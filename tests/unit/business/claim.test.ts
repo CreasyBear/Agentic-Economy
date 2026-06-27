@@ -49,6 +49,72 @@ describe('claimBusiness', () => {
     expect(state.owners).toHaveLength(1)
     expect(state.businesses).toHaveLength(1)
     expect(state.claims).toHaveLength(1)
+    expect(state.claimFingerprints).toHaveLength(1)
+  })
+
+  it('allocates deterministic slug suffixes for non-duplicate slug collisions', () => {
+    const state = createEmptyBusinessSourceState()
+
+    claimBusiness(state, {
+      actor: { kind: 'authenticated_owner', clerkUserId: 'user_123' },
+      facts: validFacts(),
+      operationKey: brandNonEmpty('op:claim:first', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:first', 'CorrelationId'),
+      now: 10,
+    })
+
+    const second = claimBusiness(state, {
+      actor: { kind: 'authenticated_owner', clerkUserId: 'user_456' },
+      facts: {
+        ...validFacts(),
+        name: 'Parramatta Emergency Electrical',
+        category: 'Emergency electrical',
+      },
+      operationKey: brandNonEmpty('op:claim:second', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:second', 'CorrelationId'),
+      now: 20,
+    })
+
+    expect(second).toMatchObject({
+      kind: 'ok',
+      code: 'claim_created',
+      business: { slug: 'parramatta-emergency-plumbing-2' },
+    })
+  })
+
+  it('returns pending review for cross-owner duplicate fingerprints without owner details', () => {
+    const state = createEmptyBusinessSourceState()
+
+    claimBusiness(state, {
+      actor: { kind: 'authenticated_owner', clerkUserId: 'user_123' },
+      facts: validFacts(),
+      operationKey: brandNonEmpty('op:claim:first-duplicate', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:first-duplicate', 'CorrelationId'),
+      now: 10,
+    })
+
+    const duplicate = claimBusiness(state, {
+      actor: { kind: 'authenticated_owner', clerkUserId: 'user_789' },
+      facts: {
+        ...validFacts(),
+        name: '  parramatta emergency plumbing  ',
+        requestedSlug: 'parramatta-emergency-plumbing-copy',
+      },
+      operationKey: brandNonEmpty('op:claim:duplicate', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:duplicate', 'CorrelationId'),
+      now: 30,
+    })
+
+    expect(duplicate).toMatchObject({
+      kind: 'error',
+      code: 'claim_pending_review',
+      retryable: false,
+      publicReason: 'duplicate_or_impersonation_review',
+      claim: { status: 'contested' },
+    })
+    expect(JSON.stringify(duplicate)).not.toContain('user_123')
+    expect(state.businesses).toHaveLength(1)
+    expect(state.claims).toHaveLength(2)
   })
 })
 

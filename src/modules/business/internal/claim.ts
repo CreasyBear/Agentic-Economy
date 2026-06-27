@@ -1,5 +1,6 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import { allocateDeterministicSlug, detectDuplicateClaim } from '@/modules/security/public'
 import type {
   BusinessContextRecord,
   BusinessRecord,
@@ -17,6 +18,7 @@ export function createEmptyBusinessSourceState(): BusinessSourceState {
     businesses: [],
     businessContexts: [],
     claims: [],
+    claimFingerprints: [],
   }
 }
 
@@ -40,23 +42,77 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     }
   }
 
-  const existingBusiness = state.businesses.find((business) => business.slug === normalizedFacts.slug)
-  if (existingBusiness !== undefined) {
+  const owner = findOrCreateOwner(state, command.actor, command.now)
+  const duplicateDecision = detectDuplicateClaim(
+    state.claimFingerprints,
+    {
+      name: normalizedFacts.name,
+      category: normalizedFacts.category,
+      suburb: normalizedFacts.suburb,
+      stateTerritory: normalizedFacts.stateTerritory,
+    },
+    owner.ownerId
+  )
+
+  if (duplicateDecision.kind === 'same_owner_conflict') {
     return {
       kind: 'error',
-      code: 'claim_slug_conflict',
+      code: 'claim_duplicate_conflict',
       retryable: false,
-      reason: 'Requested slug is already claimed.',
+      reason: 'This owner already has a claim for the normalized business identity.',
     }
   }
 
-  const owner = findOrCreateOwner(state, command.actor, command.now)
-  const businessId = brandNonEmpty(`business:${normalizedFacts.slug}`, 'BusinessId')
-  const claimId = brandNonEmpty(`claim:${normalizedFacts.slug}:${owner.ownerId}`, 'ClaimId')
+  const allocatedSlug = allocateDeterministicSlug(
+    normalizedFacts.slug,
+    state.businesses.map((business) => business.slug)
+  )
+  const claimId = brandNonEmpty(`claim:${allocatedSlug}:${owner.ownerId}`, 'ClaimId')
+
+  if (duplicateDecision.kind === 'pending_review') {
+    const claim: ClaimRecord = {
+      claimId,
+      ownerId: owner.ownerId,
+      slug: allocatedSlug,
+      status: 'contested',
+      submittedFactsHash: stableHash({
+        category: normalizedFacts.category,
+        duplicate: duplicateDecision.publicReason,
+        name: normalizedFacts.name,
+        slug: allocatedSlug,
+        stateTerritory: normalizedFacts.stateTerritory,
+        suburb: normalizedFacts.suburb,
+      }),
+      createdAt: command.now,
+      updatedAt: command.now,
+    }
+
+    state.claims.push(claim)
+    state.claimFingerprints.push({
+      fingerprint: duplicateDecision.fingerprint,
+      status: 'duplicate_suspected',
+      businessSlug: allocatedSlug,
+      ownerId: owner.ownerId,
+      claimId: claim.claimId,
+      createdAt: command.now,
+      updatedAt: command.now,
+    })
+
+    return {
+      kind: 'error',
+      code: 'claim_pending_review',
+      retryable: false,
+      reason: 'This claim needs owner review before it can publish.',
+      publicReason: duplicateDecision.publicReason,
+      claim,
+    }
+  }
+
+  const businessId = brandNonEmpty(`business:${allocatedSlug}`, 'BusinessId')
   const sourceHash = stableHash({
     category: normalizedFacts.category,
     name: normalizedFacts.name,
-    slug: normalizedFacts.slug,
+    slug: allocatedSlug,
     sourceRefs: normalizedFacts.sourceRefs.map((sourceRef) => ({
       evidenceRef: sourceRef.evidenceRef,
       label: sourceRef.label,
@@ -69,7 +125,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
   const business: BusinessRecord = {
     businessId,
     ownerId: owner.ownerId,
-    slug: normalizedFacts.slug,
+    slug: allocatedSlug,
     name: normalizedFacts.name,
     normalizedName: normalizeIdentityText(normalizedFacts.name),
     category: normalizedFacts.category,
@@ -109,7 +165,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     claimId,
     ownerId: owner.ownerId,
     businessId,
-    slug: normalizedFacts.slug,
+    slug: allocatedSlug,
     status: 'authenticated',
     submittedFactsHash: sourceHash,
     createdAt: command.now,
@@ -119,6 +175,15 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
   state.businesses.push(business)
   state.businessContexts.push(context)
   state.claims.push(claim)
+  state.claimFingerprints.push({
+    fingerprint: duplicateDecision.fingerprint,
+    status: 'clear',
+    businessSlug: allocatedSlug,
+    ownerId: owner.ownerId,
+    claimId: claim.claimId,
+    createdAt: command.now,
+    updatedAt: command.now,
+  })
 
   return {
     kind: 'ok',

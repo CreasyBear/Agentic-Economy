@@ -1,5 +1,6 @@
 import type { BusinessId, ClaimId, CorrelationId, OperationKey, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
 import type { ModuleResult } from '@/modules/common/result'
+import type { ClaimFingerprintRecord } from '@/modules/security/public'
 import {
   claimBusiness as claimBusinessImpl,
   createEmptyBusinessSourceState as createEmptyBusinessSourceStateImpl,
@@ -98,6 +99,7 @@ export type BusinessSourceState = {
   businesses: BusinessRecord[]
   businessContexts: BusinessContextRecord[]
   claims: ClaimRecord[]
+  claimFingerprints: ClaimFingerprintRecord[]
 }
 
 export type BusinessMutationActor =
@@ -135,12 +137,14 @@ export type ClaimBusinessErrorCode =
   | 'claim_unauthenticated'
   | 'claim_invalid_facts'
   | 'claim_slug_conflict'
+  | 'claim_duplicate_conflict'
+  | 'claim_pending_review'
 
 export type ClaimBusinessResult = ModuleResult<
   'claim_created',
   ClaimBusinessErrorCode,
   { owner: BusinessOwnerRecord; business: BusinessRecord; claim: ClaimRecord; context: BusinessContextRecord },
-  { reason: string }
+  { reason: string; claim?: ClaimRecord; publicReason?: 'duplicate_or_impersonation_review' }
 >
 
 export type VisibilityContract = {

@@ -73,6 +73,7 @@ export const securityTables = {
     fingerprint: v.string(),
     status: literalUnion(ClaimFingerprintStatusValues),
     businessSlug: v.string(),
+    ownerRef: v.optional(v.string()),
     claimId: v.optional(v.id('claims')),
     createdAt: v.number(),
     updatedAt: v.number(),

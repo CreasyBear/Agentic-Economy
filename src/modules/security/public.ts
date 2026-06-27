@@ -1,4 +1,10 @@
 import type { AuditEventId, CorrelationId, OperationKey } from '@/modules/common/ids'
+import type { ClaimId, OwnerId, Slug } from '@/modules/common/ids'
+import {
+  allocateDeterministicSlug as allocateDeterministicSlugImpl,
+  detectDuplicateClaim as detectDuplicateClaimImpl,
+  normalizeClaimFingerprint as normalizeClaimFingerprintImpl,
+} from './internal/duplicates'
 
 export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
 export type AdminRole = (typeof AdminRoleValues)[number]
@@ -49,6 +55,28 @@ export type AdminMembership = {
   evidenceRef?: string
 }
 
+export type ClaimFingerprintRecord = {
+  fingerprint: string
+  status: ClaimFingerprintStatus
+  businessSlug: Slug
+  ownerId: OwnerId
+  claimId?: ClaimId
+  createdAt: number
+  updatedAt: number
+}
+
+export type ClaimFingerprintInput = {
+  name: string
+  category: string
+  suburb: string
+  stateTerritory: string
+}
+
+export type DuplicateClaimDecision =
+  | { kind: 'clear'; fingerprint: string }
+  | { kind: 'same_owner_conflict'; fingerprint: string; claimId?: ClaimId }
+  | { kind: 'pending_review'; fingerprint: string; publicReason: 'duplicate_or_impersonation_review' }
+
 export type AdminDecisionAudit = {
   auditEventId: AuditEventId
   eventType: AdminMembershipAuditEventType
@@ -60,3 +88,9 @@ export type AdminDecisionAudit = {
   correlationId: CorrelationId
   createdAt: number
 }
+
+export const allocateDeterministicSlug = allocateDeterministicSlugImpl
+
+export const detectDuplicateClaim = detectDuplicateClaimImpl
+
+export const normalizeClaimFingerprint = normalizeClaimFingerprintImpl
