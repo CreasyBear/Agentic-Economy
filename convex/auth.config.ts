@@ -1,6 +1,6 @@
 import type { AuthConfig } from 'convex/server'
 
-const clerkJwtIssuerDomain = process.env.CLERK_JWT_ISSUER_DOMAIN ?? 'https://clerk.local.invalid'
+const clerkJwtIssuerDomain = requiredEnv('CLERK_JWT_ISSUER_DOMAIN')
 
 export default {
   providers: [
@@ -10,3 +10,12 @@ export default {
     },
   ],
 } satisfies AuthConfig
+
+function requiredEnv(name: string): string {
+  const value = process.env[name]
+  if (typeof value === 'string' && value.length > 0) {
+    return value
+  }
+
+  throw new Error(`${name} is required for Convex auth configuration`)
+}
