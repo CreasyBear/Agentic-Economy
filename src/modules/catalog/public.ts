@@ -1,7 +1,13 @@
 import type { BusinessId, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
+import type { BusinessContextRecord, BusinessRecord } from '@/modules/business/public'
 import type { DiscoveryStatus } from '@/modules/discovery/public'
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
 import type { IndexStatus } from '@/modules/registry/public'
+import {
+  buildPublicCatalogDto as buildPublicCatalogDtoImpl,
+  createEmptyCatalogSourceState as createEmptyCatalogSourceStateImpl,
+} from './internal/public-catalog-dto'
+import { validateServiceCatalogInput as validateServiceCatalogInputImpl } from './internal/first-request'
 
 export const FirstRequestModeValues = ['inquiry_available', 'quote_request_available', 'not_available_yet'] as const
 export type FirstRequestMode = (typeof FirstRequestModeValues)[number]
@@ -35,6 +41,77 @@ export type PublicFirstRequestDisclosure = {
   rawContactExcluded: true
 }
 
+export type FirstRequestDisclosureInput =
+  | {
+      mode: Extract<FirstRequestMode, 'inquiry_available' | 'quote_request_available'>
+      publicDisclosure: string
+      publicChannel: Extract<PublicFirstRequestChannel, 'public_business_contact' | 'ae_status_only'>
+      rawContactValue?: string
+    }
+  | {
+      mode: Extract<FirstRequestMode, 'not_available_yet'>
+      publicDisclosure?: string
+      publicChannel: Extract<PublicFirstRequestChannel, 'ae_status_only' | 'not_available'>
+      noContactReason: string
+    }
+
+export type ServiceCatalogInput = {
+  name: string
+  category: string
+  summary: string
+  serviceArea: string
+  hoursOrUnknown: string
+  firstRequest: FirstRequestDisclosureInput
+}
+
+export type ValidatedServiceCatalogInput = {
+  name: string
+  category: string
+  summary: string
+  serviceArea: string
+  hoursOrUnknown: string
+  firstRequest: PublicFirstRequestDisclosure
+}
+
+export type ServiceCatalogValidationResult =
+  | { kind: 'valid'; services: readonly ValidatedServiceCatalogInput[] }
+  | { kind: 'invalid'; reason: 'empty_services' | 'invalid_service' | 'invalid_first_request' }
+
+export type BusinessServiceRecord = {
+  serviceId: ServiceId
+  serviceSlug: Slug
+  businessId: BusinessId
+  name: string
+  category: string
+  summary: string
+  serviceArea: string
+  hoursOrUnknown: string
+  status: BusinessServiceStatus
+  sortOrder: number
+  sourceHash: SourceHash
+  createdAt: number
+  updatedAt: number
+}
+
+export type ServiceCapabilityRecord = {
+  businessId: BusinessId
+  serviceId: ServiceId
+  kind: CapabilityKind
+  status: ServiceCapabilityStatus
+  firstRequest: PublicFirstRequestDisclosure
+  callable: false
+  paymentRequired: false
+  reason?: string
+  sourceHash: SourceHash
+  createdAt: number
+  updatedAt: number
+}
+
+export type CatalogSourceState = {
+  businessServices: BusinessServiceRecord[]
+  serviceCapabilities: ServiceCapabilityRecord[]
+}
+
 export type ServiceCapabilityContract = {
   serviceId: ServiceId
   kind: CapabilityKind
@@ -52,9 +129,11 @@ export type PublicServiceContract = {
   businessId: BusinessId
   name: string
   category: string
+  summary: string
   serviceArea: string
   hoursOrUnknown: string
-  status: BusinessServiceStatus
+  firstRequest: PublicFirstRequestDisclosure
+  status: Extract<BusinessServiceStatus, 'published'>
   capabilities: readonly ServiceCapabilityContract[]
 }
 
@@ -71,3 +150,22 @@ export type PublicCatalogContract = {
   services: readonly PublicServiceContract[]
   sourceHash: SourceHash
 }
+
+export type BuildPublicCatalogInput = {
+  business: BusinessRecord
+  context: BusinessContextRecord
+  services: readonly BusinessServiceRecord[]
+  capabilities: readonly ServiceCapabilityRecord[]
+  indexStatus: IndexStatus
+  discoveryStatus: DiscoveryStatus
+}
+
+export type BuildPublicCatalogResult =
+  | { kind: 'available'; catalog: PublicCatalogContract }
+  | { kind: 'hidden'; reason: 'not_published' | 'no_published_services' }
+
+export const buildPublicCatalogDto = buildPublicCatalogDtoImpl
+
+export const createEmptyCatalogSourceState = createEmptyCatalogSourceStateImpl
+
+export const validateServiceCatalogInput = validateServiceCatalogInputImpl
