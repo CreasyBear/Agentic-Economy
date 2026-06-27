@@ -3,12 +3,29 @@ import { createFileRoute } from '@tanstack/react-router'
 import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
 import { readAdminRouteShell } from '@/modules/security/public'
+import type { AdminReadbackRow } from '@/modules/security/public'
+
+const claimsQueueRows = [
+  {
+    rowId: 'row:claims:disputes-by-business-status',
+    rowType: 'claim',
+    objectRef: 'disputes.by_business_status',
+    rowState: 'guarded',
+    surface: 'claims_queue',
+    readbackState: 'available',
+    repairAction: 'review_claim',
+    correlationId: 'schema:disputes',
+    attemptRef: 'index:by_business_status',
+    updatedAt: 0,
+  },
+] satisfies readonly AdminReadbackRow[]
 
 export const Route = createFileRoute('/admin/claims')({
   loader: () =>
     readAdminRouteShell({
       membership: undefined,
       surface: 'claims_queue',
+      rows: claimsQueueRows,
       now: 0,
     }),
   component: AdminClaimsRoute,

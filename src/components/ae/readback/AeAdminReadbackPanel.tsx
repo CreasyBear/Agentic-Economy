@@ -107,7 +107,9 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
               </div>
               <dl className="mt-3 grid gap-2 text-sm md:grid-cols-3">
                 <ReadbackTerm label="Surface" value={surfaceLabels[row.surface]} />
+                <ReadbackTerm label="Source state" value={rowStateLabels[row.rowState]} />
                 <ReadbackTerm label="Readback" value={row.readbackState.replaceAll('_', ' ')} />
+                <ReadbackTerm label="Attempt" value={row.attemptRef ?? 'Unavailable'} />
                 <ReadbackTerm label="Correlation" value={row.correlationId ?? 'Unavailable'} />
               </dl>
             </li>
