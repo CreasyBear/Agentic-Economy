@@ -1,7 +1,7 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
-import { VisibilityTargetTypeValues } from '@/modules/business/public'
+import { ClaimStatusValues, PublicStatusValues, VisibilityTargetTypeValues } from '@/modules/business/public'
 import { literalUnion } from '@/modules/common/convex-literals'
 import {
   AbuseBucketStateValues,
@@ -43,6 +43,11 @@ export const securityTables = {
     evidenceRefs: v.array(v.string()),
     createdByAdminRef: v.string(),
     createdAt: v.number(),
+    beforePublicStatus: literalUnion(PublicStatusValues),
+    beforeClaimStatus: literalUnion(ClaimStatusValues),
+    liftedByAdminRef: v.optional(v.string()),
+    liftedReasonCode: v.optional(v.string()),
+    liftedEvidenceRefs: v.optional(v.array(v.string())),
     liftedAt: v.optional(v.number()),
   }).index('by_target_status', ['targetType', 'targetRef', 'status']),
 

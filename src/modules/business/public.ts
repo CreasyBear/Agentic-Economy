@@ -15,6 +15,7 @@ import {
 import {
   isPubliclyDiscoverable as isPubliclyDiscoverableImpl,
   suppressBusiness as suppressBusinessImpl,
+  unsuppressBusiness as unsuppressBusinessImpl,
 } from './internal/visibility'
 import type { AuditEventContract, InvalidationIntent } from '@/modules/observability/public'
 import type { BusinessServiceRecord } from '@/modules/catalog/public'
@@ -209,6 +210,40 @@ export type SuppressBusinessResult =
         | 'business_suppress_admin_denied'
         | 'business_suppress_not_found'
         | 'business_suppress_invalid_reason'
+        | 'business_suppress_missing_evidence'
+      retryable: boolean
+      reason: string
+    }
+
+export type UnsuppressBusinessCommand = {
+  adminMembership: AdminMembership | undefined
+  businessId: BusinessId
+  security: {
+    csrf: CsrfCheckInput
+  }
+  reasonCode: string
+  evidenceRefs: readonly string[]
+  operationKey: OperationKey
+  correlationId: CorrelationId
+  now: number
+}
+
+export type UnsuppressBusinessResult =
+  | {
+      kind: 'ok'
+      code: 'business_unsuppressed' | 'business_unsuppression_replayed'
+      business: BusinessRecord
+      auditEvent: AuditEventContract
+      invalidationIntent: InvalidationIntent
+    }
+  | {
+      kind: 'error'
+      code:
+        | 'business_unsuppress_csrf_rejected'
+        | 'business_unsuppress_admin_denied'
+        | 'business_unsuppress_not_found'
+        | 'business_unsuppress_invalid_reason'
+        | 'business_unsuppress_missing_evidence'
       retryable: boolean
       reason: string
     }
@@ -227,3 +262,5 @@ export const claimBusiness = claimBusinessImpl
 export const isPubliclyDiscoverable = isPubliclyDiscoverableImpl
 
 export const suppressBusiness = suppressBusinessImpl
+
+export const unsuppressBusiness = unsuppressBusinessImpl

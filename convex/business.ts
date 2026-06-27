@@ -54,6 +54,31 @@ export const suppressBusiness = mutationGeneric({
   }),
 })
 
+export const unsuppressBusiness = mutationGeneric({
+  args: {
+    businessId: v.string(),
+    reasonCode: v.string(),
+    evidenceRefs: v.array(v.string()),
+    csrfToken: v.optional(v.string()),
+    csrfCookie: v.optional(v.string()),
+    origin: v.optional(v.string()),
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: v.object({
+    kind: v.literal('error'),
+    code: v.literal('business_unsuppress_admin_denied'),
+    retryable: v.boolean(),
+    reason: v.string(),
+  }),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'business_unsuppress_admin_denied' as const,
+    retryable: false,
+    reason: 'Convex unsuppression mutations require source-owned admin membership wiring in the deployment boundary.',
+  }),
+})
+
 export type {
   BusinessIdentity,
   BusinessSuppressionState,
@@ -66,4 +91,6 @@ export type {
   SuppressBusinessCommand,
   SuppressBusinessResult,
   TrustTier,
+  UnsuppressBusinessCommand,
+  UnsuppressBusinessResult,
 } from '../src/modules/business/public'

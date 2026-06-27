@@ -132,6 +132,11 @@ export type SuppressionRuleRecord = {
   evidenceRefs: readonly string[]
   createdByAdminRef: string
   createdAt: number
+  beforePublicStatus: 'unpublished' | 'published' | 'suppressed'
+  beforeClaimStatus: 'draft' | 'authenticated' | 'published' | 'contested' | 'disputed' | 'suppressed'
+  liftedByAdminRef?: string
+  liftedReasonCode?: string
+  liftedEvidenceRefs?: readonly string[]
   liftedAt?: number
 }
 

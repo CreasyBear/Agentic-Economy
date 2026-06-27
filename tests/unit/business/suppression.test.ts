@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
-import { claimBusiness, createEmptyBusinessSourceState, suppressBusiness } from '@/modules/business/public'
+import { claimBusiness, createEmptyBusinessSourceState, suppressBusiness, unsuppressBusiness } from '@/modules/business/public'
 import type { BusinessSuppressionState } from '@/modules/business/public'
 import {
   createEmptyCatalogSourceState,
@@ -65,6 +65,116 @@ describe('suppressBusiness', () => {
         discoveryStatus: 'degraded',
       })
     ).toEqual({ kind: 'hidden', reason: 'not_published' })
+  })
+
+  it('requires private evidence for suppression and unsuppression', () => {
+    const state = publishedState()
+    const businessId = firstBusinessId(state)
+
+    expect(
+      suppressBusiness(state, {
+        adminMembership: ownerAdmin(),
+        businessId,
+        security: csrf('missing-suppress-evidence'),
+        reasonCode: 'privacy_removal_requested',
+        evidenceRefs: [],
+        operationKey: brandNonEmpty('op:suppress:missing-evidence', 'OperationKey'),
+        correlationId: brandNonEmpty('corr:suppress:missing-evidence', 'CorrelationId'),
+        now: 30,
+      })
+    ).toMatchObject({ kind: 'error', code: 'business_suppress_missing_evidence' })
+
+    const suppressed = suppressBusiness(state, {
+      adminMembership: ownerAdmin(),
+      businessId,
+      security: csrf('suppress-before-unsuppress'),
+      reasonCode: 'privacy_removal_requested',
+      evidenceRefs: ['private:evidence:suppress'],
+      operationKey: brandNonEmpty('op:suppress:before-unsuppress', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:suppress:before-unsuppress', 'CorrelationId'),
+      now: 31,
+    })
+    expect(suppressed).toMatchObject({ kind: 'ok' })
+
+    expect(
+      unsuppressBusiness(state, {
+        adminMembership: ownerAdmin(),
+        businessId,
+        security: csrf('missing-unsuppress-evidence'),
+        reasonCode: 'removal_resolved',
+        evidenceRefs: [],
+        operationKey: brandNonEmpty('op:unsuppress:missing-evidence', 'OperationKey'),
+        correlationId: brandNonEmpty('corr:unsuppress:missing-evidence', 'CorrelationId'),
+        now: 40,
+      })
+    ).toMatchObject({ kind: 'error', code: 'business_unsuppress_missing_evidence' })
+  })
+
+  it('unsuppresses through an audited source-owned rule and restores public catalog reads', () => {
+    const state = publishedState()
+    const businessId = firstBusinessId(state)
+    const suppress = suppressBusiness(state, {
+      adminMembership: ownerAdmin(),
+      businessId,
+      security: csrf('suppress-for-restore'),
+      reasonCode: 'privacy_removal_requested',
+      evidenceRefs: ['private:evidence:suppress'],
+      operationKey: brandNonEmpty('op:suppress:restore', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:suppress:restore', 'CorrelationId'),
+      now: 30,
+    })
+
+    expect(suppress).toMatchObject({ kind: 'ok', business: { publicStatus: 'suppressed' } })
+    expect(state.suppressionRules).toMatchObject([
+      {
+        status: 'active',
+        beforePublicStatus: 'published',
+        beforeClaimStatus: 'published',
+      },
+    ])
+
+    const unsuppress = unsuppressBusiness(state, {
+      adminMembership: ownerAdmin(),
+      businessId,
+      security: csrf('unsuppress-restore'),
+      reasonCode: 'removal_resolved',
+      evidenceRefs: ['private:evidence:restore'],
+      operationKey: brandNonEmpty('op:unsuppress:restore', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:unsuppress:restore', 'CorrelationId'),
+      now: 40,
+    })
+    const replay = unsuppressBusiness(state, {
+      adminMembership: ownerAdmin(),
+      businessId,
+      security: csrf('unsuppress-restore'),
+      reasonCode: 'removal_resolved',
+      evidenceRefs: ['private:evidence:restore'],
+      operationKey: brandNonEmpty('op:unsuppress:restore', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:unsuppress:restore', 'CorrelationId'),
+      now: 50,
+    })
+
+    expect(unsuppress).toMatchObject({
+      kind: 'ok',
+      code: 'business_unsuppressed',
+      business: { publicStatus: 'published', claimStatus: 'published' },
+      auditEvent: { eventType: 'business.unsuppressed', beforeState: 'suppressed', afterState: 'published' },
+      invalidationIntent: {
+        surfaces: ['public_catalog', 'registry_projection', 'discovery_manifest'],
+        status: 'queued',
+      },
+    })
+    expect(replay).toMatchObject({ kind: 'ok', code: 'business_unsuppression_replayed' })
+    expect(state.suppressionRules).toMatchObject([{ status: 'lifted', liftedByAdminRef: 'admin_1' }])
+    expect(state.auditEvents.filter((event) => event.eventType === 'business.unsuppressed')).toHaveLength(1)
+    expect(state.invalidationIntents).toHaveLength(2)
+    expect(
+      getPublicBusinessCatalog(state, {
+        slug: brandNonEmpty('parramatta-emergency-plumbing', 'Slug'),
+        indexStatus: 'queued',
+        discoveryStatus: 'degraded',
+      })
+    ).toMatchObject({ kind: 'available' })
   })
 
   it('denies non-owner-admin suppression attempts', () => {
