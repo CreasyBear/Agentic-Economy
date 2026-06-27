@@ -6,10 +6,15 @@ import {
 } from './internal/operation-keys'
 import { recordInvalidationIntent as recordInvalidationIntentImpl } from './internal/outbox'
 import { validateAuditEvent as validateAuditEventImpl } from './internal/audit'
+import {
+  readOperatorControls as readOperatorControlsImpl,
+  setOperatorControl as setOperatorControlImpl,
+} from './internal/operator-controls'
 import type {
   AuditEventInput,
   AuditValidationResult,
 } from './internal/audit'
+import type { AdminMembership, CsrfCheckInput } from '@/modules/security/public'
 import type {
   OperationKeyAuditSink,
   OperationKeyDecision,
@@ -170,6 +175,71 @@ export type InvalidationIntent = {
   createdAt: number
 }
 
+export type OperatorControlRecord = {
+  key: OperatorControlKey
+  enabled: boolean
+  changedByAdminRef: string
+  reasonCode: string
+  evidenceRefs: string[]
+  correlationId: CorrelationId
+  operationKey: OperationKey
+  expiresAt?: number
+  updatedAt: number
+}
+
+export type OperatorControlSourceState = {
+  operatorControls: OperatorControlRecord[]
+  auditEvents: AuditEventContract[]
+}
+
+export type SetOperatorControlCommand = {
+  adminMembership: AdminMembership | undefined
+  key: OperatorControlKey
+  enabled: boolean
+  reasonCode: string
+  evidenceRefs: readonly string[]
+  expiresAt?: number
+  security: {
+    csrf: CsrfCheckInput
+  }
+  operationKey: OperationKey
+  correlationId: CorrelationId
+  now: number
+}
+
+export type OperatorControlReadback = {
+  key: OperatorControlKey
+  configuredEnabled: boolean
+  effectiveEnabled: boolean
+  expired: boolean
+  expiresAt?: number
+  source: 'default' | 'source_owned'
+  reasonCode?: string
+  changedByAdminRef?: string
+  correlationId?: CorrelationId
+  updatedAt: number
+}
+
+export type SetOperatorControlResult =
+  | {
+      kind: 'ok'
+      code: 'operator_control_changed' | 'operator_control_replayed'
+      control: OperatorControlRecord
+      readback: OperatorControlReadback
+      auditEvent: AuditEventContract
+    }
+  | {
+      kind: 'error'
+      code:
+        | 'operator_control_csrf_rejected'
+        | 'operator_control_admin_denied'
+        | 'operator_control_invalid_reason'
+        | 'operator_control_missing_evidence'
+        | 'operator_control_invalid_expiry'
+      retryable: boolean
+      reason: string
+    }
+
 export type {
   AuditEventInput,
   AuditValidationResult,
@@ -186,3 +256,7 @@ export const reserveOperationKey = reserveOperationKeyImpl
 export const validateAuditEvent = validateAuditEventImpl
 
 export const recordInvalidationIntent = recordInvalidationIntentImpl
+
+export const setOperatorControl = setOperatorControlImpl
+
+export const readOperatorControls = readOperatorControlsImpl

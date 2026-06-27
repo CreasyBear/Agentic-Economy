@@ -61,6 +61,7 @@ export const observabilityTables = {
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
     correlationId: v.string(),
+    operationKey: v.string(),
     expiresAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index('by_key', ['key']),
