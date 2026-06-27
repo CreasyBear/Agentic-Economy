@@ -2,8 +2,10 @@ import type { AuditEventId, CorrelationId, OperationKey } from '@/modules/common
 import type { ClaimId, OwnerId, Slug } from '@/modules/common/ids'
 import {
   allocateDeterministicSlug as allocateDeterministicSlugImpl,
+  assertCsrf as assertCsrfImpl,
   detectDuplicateClaim as detectDuplicateClaimImpl,
   normalizeClaimFingerprint as normalizeClaimFingerprintImpl,
+  rateLimitClaim as rateLimitClaimImpl,
 } from './internal/duplicates'
 
 export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
@@ -65,6 +67,39 @@ export type ClaimFingerprintRecord = {
   updatedAt: number
 }
 
+export type AbuseRateLimitBucketRecord = {
+  scope: string
+  key: string
+  window: string
+  count: number
+  state: AbuseBucketState
+  resetAt: number
+  updatedAt: number
+}
+
+export type CsrfCheckInput = {
+  csrfToken?: string
+  csrfCookie?: string
+  origin?: string
+  allowedOrigins: readonly string[]
+}
+
+export type CsrfDecision =
+  | { kind: 'accepted'; mode: 'csrf_token' | 'same_site_origin' }
+  | { kind: 'rejected'; reason: 'missing_csrf' | 'foreign_origin' }
+
+export type RateLimitClaimInput = {
+  scope: 'claim_submit'
+  key: string
+  now: number
+  limit: number
+  windowMs: number
+}
+
+export type RateLimitDecision =
+  | { kind: 'accepted'; bucket: AbuseRateLimitBucketRecord }
+  | { kind: 'limited'; bucket: AbuseRateLimitBucketRecord; retryAfter: number }
+
 export type ClaimFingerprintInput = {
   name: string
   category: string
@@ -91,6 +126,10 @@ export type AdminDecisionAudit = {
 
 export const allocateDeterministicSlug = allocateDeterministicSlugImpl
 
+export const assertCsrf = assertCsrfImpl
+
 export const detectDuplicateClaim = detectDuplicateClaimImpl
 
 export const normalizeClaimFingerprint = normalizeClaimFingerprintImpl
+
+export const rateLimitClaim = rateLimitClaimImpl

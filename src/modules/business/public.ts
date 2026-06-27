@@ -1,6 +1,11 @@
 import type { BusinessId, ClaimId, CorrelationId, OperationKey, OwnerId, Slug, SourceHash } from '@/modules/common/ids'
 import type { ModuleResult } from '@/modules/common/result'
-import type { ClaimFingerprintRecord } from '@/modules/security/public'
+import type {
+  AbuseRateLimitBucketRecord,
+  ClaimFingerprintRecord,
+  CsrfCheckInput,
+  RateLimitClaimInput,
+} from '@/modules/security/public'
 import {
   claimBusiness as claimBusinessImpl,
   createEmptyBusinessSourceState as createEmptyBusinessSourceStateImpl,
@@ -100,6 +105,7 @@ export type BusinessSourceState = {
   businessContexts: BusinessContextRecord[]
   claims: ClaimRecord[]
   claimFingerprints: ClaimFingerprintRecord[]
+  abuseRateLimitBuckets: AbuseRateLimitBucketRecord[]
 }
 
 export type BusinessMutationActor =
@@ -128,6 +134,10 @@ export type ClaimBusinessFacts = {
 export type ClaimBusinessCommand = {
   actor: BusinessMutationActor
   facts: ClaimBusinessFacts
+  security: {
+    csrf: CsrfCheckInput
+    rateLimit: RateLimitClaimInput
+  }
   operationKey: OperationKey
   correlationId: CorrelationId
   now: number
@@ -139,6 +149,8 @@ export type ClaimBusinessErrorCode =
   | 'claim_slug_conflict'
   | 'claim_duplicate_conflict'
   | 'claim_pending_review'
+  | 'claim_csrf_rejected'
+  | 'claim_rate_limited'
 
 export type ClaimBusinessResult = ModuleResult<
   'claim_created',

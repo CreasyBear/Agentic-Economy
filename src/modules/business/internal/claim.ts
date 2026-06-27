@@ -1,6 +1,6 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
-import { allocateDeterministicSlug, detectDuplicateClaim } from '@/modules/security/public'
+import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim, rateLimitClaim } from '@/modules/security/public'
 import type {
   BusinessContextRecord,
   BusinessRecord,
@@ -19,10 +19,31 @@ export function createEmptyBusinessSourceState(): BusinessSourceState {
     businessContexts: [],
     claims: [],
     claimFingerprints: [],
+    abuseRateLimitBuckets: [],
   }
 }
 
 export function claimBusiness(state: BusinessSourceState, command: ClaimBusinessCommand): ClaimBusinessResult {
+  const csrfDecision = assertCsrf(command.security.csrf)
+  if (csrfDecision.kind === 'rejected') {
+    return {
+      kind: 'error',
+      code: 'claim_csrf_rejected',
+      retryable: false,
+      reason: csrfDecision.reason,
+    }
+  }
+
+  const rateLimitDecision = rateLimitClaim(state.abuseRateLimitBuckets, command.security.rateLimit)
+  if (rateLimitDecision.kind === 'limited') {
+    return {
+      kind: 'error',
+      code: 'claim_rate_limited',
+      retryable: true,
+      reason: `Retry after ${rateLimitDecision.retryAfter}.`,
+    }
+  }
+
   if (command.actor.kind === 'anonymous') {
     return {
       kind: 'error',
