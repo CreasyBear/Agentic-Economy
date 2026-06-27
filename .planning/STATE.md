@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-03-business-claim-publish-suppress-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup
-last_updated: "2026-06-27T15:16:39.892Z"
+stopped_at: Completed 01-04-admin-dispute-operator-recovery-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup; Playwright e2e/a11y specs are not present
+last_updated: "2026-06-27T22:17:34.000Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 13
-  completed_plans: 3
-  percent: 23
+  completed_plans: 4
+  percent: 31
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -50,7 +50,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Execute `.planning/phases/01-ten-star-spine-foundation/01-04-admin-dispute-operator-recovery-PLAN.md` next. PR03 claim, publish, and suppression seams now exist behind module-owned public exports; keep Convex codegen honest until `CONVEX_DEPLOYMENT` is configured.
+Execute `.planning/phases/01-ten-star-spine-foundation/01-05-public-owner-ui-routes-PLAN.md` next. PR04 admin authority, removal disputes, suppression recovery, operator controls, and protected admin readbacks now exist behind module-owned public exports; keep Convex codegen honest until `CONVEX_DEPLOYMENT` is configured.
 
 ## Verification expectation
 
@@ -58,9 +58,9 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-27T15:16:39.888Z
-**Stopped at:** Completed 01-03-business-claim-publish-suppress-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup
-**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-04-admin-dispute-operator-recovery-PLAN.md
+**Last session:** 2026-06-27T22:17:34.000Z
+**Stopped at:** Completed 01-04-admin-dispute-operator-recovery-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup; Playwright e2e/a11y specs are not present
+**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-05-public-owner-ui-routes-PLAN.md
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P01 | 14 min | 3 tasks | 54 files |
 | Phase 01 P02 | 43 min | 8 tasks | 46 files |
 | Phase 01 P03 | 32 min | 7 tasks | 25 files |
+| Phase 01 P04 | 6h 56m | 6 tasks | 24 files |
 
 ## Decisions
 
@@ -78,3 +79,5 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Left Convex codegen as the real Convex CLI command and recorded the missing deployment as an environment blocker. — Prevents false green checks; codegen can pass only after CONVEX_DEPLOYMENT is configured.
 - [Phase 01]: Implemented PR03 behavior through module seams and fail-closed generic Convex wrappers. — Generated Convex server files remain unavailable until `CONVEX_DEPLOYMENT` is configured, so runtime mutation boundaries fail closed while seam-level behavior is tested.
 - [Phase 01]: Allowed only same-module `public.ts` files to import their own internal implementations. — This enables owning public seams while route, sibling-module, and cross-module private-import bans remain active.
+- [Phase 01]: Implemented PR04 admin, dispute, suppression recovery, and operator controls through source-owned module seams with fail-closed Convex wrappers. — Route guards alone are not authority, and deployment boundaries deny until generated auth/DB wiring exists.
+- [Phase 01]: Kept admin route loaders fail-closed with `membership: undefined` readbacks. — Non-admins receive safe denial/readback shells without private rows; source-owned admin resolution is deferred to configured Convex deployment wiring.
