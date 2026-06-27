@@ -12,9 +12,13 @@
 - `AI-SPEC.md` — UCP/llms/agent discovery support matrix and eval gates.
 - `SEO-AEO-SPEC.md` — public business service catalog page SEO, sitemap, robots, llms, schema, AI visibility gates.
 - `GTM-READINESS.md` — 90-day launch gates, ORB channels, activation and claims register.
+- `FRONTEND-DESIGN-FRAMEWORK.md` — frontend design architecture: tokens, shadcn posture, AE component seams, route class policy, `/taste` + `/impeccable` gates.
+- `../DESIGN.md` — machine-readable visual seed for Agentic Economy colors, typography, spacing, radii, and component hints.
+- `../.impeccable/design.json` — rich design sidecar for agents/panels: tonal ramps, shadows, motion, breakpoints, and primitive previews.
 - `ROADMAP.md` — phase sequence, decision doors, and hard boundaries.
 - `phases/01-ten-star-spine-foundation/PHASE.md` — master Phase 1 authority and PR sequence.
 - `phases/01-ten-star-spine-foundation/PREMORTEM.md` — Phase 1 failure modes, runtime kill-switches, and repair loops.
+- `phases/01-ten-star-spine-foundation/01-UI-SPEC.md` — Phase 1 visual, IA, UX, state, accessibility, and responsive contract.
 - `STATE.md` — current phase and active risks.
 - `source-mining/phase-1-ledger.md` — concrete Phase 1 backup-source ledger and PR gate.
 

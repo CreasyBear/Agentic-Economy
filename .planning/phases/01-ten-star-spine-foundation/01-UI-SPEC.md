@@ -12,6 +12,13 @@ created: 2026-06-27
 
 Visual, IA, UI, and UX contract for Phase 1 implementation. Runtime is absent: no `package.json`, `components.json`, `apps/`, `src/`, `convex/`, or `tests/` tree exists yet. This file locks the user-facing product direction before `plan-phase`; rendered verification remains required during implementation.
 
+
+## Design Authorities
+
+- `DESIGN.md` owns the machine-readable visual seed: command-ink/cool-field/signal-cobalt palette, Geist typography, 8/12/16px radii, spacing, and primitive component hints.
+- `.impeccable/design.json` owns the rich design sidecar for agents/panels: tonal ramps, shadows, motion tokens, breakpoints, and preview primitives.
+- `.planning/FRONTEND-DESIGN-FRAMEWORK.md` owns the frontend engineering framework: tokens, AE shells, component seams, route class policy, `/taste` and `/impeccable` command pipeline, and `test:ui-contract` scope.
+- Phase 1 UI must be bold through topology and state architecture, not bespoke route styling. Public/story surfaces may use `/taste`; every task/admin surface must pass `/impeccable harden`, `/impeccable audit`, and `/impeccable polish` before closeout.
 ---
 
 ## Scope and mode
@@ -409,4 +416,4 @@ The UI-SPEC is approved for planning, not implementation closeout. During implem
 
 ## Next implementation handoff
 
-Planner must include this UI-SPEC in Phase 1 plan inputs. The first UI-related implementation task should initialize the TanStack Start app and shadcn only after runtime substrate exists, then install the smallest required official shadcn components for the routes being built. No component or nav item should be added for a future phase.
+Planner must include this UI-SPEC, `DESIGN.md`, `.impeccable/design.json`, and `.planning/FRONTEND-DESIGN-FRAMEWORK.md` in Phase 1 plan inputs. The first UI-related implementation task should initialize the TanStack Start app and shadcn only after runtime substrate exists, wire framework tokens before composing routes, then install the smallest required official shadcn components for the routes being built. No component or nav item should be added for a future phase.

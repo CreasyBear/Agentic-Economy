@@ -23,7 +23,7 @@ If a change does not strengthen that spine or an authority spec, cut it.
 | Convex schema/functions | Convex project rules | Source-owned state, auth-derived actors, codegen. |
 | Clerk auth | `clerk-tanstack-patterns` | Clerk UX + Convex authority, no request owner IDs. |
 | Payments | `stripe-best-practices` | Reject in Phase 1; future Billing/Checkout/Connect discipline. |
-| UI | `accessibility`, `make-interfaces-feel-better` | Mobile, keyboard, focus, errors, loading, empty states. |
+| UI/product surfaces | `accessibility`, `shadcn`, `impeccable`, `make-interfaces-feel-better`, `/taste` for public storytelling only | Design framework, official component source, harden/audit/polish gates, mobile/keyboard/focus/error/loading/empty states. |
 | Review | `/mattpocock-review` | Standards and Spec axes separate. |
 | Security | `cso` lens | Threat model, source-owned admin, audit, redaction. |
 | SEO/AEO | `seo-audit`, `ai-seo` | Crawl/schema/robots/llms gates. |

@@ -117,6 +117,9 @@ None. User selected concrete decisions or directed docs auto mode, and Fable 5 r
 - `.planning/phases/01-ten-star-spine-foundation/01-CONTEXT.md` — this implementation-decision context.
 - `.planning/phases/01-ten-star-spine-foundation/FABLE-5-FOUNDATION-REVIEW.md` — accepted Fable 5 docs auto review findings and must-not-regress checks.
 - `.planning/phases/01-ten-star-spine-foundation/01-UI-SPEC.md` — UI/IA/UX contract, shadcn posture, SaaS-inspired patterns, state rendering, copy, accessibility, responsive, and polish obligations.
+- `.planning/FRONTEND-DESIGN-FRAMEWORK.md` — app-wide frontend engineering framework: tokens, shells, AE component seams, class policy, `/taste` + `/impeccable` operating pipeline, UI contract scans.
+- `DESIGN.md` — machine-readable visual seed for colors, typography, radii, spacing, and component token hints.
+- `.impeccable/design.json` — rich design sidecar for agents/panels: tonal ramps, shadows, motion, breakpoints, and primitive previews.
 
 ### Product and roadmap authority
 
