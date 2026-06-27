@@ -116,6 +116,7 @@ None. User selected concrete decisions or directed docs auto mode, and Fable 5 r
 - `.planning/phases/01-ten-star-spine-foundation/01-SPEC.md` — locked Phase 1 requirements, boundaries, acceptance criteria, edge/prohibition coverage.
 - `.planning/phases/01-ten-star-spine-foundation/01-CONTEXT.md` — this implementation-decision context.
 - `.planning/phases/01-ten-star-spine-foundation/FABLE-5-FOUNDATION-REVIEW.md` — accepted Fable 5 docs auto review findings and must-not-regress checks.
+- `.planning/phases/01-ten-star-spine-foundation/01-UI-SPEC.md` — UI/IA/UX contract, shadcn posture, SaaS-inspired patterns, state rendering, copy, accessibility, responsive, and polish obligations.
 
 ### Product and roadmap authority
 
