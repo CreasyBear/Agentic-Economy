@@ -1,13 +1,19 @@
 import type { BusinessId, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
 import type { BusinessContextRecord, BusinessRecord } from '@/modules/business/public'
+import type { BusinessMutationActor, BusinessSourceState, ClaimRecord } from '@/modules/business/public'
 import type { DiscoveryStatus } from '@/modules/discovery/public'
+import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
-import type { IndexStatus } from '@/modules/registry/public'
+import type { IndexStatus, RegistryProjectionAttemptContract } from '@/modules/registry/public'
+import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
+import type { CorrelationId, OperationKey } from '@/modules/common/ids'
+import type { CsrfCheckInput } from '@/modules/security/public'
 import {
   buildPublicCatalogDto as buildPublicCatalogDtoImpl,
   createEmptyCatalogSourceState as createEmptyCatalogSourceStateImpl,
 } from './internal/public-catalog-dto'
 import { validateServiceCatalogInput as validateServiceCatalogInputImpl } from './internal/first-request'
+import { publishBusinessCatalog as publishBusinessCatalogImpl } from './internal/publish'
 
 export const FirstRequestModeValues = ['inquiry_available', 'quote_request_available', 'not_available_yet'] as const
 export type FirstRequestMode = (typeof FirstRequestModeValues)[number]
@@ -112,6 +118,13 @@ export type CatalogSourceState = {
   serviceCapabilities: ServiceCapabilityRecord[]
 }
 
+export type CatalogPublishSourceState = CatalogSourceState & {
+  operationKeys: OperationKeyRecord[]
+  auditEvents: AuditEventContract[]
+  registryProjectionAttempts: RegistryProjectionAttemptContract[]
+  discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
+}
+
 export type ServiceCapabilityContract = {
   serviceId: ServiceId
   kind: CapabilityKind
@@ -164,8 +177,51 @@ export type BuildPublicCatalogResult =
   | { kind: 'available'; catalog: PublicCatalogContract }
   | { kind: 'hidden'; reason: 'not_published' | 'no_published_services' }
 
+export type PublishBusinessCatalogCommand = {
+  actor: BusinessMutationActor
+  claimId: ClaimRecord['claimId']
+  services: readonly ServiceCatalogInput[]
+  security: {
+    csrf: CsrfCheckInput
+  }
+  operationKey: OperationKey
+  correlationId: CorrelationId
+  now: number
+}
+
+export type PublishBusinessCatalogErrorCode =
+  | 'catalog_publish_unauthenticated'
+  | 'catalog_publish_csrf_rejected'
+  | 'catalog_publish_claim_not_found'
+  | 'catalog_publish_wrong_owner'
+  | 'catalog_publish_pending_review'
+  | 'catalog_publish_invalid_services'
+  | 'catalog_publish_operation_conflict'
+
+export type PublishBusinessCatalogResult =
+  | {
+      kind: 'ok'
+      code: 'catalog_published' | 'catalog_publish_replayed'
+      business: BusinessRecord
+      claim: ClaimRecord
+      catalog: PublicCatalogContract
+      auditEvent: AuditEventContract
+      registryProjectionAttempts: readonly RegistryProjectionAttemptContract[]
+      discoveryManifestAttempts: readonly DiscoveryManifestAttemptContract[]
+    }
+  | {
+      kind: 'error'
+      code: PublishBusinessCatalogErrorCode
+      retryable: boolean
+      reason: string
+    }
+
+export type PublishBusinessCatalogState = BusinessSourceState & CatalogPublishSourceState
+
 export const buildPublicCatalogDto = buildPublicCatalogDtoImpl
 
 export const createEmptyCatalogSourceState = createEmptyCatalogSourceStateImpl
 
 export const validateServiceCatalogInput = validateServiceCatalogInputImpl
+
+export const publishBusinessCatalog = publishBusinessCatalogImpl

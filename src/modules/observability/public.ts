@@ -1,4 +1,19 @@
 import type { AuditEventId, BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
+import {
+  markOperationSucceeded as markOperationSucceededImpl,
+  reserveOperationKey as reserveOperationKeyImpl,
+} from './internal/operation-keys'
+import { validateAuditEvent as validateAuditEventImpl } from './internal/audit'
+import type {
+  AuditEventInput,
+  AuditValidationResult,
+} from './internal/audit'
+import type {
+  OperationKeyAuditSink,
+  OperationKeyDecision,
+  OperationKeyInput,
+  OperationKeyStore,
+} from './internal/operation-keys'
 
 export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_retryable', 'failed_terminal'] as const
 export type OperationKeyStatus = (typeof OperationKeyStatusValues)[number]
@@ -135,3 +150,18 @@ export type OwnerActivationState = {
   attributionRecorded: boolean
   lastEventAt: number
 }
+
+export type {
+  AuditEventInput,
+  AuditValidationResult,
+  OperationKeyAuditSink,
+  OperationKeyDecision,
+  OperationKeyInput,
+  OperationKeyStore,
+}
+
+export const markOperationSucceeded = markOperationSucceededImpl
+
+export const reserveOperationKey = reserveOperationKeyImpl
+
+export const validateAuditEvent = validateAuditEventImpl

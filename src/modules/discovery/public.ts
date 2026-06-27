@@ -20,3 +20,15 @@ export type DiscoveryManifestContract = {
   degradedReason?: string
   suppressedAt?: number
 }
+
+export type DiscoveryManifestAttemptContract = {
+  attemptId: string
+  businessId: BusinessId
+  ucpVersion: string
+  pathKind: Extract<DiscoveryPathKind, 'ae_hosted_fallback'>
+  status: DiscoveryAttemptStatus
+  failureCode?: string
+  failureMessageRedacted?: string
+  startedAt: number
+  finishedAt?: number
+}
