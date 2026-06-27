@@ -49,7 +49,7 @@ future provider URL -> internet
 2. Session-cookie mutations require CSRF or same-site Origin enforcement.
 3. Claim abuse controls exist before public exposure: actor/IP/device rate limit, slug collision policy, duplicate/impersonation fingerprint, typed rejection, audit event.
 4. Suppression uses one fail-closed eligibility predicate consumed by page, registry, sitemap, `llms.txt`, UCP, and search sync.
-5. Admin authority is source-owned: role, state, bootstrap, grant, revoke, break-glass, evidence refs, audit. No env-only admin authority.
+5. Admin authority is source-owned: role, state, preauthorized bootstrap, grant, revoke, break-glass, evidence refs, audit. No env-only admin authority and no arbitrary "first authenticated caller wins" path.
 6. Consequential mutations write append-only typed audit events in the same logical operation.
 7. Public/discovery projections are allowlisted builders, not DB row spreads.
 8. Discovery emits no callable, payment, wallet, custody, settlement, or provider-handler descriptors.
@@ -82,6 +82,8 @@ adminMembershipAuditEvents
 ```
 
 `requireAdmin` must read source-owned admin membership. Clerk/session state can identify the principal, not grant admin power by itself.
+
+Bootstrap is allowed only for a principal explicitly named by source-owned local configuration or a one-time bootstrap grant, and only while no active `owner_admin` exists. Tests must prove an arbitrary authenticated first caller is denied before the authorized bootstrap succeeds, then every later bootstrap is denied and audited.
 
 ## Admin permission matrix
 
@@ -194,6 +196,20 @@ Required on session-cookie mutations:
 - operator control change.
 
 Tests cover missing token, foreign Origin, and same-site success.
+
+## Public removal/dispute intake controls
+
+`/privacy/remove-business` is a public-write safety valve, not an unbounded mailbox.
+
+- Rate-limit by actor/session/IP/device fingerprint.
+- Dedupe by target business/service plus contact hash and normalized evidence hash.
+- Cap evidence length, file count, file type, and total payload bytes.
+- Require CSRF/same-site Origin for session-bearing submissions.
+- Store raw contact/evidence only behind private evidence refs; public/admin lists show redacted summaries and hashes.
+- Emit idempotent `dispute.opened`/`dispute.updated` audit events with operation key and correlation ID.
+- Never index removal evidence, owner notes, or claimant contact in page/search/API/sitemap/llms/UCP.
+
+Tests cover empty, invalid, duplicate, oversized, rate-limited, CSRF-failed, contested, suppressed-target, and successful submission states.
 
 ## Provider URL / SSRF quarantine
 

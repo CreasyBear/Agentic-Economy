@@ -301,11 +301,11 @@ Rules:
 | Secondary CTA | View registry |
 | Claim page heading | Tell us what your service can safely publish |
 | Claim submit | Publish service page |
-| Claim review warning | Publishing makes these service facts visible on your public page, registry, search API, and AE-hosted discovery files. |
+| Claim review warning | Publishing makes these service facts visible on enabled public surfaces. In `01-05`, name the public page only; add registry, search API, and AE-hosted discovery files only after those routes pass readback in `01-06`/`01-07`. |
 | Empty service error | Add at least one service before publishing. |
 | Duplicate claim error | This business may already be claimed. We saved the attempt for review and did not publish changes. |
 | Rate-limit error | Too many claim attempts. Try again later or request help. |
-| Publish pending | Publishing your page and updating discovery files. |
+| Publish pending | Publishing your page. Registry/search and discovery updates appear only after those route gates exist and pass readback. |
 | Publish failed | We could not publish this page yet. Nothing public changed. |
 | Success heading | Your service page is published |
 | Indexed pending | Search and discovery updates are still running. |

@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: Phase 1 — Ten-Star Spine Foundation
 status: executing
-stopped_at: Frontend design framework, DESIGN.md seed, and impeccable sidecar added; Phase 1 remains current execution target
-last_updated: "2026-06-27T09:59:34.557Z"
+stopped_at: Phase 1 implementation plan package ready; reviews incorporated; execute 01-01 substrate and guardrails next
+last_updated: "2026-06-27T13:01:14.660Z"
 progress:
   total_phases: 5
   completed_phases: 0
@@ -18,7 +18,7 @@ progress:
 
 **Created:** 2026-06-27
 **Current phase:** Phase 1 — Ten-Star Spine Foundation
-**Status:** GSD kickoff started; Phase 1-5 SPEC.md files exist with product-design passes; Phase 1 UI-SPEC, frontend design framework, `DESIGN.md`, and `.impeccable/design.json` exist; runtime implementation not started.
+**Status:** GSD kickoff started; Phase 1-5 SPEC.md files exist with product-design passes; Phase 1 UI-SPEC, frontend design framework, `DESIGN.md`, `.impeccable/design.json`, research, patterns, validation strategy, and 01-01 through 01-09 implementation plans exist; runtime implementation not started.
 
 ## Active decision
 
@@ -50,7 +50,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Run `/gsd:plan-phase 1` from the locked Phase 1 SPEC/context, Fable 5 review, UI-SPEC, `DESIGN.md`, `.impeccable/design.json`, and `FRONTEND-DESIGN-FRAMEWORK.md`, then execute the first Phase 1 substrate/guardrail PR slice. Future phases 2-5 now have SPEC.md files with product-design passes but must not be implemented before their prerequisite gates.
+Execute `.planning/phases/01-ten-star-spine-foundation/01-01-substrate-and-guardrails-PLAN.md` first. Do not start routes or Convex business behavior until the substrate/import/source-mining/type/copy/UI guardrails from 01-01 exist and pass their clean plus negative-fixture checks.
 
 ## Verification expectation
 
@@ -58,6 +58,6 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-27T09:59:34.557Z
-**Stopped at:** Frontend design framework, DESIGN.md seed, and impeccable sidecar added; Phase 1 remains current execution target
-**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-CONTEXT.md
+**Last session:** 2026-06-27T13:01:14.660Z
+**Stopped at:** Phase 1 implementation plan package ready; reviews incorporated; execute 01-01 substrate and guardrails next
+**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-01-substrate-and-guardrails-PLAN.md

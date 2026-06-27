@@ -351,7 +351,7 @@ A cold clone can prove:
 one launch-ICP business can claim without ABN;
 publish writes source state, service catalog rows, audit, idempotency, and queued projection;
 public business service catalog page renders workflow-critical service facts and unavailable capabilities;
-owner/status UX exposes separate `publicStatus`, `indexStatus`, `discoveryStatus`, `trustTier`, service/capability status, `callable=false`, `paymentRequired=false`, and next action;
+owner/status UX exposes separate `publicStatus`, `indexStatus`, `discoveryStatus`, `trustTier`, service/capability status, human labels for bookings/payments/automated actions not live, and next action; raw `callable=false` and `paymentRequired=false` stay in machine DTOs/manifests/admin diagnostics;
 registry/search/API/discovery outputs are generated from eligible catalog source state;
 index/discovery failures have business/service/capability readback and repair path;
 suppression removes business/service/capability exposure from page/search/API/sitemap/llms/UCP;
