@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-02-contracts-schema-idempotency-admin-foundation-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup
-last_updated: "2026-06-27T14:39:05.944Z"
+stopped_at: Completed 01-03-business-claim-publish-suppress-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup
+last_updated: "2026-06-27T15:16:39.892Z"
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 9
-  completed_plans: 2
-  percent: 0
+  total_plans: 13
+  completed_plans: 3
+  percent: 23
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -50,7 +50,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Execute `.planning/phases/01-ten-star-spine-foundation/01-01-substrate-and-guardrails-PLAN.md` first. Do not start routes or Convex business behavior until the substrate/import/source-mining/type/copy/UI guardrails from 01-01 exist and pass their clean plus negative-fixture checks.
+Execute `.planning/phases/01-ten-star-spine-foundation/01-04-admin-dispute-operator-recovery-PLAN.md` next. PR03 claim, publish, and suppression seams now exist behind module-owned public exports; keep Convex codegen honest until `CONVEX_DEPLOYMENT` is configured.
 
 ## Verification expectation
 
@@ -58,9 +58,9 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-27T14:38:16.691Z
-**Stopped at:** Completed 01-02-contracts-schema-idempotency-admin-foundation-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup
-**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-03-business-claim-publish-suppress-PLAN.md
+**Last session:** 2026-06-27T15:16:39.888Z
+**Stopped at:** Completed 01-03-business-claim-publish-suppress-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup
+**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-04-admin-dispute-operator-recovery-PLAN.md
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 |-------|------|----------|-------|
 | Phase 01 P01 | 14 min | 3 tasks | 54 files |
 | Phase 01 P02 | 43 min | 8 tasks | 46 files |
+| Phase 01 P03 | 32 min | 7 tasks | 25 files |
 
 ## Decisions
 
@@ -75,3 +76,5 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: 01-01 clean guardrail scans exclude the scanner definition file while fixture scans prove banned tokens are detected. — The scanner utility must contain the banned regex tokens it enforces; excluding only that file avoids self-matching without weakening runtime coverage.
 - [Phase 01]: Kept Convex schema as a thin composition root over module-owned schema fragments. — Avoids a monolithic schema file while preserving the Convex-required default export.
 - [Phase 01]: Left Convex codegen as the real Convex CLI command and recorded the missing deployment as an environment blocker. — Prevents false green checks; codegen can pass only after CONVEX_DEPLOYMENT is configured.
+- [Phase 01]: Implemented PR03 behavior through module seams and fail-closed generic Convex wrappers. — Generated Convex server files remain unavailable until `CONVEX_DEPLOYMENT` is configured, so runtime mutation boundaries fail closed while seam-level behavior is tested.
+- [Phase 01]: Allowed only same-module `public.ts` files to import their own internal implementations. — This enables owning public seams while route, sibling-module, and cross-module private-import bans remain active.
