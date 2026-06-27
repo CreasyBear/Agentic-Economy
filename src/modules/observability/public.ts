@@ -1,8 +1,10 @@
 import type { AuditEventId, BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
+import type { VisibilityTargetType } from '@/modules/business/public'
 import {
   markOperationSucceeded as markOperationSucceededImpl,
   reserveOperationKey as reserveOperationKeyImpl,
 } from './internal/operation-keys'
+import { recordInvalidationIntent as recordInvalidationIntentImpl } from './internal/outbox'
 import { validateAuditEvent as validateAuditEventImpl } from './internal/audit'
 import type {
   AuditEventInput,
@@ -69,6 +71,12 @@ export const OperatorControlKeyValues = [
   'public_copy_safe_mode',
 ] as const
 export type OperatorControlKey = (typeof OperatorControlKeyValues)[number]
+
+export const InvalidationSurfaceValues = ['public_catalog', 'registry_projection', 'discovery_manifest'] as const
+export type InvalidationSurface = (typeof InvalidationSurfaceValues)[number]
+
+export const InvalidationIntentStatusValues = ['queued', 'applied'] as const
+export type InvalidationIntentStatus = (typeof InvalidationIntentStatusValues)[number]
 
 export const FunnelEventTypeValues = [
   'visitor_attributed',
@@ -151,6 +159,17 @@ export type OwnerActivationState = {
   lastEventAt: number
 }
 
+export type InvalidationIntent = {
+  intentId: string
+  businessId: BusinessId
+  targetType: VisibilityTargetType
+  targetRef: string
+  surfaces: readonly InvalidationSurface[]
+  status: InvalidationIntentStatus
+  reasonCode: string
+  createdAt: number
+}
+
 export type {
   AuditEventInput,
   AuditValidationResult,
@@ -165,3 +184,5 @@ export const markOperationSucceeded = markOperationSucceededImpl
 export const reserveOperationKey = reserveOperationKeyImpl
 
 export const validateAuditEvent = validateAuditEventImpl
+
+export const recordInvalidationIntent = recordInvalidationIntentImpl

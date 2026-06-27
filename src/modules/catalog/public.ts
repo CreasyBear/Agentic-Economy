@@ -1,6 +1,8 @@
 import type { BusinessId, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
 import type { BusinessContextRecord, BusinessRecord } from '@/modules/business/public'
 import type { BusinessMutationActor, BusinessSourceState, ClaimRecord } from '@/modules/business/public'
+import { isPubliclyDiscoverable } from '@/modules/business/public'
+import type { SuppressionRuleRecord } from '@/modules/security/public'
 import type { DiscoveryStatus } from '@/modules/discovery/public'
 import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
 import type { PublicStatus, TrustTier } from '@/modules/business/public'
@@ -177,6 +179,17 @@ export type BuildPublicCatalogResult =
   | { kind: 'available'; catalog: PublicCatalogContract }
   | { kind: 'hidden'; reason: 'not_published' | 'no_published_services' }
 
+export type PublicCatalogReadState = BusinessSourceState &
+  CatalogSourceState & {
+    suppressionRules: SuppressionRuleRecord[]
+  }
+
+export type GetPublicBusinessCatalogInput = {
+  slug: Slug
+  indexStatus: IndexStatus
+  discoveryStatus: DiscoveryStatus
+}
+
 export type PublishBusinessCatalogCommand = {
   actor: BusinessMutationActor
   claimId: ClaimRecord['claimId']
@@ -225,3 +238,31 @@ export const createEmptyCatalogSourceState = createEmptyCatalogSourceStateImpl
 export const validateServiceCatalogInput = validateServiceCatalogInputImpl
 
 export const publishBusinessCatalog = publishBusinessCatalogImpl
+
+export function getPublicBusinessCatalog(
+  state: PublicCatalogReadState,
+  input: GetPublicBusinessCatalogInput
+): BuildPublicCatalogResult {
+  const business = state.businesses.find((candidate) => candidate.slug === input.slug)
+  if (business === undefined) {
+    return { kind: 'hidden', reason: 'not_published' }
+  }
+
+  if (!isPubliclyDiscoverable(business, state.suppressionRules)) {
+    return { kind: 'hidden', reason: 'not_published' }
+  }
+
+  const context = state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+  if (context === undefined) {
+    return { kind: 'hidden', reason: 'not_published' }
+  }
+
+  return buildPublicCatalogDtoImpl({
+    business,
+    context,
+    services: state.businessServices.filter((service) => service.businessId === business.businessId),
+    capabilities: state.serviceCapabilities.filter((capability) => capability.businessId === business.businessId),
+    indexStatus: input.indexStatus,
+    discoveryStatus: input.discoveryStatus,
+  })
+}

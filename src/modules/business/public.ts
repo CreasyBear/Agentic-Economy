@@ -2,14 +2,22 @@ import type { BusinessId, ClaimId, CorrelationId, OperationKey, OwnerId, Slug, S
 import type { ModuleResult } from '@/modules/common/result'
 import type {
   AbuseRateLimitBucketRecord,
+  AdminMembership,
   ClaimFingerprintRecord,
   CsrfCheckInput,
   RateLimitClaimInput,
+  SuppressionRuleRecord,
 } from '@/modules/security/public'
 import {
   claimBusiness as claimBusinessImpl,
   createEmptyBusinessSourceState as createEmptyBusinessSourceStateImpl,
 } from './internal/claim'
+import {
+  isPubliclyDiscoverable as isPubliclyDiscoverableImpl,
+  suppressBusiness as suppressBusinessImpl,
+} from './internal/visibility'
+import type { AuditEventContract, InvalidationIntent } from '@/modules/observability/public'
+import type { BusinessServiceRecord } from '@/modules/catalog/public'
 
 export const ClaimStatusValues = ['draft', 'authenticated', 'published', 'contested', 'disputed', 'suppressed'] as const
 export type ClaimStatus = (typeof ClaimStatusValues)[number]
@@ -108,6 +116,13 @@ export type BusinessSourceState = {
   abuseRateLimitBuckets: AbuseRateLimitBucketRecord[]
 }
 
+export type BusinessSuppressionState = BusinessSourceState & {
+  businessServices: BusinessServiceRecord[]
+  suppressionRules: SuppressionRuleRecord[]
+  auditEvents: AuditEventContract[]
+  invalidationIntents: InvalidationIntent[]
+}
+
 export type BusinessMutationActor =
   | {
       kind: 'authenticated_owner'
@@ -166,6 +181,38 @@ export type VisibilityContract = {
   suppressedAt?: number
 }
 
+export type SuppressBusinessCommand = {
+  adminMembership: AdminMembership | undefined
+  businessId: BusinessId
+  security: {
+    csrf: CsrfCheckInput
+  }
+  reasonCode: string
+  evidenceRefs: readonly string[]
+  operationKey: OperationKey
+  correlationId: CorrelationId
+  now: number
+}
+
+export type SuppressBusinessResult =
+  | {
+      kind: 'ok'
+      code: 'business_suppressed' | 'business_suppression_replayed'
+      business: BusinessRecord
+      auditEvent: AuditEventContract
+      invalidationIntent: InvalidationIntent
+    }
+  | {
+      kind: 'error'
+      code:
+        | 'business_suppress_csrf_rejected'
+        | 'business_suppress_admin_denied'
+        | 'business_suppress_not_found'
+        | 'business_suppress_invalid_reason'
+      retryable: boolean
+      reason: string
+    }
+
 export type BusinessContractResult = ModuleResult<
   'business_contract_ready',
   'business_contract_invalid',
@@ -176,3 +223,7 @@ export type BusinessContractResult = ModuleResult<
 export const createEmptyBusinessSourceState = createEmptyBusinessSourceStateImpl
 
 export const claimBusiness = claimBusinessImpl
+
+export const isPubliclyDiscoverable = isPubliclyDiscoverableImpl
+
+export const suppressBusiness = suppressBusinessImpl

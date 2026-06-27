@@ -1,5 +1,6 @@
 import type { AuditEventId, CorrelationId, OperationKey } from '@/modules/common/ids'
 import type { ClaimId, OwnerId, Slug } from '@/modules/common/ids'
+import type { VisibilityTargetType } from '@/modules/business/public'
 import {
   allocateDeterministicSlug as allocateDeterministicSlugImpl,
   assertCsrf as assertCsrfImpl,
@@ -7,6 +8,7 @@ import {
   normalizeClaimFingerprint as normalizeClaimFingerprintImpl,
   rateLimitClaim as rateLimitClaimImpl,
 } from './internal/duplicates'
+import { requireAdminAuthority as requireAdminAuthorityImpl } from './internal/admin-authority'
 
 export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
 export type AdminRole = (typeof AdminRoleValues)[number]
@@ -77,6 +79,17 @@ export type AbuseRateLimitBucketRecord = {
   updatedAt: number
 }
 
+export type SuppressionRuleRecord = {
+  targetType: VisibilityTargetType
+  targetRef: string
+  status: SuppressionRuleStatus
+  reasonCode: string
+  evidenceRefs: readonly string[]
+  createdByAdminRef: string
+  createdAt: number
+  liftedAt?: number
+}
+
 export type CsrfCheckInput = {
   csrfToken?: string
   csrfCookie?: string
@@ -133,3 +146,5 @@ export const detectDuplicateClaim = detectDuplicateClaimImpl
 export const normalizeClaimFingerprint = normalizeClaimFingerprintImpl
 
 export const rateLimitClaim = rateLimitClaimImpl
+
+export const requireAdminAuthority = requireAdminAuthorityImpl
