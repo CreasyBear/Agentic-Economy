@@ -95,6 +95,28 @@ Current repo state is planning-only and Phase 4 does not yet have a GSD phase di
 - [ ] E2E/unit/integration tests cover duplicate, stale, concurrent, wrong-owner, expired, refused, proof-gap, downstream failure, success, mobile, keyboard, focus, and disabled states.
 - [ ] Source-mining/import scans prove no hosted agents, broad action catalogs, request market, wallet/payment, MCP/OpenAPI/SDK mutation bloat, or autonomous execution ships.
 
+## Product Design Pass
+
+**Mode:** Shape/Harden for future implementation. This phase introduces consequential owner decisions, so interaction semantics and consequence clarity are safety requirements, not polish.
+
+**Primary user/job/object/outcome:**
+- User: owner/manager deciding on one proposed action, plus operator reconstructing provider/readback outcomes.
+- Job: understand a proposed action, approve or reject it, and see whether the attempted outcome succeeded, failed, or has a proof gap.
+- Object: candidate action, policy result, owner decision, gateway admission, provider/internal attempt, receipt/proof-gap, and audit chain.
+- Outcome: no protected action happens without informed owner approval, and every result can be reconstructed.
+
+**User-visible surfaces to design:** owner action queue, action detail/review panel, approve/reject controls, disabled/expired/refused states, consequence/reversibility/deadline/proof disclosure, attempt progress, receipt/proof-gap/failure readback, repair/no-repair action, and operator reconstruction.
+
+**Product decisions locked:**
+- One action class only; broad catalogs and autonomous execution stay out.
+- Inline consequence disclosure is required before approval; do not hide it behind decorative modals or protocol copy.
+- Approve/reject are actions, not navigation; controls must name object, scope, consequence, reversibility, deadline, and proof requirement.
+- Proof gaps are honest terminal or repairable states, not silently successful execution.
+
+**Reachable states that implementation must render:** no proposals, review required, refused, expired, missing proof, external-authority required, time-bound warning, disabled reason, wrong-owner/forbidden, duplicate/stale proposal, approve pending, reject pending, provider attempt pending, timeout, mismatch, failed, proof_gap, successful receipt, disputed/reversed, repair available, no-repair, mobile 375px, keyboard/focus path, and long action names/provider messages.
+
+**Product-design acceptance:** Closeout must include rendered queue/detail/approval/rejection evidence at compact and wide widths, keyboard/focus proof, consequence-copy proof, disabled/expired/proof-gap/failed/success evidence, and scans proving no autonomous/direct-execute/payment wording ships.
+
 ## Edge Coverage
 
 **Coverage:** 13/13 applicable edges resolved · 0 unresolved

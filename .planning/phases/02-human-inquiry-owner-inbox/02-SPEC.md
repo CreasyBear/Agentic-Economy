@@ -96,6 +96,28 @@ Current repo state is planning-only and Phase 2 does not yet have a GSD phase di
 - [ ] Copy/source-mining scans prove no AI reply, booking, payment, protected action, request market, hosted agent, voice, expert, or multi-channel notification runtime ships.
 - [ ] Closeout evidence reconstructs customer inquiry to owner read to owner reply to notification readback to audit from source state.
 
+## Product Design Pass
+
+**Mode:** Shape/Harden for future implementation. This spec changes what customers and owners can do, so product decisions, copy, and reachable states are part of the locked requirement.
+
+**Primary user/job/object/outcome:**
+- User: customer needing a safe first contact, source-owned business owner/manager, and operator handling delivery failures.
+- Job: customer submits one conservative inquiry; owner reads, replies, and understands delivery/readback state.
+- Object: inquiry thread, owner reply, notification outbox, and private audit/readback.
+- Outcome: the message is not lost, the owner is not impersonated by AI, and no one mistakes an inquiry for booking/payment/provider execution.
+
+**User-visible surfaces to design:** public inquiry availability affordance on the business page, inquiry form, submitted/error receipt, owner inbox list, inquiry detail thread, reply/close controls, notification readback, suppression-disabled state, and operator/admin failure readback.
+
+**Product decisions locked:**
+- Inquiry is human-only; no autonomous/AI reply or owner impersonation.
+- Inquiry availability appears only when handling and notification readback are real; unavailable is an explicit state.
+- Notification failure must be visible but must not erase or downgrade the underlying inquiry/message truth.
+- Private inquiry body/contact/owner notes remain private source state; public surfaces may show only safe availability/status.
+
+**Reachable states that implementation must render:** unavailable/ineligible, eligible, loading, empty form, invalid contact/body, abuse blocked/rate-limited, duplicate/replay, submitted, notification queued/sent/retryable/permanent-failure/provider-missing/suppressed, owner inbox empty/sparse/populated, unread, needs reply, read, reply pending, reply failed, resolved/closed, suppressed after submission, wrong-owner/forbidden/not-found, long customer text, mobile 375px, keyboard/focus path, and preserved input after recoverable validation errors.
+
+**Product-design acceptance:** Closeout must show rendered customer submit and owner reply flows at compact and wide widths, keyboard/focus proof for submit/reply/close, copy proof that inquiry does not imply guaranteed response/booking/payment/action, and failure-state evidence for notification readback without message loss.
+
 ## Edge Coverage
 
 **Coverage:** 15/15 applicable edges resolved · 0 unresolved

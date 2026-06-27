@@ -126,6 +126,28 @@ The accepted Phase 1 story is Sam from Parramatta Emergency Plumbing: Sam claims
 - [ ] Deployment/readback smoke passes for public routes, discovery headers, Convex, Clerk, and `/admin/*` non-admin denial.
 - [ ] `/mattpocock-review` Standards and Spec axes complete separately; every finding is fixed or explicitly recorded.
 
+## Product Design Pass
+
+**Mode:** Shape/Harden for future implementation. Runtime is absent, so this pass locks product-design obligations; visual quality still requires rendered compact and wide viewport verification during implementation.
+
+**Primary user/job/object/outcome:**
+- User: launch-ICP Australian urgent/local-service owner, plus public customer/agent and source-owned operator.
+- Job: claim without ABN, publish truthful service facts, understand discoverability, and recover or suppress exposure when something is wrong.
+- Object: source-owned business/service catalog and its public/discovery projections.
+- Outcome: Sam can tell what is live, unavailable, degraded, or suppressed without protocol jargon or future-capability promises.
+
+**User-visible surfaces to design:** `/`, `/claim`, `/claim/success`, `/{slug}`, owner status/readback, `/registry`, public API/search outputs, `/{slug}/ucp`, `/llms.txt`, `/sitemap.xml`, `/robots.txt`, `/privacy/remove-business`, `/admin/claims`, `/admin/index-health`, `/admin/audit-events`.
+
+**Product decisions locked:**
+- No ABN is required for the launch claim; ABR/registry verification is later trust evidence, not the publish gate.
+- Public and owner-facing status remain separated (`publicStatus`, `trustTier`, `indexStatus`, `discoveryStatus`, service/capability state, `callable=false`, `paymentRequired=false`) rather than collapsed into "live" or "verified".
+- Unavailable capability is a first-class user state, not hidden absence.
+- Suppression/removal must remove exposure everywhere and leave operator reconstruction.
+
+**Reachable states that implementation must render:** unauthenticated, authenticated launch owner, wrong owner, non-admin admin access, empty service list, invalid claim input, CSRF/origin failure, rate-limited claim, duplicate/suspicious claim, publish pending, publish failed, published/not indexed, degraded discovery, stale projection, suppressed/unavailable, not-found/noindex, repair available, repair failed, long owner text, mobile 375px, keyboard/focus path, and reduced-motion where motion exists.
+
+**Product-design acceptance:** Phase 1 cannot close from code inspection alone. Closeout must include rendered evidence for the public claim/publish/status path and admin/operator paths at compact and wide widths, keyboard/focus proof, copy scan proof for overclaims, and long-content/escaped-text proof for owner-authored fields.
+
 ## Edge Coverage
 
 **Coverage:** 48/48 applicable edges resolved · 0 unresolved

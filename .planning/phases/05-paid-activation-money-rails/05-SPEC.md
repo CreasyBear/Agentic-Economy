@@ -98,6 +98,28 @@ Current repo state is planning-only and Phase 5 does not yet have a GSD phase di
 - [ ] Sandbox/local tests cover success, duplicate replay, webhook retry, invalid signature, unbound object, failed payment, refund/reversal, dispute, reconciliation mismatch, wrong-owner/permission denial, and redaction.
 - [ ] Phase 1-4 truth boundaries remain intact: catalog/discovery still derive public facts from source-owned catalog/action state, not provider payloads.
 
+## Product Design Pass
+
+**Mode:** Shape/Harden for future implementation. Paid activation is a high-consequence owner/operator flow; copy, state, permission, and reversibility clarity are part of the payment contract.
+
+**Primary user/job/object/outcome:**
+- User: owner/admin starting paid activation, customer/payment provider redirect participant where applicable, and operator reconciling provider/internal state.
+- Job: choose or confirm paid activation, complete server-created checkout/subscription, understand paid/failed/refunded/disputed state, and recover provider/internal mismatches.
+- Object: money-rail decision, plan/quote, checkout/subscription operation, provider event/readback, receipt, entitlement/readback, reversal/dispute, and reconciliation record.
+- Outcome: the owner sees exactly what they are paying for and what happened, while AE grants paid state only from source-owned, idempotent, reconciled evidence.
+
+**User-visible surfaces to design:** paid activation entry/plan confirmation, checkout redirect handoff and return/cancel states, billing status/receipt readback, failed-payment/refund/reversal/dispute/cancellation notices, entitlement/readback state, operator reconciliation dashboard, retry/no-repair controls, and redacted provider-error display.
+
+**Product decisions locked:**
+- One selected rail starts paid activation; provider/rail choice and controller responsibilities are decision-recorded before UI copy claims capability.
+- Client UI never supplies amount, currency, customer ID, entitlement, or business authority.
+- Entitlement copy follows internal billing/readback state, not raw webhook arrival.
+- Refunds, disputes, reversals, and failed payments preserve history and expose next action instead of erasing receipts.
+
+**Reachable states that implementation must render:** paid activation unavailable, plan unavailable, owner unauthorized, valid plan confirmation, checkout creating, redirecting, canceled return, pending provider readback, paid/active, duplicate replay, failed payment, refund, reversal, dispute hold, cancellation, provider unavailable, invalid signature/unbound object held, reconciliation stale/missing/duplicate/mismatched, retry/no-repair, redacted provider error, mobile 375px, keyboard/focus path, and long plan/provider text.
+
+**Product-design acceptance:** Closeout must include rendered paid activation, receipt/status, failure/dispute, and reconciliation evidence at compact and wide widths, keyboard/focus proof for owner/operator controls, copy scans proving no unsupported custody/settlement/x402/Connect/paymentRequired claims, and redaction evidence for provider errors and sensitive payment data.
+
 ## Edge Coverage
 
 **Coverage:** 12/12 applicable edges resolved · 0 unresolved

@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: Phase 1 — Ten-Star Spine Foundation
 status: executing
-stopped_at: Phase 1-5 specs created; Phase 1 remains current execution target
-last_updated: "2026-06-27T09:20:24.224Z"
+stopped_at: Product-design pass added to Phase 1-5 specs; Phase 1 remains current execution target
+last_updated: "2026-06-27T09:28:50.302Z"
 progress:
   total_phases: 5
   completed_phases: 0
@@ -18,7 +18,7 @@ progress:
 
 **Created:** 2026-06-27
 **Current phase:** Phase 1 — Ten-Star Spine Foundation
-**Status:** GSD kickoff started; Phase 1-5 SPEC.md files exist; runtime implementation not started.
+**Status:** GSD kickoff started; Phase 1-5 SPEC.md files exist with product-design passes; runtime implementation not started.
 
 ## Active decision
 
@@ -50,14 +50,14 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Run `/gsd:discuss-phase 1` or `/gsd:plan-phase 1` from the locked Phase 1 SPEC/context, then execute the first Phase 1 substrate/guardrail PR slice. Future phases 2-5 now have SPEC.md files but must not be implemented before their prerequisite gates.
+Run `/gsd:discuss-phase 1` or `/gsd:plan-phase 1` from the locked Phase 1 SPEC/context and its Product Design Pass, then execute the first Phase 1 substrate/guardrail PR slice. Future phases 2-5 now have SPEC.md files with product-design passes but must not be implemented before their prerequisite gates.
 
 ## Verification expectation
 
-Phase 1 cannot close until the exact command suite in the plan passes, plus deployment/readback smoke for `/`, `/claim`, `/registry`, `/{slug}`, `/api/businesses`, `/api/businesses/search?q=`, `/api/businesses/{slug}`, `/{slug}/ucp`, `/llms.txt`, `/sitemap.xml`, `/robots.txt`, and `/admin/*` non-admin denial.
+Phase 1 cannot close until the exact command suite in the plan passes, rendered compact/wide product-design evidence exists for materially changed user-facing surfaces, and deployment/readback smoke covers `/`, `/claim`, `/registry`, `/{slug}`, `/api/businesses`, `/api/businesses/search?q=`, `/api/businesses/{slug}`, `/{slug}/ucp`, `/llms.txt`, `/sitemap.xml`, `/robots.txt`, and `/admin/*` non-admin denial.
 
 ## Session
 
-**Last session:** 2026-06-27T09:20:24.224Z
-**Stopped at:** Phase 1-5 specs created; Phase 1 remains current execution target
+**Last session:** 2026-06-27T09:28:50.302Z
+**Stopped at:** Product-design pass added to Phase 1-5 specs; Phase 1 remains current execution target
 **Resume file:** .planning/phases/01-ten-star-spine-foundation/01-CONTEXT.md

@@ -96,6 +96,28 @@ Current repo state is planning-only and Phase 3 does not yet have a GSD phase di
 - [ ] No invocation, protected action, payment, SDK/CLI/plugin, hosted-agent, marketplace, or request-market surface ships by accident.
 - [ ] Builder/agent smoke can fetch docs/schema/examples and determine current public facts plus unsupported/degraded capabilities.
 
+## Product Design Pass
+
+**Mode:** Shape/Harden for future implementation. The surface is developer/agent-facing, but it is still user-facing product: builders must understand capability without receiving hidden authority.
+
+**Primary user/job/object/outcome:**
+- User: builder, agent operator, crawler/answer engine consumer, and internal operator reading route health.
+- Job: discover current public facts, schema shape, freshness, and unsupported/degraded capabilities.
+- Object: public catalog DTO, docs/schema/examples, support matrix, cache/freshness/readback, and optional read-only projection/key.
+- Outcome: a builder can integrate against the truthful read-only surface and know exactly what is unavailable without guessing or invoking mutation paths.
+
+**User-visible surfaces to design:** developer/agent docs page or equivalent readback, support matrix, schema/examples/fixtures, route health and freshness panel, AE-hosted fallback explanation, optional API key reveal/readback UI, optional OpenAPI/MCP read projection download, and unavailable/degraded notices.
+
+**Product decisions locked:**
+- Read-only discovery is the product; absent/unavailable is acceptable and must be explained.
+- Generated docs/projections follow route-tested server capability; they never create authority.
+- AE-hosted fallback must remain visibly distinct from standard merchant-origin UCP.
+- Optional keys/projections ship only behind a support-matrix decision with user value, not platform theatre.
+
+**Reachable states that implementation must render:** no docs/projection available, shipped/degraded/unavailable/deferred surface, schema version current/stale/mismatch, cache hit/stale/error, 404/missing slug, empty examples, large example payload, optional API key absent/reveal-once/revoked/rate-limited/last-used, business-origin UCP unavailable, AE-hosted fallback, public route outage, mobile/narrow docs, keyboard/focus path, and long field/status names.
+
+**Product-design acceptance:** Closeout must include rendered or extracted docs/readback evidence that a builder can identify current public facts, freshness, examples, unsupported capabilities, and next steps; compact/wide layout, keyboard navigation, long examples, copy scans, and no-mutation/no-payment descriptor scans must pass.
+
 ## Edge Coverage
 
 **Coverage:** 14/14 applicable edges resolved · 0 unresolved
