@@ -58,7 +58,7 @@ export function scanPrivateImports(targets: readonly ScanTarget[]): readonly Sca
       message: 'Routes and sibling modules must use module public seams, not internal files.',
       pattern: /from\s+['"][^'"]*(?:@\/|~\/|src\/)?modules\/[^'"]+\/internal\/[^'"]+['"]/,
     },
-  ]).filter((violation) => !isAllowedConvexSchemaComposition(violation))
+  ]).filter((violation) => !isAllowedConvexSchemaComposition(violation) && !isAllowedModulePublicSeam(violation))
 }
 
 export function scanRouteBoundaries(targets: readonly ScanTarget[]): readonly ScanViolation[] {
@@ -292,4 +292,17 @@ function isAllowedConvexSchemaComposition(violation: ScanViolation): boolean {
     violation.file === 'convex/schema.ts' &&
     /from\s+['"]\.\.\/src\/modules\/[^'"]+\/internal\/schema['"]/.test(violation.excerpt)
   )
+}
+
+function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
+  if (violation.rule !== 'module-private-import') {
+    return false
+  }
+
+  const match = /^src\/modules\/([^/]+)\/public\.ts$/.exec(violation.file)
+  if (match === null) {
+    return false
+  }
+
+  return match[1] !== undefined && /from\s+['"]\.\/internal\//.test(violation.excerpt)
 }
