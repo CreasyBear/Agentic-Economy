@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.vinxi/
+.output/
+.env
+.env.*
+.DS_Store
+.convex/
+playwright-report/
+test-results/
+coverage/
+.codex/
