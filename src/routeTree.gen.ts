@@ -10,33 +10,69 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
+import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
+import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexHealthRoute = AdminIndexHealthRouteImport.update({
+  id: '/admin/index-health',
+  path: '/admin/index-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminClaimsRoute = AdminClaimsRouteImport.update({
+  id: '/admin/claims',
+  path: '/admin/claims',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAuditEventsRoute = AdminAuditEventsRouteImport.update({
+  id: '/admin/audit-events',
+  path: '/admin/audit-events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin/audit-events': typeof AdminAuditEventsRoute
+  '/admin/claims': typeof AdminClaimsRoute
+  '/admin/index-health': typeof AdminIndexHealthRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin/audit-events': typeof AdminAuditEventsRoute
+  '/admin/claims': typeof AdminClaimsRoute
+  '/admin/index-health': typeof AdminIndexHealthRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin/audit-events': typeof AdminAuditEventsRoute
+  '/admin/claims': typeof AdminClaimsRoute
+  '/admin/index-health': typeof AdminIndexHealthRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    '/' | '/admin/audit-events' | '/admin/claims' | '/admin/index-health'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/admin/audit-events' | '/admin/claims' | '/admin/index-health'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin/audit-events'
+    | '/admin/claims'
+    | '/admin/index-health'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminAuditEventsRoute: typeof AdminAuditEventsRoute
+  AdminClaimsRoute: typeof AdminClaimsRoute
+  AdminIndexHealthRoute: typeof AdminIndexHealthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +84,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/index-health': {
+      id: '/admin/index-health'
+      path: '/admin/index-health'
+      fullPath: '/admin/index-health'
+      preLoaderRoute: typeof AdminIndexHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/claims': {
+      id: '/admin/claims'
+      path: '/admin/claims'
+      fullPath: '/admin/claims'
+      preLoaderRoute: typeof AdminClaimsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/audit-events': {
+      id: '/admin/audit-events'
+      path: '/admin/audit-events'
+      fullPath: '/admin/audit-events'
+      preLoaderRoute: typeof AdminAuditEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminAuditEventsRoute: AdminAuditEventsRoute,
+  AdminClaimsRoute: AdminClaimsRoute,
+  AdminIndexHealthRoute: AdminIndexHealthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

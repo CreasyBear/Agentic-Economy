@@ -16,6 +16,7 @@ import {
   requireAdminAuthority as requireAdminAuthorityImpl,
   revokeAdminMembership as revokeAdminMembershipImpl,
 } from './internal/admin-authority'
+import { readAdminRouteShell as readAdminRouteShellImpl } from './internal/admin-readbacks'
 import type {
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
@@ -24,6 +25,19 @@ import type {
   AdminGrantMembershipCommand,
   AdminRevokeMembershipCommand,
 } from './internal/admin-authority'
+import type {
+  AdminAllowedReadback,
+  AdminDeniedReadback,
+  AdminReadbackDeniedReason,
+  AdminReadbackRepairAction,
+  AdminReadbackRequest,
+  AdminReadbackRow,
+  AdminReadbackRowState,
+  AdminReadbackRowType,
+  AdminReadbackSummary,
+  AdminReadbackSurface,
+  AdminShellReadback,
+} from './internal/admin-readbacks'
 
 export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
 export type AdminRole = (typeof AdminRoleValues)[number]
@@ -153,12 +167,23 @@ export type AdminDecisionAudit = {
 }
 
 export type {
+  AdminAllowedReadback,
   AdminActionDeniedCommand,
   AdminAuthorityMutationResult,
   AdminAuthorityState,
   AdminBootstrapCommand,
+  AdminDeniedReadback,
   AdminGrantMembershipCommand,
+  AdminReadbackDeniedReason,
+  AdminReadbackRepairAction,
+  AdminReadbackRequest,
+  AdminReadbackRow,
+  AdminReadbackRowState,
+  AdminReadbackRowType,
+  AdminReadbackSummary,
+  AdminReadbackSurface,
   AdminRevokeMembershipCommand,
+  AdminShellReadback,
 }
 
 export const allocateDeterministicSlug = allocateDeterministicSlugImpl
@@ -182,3 +207,5 @@ export const grantAdminMembership = grantAdminMembershipImpl
 export const recordAdminActionDenied = recordAdminActionDeniedImpl
 
 export const revokeAdminMembership = revokeAdminMembershipImpl
+
+export const readAdminRouteShell = readAdminRouteShellImpl
