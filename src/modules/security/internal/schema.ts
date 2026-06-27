@@ -22,9 +22,18 @@ export const securityTables = {
     targetRef: v.string(),
     reasonCode: v.string(),
     evidenceHash: v.string(),
+    evidenceRefs: v.array(v.string()),
+    publicMessageHash: v.string(),
+    operationKey: v.string(),
+    operationKeys: v.array(v.string()),
+    correlationId: v.string(),
+    requestCount: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_business_status', ['businessId', 'status']),
+  })
+    .index('by_business_status', ['businessId', 'status'])
+    .index('by_operation_key', ['operationKey'])
+    .index('by_target_status', ['targetType', 'targetRef', 'status']),
 
   suppressionRules: defineTable({
     targetType: literalUnion(VisibilityTargetTypeValues),

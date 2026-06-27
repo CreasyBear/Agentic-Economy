@@ -146,10 +146,62 @@ export const readAdminIndexHealth = queryGeneric({
   handler: async () => deniedReadback('index_health'),
 })
 
+export const openRemovalDispute = mutationGeneric({
+  args: {
+    businessId: v.string(),
+    targetType: v.union(v.literal('business'), v.literal('service'), v.literal('capability')),
+    targetRef: v.string(),
+    reasonCode: v.union(
+      v.literal('privacy_removal_requested'),
+      v.literal('ownership_contested'),
+      v.literal('duplicate_or_impersonation'),
+      v.literal('unsafe_or_inaccurate')
+    ),
+    contactEmail: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+    contactName: v.optional(v.string()),
+    evidence: v.array(
+      v.object({
+        label: v.string(),
+        mediaType: v.union(
+          v.literal('text/plain'),
+          v.literal('image/jpeg'),
+          v.literal('image/png'),
+          v.literal('application/pdf')
+        ),
+        byteLength: v.number(),
+        privateRef: v.string(),
+      })
+    ),
+    publicMessage: v.optional(v.string()),
+    csrfToken: v.optional(v.string()),
+    csrfCookie: v.optional(v.string()),
+    origin: v.optional(v.string()),
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: v.object({
+    kind: v.literal('error'),
+    code: v.literal('dispute_unavailable'),
+    retryable: v.boolean(),
+    reason: v.string(),
+  }),
+  handler: async () => ({
+    kind: 'error' as const,
+    code: 'dispute_unavailable' as const,
+    retryable: true,
+    reason: 'Removal disputes require generated Convex source-state and abuse-control wiring in the deployment boundary.',
+  }),
+})
+
 export type {
   AdminAction,
   AdminAuthorityState,
   AdminDecisionAudit,
   AdminMembership,
   AdminRole,
+  DisputeOpenCommand,
+  DisputeOpenResult,
+  DisputeRecord,
+  DisputeSourceState,
 } from '../src/modules/security/public'
