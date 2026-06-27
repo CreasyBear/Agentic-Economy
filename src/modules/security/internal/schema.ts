@@ -55,6 +55,7 @@ export const securityTables = {
     targetRef: v.string(),
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
+    operationKey: v.string(),
     correlationId: v.string(),
     createdAt: v.number(),
   }),

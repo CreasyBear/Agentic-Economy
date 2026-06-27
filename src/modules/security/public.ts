@@ -8,7 +8,22 @@ import {
   normalizeClaimFingerprint as normalizeClaimFingerprintImpl,
   rateLimitClaim as rateLimitClaimImpl,
 } from './internal/duplicates'
-import { requireAdminAuthority as requireAdminAuthorityImpl } from './internal/admin-authority'
+import {
+  bootstrapOwnerAdmin as bootstrapOwnerAdminImpl,
+  createEmptyAdminAuthorityState as createEmptyAdminAuthorityStateImpl,
+  grantAdminMembership as grantAdminMembershipImpl,
+  recordAdminActionDenied as recordAdminActionDeniedImpl,
+  requireAdminAuthority as requireAdminAuthorityImpl,
+  revokeAdminMembership as revokeAdminMembershipImpl,
+} from './internal/admin-authority'
+import type {
+  AdminActionDeniedCommand,
+  AdminAuthorityMutationResult,
+  AdminAuthorityState,
+  AdminBootstrapCommand,
+  AdminGrantMembershipCommand,
+  AdminRevokeMembershipCommand,
+} from './internal/admin-authority'
 
 export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
 export type AdminRole = (typeof AdminRoleValues)[number]
@@ -137,6 +152,15 @@ export type AdminDecisionAudit = {
   createdAt: number
 }
 
+export type {
+  AdminActionDeniedCommand,
+  AdminAuthorityMutationResult,
+  AdminAuthorityState,
+  AdminBootstrapCommand,
+  AdminGrantMembershipCommand,
+  AdminRevokeMembershipCommand,
+}
+
 export const allocateDeterministicSlug = allocateDeterministicSlugImpl
 
 export const assertCsrf = assertCsrfImpl
@@ -148,3 +172,13 @@ export const normalizeClaimFingerprint = normalizeClaimFingerprintImpl
 export const rateLimitClaim = rateLimitClaimImpl
 
 export const requireAdminAuthority = requireAdminAuthorityImpl
+
+export const bootstrapOwnerAdmin = bootstrapOwnerAdminImpl
+
+export const createEmptyAdminAuthorityState = createEmptyAdminAuthorityStateImpl
+
+export const grantAdminMembership = grantAdminMembershipImpl
+
+export const recordAdminActionDenied = recordAdminActionDeniedImpl
+
+export const revokeAdminMembership = revokeAdminMembershipImpl
