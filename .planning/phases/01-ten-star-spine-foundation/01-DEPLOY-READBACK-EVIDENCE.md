@@ -81,13 +81,35 @@ failure is in the existing durable registry/runtime codegen boundary.
 
 ## Deploy Smoke Evidence
 
-Pending Task 2 evidence. Deploy smoke must remain blocked unless all required
-real inputs are present:
+`npm run test:deploy-smoke` was not run in Task 2 because the plan and user
+instructions require all non-secret deploy inputs and storage-state paths to be
+present before executing live smoke.
 
-- `DEPLOY_BASE_URL`
-- `DEPLOY_CONVEX_URL`
-- `SMOKE_ADMIN_STORAGE_STATE`
-- `SMOKE_OWNER_STORAGE_STATE`
-- `SMOKE_BUSINESS_SLUG`
+| Required input | Status | Decision |
+|---|---|---|
+| `DEPLOY_BASE_URL` | missing from shell env; absent from `.env.local` | Block deploy smoke. |
+| `DEPLOY_CONVEX_URL` | missing from shell env; absent from `.env.local` | Block deploy smoke. |
+| `SMOKE_ADMIN_STORAGE_STATE` | missing from shell env; absent from `.env.local` | Block admin readback. |
+| `SMOKE_OWNER_STORAGE_STATE` | missing from shell env; absent from `.env.local` | Block non-admin denial readback. |
+| `SMOKE_BUSINESS_SLUG` | missing from shell env; absent from `.env.local` | Block durable business readback. |
 
 Storage-state files are local operator artifacts and must not be committed.
+
+## Deploy Smoke Harness Coverage
+
+No harness edit was needed in Task 2. The existing deploy-smoke spec already
+fails closed on missing inputs and checks the R10 live-readback surfaces when the
+inputs are provided:
+
+- public HTML routes: `/`, `/claim`, `/claim/success`, `/privacy/remove-business`, `/registry`, and `/{slug}`;
+- public APIs: `/api/businesses`, `/api/businesses/search?q=`, and `/api/businesses/{slug}`;
+- discovery routes and headers: `/{slug}/ucp`, `/llms.txt`, `/sitemap.xml`, and `/robots.txt`;
+- durable slug presence across registry/API/discovery outputs from the provided `SMOKE_BUSINESS_SLUG`;
+- sitemap and llms omissions for admin/private/suppressed/future capability surfaces;
+- owner storage-state denial from `/admin/claims`, `/admin/audit-events`, and `/admin/index-health`;
+- admin storage-state readback for claims, audit events, index health, repair/readback, and public surfaces;
+- explicit HTTPS, non-local `DEPLOY_CONVEX_URL` reachability without a 5xx response.
+
+Because no live Vercel/Convex/Clerk URL, storage state, or durable business slug
+was available, this artifact records blocked deploy evidence rather than a
+skipped green.
