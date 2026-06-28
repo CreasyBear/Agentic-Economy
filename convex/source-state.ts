@@ -1,19 +1,60 @@
-type RuntimeDocument = Record<string, unknown> & { _id: string }
+import type { UserIdentity } from 'convex/server'
 
-type RuntimeIndexBuilder = {
+export type RuntimeDocument = Record<string, unknown> & { _id: string }
+
+export type RuntimeIndexBuilder = {
   eq: (field: string, value: unknown) => RuntimeIndexBuilder
 }
 
-type RuntimeQuery = {
+export type RuntimeQuery = {
   withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
   collect: () => Promise<RuntimeDocument[]>
   unique: () => Promise<RuntimeDocument | null>
+  first?: () => Promise<RuntimeDocument | null>
 }
 
-type RuntimeDb = {
+export type RuntimeQueryable = {
   query: (tableName: string) => RuntimeQuery
+}
+
+export type RuntimeReader = RuntimeQueryable & {
+  get: (id: string) => Promise<RuntimeDocument | null>
+}
+
+export type RuntimeWriter = RuntimeQueryable & {
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
+}
+
+export type RuntimeDb = RuntimeReader & RuntimeWriter
+
+export type RuntimeAuth = {
+  getUserIdentity: () => Promise<UserIdentity | null>
+}
+
+export type RuntimeQueryCtx = {
+  db: RuntimeReader
+}
+
+export type RuntimeMutationCtx = {
+  db: RuntimeDb
+  auth: RuntimeAuth
+}
+
+export function runtimeReader(db: object): RuntimeReader {
+  return db as RuntimeReader
+}
+
+export function runtimeWriter(db: object): RuntimeWriter {
+  return db as RuntimeWriter
+}
+
+export function runtimeDb(db: object): RuntimeDb {
+  return db as RuntimeDb
+}
+
+export function runtimeMutationCtx(ctx: { db: object; auth: RuntimeAuth }): RuntimeMutationCtx {
+  return { db: runtimeDb(ctx.db), auth: ctx.auth }
 }
 
 type SourceRefRecord = {
@@ -165,7 +206,7 @@ export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Pro
   }
 }
 
-export async function persistPhaseOneSourceState(db: RuntimeDb, state: PhaseOneSourceState): Promise<void> {
+export async function persistPhaseOneSourceState(db: RuntimeWriter, state: PhaseOneSourceState): Promise<void> {
   const specs: UpsertSpec[] = [
     byDomainId('owners', state.business.owners, 'ownerId'),
     byDomainId('businesses', state.business.businesses, 'businessId'),
@@ -196,7 +237,7 @@ export async function persistPhaseOneSourceState(db: RuntimeDb, state: PhaseOneS
   }
 }
 
-async function upsertRows(db: RuntimeDb, spec: UpsertSpec): Promise<void> {
+async function upsertRows(db: RuntimeWriter, spec: UpsertSpec): Promise<void> {
   for (const row of spec.rows) {
     const patch = spec.toPatch(row)
     const existing = (await collect(db, spec.tableName)).find((document) => spec.matches(document, row))

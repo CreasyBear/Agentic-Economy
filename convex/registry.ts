@@ -1,6 +1,9 @@
 import { queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import { runtimeReader } from './source-state'
+import type { RuntimeDocument, RuntimeReader } from './source-state'
+
 const firstRequestDto = v.object({
   mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
   publicDisclosure: v.string(),
@@ -16,7 +19,7 @@ const catalogItemDto = v.object({
   stateTerritory: v.string(),
   postcode: v.optional(v.string()),
   publicUrl: v.string(),
-  trustTier: v.string(),
+  trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
   publicStatus: v.literal('published'),
   indexStatus: v.union(v.literal('not_queued'), v.literal('queued'), v.literal('indexed'), v.literal('failed'), v.literal('stale')),
   discoveryStatus: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
@@ -34,8 +37,14 @@ const catalogItemDto = v.object({
       status: v.literal('published'),
       capabilities: v.array(
         v.object({
-          kind: v.string(),
-          status: v.string(),
+          kind: v.union(
+            v.literal('phone_inquiry'),
+            v.literal('quote_request'),
+            v.literal('booking_interest'),
+            v.literal('emergency_callout_interest'),
+            v.literal('ae_hosted_discovery')
+          ),
+          status: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
         })
       ),
     })
@@ -120,8 +129,7 @@ export const listPublicBusinessCatalog = queryGeneric({
   },
   returns: pageResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const db = ctx.db as unknown as RuntimeDb
+    const db = runtimeReader(ctx.db)
     return paginateCatalogs(await readPublicCatalogs(db), queryInput(args))
   },
 })
@@ -134,8 +142,7 @@ export const searchPublicBusinessCatalog = queryGeneric({
   },
   returns: pageResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const db = ctx.db as unknown as RuntimeDb
+    const db = runtimeReader(ctx.db)
     const query = normalizeSearchText(args.query)
     if (query.length === 0) {
       return paginateCatalogs([], queryInput(args), '')
@@ -153,8 +160,7 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
   },
   returns: detailResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const db = ctx.db as unknown as RuntimeDb
+    const db = runtimeReader(ctx.db)
     const catalogs = await readPublicCatalogs(db)
     const catalog = catalogs.find((candidate) => candidate.slug === normalizeSlug(args.slug))
     if (catalog === undefined) {
@@ -179,32 +185,12 @@ export const readCatalogHealth = queryGeneric({
   },
   returns: healthResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const db = ctx.db as unknown as RuntimeDb
+    const db = runtimeReader(ctx.db)
     return readCatalogHealthFromDb(db, args.businessId)
   },
 })
 
-type RuntimeDocument = Record<string, unknown> & { _id: string }
-
-type RuntimeIndexBuilder = {
-  eq: (field: string, value: unknown) => RuntimeIndexBuilder
-}
-
-type RuntimeQuery = {
-  withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
-  collect: () => Promise<RuntimeDocument[]>
-  unique: () => Promise<RuntimeDocument | null>
-}
-
-type RuntimeDb = {
-  query: (tableName: string) => RuntimeQuery
-  get: (id: string) => Promise<RuntimeDocument | null>
-}
-
-type RuntimeQueryCtx = {
-  db: RuntimeDb
-}
+type RuntimeDb = RuntimeReader
 
 type CatalogDto = {
   slug: string
@@ -214,7 +200,7 @@ type CatalogDto = {
   stateTerritory: string
   postcode?: string
   publicUrl: string
-  trustTier: string
+  trustTier: CatalogTrustTier
   publicStatus: 'published'
   indexStatus: 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'
   discoveryStatus: 'unavailable' | 'degraded' | 'available' | 'stale'
@@ -243,9 +229,13 @@ type FirstRequestDto = {
 }
 
 type CapabilityDto = {
-  kind: string
-  status: string
+  kind: CatalogCapabilityKind
+  status: CatalogDiscoveryStatus
 }
+
+type CatalogTrustTier = 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'
+type CatalogCapabilityKind = 'phone_inquiry' | 'quote_request' | 'booking_interest' | 'emergency_callout_interest' | 'ae_hosted_discovery'
+type CatalogDiscoveryStatus = 'unavailable' | 'degraded' | 'available' | 'stale'
 
 type QueryInput = {
   cursor?: string
@@ -326,7 +316,7 @@ async function catalogForBusiness(db: RuntimeDb, business: RuntimeDocument): Pro
     stateTerritory: stringField(context, 'stateTerritory'),
     ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
     publicUrl: `/${stringField(business, 'slug')}`,
-    trustTier: stringField(business, 'trustTier'),
+    trustTier: trustTier(business),
     publicStatus: 'published',
     indexStatus: await indexStatusForBusiness(db, business._id),
     discoveryStatus: await discoveryStatusForBusiness(db, business._id, stringField(business, 'sourceHash')),
@@ -351,8 +341,8 @@ function toServiceDto(service: RuntimeDocument, capabilities: readonly RuntimeDo
     firstRequest: firstCapability === undefined ? unavailableFirstRequest() : toFirstRequestDto(firstCapability),
     status: 'published',
     capabilities: serviceCapabilities.map((capability) => ({
-      kind: stringField(capability, 'kind'),
-      status: stringField(capability, 'status'),
+      kind: capabilityKind(capability),
+      status: capabilityStatus(capability),
     })),
   }
 }
@@ -579,6 +569,33 @@ function publicChannel(document: RuntimeDocument): FirstRequestDto['publicChanne
     return value
   }
   return 'not_available'
+}
+
+function trustTier(document: RuntimeDocument): CatalogTrustTier {
+  const value = stringField(document, 'trustTier')
+  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified' ? value : 'claimed'
+}
+
+function capabilityKind(document: RuntimeDocument): CatalogCapabilityKind {
+  const value = stringField(document, 'kind')
+  if (
+    value === 'phone_inquiry' ||
+    value === 'quote_request' ||
+    value === 'booking_interest' ||
+    value === 'emergency_callout_interest' ||
+    value === 'ae_hosted_discovery'
+  ) {
+    return value
+  }
+  return 'ae_hosted_discovery'
+}
+
+function capabilityStatus(document: RuntimeDocument): CatalogDiscoveryStatus {
+  const value = stringField(document, 'status')
+  if (value === 'available' || value === 'degraded' || value === 'stale') {
+    return value
+  }
+  return 'unavailable'
 }
 
 function registryStatus(document: RuntimeDocument): RegistryAttempt['status'] {

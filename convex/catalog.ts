@@ -2,6 +2,8 @@ import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
+import { runtimeDb } from './source-state'
+import type { RuntimeDb, RuntimeDocument } from './source-state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import { validateServiceCatalogInput } from '../src/modules/catalog/public'
 import type { ServiceCatalogInput, ValidatedServiceCatalogInput } from '../src/modules/catalog/public'
@@ -220,8 +222,7 @@ export const publishBusinessCatalog = mutationGeneric({
       return catalogError('catalog_publish_unauthenticated', 'Authentication is required to publish a business catalog.')
     }
 
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const db = ctx.db as unknown as RuntimeDb
+    const db = runtimeDb(ctx.db)
 
     const claim = await db.get(args.claimId)
     if (claim === null) {
@@ -358,33 +359,6 @@ export const publishBusinessCatalog = mutationGeneric({
     }
   },
 })
-
-type RuntimeDocument = Record<string, unknown> & { _id: string }
-
-type RuntimeIndexBuilder = {
-  eq: (field: string, value: unknown) => RuntimeIndexBuilder
-}
-
-type RuntimeQuery = {
-  withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
-  collect: () => Promise<RuntimeDocument[]>
-  unique: () => Promise<RuntimeDocument | null>
-  first: () => Promise<RuntimeDocument | null>
-}
-
-type RuntimeDb = {
-  query: (tableName: string) => RuntimeQuery
-  get: (id: string) => Promise<RuntimeDocument | null>
-  insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
-  patch: (id: string, value: Record<string, unknown>) => Promise<void>
-}
-
-type RuntimeMutationCtx = {
-  db: RuntimeDb
-  auth: {
-    getUserIdentity: () => Promise<unknown>
-  }
-}
 
 type ServiceInput = {
   name: string

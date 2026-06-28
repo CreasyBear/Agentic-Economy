@@ -1,8 +1,9 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
-import type { UserIdentity } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
+import { runtimeMutationCtx, runtimeReader } from './source-state'
+import type { RuntimeDocument, RuntimeMutationCtx, RuntimeReader, RuntimeWriter } from './source-state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { assertCsrf } from '../src/modules/security/public'
@@ -21,8 +22,14 @@ const firstRequestResult = v.object({
 })
 
 const manifestCapabilityResult = v.object({
-  kind: v.string(),
-  status: v.string(),
+  kind: v.union(
+    v.literal('phone_inquiry'),
+    v.literal('quote_request'),
+    v.literal('booking_interest'),
+    v.literal('emergency_callout_interest'),
+    v.literal('ae_hosted_discovery')
+  ),
+  status: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
   firstRequest: firstRequestResult,
   callable: v.literal(false),
   paymentRequired: v.literal(false),
@@ -193,8 +200,7 @@ export const regenerateDiscoveryManifest = mutationGeneric({
   },
   returns: regenerateResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const runtimeCtx = { db: ctx.db as unknown as RuntimeWriter, auth: ctx.auth }
+    const runtimeCtx = runtimeMutationCtx(ctx)
     const db = runtimeCtx.db
     const auth = await requireOwnerMutation(runtimeCtx, args)
     if (auth.kind === 'error') {
@@ -233,8 +239,7 @@ export const invalidateDiscoveryManifest = mutationGeneric({
   },
   returns: invalidateResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const runtimeCtx = { db: ctx.db as unknown as RuntimeWriter, auth: ctx.auth }
+    const runtimeCtx = runtimeMutationCtx(ctx)
     const db = runtimeCtx.db
     const auth = await requireOwnerMutation(runtimeCtx, args)
     if (auth.kind === 'error') {
@@ -291,44 +296,10 @@ export const readDiscoveryHealth = queryGeneric({
   },
   returns: healthResult,
   handler: async (ctx, args) => {
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const db = ctx.db as unknown as RuntimeReader
+    const db = runtimeReader(ctx.db)
     return readDiscoveryHealthFromDb(db, args.businessId)
   },
 })
-
-type RuntimeDocument = Record<string, unknown> & { _id: string }
-
-type RuntimeIndexBuilder = {
-  eq: (field: string, value: unknown) => RuntimeIndexBuilder
-}
-
-type RuntimeQuery = {
-  withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
-  collect: () => Promise<RuntimeDocument[]>
-  unique: () => Promise<RuntimeDocument | null>
-}
-
-type RuntimeReader = {
-  query: (tableName: string) => RuntimeQuery
-  get: (id: string) => Promise<RuntimeDocument | null>
-}
-
-type RuntimeWriter = RuntimeReader & {
-  insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
-  patch: (id: string, value: Record<string, unknown>) => Promise<void>
-}
-
-type RuntimeQueryCtx = {
-  db: RuntimeReader
-}
-
-type RuntimeMutationCtx = {
-  db: RuntimeWriter
-  auth: {
-    getUserIdentity: () => Promise<UserIdentity | null>
-  }
-}
 
 type OwnerMutationArgs = {
   businessId?: string
@@ -362,7 +333,7 @@ type PublicCatalog = {
   stateTerritory: string
   postcode?: string
   publicStatus: 'published'
-  trustTier: string
+  trustTier: CatalogTrustTier
   indexStatus: 'not_queued' | 'queued' | 'indexed' | 'failed' | 'stale'
   discoveryStatus: 'unavailable' | 'degraded' | 'available' | 'stale'
   services: PublicService[]
@@ -391,13 +362,17 @@ type FirstRequest = {
 }
 
 type PublicCapability = {
-  kind: string
-  status: string
+  kind: CatalogCapabilityKind
+  status: CatalogDiscoveryStatus
   firstRequest: FirstRequest
   callable: false
   paymentRequired: false
   reason?: string
 }
+
+type CatalogTrustTier = 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'
+type CatalogCapabilityKind = 'phone_inquiry' | 'quote_request' | 'booking_interest' | 'emergency_callout_interest' | 'ae_hosted_discovery'
+type CatalogDiscoveryStatus = 'unavailable' | 'degraded' | 'available' | 'stale'
 
 type DiscoveryManifest = {
   schemaVersion: 'ae-ucp-fallback:v1'
@@ -441,8 +416,8 @@ type ManifestService = {
 }
 
 type ManifestCapability = {
-  kind: string
-  status: string
+  kind: CatalogCapabilityKind
+  status: CatalogDiscoveryStatus
   firstRequest: FirstRequest
   callable: false
   paymentRequired: false
@@ -583,7 +558,7 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
     stateTerritory: stringField(context, 'stateTerritory'),
     ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
     publicStatus: 'published',
-    trustTier: stringField(business, 'trustTier'),
+    trustTier: trustTier(business),
     indexStatus: await indexStatusForBusiness(db, business._id),
     discoveryStatus: 'available',
     services: services
@@ -613,8 +588,8 @@ function toPublicService(service: RuntimeDocument, capabilities: readonly Runtim
 
 function toPublicCapability(capability: RuntimeDocument): PublicCapability {
   return {
-    kind: stringField(capability, 'kind'),
-    status: stringField(capability, 'status'),
+    kind: capabilityKind(capability),
+    status: capabilityStatus(capability),
     firstRequest: toFirstRequest(capability),
     callable: false,
     paymentRequired: false,
@@ -1078,8 +1053,8 @@ function capabilitiesFromRecord(service: Record<string, unknown>): ManifestCapab
     return []
   }
   return capabilities.filter(isRecord).map((capability) => ({
-    kind: stringFromRecord(capability, 'kind'),
-    status: stringFromRecord(capability, 'status'),
+    kind: capabilityKindRecord(capability),
+    status: capabilityStatusRecord(capability),
     firstRequest: firstRequestFromRecord(capability),
     callable: false as const,
     paymentRequired: false as const,
@@ -1215,6 +1190,47 @@ function publicChannelRecord(record: Record<string, unknown>): FirstRequest['pub
     return value
   }
   return 'not_available'
+}
+
+function trustTier(document: RuntimeDocument): CatalogTrustTier {
+  const value = stringField(document, 'trustTier')
+  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified' ? value : 'claimed'
+}
+
+function capabilityKind(document: RuntimeDocument): CatalogCapabilityKind {
+  return capabilityKindValue(stringField(document, 'kind'))
+}
+
+function capabilityStatus(document: RuntimeDocument): CatalogDiscoveryStatus {
+  return capabilityStatusValue(stringField(document, 'status'))
+}
+
+function capabilityKindRecord(record: Record<string, unknown>): CatalogCapabilityKind {
+  return capabilityKindValue(stringFromRecord(record, 'kind'))
+}
+
+function capabilityStatusRecord(record: Record<string, unknown>): CatalogDiscoveryStatus {
+  return capabilityStatusValue(stringFromRecord(record, 'status'))
+}
+
+function capabilityKindValue(value: string): CatalogCapabilityKind {
+  if (
+    value === 'phone_inquiry' ||
+    value === 'quote_request' ||
+    value === 'booking_interest' ||
+    value === 'emergency_callout_interest' ||
+    value === 'ae_hosted_discovery'
+  ) {
+    return value
+  }
+  return 'ae_hosted_discovery'
+}
+
+function capabilityStatusValue(value: string): CatalogDiscoveryStatus {
+  if (value === 'available' || value === 'degraded' || value === 'stale') {
+    return value
+  }
+  return 'unavailable'
 }
 
 function discoveryStatus(document: RuntimeDocument): DiscoveryManifest['status'] {

@@ -2,6 +2,8 @@ import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
+import { runtimeWriter } from './source-state'
+import type { RuntimeDocument, RuntimeWriter } from './source-state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
 import { assertCsrf, normalizeClaimFingerprint } from '../src/modules/security/public'
@@ -142,8 +144,7 @@ export const claimBusiness = mutationGeneric({
       return claimError('claim_unauthenticated', 'Authentication is required to claim a business.')
     }
 
-    // Convex's generic db type does not expose this source-owned table bundle without generated types.
-    const runtimeCtx = { db: ctx.db as unknown as RuntimeDb }
+    const runtimeCtx = { db: runtimeWriter(ctx.db) }
     const now = Date.now()
     const normalized = normalizeClaimFacts(args)
     if (normalized.kind === 'invalid') {
@@ -459,26 +460,8 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
   return ownerMessage === undefined ? base : { ...base, ownerMessage }
 }
 
-type RuntimeDocument = Record<string, unknown> & { _id: string }
-
-type RuntimeIndexBuilder = {
-  eq: (field: string, value: unknown) => RuntimeIndexBuilder
-}
-
-type RuntimeQuery = {
-  withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
-  collect: () => Promise<RuntimeDocument[]>
-  unique: () => Promise<RuntimeDocument | null>
-}
-
-type RuntimeDb = {
-  query: (tableName: string) => RuntimeQuery
-  insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
-  patch: (id: string, value: Record<string, unknown>) => Promise<void>
-}
-
 type RuntimeCtx = {
-  db: RuntimeDb
+  db: RuntimeWriter
 }
 
 async function findOrCreateOwner(ctx: RuntimeCtx, actor: AuthenticatedOwnerActor, now: number): Promise<OwnerContract> {
