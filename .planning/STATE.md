@@ -4,21 +4,21 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-06-28T10:30:08.890Z"
+stopped_at: Completed 01-15-PLAN.md with R10 blocked evidence artifacts
+last_updated: "2026-06-28T10:46:57.018Z"
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 19
-  completed_plans: 14
-  percent: 74
+  completed_plans: 15
+  percent: 20
 ---
 
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
 **Current phase:** 01
-**Status:** Executing Phase 01
+**Status:** executing
 
 ## Active decision
 
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T10:30:08.886Z
-**Stopped at:** Completed 01-14-PLAN.md
+**Last session:** 2026-06-28T10:46:35.875Z
+**Stopped at:** Completed 01-15-PLAN.md with R10 blocked evidence artifacts
 **Resume file:** None
 
 ## Performance Metrics
@@ -78,6 +78,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P11 | 21min | 3 tasks | 10 files |
 | Phase 01 P13 | 12min | 3 tasks | 5 files |
 | Phase 01 P14 | 19min | 3 tasks | 10 files |
+| Phase 01 P15 | 12min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -109,6 +110,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Public registry/API runtime handlers now call Convex registry query references; legacy synchronous API helper exports are fixture-only for existing guardrail tests. — Preserves dirty-worktree test compatibility while removing route-local default source factories from runtime handlers.
 - [Phase 01]: Discovery route server handlers now use durable Convex query references; synchronous helper exports are fixture-only for existing guardrail tests.
 - [Phase 01]: Plan 01-14 used index-only staging for src/modules/discovery/public.ts to preserve pre-existing developer-discovery worktree edits.
+- [Phase 01]: Plan 01-15 kept R10 blocked because Convex codegen auth, deploy-smoke inputs, full local Playwright, and five-owner evidence were not green. — Evidence gate must fail closed rather than overclaim Phase 01 readiness.
 
 ### Blockers
 
@@ -117,3 +119,4 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - Phase 01 Plan 01-11 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
 - Phase 01 Plan 01-11 full public-owner Playwright spec is blocked in this dirty checkout by unrelated untracked src/routes/owner.actions.tsx route-generator overlay; the focused claim-readback regression passes serially.
 - Phase 01 Plan 01-14 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
+- Phase 01 Plan 01-15 R10 remains blocked: Convex MissingAccessToken, missing deploy smoke inputs/storage states/business slug, local /registry Playwright failure, and 0/5 friendly-owner rows.
