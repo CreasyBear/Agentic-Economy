@@ -14,6 +14,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test tests/e2e",
+    "test:deploy-smoke": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase1-deploy-smoke.spec.ts",
     "test:e2e:a11y": "playwright test tests/e2e/a11y",
     "test:a11y": "playwright test tests/e2e/a11y",
     "test:types": "vitest run tests/types",
