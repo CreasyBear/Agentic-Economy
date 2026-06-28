@@ -189,6 +189,22 @@ const healthResult = v.object({
   repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
 })
 
+const manifestReadResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    manifest: manifestResult,
+  }),
+  v.object({
+    kind: v.literal('hidden'),
+    reason: v.union(v.literal('not_public'), v.literal('no_public_catalog')),
+  })
+)
+
+const discoveryFileResult = v.object({
+  body: v.string(),
+  urls: v.array(v.string()),
+})
+
 export const regenerateDiscoveryManifest = mutationGeneric({
   args: {
     businessId: v.optional(v.string()),
@@ -298,6 +314,68 @@ export const readDiscoveryHealth = queryGeneric({
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
     return readDiscoveryHealthFromDb(db, args.businessId)
+  },
+})
+
+export const readCatalogDiscoveryManifest = queryGeneric({
+  args: {
+    slug: v.string(),
+    canonicalBaseUrl: v.optional(v.string()),
+    now: v.number(),
+  },
+  returns: manifestReadResult,
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    const business = await findBusiness(db, { slug: args.slug })
+    if (business === null) {
+      return { kind: 'hidden' as const, reason: 'no_public_catalog' as const }
+    }
+
+    const catalog = await publicCatalogForBusiness(db, business)
+    if (catalog === undefined) {
+      return { kind: 'hidden' as const, reason: 'not_public' as const }
+    }
+
+    const latestAttempt = await latestAttemptForBusiness(db, catalog.businessId)
+    const discoveryStatus = healthStatus(true, latestAttempt, catalog.sourceHash)
+    return {
+      kind: 'available' as const,
+      manifest: buildManifest(
+        { ...catalog, discoveryStatus },
+        canonicalBaseUrl(args.canonicalBaseUrl),
+        args.now,
+        discoveryStatus
+      ),
+    }
+  },
+})
+
+export const readLlmsTxt = queryGeneric({
+  args: {
+    canonicalBaseUrl: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  returns: discoveryFileResult,
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    return buildLlmsTxtFromCatalogs(await publicCatalogsForDiscovery(db), {
+      canonicalBaseUrl: canonicalBaseUrl(args.canonicalBaseUrl),
+    })
+  },
+})
+
+export const readSitemapXml = queryGeneric({
+  args: {
+    canonicalBaseUrl: v.optional(v.string()),
+    now: v.optional(v.number()),
+  },
+  returns: discoveryFileResult,
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    return buildSitemapXmlFromCatalogs(await publicCatalogsForDiscovery(db), {
+      canonicalBaseUrl: canonicalBaseUrl(args.canonicalBaseUrl),
+      now: args.now ?? Date.now(),
+    })
   },
 })
 
@@ -531,6 +609,9 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
   if (stringField(business, 'publicStatus') !== 'published') {
     return undefined
   }
+  if (await hasActiveBusinessSuppression(db, business._id)) {
+    return undefined
+  }
   const context = await db
     .query('businessContexts')
     .withIndex('by_business', (query) => query.eq('businessId', business._id))
@@ -560,13 +641,46 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
     publicStatus: 'published',
     trustTier: trustTier(business),
     indexStatus: await indexStatusForBusiness(db, business._id),
-    discoveryStatus: 'available',
+    discoveryStatus: await discoveryStatusForBusiness(db, business._id, stringField(business, 'sourceHash')),
     services: services
       .sort((left, right) => numberField(left, 'sortOrder') - numberField(right, 'sortOrder'))
       .map((service) => toPublicService(service, capabilities)),
     sourceHash: stringField(business, 'sourceHash'),
     updatedAt: numberField(business, 'updatedAt'),
   }
+}
+
+async function publicCatalogsForDiscovery(db: RuntimeReader): Promise<PublicCatalog[]> {
+  const businesses = await db
+    .query('businesses')
+    .withIndex('by_publicStatus_slug', (query) => query.eq('publicStatus', 'published'))
+    .collect()
+  const catalogs: PublicCatalog[] = []
+  for (const business of businesses) {
+    const catalog = await publicCatalogForBusiness(db, business)
+    if (catalog !== undefined) {
+      catalogs.push(catalog)
+    }
+  }
+  return catalogs.sort((left, right) => left.slug.localeCompare(right.slug))
+}
+
+async function discoveryStatusForBusiness(
+  db: RuntimeReader,
+  businessId: string,
+  sourceHash: string
+): Promise<PublicCatalog['discoveryStatus']> {
+  return healthStatus(true, await latestAttemptForBusiness(db, businessId), sourceHash)
+}
+
+async function hasActiveBusinessSuppression(db: RuntimeReader, businessId: string): Promise<boolean> {
+  const suppression = await db
+    .query('suppressionRules')
+    .withIndex('by_target_status', (query) =>
+      query.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active')
+    )
+    .unique()
+  return suppression !== null
 }
 
 function toPublicService(service: RuntimeDocument, capabilities: readonly RuntimeDocument[]): PublicService {
@@ -613,6 +727,75 @@ function unavailableFirstRequest(): FirstRequest {
     publicChannel: 'not_available',
     noContactReason: 'Owner has not supplied public contact instructions.',
   }
+}
+
+const staticSitemapPaths = ['/', '/claim', '/registry', '/privacy/remove-business'] as const
+const publicSurfacePaths = [
+  '/',
+  '/claim',
+  '/registry',
+  '/privacy/remove-business',
+  '/api/businesses',
+  '/api/businesses/search?q=',
+] as const
+
+function buildLlmsTxtFromCatalogs(
+  catalogs: readonly PublicCatalog[],
+  options: { canonicalBaseUrl: string }
+): { body: string; urls: string[] } {
+  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const urls = [
+    ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
+    ...catalogs.flatMap((catalog) => [
+      `${canonicalBaseUrl}/${catalog.slug}`,
+      `${canonicalBaseUrl}/${catalog.slug}/ucp`,
+      `${canonicalBaseUrl}/api/businesses/${catalog.slug}`,
+    ]),
+  ]
+  const catalogLines = catalogs.map(
+    (catalog) =>
+      `- slug=${catalog.slug} publicUrl=${canonicalBaseUrl}/${catalog.slug} ucpUrl=${canonicalBaseUrl}/${catalog.slug}/ucp apiUrl=${canonicalBaseUrl}/api/businesses/${catalog.slug} publicStatus=${catalog.publicStatus} indexStatus=${catalog.indexStatus} discoveryStatus=${catalog.discoveryStatus}`
+  )
+  const body = [
+    '# Agentic Economy',
+    '',
+    'Public surfaces:',
+    ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    '',
+    'Catalog entries:',
+    ...(catalogLines.length === 0 ? ['- none'] : catalogLines),
+    '',
+    'Unsupported capability flags:',
+    '- callable=false',
+    '- paymentRequired=false',
+    '',
+    'Privacy and correction:',
+    `- ${canonicalBaseUrl}/privacy/remove-business`,
+    '',
+  ].join('\n')
+
+  return { body, urls }
+}
+
+function buildSitemapXmlFromCatalogs(
+  catalogs: readonly PublicCatalog[],
+  options: { canonicalBaseUrl: string; now: number }
+): { body: string; urls: string[] } {
+  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const lastmod = new Date(options.now).toISOString()
+  const urls = [
+    ...staticSitemapPaths.map((path) => `${canonicalBaseUrl}${path}`),
+    ...catalogs.map((catalog) => `${canonicalBaseUrl}/${catalog.slug}`),
+  ]
+  const body = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls.map((url) => `  <url><loc>${escapeXml(url)}</loc><lastmod>${lastmod}</lastmod></url>`),
+    '</urlset>',
+    '',
+  ].join('\n')
+
+  return { body, urls }
 }
 
 function buildManifest(
@@ -1088,6 +1271,19 @@ function readEnv(name: string): string | undefined {
 function canonicalBaseUrl(value: string | undefined): string {
   const raw = value ?? readEnv('AE_CANONICAL_BASE_URL') ?? readEnv('SITE_URL') ?? 'https://ae.example'
   return raw.replace(/\/+$/u, '')
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/u, '')
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
 }
 
 function normalizeSlug(value: string): string {

@@ -23,6 +23,7 @@ import {
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiPage } from '@/modules/registry/public'
 import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import {
   handleDurableListBusinessesRequest,
@@ -33,10 +34,10 @@ import {
   handleDurableSearchBusinessesRequest,
   handleSearchBusinessesRequest,
 } from '@/routes/api.businesses.search'
-import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
-import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
-import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
+import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
+import { handleDurableUcpManifestRequest } from '@/routes/$slug.ucp'
 
 describe('discovery route parity', () => {
   it('tracks one durable catalog and suppression across public page, registry/API, UCP, llms, and sitemap', async () => {
@@ -65,14 +66,14 @@ describe('discovery route parity', () => {
         )
         const apiDetailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
         const apiDetail = await apiDetailResponse.json()
-        const ucpResponse = await handleUcpManifestRequest(
+        const ucpResponse = await handleDurableUcpManifestRequest(
           new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
           'fremantle-heat-pump-repairs'
         )
         const ucp = await ucpResponse.json()
-        const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
+        const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
         const llmsBody = await llms.text()
-        const sitemap = await handleSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
+        const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
         const sitemapBody = await sitemap.text()
 
         expect(page).toMatchObject({
@@ -117,14 +118,14 @@ describe('discovery route parity', () => {
         )
         const apiDetailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
         const apiDetail = await apiDetailResponse.json()
-        const ucpResponse = await handleUcpManifestRequest(
+        const ucpResponse = await handleDurableUcpManifestRequest(
           new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
           'fremantle-heat-pump-repairs'
         )
         const ucp = await ucpResponse.json()
-        const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
+        const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
         const llmsBody = await llms.text()
-        const sitemap = await handleSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
+        const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
         const sitemapBody = await sitemap.text()
 
         expect(page).toEqual({ kind: 'hidden', reason: 'not_published' })
@@ -151,27 +152,29 @@ describe('discovery route parity', () => {
   it('resolves every URL advertised by manifest, llms, sitemap, and robots outputs', async () => {
     const origin = 'https://ae.example'
     const state = createDefaultDiscoverySourceState()
-    const manifestResponse = await handleUcpManifestRequest(
-      new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
-      'parramatta-emergency-plumbing'
-    )
-    const manifest = await manifestResponse.json()
-    const llms = buildLlmsTxt(state, { canonicalBaseUrl: origin })
-    const sitemap = buildSitemapXml(state, { canonicalBaseUrl: origin, now: 0 })
-    const robots = buildRobotsTxt({ canonicalBaseUrl: origin })
-    const urls = uniqueUrls([
-      ...manifest.routes.map((route: { url: string }) => route.url),
-      ...llms.urls,
-      ...sitemap.urls,
-      ...sitemapLocs(sitemap.body),
-      ...robots.urls,
-    ])
+    await withDiscoveryQueryClient(state, async () => {
+      const manifestResponse = await handleDurableUcpManifestRequest(
+        new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
+        'parramatta-emergency-plumbing'
+      )
+      const manifest = await manifestResponse.json()
+      const llms = buildLlmsTxt(state, { canonicalBaseUrl: origin })
+      const sitemap = buildSitemapXml(state, { canonicalBaseUrl: origin, now: 0 })
+      const robots = buildRobotsTxt({ canonicalBaseUrl: origin })
+      const urls = uniqueUrls([
+        ...manifest.routes.map((route: { url: string }) => route.url),
+        ...llms.urls,
+        ...sitemap.urls,
+        ...sitemapLocs(sitemap.body),
+        ...robots.urls,
+      ])
 
-    expect(urls.length).toBeGreaterThan(0)
-    for (const url of urls) {
-      const resolved = await resolveAdvertisedUrl(url)
-      expect(resolved, url).toBe(true)
-    }
+      expect(urls.length).toBeGreaterThan(0)
+      for (const url of urls) {
+        const resolved = await resolveAdvertisedUrl(url)
+        expect(resolved, url).toBe(true)
+      }
+    })
   })
 
   it('keeps llms API routes aligned with public API response schemas', async () => {
@@ -221,11 +224,11 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
   }
 
   if (path === '/llms.txt') {
-    return (await handleLlmsTxtRequest(new Request(url))).status === 200
+    return (await handleDurableLlmsTxtRequest(new Request(url))).status === 200
   }
 
   if (path === '/sitemap.xml') {
-    return (await handleSitemapXmlRequest(new Request(url))).status === 200
+    return (await handleDurableSitemapXmlRequest(new Request(url))).status === 200
   }
 
   if (path === '/robots.txt') {
@@ -247,7 +250,7 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
 
   const ucpMatch = /^\/([^/]+)\/ucp$/u.exec(path)
   if (ucpMatch?.[1] !== undefined) {
-    return (await handleUcpManifestRequest(new Request(url), ucpMatch[1])).status === 200
+    return (await handleDurableUcpManifestRequest(new Request(url), ucpMatch[1])).status === 200
   }
 
   const pageMatch = /^\/([^/]+)$/u.exec(path)
@@ -271,7 +274,7 @@ async function withDiscoveryQueryClient(state: DiscoverySourceState, run: () => 
   const reset = setPublicDiscoveryQueryClientForTests({
     manifest: ({ slug, canonicalBaseUrl, now }) => {
       const result = regenerateDiscoveryManifest(state, { slug: brandNonEmpty(slug, 'Slug') }, {
-        canonicalBaseUrl,
+        ...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl }),
         now,
       })
 
@@ -306,8 +309,8 @@ async function withRegistryQueryClient(state: RegistrySourceState, run: () => Pr
   }
 }
 
-async function jsonBody(response: Promise<Response>) {
-  return response.then((resolved) => resolved.json())
+async function jsonBody(response: Promise<Response>): Promise<PublicBusinessCatalogApiPage> {
+  return response.then((resolved) => resolved.json() as Promise<PublicBusinessCatalogApiPage>)
 }
 
 function createDurablePublishedDiscoveryState(input: {

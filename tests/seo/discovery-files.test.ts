@@ -12,9 +12,9 @@ import {
   setPublicDiscoveryQueryClientForTests,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
-import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
+import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 
 describe('discovery files', () => {
   it('serves llms and sitemap files from durable eligible source rows without private fields or positive capabilities', async () => {
@@ -27,8 +27,8 @@ describe('discovery files', () => {
     })
 
     await withDiscoveryQueryClient(state, async () => {
-      const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
-      const sitemap = await handleSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
+      const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
+      const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
       const llmsBody = await llms.text()
       const sitemapBody = await sitemap.text()
       const serialized = `${llmsBody}\n${sitemapBody}`
@@ -121,19 +121,21 @@ describe('discovery files', () => {
   })
 
   it('serves discovery files with no-store and nosniff headers', async () => {
-    const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
-    const sitemap = await handleSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
-    const robots = handleRobotsTxtRequest(new Request('https://ae.example/robots.txt'))
+    await withDiscoveryQueryClient(createDefaultDiscoverySourceState(), async () => {
+      const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
+      const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
+      const robots = handleRobotsTxtRequest(new Request('https://ae.example/robots.txt'))
 
-    expect(llms.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
-    expect(sitemap.headers.get('Content-Type')).toBe('application/xml; charset=utf-8')
-    expect(robots.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
+      expect(llms.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
+      expect(sitemap.headers.get('Content-Type')).toBe('application/xml; charset=utf-8')
+      expect(robots.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
 
-    for (const response of [llms, sitemap, robots]) {
-      expect(response.headers.get('Cache-Control')).toBe('no-store')
-      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
-      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
-    }
+      for (const response of [llms, sitemap, robots]) {
+        expect(response.headers.get('Cache-Control')).toBe('no-store')
+        expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+        expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
+      }
+    })
   })
 })
 
@@ -141,7 +143,7 @@ async function withDiscoveryQueryClient(state: DiscoverySourceState, run: () => 
   const reset = setPublicDiscoveryQueryClientForTests({
     manifest: ({ slug, canonicalBaseUrl, now }) => {
       const result = regenerateDiscoveryManifest(state, { slug: brandNonEmpty(slug, 'Slug') }, {
-        canonicalBaseUrl,
+        ...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl }),
         now,
       })
 

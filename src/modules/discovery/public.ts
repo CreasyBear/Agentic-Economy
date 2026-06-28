@@ -12,7 +12,7 @@ import {
   buildRobotsTxt as buildRobotsTxtImpl,
   buildSitemapXml as buildSitemapXmlImpl,
 } from './internal/discovery-files'
-import { createDefaultDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
+import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl } from './internal/ucp-manifest'
 
 export const DiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const
@@ -223,6 +223,62 @@ export type BuildDiscoveryFileOptions = {
 export type DiscoveryFileBuildResult = {
   body: string
   urls: readonly string[]
+}
+
+export type ReadCatalogDiscoveryManifestInput = {
+  slug: string
+  canonicalBaseUrl?: string
+  now: number
+}
+
+export type ReadCatalogDiscoveryManifestResult = BuildCatalogDiscoveryManifestResult
+
+export type PublicDiscoveryQueryClient = {
+  manifest: (input: ReadCatalogDiscoveryManifestInput) => Promise<ReadCatalogDiscoveryManifestResult>
+  llms: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
+  sitemap: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
+}
+
+let publicDiscoveryQueryClientForTests: PublicDiscoveryQueryClient | undefined
+
+export function setPublicDiscoveryQueryClientForTests(client: PublicDiscoveryQueryClient): () => void {
+  const previous = publicDiscoveryQueryClientForTests
+  publicDiscoveryQueryClientForTests = client
+  return () => {
+    publicDiscoveryQueryClientForTests = previous
+  }
+}
+
+export function getPublicDiscoveryQueryClientForTests(): PublicDiscoveryQueryClient | undefined {
+  return publicDiscoveryQueryClientForTests
+}
+
+export function readFixtureCatalogDiscoveryManifest(
+  input: ReadCatalogDiscoveryManifestInput
+): ReadCatalogDiscoveryManifestResult {
+  const state = createDefaultDiscoverySourceStateImpl()
+  const result = regenerateDiscoveryManifestImpl(
+    state,
+    { slug: input.slug },
+    {
+      ...(input.canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl: input.canonicalBaseUrl }),
+      now: input.now,
+    }
+  )
+
+  if (result.kind === 'ok') {
+    return { kind: 'available', manifest: result.manifest }
+  }
+
+  return { kind: 'hidden', reason: 'not_public' }
+}
+
+export function readFixtureLlmsTxt(options: BuildDiscoveryFileOptions = {}): DiscoveryFileBuildResult {
+  return buildLlmsTxtImpl(createDefaultDiscoverySourceStateImpl(), options)
+}
+
+export function readFixtureSitemapXml(options: BuildDiscoveryFileOptions = {}): DiscoveryFileBuildResult {
+  return buildSitemapXmlImpl(createDefaultDiscoverySourceStateImpl(), options)
 }
 
 export const buildCatalogDiscoveryManifest = buildCatalogDiscoveryManifestImpl
