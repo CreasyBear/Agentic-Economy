@@ -10,3 +10,6 @@ playwright-report/
 test-results/
 coverage/
 .codex/
+
+# clerk configuration (can include secrets)
+/.clerk/

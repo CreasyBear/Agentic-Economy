@@ -22,6 +22,14 @@ describe('Phase 1 public copy guardrail', () => {
           'payment-or-booking-overclaim',
           'agent-action-overclaim',
           'marketplace-trust-overclaim',
+          'p2-inquiry-overclaim',
+          'p2-notification-provider-overclaim',
+          'p3-read-only-discovery-overclaim',
+          'p3-developer-platform-overclaim',
+          'p4-protected-action-overclaim',
+          'p4-autonomous-action-overclaim',
+          'p5-paid-activation-overclaim',
+          'p5-money-rail-overclaim',
         ])
       )
       return

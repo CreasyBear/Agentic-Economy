@@ -21,6 +21,13 @@ type PatternRule = {
   pattern: RegExp
 }
 
+type PhaseNumber = 2 | 3 | 4 | 5
+
+type CopyClaimRule = PatternRule & {
+  allowedPhases?: readonly PhaseNumber[]
+  negativeOnly?: boolean
+}
+
 const defaultExtensions = ['.ts', '.tsx', '.js', '.jsx', '.css', '.md', '.json', '.fixture'] as const
 const ignoredDirectories = new Set([
   '.git',
@@ -146,23 +153,150 @@ export function scanTypeScriptStandards(targets: readonly ScanTarget[]): readonl
 }
 
 export function scanCopyClaims(targets: readonly ScanTarget[]): readonly ScanViolation[] {
-  return scanPatterns(targets, [
-    {
-      rule: 'payment-or-booking-overclaim',
-      message: 'Owner/public copy cannot imply live booking or payment behavior.',
-      pattern: /\b(?:book instantly|book now|booking confirmed|pay now|payment required|checkout|wallet ready)\b/i,
-    },
-    {
-      rule: 'agent-action-overclaim',
-      message: 'Owner/public copy cannot imply callable or autonomous agent actions.',
-      pattern: /\b(?:callable agent|agent-ready|agent-native|autonomous agent|AI booking|guaranteed response)\b/i,
-    },
-    {
-      rule: 'marketplace-trust-overclaim',
-      message: 'Owner/public copy cannot imply marketplace, partner, or unsupported verification claims.',
-      pattern: /\b(?:marketplace|partner network|verified by ABR|ABR verified by default)\b/i,
-    },
-  ])
+  const violations = scanPatterns(targets, copyClaimRules)
+
+  return violations.filter((violation) => {
+    const rule = copyClaimRules.find((candidate) => candidate.rule === violation.rule)
+
+    return rule === undefined || !isAllowedCopyClaim(violation, rule)
+  })
+}
+
+const copyClaimRules: readonly CopyClaimRule[] = [
+  {
+    rule: 'payment-or-booking-overclaim',
+    message: 'Owner/public copy cannot imply live booking or payment behavior.',
+    pattern:
+      /\b(?:book instantly|book now|booking confirmed|pay now|payment required|paymentRequired\s*:\s*true|wallet ready)\b/i,
+  },
+  {
+    rule: 'agent-action-overclaim',
+    message: 'Owner/public copy cannot imply callable or autonomous agent actions.',
+    pattern: /\b(?:callable agent|agent-ready|agent-native|autonomous agent|AI booking|guaranteed response)\b/i,
+  },
+  {
+    rule: 'marketplace-trust-overclaim',
+    message: 'Owner/public copy cannot imply marketplace, partner, or unsupported verification claims.',
+    pattern: /\b(?:marketplace\b|partner network|verified by ABR|ABR verified by default)\b/i,
+    negativeOnly: true,
+  },
+  {
+    rule: 'p2-inquiry-overclaim',
+    message: 'Inquiry and owner-inbox claims belong only in Phase 2 planning/test contexts until shipped.',
+    pattern:
+      /\b(?:customer inquiry|public inquiry form|submit(?:s|ted)? (?:an )?inquiry|owner inbox|message the owner|owner reply)\b/i,
+    allowedPhases: [2],
+  },
+  {
+    rule: 'p2-notification-provider-overclaim',
+    message: 'Resend/Novu notification claims belong only in Phase 2 planning/test contexts until shipped.',
+    pattern: /\b(?:Resend|Novu|notification outbox|email notification|delivery readback)\b/i,
+    allowedPhases: [2],
+  },
+  {
+    rule: 'p3-read-only-discovery-overclaim',
+    message: 'Developer discovery/docs/schema/API claims belong only in Phase 3 planning/test contexts until shipped.',
+    pattern:
+      /\b(?:developer discovery|builder discovery|agent discovery|developer\/agent docs|schema docs|API docs|API examples|read-only discovery|support matrix|route health)\b/i,
+    allowedPhases: [3],
+  },
+  {
+    rule: 'p3-developer-platform-overclaim',
+    message: 'SDK/CLI/MCP/API-key platform claims must stay negative planning/test posture.',
+    pattern: /\b(?:SDK\/CLI platform|SDK\/CLI\/plugin ecosystem|MCP mutation|API-key platform|API key platform|developer launch|mutation API)\b/i,
+    negativeOnly: true,
+  },
+  {
+    rule: 'p4-protected-action-overclaim',
+    message: 'Protected action proposal/approval claims belong only in Phase 4 planning/test contexts until shipped.',
+    pattern:
+      /\b(?:protected-action loop|protected action proposal|action proposal|owner approval|approve action|approval-required|action gateway|proposeAction|provider\/internal attempt)\b/i,
+    allowedPhases: [4],
+  },
+  {
+    rule: 'p4-autonomous-action-overclaim',
+    message: 'Autonomous/direct-execute action claims must stay negative planning/test posture.',
+    pattern: /\b(?:autonomous protected execution|direct execute|auto-approve|auto-execute|provider success)\b/i,
+    negativeOnly: true,
+  },
+  {
+    rule: 'p5-paid-activation-overclaim',
+    message: 'Autumn/Stripe paid-activation claims belong only in Phase 5 planning/test contexts until shipped.',
+    pattern:
+      /\b(?:Autumn(?: Cloud)?|Autumn\+Stripe|Stripe PSP|Stripe Billing|Stripe Checkout|paid activation|paid-activation|checkout|subscription|customer portal|billing rail|billing center|billing reconciliation)\b/i,
+    allowedPhases: [5],
+  },
+  {
+    rule: 'p5-money-rail-overclaim',
+    message: 'Wallet/Connect/x402/custody/settlement claims must stay negative planning/test posture.',
+    pattern:
+      /\b(?:wallet ready|wallet\/credits|credits balance|Connect\/x402|Stripe Connect|x402 checkout|x402 rail|custody rail|custody wallet|settlement platform|payment handlers?|paymentRequired\s*:\s*true)\b/i,
+    negativeOnly: true,
+  },
+]
+
+function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): boolean {
+  if (isCopyTestContext(violation.file)) {
+    return true
+  }
+
+  const phases = copyClaimContextPhases(violation.file)
+  if (phases.length === 0) {
+    return false
+  }
+
+  if (rule.negativeOnly) {
+    return isNegativeCapabilityContext(violation.excerpt)
+  }
+
+  return rule.allowedPhases?.some((phase) => phases.includes(phase)) ?? false
+}
+
+function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
+  const normalized = normalizedScanPath(file)
+
+  if (normalized.includes('.planning/phases/02-05-PRODUCTION-MATURITY-')) {
+    return [2, 3, 4, 5]
+  }
+
+  if (normalized.includes('.planning/phases/02-human-inquiry-owner-inbox/')) {
+    return [2]
+  }
+
+  if (normalized.includes('.planning/phases/03-standard-agent-builder-discovery/')) {
+    return [3]
+  }
+
+  if (normalized.includes('.planning/phases/04-owner-pending-protected-actions/')) {
+    return [4]
+  }
+
+  if (normalized.includes('.planning/phases/05-paid-activation-money-rails/')) {
+    return [5]
+  }
+
+  if (isCopyTestContext(file)) {
+    return [2, 3, 4, 5]
+  }
+
+  return []
+}
+
+function normalizedScanPath(file: string): string {
+  const relativePath = relative(process.cwd(), file).replaceAll('\\', '/')
+  const rawPath = file.replaceAll('\\', '/')
+
+  return `${relativePath}\n${rawPath}`
+}
+
+function isCopyTestContext(file: string): boolean {
+  return normalizedScanPath(file).includes('tests/copy/')
+}
+
+function isNegativeCapabilityContext(excerpt: string): boolean {
+  return /\b(?:does not|do not|not live|not ship|not shipped|not advertised|not available|never|without|unless|unavailable|deferred|future products?|out of scope|rejects?|fail(?:s)? scans?|banned|blocked|stay out|remain(?:s)? unavailable|no\s+(?:AI|booking|payment|provider|autonomous|SDK|MCP|API-key|wallet|Connect|x402|custody|settlement)|cut these)\b/i.test(
+    excerpt
+  )
 }
 
 export function scanUiContract(targets: readonly ScanTarget[]): readonly ScanViolation[] {
