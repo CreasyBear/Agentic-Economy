@@ -193,6 +193,33 @@ export type PublicCatalogContract = {
   updatedAt: number
 }
 
+export type PublicRouteCapabilityContract = Omit<PublicCatalogContract['services'][number]['capabilities'][number], 'sourceHash'>
+
+export type PublicRouteServiceContract = Omit<PublicCatalogContract['services'][number], 'sourceHash' | 'capabilities'> & {
+  capabilities: readonly PublicRouteCapabilityContract[]
+}
+
+export type PublicRouteCatalogContract = Omit<PublicCatalogContract, 'sourceHash' | 'services'> & {
+  services: readonly PublicRouteServiceContract[]
+}
+
+export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'catalog'> & {
+  catalog: PublicRouteCatalogContract
+}
+
+export type PublicOwnerClaimFlowRouteResult =
+  | Extract<PublicOwnerClaimFlowResult, { kind: 'error' }>
+  | {
+      kind: 'ok'
+      code: 'claim_flow_published'
+      catalog: PublicRouteCatalogContract
+      readback: PublicOwnerStatusRouteReadback
+    }
+
+export type PublicBusinessPageRouteReadbackResult =
+  | { kind: 'available'; catalog: PublicRouteCatalogContract }
+  | Exclude<PublicBusinessPageReadbackResult, { kind: 'available' }>
+
 export type BuildPublicCatalogInput = {
   business: BusinessRecord
   context: BusinessContextRecord

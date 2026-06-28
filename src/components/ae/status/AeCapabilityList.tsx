@@ -1,10 +1,10 @@
-import type { PublicCatalogContract } from '@/modules/catalog/public'
+import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
 
 type AeCapabilityListProps = {
-  catalog: PublicCatalogContract
+  catalog: PublicRouteCatalogContract
 }
 
 export function AeCapabilityList({ catalog }: AeCapabilityListProps) {

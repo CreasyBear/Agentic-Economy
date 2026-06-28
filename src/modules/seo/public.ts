@@ -21,8 +21,17 @@ export type BuildPublicBusinessSeoOptions = {
   canonicalBaseUrl?: string
 }
 
+export type PublicBusinessSeoService = Pick<PublicCatalogContract['services'][number], 'serviceSlug' | 'name' | 'category' | 'summary' | 'serviceArea'>
+
+export type PublicBusinessSeoCatalog = Pick<
+  PublicCatalogContract,
+  'slug' | 'name' | 'category' | 'suburb' | 'stateTerritory'
+> & {
+  services: readonly PublicBusinessSeoService[]
+}
+
 export type BuildPublicBusinessSeoInput = {
-  catalog: PublicCatalogContract
+  catalog: PublicBusinessSeoCatalog
   options?: BuildPublicBusinessSeoOptions
 }
 

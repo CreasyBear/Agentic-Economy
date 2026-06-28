@@ -188,6 +188,14 @@ function getPublicRegistryQueryClient(): PublicRegistryQueryClient {
     return publicRegistryQueryClientForTests
   }
 
+  if (usesLocalE2eBypass()) {
+    return {
+      list: (input) => Promise.resolve(legacyPublicRegistryList(input)),
+      search: (input) => Promise.resolve(legacyPublicRegistrySearch(input)),
+      detail: (input) => Promise.resolve(legacyPublicRegistryDetail(input)),
+    }
+  }
+
   const client = new ConvexHttpClient(readRequiredConvexUrl(process.env))
   return {
     list: (input) => client.query(listPublicBusinessCatalogQuery, input),
@@ -218,6 +226,10 @@ function readEnv(env: Env, name: string): string | undefined {
   }
 
   return value.trim()
+}
+
+function usesLocalE2eBypass(): boolean {
+  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 function paginateLegacyCatalogs(

@@ -1,5 +1,4 @@
-import type { PublicServiceContract } from '@/modules/catalog/public'
-import type { BuildPublicBusinessSeoInput, PublicBusinessSeoContract } from '@/modules/seo/public'
+import type { BuildPublicBusinessSeoInput, PublicBusinessSeoContract, PublicBusinessSeoService } from '@/modules/seo/public'
 import type { JsonLdObject } from './json-ld'
 
 export function buildPublicBusinessSeo(input: BuildPublicBusinessSeoInput): PublicBusinessSeoContract {
@@ -41,7 +40,7 @@ function buildLocalBusinessJsonLd(
   }
 }
 
-function buildServiceJsonLd(service: PublicServiceContract, canonicalUrl: string): JsonLdObject {
+function buildServiceJsonLd(service: PublicBusinessSeoService, canonicalUrl: string): JsonLdObject {
   return {
     '@context': 'https://schema.org',
     '@type': 'Service',

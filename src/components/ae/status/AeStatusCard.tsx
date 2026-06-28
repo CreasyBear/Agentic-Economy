@@ -1,6 +1,6 @@
 import { ExternalLinkIcon } from 'lucide-react'
 
-import type { PublicOwnerStatusReadback } from '@/modules/catalog/public'
+import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +12,7 @@ import {
 } from '@/lib/ui/status-presentation'
 
 type AeStatusCardProps = {
-  readback: PublicOwnerStatusReadback
+  readback: PublicOwnerStatusRouteReadback
 }
 
 export function AeStatusCard({ readback }: AeStatusCardProps) {

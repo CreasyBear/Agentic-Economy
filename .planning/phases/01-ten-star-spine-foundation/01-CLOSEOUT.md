@@ -1,6 +1,6 @@
 ---
 phase: 01-ten-star-spine-foundation
-status: blocked-final-r10-evidence
+status: blocked-internal-alpha-evidence
 created: 2026-06-28
 updated: 2026-06-28
 source_plan: 01-09-deploy-readback-closeout
@@ -8,117 +8,77 @@ source_plan: 01-09-deploy-readback-closeout
 
 # Phase 01 Closeout
 
-Phase 01 is not closed. The non-browser local suite is green and Convex codegen now passes, but the deploy smoke harness is still input-gated, the current full local Playwright run is not green, live deploy smoke inputs are absent, and five-owner internal-alpha evidence does not exist.
+Phase 01 is technically verified but not cleanly closed. The local suite, Convex codegen, and live deploy smoke are green as of 2026-06-28T15:26:38Z. The current Phase 1 spec still requires five real friendly-owner activation rows and completed review/requirements traceability before clean milestone close.
 
 ## Closeout Decision
 
 | Gate | Decision | Evidence |
 |---|---|---|
-| Non-browser local implementation suite | Pass | Typecheck, unit, integration, copy, import, source-mining, type, standards, SEO, UI contract, and build passed on 2026-06-28. |
-| Local browser suite | Blocked | `npm run test:e2e` with command-scoped local Clerk bypass passed 16 checks and failed 2 `/registry` checks because the server could not find public function `registry:listPublicBusinessCatalog`. |
-| Convex codegen/readback | Codegen pass; readback blocked | `npm run check:convex-codegen` now passes against dev deployment `loyal-peacock-107`; live Clerk/session and route readbacks are still blocked by missing deploy smoke inputs. |
-| Deployment readback | Blocked | `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, and `SMOKE_BUSINESS_SLUG` are missing from the shell environment and absent from `.env.local`. |
-| Deploy smoke harness | Ready but env-gated | `npm run test:deploy-smoke` is executable and fail-closed, but it was not run because required deploy URLs, storage states, and business slug were missing. |
-| Internal founder-assisted alpha | Not ready | `01-ALPHA-EVIDENCE.md` records 0 of 5 real friendly-owner activation rows. Current evidence is local instrumentation plus a Sam rehearsal only. |
-| Public launch | Not ready | GTM readiness still requires owner activation proof, deployed readback, attribution, support capacity, and clean live discovery evidence. |
+| Non-browser local implementation suite | Pass | Typecheck, unit, integration, copy, import, source-mining, type, standards, SEO, UI contract, and build passed. |
+| Local browser suite | Pass local | `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run test:e2e` passed 20 browser checks. |
+| Local accessibility suite | Pass local | `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run test:a11y` passed 4 browser checks. |
+| Convex codegen/readback | Pass | Convex codegen passed against dev deployment `loyal-peacock-107`. |
+| Deployment readback | Pass | `npm run test:deploy-smoke` passed 5/5 against Vercel, Convex, and Clerk storage states. |
+| Internal founder-assisted alpha | Not ready | `01-ALPHA-EVIDENCE.md` records 0 of 5 real friendly-owner activation rows. |
+| External Standards/Spec review | Not complete | `01-MATT-REVIEW-CONTEXT.md` exists, but this rerun did not execute an external `/mattpocock-review`. |
+| Requirements traceability | Not complete | `.planning/REQUIREMENTS.md` is absent, so milestone close cannot produce clean requirements coverage. |
 
-## Local Verification Run
+## Verification Run
 
-| Command | Result | Notes |
-|---|---|---|
-| `npm run typecheck` | Pass | `tsc --noEmit`. |
-| `npm run test:unit` | Pass | 31 files, 110 tests. |
-| `npm run test:integration` | Pass | 8 files, 25 tests. |
-| `npm run test:e2e` | Fail closed | 16 passed, 2 failed on `/registry`; server error: `Could not find public function for 'registry:listPublicBusinessCatalog'`. |
-| `npm run test:a11y` | Pass local | 4/4 with command-scoped local Clerk bypass values. |
-| `npm run test:copy` | Pass | 3 files, 28 tests. |
-| `npm run test:imports` | Pass | 3 files, 3 tests. |
-| `npm run test:source-mining` | Pass | 1 file, 2 tests. |
-| `npm run test:types` | Pass | 1 file, 4 tests. |
-| `npm run test:ts-standards` | Pass | 1 file, 1 test. |
-| `npm run test:seo` | Pass | 2 files, 8 tests. |
-| `npm run test:ui-contract` | Pass | 2 files, 2 tests. |
-| `npm run build` | Pass | Client and SSR bundles built. |
-| `npm run check:convex-codegen` | Pass | Re-run with telemetry-constrained settings; Convex reached `loyal-peacock-107`, generated bindings in dry-run mode, and completed TypeScript. |
-| `npm run test:deploy-smoke` | Not run | Required deploy inputs were missing; see `01-DEPLOY-READBACK-EVIDENCE.md`. |
+| Command | Result |
+|---|---:|
+| `npm run typecheck` | PASS |
+| `npm run test:unit` | PASS, 31 files / 110 tests |
+| `npm run test:integration` | PASS, 8 files / 26 tests |
+| `npm run test:e2e` with command-scoped local Clerk bypass | PASS, 20 checks |
+| `npm run test:a11y` with command-scoped local Clerk bypass | PASS, 4 checks |
+| `npm run test:copy` | PASS, 3 files / 28 tests |
+| `npm run test:imports` | PASS, 3 files / 3 tests |
+| `npm run test:source-mining` | PASS, 1 file / 2 tests |
+| `npm run test:types` | PASS, 1 file / 4 tests |
+| `npm run test:ts-standards` | PASS, 1 file / 1 test |
+| `npm run test:seo` | PASS, 2 files / 8 tests |
+| `npm run test:ui-contract` | PASS, 2 files / 2 tests |
+| `npm run build` | PASS |
+| `npm run check:convex-codegen` | PASS |
+| `npm run test:deploy-smoke` with live inputs | PASS, 5 checks |
 
-Browser commands used only command-scoped local values:
+## Deploy Smoke Inputs Used
 
-```bash
-VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true \
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_Y2xlcmsuZXhhbXBsZS5jb20k \
-CLERK_SECRET_KEY=sk_test_placeholder \
-npm run test:e2e
-```
+Only non-secret identifiers are recorded:
 
-The same local-only bypass shape was used for `npm run test:a11y`. Fake Clerk keys were not written to `.env.local`, and these browser passes do not prove real Clerk behavior.
+| Input | Value |
+|---|---|
+| Deploy base URL | `https://agentic-economy-phi.vercel.app` |
+| Convex URL | `https://loyal-peacock-107.convex.cloud` |
+| Smoke slug | `agentic-economy-r10-smoke` |
+| Storage states | `.auth/admin.json`, `.auth/owner.json` |
 
-## Deploy Smoke Harness
-
-Added `npm run test:deploy-smoke`, backed by:
-
-- `playwright.deploy-smoke.config.ts`
-- `tests/deploy-smoke/phase1-deploy-smoke.spec.ts`
-
-The harness requires:
-
-```text
-DEPLOY_BASE_URL
-DEPLOY_CONVEX_URL
-SMOKE_ADMIN_STORAGE_STATE
-SMOKE_OWNER_STORAGE_STATE
-SMOKE_BUSINESS_SLUG
-```
-
-It covers the Phase 1 deployment/readback surface:
-
-- Public HTML routes: `/`, `/claim`, `/claim/success`, `/privacy/remove-business`, `/registry`, `/{slug}`.
-- Public API routes: `/api/businesses`, `/api/businesses/search?q=`, `/api/businesses/{slug}`.
-- Discovery routes: `/{slug}/ucp`, `/llms.txt`, `/sitemap.xml`, `/robots.txt`.
-- Admin readback routes: `/admin/claims`, `/admin/audit-events`, `/admin/index-health`.
-- Header checks for content type, no-store cache headers, and CORS on discovery routes.
-- SEO/discovery parity checks: published page indexability, missing page noindex, sitemap exclusions, llms unsupported-capability honesty, robots private-route exclusions.
-- Clerk/session expectations: owner storage state must be denied from admin routes; admin storage state must see operator readback surfaces.
-- Convex URL expectation: deployed HTTPS URL must be non-local and reachable without a 5xx response.
-
-Storage-state files are local operator artifacts and must stay out of git.
-
-## What Is Not Proven
-
-No live Vercel preview or production URL was tested in this run. Convex codegen now passes against the dev deployment, but no real deployed route readback was run because deploy-smoke inputs are still missing. No real Clerk session or middleware behavior was proven. No suppression or kill-switch behavior was exercised against a live deployment. The current full local Playwright suite is also not green because `/registry` fails without the generated Convex public function `registry:listPublicBusinessCatalog`.
-
-The deploy smoke test now encodes those expectations so the next operator run can fail on real evidence instead of passing silently.
+Storage-state files are local operator artifacts and are not committed.
 
 ## R10 Evidence Artifacts
 
 | Artifact | Status | Decision |
 |---|---|---|
-| `01-DEPLOY-READBACK-EVIDENCE.md` | Blocked | Records local command results, the now-passing Convex codegen gate, local `/registry` browser failure, missing deploy inputs, and deploy harness coverage. |
+| `01-DEPLOY-READBACK-EVIDENCE.md` | Passed | Records local command results, Convex codegen, and live deploy smoke. |
 | `01-ALPHA-EVIDENCE.md` | Blocked | Records 0 of 5 real owner activation rows and the required row shape. |
-| `01-INTERNAL-ALPHA-READINESS.md` | Not ready | Points to the alpha evidence artifact and keeps five-owner readiness blocked. |
+| `01-INTERNAL-ALPHA-READINESS.md` | Not ready | Keeps internal alpha blocked until owner rows exist. |
+| `01-MATT-REVIEW-CONTEXT.md` | Prepared | Standards and Spec axes are separated, but external review execution is not recorded. |
 
 ## GTM and Internal Alpha
 
-`.planning/phases/01-ten-star-spine-foundation/01-INTERNAL-ALPHA-READINESS.md` remains authoritative for the current alpha decision:
-
-- current status: not alpha-ready;
-- blocker: five real friendly-owner activation rows do not exist; Plan 01-15 recorded 0/5;
-- current proof: instrumentation and local Sam route rehearsal only;
-- still required: real owner attempts, source/channel attribution, share or interest evidence, friction/failure notes, and no unresolved P0 local/deployed failures.
-
 No public launch, paid acquisition, Product Hunt-style campaign, partner push, payment claim, booking claim, action claim, inbox claim, developer/API platform claim, or Phase 2+ capability claim is supported by Phase 01 evidence.
 
-## Review Artifacts
+Phase 01 can support founder-assisted rehearsal. It should not be called internal-alpha ready until:
 
-Fable 5 accepted findings are mapped in `.planning/phases/01-ten-star-spine-foundation/01-FABLE-CLOSEOUT.md`. Remaining Fable risk is evidence-gated: real Clerk/Convex/deploy proof and five-owner activation evidence.
-
-Matt Pocock review context is prepared in `.planning/phases/01-ten-star-spine-foundation/01-MATT-REVIEW-CONTEXT.md`. The artifact keeps Standards and Spec review axes separate. This closeout does not claim that an external Matt review has been run.
+1. five friendly-owner activation rows are recorded;
+2. each row includes attribution, share/interest, friction/failure, and no-P0 evidence;
+3. the external review disposition is executed or explicitly deferred;
+4. requirements traceability is restored or an explicit closeout override is recorded.
 
 ## Remaining Risks
 
-1. Convex codegen now passes; deploy readback remains blocked until live deploy URLs, storage states, and business slug inputs are available.
-2. Full local Playwright is not green until `/registry` can resolve generated Convex public function `registry:listPublicBusinessCatalog` or an approved local readback path.
-3. Admin transport-level HTTP denial is not proven live because no real Clerk/session deployment was available.
-4. Suppression, cache invalidation, operator repair, and kill-switch behavior are locally covered through module/route tests but not deployed/readback verified.
-5. Internal alpha remains blocked until five friendly owners create activation evidence rows.
-6. Dirty top-level planning files already existed before this plan; this closeout intentionally records Phase 01 status in phase-owned artifacts rather than mixing unrelated planning changes.
+1. Internal alpha remains blocked until five friendly owners create activation evidence rows.
+2. The external Matt review is prepared but not executed.
+3. `.planning/REQUIREMENTS.md` is absent, so `gsd-complete-milestone` cannot perform clean traceability.
+4. Dirty Phase 2-5 planning/runtime work exists in the shared worktree; this closeout only updates Phase 1-owned artifacts and focused Phase 1 verification fixes.

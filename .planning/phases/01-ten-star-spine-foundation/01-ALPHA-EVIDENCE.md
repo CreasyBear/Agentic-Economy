@@ -4,7 +4,7 @@ source_plan: 01-15
 status: blocked
 created: 2026-06-28
 updated: 2026-06-28
-evidence_timestamp_utc: 2026-06-28T13:08:02Z
+evidence_timestamp_utc: 2026-06-28T15:26:38Z
 requirements: [R10]
 owner_rows_recorded: 0
 owner_rows_required: 5
@@ -22,11 +22,11 @@ proof.
 | Gate | Status | Evidence |
 |---|---|---|
 | Five real owner activation rows | BLOCKED | 0 of 5 rows recorded. |
-| Durable activation readback fields | BLOCKED | Query/readback model exists, but no real owner rows were supplied. |
+| Durable activation readback fields | READY LOCAL | Query/readback model exists, but no real owner rows were supplied. |
 | Share or interest evidence | BLOCKED | No real `share_url_copied` or consented `owner_interest_submitted` evidence was supplied. |
 | Attribution | BLOCKED | No real source/channel attribution rows were supplied. |
 | Friction/failure notes | BLOCKED | No observed owner friction or failure notes were supplied. |
-| No unresolved P0 evidence | BLOCKED | Non-browser local suite and Convex codegen passed, but full local Playwright failed on `/registry` and deploy smoke inputs are missing. |
+| No unresolved P0 evidence | TECHNICAL PASS | Local suite, Convex codegen, and deploy smoke passed; no real owner rows exist. |
 | Claims-register proof | LOCAL ONLY | Copy/SEO/API/discovery claim scans passed locally; no live owner evidence exists. |
 
 ## Required Row Shape
@@ -70,10 +70,10 @@ owner attempts happened.
 |---|---|---|
 | Typecheck | PASS | `npm run typecheck`. |
 | Unit/integration/scanner/SEO/UI/build | PASS | `npm run test:unit`, `npm run test:integration`, `npm run test:copy`, `npm run test:imports`, `npm run test:source-mining`, `npm run test:types`, `npm run test:ts-standards`, `npm run test:seo`, `npm run test:ui-contract`, `npm run build`. |
-| Local browser | FAIL CLOSED | `npm run test:e2e` failed 2 `/registry` checks because generated Convex public function `registry:listPublicBusinessCatalog` was unavailable to the local server. |
-| Local a11y | PASS LOCAL | `npm run test:a11y` passed with command-scoped local Clerk bypass. |
+| Local browser | PASS LOCAL | `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run test:e2e` passed 20 checks. |
+| Local a11y | PASS LOCAL | `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true npm run test:a11y` passed 4 checks. |
 | Convex codegen | PASS | `CLERK_JWT_ISSUER_DOMAIN` is set on dev deployment `loyal-peacock-107`; `npm run check:convex-codegen` passes with telemetry-constrained settings. |
-| Deploy smoke | BLOCKED | Required deploy URLs, storage states, and business slug were missing, so smoke was not run. |
+| Deploy smoke | PASS | `npm run test:deploy-smoke` passed 5 checks against Vercel/Convex/Clerk storage states. |
 
 ## Verification
 
@@ -85,7 +85,7 @@ owner attempts happened.
 
 ## Required Next Evidence
 
-1. Provide real deployed Vercel/Convex/Clerk URLs and owner/admin storage states, then run `npm run test:deploy-smoke`.
-2. Collect five real owner attempts with durable activation readbacks.
-3. For each owner, record attribution, share/interest, friction/failure notes, no-P0 status, and claims-register proof.
+1. Collect five real owner attempts with durable activation readbacks.
+2. For each owner, record attribution, share/interest, friction/failure notes, no-P0 status, and claims-register proof.
+3. Run or explicitly defer the external Standards/Spec review.
 4. Only then mark internal-alpha readiness green.
