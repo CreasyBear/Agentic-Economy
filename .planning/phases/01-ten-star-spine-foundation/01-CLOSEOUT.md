@@ -1,6 +1,6 @@
 ---
 phase: 01-ten-star-spine-foundation
-status: blocked-for-live-deploy-readback
+status: blocked-final-r10-evidence
 created: 2026-06-28
 updated: 2026-06-28
 source_plan: 01-09-deploy-readback-closeout
@@ -8,16 +8,17 @@ source_plan: 01-09-deploy-readback-closeout
 
 # Phase 01 Closeout
 
-Phase 01 has a green local product/test suite and an executable deployment smoke harness. It is not live-deploy verified, not Convex/Clerk verified, not internal-alpha ready, and not public-launch ready.
+Phase 01 is not closed. The non-browser local suite is green, the deploy smoke harness is executable and fail-closed, but the current full local Playwright run is not green, Convex codegen is auth-gated, live deploy smoke inputs are absent, and five-owner internal-alpha evidence does not exist.
 
 ## Closeout Decision
 
 | Gate | Decision | Evidence |
 |---|---|---|
-| Local implementation suite | Pass | Typecheck, unit, integration, browser, copy, import, source-mining, type, standards, SEO, UI contract, build, and full Vitest passed on 2026-06-28. |
-| Convex codegen/readback | Blocked | `npm run check:convex-codegen` fails on external DNS/Sentry fetch and still lacks real `CLERK_JWT_ISSUER_DOMAIN`; no network approval was requested. |
-| Deployment readback | Blocked | No `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, Clerk session storage states, or approval/evidence for live Vercel/Convex/Clerk smoke was available. |
-| Deploy smoke harness | Ready but env-gated | `npm run test:deploy-smoke` is executable and fails clearly when required deploy env/storage-state inputs are missing. |
+| Non-browser local implementation suite | Pass | Typecheck, unit, integration, copy, import, source-mining, type, standards, SEO, UI contract, and build passed on 2026-06-28. |
+| Local browser suite | Blocked | `npm run test:e2e` with command-scoped local Clerk bypass passed 16 checks and failed 2 `/registry` checks because the server could not find public function `registry:listPublicBusinessCatalog`. |
+| Convex codegen/readback | Auth-gated | `npm run check:convex-codegen` returned Convex `401 Unauthorized: MissingAccessToken`; real generated bindings, Clerk issuer, and Convex readbacks are not proven. |
+| Deployment readback | Blocked | `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, and `SMOKE_BUSINESS_SLUG` are missing from the shell environment and absent from `.env.local`. |
+| Deploy smoke harness | Ready but env-gated | `npm run test:deploy-smoke` is executable and fail-closed, but it was not run because required deploy URLs, storage states, and business slug were missing. |
 | Internal founder-assisted alpha | Not ready | Fewer than five friendly-owner activation rows exist. Current evidence is local instrumentation plus a Sam rehearsal only. |
 | Public launch | Not ready | GTM readiness still requires owner activation proof, deployed readback, attribution, support capacity, and clean live discovery evidence. |
 
@@ -26,21 +27,20 @@ Phase 01 has a green local product/test suite and an executable deployment smoke
 | Command | Result | Notes |
 |---|---|---|
 | `npm run typecheck` | Pass | `tsc --noEmit`. |
-| `npm run test:unit` | Pass | 22 files, 63 tests. |
-| `npm run test:integration` | Pass | 5 files, 13 tests. |
-| `npm run test:e2e` | Pass | 16/16 with command-scoped local Clerk bypass values. Initial sandbox server bind failed; rerun with local server permissions passed. |
-| `npm run test:a11y` | Pass | 4/4 with command-scoped local Clerk bypass values. |
+| `npm run test:unit` | Pass | 31 files, 110 tests. |
+| `npm run test:integration` | Pass | 8 files, 25 tests. |
+| `npm run test:e2e` | Fail closed | 16 passed, 2 failed on `/registry`; server error: `Could not find public function for 'registry:listPublicBusinessCatalog'`. |
+| `npm run test:a11y` | Pass local | 4/4 with command-scoped local Clerk bypass values. |
 | `npm run test:copy` | Pass | 3 files, 28 tests. |
 | `npm run test:imports` | Pass | 3 files, 3 tests. |
 | `npm run test:source-mining` | Pass | 1 file, 2 tests. |
-| `npm run test:types` | Pass | 1 file, 3 tests. |
+| `npm run test:types` | Pass | 1 file, 4 tests. |
 | `npm run test:ts-standards` | Pass | 1 file, 1 test. |
-| `npm run test:seo` | Pass | 2 files, 7 tests. |
+| `npm run test:seo` | Pass | 2 files, 8 tests. |
 | `npm run test:ui-contract` | Pass | 2 files, 2 tests. |
 | `npm run build` | Pass | Client and SSR bundles built. |
-| `npm test` | Pass | 40 files, 122 tests. |
-| `npm run test:deploy-smoke` with no env | Expected fail | Fails before test execution with missing `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, and `SMOKE_BUSINESS_SLUG`. |
-| `npm run check:convex-codegen` | Blocked | Fails with `TypeError: fetch failed` and `getaddrinfo ENOTFOUND o1192621.ingest.sentry.io`; real Clerk issuer/network approval still missing. |
+| `npm run check:convex-codegen` | Auth gate | Convex returned `401 Unauthorized: MissingAccessToken` and suggested `npx convex dev`. |
+| `npm run test:deploy-smoke` | Not run | Required deploy inputs were missing; see `01-DEPLOY-READBACK-EVIDENCE.md`. |
 
 Browser commands used only command-scoped local values:
 
@@ -51,7 +51,7 @@ CLERK_SECRET_KEY=sk_test_placeholder \
 npm run test:e2e
 ```
 
-The same local-only values were used for `npm run test:a11y`. Fake Clerk keys were not written to `.env.local`.
+The same local-only bypass shape was used for `npm run test:a11y`. Fake Clerk keys were not written to `.env.local`, and these browser passes do not prove real Clerk behavior.
 
 ## Deploy Smoke Harness
 
