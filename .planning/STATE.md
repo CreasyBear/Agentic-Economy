@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-06-28T10:03:57.913Z"
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-06-28T10:30:08.890Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 19
-  completed_plans: 13
-  percent: 68
+  completed_plans: 14
+  percent: 74
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T10:03:57.896Z
-**Stopped at:** Completed 01-13-PLAN.md
+**Last session:** 2026-06-28T10:30:08.886Z
+**Stopped at:** Completed 01-14-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -77,6 +77,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P10 | 14min | 3 tasks | 12 files |
 | Phase 01 P11 | 21min | 3 tasks | 10 files |
 | Phase 01 P13 | 12min | 3 tasks | 5 files |
+| Phase 01 P14 | 19min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -106,6 +107,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Used slug search params for 01-11 success/status readbacks without treating the slug as authority. — The slug selects a public DTO while owner/admin identity remains server-derived.
 - [Phase 01]: Skipped ROADMAP.md mutation for 01-11 because ROADMAP.md was already dirty with unrelated planning work. — Avoided staging or overwriting pre-existing Phase 2-5 planning edits.
 - [Phase 01]: Public registry/API runtime handlers now call Convex registry query references; legacy synchronous API helper exports are fixture-only for existing guardrail tests. — Preserves dirty-worktree test compatibility while removing route-local default source factories from runtime handlers.
+- [Phase 01]: Discovery route server handlers now use durable Convex query references; synchronous helper exports are fixture-only for existing guardrail tests.
+- [Phase 01]: Plan 01-14 used index-only staging for src/modules/discovery/public.ts to preserve pre-existing developer-discovery worktree edits.
 
 ### Blockers
 
@@ -113,3 +116,4 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - Phase 01 Convex codegen remains blocked pending real VITE_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_JWT_ISSUER_DOMAIN, and approved outbound Convex CLI/network access.
 - Phase 01 Plan 01-11 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
 - Phase 01 Plan 01-11 full public-owner Playwright spec is blocked in this dirty checkout by unrelated untracked src/routes/owner.actions.tsx route-generator overlay; the focused claim-readback regression passes serially.
+- Phase 01 Plan 01-14 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
