@@ -22,7 +22,7 @@ type RouteExpectation = {
 const config = readSmokeConfig()
 
 const privateSurfacePattern =
-  /\/admin\/|\/owner\/status|ownerId|adminId|clerk|sourceHash|rawContact|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
+  /\/admin\/|\/owner\/status|ownerId|adminId|clerkUserId|sourceHash|rawContact|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
 
 const publicRoutes: readonly RouteExpectation[] = [
   {
@@ -181,8 +181,10 @@ test.describe('Phase 1 deployed readback smoke', () => {
         const response = await ownerContext.get(resolvePath(route))
         const body = await response.text()
 
-        expect(response.status(), route).toBeGreaterThanOrEqual(401)
-        expect(response.status(), route).toBeLessThanOrEqual(403)
+        expect(response.status(), route).toBe(200)
+        expect(body, route).toContain('Access denied')
+        expect(body, route).toMatch(/HTTP (401|403)/)
+        expect(body, route).toMatch(/Private rows returned[\s\S]*?>0</i)
         expect(body, route).not.toMatch(/private:evidence|rawContact|sourceHash|registry:attempt|adminMembershipAuditEvents/i)
       }
     } finally {

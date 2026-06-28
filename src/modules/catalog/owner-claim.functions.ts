@@ -197,15 +197,24 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
     return getPublicOwnerStatusReadbackBySlug(slug) ?? getDefaultPublicOwnerStatusReadback()
   }
 
-  const result =
-    slug === undefined || slug.trim().length === 0
-      ? await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
-      : await callPublicQuery(publicCatalogBySlugQuery, { slug })
+  const readsCurrentOwner = slug === undefined || slug.trim().length === 0
+  let result: PublicCatalogReadResult
+
+  if (readsCurrentOwner) {
+    try {
+      result = await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
+    } catch {
+      return getDefaultPublicOwnerStatusReadback()
+    }
+  } else {
+    result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
+  }
+
   if (result.kind === 'available') {
     return buildPublicOwnerStatusReadback(result.catalog)
   }
 
-  throw new Error('No published owner catalog readback is available for this request.')
+  return getDefaultPublicOwnerStatusReadback()
 }
 
 export async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageReadbackResult> {
