@@ -303,10 +303,13 @@ function ensureRegistryAttempts(
     businessId,
     logicalKey: `registry:business:${businessId}:${sourceHash}`,
     sourceHash,
+    sourceVersion: 'public-catalog:v1',
     projectionKind: 'business_catalog',
     status: 'queued',
     retryCount: 0,
     startedAt: now,
+    repairAction: 'rebuild_projection',
+    repairResult: 'not_run',
   })
   const serviceAttempts = services.map((service) =>
     upsertRegistryAttempt(state.registryProjectionAttempts, {
@@ -314,10 +317,13 @@ function ensureRegistryAttempts(
       serviceId: service.serviceId,
       logicalKey: `registry:service:${service.serviceId}:${service.sourceHash}`,
       sourceHash: service.sourceHash,
+      sourceVersion: 'public-catalog:v1',
       projectionKind: 'service_catalog',
       status: 'queued',
       retryCount: 0,
       startedAt: now,
+      repairAction: 'rebuild_projection',
+      repairResult: 'not_run',
     })
   )
   return [businessAttempt, ...serviceAttempts]

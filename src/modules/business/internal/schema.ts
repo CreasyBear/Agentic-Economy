@@ -43,6 +43,7 @@ export const businessTables = {
     category: v.string(),
     suburb: v.string(),
     stateTerritory: v.string(),
+    postcode: v.optional(v.string()),
     ownerMessage: v.optional(v.string()),
     sourceRefs: v.array(sourceRef),
     sourceHash: v.string(),

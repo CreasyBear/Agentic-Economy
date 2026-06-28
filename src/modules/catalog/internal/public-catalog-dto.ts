@@ -59,6 +59,7 @@ export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPubl
         firstRequest,
         status: 'published',
         capabilities,
+        sourceHash: service.sourceHash,
       }
     })
 
@@ -73,12 +74,16 @@ export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPubl
     category: input.context.category,
     suburb: input.context.suburb,
     stateTerritory: input.context.stateTerritory,
+    ...(input.context.postcode === undefined ? {} : { postcode: input.context.postcode }),
+    publicUrl: `/${input.business.slug}`,
     publicStatus: 'published',
     trustTier: input.business.trustTier,
     indexStatus: input.indexStatus,
     discoveryStatus: input.discoveryStatus,
     services,
     sourceHash: input.business.sourceHash,
+    schemaVersion: 'public-catalog:v1',
+    updatedAt: input.business.updatedAt,
   }
 
   return { kind: 'available', catalog }

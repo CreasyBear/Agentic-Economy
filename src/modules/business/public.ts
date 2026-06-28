@@ -64,6 +64,7 @@ export type BusinessContextRecord = {
   category: string
   suburb: string
   stateTerritory: string
+  postcode?: string
   ownerMessage?: string
   sourceRefs: readonly BusinessSourceRef[]
   sourceHash: SourceHash

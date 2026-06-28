@@ -168,6 +168,7 @@ export type PublicServiceContract = {
   firstRequest: PublicFirstRequestDisclosure
   status: Extract<BusinessServiceStatus, 'published'>
   capabilities: readonly ServiceCapabilityContract[]
+  sourceHash: SourceHash
 }
 
 export type PublicCatalogContract = {
@@ -177,12 +178,16 @@ export type PublicCatalogContract = {
   category: string
   suburb: string
   stateTerritory: string
+  postcode?: string
+  publicUrl: string
   publicStatus: Extract<PublicStatus, 'published'>
   trustTier: TrustTier
   indexStatus: IndexStatus
   discoveryStatus: DiscoveryStatus
   services: readonly PublicServiceContract[]
   sourceHash: SourceHash
+  schemaVersion: 'public-catalog:v1'
+  updatedAt: number
 }
 
 export type BuildPublicCatalogInput = {
