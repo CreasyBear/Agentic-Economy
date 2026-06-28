@@ -37,8 +37,8 @@ function Home() {
                 Claim your service page
               </Link>
             </Button>
-            <Button type="button" variant="outline" disabled>
-              Registry opens after the next gate
+            <Button asChild variant="outline">
+              <Link to="/registry" search={{ q: '', limit: 10 }}>Open registry</Link>
             </Button>
           </>
         }
@@ -64,11 +64,11 @@ function Home() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Registry teaser</CardTitle>
-            <CardDescription>Registry and search surfaces are not linked until their readback gate ships.</CardDescription>
+            <CardTitle>Registry search</CardTitle>
+            <CardDescription>Search published, non-suppressed catalog facts from the source-owned registry projection.</CardDescription>
           </CardHeader>
           <CardContent>
-            <AeStatusBadge status="not_live" />
+            <AeStatusBadge status="queued" />
           </CardContent>
         </Card>
       </section>

@@ -24,6 +24,9 @@ export function AePublicShell({ children }: AePublicShellProps) {
           </a>
           <nav aria-label="Public" className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
+              <Link to="/registry" search={{ q: '', limit: 10 }}>Registry</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
               <Link to="/claim">Claim</Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>

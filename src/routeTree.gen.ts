@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
@@ -16,12 +17,17 @@ import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remo
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
-import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
-import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
 import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
+import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
+import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 
+const RegistryRoute = RegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClaimRoute = ClaimRouteImport.update({
   id: '/claim',
   path: '/claim',
@@ -57,16 +63,6 @@ const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
   path: '/api/businesses',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
-  id: '/search',
-  path: '/search',
-  getParentRoute: () => ApiBusinessesRoute,
-} as any)
-const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => ApiBusinessesRoute,
-} as any)
 const AdminIndexHealthRoute = AdminIndexHealthRouteImport.update({
   id: '/admin/index-health',
   path: '/admin/index-health',
@@ -82,49 +78,62 @@ const AdminAuditEventsRoute = AdminAuditEventsRouteImport.update({
   path: '/admin/audit-events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => ApiBusinessesRoute,
+} as any)
+const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => ApiBusinessesRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
-  '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
+  '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
-  '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
+  '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$slug': typeof SlugRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
-  '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
+  '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -132,49 +141,53 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/claim'
+    | '/registry'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
     | '/api/businesses'
-    | '/api/businesses/$slug'
-    | '/api/businesses/search'
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/api/businesses/$slug'
+    | '/api/businesses/search'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/$slug'
     | '/claim'
+    | '/registry'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
     | '/api/businesses'
-    | '/api/businesses/$slug'
-    | '/api/businesses/search'
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/api/businesses/$slug'
+    | '/api/businesses/search'
   id:
     | '__root__'
     | '/'
     | '/$slug'
     | '/claim'
+    | '/registry'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
     | '/api/businesses'
-    | '/api/businesses/$slug'
-    | '/api/businesses/search'
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/api/businesses/$slug'
+    | '/api/businesses/search'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRoute
   ClaimRoute: typeof ClaimRouteWithChildren
+  RegistryRoute: typeof RegistryRoute
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
   AdminClaimsRoute: typeof AdminClaimsRoute
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
@@ -185,6 +198,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/registry': {
+      id: '/registry'
+      path: '/registry'
+      fullPath: '/registry'
+      preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/claim': {
       id: '/claim'
       path: '/claim'
@@ -234,20 +254,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/businesses/search': {
-      id: '/api/businesses/search'
-      path: '/search'
-      fullPath: '/api/businesses/search'
-      preLoaderRoute: typeof ApiBusinessesSearchRouteImport
-      parentRoute: typeof ApiBusinessesRoute
-    }
-    '/api/businesses/$slug': {
-      id: '/api/businesses/$slug'
-      path: '/$slug'
-      fullPath: '/api/businesses/$slug'
-      preLoaderRoute: typeof ApiBusinessesSlugRouteImport
-      parentRoute: typeof ApiBusinessesRoute
-    }
     '/admin/index-health': {
       id: '/admin/index-health'
       path: '/admin/index-health'
@@ -269,6 +275,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuditEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/businesses/search': {
+      id: '/api/businesses/search'
+      path: '/search'
+      fullPath: '/api/businesses/search'
+      preLoaderRoute: typeof ApiBusinessesSearchRouteImport
+      parentRoute: typeof ApiBusinessesRoute
+    }
+    '/api/businesses/$slug': {
+      id: '/api/businesses/$slug'
+      path: '/$slug'
+      fullPath: '/api/businesses/$slug'
+      preLoaderRoute: typeof ApiBusinessesSlugRouteImport
+      parentRoute: typeof ApiBusinessesRoute
+    }
   }
 }
 
@@ -280,23 +300,27 @@ const ClaimRouteChildren: ClaimRouteChildren = {
   ClaimSuccessRoute: ClaimSuccessRoute,
 }
 
+const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
+
 interface ApiBusinessesRouteChildren {
-  ApiBusinessesSearchRoute: typeof ApiBusinessesSearchRoute
   ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
+  ApiBusinessesSearchRoute: typeof ApiBusinessesSearchRoute
 }
 
 const ApiBusinessesRouteChildren: ApiBusinessesRouteChildren = {
-  ApiBusinessesSearchRoute: ApiBusinessesSearchRoute,
   ApiBusinessesSlugRoute: ApiBusinessesSlugRoute,
+  ApiBusinessesSearchRoute: ApiBusinessesSearchRoute,
 }
 
-const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
-const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(ApiBusinessesRouteChildren)
+const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
+  ApiBusinessesRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRoute,
   ClaimRoute: ClaimRouteWithChildren,
+  RegistryRoute: RegistryRoute,
   AdminAuditEventsRoute: AdminAuditEventsRoute,
   AdminClaimsRoute: AdminClaimsRoute,
   AdminIndexHealthRoute: AdminIndexHealthRoute,

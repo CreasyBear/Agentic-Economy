@@ -202,8 +202,9 @@ const copyClaimRules: readonly CopyClaimRule[] = [
   },
   {
     rule: 'p3-developer-platform-overclaim',
-    message: 'SDK/CLI/MCP/API-key platform claims must stay negative planning/test posture.',
-    pattern: /\b(?:SDK\/CLI platform|SDK\/CLI\/plugin ecosystem|MCP mutation|API-key platform|API key platform|developer launch|mutation API)\b/i,
+    message: 'SDK/CLI/MCP/API-key/protocol claims must stay negative planning/test posture.',
+    pattern:
+      /\b(?:SDK\/CLI platform|SDK\/CLI\/plugin ecosystem|MCP mutation|MCP tools?|API-key platform|API key platform|developer launch|mutation API|standard merchant-origin UCP|merchant-origin UCP|\.well-known UCP|OpenAPI (?:service|action )?descriptor|action endpoint|payment handler|callable endpoint|tool-call|agent-callable)\b/i,
     negativeOnly: true,
   },
   {
@@ -228,9 +229,9 @@ const copyClaimRules: readonly CopyClaimRule[] = [
   },
   {
     rule: 'p5-money-rail-overclaim',
-    message: 'Wallet/Connect/x402/custody/settlement claims must stay negative planning/test posture.',
+    message: 'Wallet/Connect/x402/custody/settlement/direct-Stripe claims must stay negative planning/test posture.',
     pattern:
-      /\b(?:wallet ready|wallet\/credits|credits balance|Connect\/x402|Stripe Connect|x402 checkout|x402 rail|custody rail|custody wallet|settlement platform|payment handlers?|paymentRequired\s*:\s*true)\b/i,
+      /\b(?:wallet(?:s)?|credits?|credit balance|credits? balance|stored value|custody|crypto|x402|Connect marketplace|Stripe Connect|Connect\/x402|marketplace payout|split payout|split charge|settlement|payment handlers?|paymentRequired\s*(?::|=)\s*true|direct Stripe rail|direct Stripe subscription|Stripe subscription authority)\b/i,
     negativeOnly: true,
   },
 ]
@@ -246,7 +247,7 @@ function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): bool
   }
 
   if (rule.negativeOnly) {
-    return isNegativeCapabilityContext(violation.excerpt)
+    return isNegativeCapabilityContext(violation.excerpt, rule.pattern)
   }
 
   return rule.allowedPhases?.some((phase) => phases.includes(phase)) ?? false
@@ -293,10 +294,19 @@ function isCopyTestContext(file: string): boolean {
   return normalizedScanPath(file).includes('tests/copy/')
 }
 
-function isNegativeCapabilityContext(excerpt: string): boolean {
-  return /\b(?:does not|do not|not live|not ship|not shipped|not advertised|not available|never|without|unless|unavailable|deferred|future products?|out of scope|rejects?|fail(?:s)? scans?|banned|blocked|stay out|remain(?:s)? unavailable|no\s+(?:AI|booking|payment|provider|autonomous|SDK|MCP|API-key|wallet|Connect|x402|custody|settlement)|cut these)\b/i.test(
-    excerpt
-  )
+function isNegativeCapabilityContext(excerpt: string, capabilityPattern: RegExp): boolean {
+  const capability =
+    '(?:AI|booking|payment|provider|autonomous|SDK|CLI|MCP|API-key|API key|OpenAPI|merchant-origin UCP|\\.well-known UCP|action endpoint|callable|tool-call|agent-callable|wallet|credits?|credit balance|credits? balance|Connect|x402|custody|crypto|stored value|settlement|split payout|marketplace payout|payment handler|direct Stripe|Stripe subscription|paymentRequired)'
+  const negative =
+    '(?:no|not live|not shipped?|not advertised|not available|never|unavailable|deferred|out of scope|banned|blocked|stay out|stays out|remain(?:s)? unavailable|negative(?:ly)?|fail(?:s)? scans?)'
+  const beforeCapability = new RegExp(`\\b${negative}\\b[\\s\\S]{0,80}\\b${capability}\\b`, 'i')
+  const afterCapability = new RegExp(`\\b${capability}\\b[\\s\\S]{0,80}\\b${negative}\\b`, 'i')
+  const capabilityInClause = new RegExp(capabilityPattern.source, capabilityPattern.flags.replace('g', ''))
+
+  return excerpt
+    .split(/[.;!?\n]/)
+    .filter((clause) => capabilityInClause.test(clause))
+    .every((clause) => beforeCapability.test(clause) || afterCapability.test(clause))
 }
 
 export function scanUiContract(targets: readonly ScanTarget[]): readonly ScanViolation[] {

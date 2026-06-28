@@ -6,8 +6,33 @@ test.describe('public owner routes', () => {
 
     await expect(page.getByRole('heading', { name: /claim and publish a truthful service page/i })).toBeVisible()
     await expect(page.getByRole('link', { name: /claim your service page/i })).toHaveCount(1)
-    await expect(page.getByRole('button', { name: /registry opens after the next gate/i })).toBeDisabled()
+    await expect(page.getByRole('link', { name: /open registry/i })).toBeVisible()
     await expect(page.getByText(/bookings, payments, and automated actions are not live/i)).toBeVisible()
+  })
+
+  test('registry search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
+    await page.goto('/registry')
+
+    await expect(page.getByRole('heading', { name: /search published service catalog facts/i })).toBeVisible()
+    await expect(page.getByLabel('Search registry')).toBeVisible()
+    await expect(page.getByText('Parramatta Emergency Plumbing')).toBeVisible()
+    await expect(page.getByRole('navigation', { name: /registry pagination/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+    await page.getByLabel('Search registry').fill('emergency plumber parramatta')
+    await page.getByRole('button', { name: /^search$/i }).click()
+    await expect(page).toHaveURL(/q=emergency\+plumber\+parramatta/)
+    await expect(page.getByText('1 result for "emergency plumber parramatta".')).toBeVisible()
+    await expect(page.getByRole('link', { name: /open page/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing')
+
+    await page.getByLabel('Search registry').fill('fremantle locksmith')
+    await page.getByRole('button', { name: /^search$/i }).click()
+    await expect(page.getByText('No registry results')).toBeVisible()
+    await expect(page.getByRole('link', { name: /clear search/i })).toBeVisible()
+
+    const bodyText = await page.locator('body').innerText()
+    expect(bodyText).not.toMatch(/ownerId|serviceId|businessId|clerk|sourceHash|rawContact|admin/i)
   })
 
   test('claim form preserves input and focuses the first validation error', async ({ page }) => {

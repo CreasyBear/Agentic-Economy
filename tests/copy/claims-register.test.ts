@@ -16,7 +16,7 @@ const phaseOwnedCopyExamples = [
   {
     phase: 'P3 read-only discovery',
     relativeFile: '.planning/phases/03-standard-agent-builder-discovery/03-UI-SPEC.fixture',
-    copy: 'Phase 3 read-only discovery exposes developer discovery, schema docs, API examples, support matrix, and route health; SDK/CLI platform, MCP mutation, and API-key platform remain unavailable.',
+    copy: 'Phase 3 read-only discovery exposes developer discovery, schema docs, API examples, support matrix, and route health; SDK/CLI platform, MCP mutation, API-key platform, standard merchant-origin UCP, OpenAPI action descriptor, callable endpoint, and payment handler remain unavailable.',
   },
   {
     phase: 'P4 protected action',
@@ -26,7 +26,7 @@ const phaseOwnedCopyExamples = [
   {
     phase: 'P5 paid activation',
     relativeFile: '.planning/phases/05-paid-activation-money-rails/05-UI-SPEC.fixture',
-    copy: 'Phase 5 Autumn+Stripe paid activation shows Stripe PSP checkout, subscription, customer portal, and billing reconciliation; wallet/credits, Connect/x402, x402 checkout, custody rail, and settlement platform remain unavailable.',
+    copy: 'Phase 5 Autumn+Stripe paid activation shows Stripe PSP checkout, subscription, customer portal, and billing reconciliation; wallet/credits, balance, stored value, Connect/x402, x402 checkout, custody rail, direct Stripe subscription authority, marketplace payout, split payout, and settlement platform remain unavailable.',
   },
 ] as const
 
@@ -45,7 +45,7 @@ const publicOverclaimExamples = [
   },
   {
     rule: 'p3-developer-platform-overclaim',
-    copy: 'Public page: SDK/CLI platform with MCP mutation and API-key platform is live.',
+    copy: 'Public page: SDK/CLI platform with MCP mutation, API-key platform, standard merchant-origin UCP, OpenAPI action descriptor, callable endpoint, and payment handler is live.',
   },
   {
     rule: 'p4-protected-action-overclaim',
@@ -61,7 +61,7 @@ const publicOverclaimExamples = [
   },
   {
     rule: 'p5-money-rail-overclaim',
-    copy: 'Public page: wallet/credits, Connect/x402, x402 checkout, custody rail, and settlement platform are ready.',
+    copy: 'Public page: wallet/credits, balance, stored value, Connect/x402, x402 checkout, custody rail, direct Stripe subscription authority, marketplace payout, split payout, and settlement platform are ready.',
   },
 ] as const
 
@@ -108,6 +108,17 @@ describe('claims register seed copy', () => {
     const violations = scanFixture(relativeFile, copy)
 
     expect(violations.map((violation) => violation.rule)).toContain(rule)
+  })
+
+  it('rejects future-platform claims hidden behind unless wording', () => {
+    const violations = scanFixture(
+      'public-copy/overclaim.fixture',
+      'Public page: wallet credits, MCP tools, and direct Stripe subscription authority are available unless the owner disables them.',
+    )
+
+    expect(violations.map((violation) => violation.rule)).toEqual(
+      expect.arrayContaining(['p3-developer-platform-overclaim', 'p5-money-rail-overclaim']),
+    )
   })
 })
 
