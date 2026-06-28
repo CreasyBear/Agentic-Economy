@@ -1,0 +1,70 @@
+import { expect, test } from '@playwright/test'
+
+test.describe('public owner routes', () => {
+  test('home exposes one primary claim path and honest unavailable capability copy', async ({ page }) => {
+    await page.goto('/')
+
+    await expect(page.getByRole('heading', { name: /claim and publish a truthful service page/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /claim your service page/i })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: /registry opens after the next gate/i })).toBeDisabled()
+    await expect(page.getByText(/bookings, payments, and automated actions are not live/i)).toBeVisible()
+  })
+
+  test('claim form preserves input and focuses the first validation error', async ({ page }) => {
+    await page.goto('/claim')
+
+    await page.getByLabel('Business name').fill('Northside Solar')
+    await page.getByLabel('Business category').fill('Solar repairs')
+    await page.getByLabel('Suburb').fill('Leederville')
+    await page.getByLabel('State or territory').fill('WA')
+    await page.getByLabel('Public page slug').fill('northside-solar')
+    await page.getByLabel('Source label').fill('Owner supplied')
+    await page.getByLabel('Service name').fill('Solar inverter repair')
+    await page.getByRole('button', { name: /publish service page/i }).click()
+
+    await expect(page.getByLabel('Business name')).toHaveValue('Northside Solar')
+    await expect(page.getByLabel('Service category')).toBeFocused()
+    await expect(page.getByText('Service category is required.')).toBeVisible()
+  })
+
+  test('claim success and owner readback show public URL, separate states, and unavailable actions', async ({ page }) => {
+    await page.goto('/claim/success')
+
+    await expect(page.getByRole('heading', { name: /your service page is published/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /open page/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing')
+    await expect(page.getByText('Bookings not live')).toBeVisible()
+    await expect(page.getByText('Payments not live')).toBeVisible()
+    await expect(page.getByText('Automated actions not live')).toBeVisible()
+
+    await page.getByRole('link', { name: /view owner status/i }).click()
+    await expect(page).toHaveURL(/\/owner\/status$/)
+    await expect(page.getByRole('heading', { name: /service page status/i })).toBeVisible()
+    await expect(page.getByText(/index, discovery, trust, and capability states stay separate/i)).toBeVisible()
+  })
+
+  test('public business page exposes service facts without private authority fields', async ({ page }) => {
+    await page.goto('/parramatta-emergency-plumbing')
+
+    await expect(page.getByRole('heading', { name: 'Parramatta Emergency Plumbing' })).toBeVisible()
+    await expect(page.getByText('Parramatta, NSW')).toBeVisible()
+    await expect(page.getByText('Public service facts')).toBeVisible()
+    await expect(page.getByText('First request not available yet')).toBeVisible()
+    await expect(page.getByRole('link', { name: /request removal or correction/i })).toBeVisible()
+
+    const bodyText = await page.locator('body').innerText()
+    expect(bodyText).not.toMatch(/ownerId|adminId|clerk|actor|trust tier|public status/i)
+  })
+
+  test('privacy removal request validates and records a receipt', async ({ page }) => {
+    await page.goto('/privacy/remove-business')
+
+    await page.getByRole('button', { name: /submit request/i }).click()
+    await expect(page.getByLabel('Contact email')).toBeFocused()
+    await expect(page.getByText('A contact email is required.')).toBeVisible()
+
+    await page.getByLabel('Contact email').fill('owner@example.com')
+    await page.getByLabel('Evidence summary').fill('The public facts are inaccurate and should be reviewed.')
+    await page.getByRole('button', { name: /submit request/i }).click()
+    await expect(page.getByText(/request recorded/i)).toBeVisible()
+  })
+})
