@@ -54,7 +54,9 @@ describe('Convex source-state adapters', () => {
     expect(state.observability.auditEvents[0]).toMatchObject({
       eventId: 'audit:publish:1',
       payloadHash: 'payload:publish:v1',
+      redactedPayload: {},
     })
+    expect(state.observability.auditEvents[0]).not.toHaveProperty('redactedPayloadJson')
     expect(state.discovery.discoveryManifestAttempts[0]).toMatchObject({
       attemptId: 'discovery:attempt:1',
       sourceHash: 'source:business:v1',
@@ -71,6 +73,7 @@ describe('Convex source-state adapters', () => {
     first(state.catalog.businessServices).sourceHash = 'source:service:v2'
     first(state.observability.operationKeys).resultHash = 'result:publish:v2'
     first(state.observability.auditEvents).payloadHash = 'payload:publish:v2'
+    first(state.observability.auditEvents).redactedPayload = { evidenceCount: 1 }
     first(state.registry.registryProjectionAttempts).sourceHash = 'source:business:v2'
     first(state.discovery.discoveryManifestAttempts).sourceHash = 'source:business:v2'
 
@@ -87,7 +90,12 @@ describe('Convex source-state adapters', () => {
     expect(db.dump('businessServices')[0]).toMatchObject({ sourceHash: 'source:service:v2' })
     expect(db.dump('operationKeys')[0]).toMatchObject({ key: 'publish-key', resultHash: 'result:publish:v2' })
     expect(db.dump('operationKeys')[0]).not.toHaveProperty('operationKey')
-    expect(db.dump('auditEvents')[0]).toMatchObject({ eventId: 'audit:publish:1', payloadHash: 'payload:publish:v2' })
+    expect(db.dump('auditEvents')[0]).toMatchObject({
+      eventId: 'audit:publish:1',
+      payloadHash: 'payload:publish:v2',
+      redactedPayloadJson: '{"evidenceCount":1}',
+    })
+    expect(db.dump('auditEvents')[0]).not.toHaveProperty('redactedPayload')
   })
 })
 

@@ -198,7 +198,7 @@ export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Pro
     },
     observability: {
       operationKeys: operationKeys.map(mapOperationKey),
-      auditEvents: auditEvents.map(stripConvexFields),
+      auditEvents: auditEvents.map(mapAuditEvent),
       operatorControls: operatorControls.map(stripConvexFields),
       funnelEvents: funnelEvents.map(stripConvexFields),
       ownerActivationState: ownerActivationState.map(stripConvexFields),
@@ -226,7 +226,7 @@ export async function persistPhaseOneSourceState(db: RuntimeWriter, state: Phase
     byDomainId('disputes', state.security.disputes, 'disputeId'),
     byFields('suppressionRules', state.security.suppressionRules, ['targetType', 'targetRef', 'status']),
     byFieldsWithout('operationKeys', state.observability.operationKeys, ['actorRef', 'operationName', 'key'], ['operationKey']),
-    byFields('auditEvents', state.observability.auditEvents, ['eventId']),
+    byFieldsWithPatch('auditEvents', state.observability.auditEvents, ['eventId'], auditEventPatch),
     byFields('operatorControls', state.observability.operatorControls, ['key']),
     byFields('funnelEvents', state.observability.funnelEvents, ['eventId']),
     byFields('ownerActivationState', state.observability.ownerActivationState, ['businessId']),
@@ -263,6 +263,20 @@ function byFields(tableName: string, rows: readonly Record<string, unknown>[], f
     tableName,
     rows,
     toPatch: (row) => ({ ...row }),
+    matches: (document, row) => fields.every((field) => document[field] === row[field]),
+  }
+}
+
+function byFieldsWithPatch(
+  tableName: string,
+  rows: readonly Record<string, unknown>[],
+  fields: readonly string[],
+  toPatch: (row: Record<string, unknown>) => Record<string, unknown>
+): UpsertSpec {
+  return {
+    tableName,
+    rows,
+    toPatch,
     matches: (document, row) => fields.every((field) => document[field] === row[field]),
   }
 }
@@ -306,6 +320,23 @@ function mapOperationKey(row: RuntimeDocument): Record<string, unknown> {
   }
 }
 
+function mapAuditEvent(row: RuntimeDocument): Record<string, unknown> {
+  const stripped = stripConvexFields(row)
+  return {
+    ...omitKeys(stripped, ['redactedPayloadJson']),
+    redactedPayload: parseJsonField(row, 'redactedPayloadJson'),
+  }
+}
+
+function auditEventPatch(row: Record<string, unknown>): Record<string, unknown> {
+  const redactedPayloadJson =
+    typeof row.redactedPayloadJson === 'string' ? row.redactedPayloadJson : JSON.stringify(row.redactedPayload ?? null)
+  return {
+    ...omitKeys(row, ['redactedPayload', 'redactedPayloadJson']),
+    redactedPayloadJson,
+  }
+}
+
 function stripConvexFields(row: RuntimeDocument): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(row).filter(([key]) => key !== '_id' && key !== '_creationTime')
@@ -332,6 +363,19 @@ function sourceRefsField(document: RuntimeDocument, field: string): SourceRefRec
 function stringField(document: RuntimeDocument, field: string): string {
   const value = document[field]
   return typeof value === 'string' ? value : ''
+}
+
+function parseJsonField(document: RuntimeDocument, field: string): unknown {
+  const value = document[field]
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
 }
 
 function stringRecordField(record: Record<string, unknown>, field: string): string {
