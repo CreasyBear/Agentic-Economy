@@ -340,8 +340,13 @@ function ensureDiscoveryAttempts(
     businessId,
     ucpVersion: 'v1',
     pathKind: 'ae_hosted_fallback',
+    sourceHash,
+    sourceVersion: 'public-catalog:v1',
     status: 'queued',
+    retryCount: 0,
     startedAt: now,
+    repairAction: 'regenerate_manifest',
+    repairResult: 'not_run',
   })
 
   return [attempt]

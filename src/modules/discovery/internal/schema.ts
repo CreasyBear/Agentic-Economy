@@ -2,7 +2,13 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 import { literalUnion } from '@/modules/common/convex-literals'
-import { DiscoveryAttemptStatusValues, DiscoveryPathKindValues, DiscoveryStatusValues } from '@/modules/discovery/public'
+import {
+  DiscoveryAttemptStatusValues,
+  DiscoveryPathKindValues,
+  DiscoveryRepairActionValues,
+  DiscoveryRepairResultValues,
+  DiscoveryStatusValues,
+} from '@/modules/discovery/public'
 
 export const discoveryTables = {
   discoveryManifests: defineTable({
@@ -35,10 +41,21 @@ export const discoveryTables = {
     businessId: v.id('businesses'),
     ucpVersion: v.string(),
     pathKind: literalUnion(DiscoveryPathKindValues),
+    sourceHash: v.string(),
+    sourceVersion: v.string(),
     status: literalUnion(DiscoveryAttemptStatusValues),
+    retryCount: v.number(),
     failureCode: v.optional(v.string()),
     failureMessageRedacted: v.optional(v.string()),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
+    generatedHash: v.optional(v.string()),
+    bodyHash: v.optional(v.string()),
+    urlHash: v.optional(v.string()),
+    latestManifestUrl: v.optional(v.string()),
+    latestRouteUrls: v.optional(v.array(v.string())),
+    staleThresholdAt: v.optional(v.number()),
+    repairAction: literalUnion(DiscoveryRepairActionValues),
+    repairResult: literalUnion(DiscoveryRepairResultValues),
   }).index('by_business_status', ['businessId', 'status']),
 } as const
