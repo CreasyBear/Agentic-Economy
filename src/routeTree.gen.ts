@@ -15,6 +15,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
+import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
+import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
+import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
 import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
@@ -49,6 +52,21 @@ const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
   path: '/success',
   getParentRoute: () => ClaimRoute,
 } as any)
+const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
+  id: '/api/businesses',
+  path: '/api/businesses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => ApiBusinessesRoute,
+} as any)
+const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => ApiBusinessesRoute,
+} as any)
 const AdminIndexHealthRoute = AdminIndexHealthRouteImport.update({
   id: '/admin/index-health',
   path: '/admin/index-health',
@@ -72,6 +90,9 @@ export interface FileRoutesByFullPath {
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
+  '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -83,6 +104,9 @@ export interface FileRoutesByTo {
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
+  '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -95,6 +119,9 @@ export interface FileRoutesById {
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
+  '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -108,6 +135,9 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/api/businesses'
+    | '/api/businesses/$slug'
+    | '/api/businesses/search'
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
@@ -119,6 +149,9 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/api/businesses'
+    | '/api/businesses/$slug'
+    | '/api/businesses/search'
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
@@ -130,6 +163,9 @@ export interface FileRouteTypes {
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/api/businesses'
+    | '/api/businesses/$slug'
+    | '/api/businesses/search'
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
@@ -142,6 +178,7 @@ export interface RootRouteChildren {
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
   AdminClaimsRoute: typeof AdminClaimsRoute
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
+  ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   OwnerStatusRoute: typeof OwnerStatusRoute
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
 }
@@ -190,6 +227,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClaimSuccessRouteImport
       parentRoute: typeof ClaimRoute
     }
+    '/api/businesses': {
+      id: '/api/businesses'
+      path: '/api/businesses'
+      fullPath: '/api/businesses'
+      preLoaderRoute: typeof ApiBusinessesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/businesses/search': {
+      id: '/api/businesses/search'
+      path: '/search'
+      fullPath: '/api/businesses/search'
+      preLoaderRoute: typeof ApiBusinessesSearchRouteImport
+      parentRoute: typeof ApiBusinessesRoute
+    }
+    '/api/businesses/$slug': {
+      id: '/api/businesses/$slug'
+      path: '/$slug'
+      fullPath: '/api/businesses/$slug'
+      preLoaderRoute: typeof ApiBusinessesSlugRouteImport
+      parentRoute: typeof ApiBusinessesRoute
+    }
     '/admin/index-health': {
       id: '/admin/index-health'
       path: '/admin/index-health'
@@ -222,7 +280,18 @@ const ClaimRouteChildren: ClaimRouteChildren = {
   ClaimSuccessRoute: ClaimSuccessRoute,
 }
 
+interface ApiBusinessesRouteChildren {
+  ApiBusinessesSearchRoute: typeof ApiBusinessesSearchRoute
+  ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
+}
+
+const ApiBusinessesRouteChildren: ApiBusinessesRouteChildren = {
+  ApiBusinessesSearchRoute: ApiBusinessesSearchRoute,
+  ApiBusinessesSlugRoute: ApiBusinessesSlugRoute,
+}
+
 const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
+const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(ApiBusinessesRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -231,6 +300,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuditEventsRoute: AdminAuditEventsRoute,
   AdminClaimsRoute: AdminClaimsRoute,
   AdminIndexHealthRoute: AdminIndexHealthRoute,
+  ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   OwnerStatusRoute: OwnerStatusRoute,
   PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
 }

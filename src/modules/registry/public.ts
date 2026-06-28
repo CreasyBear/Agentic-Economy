@@ -1,13 +1,27 @@
 import type { BusinessId, CorrelationId, OperationKey, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
 import type { PublicStatus } from '@/modules/business/public'
 import type { PublicCatalogContract, PublicCatalogReadState } from '@/modules/catalog/public'
-import type { AuditEventContract } from '@/modules/observability/public'
+import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
+import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
 import {
   getIndexStatus as getIndexStatusImpl,
   readCatalogHealth as readCatalogHealthImpl,
   retryRegistryProjection as retryRegistryProjectionImpl,
   syncCatalogProjection as syncCatalogProjectionImpl,
 } from './internal/projection-attempts'
+import {
+  createDefaultRegistrySourceState as createDefaultRegistrySourceStateImpl,
+  getPublicBusinessCatalogBySlug as getPublicBusinessCatalogBySlugImpl,
+  listPublicBusinessCatalog as listPublicBusinessCatalogImpl,
+  searchPublicBusinessCatalog as searchPublicBusinessCatalogImpl,
+} from './internal/search'
+import type {
+  PublicBusinessCatalogApiDto,
+  PublicBusinessCatalogApiPage,
+  PublicBusinessCatalogDetailResult,
+  PublicBusinessCatalogQueryInput,
+  PublicBusinessCatalogSearchInput,
+} from './internal/search'
 
 export const IndexStatusValues = ['not_queued', 'queued', 'indexed', 'failed', 'stale'] as const
 export type IndexStatus = (typeof IndexStatusValues)[number]
@@ -94,8 +108,10 @@ export type IndexStatusContract = {
 }
 
 export type RegistrySourceState = PublicCatalogReadState & {
+  operationKeys: OperationKeyRecord[]
   registryProjectionItems: RegistryProjectionItemContract[]
   registryProjectionAttempts: RegistryProjectionAttemptContract[]
+  discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
   indexStatus: IndexStatusContract[]
   auditEvents: AuditEventContract[]
 }
@@ -159,9 +175,25 @@ export type CatalogHealthReadback = {
   repairResult: RegistryRepairResult
 }
 
+export type {
+  PublicBusinessCatalogApiDto,
+  PublicBusinessCatalogApiPage,
+  PublicBusinessCatalogDetailResult,
+  PublicBusinessCatalogQueryInput,
+  PublicBusinessCatalogSearchInput,
+}
+
+export const createDefaultRegistrySourceState = createDefaultRegistrySourceStateImpl
+
 export const syncCatalogProjection = syncCatalogProjectionImpl
 
 export const retryRegistryProjection = retryRegistryProjectionImpl
+
+export const listPublicBusinessCatalog = listPublicBusinessCatalogImpl
+
+export const searchPublicBusinessCatalog = searchPublicBusinessCatalogImpl
+
+export const getPublicBusinessCatalogBySlug = getPublicBusinessCatalogBySlugImpl
 
 export const getIndexStatus = getIndexStatusImpl
 
