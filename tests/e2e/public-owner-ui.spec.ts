@@ -57,10 +57,11 @@ test.describe('public owner routes', () => {
   test('claim submission readbacks use the submitted catalog instead of the default Sam record', async ({ page }, testInfo) => {
     const suffix = testInfo.project.name.replace(/[^a-z0-9]+/giu, '-').toLowerCase()
     const slug = `fremantle-priority-electrical-${suffix}`
+    const businessName = `Fremantle Priority Electrical ${suffix}`
 
     await page.goto('/claim')
 
-    await page.getByLabel('Business name').fill('Fremantle Priority Electrical')
+    await page.getByLabel('Business name').fill(businessName)
     await page.getByLabel('Business category').fill('Emergency electrical')
     await page.getByLabel('Suburb').fill('Fremantle')
     await page.getByLabel('State or territory').fill('WA')
@@ -78,17 +79,17 @@ test.describe('public owner routes', () => {
 
     await expect(page).toHaveURL(new RegExp(`/claim/success.*slug=${slug}`))
     await expect(page.getByRole('heading', { name: /your service page is published/i })).toBeVisible()
-    await expect(page.getByText('Fremantle Priority Electrical')).toBeVisible()
+    await expect(page.getByText(businessName)).toBeVisible()
     await expect(page.getByText('After-hours switchboard repair')).toBeVisible()
     await expect(page.getByText('Fremantle, South Fremantle, and Beaconsfield')).toBeVisible()
     await expect(page.getByText('Parramatta Emergency Plumbing')).toHaveCount(0)
 
     await page.getByRole('link', { name: /view owner status/i }).click()
     await expect(page).toHaveURL(new RegExp(`/owner/status.*slug=${slug}`))
-    await expect(page.getByText('Fremantle Priority Electrical')).toBeVisible()
+    await expect(page.getByText(businessName)).toBeVisible()
 
     await page.goto(`/${slug}`)
-    await expect(page.getByRole('heading', { name: 'Fremantle Priority Electrical' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: businessName })).toBeVisible()
     await expect(page.getByText('Urgent switchboard fault triage for Fremantle homes and shops.')).toBeVisible()
     await expect(page.getByText('Parramatta Emergency Plumbing')).toHaveCount(0)
   })
@@ -103,7 +104,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByText('Automated actions not live')).toBeVisible()
 
     await page.getByRole('link', { name: /view owner status/i }).click()
-    await expect(page).toHaveURL(/\/owner\/status$/)
+    await expect(page).toHaveURL(/\/owner\/status/)
     await expect(page.getByRole('heading', { name: /service page status/i })).toBeVisible()
     await expect(page.getByText(/index, discovery, trust, and capability states stay separate/i)).toBeVisible()
   })

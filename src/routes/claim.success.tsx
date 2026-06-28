@@ -6,10 +6,19 @@ import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
-import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
+import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
+
+type ClaimSuccessSearch = {
+  slug?: string
+}
 
 export const Route = createFileRoute('/claim/success')({
-  loader: () => getDefaultPublicOwnerStatusReadback(),
+  validateSearch: (search: Record<string, unknown>): ClaimSuccessSearch => {
+    const slug = typeof search.slug === 'string' && search.slug.trim().length > 0 ? search.slug.trim() : undefined
+    return slug === undefined ? {} : { slug }
+  },
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => readOwnerStatusServer({ data: deps }),
   head: () => ({
     meta: [
       { title: 'Your service page is published | Agentic Economy' },
@@ -30,7 +39,7 @@ function ClaimSuccessRoute() {
         description="The public page is available. Index and discovery readbacks remain separate so you can see what is queued or degraded."
         actions={
           <Button asChild>
-            <Link to="/owner/status">
+            <Link to="/owner/status" search={{ slug: readback.catalog.slug }}>
               <ArrowRightIcon data-icon="inline-start" />
               View owner status
             </Link>

@@ -4,10 +4,19 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
-import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
+import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
+
+type OwnerStatusSearch = {
+  slug?: string
+}
 
 export const Route = createFileRoute('/owner/status')({
-  loader: () => getDefaultPublicOwnerStatusReadback(),
+  validateSearch: (search: Record<string, unknown>): OwnerStatusSearch => {
+    const slug = typeof search.slug === 'string' && search.slug.trim().length > 0 ? search.slug.trim() : undefined
+    return slug === undefined ? {} : { slug }
+  },
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => readOwnerStatusServer({ data: deps }),
   head: () => ({
     meta: [
       { title: 'Owner status readback | Agentic Economy' },

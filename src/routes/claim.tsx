@@ -1,8 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
-import { createServerFn, useServerFn } from '@tanstack/react-start'
+import { useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
-import { z } from 'zod'
 
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
 import { AeReviewBlock } from '@/components/ae/forms/AeReviewBlock'
@@ -15,10 +14,8 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  submitPublicOwnerClaimFlow,
-  validatePublicOwnerClaimFlowInput,
-} from '@/modules/catalog/public'
+import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
+import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
 
 type TextClaimField = Exclude<PublicOwnerClaimField, 'firstRequestMode'>
@@ -30,23 +27,6 @@ type FieldConfig = {
   control: 'input' | 'textarea'
 }
 
-const claimInputSchema = z.object({
-  businessName: z.string(),
-  category: z.string(),
-  suburb: z.string(),
-  stateTerritory: z.string(),
-  requestedSlug: z.string(),
-  ownerMessage: z.string(),
-  sourceLabel: z.string(),
-  serviceName: z.string(),
-  serviceCategory: z.string(),
-  serviceSummary: z.string(),
-  serviceArea: z.string(),
-  hoursOrUnknown: z.string(),
-  firstRequestMode: z.enum(['inquiry_available', 'quote_request_available', 'not_available_yet']),
-  publicDisclosure: z.string(),
-  noContactReason: z.string(),
-})
 
 const emptyPublicOwnerClaimInput = {
   businessName: '',
@@ -66,9 +46,7 @@ const emptyPublicOwnerClaimInput = {
   noContactReason: '',
 } satisfies PublicOwnerClaimFlowInput
 
-const submitClaimServer = createServerFn({ method: 'POST' })
-  .validator((data) => claimInputSchema.parse(data))
-  .handler(async ({ data }) => submitPublicOwnerClaimFlow(data))
+const submitClaimServer = submitOwnerClaimServer
 
 const identityFields = [
   {
@@ -191,7 +169,7 @@ function ClaimRoute() {
     try {
       const result = await submitClaim({ data: value })
       if (result.kind === 'ok') {
-        await navigate({ to: '/claim/success' })
+        await navigate({ to: '/claim/success', search: { slug: result.catalog.slug } })
         return
       }
 

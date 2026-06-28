@@ -1,6 +1,5 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
-import { getRequestUrl } from '@tanstack/start-server-core'
 import { ConvexHttpClient } from 'convex/browser'
 import { makeFunctionReference } from 'convex/server'
 import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
@@ -297,7 +296,7 @@ async function createConvexClient(options: { authenticated: boolean }): Promise<
 }
 
 function requestOrigin(): string {
-  return getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin
+  return readEnv(process.env, 'SITE_URL') ?? readEnv(process.env, 'VITE_SITE_URL') ?? 'https://ae.example'
 }
 
 function readRequiredConvexUrl(env: Env): string {

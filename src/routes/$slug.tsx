@@ -7,13 +7,13 @@ import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { getPublicBusinessPageReadback } from '@/modules/catalog/public'
+import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 import { discoveryStatusToAeStatus, indexStatusToAeStatus, publicStatusToAeStatus, trustTierToAeStatus } from '@/lib/ui/status-presentation'
 
 export const Route = createFileRoute('/$slug')({
-  loader: ({ params }) => {
-    const page = getPublicBusinessPageReadback(params.slug)
+  loader: async ({ params }) => {
+    const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind === 'not_found') {
       return { page, seo: undefined }
     }
