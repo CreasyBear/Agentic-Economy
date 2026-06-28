@@ -1,5 +1,5 @@
 import type { UserIdentity } from 'convex/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { resolveAdminAuthority, resolveBusinessActor } from '../../../convex/authz'
 
@@ -26,6 +26,16 @@ type AuthCtx = {
 }
 
 describe('Convex authz helpers', () => {
+  it('fails closed by naming the missing Clerk JWT issuer', async () => {
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', '')
+
+    await expect(import('../../../convex/auth.config')).rejects.toThrow(
+      'CLERK_JWT_ISSUER_DOMAIN is required for Convex auth configuration'
+    )
+
+    vi.unstubAllEnvs()
+  })
+
   it('derives business actors from Convex Clerk identity and never from browser authority payloads', async () => {
     const anonymous = await resolveBusinessActor(authCtx(new FakeDb(), null))
     expect(anonymous).toEqual({ kind: 'anonymous', anonymousBucket: 'convex:anonymous' })

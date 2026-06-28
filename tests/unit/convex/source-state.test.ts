@@ -67,12 +67,12 @@ describe('Convex source-state adapters', () => {
     seedPhaseOneRows(db)
     const state = await loadPhaseOneSourceState(db)
 
-    state.business.businesses[0].sourceHash = 'source:business:v2'
-    state.catalog.businessServices[0].sourceHash = 'source:service:v2'
-    state.observability.operationKeys[0].resultHash = 'result:publish:v2'
-    state.observability.auditEvents[0].payloadHash = 'payload:publish:v2'
-    state.registry.registryProjectionAttempts[0].sourceHash = 'source:business:v2'
-    state.discovery.discoveryManifestAttempts[0].sourceHash = 'source:business:v2'
+    first(state.business.businesses).sourceHash = 'source:business:v2'
+    first(state.catalog.businessServices).sourceHash = 'source:service:v2'
+    first(state.observability.operationKeys).resultHash = 'result:publish:v2'
+    first(state.observability.auditEvents).payloadHash = 'payload:publish:v2'
+    first(state.registry.registryProjectionAttempts).sourceHash = 'source:business:v2'
+    first(state.discovery.discoveryManifestAttempts).sourceHash = 'source:business:v2'
 
     await persistPhaseOneSourceState(db, state)
     await persistPhaseOneSourceState(db, state)
@@ -357,4 +357,12 @@ function seedPhaseOneRows(db: FakeDb): void {
     beforePublicStatus: 'published',
     beforeClaimStatus: 'published',
   })
+}
+
+function first<T>(items: readonly T[]): T {
+  const item = items[0]
+  if (item === undefined) {
+    throw new Error('Expected seeded item')
+  }
+  return item
 }

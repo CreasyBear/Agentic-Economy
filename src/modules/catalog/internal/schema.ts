@@ -16,6 +16,7 @@ export const catalogTables = {
     serviceSlug: v.string(),
     name: v.string(),
     category: v.string(),
+    summary: v.string(),
     serviceArea: v.string(),
     hoursOrUnknown: v.string(),
     status: literalUnion(BusinessServiceStatusValues),

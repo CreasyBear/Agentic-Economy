@@ -48,7 +48,7 @@ export const businessTables = {
     sourceRefs: v.array(sourceRef),
     sourceHash: v.string(),
     approvedAt: v.number(),
-  }),
+  }).index('by_business', ['businessId']),
 
   claims: defineTable({
     ownerId: v.id('owners'),
