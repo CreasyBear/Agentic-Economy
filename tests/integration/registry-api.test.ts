@@ -104,6 +104,38 @@ describe('registry public API routes', () => {
     })
   })
 
+  it('keeps the empty registry page list query compatible with the durable Convex validator', async () => {
+    const state = createDurablePublishedRegistryState({
+      businessName: 'Fremantle Heat Pump Repairs',
+      requestedSlug: 'fremantle-heat-pump-repairs',
+      serviceName: 'Heat pump diagnostics',
+      serviceQuery: 'heat pump fremantle',
+      suburb: 'Fremantle',
+    })
+    const listInputs: unknown[] = []
+
+    const reset = setPublicRegistryQueryClientForTests({
+      list: (input) => {
+        listInputs.push(input)
+        expect(input).toEqual({ limit: 10 })
+        return Promise.resolve(listPublicBusinessCatalog(state, input))
+      },
+      search: () => {
+        throw new Error('Expected empty registry query to use list, not search.')
+      },
+      detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
+    })
+
+    try {
+      const registry = await loadRegistryRouteReadback({ q: '', limit: 10 })
+
+      expect(registry.result.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+      expect(listInputs).toHaveLength(1)
+    } finally {
+      reset()
+    }
+  })
+
   it('keeps durable public DTOs strict across registry and API outputs', async () => {
     const state = createDurablePublishedRegistryState({
       businessName: 'Fremantle Heat Pump Repairs',

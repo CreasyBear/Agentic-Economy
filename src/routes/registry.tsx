@@ -75,7 +75,10 @@ export const Route = createFileRoute('/registry')({
 export async function loadRegistryRouteReadback(deps: RegistrySearchParams): Promise<RegistryRouteReadback> {
   const result =
     deps.q.length === 0
-      ? await readPublicRegistryCatalogPage(deps)
+      ? await readPublicRegistryCatalogPage({
+          limit: deps.limit,
+          ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        })
       : await readPublicRegistrySearchPage({
           query: deps.q,
           limit: deps.limit,
