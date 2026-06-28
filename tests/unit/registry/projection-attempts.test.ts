@@ -5,7 +5,7 @@ import type { BusinessSuppressionState } from '@/modules/business/public'
 import { createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
 import type { PublishBusinessCatalogState, ServiceCatalogInput } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import { syncCatalogProjection } from '@/modules/registry/public'
+import { readCatalogHealth, retryRegistryProjection, syncCatalogProjection } from '@/modules/registry/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
 
 describe('registry projection attempts', () => {
@@ -55,6 +55,72 @@ describe('registry projection attempts', () => {
     expect(state.registryProjectionItems).toHaveLength(2)
     expect(state.auditEvents.filter((event) => event.eventType === 'registry.sync_succeeded')).toHaveLength(1)
     expect(JSON.stringify(synced)).not.toContain('sam-owner@example.test')
+  })
+
+  it('persists redacted forced failures and repairs without duplicate projection side effects', () => {
+    const state = emptyState()
+    const published = publishSamCatalog(state)
+
+    const failed = syncCatalogProjection(
+      state,
+      { businessId: published.business.businessId },
+      {
+        now: 3_000,
+        adapter: {
+          writeProjection: () => ({
+            kind: 'error',
+            code: 'forced_projection_failure',
+            redactedMessage: 'Projection adapter failed in a controlled test path.',
+          }),
+        },
+      }
+    )
+    const failedHealth = readCatalogHealth(state, published.business.businessId)
+    const repaired = retryRegistryProjection(
+      state,
+      { businessId: published.business.businessId },
+      { now: 4_000 }
+    )
+    const repairedHealth = readCatalogHealth(state, published.business.businessId)
+
+    expect(failed).toMatchObject({
+      kind: 'error',
+      code: 'registry_projection_failed',
+      retryable: true,
+      attempt: {
+        status: 'failed',
+        lastErrorCode: 'forced_projection_failure',
+        lastErrorRedacted: 'Projection adapter failed in a controlled test path.',
+        repairAction: 'retry_projection',
+        repairResult: 'failed',
+      },
+    })
+    expect(JSON.stringify(failed)).not.toContain('sam-owner@example.test')
+    expect(failedHealth).toMatchObject({
+      sourceState: 'published',
+      indexStatus: 'failed',
+      repairAction: 'retry_projection',
+      repairResult: 'failed',
+    })
+    expect(repaired).toMatchObject({
+      kind: 'ok',
+      code: 'registry_projection_indexed',
+      attempt: {
+        status: 'succeeded',
+        retryCount: 1,
+        repairAction: 'no_repair',
+        repairResult: 'succeeded',
+      },
+    })
+    expect(repairedHealth).toMatchObject({
+      sourceState: 'published',
+      indexStatus: 'indexed',
+      repairAction: 'no_repair',
+      repairResult: 'succeeded',
+    })
+    expect(state.registryProjectionItems).toHaveLength(2)
+    expect(state.auditEvents.filter((event) => event.eventType === 'registry.sync_failed')).toHaveLength(1)
+    expect(state.auditEvents.filter((event) => event.eventType === 'registry.sync_succeeded')).toHaveLength(1)
   })
 })
 
