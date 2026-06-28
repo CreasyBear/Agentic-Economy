@@ -9,13 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RobotsTxtRouteImport } from './routes/robots[.]txt'
-import { Route as SitemapXmlRouteImport } from './routes/sitemap[.]xml'
-import { Route as LlmsTxtRouteImport } from './routes/llms[.]txt'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
@@ -23,13 +23,28 @@ import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
 import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
+import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
-import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -45,21 +60,6 @@ const SlugRoute = SlugRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RobotsTxtRoute = RobotsTxtRouteImport.update({
-  id: '/robots.txt',
-  path: '/robots.txt',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SitemapXmlRoute = SitemapXmlRouteImport.update({
-  id: '/sitemap.xml',
-  path: '/sitemap.xml',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LlmsTxtRoute = LlmsTxtRouteImport.update({
-  id: '/llms.txt',
-  path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
@@ -97,6 +97,11 @@ const AdminAuditEventsRoute = AdminAuditEventsRouteImport.update({
   path: '/admin/audit-events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SlugUcpRoute = SlugUcpRouteImport.update({
+  id: '/ucp',
+  path: '/ucp',
+  getParentRoute: () => SlugRoute,
+} as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -107,20 +112,16 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
-const SlugUcpRoute = SlugUcpRouteImport.update({
-  id: '/ucp',
-  path: '/ucp',
-  getParentRoute: () => SlugRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
-  '/llms.txt': typeof LlmsTxtRoute
   '/claim': typeof ClaimRouteWithChildren
-  '/robots.txt': typeof RobotsTxtRoute
-  '/sitemap.xml': typeof SitemapXmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/registry': typeof RegistryRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
@@ -128,18 +129,18 @@ export interface FileRoutesByFullPath {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/$slug/ucp': typeof SlugUcpRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
-  '/llms.txt': typeof LlmsTxtRoute
   '/claim': typeof ClaimRouteWithChildren
-  '/robots.txt': typeof RobotsTxtRoute
-  '/sitemap.xml': typeof SitemapXmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/registry': typeof RegistryRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
@@ -147,7 +148,6 @@ export interface FileRoutesByTo {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/$slug/ucp': typeof SlugUcpRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
@@ -155,11 +155,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
-  '/llms.txt': typeof LlmsTxtRoute
   '/claim': typeof ClaimRouteWithChildren
-  '/robots.txt': typeof RobotsTxtRoute
-  '/sitemap.xml': typeof SitemapXmlRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/registry': typeof RegistryRoute
+  '/robots.txt': typeof RobotsDottxtRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
@@ -167,7 +168,6 @@ export interface FileRoutesById {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
-  '/$slug/ucp': typeof SlugUcpRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
@@ -176,12 +176,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$slug'
-    | '/$slug/ucp'
-    | '/llms.txt'
     | '/claim'
+    | '/llms.txt'
+    | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
-    | '/registry'
+    | '/$slug/ucp'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
@@ -195,12 +195,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$slug'
-    | '/$slug/ucp'
-    | '/llms.txt'
     | '/claim'
+    | '/llms.txt'
+    | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
-    | '/registry'
+    | '/$slug/ucp'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
@@ -214,12 +214,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$slug'
-    | '/$slug/ucp'
-    | '/llms.txt'
     | '/claim'
+    | '/llms.txt'
+    | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
-    | '/registry'
+    | '/$slug/ucp'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
@@ -235,10 +235,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRouteWithChildren
   ClaimRoute: typeof ClaimRouteWithChildren
-  LlmsTxtRoute: typeof LlmsTxtRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   RegistryRoute: typeof RegistryRoute
-  RobotsTxtRoute: typeof RobotsTxtRoute
-  SitemapXmlRoute: typeof SitemapXmlRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
   AdminClaimsRoute: typeof AdminClaimsRoute
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
@@ -249,11 +249,32 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/registry': {
       id: '/registry'
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -270,39 +291,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$slug/ucp': {
-      id: '/$slug/ucp'
-      path: '/ucp'
-      fullPath: '/$slug/ucp'
-      preLoaderRoute: typeof SlugUcpRouteImport
-      parentRoute: typeof SlugRoute
-    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/robots.txt': {
-      id: '/robots.txt'
-      path: '/robots.txt'
-      fullPath: '/robots.txt'
-      preLoaderRoute: typeof RobotsTxtRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sitemap.xml': {
-      id: '/sitemap.xml'
-      path: '/sitemap.xml'
-      fullPath: '/sitemap.xml'
-      preLoaderRoute: typeof SitemapXmlRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/llms.txt': {
-      id: '/llms.txt'
-      path: '/llms.txt'
-      fullPath: '/llms.txt'
-      preLoaderRoute: typeof LlmsTxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/remove-business': {
@@ -354,6 +347,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuditEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$slug/ucp': {
+      id: '/$slug/ucp'
+      path: '/ucp'
+      fullPath: '/$slug/ucp'
+      preLoaderRoute: typeof SlugUcpRouteImport
+      parentRoute: typeof SlugRoute
+    }
     '/api/businesses/search': {
       id: '/api/businesses/search'
       path: '/search'
@@ -371,16 +371,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface ClaimRouteChildren {
-  ClaimSuccessRoute: typeof ClaimSuccessRoute
-}
-
-const ClaimRouteChildren: ClaimRouteChildren = {
-  ClaimSuccessRoute: ClaimSuccessRoute,
-}
-
-const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
-
 interface SlugRouteChildren {
   SlugUcpRoute: typeof SlugUcpRoute
 }
@@ -390,6 +380,16 @@ const SlugRouteChildren: SlugRouteChildren = {
 }
 
 const SlugRouteWithChildren = SlugRoute._addFileChildren(SlugRouteChildren)
+
+interface ClaimRouteChildren {
+  ClaimSuccessRoute: typeof ClaimSuccessRoute
+}
+
+const ClaimRouteChildren: ClaimRouteChildren = {
+  ClaimSuccessRoute: ClaimSuccessRoute,
+}
+
+const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
 
 interface ApiBusinessesRouteChildren {
   ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
@@ -409,10 +409,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
   ClaimRoute: ClaimRouteWithChildren,
-  LlmsTxtRoute: LlmsTxtRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   RegistryRoute: RegistryRoute,
-  RobotsTxtRoute: RobotsTxtRoute,
-  SitemapXmlRoute: SitemapXmlRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   AdminAuditEventsRoute: AdminAuditEventsRoute,
   AdminClaimsRoute: AdminClaimsRoute,
   AdminIndexHealthRoute: AdminIndexHealthRoute,
