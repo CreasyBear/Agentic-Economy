@@ -86,6 +86,7 @@ describe('Convex source-state adapters', () => {
     expect(db.dump('businesses')[0]).toMatchObject({ sourceHash: 'source:business:v2' })
     expect(db.dump('businessServices')[0]).toMatchObject({ sourceHash: 'source:service:v2' })
     expect(db.dump('operationKeys')[0]).toMatchObject({ key: 'publish-key', resultHash: 'result:publish:v2' })
+    expect(db.dump('operationKeys')[0]).not.toHaveProperty('operationKey')
     expect(db.dump('auditEvents')[0]).toMatchObject({ eventId: 'audit:publish:1', payloadHash: 'payload:publish:v2' })
   })
 })

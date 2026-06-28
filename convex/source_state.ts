@@ -225,7 +225,7 @@ export async function persistPhaseOneSourceState(db: RuntimeWriter, state: Phase
     byFields('adminMembershipAuditEvents', state.security.adminMembershipAuditEvents, ['auditEventId']),
     byDomainId('disputes', state.security.disputes, 'disputeId'),
     byFields('suppressionRules', state.security.suppressionRules, ['targetType', 'targetRef', 'status']),
-    byFields('operationKeys', state.observability.operationKeys, ['actorRef', 'operationName', 'key']),
+    byFieldsWithout('operationKeys', state.observability.operationKeys, ['actorRef', 'operationName', 'key'], ['operationKey']),
     byFields('auditEvents', state.observability.auditEvents, ['eventId']),
     byFields('operatorControls', state.observability.operatorControls, ['key']),
     byFields('funnelEvents', state.observability.funnelEvents, ['eventId']),
@@ -263,6 +263,20 @@ function byFields(tableName: string, rows: readonly Record<string, unknown>[], f
     tableName,
     rows,
     toPatch: (row) => ({ ...row }),
+    matches: (document, row) => fields.every((field) => document[field] === row[field]),
+  }
+}
+
+function byFieldsWithout(
+  tableName: string,
+  rows: readonly Record<string, unknown>[],
+  fields: readonly string[],
+  omittedFields: readonly string[]
+): UpsertSpec {
+  return {
+    tableName,
+    rows,
+    toPatch: (row) => omitKeys(row, omittedFields),
     matches: (document, row) => fields.every((field) => document[field] === row[field]),
   }
 }
