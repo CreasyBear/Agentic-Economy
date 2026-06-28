@@ -167,7 +167,7 @@ const copyClaimRules: readonly CopyClaimRule[] = [
     rule: 'payment-or-booking-overclaim',
     message: 'Owner/public copy cannot imply live booking or payment behavior.',
     pattern:
-      /\b(?:book instantly|book now|booking confirmed|pay now|payment required|paymentRequired\s*:\s*true|wallet ready)\b/i,
+      /\b(?:book instantly|book now|booking confirmed|bookings?\s+(?:are\s+)?(?:available|live|ready|enabled|supported|confirmed|guaranteed)|(?:available|live|ready|enabled|supported|confirmed|guaranteed)\s+bookings?|pay now|payment required|payments?\s+(?:are\s+)?(?:available|live|ready|enabled|supported)|(?:available|live|ready|enabled|supported)\s+payments?|paymentRequired\s*:\s*true|wallet ready)\b/i,
   },
   {
     rule: 'agent-action-overclaim',
@@ -204,7 +204,7 @@ const copyClaimRules: readonly CopyClaimRule[] = [
     rule: 'p3-developer-platform-overclaim',
     message: 'SDK/CLI/MCP/API-key/protocol claims must stay negative planning/test posture.',
     pattern:
-      /\b(?:SDK\/CLI platform|SDK\/CLI\/plugin ecosystem|MCP mutation|MCP tools?|API-key platform|API key platform|developer launch|mutation API|standard merchant-origin UCP|merchant-origin UCP|\.well-known UCP|OpenAPI (?:service|action )?descriptor|action endpoint|payment handler|callable endpoint|tool-call|agent-callable)\b/i,
+      /\b(?:SDK\/CLI platform|SDK\/CLI\/plugin ecosystem|MCP mutation|MCP tools?|API-key platform|API key platform|developer launch|mutation API|standard merchant-origin UCP|merchant-origin UCP|(?:\/?\.)well-known\/ucp|\.well-known UCP|OpenAPI\b|action endpoint|payment handler|callable endpoint|tool-call|agent-callable)\b/i,
     negativeOnly: true,
   },
   {
@@ -231,7 +231,7 @@ const copyClaimRules: readonly CopyClaimRule[] = [
     rule: 'p5-money-rail-overclaim',
     message: 'Wallet/Connect/x402/custody/settlement/direct-Stripe claims must stay negative planning/test posture.',
     pattern:
-      /\b(?:wallet(?:s)?|credits?|credit balance|credits? balance|stored value|custody|crypto|x402|Connect marketplace|Stripe Connect|Connect\/x402|marketplace payout|split payout|split charge|settlement|payment handlers?|paymentRequired\s*(?::|=)\s*true|direct Stripe rail|direct Stripe subscription|Stripe subscription authority)\b/i,
+      /\b(?:wallet(?:s)?|(?<!-)balances?|credits?|credit balance|credits? balance|stored value|custody|crypto|x402|Connect|Connect marketplace|Stripe Connect|Connect\/x402|marketplace payout|split payout|split charge|settlement|payment handlers?|paymentRequired\s*(?::|=)\s*true|direct Stripe rail|direct Stripe subscription|Stripe subscription authority)\b/i,
     negativeOnly: true,
   },
 ]

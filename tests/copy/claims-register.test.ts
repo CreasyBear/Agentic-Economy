@@ -70,6 +70,18 @@ const publicOverclaimExamples = [
     rule: 'p5-money-rail-overclaim',
     copy: 'Public page: wallet/credits, balance, stored value, Connect/x402, x402 checkout, custody rail, direct Stripe subscription authority, marketplace payout, split payout, and settlement platform are ready.',
   },
+  {
+    rule: 'payment-or-booking-overclaim',
+    copy: 'Public page: bookings are available and payments are live.',
+  },
+  {
+    rule: 'p3-developer-platform-overclaim',
+    copy: 'Public page: /.well-known/ucp and OpenAPI are available.',
+  },
+  {
+    rule: 'p5-money-rail-overclaim',
+    copy: 'Public page: balance is live and Connect is ready.',
+  },
 ] as const
 
 const wrongPhaseExamples = [
