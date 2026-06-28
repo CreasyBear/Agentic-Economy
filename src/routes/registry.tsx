@@ -1,5 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
 import { SearchIcon } from 'lucide-react'
+import { z } from 'zod'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
@@ -10,18 +12,36 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  createDefaultRegistrySourceState,
-  listPublicBusinessCatalog,
-  searchPublicBusinessCatalog,
-} from '@/modules/registry/public'
-import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
+import { readPublicRegistryCatalogPage, readPublicRegistrySearchPage } from './api.businesses'
 
 type RegistrySearchParams = {
   q: string
   limit: number
   cursor?: string
 }
+
+type RegistryRouteReadback = {
+  result: PublicBusinessCatalogApiPage
+  query: string
+  limit: number
+}
+
+const registrySearchParamsSchema = z.object({
+  q: z.string(),
+  limit: z.number(),
+  cursor: z.string().optional(),
+})
+
+export const readRegistryRouteServer = createServerFn()
+  .validator((data) => registrySearchParamsSchema.parse(data))
+  .handler(({ data }) =>
+    loadRegistryRouteReadback({
+      q: data.q,
+      limit: data.limit,
+      ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+    })
+  )
 
 export const Route = createFileRoute('/registry')({
   validateSearch: (search: Record<string, unknown>): RegistrySearchParams => {
@@ -37,15 +57,7 @@ export const Route = createFileRoute('/registry')({
     }
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => {
-    const state = createDefaultRegistrySourceState()
-    const result =
-      deps.q.length === 0
-        ? listPublicBusinessCatalog(state, deps)
-        : searchPublicBusinessCatalog(state, { query: deps.q, limit: deps.limit, ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }) })
-
-    return { result, query: deps.q, limit: deps.limit }
-  },
+  loader: ({ deps }) => readRegistryRouteServer({ data: deps }),
   pendingComponent: RegistryLoading,
   errorComponent: RegistryError,
   head: () => ({
@@ -59,6 +71,19 @@ export const Route = createFileRoute('/registry')({
   }),
   component: RegistryRoute,
 })
+
+export async function loadRegistryRouteReadback(deps: RegistrySearchParams): Promise<RegistryRouteReadback> {
+  const result =
+    deps.q.length === 0
+      ? await readPublicRegistryCatalogPage(deps)
+      : await readPublicRegistrySearchPage({
+          query: deps.q,
+          limit: deps.limit,
+          ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        })
+
+  return { result, query: deps.q, limit: deps.limit }
+}
 
 function RegistryRoute() {
   const { result, query, limit } = Route.useLoaderData()
