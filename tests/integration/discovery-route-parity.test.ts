@@ -1,25 +1,157 @@
 import { describe, expect, it } from 'vitest'
 
-import { getPublicBusinessPageReadback } from '@/modules/catalog/public'
+import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
+import {
+  createEmptyCatalogSourceState,
+  getPublicBusinessCatalog,
+  getPublicBusinessPageReadback,
+  publishBusinessCatalog,
+} from '@/modules/catalog/public'
+import { brandNonEmpty } from '@/modules/common/ids'
 import {
   buildLlmsTxt,
   buildRobotsTxt,
   buildSitemapXml,
   createDefaultDiscoverySourceState,
+  regenerateDiscoveryManifest,
+  setPublicDiscoveryQueryClientForTests,
 } from '@/modules/discovery/public'
-import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
-import { handleListBusinessesRequest } from '@/routes/api.businesses'
-import { handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
+  getPublicBusinessCatalogBySlug,
+  listPublicBusinessCatalog,
+  searchPublicBusinessCatalog,
+} from '@/modules/registry/public'
+import type { RegistrySourceState } from '@/modules/registry/public'
+import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import {
+  handleDurableListBusinessesRequest,
+  handleListBusinessesRequest,
+  setPublicRegistryQueryClientForTests,
+} from '@/routes/api.businesses'
+import {
+  handleDurableSearchBusinessesRequest,
+  handleSearchBusinessesRequest,
+} from '@/routes/api.businesses.search'
 import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 
 describe('discovery route parity', () => {
+  it('tracks one durable catalog and suppression across public page, registry/API, UCP, llms, and sitemap', async () => {
+    const state = createDurablePublishedDiscoveryState({
+      businessName: 'Fremantle Heat Pump Repairs',
+      requestedSlug: 'fremantle-heat-pump-repairs',
+      serviceName: 'Heat pump diagnostics',
+      serviceQuery: 'heat pump fremantle',
+      suburb: 'Fremantle',
+    })
+
+    await withRegistryQueryClient(state, async () => {
+      await withDiscoveryQueryClient(state, async () => {
+        const page = getPublicBusinessCatalog(state, {
+          slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
+          indexStatus: 'indexed',
+          discoveryStatus: 'available',
+        })
+        const registryList = await jsonBody(
+          handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses'))
+        )
+        const registrySearch = await jsonBody(
+          handleDurableSearchBusinessesRequest(
+            new Request('https://ae.example/api/businesses/search?q=heat+pump+fremantle')
+          )
+        )
+        const apiDetailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
+        const apiDetail = await apiDetailResponse.json()
+        const ucpResponse = await handleUcpManifestRequest(
+          new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
+          'fremantle-heat-pump-repairs'
+        )
+        const ucp = await ucpResponse.json()
+        const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
+        const llmsBody = await llms.text()
+        const sitemap = await handleSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
+        const sitemapBody = await sitemap.text()
+
+        expect(page).toMatchObject({
+          kind: 'available',
+          catalog: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
+        })
+        expect(registryList.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+        expect(registrySearch.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+        expect(apiDetailResponse.status).toBe(200)
+        expect(apiDetail).toMatchObject({
+          kind: 'found',
+          business: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
+        })
+        expect(ucp).toMatchObject({
+          slug: 'fremantle-heat-pump-repairs',
+          businessName: 'Fremantle Heat Pump Repairs',
+        })
+        expect(llmsBody).toContain('slug=fremantle-heat-pump-repairs')
+        expect(sitemapBody).toContain('https://ae.example/fremantle-heat-pump-repairs')
+        expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llmsBody, sitemapBody })).not.toContain(
+          'parramatta-emergency-plumbing'
+        )
+      })
+    })
+
+    suppressFirstBusiness(state)
+
+    await withRegistryQueryClient(state, async () => {
+      await withDiscoveryQueryClient(state, async () => {
+        const page = getPublicBusinessCatalog(state, {
+          slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
+          indexStatus: 'indexed',
+          discoveryStatus: 'available',
+        })
+        const registryList = await jsonBody(
+          handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses'))
+        )
+        const registrySearch = await jsonBody(
+          handleDurableSearchBusinessesRequest(
+            new Request('https://ae.example/api/businesses/search?q=heat+pump+fremantle')
+          )
+        )
+        const apiDetailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
+        const apiDetail = await apiDetailResponse.json()
+        const ucpResponse = await handleUcpManifestRequest(
+          new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
+          'fremantle-heat-pump-repairs'
+        )
+        const ucp = await ucpResponse.json()
+        const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
+        const llmsBody = await llms.text()
+        const sitemap = await handleSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
+        const sitemapBody = await sitemap.text()
+
+        expect(page).toEqual({ kind: 'hidden', reason: 'not_published' })
+        expect(registryList.items).toEqual([])
+        expect(registrySearch.items).toEqual([])
+        expect(apiDetailResponse.status).toBe(404)
+        expect(apiDetail).toEqual({
+          kind: 'not_found',
+          code: 'business_not_found',
+          reason: 'No public business catalog exists for this slug.',
+        })
+        expect(ucpResponse.status).toBe(404)
+        expect(ucp).toEqual({
+          kind: 'not_found',
+          code: 'discovery_manifest_not_found',
+          reason: 'No public discovery manifest exists for this slug.',
+        })
+        expect(llmsBody).not.toContain('fremantle-heat-pump-repairs')
+        expect(sitemapBody).not.toContain('fremantle-heat-pump-repairs')
+      })
+    })
+  })
+
   it('resolves every URL advertised by manifest, llms, sitemap, and robots outputs', async () => {
     const origin = 'https://ae.example'
     const state = createDefaultDiscoverySourceState()
-    const manifestResponse = handleUcpManifestRequest(
+    const manifestResponse = await handleUcpManifestRequest(
       new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
       'parramatta-emergency-plumbing'
     )
@@ -89,11 +221,11 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
   }
 
   if (path === '/llms.txt') {
-    return handleLlmsTxtRequest(new Request(url)).status === 200
+    return (await handleLlmsTxtRequest(new Request(url))).status === 200
   }
 
   if (path === '/sitemap.xml') {
-    return handleSitemapXmlRequest(new Request(url)).status === 200
+    return (await handleSitemapXmlRequest(new Request(url))).status === 200
   }
 
   if (path === '/robots.txt') {
@@ -115,7 +247,7 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
 
   const ucpMatch = /^\/([^/]+)\/ucp$/u.exec(path)
   if (ucpMatch?.[1] !== undefined) {
-    return handleUcpManifestRequest(new Request(url), ucpMatch[1]).status === 200
+    return (await handleUcpManifestRequest(new Request(url), ucpMatch[1])).status === 200
   }
 
   const pageMatch = /^\/([^/]+)$/u.exec(path)
@@ -133,4 +265,187 @@ function sitemapLocs(body: string): readonly string[] {
 
 function uniqueUrls(urls: readonly string[]): readonly string[] {
   return Array.from(new Set(urls))
+}
+
+async function withDiscoveryQueryClient(state: DiscoverySourceState, run: () => Promise<void>): Promise<void> {
+  const reset = setPublicDiscoveryQueryClientForTests({
+    manifest: ({ slug, canonicalBaseUrl, now }) => {
+      const result = regenerateDiscoveryManifest(state, { slug: brandNonEmpty(slug, 'Slug') }, {
+        canonicalBaseUrl,
+        now,
+      })
+
+      if (result.kind === 'ok') {
+        return Promise.resolve({ kind: 'available', manifest: result.manifest })
+      }
+
+      return Promise.resolve({ kind: 'hidden', reason: 'not_public' })
+    },
+    llms: (options) => Promise.resolve(buildLlmsTxt(state, options)),
+    sitemap: (options) => Promise.resolve(buildSitemapXml(state, options)),
+  })
+
+  try {
+    await run()
+  } finally {
+    reset()
+  }
+}
+
+async function withRegistryQueryClient(state: RegistrySourceState, run: () => Promise<void>): Promise<void> {
+  const reset = setPublicRegistryQueryClientForTests({
+    list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
+    search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
+    detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
+  })
+
+  try {
+    await run()
+  } finally {
+    reset()
+  }
+}
+
+async function jsonBody(response: Promise<Response>) {
+  return response.then((resolved) => resolved.json())
+}
+
+function createDurablePublishedDiscoveryState(input: {
+  businessName: string
+  requestedSlug: string
+  serviceName: string
+  serviceQuery: string
+  suburb: string
+}): DiscoverySourceState {
+  const state = emptyDiscoverySourceState()
+  const claim = claimBusiness(state, {
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: `owner:${input.requestedSlug}`,
+      displayName: input.businessName,
+    },
+    facts: {
+      name: input.businessName,
+      category: 'Heat pump repair',
+      suburb: input.suburb,
+      stateTerritory: 'WA',
+      requestedSlug: input.requestedSlug,
+      ownerMessage: 'Owner supplied durable source facts.',
+      sourceRefs: [
+        {
+          label: `${input.businessName} service card`,
+          evidenceRef: `private:evidence:${input.requestedSlug}`,
+          sourceHash: brandNonEmpty(`hash:source:${input.requestedSlug}`, 'SourceHash'),
+        },
+      ],
+    },
+    security: {
+      csrf: matchingCsrf('claim'),
+      rateLimit: {
+        scope: 'claim_submit',
+        key: `discovery:${input.requestedSlug}`,
+        now: 10_000,
+        limit: 5,
+        windowMs: 60_000,
+      },
+    },
+    operationKey: operationKey(`claim:${input.requestedSlug}`),
+    correlationId: correlationId(`claim:${input.requestedSlug}`),
+    now: 10_000,
+  })
+
+  if (claim.kind === 'error') {
+    throw new Error(`Expected durable claim fixture to publish: ${claim.reason}`)
+  }
+
+  const publish = publishBusinessCatalog(state, {
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: `owner:${input.requestedSlug}`,
+      displayName: input.businessName,
+    },
+    claimId: claim.claim.claimId,
+    services: [
+      {
+        name: input.serviceName,
+        category: 'Heat pump repair',
+        summary: `${input.serviceName} for ${input.suburb} homes.`,
+        serviceArea: `${input.serviceQuery} and nearby suburbs`,
+        hoursOrUnknown: 'Weekdays by appointment',
+        firstRequest: {
+          mode: 'not_available_yet',
+          publicChannel: 'not_available',
+          publicDisclosure: 'First request is not available yet.',
+          noContactReason: 'Owner has not supplied public contact instructions.',
+        },
+      },
+    ],
+    security: { csrf: matchingCsrf('publish') },
+    operationKey: operationKey(`publish:${input.requestedSlug}`),
+    correlationId: correlationId(`publish:${input.requestedSlug}`),
+    now: 11_000,
+  })
+
+  if (publish.kind === 'error') {
+    throw new Error(`Expected durable publish fixture to publish: ${publish.reason}`)
+  }
+
+  return state
+}
+
+function emptyDiscoverySourceState(): DiscoverySourceState {
+  return {
+    ...createEmptyBusinessSourceState(),
+    ...createEmptyCatalogSourceState(),
+    operationKeys: [],
+    auditEvents: [],
+    registryProjectionItems: [],
+    registryProjectionAttempts: [],
+    discoveryManifestAttempts: [],
+    indexStatus: [],
+    suppressionRules: [],
+    discoveryManifests: [],
+    invalidationIntents: [],
+  }
+}
+
+function suppressFirstBusiness(state: DiscoverySourceState): void {
+  const business = state.businesses.at(0)
+  if (business === undefined) {
+    throw new Error('Expected a business to suppress.')
+  }
+
+  business.publicStatus = 'suppressed'
+  business.claimStatus = 'suppressed'
+  business.suppressedAt = 12_000
+  for (const service of state.businessServices.filter((candidate) => candidate.businessId === business.businessId)) {
+    service.status = 'suppressed'
+  }
+  state.suppressionRules.push({
+    targetType: 'business',
+    targetRef: business.businessId,
+    status: 'active',
+    reasonCode: 'privacy_removal_requested',
+    evidenceRefs: ['private:evidence:suppression'],
+    createdByAdminRef: 'admin:test',
+    createdAt: 12_000,
+    beforePublicStatus: 'published',
+    beforeClaimStatus: 'published',
+  })
+}
+
+function matchingCsrf(key: string) {
+  return {
+    csrfToken: `csrf-${key}`,
+    csrfCookie: `csrf-${key}`,
+    allowedOrigins: ['https://ae.example'],
+  }
+}
+
+function operationKey(value: string) {
+  return brandNonEmpty(`op:discovery-parity-test:${value}`, 'OperationKey')
+}
+
+function correlationId(value: string) {
+  return brandNonEmpty(`corr:discovery-parity-test:${value}`, 'CorrelationId')
 }
