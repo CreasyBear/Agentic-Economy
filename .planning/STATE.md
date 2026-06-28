@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-06-registry-search-api-repair-PLAN.md
-last_updated: "2026-06-28T02:14:30.447Z"
+stopped_at: Completed 01-07-discovery-llms-sitemap-robots-PLAN.md
+last_updated: "2026-06-28T02:50:19.875Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 13
-  completed_plans: 6
-  percent: 46
+  completed_plans: 7
+  percent: 0
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T02:14:17.555Z
-**Stopped at:** Completed 01-06-registry-search-api-repair-PLAN.md
+**Last session:** 2026-06-28T02:50:19.870Z
+**Stopped at:** Completed 01-07-discovery-llms-sitemap-robots-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -71,6 +71,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P03 | 32 min | 7 tasks | 25 files |
 | Phase 01 P04 | 6h 56m | 6 tasks | 24 files |
 | Phase 01 P06 | 37min | 6 tasks | 29 files |
+| Phase 01 P07 | 26min | 6 tasks | 21 files |
 
 ## Decisions
 
@@ -85,3 +86,6 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Public business APIs return explicit public DTO subsets without private ids, source hashes, MCP/OpenAPI, callable, or payment fields. — The plan stop conditions forbid raw database/private fields and future platform/action/payment surfaces.
 - [Phase 01]: Admin index-health generates source/projection/repair rows but denied route reads return no private rows until real membership wiring exists. — This keeps admin readback useful in tests and fail-closed in the unauthenticated runtime shell.
 - [Phase 01]: Registry search uses deterministic source-owned catalog DTO projection, not an external search engine. — Phase 1 requires no external search engine or marketplace ranking surface.
+- [Phase 01]: Discovery manifests are AE-hosted fallback documents only; no merchant-origin well-known claim is emitted. — The plan forbids merchant-origin /.well-known/ucp claims and future action/payment protocol overclaims in Phase 1.
+- [Phase 01]: llms.txt lists canonical links and source-owned status fields only, not owner-authored free text. — Owner-authored text is excluded from llms.txt to avoid prompt-injection, Markdown, HTML, bidi, and instruction-like prose risk.
+- [Phase 01]: Discovery route availability is proven by in-process route-handler parity tests rather than hand-authored static files. — Every URL emitted by manifest, llms, sitemap, and robots must resolve through the shipped route handlers or be omitted.
