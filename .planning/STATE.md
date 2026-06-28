@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-08-gate-suite-review-alpha-readiness-PLAN.md
-last_updated: "2026-06-28T03:32:19.572Z"
+stopped_at: Completed 01-09-deploy-readback-closeout-PLAN.md; live deploy/readback blocked pending real Vercel/Convex/Clerk evidence
+last_updated: "2026-06-28T05:25:53.382Z"
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 13
-  completed_plans: 8
-  percent: 0
+  completed_plans: 9
+  percent: 20
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T03:32:19.568Z
-**Stopped at:** Completed 01-08-gate-suite-review-alpha-readiness-PLAN.md
+**Last session:** 2026-06-28T05:25:53.115Z
+**Stopped at:** Completed 01-09-deploy-readback-closeout-PLAN.md; live deploy/readback blocked pending real Vercel/Convex/Clerk evidence
 **Resume file:** None
 
 ## Performance Metrics
@@ -73,6 +73,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P06 | 37min | 6 tasks | 29 files |
 | Phase 01 P07 | 26min | 6 tasks | 21 files |
 | Phase 01 P08 | 35min | 7 tasks | 15 files |
+| Phase 01 P09 | 1h 46m | 6 tasks | 4 files |
 
 ## Decisions
 
@@ -93,3 +94,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Browser gates use VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E only at command time because real Clerk keys are absent. — Route rendering could be verified locally without writing fake keys to .env.local or claiming real Clerk proof.
 - [Phase 01]: Internal alpha is explicitly not ready until five real friendly-owner activation rows exist. — Plan 01-08 produced instrumentation and a one-owner rehearsal record only; GTM requires five owner evidence rows plus friction/failure notes.
 - [Phase 01]: ROADMAP progress update was skipped for Plan 01-08 to avoid mixing pre-existing dirty planning changes. — User explicitly warned not to stage or modify unrelated dirty planning files; ROADMAP.md was already dirty before this execution.
+- [Phase 01]: Deploy smoke fails loudly when deployment env, Convex URL, Clerk storage states, or business slug are absent. — A silent skip would create false deploy/readback proof.
+
+### Blockers
+
+- Phase 01 live deploy/readback remains blocked pending real DEPLOY_BASE_URL, DEPLOY_CONVEX_URL, Clerk admin/owner storage states, and explicit network approval.
