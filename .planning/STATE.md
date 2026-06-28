@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-10-PLAN.md; Convex auth/source-state helpers added; codegen blocked by empty Clerk issuer/keys and outbound network restriction
-last_updated: "2026-06-28T08:30:47.858Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-06-28T09:07:57.784Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 19
-  completed_plans: 10
-  percent: 53
+  completed_plans: 11
+  percent: 58
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T08:30:47.853Z
-**Stopped at:** Completed 01-10-PLAN.md; Convex auth/source-state helpers added; codegen blocked by empty Clerk issuer/keys and outbound network restriction
+**Last session:** 2026-06-28T09:06:54.367Z
+**Stopped at:** Completed 01-11-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -75,6 +75,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P08 | 35min | 7 tasks | 15 files |
 | Phase 01 P09 | 1h 46m | 6 tasks | 4 files |
 | Phase 01 P10 | 14min | 3 tasks | 12 files |
+| Phase 01 P11 | 21min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -99,8 +100,14 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Plan 01-10 continued existing dirty Convex bridge work but staged only auth/source-state files and required schema/test support. — Preserved useful partial work while avoiding unrelated billing, Phase 2-5, ROADMAP, and future-surface changes.
 - [Phase 01]: Convex actor authority now derives from `ctx.auth.getUserIdentity()` plus source-owned admin membership rows. — Browser-supplied owner/admin/Clerk fields are ignored by the shared authz helper.
 - [Phase 01]: Convex codegen proof remains blocked by empty Clerk issuer/keys and rejected outbound codegen network access. — Missing setup is recorded as fail-closed evidence, not a green proof.
+- [Phase 01]: Adopted a claim-specific server helper for 01-11 instead of touching unrelated dirty src/lib/server work. — Preserved the dirty-worktree boundary while completing durable claim/readback routing.
+- [Phase 01]: Kept 01-11 local e2e bypass command-scoped through VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E. — Production claim/readback authority still requires Clerk-authenticated Convex calls.
+- [Phase 01]: Used slug search params for 01-11 success/status readbacks without treating the slug as authority. — The slug selects a public DTO while owner/admin identity remains server-derived.
+- [Phase 01]: Skipped ROADMAP.md mutation for 01-11 because ROADMAP.md was already dirty with unrelated planning work. — Avoided staging or overwriting pre-existing Phase 2-5 planning edits.
 
 ### Blockers
 
 - Phase 01 live deploy/readback remains blocked pending real DEPLOY_BASE_URL, DEPLOY_CONVEX_URL, Clerk admin/owner storage states, and explicit network approval.
 - Phase 01 Convex codegen remains blocked pending real VITE_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_JWT_ISSUER_DOMAIN, and approved outbound Convex CLI/network access.
+- Phase 01 Plan 01-11 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
+- Phase 01 Plan 01-11 full public-owner Playwright spec is blocked in this dirty checkout by unrelated untracked src/routes/owner.actions.tsx route-generator overlay; the focused claim-readback regression passes serially.
