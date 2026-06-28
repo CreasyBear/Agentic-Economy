@@ -128,7 +128,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     cache: 'no-store',
     cors: '*',
     mustContain: ['User-agent: *', 'Disallow: /admin/', 'Disallow: /claim/success', 'Sitemap:'],
-    mustNotMatch: /Allow: \/admin\//i,
+    mustNotMatch: /^Allow:\s*\/admin\//im,
   },
 ]
 
