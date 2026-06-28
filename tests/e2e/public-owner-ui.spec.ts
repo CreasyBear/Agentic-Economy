@@ -54,6 +54,45 @@ test.describe('public owner routes', () => {
     await expect(page.getByText('Service category is required.')).toBeVisible()
   })
 
+  test('claim submission readbacks use the submitted catalog instead of the default Sam record', async ({ page }, testInfo) => {
+    const suffix = testInfo.project.name.replace(/[^a-z0-9]+/giu, '-').toLowerCase()
+    const slug = `fremantle-priority-electrical-${suffix}`
+
+    await page.goto('/claim')
+
+    await page.getByLabel('Business name').fill('Fremantle Priority Electrical')
+    await page.getByLabel('Business category').fill('Emergency electrical')
+    await page.getByLabel('Suburb').fill('Fremantle')
+    await page.getByLabel('State or territory').fill('WA')
+    await page.getByLabel('Public page slug').fill(slug)
+    await page.getByLabel('Source label').fill('Owner supplied electrical service facts')
+    await page.getByLabel('Service name').fill('After-hours switchboard repair')
+    await page.getByLabel('Service category').fill('Emergency electrical')
+    await page.getByLabel('Service summary').fill('Urgent switchboard fault triage for Fremantle homes and shops.')
+    await page.getByLabel('Service area').fill('Fremantle, South Fremantle, and Beaconsfield')
+    await page.getByLabel('Hours or unknown').fill('After-hours availability supplied by owner')
+    await page.getByLabel('Unavailable reason').fill('Owner has not supplied a public contact path yet.')
+    await page.getByLabel('Owner message').fill('Owner supplied switchboard repair facts for the public service page.')
+
+    await page.getByRole('button', { name: /publish service page/i }).click()
+
+    await expect(page).toHaveURL(new RegExp(`/claim/success.*slug=${slug}`))
+    await expect(page.getByRole('heading', { name: /your service page is published/i })).toBeVisible()
+    await expect(page.getByText('Fremantle Priority Electrical')).toBeVisible()
+    await expect(page.getByText('After-hours switchboard repair')).toBeVisible()
+    await expect(page.getByText('Fremantle, South Fremantle, and Beaconsfield')).toBeVisible()
+    await expect(page.getByText('Parramatta Emergency Plumbing')).toHaveCount(0)
+
+    await page.getByRole('link', { name: /view owner status/i }).click()
+    await expect(page).toHaveURL(new RegExp(`/owner/status.*slug=${slug}`))
+    await expect(page.getByText('Fremantle Priority Electrical')).toBeVisible()
+
+    await page.goto(`/${slug}`)
+    await expect(page.getByRole('heading', { name: 'Fremantle Priority Electrical' })).toBeVisible()
+    await expect(page.getByText('Urgent switchboard fault triage for Fremantle homes and shops.')).toBeVisible()
+    await expect(page.getByText('Parramatta Emergency Plumbing')).toHaveCount(0)
+  })
+
   test('claim success and owner readback show public URL, separate states, and unavailable actions', async ({ page }) => {
     await page.goto('/claim/success')
 
