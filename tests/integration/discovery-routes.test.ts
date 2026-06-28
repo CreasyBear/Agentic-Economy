@@ -56,7 +56,7 @@ describe('discovery route handlers', () => {
         ],
       })
       expect(JSON.stringify(body)).not.toMatch(
-        /parramatta-emergency-plumbing|rawContact|ownerId|clerk|private:evidence|admin|sourceRefs|callable":true|paymentRequired":true/
+        /parramatta-emergency-plumbing|businessId|sourceHash|rawContact|ownerId|clerk|private:evidence|admin|sourceRefs|callable":true|paymentRequired":true/
       )
     })
   })
@@ -97,7 +97,7 @@ describe('discovery route handlers', () => {
           },
         ],
       })
-      expect(JSON.stringify(body)).not.toMatch(/rawContact|ownerId|clerk|private:evidence/)
+      expect(JSON.stringify(body)).not.toMatch(/businessId|sourceHash|rawContact|ownerId|clerk|private:evidence/)
     })
   })
 

@@ -9,10 +9,13 @@ import {
   readFixtureCatalogDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type {
+  DiscoveryManifestContract,
   PublicDiscoveryQueryClient,
   ReadCatalogDiscoveryManifestInput,
   ReadCatalogDiscoveryManifestResult,
 } from '@/modules/discovery/public'
+
+type PublicUcpManifest = Omit<DiscoveryManifestContract, 'businessId' | 'sourceHash'>
 
 type Env = Record<string, string | undefined>
 
@@ -47,7 +50,7 @@ export async function handleDurableUcpManifestRequest(request: Request, slug: st
     )
   }
 
-  return discoveryJsonResponse(result.manifest)
+  return discoveryJsonResponse(toPublicUcpManifest(result.manifest))
 }
 
 export function handleUcpManifestRequest(request: Request, slug: string): Response {
@@ -68,7 +71,12 @@ export function handleUcpManifestRequest(request: Request, slug: string): Respon
     )
   }
 
-  return discoveryJsonResponse(result.manifest)
+  return discoveryJsonResponse(toPublicUcpManifest(result.manifest))
+}
+
+function toPublicUcpManifest(manifest: DiscoveryManifestContract): PublicUcpManifest {
+  const { businessId: _businessId, sourceHash: _sourceHash, ...publicManifest } = manifest
+  return publicManifest
 }
 
 function getPublicDiscoveryQueryClient(): PublicDiscoveryQueryClient {

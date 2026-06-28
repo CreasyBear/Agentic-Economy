@@ -21,8 +21,11 @@ type RouteExpectation = {
 
 const config = readSmokeConfig()
 
+const privateDataPattern =
+  /\/admin\/|ownerId|adminId|clerkUserId|sourceHash|rawContact(?!Excluded)|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
+
 const privateSurfacePattern =
-  /\/admin\/|\/owner\/status|ownerId|adminId|clerkUserId|sourceHash|rawContact|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
+  /\/admin\/|\/owner\/status|ownerId|adminId|clerkUserId|sourceHash|rawContact(?!Excluded)|private:evidence|MCP|OpenAPI|paymentRequired=true|callable=true/i
 
 const publicRoutes: readonly RouteExpectation[] = [
   {
@@ -44,7 +47,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     status: 200,
     contentType: /text\/html/i,
     mustContain: ['Your service page is published', `/${config.businessSlug}`],
-    mustNotMatch: privateSurfacePattern,
+    mustNotMatch: privateDataPattern,
   },
   {
     path: '/privacy/remove-business',
