@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-06-28T09:07:57.784Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-06-28T10:03:57.913Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 19
-  completed_plans: 11
-  percent: 58
+  completed_plans: 13
+  percent: 68
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T09:06:54.367Z
-**Stopped at:** Completed 01-11-PLAN.md
+**Last session:** 2026-06-28T10:03:57.896Z
+**Stopped at:** Completed 01-13-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -76,6 +76,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P09 | 1h 46m | 6 tasks | 4 files |
 | Phase 01 P10 | 14min | 3 tasks | 12 files |
 | Phase 01 P11 | 21min | 3 tasks | 10 files |
+| Phase 01 P13 | 12min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -104,6 +105,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Kept 01-11 local e2e bypass command-scoped through VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E. — Production claim/readback authority still requires Clerk-authenticated Convex calls.
 - [Phase 01]: Used slug search params for 01-11 success/status readbacks without treating the slug as authority. — The slug selects a public DTO while owner/admin identity remains server-derived.
 - [Phase 01]: Skipped ROADMAP.md mutation for 01-11 because ROADMAP.md was already dirty with unrelated planning work. — Avoided staging or overwriting pre-existing Phase 2-5 planning edits.
+- [Phase 01]: Public registry/API runtime handlers now call Convex registry query references; legacy synchronous API helper exports are fixture-only for existing guardrail tests. — Preserves dirty-worktree test compatibility while removing route-local default source factories from runtime handlers.
 
 ### Blockers
 
