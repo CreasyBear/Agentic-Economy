@@ -54,6 +54,16 @@ test.describe('public owner routes', () => {
     await expect(page.getByText('Service category is required.')).toBeVisible()
   })
 
+  test('claim form remains usable when first request state changes', async ({ page }) => {
+    await page.goto('/claim')
+
+    await page.getByLabel('First request state').selectOption('inquiry_available')
+
+    await expect(page.getByLabel('First request state')).toHaveValue('inquiry_available')
+    await expect(page.getByRole('button', { name: /publish service page/i })).toBeEnabled()
+    await expect(page.getByText(/something went wrong/i)).toHaveCount(0)
+  })
+
   test('claim submission readbacks use the submitted catalog instead of the default Sam record', async ({ page }, testInfo) => {
     const suffix = testInfo.project.name.replace(/[^a-z0-9]+/giu, '-').toLowerCase()
     const slug = `fremantle-priority-electrical-${suffix}`

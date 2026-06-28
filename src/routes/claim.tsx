@@ -211,7 +211,10 @@ function ClaimRoute() {
                 value={value.firstRequestMode}
                 aria-invalid={errorByField.has('firstRequestMode') || undefined}
                 disabled={!hydrated || pending}
-                onChange={(event) => setValue((current) => ({ ...current, firstRequestMode: toFirstRequestMode(event.currentTarget.value) }))}
+                onChange={(event) => {
+                  const firstRequestMode = toFirstRequestMode(event.currentTarget.value)
+                  setValue((current) => ({ ...current, firstRequestMode }))
+                }}
               >
                 <option value="not_available_yet">First request not available yet</option>
                 <option value="inquiry_available">Public first-request instructions supplied</option>
