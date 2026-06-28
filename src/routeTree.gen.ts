@@ -16,6 +16,8 @@ import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
+import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
@@ -60,6 +62,16 @@ const SlugRoute = SlugRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpSplatRoute = SignUpSplatRouteImport.update({
+  id: '/sign-up/$',
+  path: '/sign-up/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignInSplatRoute = SignInSplatRouteImport.update({
+  id: '/sign-in/$',
+  path: '/sign-in/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
@@ -129,6 +141,8 @@ export interface FileRoutesByFullPath {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/sign-in/$': typeof SignInSplatRoute
+  '/sign-up/$': typeof SignUpSplatRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
@@ -148,6 +162,8 @@ export interface FileRoutesByTo {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/sign-in/$': typeof SignInSplatRoute
+  '/sign-up/$': typeof SignUpSplatRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
@@ -168,6 +184,8 @@ export interface FileRoutesById {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/sign-in/$': typeof SignInSplatRoute
+  '/sign-up/$': typeof SignUpSplatRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
@@ -189,6 +207,8 @@ export interface FileRouteTypes {
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/sign-in/$'
+    | '/sign-up/$'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
   fileRoutesByTo: FileRoutesByTo
@@ -208,6 +228,8 @@ export interface FileRouteTypes {
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/sign-in/$'
+    | '/sign-up/$'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
   id:
@@ -227,6 +249,8 @@ export interface FileRouteTypes {
     | '/claim/success'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/sign-in/$'
+    | '/sign-up/$'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
   fileRoutesById: FileRoutesById
@@ -245,6 +269,8 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   OwnerStatusRoute: typeof OwnerStatusRoute
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
+  SignInSplatRoute: typeof SignInSplatRoute
+  SignUpSplatRoute: typeof SignUpSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -296,6 +322,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up/$': {
+      id: '/sign-up/$'
+      path: '/sign-up/$'
+      fullPath: '/sign-up/$'
+      preLoaderRoute: typeof SignUpSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in/$': {
+      id: '/sign-in/$'
+      path: '/sign-in/$'
+      fullPath: '/sign-in/$'
+      preLoaderRoute: typeof SignInSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/remove-business': {
@@ -419,6 +459,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   OwnerStatusRoute: OwnerStatusRoute,
   PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
+  SignInSplatRoute: SignInSplatRoute,
+  SignUpSplatRoute: SignUpSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
