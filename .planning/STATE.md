@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-07-discovery-llms-sitemap-robots-PLAN.md
-last_updated: "2026-06-28T02:50:19.875Z"
+stopped_at: Completed 01-08-gate-suite-review-alpha-readiness-PLAN.md
+last_updated: "2026-06-28T03:32:19.572Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 13
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T02:50:19.870Z
-**Stopped at:** Completed 01-07-discovery-llms-sitemap-robots-PLAN.md
+**Last session:** 2026-06-28T03:32:19.568Z
+**Stopped at:** Completed 01-08-gate-suite-review-alpha-readiness-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -72,6 +72,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P04 | 6h 56m | 6 tasks | 24 files |
 | Phase 01 P06 | 37min | 6 tasks | 29 files |
 | Phase 01 P07 | 26min | 6 tasks | 21 files |
+| Phase 01 P08 | 35min | 7 tasks | 15 files |
 
 ## Decisions
 
@@ -89,3 +90,6 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Discovery manifests are AE-hosted fallback documents only; no merchant-origin well-known claim is emitted. — The plan forbids merchant-origin /.well-known/ucp claims and future action/payment protocol overclaims in Phase 1.
 - [Phase 01]: llms.txt lists canonical links and source-owned status fields only, not owner-authored free text. — Owner-authored text is excluded from llms.txt to avoid prompt-injection, Markdown, HTML, bidi, and instruction-like prose risk.
 - [Phase 01]: Discovery route availability is proven by in-process route-handler parity tests rather than hand-authored static files. — Every URL emitted by manifest, llms, sitemap, and robots must resolve through the shipped route handlers or be omitted.
+- [Phase 01]: Browser gates use VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E only at command time because real Clerk keys are absent. — Route rendering could be verified locally without writing fake keys to .env.local or claiming real Clerk proof.
+- [Phase 01]: Internal alpha is explicitly not ready until five real friendly-owner activation rows exist. — Plan 01-08 produced instrumentation and a one-owner rehearsal record only; GTM requires five owner evidence rows plus friction/failure notes.
+- [Phase 01]: ROADMAP progress update was skipped for Plan 01-08 to avoid mixing pre-existing dirty planning changes. — User explicitly warned not to stage or modify unrelated dirty planning files; ROADMAP.md was already dirty before this execution.
