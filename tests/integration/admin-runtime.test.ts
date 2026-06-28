@@ -165,8 +165,13 @@ describe('admin Convex runtime controls', () => {
     const controls = await readControlsHandler(authCtx(db, ownerAdmin()), {})
     expect(controls).toMatchObject({
       kind: 'allowed',
-      controls: [expect.objectContaining({ key: 'claims_enabled', effectiveEnabled: false })],
     })
+    if (!isRecord(controls) || !Array.isArray(controls.controls)) {
+      throw new Error('Expected operator controls readback.')
+    }
+    expect(controls.controls).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'claims_enabled', effectiveEnabled: false })])
+    )
     expect(JSON.stringify(controls)).not.toContain('private:evidence')
   })
 })
@@ -357,6 +362,10 @@ function support(): UserIdentity {
   return { tokenIdentifier: 'clerk|user_support', subject: 'user_support', issuer: 'https://clerk.example.test' }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function bootstrapArgs(key: string): AdminBootstrapArgs {
   return {
     reasonCode: 'source_owned_setup',
@@ -372,7 +381,7 @@ function operatorArgs(key: string): SetControlArgs {
     enabled: false,
     reasonCode: 'abuse_spike',
     evidenceRefs: ['private:evidence:operator-control'],
-    expiresAt: 100,
+    expiresAt: Date.now() + 60_000,
     csrfToken: `csrf-${key}`,
     csrfCookie: `csrf-${key}`,
     operationKey: `op:operator:${key}`,

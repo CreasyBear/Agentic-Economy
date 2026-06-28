@@ -1,12 +1,17 @@
+import type { UserIdentity } from 'convex/server'
 import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { resolveBusinessActor } from './authz'
-import { runtimeWriter } from './source-state'
+import { readActiveAdminMembership, resolveBusinessActor } from './authz'
+import { loadPhaseOneSourceState, persistPhaseOneSourceState, runtimeDb, runtimeWriter } from './source-state'
 import type { RuntimeDocument, RuntimeWriter } from './source-state'
+import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
-import type { BusinessMutationActor } from '../src/modules/business/public'
-import { assertCsrf, normalizeClaimFingerprint } from '../src/modules/security/public'
+import { suppressBusiness as suppressBusinessModule, unsuppressBusiness as unsuppressBusinessModule } from '../src/modules/business/public'
+import type { BusinessMutationActor, BusinessSuppressionState } from '../src/modules/business/public'
+import { assertCsrf, recordAdminActionDenied, requireAdminAuthority, normalizeClaimFingerprint } from '../src/modules/security/public'
+import type { AdminAuthorityState, AdminDecisionAudit, AdminMembership } from '../src/modules/security/public'
+import type { AuditEventContract } from '../src/modules/observability/public'
 
 const sourceRefArg = v.object({
   label: v.string(),
@@ -111,6 +116,52 @@ const claimOkResult = v.object({
   claim: claimResult,
   context: contextResult,
 })
+
+const suppressionAuditSummary = v.object({
+  eventType: v.union(
+    v.literal('business.suppressed'),
+    v.literal('business.unsuppressed'),
+    v.literal('admin.action_denied')
+  ),
+  actorRef: v.string(),
+  targetRef: v.string(),
+  beforeState: v.optional(v.string()),
+  afterState: v.optional(v.string()),
+  reasonCode: v.optional(v.string()),
+})
+
+const suppressionErrorResult = v.object({
+  kind: v.literal('error'),
+  code: v.union(
+    v.literal('business_suppress_csrf_rejected'),
+    v.literal('business_suppress_admin_denied'),
+    v.literal('business_suppress_not_found'),
+    v.literal('business_suppress_invalid_reason'),
+    v.literal('business_suppress_missing_evidence'),
+    v.literal('business_unsuppress_csrf_rejected'),
+    v.literal('business_unsuppress_admin_denied'),
+    v.literal('business_unsuppress_not_found'),
+    v.literal('business_unsuppress_invalid_reason'),
+    v.literal('business_unsuppress_missing_evidence')
+  ),
+  retryable: v.boolean(),
+  reason: v.string(),
+  auditEvent: v.optional(suppressionAuditSummary),
+})
+
+const suppressionOkResult = v.object({
+  kind: v.literal('ok'),
+  code: v.union(
+    v.literal('business_suppressed'),
+    v.literal('business_suppression_replayed'),
+    v.literal('business_unsuppressed'),
+    v.literal('business_unsuppression_replayed')
+  ),
+  business: businessResult,
+  auditEvent: suppressionAuditSummary,
+})
+
+const suppressionResult = v.union(suppressionOkResult, suppressionErrorResult)
 
 export const claimBusiness = mutationGeneric({
   args: {
@@ -332,18 +383,8 @@ export const suppressBusiness = mutationGeneric({
     operationKey: v.string(),
     correlationId: v.string(),
   },
-  returns: v.object({
-    kind: v.literal('error'),
-    code: v.literal('business_suppress_admin_denied'),
-    retryable: v.boolean(),
-    reason: v.string(),
-  }),
-  handler: async () => ({
-    kind: 'error' as const,
-    code: 'business_suppress_admin_denied' as const,
-    retryable: false,
-    reason: 'Convex suppression mutations require source-owned admin membership wiring in the deployment boundary.',
-  }),
+  returns: suppressionResult,
+  handler: async (ctx, args) => runVisibilityChange(ctx, 'suppress', args),
 })
 
 export const unsuppressBusiness = mutationGeneric({
@@ -357,19 +398,177 @@ export const unsuppressBusiness = mutationGeneric({
     operationKey: v.string(),
     correlationId: v.string(),
   },
-  returns: v.object({
-    kind: v.literal('error'),
-    code: v.literal('business_unsuppress_admin_denied'),
-    retryable: v.boolean(),
-    reason: v.string(),
-  }),
-  handler: async () => ({
-    kind: 'error' as const,
-    code: 'business_unsuppress_admin_denied' as const,
-    retryable: false,
-    reason: 'Convex unsuppression mutations require source-owned admin membership wiring in the deployment boundary.',
-  }),
+  returns: suppressionResult,
+  handler: async (ctx, args) => runVisibilityChange(ctx, 'unsuppress', args),
 })
+
+type VisibilityMutationArgs = {
+  businessId: string
+  reasonCode: string
+  evidenceRefs: string[]
+  csrfToken?: string
+  csrfCookie?: string
+  origin?: string
+  operationKey: string
+  correlationId: string
+}
+
+type VisibilityMutationCtx = {
+  db: object
+  auth: {
+    getUserIdentity: () => Promise<UserIdentity | null>
+  }
+}
+
+async function runVisibilityChange(
+  ctx: VisibilityMutationCtx,
+  mode: 'suppress' | 'unsuppress',
+  args: VisibilityMutationArgs
+) {
+  const db = runtimeDb(ctx.db)
+  const source = await loadPhaseOneSourceState(db)
+  const adminMembership = await readCurrentActiveMembership(ctx)
+  const authority = requireAdminAuthority(adminMembership, 'change_public_visibility')
+  if (authority.kind === 'denied') {
+    const denied = recordAdminActionDenied(adminAuthorityState(source), {
+      actorMembership: adminMembership,
+      action: 'change_public_visibility',
+      targetType: 'business',
+      targetRef: args.businessId,
+      reasonCode: authority.reason,
+      evidenceRefs: args.evidenceRefs,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      now: Date.now(),
+    })
+    await persistPhaseOneSourceState(db, source)
+    return {
+      kind: 'error' as const,
+      code: mode === 'suppress' ? 'business_suppress_admin_denied' as const : 'business_unsuppress_admin_denied' as const,
+      retryable: false,
+      reason: authority.reason,
+      auditEvent: summarizeSuppressionAudit(denied.auditEvent),
+    }
+  }
+
+  const state = businessSuppressionState(source)
+  const activeSuppressionRule =
+    mode === 'unsuppress'
+      ? source.security.suppressionRules.find(
+          (rule) =>
+            stringRecordField(rule, 'targetType') === 'business' &&
+            stringRecordField(rule, 'targetRef') === args.businessId &&
+            stringRecordField(rule, 'status') === 'active'
+        )
+      : undefined
+  const businessId = brandNonEmpty(args.businessId, 'BusinessId')
+  const operationKey = brandNonEmpty(args.operationKey, 'OperationKey')
+  const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+  const command = {
+    adminMembership,
+    businessId,
+    security: {
+      csrf: {
+        ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
+        ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
+        ...(args.origin === undefined ? {} : { origin: args.origin }),
+        allowedOrigins: sourceAllowedOrigins(),
+      },
+    },
+    reasonCode: args.reasonCode,
+    evidenceRefs: args.evidenceRefs,
+    operationKey,
+    correlationId,
+    now: Date.now(),
+  }
+  const result =
+    mode === 'suppress'
+      ? suppressBusinessModule(state, command)
+      : unsuppressBusinessModule(state, command)
+
+  if (mode === 'unsuppress' && result.kind === 'ok' && activeSuppressionRule !== undefined) {
+    await patchLiftedSuppressionRule(db, activeSuppressionRule)
+    source.security.suppressionRules = source.security.suppressionRules.filter((rule) => rule !== activeSuppressionRule)
+  }
+  await persistPhaseOneSourceState(db, source)
+  return summarizeVisibilityResult(result)
+}
+
+function businessSuppressionState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): BusinessSuppressionState {
+  return {
+    owners: source.business.owners as BusinessSuppressionState['owners'],
+    businesses: source.business.businesses as BusinessSuppressionState['businesses'],
+    businessContexts: source.business.businessContexts as BusinessSuppressionState['businessContexts'],
+    claims: source.business.claims as BusinessSuppressionState['claims'],
+    claimFingerprints: source.business.claimFingerprints as BusinessSuppressionState['claimFingerprints'],
+    abuseRateLimitBuckets: source.business.abuseRateLimitBuckets as BusinessSuppressionState['abuseRateLimitBuckets'],
+    businessServices: source.catalog.businessServices as BusinessSuppressionState['businessServices'],
+    suppressionRules: source.security.suppressionRules as BusinessSuppressionState['suppressionRules'],
+    auditEvents: source.observability.auditEvents as AuditEventContract[],
+    invalidationIntents: [],
+  }
+}
+
+function adminAuthorityState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): AdminAuthorityState {
+  return {
+    adminMemberships: source.security.adminMemberships as AdminMembership[],
+    adminMembershipAuditEvents: source.security.adminMembershipAuditEvents as AdminDecisionAudit[],
+    auditEvents: source.observability.auditEvents as AuditEventContract[],
+  }
+}
+
+async function readCurrentActiveMembership(ctx: VisibilityMutationCtx): Promise<AdminMembership | undefined> {
+  const identity = await ctx.auth.getUserIdentity()
+  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity.subject)
+}
+
+function summarizeVisibilityResult(
+  result: ReturnType<typeof suppressBusinessModule> | ReturnType<typeof unsuppressBusinessModule>
+) {
+  if (result.kind === 'error') {
+    return result
+  }
+
+  return {
+    kind: 'ok' as const,
+    code: result.code,
+    business: result.business,
+    auditEvent: summarizeSuppressionAudit(result.auditEvent),
+  }
+}
+
+function summarizeSuppressionAudit(event: AuditEventContract) {
+  return {
+    eventType: event.eventType as 'business.suppressed' | 'business.unsuppressed' | 'admin.action_denied',
+    actorRef: event.actorRef,
+    targetRef: event.targetRef,
+    ...(event.beforeState === undefined ? {} : { beforeState: event.beforeState }),
+    ...(event.afterState === undefined ? {} : { afterState: event.afterState }),
+    ...(event.reasonCode === undefined ? {} : { reasonCode: event.reasonCode }),
+  }
+}
+
+async function patchLiftedSuppressionRule(db: ReturnType<typeof runtimeDb>, rule: Record<string, unknown>): Promise<void> {
+  const existing = await db
+    .query('suppressionRules')
+    .withIndex('by_target_status', (query) =>
+      query
+        .eq('targetType', stringRecordField(rule, 'targetType'))
+        .eq('targetRef', stringRecordField(rule, 'targetRef'))
+        .eq('status', 'active')
+    )
+    .unique()
+  if (existing === null) {
+    return
+  }
+
+  await db.patch(existing._id, { ...rule })
+}
+
+function stringRecordField(record: Record<string, unknown>, field: string): string {
+  const value = record[field]
+  return typeof value === 'string' ? value : ''
+}
 
 type ClaimBusinessArgs = {
   name: string
