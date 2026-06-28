@@ -8,6 +8,12 @@ const cleanCopyTargets = [
   { root: 'src/routes', includeExtensions: ['.ts', '.tsx'] },
   { root: 'src/components/ae', includeExtensions: ['.ts', '.tsx'] },
   { root: 'src/lib/ui/copy.ts', includeExtensions: ['.ts'] },
+  { root: 'src/modules/catalog', includeExtensions: ['.ts'] },
+  { root: 'src/modules/discovery', includeExtensions: ['.ts'] },
+  { root: 'src/lib/seo', includeExtensions: ['.ts', '.tsx', '.json', '.md'] },
+  { root: 'src/lib/schema', includeExtensions: ['.ts', '.tsx', '.json', '.md'] },
+  { root: 'src/generated', includeExtensions: ['.ts', '.tsx', '.json', '.md'] },
+  { root: 'public', includeExtensions: ['.html', '.json', '.md', '.txt', '.xml'] },
 ] as const
 
 describe('Phase 1 public copy guardrail', () => {

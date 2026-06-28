@@ -120,6 +120,20 @@ describe('claims register seed copy', () => {
       expect.arrayContaining(['p3-developer-platform-overclaim', 'p5-money-rail-overclaim']),
     )
   })
+
+  it('rejects mixed negative and positive future-capability copy', () => {
+    const moneyViolations = scanFixture(
+      'public-copy/overclaim.fixture',
+      'Public page: wallet is unavailable, but credits are live.',
+    )
+    const protocolViolations = scanFixture(
+      'public-copy/overclaim.fixture',
+      'Public page: MCP tools remain unavailable, but callable endpoint is live.',
+    )
+
+    expect(moneyViolations.map((violation) => violation.rule)).toContain('p5-money-rail-overclaim')
+    expect(protocolViolations.map((violation) => violation.rule)).toContain('p3-developer-platform-overclaim')
+  })
 })
 
 function scanFixture(relativeFile: string, copy: string) {

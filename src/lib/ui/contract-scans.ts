@@ -299,14 +299,26 @@ function isNegativeCapabilityContext(excerpt: string, capabilityPattern: RegExp)
     '(?:AI|booking|payment|provider|autonomous|SDK|CLI|MCP|API-key|API key|OpenAPI|merchant-origin UCP|\\.well-known UCP|action endpoint|callable|tool-call|agent-callable|wallet|credits?|credit balance|credits? balance|Connect|x402|custody|crypto|stored value|settlement|split payout|marketplace payout|payment handler|direct Stripe|Stripe subscription|paymentRequired)'
   const negative =
     '(?:no|not live|not shipped?|not advertised|not available|never|unavailable|deferred|out of scope|banned|blocked|stay out|stays out|remain(?:s)? unavailable|negative(?:ly)?|fail(?:s)? scans?)'
+  const positive = '(?:live|available|ready|enabled|supported|shipped|active)'
   const beforeCapability = new RegExp(`\\b${negative}\\b[\\s\\S]{0,80}\\b${capability}\\b`, 'i')
   const afterCapability = new RegExp(`\\b${capability}\\b[\\s\\S]{0,80}\\b${negative}\\b`, 'i')
   const capabilityInClause = new RegExp(capabilityPattern.source, capabilityPattern.flags.replace('g', ''))
+  const mixedPositiveSegment = new RegExp(
+    `${capabilityPattern.source}[\\s\\S]{0,40}\\b${positive}\\b|\\b${positive}\\b[\\s\\S]{0,40}${capabilityPattern.source}`,
+    capabilityPattern.flags.replace('g', '')
+  )
+  const segmentNegative = new RegExp(`\\b${negative}\\b`, 'i')
 
   return excerpt
     .split(/[.;!?\n]/)
     .filter((clause) => capabilityInClause.test(clause))
-    .every((clause) => beforeCapability.test(clause) || afterCapability.test(clause))
+    .every((clause) => {
+      const hasPositiveSegment = clause
+        .split(/,|\bbut\b|\bwhile\b|\bwhereas\b/i)
+        .some((segment) => mixedPositiveSegment.test(segment) && !segmentNegative.test(segment))
+
+      return !hasPositiveSegment && (beforeCapability.test(clause) || afterCapability.test(clause))
+    })
 }
 
 export function scanUiContract(targets: readonly ScanTarget[]): readonly ScanViolation[] {
