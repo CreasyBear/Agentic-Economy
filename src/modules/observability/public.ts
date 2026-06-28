@@ -10,6 +10,11 @@ import {
   readOperatorControls as readOperatorControlsImpl,
   setOperatorControl as setOperatorControlImpl,
 } from './internal/operator-controls'
+import {
+  applyFunnelEvent as applyFunnelEventImpl,
+  buildOwnerActivationReadback as buildOwnerActivationReadbackImpl,
+  initialOwnerActivationState as initialOwnerActivationStateImpl,
+} from './internal/funnel'
 import type {
   AuditEventInput,
   AuditValidationResult,
@@ -21,6 +26,7 @@ import type {
   OperationKeyInput,
   OperationKeyStore,
 } from './internal/operation-keys'
+import type { FunnelEventContract, OwnerActivationReadbackInput } from './internal/funnel'
 
 export const OperationKeyStatusValues = ['in_progress', 'succeeded', 'failed_retryable', 'failed_terminal'] as const
 export type OperationKeyStatus = (typeof OperationKeyStatusValues)[number]
@@ -161,7 +167,15 @@ export type OwnerActivationState = {
   capabilityHealthSeen: boolean
   sharedOrInterestSubmitted: boolean
   attributionRecorded: boolean
+  frictionCode?: string
+  failureCode?: string
   lastEventAt: number
+}
+
+export type OwnerActivationReadback = OwnerActivationState & {
+  activated: boolean
+  blocked: boolean
+  frictionOrFailureSeen: boolean
 }
 
 export type InvalidationIntent = {
@@ -243,10 +257,12 @@ export type SetOperatorControlResult =
 export type {
   AuditEventInput,
   AuditValidationResult,
+  FunnelEventContract,
   OperationKeyAuditSink,
   OperationKeyDecision,
   OperationKeyInput,
   OperationKeyStore,
+  OwnerActivationReadbackInput,
 }
 
 export const markOperationSucceeded = markOperationSucceededImpl
@@ -260,3 +276,9 @@ export const recordInvalidationIntent = recordInvalidationIntentImpl
 export const setOperatorControl = setOperatorControlImpl
 
 export const readOperatorControls = readOperatorControlsImpl
+
+export const initialOwnerActivationState = initialOwnerActivationStateImpl
+
+export const applyFunnelEvent = applyFunnelEventImpl
+
+export const buildOwnerActivationReadback = buildOwnerActivationReadbackImpl

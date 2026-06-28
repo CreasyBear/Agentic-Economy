@@ -1,5 +1,5 @@
 import type { BusinessId } from '@/modules/common/ids'
-import type { FunnelEventType, OwnerActivationState } from '@/modules/observability/public'
+import type { FunnelEventType, OwnerActivationReadback, OwnerActivationState } from '@/modules/observability/public'
 
 export type FunnelEventContract = {
   eventType: FunnelEventType
@@ -12,6 +12,8 @@ export type FunnelEventContract = {
   correlationId: string
   createdAt: number
 }
+
+export type OwnerActivationReadbackInput = OwnerActivationState
 
 export function initialOwnerActivationState(businessId: BusinessId, now: number): OwnerActivationState {
   return {
@@ -27,6 +29,8 @@ export function initialOwnerActivationState(businessId: BusinessId, now: number)
 }
 
 export function applyFunnelEvent(state: OwnerActivationState, event: FunnelEventContract): OwnerActivationState {
+  const frictionCode = frictionCodeForEvent(event.eventType)
+  const failureCode = failureCodeForEvent(event.eventType)
   const next = {
     ...state,
     publishSeen: state.publishSeen || event.eventType === 'publish_succeeded',
@@ -37,6 +41,8 @@ export function applyFunnelEvent(state: OwnerActivationState, event: FunnelEvent
       event.eventType === 'share_url_copied' ||
       event.eventType === 'owner_interest_submitted',
     attributionRecorded: state.attributionRecorded || event.eventType === 'visitor_attributed',
+    ...(state.frictionCode !== undefined || frictionCode === undefined ? {} : { frictionCode }),
+    ...(state.failureCode !== undefined || failureCode === undefined ? {} : { failureCode }),
     lastEventAt: event.createdAt,
   }
 
@@ -58,9 +64,34 @@ export function applyFunnelEvent(state: OwnerActivationState, event: FunnelEvent
     return { ...next, stage: 'claim_started' }
   }
 
-  if (event.eventType === 'publish_failed' || event.eventType === 'duplicate_suspected') {
+  if (failureCode !== undefined || frictionCode !== undefined) {
     return { ...next, stage: 'blocked' }
   }
 
   return next
+}
+
+export function buildOwnerActivationReadback(state: OwnerActivationReadbackInput): OwnerActivationReadback {
+  return {
+    ...state,
+    activated: state.stage === 'activated',
+    blocked: state.stage === 'blocked',
+    frictionOrFailureSeen: state.frictionCode !== undefined || state.failureCode !== undefined,
+  }
+}
+
+function frictionCodeForEvent(eventType: FunnelEventType): string | undefined {
+  if (eventType === 'slug_conflict' || eventType === 'duplicate_suspected') {
+    return eventType
+  }
+
+  return undefined
+}
+
+function failureCodeForEvent(eventType: FunnelEventType): string | undefined {
+  if (eventType === 'publish_failed') {
+    return eventType
+  }
+
+  return undefined
 }

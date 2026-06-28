@@ -95,6 +95,7 @@ export const observabilityTables = {
     sharedOrInterestSubmitted: v.boolean(),
     attributionRecorded: v.boolean(),
     frictionCode: v.optional(v.string()),
+    failureCode: v.optional(v.string()),
     lastEventAt: v.number(),
   }).index('by_business_stage', ['businessId', 'stage']),
 } as const
