@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-09-deploy-readback-closeout-PLAN.md; live deploy/readback blocked pending real Vercel/Convex/Clerk evidence
-last_updated: "2026-06-28T05:25:53.382Z"
+stopped_at: Completed 01-10-PLAN.md; Convex auth/source-state helpers added; codegen blocked by empty Clerk issuer/keys and outbound network restriction
+last_updated: "2026-06-28T08:30:47.858Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 13
-  completed_plans: 9
-  percent: 20
+  completed_phases: 0
+  total_plans: 19
+  completed_plans: 10
+  percent: 53
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -50,7 +50,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Execute `.planning/phases/01-ten-star-spine-foundation/01-05-public-owner-ui-routes-PLAN.md` next. PR04 admin authority, removal disputes, suppression recovery, operator controls, and protected admin readbacks now exist behind module-owned public exports; keep Convex codegen honest until `CONVEX_DEPLOYMENT` is configured.
+Execute `.planning/phases/01-ten-star-spine-foundation/01-11-PLAN.md` next. Plan 01-10 added Convex auth/source-state helpers and runtime bridge coverage; route-level durable claim/publish work still needs real Clerk issuer/keys and clean typecheck after unrelated dirty billing work is reconciled.
 
 ## Verification expectation
 
@@ -58,8 +58,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T05:25:53.115Z
-**Stopped at:** Completed 01-09-deploy-readback-closeout-PLAN.md; live deploy/readback blocked pending real Vercel/Convex/Clerk evidence
+**Last session:** 2026-06-28T08:30:47.853Z
+**Stopped at:** Completed 01-10-PLAN.md; Convex auth/source-state helpers added; codegen blocked by empty Clerk issuer/keys and outbound network restriction
 **Resume file:** None
 
 ## Performance Metrics
@@ -74,6 +74,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P07 | 26min | 6 tasks | 21 files |
 | Phase 01 P08 | 35min | 7 tasks | 15 files |
 | Phase 01 P09 | 1h 46m | 6 tasks | 4 files |
+| Phase 01 P10 | 14min | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -95,7 +96,11 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Internal alpha is explicitly not ready until five real friendly-owner activation rows exist. — Plan 01-08 produced instrumentation and a one-owner rehearsal record only; GTM requires five owner evidence rows plus friction/failure notes.
 - [Phase 01]: ROADMAP progress update was skipped for Plan 01-08 to avoid mixing pre-existing dirty planning changes. — User explicitly warned not to stage or modify unrelated dirty planning files; ROADMAP.md was already dirty before this execution.
 - [Phase 01]: Deploy smoke fails loudly when deployment env, Convex URL, Clerk storage states, or business slug are absent. — A silent skip would create false deploy/readback proof.
+- [Phase 01]: Plan 01-10 continued existing dirty Convex bridge work but staged only auth/source-state files and required schema/test support. — Preserved useful partial work while avoiding unrelated billing, Phase 2-5, ROADMAP, and future-surface changes.
+- [Phase 01]: Convex actor authority now derives from `ctx.auth.getUserIdentity()` plus source-owned admin membership rows. — Browser-supplied owner/admin/Clerk fields are ignored by the shared authz helper.
+- [Phase 01]: Convex codegen proof remains blocked by empty Clerk issuer/keys and rejected outbound codegen network access. — Missing setup is recorded as fail-closed evidence, not a green proof.
 
 ### Blockers
 
 - Phase 01 live deploy/readback remains blocked pending real DEPLOY_BASE_URL, DEPLOY_CONVEX_URL, Clerk admin/owner storage states, and explicit network approval.
+- Phase 01 Convex codegen remains blocked pending real VITE_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_JWT_ISSUER_DOMAIN, and approved outbound Convex CLI/network access.
