@@ -55,8 +55,6 @@ export type PublicBusinessCatalogApiDto = {
     capabilities: readonly {
       kind: PublicCatalogContract['services'][number]['capabilities'][number]['kind']
       status: PublicCatalogContract['services'][number]['capabilities'][number]['status']
-      callable: false
-      paymentRequired: false
     }[]
   }[]
 }
@@ -268,8 +266,6 @@ function toPublicApiDto(catalog: PublicCatalogContract): PublicBusinessCatalogAp
       capabilities: service.capabilities.map((capability) => ({
         kind: capability.kind,
         status: capability.status,
-        callable: false,
-        paymentRequired: false,
       })),
     })),
   }
@@ -282,7 +278,7 @@ function paginateCatalogs(
 ): PublicBusinessCatalogApiPage {
   const limit = normalizeLimit(input.limit)
   const startIndex =
-    input.cursor === undefined ? 0 : Math.max(items.findIndex((item) => item.slug === input.cursor) + 1, 0)
+    input.cursor === undefined ? 0 : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
   const pageItems = items.slice(startIndex, startIndex + limit)
   const next = items.at(startIndex + limit)
 
