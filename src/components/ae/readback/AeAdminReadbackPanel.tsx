@@ -17,6 +17,7 @@ const rowStateLabels = {
   no_source_rows: 'No source rows',
   guarded: 'Guarded',
   queued: 'Queued',
+  indexed: 'Indexed',
   degraded: 'Degraded',
   stale: 'Stale',
   suppressed: 'Suppressed',
@@ -29,6 +30,12 @@ const repairLabels = {
   source_auth_required: 'Source auth required',
   no_repair_available: 'No repair available',
 } satisfies Record<AdminReadbackRow['repairAction'], string>
+
+const repairResultLabels = {
+  not_run: 'Not run',
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+} satisfies Record<NonNullable<AdminReadbackRow['repairResult']>, string>
 
 type AeAdminReadbackPanelProps = {
   title: string
@@ -111,6 +118,11 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
                 <ReadbackTerm label="Readback" value={row.readbackState.replaceAll('_', ' ')} />
                 <ReadbackTerm label="Attempt" value={row.attemptRef ?? 'Unavailable'} />
                 <ReadbackTerm label="Correlation" value={row.correlationId ?? 'Unavailable'} />
+                <ReadbackTerm
+                  label="Repair result"
+                  value={row.repairResult === undefined ? 'Unavailable' : repairResultLabels[row.repairResult]}
+                />
+                <ReadbackTerm label="Public surfaces" value={row.affectedPublicSurfaces?.join(', ') ?? 'Unavailable'} />
               </dl>
             </li>
           ))}

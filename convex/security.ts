@@ -35,6 +35,7 @@ const adminReadbackDeniedResult = v.object({
         v.literal('no_source_rows'),
         v.literal('guarded'),
         v.literal('queued'),
+        v.literal('indexed'),
         v.literal('degraded'),
         v.literal('stale'),
         v.literal('suppressed')
@@ -53,6 +54,8 @@ const adminReadbackDeniedResult = v.object({
         v.literal('source_auth_required'),
         v.literal('no_repair_available')
       ),
+      repairResult: v.optional(v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed'))),
+      affectedPublicSurfaces: v.optional(v.array(v.string())),
       correlationId: v.optional(v.string()),
       attemptRef: v.optional(v.string()),
       updatedAt: v.number(),
