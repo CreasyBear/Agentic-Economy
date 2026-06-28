@@ -7,6 +7,12 @@ import {
   readDiscoveryHealth as readDiscoveryHealthImpl,
   regenerateDiscoveryManifest as regenerateDiscoveryManifestImpl,
 } from './internal/manifest-attempts'
+import {
+  buildLlmsTxt as buildLlmsTxtImpl,
+  buildRobotsTxt as buildRobotsTxtImpl,
+  buildSitemapXml as buildSitemapXmlImpl,
+} from './internal/discovery-files'
+import { createDefaultDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
 import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl } from './internal/ucp-manifest'
 
 export const DiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const
@@ -209,6 +215,16 @@ export type DiscoveryHealthReadback = {
   repairResult: DiscoveryRepairResult
 }
 
+export type BuildDiscoveryFileOptions = {
+  canonicalBaseUrl?: string
+  now?: number
+}
+
+export type DiscoveryFileBuildResult = {
+  body: string
+  urls: readonly string[]
+}
+
 export const buildCatalogDiscoveryManifest = buildCatalogDiscoveryManifestImpl
 
 export const regenerateDiscoveryManifest = regenerateDiscoveryManifestImpl
@@ -216,3 +232,11 @@ export const regenerateDiscoveryManifest = regenerateDiscoveryManifestImpl
 export const invalidateDiscoveryManifest = invalidateDiscoveryManifestImpl
 
 export const readDiscoveryHealth = readDiscoveryHealthImpl
+
+export const buildLlmsTxt = buildLlmsTxtImpl
+
+export const buildSitemapXml = buildSitemapXmlImpl
+
+export const buildRobotsTxt = buildRobotsTxtImpl
+
+export const createDefaultDiscoverySourceState = createDefaultDiscoverySourceStateImpl

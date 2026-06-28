@@ -2,10 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { discoveryJsonResponse } from '@/lib/http/discovery-response'
 import {
+  createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 
 export const Route = createFileRoute('/$slug/ucp')({
   server: {
@@ -41,11 +41,7 @@ export function handleUcpManifestRequest(request: Request, slug: string): Respon
 }
 
 function createRouteDiscoveryState(): DiscoverySourceState {
-  return {
-    ...createDefaultRegistrySourceState(),
-    discoveryManifests: [],
-    invalidationIntents: [],
-  }
+  return createDefaultDiscoverySourceState()
 }
 
 function requestOrigin(request: Request): string {
