@@ -2,7 +2,7 @@ import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/busines
 import type { BusinessMutationActor } from '@/modules/business/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { CorrelationId, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
-import { createEmptyCatalogSourceState } from './public-catalog-dto'
+import { buildPublicCatalogDto, createEmptyCatalogSourceState } from './public-catalog-dto'
 import { publishBusinessCatalog } from './publish'
 import type {
   FirstRequestMode,
@@ -138,6 +138,10 @@ const sourceOwnedActor: BusinessMutationActor = {
   displayName: 'Sam',
 }
 
+type PublicOwnerRouteState = PublishBusinessCatalogState
+
+let publicOwnerRouteState = createPublicOwnerFlowState()
+
 export function validatePublicOwnerClaimFlowInput(
   input: PublicOwnerClaimFlowInput
 ): PublicOwnerClaimValidationResult {
@@ -173,6 +177,26 @@ export function validatePublicOwnerClaimFlowInput(
 }
 
 export function submitPublicOwnerClaimFlow(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowResult {
+  return submitPublicOwnerClaimFlowWithState(createPublicOwnerFlowState(), input)
+}
+
+export function submitDurablePublicOwnerClaimFlow(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowResult {
+  return submitPublicOwnerClaimFlowWithState(publicOwnerRouteState, input)
+}
+
+export function resetPublicOwnerRouteReadbacksForTest(): void {
+  publicOwnerRouteState = createPublicOwnerFlowState()
+}
+
+export function getPublicOwnerStatusReadbackBySlug(slug: string): PublicOwnerStatusReadback | undefined {
+  const catalog = readPublicOwnerRouteCatalogBySlug(slug)
+  return catalog === undefined ? undefined : buildPublicOwnerStatusReadback(catalog)
+}
+
+function submitPublicOwnerClaimFlowWithState(
+  state: PublicOwnerRouteState,
+  input: PublicOwnerClaimFlowInput
+): PublicOwnerClaimFlowResult {
   const validation = validatePublicOwnerClaimFlowInput(input)
   if (validation.kind === 'invalid') {
     return {
@@ -184,7 +208,6 @@ export function submitPublicOwnerClaimFlow(input: PublicOwnerClaimFlowInput): Pu
     }
   }
 
-  const state = createPublicOwnerFlowState()
   const slug = brandNonEmpty(validation.input.requestedSlug, 'Slug')
   const claim = claimBusiness(state, {
     actor: sourceOwnedActor,
@@ -266,6 +289,11 @@ export function getDefaultPublicOwnerStatusReadback(): PublicOwnerStatusReadback
 export function getPublicBusinessPageReadback(slug: string): PublicBusinessPageReadbackResult {
   const readback = getDefaultPublicOwnerStatusReadback()
   if (readback.catalog.slug !== slug) {
+    const routeCatalog = readPublicOwnerRouteCatalogBySlug(slug)
+    if (routeCatalog !== undefined) {
+      return { kind: 'available', catalog: routeCatalog }
+    }
+
     return { kind: 'not_found', reason: 'not_public' }
   }
 
@@ -304,6 +332,32 @@ function createPublicOwnerFlowState(): PublishBusinessCatalogState {
     registryProjectionAttempts: [],
     discoveryManifestAttempts: [],
   }
+}
+
+function readPublicOwnerRouteCatalogBySlug(slug: string): PublicCatalogContract | undefined {
+  const normalizedSlug = normalizeSlug(slug)
+  const business = publicOwnerRouteState.businesses.find(
+    (candidate) => candidate.slug === normalizedSlug && candidate.publicStatus === 'published'
+  )
+  if (business === undefined) {
+    return undefined
+  }
+
+  const context = publicOwnerRouteState.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+  if (context === undefined) {
+    return undefined
+  }
+
+  const catalog = buildPublicCatalogDto({
+    business,
+    context,
+    services: publicOwnerRouteState.businessServices.filter((service) => service.businessId === business.businessId),
+    capabilities: publicOwnerRouteState.serviceCapabilities.filter((capability) => capability.businessId === business.businessId),
+    indexStatus: 'queued',
+    discoveryStatus: 'degraded',
+  })
+
+  return catalog.kind === 'available' ? catalog.catalog : undefined
 }
 
 function toServiceCatalogInput(input: PublicOwnerClaimFlowInput): ServiceCatalogInput {

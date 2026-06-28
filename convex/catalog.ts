@@ -1,4 +1,4 @@
-import { mutationGeneric } from 'convex/server'
+import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
@@ -84,6 +84,17 @@ const publicCatalogResult = v.object({
   schemaVersion: v.literal('public-catalog:v1'),
   updatedAt: v.number(),
 })
+
+const publicCatalogReadbackResult = v.union(
+  v.object({
+    kind: v.literal('available'),
+    catalog: publicCatalogResult,
+  }),
+  v.object({
+    kind: v.literal('not_found'),
+    reason: v.literal('not_public'),
+  })
+)
 
 const auditEventResult = v.object({
   eventId: v.string(),
@@ -357,6 +368,65 @@ export const publishBusinessCatalog = mutationGeneric({
       registryProjectionAttempts: registryAttempts,
       discoveryManifestAttempts: discoveryAttempts,
     }
+  },
+})
+
+export const getPublicBusinessCatalogBySlug = queryGeneric({
+  args: {
+    slug: v.string(),
+  },
+  returns: publicCatalogReadbackResult,
+  handler: async (ctx, args) => {
+    const db = runtimeDb(ctx.db)
+    const business = await db
+      .query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', normalizeSlug(args.slug)))
+      .unique()
+    if (business === null) {
+      return catalogReadNotFound()
+    }
+
+    const catalog = await publicCatalogForBusiness(db, business._id)
+    return catalog === undefined ? catalogReadNotFound() : { kind: 'available' as const, catalog }
+  },
+})
+
+export const getCurrentOwnerPublicCatalog = queryGeneric({
+  args: {},
+  returns: publicCatalogReadbackResult,
+  handler: async (ctx) => {
+    const actor = await resolveBusinessActor(ctx)
+    if (actor.kind !== 'authenticated_owner') {
+      return catalogReadNotFound()
+    }
+
+    const db = runtimeDb(ctx.db)
+    const owner = await db
+      .query('owners')
+      .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', actor.clerkUserId))
+      .unique()
+    if (owner === null) {
+      return catalogReadNotFound()
+    }
+
+    const publishedClaims = await db
+      .query('claims')
+      .withIndex('by_owner_status', (query) => query.eq('ownerId', owner._id).eq('status', 'published'))
+      .collect()
+    const orderedClaims = publishedClaims.sort((left, right) => numberField(right, 'updatedAt') - numberField(left, 'updatedAt'))
+    for (const claim of orderedClaims) {
+      const businessId = optionalStringField(claim, 'businessId')
+      if (businessId === undefined) {
+        continue
+      }
+
+      const catalog = await publicCatalogForBusiness(db, businessId)
+      if (catalog !== undefined) {
+        return { kind: 'available' as const, catalog }
+      }
+    }
+
+    return catalogReadNotFound()
   },
 })
 
@@ -642,6 +712,9 @@ async function publicCatalogForBusiness(db: RuntimeDb, businessId: string): Prom
   if (business === null || stringField(business, 'publicStatus') !== 'published') {
     return undefined
   }
+  if (await hasActiveBusinessSuppression(db, businessId)) {
+    return undefined
+  }
   const context = await db
     .query('businessContexts')
     .withIndex('by_business', (query) => query.eq('businessId', businessId))
@@ -682,6 +755,10 @@ async function publicCatalogForBusiness(db: RuntimeDb, businessId: string): Prom
     schemaVersion: 'public-catalog:v1',
     updatedAt: numberField(business, 'updatedAt'),
   }
+}
+
+function catalogReadNotFound() {
+  return { kind: 'not_found' as const, reason: 'not_public' as const }
 }
 
 function toPublicService(service: RuntimeDocument, capabilities: readonly RuntimeDocument[]): PublicService {
@@ -1010,6 +1087,14 @@ async function discoveryStatusForBusiness(
     return 'stale'
   }
   return stringField(latest, 'status') === 'succeeded' ? 'available' : 'degraded'
+}
+
+async function hasActiveBusinessSuppression(db: RuntimeDb, businessId: string): Promise<boolean> {
+  const suppression = await db
+    .query('suppressionRules')
+    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active'))
+    .unique()
+  return suppression !== null
 }
 
 function sourceAllowedOrigins(): readonly string[] {

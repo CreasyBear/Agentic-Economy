@@ -1,0 +1,328 @@
+import { auth } from '@clerk/tanstack-react-start/server'
+import { createServerFn } from '@tanstack/react-start'
+import { getRequestUrl } from '@tanstack/start-server-core'
+import { ConvexHttpClient } from 'convex/browser'
+import { makeFunctionReference } from 'convex/server'
+import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
+import { z } from 'zod'
+
+import {
+  buildPublicOwnerStatusReadback,
+  getDefaultPublicOwnerStatusReadback,
+  getPublicBusinessPageReadback,
+  getPublicOwnerStatusReadbackBySlug,
+  submitDurablePublicOwnerClaimFlow,
+} from '@/modules/catalog/public'
+import type {
+  PublicBusinessPageReadbackResult,
+  PublicCatalogContract,
+  PublicOwnerClaimFlowInput,
+  PublicOwnerClaimFlowResult,
+  PublicOwnerStatusReadback,
+} from '@/modules/catalog/public'
+
+const ownerClaimInputSchema = z.object({
+  businessName: z.string(),
+  category: z.string(),
+  suburb: z.string(),
+  stateTerritory: z.string(),
+  requestedSlug: z.string(),
+  ownerMessage: z.string(),
+  sourceLabel: z.string(),
+  serviceName: z.string(),
+  serviceCategory: z.string(),
+  serviceSummary: z.string(),
+  serviceArea: z.string(),
+  hoursOrUnknown: z.string(),
+  firstRequestMode: z.enum(['inquiry_available', 'quote_request_available', 'not_available_yet']),
+  publicDisclosure: z.string(),
+  noContactReason: z.string(),
+})
+
+const ownerStatusInputSchema = z.object({
+  slug: z.string().optional(),
+})
+
+const publicPageInputSchema = z.object({
+  slug: z.string(),
+})
+
+type ClaimBusinessArgs = {
+  name: string
+  category: string
+  suburb: string
+  stateTerritory: string
+  requestedSlug: string
+  ownerMessage?: string
+  sourceRefs: readonly { label: string; evidenceRef: string }[]
+  origin?: string
+  operationKey: string
+  correlationId: string
+}
+
+type ClaimBusinessResult =
+  | {
+      kind: 'ok'
+      code: 'claim_created'
+      claim: { claimId: string }
+    }
+  | {
+      kind: 'error'
+      code: string
+      retryable: boolean
+      reason: string
+    }
+
+type PublishCatalogArgs = {
+  claimId: string
+  services: readonly {
+    name: string
+    category: string
+    summary: string
+    serviceArea: string
+    hoursOrUnknown: string
+    firstRequest:
+      | {
+          mode: 'inquiry_available' | 'quote_request_available'
+          publicDisclosure: string
+          publicChannel: 'public_business_contact' | 'ae_status_only'
+        }
+      | {
+          mode: 'not_available_yet'
+          publicDisclosure?: string
+          publicChannel: 'not_available'
+          noContactReason: string
+        }
+  }[]
+  origin?: string
+  operationKey: string
+  correlationId: string
+}
+
+type PublishCatalogResult =
+  | {
+      kind: 'ok'
+      code: 'catalog_published' | 'catalog_publish_replayed'
+      catalog: PublicCatalogContract
+    }
+  | {
+      kind: 'error'
+      code: string
+      retryable: boolean
+      reason: string
+    }
+
+type PublicCatalogReadResult =
+  | { kind: 'available'; catalog: PublicCatalogContract }
+  | { kind: 'not_found'; reason: 'not_public' }
+
+type Env = Record<string, string | undefined>
+
+const claimBusinessMutation = sourceMutation<ClaimBusinessArgs, ClaimBusinessResult>('business:claimBusiness')
+const publishCatalogMutation = sourceMutation<PublishCatalogArgs, PublishCatalogResult>('catalog:publishBusinessCatalog')
+const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicCatalogReadResult>('catalog:getPublicBusinessCatalogBySlug')
+const currentOwnerCatalogQuery = sourceQuery<Record<string, never>, PublicCatalogReadResult>('catalog:getCurrentOwnerPublicCatalog')
+
+export const submitOwnerClaimServer = createServerFn({ method: 'POST' })
+  .validator((data) => ownerClaimInputSchema.parse(data))
+  .handler(async ({ data }) => submitOwnerClaimThroughSource(data))
+
+export const readOwnerStatusServer = createServerFn()
+  .validator((data) => ownerStatusInputSchema.parse(data ?? {}))
+  .handler(async ({ data }) => readOwnerStatusThroughSource(data.slug))
+
+export const readPublicBusinessPageServer = createServerFn()
+  .validator((data) => publicPageInputSchema.parse(data))
+  .handler(async ({ data }) => readPublicBusinessPageThroughSource(data.slug))
+
+export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowInput): Promise<PublicOwnerClaimFlowResult> {
+  if (usesLocalE2eBypass()) {
+    return submitDurablePublicOwnerClaimFlow(input)
+  }
+
+  const origin = requestOrigin()
+  const operationSuffix = `${normalizeOperationPart(input.requestedSlug)}:${crypto.randomUUID()}`
+  const claim = await callAuthenticatedMutation(claimBusinessMutation, {
+    name: input.businessName,
+    category: input.category,
+    suburb: input.suburb,
+    stateTerritory: input.stateTerritory,
+    requestedSlug: input.requestedSlug,
+    ...(input.ownerMessage.trim().length === 0 ? {} : { ownerMessage: input.ownerMessage }),
+    sourceRefs: [{ label: input.sourceLabel, evidenceRef: `owner-submitted:${normalizeOperationPart(input.requestedSlug)}` }],
+    origin,
+    operationKey: `claim:${operationSuffix}`,
+    correlationId: `claim:${operationSuffix}`,
+  })
+
+  if (claim.kind === 'error') {
+    return {
+      kind: 'error',
+      code: 'claim_flow_claim_rejected',
+      retryable: claim.retryable,
+      reason: claim.reason,
+    }
+  }
+
+  const publish = await callAuthenticatedMutation(publishCatalogMutation, {
+    claimId: claim.claim.claimId,
+    services: [toServiceCatalogArgs(input)],
+    origin,
+    operationKey: `publish:${operationSuffix}`,
+    correlationId: `publish:${operationSuffix}`,
+  })
+
+  if (publish.kind === 'error') {
+    return {
+      kind: 'error',
+      code: 'claim_flow_publish_rejected',
+      retryable: publish.retryable,
+      reason: publish.reason,
+    }
+  }
+
+  return {
+    kind: 'ok',
+    code: 'claim_flow_published',
+    catalog: publish.catalog,
+    readback: buildPublicOwnerStatusReadback(publish.catalog),
+  }
+}
+
+export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusReadback> {
+  if (usesLocalE2eBypass()) {
+    if (slug === undefined || slug.trim().length === 0) {
+      return getDefaultPublicOwnerStatusReadback()
+    }
+
+    return getPublicOwnerStatusReadbackBySlug(slug) ?? getDefaultPublicOwnerStatusReadback()
+  }
+
+  const result =
+    slug === undefined || slug.trim().length === 0
+      ? await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
+      : await callPublicQuery(publicCatalogBySlugQuery, { slug })
+  if (result.kind === 'available') {
+    return buildPublicOwnerStatusReadback(result.catalog)
+  }
+
+  throw new Error('No published owner catalog readback is available for this request.')
+}
+
+export async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageReadbackResult> {
+  if (usesLocalE2eBypass()) {
+    return getPublicBusinessPageReadback(slug)
+  }
+
+  const result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
+  return result.kind === 'available' ? { kind: 'available', catalog: result.catalog } : { kind: 'not_found', reason: 'not_public' }
+}
+
+function toServiceCatalogArgs(input: PublicOwnerClaimFlowInput): PublishCatalogArgs['services'][number] {
+  return {
+    name: input.serviceName,
+    category: input.serviceCategory,
+    summary: input.serviceSummary,
+    serviceArea: input.serviceArea,
+    hoursOrUnknown: input.hoursOrUnknown,
+    firstRequest:
+      input.firstRequestMode === 'not_available_yet'
+        ? {
+            mode: 'not_available_yet',
+            ...(input.publicDisclosure.trim().length === 0 ? {} : { publicDisclosure: input.publicDisclosure }),
+            publicChannel: 'not_available',
+            noContactReason: input.noContactReason,
+          }
+        : {
+            mode: input.firstRequestMode,
+            publicDisclosure: input.publicDisclosure,
+            publicChannel: input.firstRequestMode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact',
+          },
+  }
+}
+
+function sourceQuery<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
+  name: string
+): FunctionReference<'query', 'public', Args, Result> {
+  return makeFunctionReference<'query', Args, Result>(name)
+}
+
+function sourceMutation<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
+  name: string
+): FunctionReference<'mutation', 'public', Args, Result> {
+  return makeFunctionReference<'mutation', Args, Result>(name)
+}
+
+async function callAuthenticatedQuery<Query extends FunctionReference<'query'>>(
+  query: Query,
+  args: FunctionArgs<Query>
+): Promise<FunctionReturnType<Query>> {
+  const client = await createConvexClient({ authenticated: true })
+  return client.query(query, args)
+}
+
+async function callPublicQuery<Query extends FunctionReference<'query'>>(
+  query: Query,
+  args: FunctionArgs<Query>
+): Promise<FunctionReturnType<Query>> {
+  const client = await createConvexClient({ authenticated: false })
+  return client.query(query, args)
+}
+
+async function callAuthenticatedMutation<Mutation extends FunctionReference<'mutation'>>(
+  mutation: Mutation,
+  args: FunctionArgs<Mutation>
+): Promise<FunctionReturnType<Mutation>> {
+  const client = await createConvexClient({ authenticated: true })
+  return client.mutation(mutation, args)
+}
+
+async function createConvexClient(options: { authenticated: boolean }): Promise<ConvexHttpClient> {
+  const convexUrl = readRequiredConvexUrl(process.env)
+  if (!options.authenticated) {
+    return new ConvexHttpClient(convexUrl)
+  }
+
+  const authObject = await auth()
+  if (!authObject.isAuthenticated) {
+    throw new Error('Authenticated owner session is required for this Convex call.')
+  }
+
+  const token = await authObject.getToken({ template: 'convex' })
+  if (token === null || token.trim().length === 0) {
+    throw new Error('Clerk did not return a Convex auth token for this request.')
+  }
+
+  return new ConvexHttpClient(convexUrl, { auth: token })
+}
+
+function requestOrigin(): string {
+  return getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin
+}
+
+function readRequiredConvexUrl(env: Env): string {
+  const value = readEnv(env, 'CONVEX_URL') ?? readEnv(env, 'VITE_CONVEX_URL')
+  if (value === undefined) {
+    throw new Error('CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.')
+  }
+
+  return value
+}
+
+function readEnv(env: Env, name: string): string | undefined {
+  const value = env[name]
+  if (value === undefined || value.trim().length === 0) {
+    return undefined
+  }
+
+  return value.trim()
+}
+
+function usesLocalE2eBypass(): boolean {
+  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
+}
+
+function normalizeOperationPart(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
+  return normalized.length === 0 ? 'claim' : normalized
+}

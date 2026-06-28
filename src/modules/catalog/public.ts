@@ -18,7 +18,10 @@ import {
   buildPublicOwnerStatusReadback as buildPublicOwnerStatusReadbackImpl,
   getDefaultPublicOwnerStatusReadback as getDefaultPublicOwnerStatusReadbackImpl,
   getPublicBusinessPageReadback as getPublicBusinessPageReadbackImpl,
+  getPublicOwnerStatusReadbackBySlug as getPublicOwnerStatusReadbackBySlugImpl,
   publicOwnerDefaultClaimInput as publicOwnerDefaultClaimInputImpl,
+  resetPublicOwnerRouteReadbacksForTest as resetPublicOwnerRouteReadbacksForTestImpl,
+  submitDurablePublicOwnerClaimFlow as submitDurablePublicOwnerClaimFlowImpl,
   submitPublicOwnerClaimFlow as submitPublicOwnerClaimFlowImpl,
   validatePublicOwnerClaimFlowInput as validatePublicOwnerClaimFlowInputImpl,
 } from './internal/owner-public-flow'
@@ -269,7 +272,13 @@ export const validatePublicOwnerClaimFlowInput = validatePublicOwnerClaimFlowInp
 
 export const submitPublicOwnerClaimFlow = submitPublicOwnerClaimFlowImpl
 
+export const submitDurablePublicOwnerClaimFlow = submitDurablePublicOwnerClaimFlowImpl
+
+export const resetPublicOwnerRouteReadbacksForTest = resetPublicOwnerRouteReadbacksForTestImpl
+
 export const getDefaultPublicOwnerStatusReadback = getDefaultPublicOwnerStatusReadbackImpl
+
+export const getPublicOwnerStatusReadbackBySlug = getPublicOwnerStatusReadbackBySlugImpl
 
 export const getPublicBusinessPageReadback = getPublicBusinessPageReadbackImpl
 
