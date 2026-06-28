@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: executing
-stopped_at: Completed 01-04-admin-dispute-operator-recovery-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup; Playwright e2e/a11y specs are not present
-last_updated: "2026-06-27T22:17:34.000Z"
+stopped_at: Completed 01-06-registry-search-api-repair-PLAN.md
+last_updated: "2026-06-28T02:14:30.447Z"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 13
-  completed_plans: 4
-  percent: 31
+  completed_plans: 6
+  percent: 46
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -58,9 +58,9 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-27T22:17:34.000Z
-**Stopped at:** Completed 01-04-admin-dispute-operator-recovery-PLAN.md; Convex codegen awaits CONVEX_DEPLOYMENT setup; Playwright e2e/a11y specs are not present
-**Resume file:** .planning/phases/01-ten-star-spine-foundation/01-05-public-owner-ui-routes-PLAN.md
+**Last session:** 2026-06-28T02:14:17.555Z
+**Stopped at:** Completed 01-06-registry-search-api-repair-PLAN.md
+**Resume file:** None
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P02 | 43 min | 8 tasks | 46 files |
 | Phase 01 P03 | 32 min | 7 tasks | 25 files |
 | Phase 01 P04 | 6h 56m | 6 tasks | 24 files |
+| Phase 01 P06 | 37min | 6 tasks | 29 files |
 
 ## Decisions
 
@@ -81,3 +82,6 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Allowed only same-module `public.ts` files to import their own internal implementations. — This enables owning public seams while route, sibling-module, and cross-module private-import bans remain active.
 - [Phase 01]: Implemented PR04 admin, dispute, suppression recovery, and operator controls through source-owned module seams with fail-closed Convex wrappers. — Route guards alone are not authority, and deployment boundaries deny until generated auth/DB wiring exists.
 - [Phase 01]: Kept admin route loaders fail-closed with `membership: undefined` readbacks. — Non-admins receive safe denial/readback shells without private rows; source-owned admin resolution is deferred to configured Convex deployment wiring.
+- [Phase 01]: Public business APIs return explicit public DTO subsets without private ids, source hashes, MCP/OpenAPI, callable, or payment fields. — The plan stop conditions forbid raw database/private fields and future platform/action/payment surfaces.
+- [Phase 01]: Admin index-health generates source/projection/repair rows but denied route reads return no private rows until real membership wiring exists. — This keeps admin readback useful in tests and fail-closed in the unauthenticated runtime shell.
+- [Phase 01]: Registry search uses deterministic source-owned catalog DTO projection, not an external search engine. — Phase 1 requires no external search engine or marketplace ranking surface.
