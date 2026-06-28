@@ -19,7 +19,7 @@ Phase 01 is not closed. The non-browser local suite is green, the deploy smoke h
 | Convex codegen/readback | Auth-gated | `npm run check:convex-codegen` returned Convex `401 Unauthorized: MissingAccessToken`; real generated bindings, Clerk issuer, and Convex readbacks are not proven. |
 | Deployment readback | Blocked | `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, and `SMOKE_BUSINESS_SLUG` are missing from the shell environment and absent from `.env.local`. |
 | Deploy smoke harness | Ready but env-gated | `npm run test:deploy-smoke` is executable and fail-closed, but it was not run because required deploy URLs, storage states, and business slug were missing. |
-| Internal founder-assisted alpha | Not ready | Fewer than five friendly-owner activation rows exist. Current evidence is local instrumentation plus a Sam rehearsal only. |
+| Internal founder-assisted alpha | Not ready | `01-ALPHA-EVIDENCE.md` records 0 of 5 real friendly-owner activation rows. Current evidence is local instrumentation plus a Sam rehearsal only. |
 | Public launch | Not ready | GTM readiness still requires owner activation proof, deployed readback, attribution, support capacity, and clean live discovery evidence. |
 
 ## Local Verification Run
@@ -85,16 +85,24 @@ Storage-state files are local operator artifacts and must stay out of git.
 
 ## What Is Not Proven
 
-No live Vercel preview or production URL was tested in this run. No real Convex deployment was read back. No real Clerk session or middleware behavior was proven. No suppression or kill-switch behavior was exercised against a live deployment.
+No live Vercel preview or production URL was tested in this run. No real Convex deployment was read back. No real Clerk session or middleware behavior was proven. No suppression or kill-switch behavior was exercised against a live deployment. The current full local Playwright suite is also not green because `/registry` fails without the generated Convex public function `registry:listPublicBusinessCatalog`.
 
 The deploy smoke test now encodes those expectations so the next operator run can fail on real evidence instead of passing silently.
+
+## R10 Evidence Artifacts
+
+| Artifact | Status | Decision |
+|---|---|---|
+| `01-DEPLOY-READBACK-EVIDENCE.md` | Blocked | Records local command results, Convex `MissingAccessToken`, local `/registry` browser failure, missing deploy inputs, and deploy harness coverage. |
+| `01-ALPHA-EVIDENCE.md` | Blocked | Records 0 of 5 real owner activation rows and the required row shape. |
+| `01-INTERNAL-ALPHA-READINESS.md` | Not ready | Points to the alpha evidence artifact and keeps five-owner readiness blocked. |
 
 ## GTM and Internal Alpha
 
 `.planning/phases/01-ten-star-spine-foundation/01-INTERNAL-ALPHA-READINESS.md` remains authoritative for the current alpha decision:
 
 - current status: not alpha-ready;
-- blocker: five real friendly-owner activation rows do not exist;
+- blocker: five real friendly-owner activation rows do not exist; Plan 01-15 recorded 0/5;
 - current proof: instrumentation and local Sam route rehearsal only;
 - still required: real owner attempts, source/channel attribution, share or interest evidence, friction/failure notes, and no unresolved P0 local/deployed failures.
 
@@ -108,8 +116,9 @@ Matt Pocock review context is prepared in `.planning/phases/01-ten-star-spine-fo
 
 ## Remaining Risks
 
-1. Convex codegen/deploy readback is blocked until real Clerk issuer configuration exists and explicit networked Convex CLI approval is granted.
-2. Admin transport-level HTTP denial is not proven live because no real Clerk/session deployment was available.
-3. Suppression, cache invalidation, operator repair, and kill-switch behavior are locally covered through module/route tests but not deployed/readback verified.
-4. Internal alpha remains blocked until five friendly owners create activation evidence rows.
-5. Dirty top-level planning files already existed before this plan; this closeout intentionally records Phase 01 status in a new phase-owned artifact rather than mixing unrelated planning changes.
+1. Convex codegen/deploy readback is blocked until Convex CLI authentication and real Clerk/Convex configuration are available.
+2. Full local Playwright is not green until `/registry` can resolve generated Convex public function `registry:listPublicBusinessCatalog` or an approved local readback path.
+3. Admin transport-level HTTP denial is not proven live because no real Clerk/session deployment was available.
+4. Suppression, cache invalidation, operator repair, and kill-switch behavior are locally covered through module/route tests but not deployed/readback verified.
+5. Internal alpha remains blocked until five friendly owners create activation evidence rows.
+6. Dirty top-level planning files already existed before this plan; this closeout intentionally records Phase 01 status in phase-owned artifacts rather than mixing unrelated planning changes.

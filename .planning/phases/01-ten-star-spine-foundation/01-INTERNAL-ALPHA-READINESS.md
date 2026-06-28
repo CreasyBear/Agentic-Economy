@@ -1,18 +1,19 @@
 # Phase 01 Internal Alpha Readiness Evidence
 
 **Status:** not alpha-ready.  
-**Reason:** five friendly-owner evidence rows do not exist. This artifact records the current evidence shape and the missing proof without editing the already-dirty top-level GTM file.
+**Reason:** five friendly-owner evidence rows do not exist. Plan 01-15 records 0 of 5 real owner rows in `01-ALPHA-EVIDENCE.md`; local instrumentation and Sam rehearsal remain insufficient.
 
 ## Gate Decision
 
 Phase 1 can be used for local founder-assisted rehearsal, but it must not be called internal-alpha ready, launch-ready, or public-ready yet.
 
-Blocking evidence gaps:
+Blocking evidence gaps as of 2026-06-28:
 
 1. Fewer than five friendly-owner attempts have been recorded.
-2. Real Clerk session/auth and Convex codegen evidence are blocked by missing real Clerk issuer configuration and explicit network approval.
-3. Deployment/readback smoke for Vercel/Convex/Clerk and public HTTP headers is still Plan 01-09 work.
+2. Convex codegen is auth-gated by `401 Unauthorized: MissingAccessToken`; real Clerk issuer/key proof is not green.
+3. Deployment/readback smoke for Vercel/Convex/Clerk and public HTTP headers is blocked by missing deploy URLs, storage states, and smoke business slug.
 4. No live channel-attribution rows exist for real owners.
+5. The current full local Playwright suite is not green: `/registry` fails because generated Convex public function `registry:listPublicBusinessCatalog` is unavailable to the local server.
 
 ## Required Alpha Evidence Shape
 
@@ -51,9 +52,11 @@ const readback = buildOwnerActivationReadback(
 
 ## Friendly-Owner Evidence Attempts
 
+Plan 01-15 created `.planning/phases/01-ten-star-spine-foundation/01-ALPHA-EVIDENCE.md` as the authoritative row-count artifact. It records 0 real rows and 5 missing rows.
+
 | Attempt | Evidence status | Activation row | Share/interest | Friction/failure | No-P0 evidence | Decision |
 |---:|---|---|---|---|---|---|
-| 1 | Local Sam route rehearsal only; not a real friendly owner. | Instrumentation path exists; no durable real-owner row. | Not collected from a real owner. | Local blocked-path unit test exists; no real friction note. | Local gates are being run in Plan 01-08; Convex codegen and deployment smoke are not green. | Not alpha-ready. |
+| 1 | Local Sam route rehearsal only; not a real friendly owner. | Instrumentation path exists; no durable real-owner row. | Not collected from a real owner. | Local blocked-path unit test exists; no real friction note. | Non-browser local suite is green, but local browser, Convex codegen, deploy smoke, and five-owner evidence are not green. | Not alpha-ready. |
 | 2 | Not attempted. | Missing. | Missing. | Missing. | Missing. | Not alpha-ready. |
 | 3 | Not attempted. | Missing. | Missing. | Missing. | Missing. | Not alpha-ready. |
 | 4 | Not attempted. | Missing. | Missing. | Missing. | Missing. | Not alpha-ready. |
@@ -96,11 +99,11 @@ Evidence currently covered by tests:
 | Area | Current evidence | Status |
 |---|---|---|
 | Claim/publish/security | Unit and integration tests cover CSRF, rate limit, wrong-owner, duplicate, no-ABN publish, idempotency, and suppression. | Local evidence present. |
-| Public routes/e2e | Local Playwright route rendering passes with local-only Clerk bypass. | Local evidence present; real Clerk proof missing. |
+| Public routes/e2e | Current full local Playwright run fails on `/registry` due missing generated Convex public function `registry:listPublicBusinessCatalog`; 16 other browser checks passed. | Not green. |
 | Registry/API/discovery | Unit, integration, SEO, copy, and route parity tests pass locally. | Local evidence present. |
 | Copy/GTM claims | Claims register tests cover route/API/discovery/SEO/GTM and optional product-marketing draft. | Local evidence present. |
-| Convex codegen | `npm run check:convex-codegen` is a real command but currently blocked by missing Clerk issuer and network/telemetry approval. | Not green. |
-| Deploy/readback smoke | Not in Plan 01-08 scope; expected in Plan 01-09. | Missing. |
+| Convex codegen | `npm run check:convex-codegen` is a real command but currently blocked by Convex `401 Unauthorized: MissingAccessToken`. | Not green. |
+| Deploy/readback smoke | Missing `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, and `SMOKE_BUSINESS_SLUG`; not run. | Missing. |
 | Five-owner activation | No real owner rows exist. | Missing. |
 
 ## Next Evidence Needed
