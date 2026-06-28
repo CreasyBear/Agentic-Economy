@@ -1,19 +1,135 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEmptyBusinessSourceState } from '@/modules/business/public'
-import { createEmptyCatalogSourceState } from '@/modules/catalog/public'
+import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
+import { createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
   createDefaultRegistrySourceState,
+  getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
-import type { RegistrySourceState } from '@/modules/registry/public'
-import { handleListBusinessesRequest } from '@/routes/api.businesses'
-import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
-import { handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
+import type { PublicBusinessCatalogApiPage, RegistrySourceState } from '@/modules/registry/public'
+import {
+  handleDurableListBusinessesRequest,
+  handleListBusinessesRequest,
+  setPublicRegistryQueryClientForTests,
+} from '@/routes/api.businesses'
+import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { handleDurableSearchBusinessesRequest, handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
+import { loadRegistryRouteReadback } from '@/routes/registry'
 
 describe('registry public API routes', () => {
+  it('reads one non-default durable catalog through registry, search, API list, and API detail', async () => {
+    const state = createDurablePublishedRegistryState({
+      businessName: 'Fremantle Heat Pump Repairs',
+      requestedSlug: 'fremantle-heat-pump-repairs',
+      serviceName: 'Heat pump diagnostics',
+      serviceQuery: 'heat pump fremantle',
+      suburb: 'Fremantle',
+    })
+
+    await withRegistryQueryClient(state, async () => {
+      const registry = await loadRegistryRouteReadback({ q: 'heat pump fremantle', limit: 10 })
+      const list = await jsonBody(handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')))
+      const search = await jsonBody(
+        handleDurableSearchBusinessesRequest(
+          new Request('https://ae.example/api/businesses/search?q=heat+pump+fremantle')
+        )
+      )
+      const detailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
+      const detail = await detailResponse.json()
+
+      expect(registry.result.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+      expect(list).toMatchObject({
+        kind: 'ok',
+        items: [{ slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' }],
+        pagination: { total: 1, hasMore: false },
+      })
+      expect(search).toMatchObject({
+        kind: 'ok',
+        query: 'heat pump fremantle',
+        items: [{ slug: 'fremantle-heat-pump-repairs' }],
+        pagination: { total: 1, hasMore: false },
+      })
+      expect(detailResponse.status).toBe(200)
+      expect(detail).toMatchObject({
+        kind: 'found',
+        business: {
+          slug: 'fremantle-heat-pump-repairs',
+          name: 'Fremantle Heat Pump Repairs',
+          suburb: 'Fremantle',
+          services: [{ slug: 'heat-pump-diagnostics', name: 'Heat pump diagnostics' }],
+        },
+      })
+      expect(JSON.stringify([registry, list, search, detail])).not.toContain('parramatta-emergency-plumbing')
+    })
+  })
+
+  it('removes a suppressed durable catalog from registry, search, API list, and API detail', async () => {
+    const state = createDurablePublishedRegistryState({
+      businessName: 'Fremantle Heat Pump Repairs',
+      requestedSlug: 'fremantle-heat-pump-repairs',
+      serviceName: 'Heat pump diagnostics',
+      serviceQuery: 'heat pump fremantle',
+      suburb: 'Fremantle',
+    })
+    suppressFirstBusiness(state)
+
+    await withRegistryQueryClient(state, async () => {
+      const registry = await loadRegistryRouteReadback({ q: '', limit: 10 })
+      const list = await jsonBody(handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')))
+      const search = await jsonBody(
+        handleDurableSearchBusinessesRequest(
+          new Request('https://ae.example/api/businesses/search?q=heat+pump+fremantle')
+        )
+      )
+      const detailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
+      const detail = await detailResponse.json()
+
+      expect(registry.result.items).toEqual([])
+      expect(list).toMatchObject({ kind: 'ok', items: [], pagination: { total: 0, hasMore: false } })
+      expect(search).toMatchObject({
+        kind: 'ok',
+        query: 'heat pump fremantle',
+        items: [],
+        pagination: { total: 0, hasMore: false },
+      })
+      expect(detailResponse.status).toBe(404)
+      expect(detail).toEqual({
+        kind: 'not_found',
+        code: 'business_not_found',
+        reason: 'No public business catalog exists for this slug.',
+      })
+    })
+  })
+
+  it('keeps durable public DTOs strict across registry and API outputs', async () => {
+    const state = createDurablePublishedRegistryState({
+      businessName: 'Fremantle Heat Pump Repairs',
+      requestedSlug: 'fremantle-heat-pump-repairs',
+      serviceName: 'Heat pump diagnostics',
+      serviceQuery: 'heat pump fremantle',
+      suburb: 'Fremantle',
+    })
+
+    await withRegistryQueryClient(state, async () => {
+      const registry = await loadRegistryRouteReadback({ q: 'heat pump', limit: 10 })
+      const list = await jsonBody(handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')))
+      const search = await jsonBody(
+        handleDurableSearchBusinessesRequest(new Request('https://ae.example/api/businesses/search?q=heat+pump'))
+      )
+      const detail = await (await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')).json()
+      const serialized = JSON.stringify({ registry, list, search, detail })
+
+      expect(serialized).not.toMatch(
+        /businessId|serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|apiKey|"callable"\s*:\s*true|"paymentRequired"\s*:\s*true/i
+      )
+      expect(serialized).toContain('not_available_yet')
+      expect(serialized).not.toMatch(/booking available|payment available|callable endpoint/i)
+    })
+  })
+
   it('lists eligible public business catalogs without private fields', async () => {
     const response = handleListBusinessesRequest(new Request('https://ae.example/api/businesses?limit=1'))
     const body = await response.json()
@@ -187,4 +303,140 @@ function addPublishedCatalogClone(
       updatedAt: capability.updatedAt + state.serviceCapabilities.length,
     })
   }
+}
+
+async function withRegistryQueryClient(state: RegistrySourceState, run: () => Promise<void>): Promise<void> {
+  const reset = setPublicRegistryQueryClientForTests({
+    list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
+    search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
+    detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
+  })
+
+  try {
+    await run()
+  } finally {
+    reset()
+  }
+}
+
+async function jsonBody(response: Promise<Response>): Promise<PublicBusinessCatalogApiPage> {
+  return (await response).json() as Promise<PublicBusinessCatalogApiPage>
+}
+
+function createDurablePublishedRegistryState(input: {
+  businessName: string
+  requestedSlug: string
+  serviceName: string
+  serviceQuery: string
+  suburb: string
+}): RegistrySourceState {
+  const state = emptyRegistrySourceState()
+  const claim = claimBusiness(state, {
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: `owner:${input.requestedSlug}`,
+      displayName: input.businessName,
+    },
+    facts: {
+      name: input.businessName,
+      category: 'Heat pump repair',
+      suburb: input.suburb,
+      stateTerritory: 'WA',
+      requestedSlug: input.requestedSlug,
+      ownerMessage: 'Owner supplied durable source facts.',
+      sourceRefs: [
+        {
+          label: `${input.businessName} service card`,
+          evidenceRef: `private:evidence:${input.requestedSlug}`,
+          sourceHash: brandNonEmpty(`hash:source:${input.requestedSlug}`, 'SourceHash'),
+        },
+      ],
+    },
+    security: {
+      csrf: matchingCsrf('claim'),
+      rateLimit: {
+        scope: 'claim_submit',
+        key: `registry:${input.requestedSlug}`,
+        now: 10_000,
+        limit: 5,
+        windowMs: 60_000,
+      },
+    },
+    operationKey: operationKey(`claim:${input.requestedSlug}`),
+    correlationId: correlationId(`claim:${input.requestedSlug}`),
+    now: 10_000,
+  })
+
+  if (claim.kind === 'error') {
+    throw new Error(`Expected durable claim fixture to publish: ${claim.reason}`)
+  }
+
+  const publish = publishBusinessCatalog(state, {
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: `owner:${input.requestedSlug}`,
+      displayName: input.businessName,
+    },
+    claimId: claim.claim.claimId,
+    services: [
+      {
+        name: input.serviceName,
+        category: 'Heat pump repair',
+        summary: `${input.serviceName} for ${input.suburb} homes.`,
+        serviceArea: `${input.serviceQuery} and nearby suburbs`,
+        hoursOrUnknown: 'Weekdays by appointment',
+        firstRequest: {
+          mode: 'not_available_yet',
+          publicChannel: 'not_available',
+          publicDisclosure: 'First request is not available yet.',
+          noContactReason: 'Owner has not supplied public contact instructions.',
+        },
+      },
+    ],
+    security: { csrf: matchingCsrf('publish') },
+    operationKey: operationKey(`publish:${input.requestedSlug}`),
+    correlationId: correlationId(`publish:${input.requestedSlug}`),
+    now: 11_000,
+  })
+
+  if (publish.kind === 'error') {
+    throw new Error(`Expected durable publish fixture to publish: ${publish.reason}`)
+  }
+
+  return state
+}
+
+function suppressFirstBusiness(state: RegistrySourceState): void {
+  const business = state.businesses.at(0)
+  if (business === undefined) {
+    throw new Error('Expected a business to suppress.')
+  }
+
+  state.suppressionRules.push({
+    targetType: 'business',
+    targetRef: business.businessId,
+    status: 'active',
+    reasonCode: 'privacy_removal_requested',
+    evidenceRefs: ['private:evidence:suppression'],
+    createdByAdminRef: 'admin:test',
+    createdAt: 12_000,
+    beforePublicStatus: business.publicStatus,
+    beforeClaimStatus: business.claimStatus,
+  })
+}
+
+function matchingCsrf(key: string) {
+  return {
+    csrfToken: `csrf-${key}`,
+    csrfCookie: `csrf-${key}`,
+    allowedOrigins: ['https://ae.example'],
+  }
+}
+
+function operationKey(value: string) {
+  return brandNonEmpty(`op:registry-durable-test:${value}`, 'OperationKey')
+}
+
+function correlationId(value: string) {
+  return brandNonEmpty(`corr:registry-durable-test:${value}`, 'CorrelationId')
 }
