@@ -40,7 +40,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     mustNotMatch: privateSurfacePattern,
   },
   {
-    path: '/claim/success',
+    path: `/claim/success?slug=${config.businessSlug}`,
     status: 200,
     contentType: /text\/html/i,
     mustContain: ['Your service page is published', `/${config.businessSlug}`],

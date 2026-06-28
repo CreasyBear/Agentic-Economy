@@ -136,7 +136,7 @@ export const readPublicBusinessPageServer = createServerFn()
 
 export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowInput): Promise<PublicOwnerClaimFlowResult> {
   if (usesLocalE2eBypass()) {
-    return submitDurablePublicOwnerClaimFlow(input)
+    return redactOwnerClaimResult(submitDurablePublicOwnerClaimFlow(input))
   }
 
   const origin = requestOrigin()
@@ -180,21 +180,23 @@ export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowI
     }
   }
 
+  const publicCatalog = redactCatalogSourceHashes(publish.catalog)
+
   return {
     kind: 'ok',
     code: 'claim_flow_published',
-    catalog: publish.catalog,
-    readback: buildPublicOwnerStatusReadback(publish.catalog),
+    catalog: publicCatalog,
+    readback: buildPublicOwnerStatusReadback(publicCatalog),
   }
 }
 
 export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusReadback> {
   if (usesLocalE2eBypass()) {
     if (slug === undefined || slug.trim().length === 0) {
-      return getDefaultPublicOwnerStatusReadback()
+      return redactOwnerStatusReadback(getDefaultPublicOwnerStatusReadback())
     }
 
-    return getPublicOwnerStatusReadbackBySlug(slug) ?? getDefaultPublicOwnerStatusReadback()
+    return redactOwnerStatusReadback(getPublicOwnerStatusReadbackBySlug(slug) ?? getDefaultPublicOwnerStatusReadback())
   }
 
   const readsCurrentOwner = slug === undefined || slug.trim().length === 0
@@ -204,26 +206,69 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
     try {
       result = await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
     } catch {
-      return getDefaultPublicOwnerStatusReadback()
+      return redactOwnerStatusReadback(getDefaultPublicOwnerStatusReadback())
     }
   } else {
     result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
   }
 
   if (result.kind === 'available') {
-    return buildPublicOwnerStatusReadback(result.catalog)
+    return buildPublicOwnerStatusReadback(redactCatalogSourceHashes(result.catalog))
   }
 
-  return getDefaultPublicOwnerStatusReadback()
+  return redactOwnerStatusReadback(getDefaultPublicOwnerStatusReadback())
 }
 
 export async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageReadbackResult> {
   if (usesLocalE2eBypass()) {
-    return getPublicBusinessPageReadback(slug)
+    return redactPublicBusinessPageReadback(getPublicBusinessPageReadback(slug))
   }
 
   const result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
-  return result.kind === 'available' ? { kind: 'available', catalog: result.catalog } : { kind: 'not_found', reason: 'not_public' }
+  return result.kind === 'available'
+    ? { kind: 'available', catalog: redactCatalogSourceHashes(result.catalog) }
+    : { kind: 'not_found', reason: 'not_public' }
+}
+
+function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): PublicOwnerClaimFlowResult {
+  if (result.kind === 'error') {
+    return result
+  }
+
+  const catalog = redactCatalogSourceHashes(result.catalog)
+  return {
+    ...result,
+    catalog,
+    readback: buildPublicOwnerStatusReadback(catalog),
+  }
+}
+
+function redactOwnerStatusReadback(readback: PublicOwnerStatusReadback): PublicOwnerStatusReadback {
+  return {
+    ...readback,
+    catalog: redactCatalogSourceHashes(readback.catalog),
+  }
+}
+
+function redactPublicBusinessPageReadback(readback: PublicBusinessPageReadbackResult): PublicBusinessPageReadbackResult {
+  return readback.kind === 'available' ? { ...readback, catalog: redactCatalogSourceHashes(readback.catalog) } : readback
+}
+
+function redactCatalogSourceHashes(catalog: PublicCatalogContract): PublicCatalogContract {
+  const { sourceHash: _catalogSourceHash, services, ...catalogRest } = catalog
+  return {
+    ...catalogRest,
+    services: services.map((service) => {
+      const { sourceHash: _serviceSourceHash, capabilities, ...serviceRest } = service
+      return {
+        ...serviceRest,
+        capabilities: capabilities.map((capability) => {
+          const { sourceHash: _capabilitySourceHash, ...capabilityRest } = capability
+          return capabilityRest
+        }),
+      }
+    }),
+  } as unknown as PublicCatalogContract
 }
 
 function toServiceCatalogArgs(input: PublicOwnerClaimFlowInput): PublishCatalogArgs['services'][number] {
