@@ -72,6 +72,7 @@ export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPubl
     name: input.business.name,
     category: input.context.category,
     suburb: input.context.suburb,
+    stateTerritory: input.context.stateTerritory,
     publicStatus: 'published',
     trustTier: input.business.trustTier,
     indexStatus: input.indexStatus,

@@ -14,6 +14,24 @@ import {
   buildPublicCatalogDto as buildPublicCatalogDtoImpl,
   createEmptyCatalogSourceState as createEmptyCatalogSourceStateImpl,
 } from './internal/public-catalog-dto'
+import {
+  buildPublicOwnerStatusReadback as buildPublicOwnerStatusReadbackImpl,
+  getDefaultPublicOwnerStatusReadback as getDefaultPublicOwnerStatusReadbackImpl,
+  getPublicBusinessPageReadback as getPublicBusinessPageReadbackImpl,
+  publicOwnerDefaultClaimInput as publicOwnerDefaultClaimInputImpl,
+  submitPublicOwnerClaimFlow as submitPublicOwnerClaimFlowImpl,
+  validatePublicOwnerClaimFlowInput as validatePublicOwnerClaimFlowInputImpl,
+} from './internal/owner-public-flow'
+import type {
+  PublicBusinessPageReadbackResult,
+  PublicOwnerClaimField,
+  PublicOwnerClaimFlowInput,
+  PublicOwnerClaimFlowResult,
+  PublicOwnerClaimValidationError,
+  PublicOwnerClaimValidationResult,
+  PublicOwnerStatusReadback,
+  PublicOwnerUnavailableCapability,
+} from './internal/owner-public-flow'
 import { validateServiceCatalogInput as validateServiceCatalogInputImpl } from './internal/first-request'
 import { publishBusinessCatalog as publishBusinessCatalogImpl } from './internal/publish'
 
@@ -158,6 +176,7 @@ export type PublicCatalogContract = {
   name: string
   category: string
   suburb: string
+  stateTerritory: string
   publicStatus: Extract<PublicStatus, 'published'>
   trustTier: TrustTier
   indexStatus: IndexStatus
@@ -238,6 +257,29 @@ export const createEmptyCatalogSourceState = createEmptyCatalogSourceStateImpl
 export const validateServiceCatalogInput = validateServiceCatalogInputImpl
 
 export const publishBusinessCatalog = publishBusinessCatalogImpl
+
+export const publicOwnerDefaultClaimInput = publicOwnerDefaultClaimInputImpl
+
+export const validatePublicOwnerClaimFlowInput = validatePublicOwnerClaimFlowInputImpl
+
+export const submitPublicOwnerClaimFlow = submitPublicOwnerClaimFlowImpl
+
+export const getDefaultPublicOwnerStatusReadback = getDefaultPublicOwnerStatusReadbackImpl
+
+export const getPublicBusinessPageReadback = getPublicBusinessPageReadbackImpl
+
+export const buildPublicOwnerStatusReadback = buildPublicOwnerStatusReadbackImpl
+
+export type {
+  PublicBusinessPageReadbackResult,
+  PublicOwnerClaimField,
+  PublicOwnerClaimFlowInput,
+  PublicOwnerClaimFlowResult,
+  PublicOwnerClaimValidationError,
+  PublicOwnerClaimValidationResult,
+  PublicOwnerStatusReadback,
+  PublicOwnerUnavailableCapability,
+}
 
 export function getPublicBusinessCatalog(
   state: PublicCatalogReadState,
