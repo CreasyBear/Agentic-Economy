@@ -22,6 +22,7 @@ import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
+import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
@@ -88,10 +89,15 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
+const SlugUcpRoute = SlugUcpRouteImport.update({
+  id: '/ucp',
+  path: '/ucp',
+  getParentRoute: () => SlugRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/$slug': typeof SlugRoute
+  '/$slug': typeof SlugRouteWithChildren
   '/claim': typeof ClaimRouteWithChildren
   '/registry': typeof RegistryRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
@@ -101,12 +107,13 @@ export interface FileRoutesByFullPath {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/$slug/ucp': typeof SlugUcpRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/$slug': typeof SlugRoute
+  '/$slug': typeof SlugRouteWithChildren
   '/claim': typeof ClaimRouteWithChildren
   '/registry': typeof RegistryRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
@@ -116,13 +123,14 @@ export interface FileRoutesByTo {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/$slug/ucp': typeof SlugUcpRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/$slug': typeof SlugRoute
+  '/$slug': typeof SlugRouteWithChildren
   '/claim': typeof ClaimRouteWithChildren
   '/registry': typeof RegistryRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/claim/success': typeof ClaimSuccessRoute
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/$slug/ucp': typeof SlugUcpRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
 }
@@ -140,6 +149,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$slug'
+    | '/$slug/ucp'
     | '/claim'
     | '/registry'
     | '/admin/audit-events'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$slug'
+    | '/$slug/ucp'
     | '/claim'
     | '/registry'
     | '/admin/audit-events'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$slug'
+    | '/$slug/ucp'
     | '/claim'
     | '/registry'
     | '/admin/audit-events'
@@ -185,7 +197,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  SlugRoute: typeof SlugRoute
+  SlugRoute: typeof SlugRouteWithChildren
   ClaimRoute: typeof ClaimRouteWithChildren
   RegistryRoute: typeof RegistryRoute
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
@@ -218,6 +230,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$slug'
       preLoaderRoute: typeof SlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/$slug/ucp': {
+      id: '/$slug/ucp'
+      path: '/ucp'
+      fullPath: '/$slug/ucp'
+      preLoaderRoute: typeof SlugUcpRouteImport
+      parentRoute: typeof SlugRoute
     }
     '/': {
       id: '/'
@@ -302,6 +321,16 @@ const ClaimRouteChildren: ClaimRouteChildren = {
 
 const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
 
+interface SlugRouteChildren {
+  SlugUcpRoute: typeof SlugUcpRoute
+}
+
+const SlugRouteChildren: SlugRouteChildren = {
+  SlugUcpRoute: SlugUcpRoute,
+}
+
+const SlugRouteWithChildren = SlugRoute._addFileChildren(SlugRouteChildren)
+
 interface ApiBusinessesRouteChildren {
   ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
   ApiBusinessesSearchRoute: typeof ApiBusinessesSearchRoute
@@ -318,7 +347,7 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  SlugRoute: SlugRoute,
+  SlugRoute: SlugRouteWithChildren,
   ClaimRoute: ClaimRouteWithChildren,
   RegistryRoute: RegistryRoute,
   AdminAuditEventsRoute: AdminAuditEventsRoute,
