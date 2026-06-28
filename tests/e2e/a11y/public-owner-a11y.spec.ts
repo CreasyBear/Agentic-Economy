@@ -17,7 +17,9 @@ test.describe('public owner accessibility', () => {
     await expect(page.getByLabel('Service summary')).toBeVisible()
     await expect(page.getByLabel('First request state')).toBeVisible()
 
-    await page.getByRole('button', { name: /publish service page/i }).focus()
+    const publishButton = page.getByRole('button', { name: /publish service page/i })
+    await expect(publishButton).toBeEnabled()
+    await publishButton.focus()
     await page.keyboard.press('Enter')
 
     await expect(page.getByText('Business name is required.')).toBeVisible()

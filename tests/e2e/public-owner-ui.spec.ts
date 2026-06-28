@@ -7,7 +7,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: /claim and publish a truthful service page/i })).toBeVisible()
     await expect(page.getByRole('link', { name: /claim your service page/i })).toHaveCount(1)
     await expect(page.getByRole('link', { name: /open registry/i })).toBeVisible()
-    await expect(page.getByText(/bookings, payments, and automated actions are not live/i)).toBeVisible()
+    await expect(page.locator('#main-content').getByText(/bookings, payments, and automated actions are not live/i)).toBeVisible()
   })
 
   test('registry search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
@@ -45,7 +45,9 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Public page slug').fill('northside-solar')
     await page.getByLabel('Source label').fill('Owner supplied')
     await page.getByLabel('Service name').fill('Solar inverter repair')
-    await page.getByRole('button', { name: /publish service page/i }).click()
+    const publishButton = page.getByRole('button', { name: /publish service page/i })
+    await expect(publishButton).toBeEnabled()
+    await publishButton.click()
 
     await expect(page.getByLabel('Business name')).toHaveValue('Northside Solar')
     await expect(page.getByLabel('Service category')).toBeFocused()
@@ -71,7 +73,7 @@ test.describe('public owner routes', () => {
     await page.goto('/parramatta-emergency-plumbing')
 
     await expect(page.getByRole('heading', { name: 'Parramatta Emergency Plumbing' })).toBeVisible()
-    await expect(page.getByText('Parramatta, NSW')).toBeVisible()
+    await expect(page.getByRole('definition').filter({ hasText: 'Parramatta, NSW' })).toBeVisible()
     await expect(page.getByText('Public service facts')).toBeVisible()
     await expect(page.getByText('First request not available yet')).toBeVisible()
     await expect(page.getByRole('link', { name: /request removal or correction/i })).toBeVisible()
@@ -83,9 +85,11 @@ test.describe('public owner routes', () => {
   test('privacy removal request validates and records a receipt', async ({ page }) => {
     await page.goto('/privacy/remove-business')
 
-    await page.getByRole('button', { name: /submit request/i }).click()
+    const submitButton = page.getByRole('button', { name: /submit request/i })
+    await expect(submitButton).toBeEnabled()
+    await submitButton.click()
     await expect(page.getByLabel('Contact email')).toBeFocused()
-    await expect(page.getByText('A contact email is required.')).toBeVisible()
+    await expect(page.getByRole('alert').getByText('A contact email is required.')).toBeVisible()
 
     await page.getByLabel('Contact email').fill('owner@example.com')
     await page.getByLabel('Evidence summary').fill('The public facts are inaccurate and should be reviewed.')

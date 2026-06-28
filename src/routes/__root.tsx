@@ -30,13 +30,15 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: ReactNode }) {
+  const content = import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true' ? children : <ClerkProvider>{children}</ClerkProvider>
+
   return (
     <html lang="en">
       <head>
         <HeadContent />
       </head>
       <body>
-        <ClerkProvider>{children}</ClerkProvider>
+        {content}
         <Scripts />
       </body>
     </html>

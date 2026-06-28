@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
@@ -78,6 +78,7 @@ export const Route = createFileRoute('/privacy/remove-business')({
 
 function RemoveBusinessRoute() {
   const openRemoval = useServerFn(openRemovalServer)
+  const [hydrated, setHydrated] = useState(false)
   const [value, setValue] = useState<RemovalInput>({
     slug: 'parramatta-emergency-plumbing',
     contactEmail: '',
@@ -88,6 +89,10 @@ function RemoveBusinessRoute() {
   const [receipt, setReceipt] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
 
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(undefined)
@@ -95,13 +100,13 @@ function RemoveBusinessRoute() {
 
     if (value.contactEmail.trim().length === 0) {
       setError('A contact email is required.')
-      document.querySelector<HTMLElement>('[name="contactEmail"]')?.focus()
+      focusField('contactEmail')
       return
     }
 
     if (value.evidenceSummary.trim().length === 0) {
       setError('Evidence summary is required.')
-      document.querySelector<HTMLElement>('[name="evidenceSummary"]')?.focus()
+      focusField('evidenceSummary')
       return
     }
 
@@ -142,7 +147,16 @@ function RemoveBusinessRoute() {
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="slug">Public page slug</FieldLabel>
-            <Input id="slug" name="slug" value={value.slug} onChange={(event) => setValue((current) => ({ ...current, slug: event.currentTarget.value }))} />
+            <Input
+              id="slug"
+              name="slug"
+              value={value.slug}
+              disabled={!hydrated || pending}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setValue((current) => ({ ...current, slug: nextValue }))
+              }}
+            />
             <FieldDescription>Use the slug from the page URL.</FieldDescription>
           </Field>
           <Field data-invalid={error?.includes('contact') ? true : undefined}>
@@ -153,7 +167,11 @@ function RemoveBusinessRoute() {
               type="email"
               value={value.contactEmail}
               aria-invalid={error?.includes('contact') || undefined}
-              onChange={(event) => setValue((current) => ({ ...current, contactEmail: event.currentTarget.value }))}
+              disabled={!hydrated || pending}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setValue((current) => ({ ...current, contactEmail: nextValue }))
+              }}
             />
             <FieldDescription>Stored behind private evidence; not shown on public pages.</FieldDescription>
             {error?.includes('contact') ? <FieldError>{error}</FieldError> : null}
@@ -164,7 +182,11 @@ function RemoveBusinessRoute() {
               id="reasonCode"
               name="reasonCode"
               value={value.reasonCode}
-              onChange={(event) => setValue((current) => ({ ...current, reasonCode: toRemovalReason(event.currentTarget.value) }))}
+              disabled={!hydrated || pending}
+              onChange={(event) => {
+                const nextValue = toRemovalReason(event.currentTarget.value)
+                setValue((current) => ({ ...current, reasonCode: nextValue }))
+              }}
             >
               <option value="privacy_removal_requested">Remove this public page</option>
               <option value="ownership_contested">Ownership is contested</option>
@@ -179,19 +201,29 @@ function RemoveBusinessRoute() {
               name="evidenceSummary"
               value={value.evidenceSummary}
               aria-invalid={error?.includes('Evidence') || undefined}
-              onChange={(event) => setValue((current) => ({ ...current, evidenceSummary: event.currentTarget.value }))}
+              disabled={!hydrated || pending}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value
+                setValue((current) => ({ ...current, evidenceSummary: nextValue }))
+              }}
             />
             <FieldDescription>Summarize the correction or removal evidence. Do not include secrets.</FieldDescription>
             {error?.includes('Evidence') ? <FieldError>{error}</FieldError> : null}
           </Field>
         </FieldGroup>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || !hydrated}>
           {pending ? <Spinner data-icon="inline-start" /> : null}
           Submit request
         </Button>
       </form>
     </AePublicShell>
   )
+}
+
+function focusField(name: keyof Pick<RemovalInput, 'contactEmail' | 'evidenceSummary'>) {
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`[name="${name}"]`)?.focus()
+  })
 }
 
 function toRemovalReason(value: string): RemovalInput['reasonCode'] {

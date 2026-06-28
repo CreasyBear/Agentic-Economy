@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
 import { z } from 'zod'
@@ -16,7 +16,6 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  publicOwnerDefaultClaimInput,
   submitPublicOwnerClaimFlow,
   validatePublicOwnerClaimFlowInput,
 } from '@/modules/catalog/public'
@@ -48,6 +47,24 @@ const claimInputSchema = z.object({
   publicDisclosure: z.string(),
   noContactReason: z.string(),
 })
+
+const emptyPublicOwnerClaimInput = {
+  businessName: '',
+  category: '',
+  suburb: '',
+  stateTerritory: '',
+  requestedSlug: '',
+  ownerMessage: '',
+  sourceLabel: '',
+  serviceName: '',
+  serviceCategory: '',
+  serviceSummary: '',
+  serviceArea: '',
+  hoursOrUnknown: '',
+  firstRequestMode: 'not_available_yet',
+  publicDisclosure: '',
+  noContactReason: '',
+} satisfies PublicOwnerClaimFlowInput
 
 const submitClaimServer = createServerFn({ method: 'POST' })
   .validator((data) => claimInputSchema.parse(data))
@@ -137,13 +154,23 @@ export const Route = createFileRoute('/claim')({
 })
 
 function ClaimRoute() {
+  const location = useLocation()
   const navigate = useNavigate()
   const submitClaim = useServerFn(submitClaimServer)
-  const [value, setValue] = useState<PublicOwnerClaimFlowInput>(publicOwnerDefaultClaimInput)
+  const [hydrated, setHydrated] = useState(false)
+  const [value, setValue] = useState<PublicOwnerClaimFlowInput>(emptyPublicOwnerClaimInput)
   const [errors, setErrors] = useState<readonly PublicOwnerClaimValidationError[]>([])
   const [message, setMessage] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
+  if (location.pathname !== '/claim') {
+    return <Outlet />
+  }
 
   function updateTextField(field: TextClaimField, nextValue: string) {
     setValue((current) => ({ ...current, [field]: nextValue }))
@@ -191,10 +218,10 @@ function ClaimRoute() {
           </Alert>
         )}
         <AeClaimFormSection title="Business identity" description="These fields become the public object identity.">
-          <FieldGroup>{identityFields.map((field) => renderField(field, value, errorByField, updateTextField))}</FieldGroup>
+          <FieldGroup>{identityFields.map((field) => renderField(field, value, errorByField, updateTextField, !hydrated || pending))}</FieldGroup>
         </AeClaimFormSection>
         <AeClaimFormSection title="Service facts" description="Publish at least one service with source-owned public facts.">
-          <FieldGroup>{serviceFields.map((field) => renderField(field, value, errorByField, updateTextField))}</FieldGroup>
+          <FieldGroup>{serviceFields.map((field) => renderField(field, value, errorByField, updateTextField, !hydrated || pending))}</FieldGroup>
         </AeClaimFormSection>
         <AeClaimFormSection title="First request posture" description="Say what the public page can safely show now.">
           <FieldGroup>
@@ -205,6 +232,7 @@ function ClaimRoute() {
                 name="firstRequestMode"
                 value={value.firstRequestMode}
                 aria-invalid={errorByField.has('firstRequestMode') || undefined}
+                disabled={!hydrated || pending}
                 onChange={(event) => setValue((current) => ({ ...current, firstRequestMode: toFirstRequestMode(event.currentTarget.value) }))}
               >
                 <option value="not_available_yet">First request not available yet</option>
@@ -223,7 +251,8 @@ function ClaimRoute() {
               },
               value,
               errorByField,
-              updateTextField
+              updateTextField,
+              !hydrated || pending
             )}
             {renderField(
               {
@@ -234,7 +263,8 @@ function ClaimRoute() {
               },
               value,
               errorByField,
-              updateTextField
+              updateTextField,
+              !hydrated || pending
             )}
             {renderField(
               {
@@ -245,13 +275,14 @@ function ClaimRoute() {
               },
               value,
               errorByField,
-              updateTextField
+              updateTextField,
+              !hydrated || pending
             )}
           </FieldGroup>
         </AeClaimFormSection>
         <AeReviewBlock value={value} />
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending || !hydrated}>
             {pending ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}
             Publish service page
           </Button>
@@ -268,7 +299,8 @@ function renderField(
   config: FieldConfig,
   value: PublicOwnerClaimFlowInput,
   errorByField: ReadonlyMap<PublicOwnerClaimField, string>,
-  updateTextField: (field: TextClaimField, nextValue: string) => void
+  updateTextField: (field: TextClaimField, nextValue: string) => void,
+  disabled: boolean
 ) {
   const error = errorByField.get(config.field)
   const invalid = error !== undefined
@@ -283,6 +315,7 @@ function renderField(
           name={config.field}
           value={value[config.field]}
           aria-invalid={invalid || undefined}
+          disabled={disabled}
           onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
         />
       ) : (
@@ -291,6 +324,7 @@ function renderField(
           name={config.field}
           value={value[config.field]}
           aria-invalid={invalid || undefined}
+          disabled={disabled}
           onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
         />
       )}
