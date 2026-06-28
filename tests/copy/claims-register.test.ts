@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -6,6 +6,13 @@ import { describe, expect, it } from 'vitest'
 
 import { aeCopy } from '@/lib/ui/copy'
 import { scanCopyClaims } from '@/lib/ui/contract-scans'
+import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
+import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
+import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import { handleListBusinessesRequest } from '@/routes/api.businesses'
+import { handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
+import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 
 const phaseOwnedCopyExamples = [
   {
@@ -134,6 +141,102 @@ describe('claims register seed copy', () => {
     expect(moneyViolations.map((violation) => violation.rule)).toContain('p5-money-rail-overclaim')
     expect(protocolViolations.map((violation) => violation.rule)).toContain('p3-developer-platform-overclaim')
   })
+
+  it('covers committed route, API, discovery, and SEO source surfaces', () => {
+    const surfaceTargets = [
+      { root: 'src/routes', includeExtensions: ['.ts', '.tsx'] },
+      { root: 'src/components/ae', includeExtensions: ['.ts', '.tsx'] },
+      { root: 'src/lib/ui/copy.ts', includeExtensions: ['.ts'] },
+      { root: 'src/modules/catalog', includeExtensions: ['.ts'] },
+      { root: 'src/modules/registry', includeExtensions: ['.ts'] },
+      { root: 'src/modules/discovery', includeExtensions: ['.ts'] },
+      { root: 'src/modules/seo', includeExtensions: ['.ts'] },
+    ] as const
+
+    expect(scanCopyClaims(surfaceTargets)).toEqual([])
+  })
+
+  it('traces route/API/discovery/SEO claims to source-owned output state', async () => {
+    const readback = getDefaultPublicOwnerStatusReadback()
+    const seo = buildPublicBusinessSeo({
+      catalog: readback.catalog,
+      options: { canonicalBaseUrl: 'https://ae.example' },
+    })
+    const list = await handleListBusinessesRequest(new Request('https://ae.example/api/businesses')).json()
+    const search = await handleSearchBusinessesRequest(
+      new Request('https://ae.example/api/businesses/search?q=emergency+plumber+parramatta')
+    ).json()
+    const detail = await handleBusinessDetailRequest('parramatta-emergency-plumbing').json()
+    const ucp = await handleUcpManifestRequest(
+      new Request('https://ae.example/parramatta-emergency-plumbing/ucp'),
+      'parramatta-emergency-plumbing'
+    ).json()
+    const llms = await handleLlmsTxtRequest(new Request('https://ae.example/llms.txt')).text()
+
+    expect(readback).toMatchObject({
+      publicUrl: '/parramatta-emergency-plumbing',
+      noindex: true,
+      catalog: {
+        publicStatus: 'published',
+        indexStatus: 'queued',
+        discoveryStatus: 'degraded',
+        trustTier: 'claimed',
+      },
+    })
+    expect(list).toMatchObject({ kind: 'ok', schemaVersion: 'public-business-catalog-api:v1' })
+    expect(search).toMatchObject({ kind: 'ok', pagination: { total: 1, hasMore: false } })
+    expect(detail).toMatchObject({ kind: 'found', schemaVersion: 'public-business-catalog-api:v1' })
+    expect(ucp).toMatchObject({
+      pathKind: 'ae_hosted_fallback',
+      status: 'available',
+      unsupportedCapabilities: { callable: false, paymentRequired: false },
+    })
+    expect(seo).toMatchObject({
+      slug: 'parramatta-emergency-plumbing',
+      canonicalUrl: 'https://ae.example/parramatta-emergency-plumbing',
+      indexDirective: 'index',
+    })
+
+    const serializedPublicOutputs = [
+      seo.title,
+      seo.description,
+      serializeJsonLd(seo.jsonLd),
+      JSON.stringify(list),
+      JSON.stringify(search),
+      JSON.stringify(detail),
+      JSON.stringify(ucp),
+      llms,
+    ].join('\n')
+
+    expect(scanFixture('public-output/claims.fixture', serializedPublicOutputs)).toEqual([])
+  })
+
+  it('keeps GTM readiness gated on activation evidence instead of launch-ready copy', () => {
+    const gtm = readFileSync('.planning/GTM-READINESS.md', 'utf8')
+
+    expect(gtm).toContain('Phase 1 cannot be called launch-ready until')
+    expect(gtm).toContain('owner activation state exists')
+    expect(gtm).toContain('claims register exists and copy scan covers marketing assets')
+    expect(gtm).toContain('claimId')
+    expect(gtm).toContain('exactPublicCopy')
+    expect(gtm).toContain('requiredReadback')
+    expect(gtm).toContain('requiredFunnelEvent')
+    expect(gtm).toContain('evidenceStatus')
+    expect(gtm).not.toMatch(/Phase 1 is launch-ready/i)
+  })
+
+  it('treats optional product-marketing context as non-public draft until evidence exists', () => {
+    if (!existsSync('.agents/product-marketing.md')) {
+      return
+    }
+
+    const productMarketing = readFileSync('.agents/product-marketing.md', 'utf8')
+
+    expect(productMarketing).toContain('Phase 1 has no paid path')
+    expect(productMarketing).toContain('Do not invent')
+    expect(productMarketing).toContain('Future')
+    expect(productMarketing).not.toMatch(/launch-ready/i)
+  })
 })
 
 function scanFixture(relativeFile: string, copy: string) {
@@ -149,4 +252,3 @@ function scanFixture(relativeFile: string, copy: string) {
     rmSync(root, { force: true, recursive: true })
   }
 }
-
