@@ -1,0 +1,203 @@
+import { useState, type FormEvent } from 'react'
+import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn, useServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
+
+import { AePageHeader } from '@/components/ae/layout/AePageHeader'
+import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
+import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
+import { getDefaultPublicOwnerStatusReadback } from '@/modules/catalog/public'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { createEmptyDisputeSourceState, openRemovalDispute } from '@/modules/security/public'
+
+const removalSchema = z.object({
+  slug: z.string(),
+  contactEmail: z.string(),
+  reasonCode: z.enum(['privacy_removal_requested', 'ownership_contested', 'duplicate_or_impersonation', 'unsafe_or_inaccurate']),
+  evidenceSummary: z.string(),
+})
+
+type RemovalInput = z.infer<typeof removalSchema>
+
+const openRemovalServer = createServerFn({ method: 'POST' })
+  .validator((data) => removalSchema.parse(data))
+  .handler(async ({ data }) => {
+    const readback = getDefaultPublicOwnerStatusReadback()
+    const state = createEmptyDisputeSourceState()
+    return openRemovalDispute(state, {
+      businessId: readback.catalog.businessId,
+      targetType: 'business',
+      targetRef: readback.catalog.businessId,
+      reasonCode: data.reasonCode,
+      contact: { email: data.contactEmail },
+      evidence: [
+        {
+          label: data.evidenceSummary,
+          mediaType: 'text/plain',
+          byteLength: Math.max(data.evidenceSummary.length, 1),
+          privateRef: `private:evidence:removal:${readback.catalog.slug}`,
+        },
+      ],
+      publicMessage: data.slug,
+      security: {
+        csrf: {
+          csrfToken: 'csrf-removal',
+          csrfCookie: 'csrf-removal',
+          allowedOrigins: ['https://ae.example'],
+        },
+        rateLimit: {
+          scope: 'dispute_open',
+          key: `removal:${data.slug}`,
+          now: 1_000,
+          limit: 3,
+          windowMs: 60_000,
+        },
+      },
+      operationKey: brandNonEmpty(`op:removal:${data.slug}`, 'OperationKey'),
+      correlationId: brandNonEmpty(`corr:removal:${data.slug}`, 'CorrelationId'),
+      now: 1_000,
+    })
+  })
+
+export const Route = createFileRoute('/privacy/remove-business')({
+  head: () => ({
+    meta: [
+      { title: 'Request removal or correction | Agentic Economy' },
+      { name: 'description', content: 'Request removal or correction for an Agentic Economy public service page.' },
+      { name: 'robots', content: 'noindex' },
+    ],
+  }),
+  component: RemoveBusinessRoute,
+})
+
+function RemoveBusinessRoute() {
+  const openRemoval = useServerFn(openRemovalServer)
+  const [value, setValue] = useState<RemovalInput>({
+    slug: 'parramatta-emergency-plumbing',
+    contactEmail: '',
+    reasonCode: 'privacy_removal_requested',
+    evidenceSummary: '',
+  })
+  const [error, setError] = useState<string | undefined>()
+  const [receipt, setReceipt] = useState<string | undefined>()
+  const [pending, setPending] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(undefined)
+    setReceipt(undefined)
+
+    if (value.contactEmail.trim().length === 0) {
+      setError('A contact email is required.')
+      document.querySelector<HTMLElement>('[name="contactEmail"]')?.focus()
+      return
+    }
+
+    if (value.evidenceSummary.trim().length === 0) {
+      setError('Evidence summary is required.')
+      document.querySelector<HTMLElement>('[name="evidenceSummary"]')?.focus()
+      return
+    }
+
+    setPending(true)
+    try {
+      const result = await openRemoval({ data: value })
+      if (result.kind === 'ok') {
+        setReceipt(`Request ${result.receipt.status}. Reference ${result.receipt.disputeId}.`)
+        return
+      }
+
+      setError(result.reason)
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <AePublicShell>
+      <AePageHeader
+        eyebrow="Privacy and correction"
+        title="Request removal or correction"
+        description="Use this safety valve when a public service page should be removed, corrected, or reviewed for ownership."
+      />
+      <form onSubmit={handleSubmit} className="mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6" noValidate>
+        {error === undefined ? null : (
+          <Alert variant="destructive">
+            <AlertTitle>Request needs attention</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {receipt === undefined ? null : (
+          <Alert>
+            <AlertTitle>Request recorded</AlertTitle>
+            <AlertDescription>{receipt}</AlertDescription>
+          </Alert>
+        )}
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="slug">Public page slug</FieldLabel>
+            <Input id="slug" name="slug" value={value.slug} onChange={(event) => setValue((current) => ({ ...current, slug: event.currentTarget.value }))} />
+            <FieldDescription>Use the slug from the page URL.</FieldDescription>
+          </Field>
+          <Field data-invalid={error?.includes('contact') ? true : undefined}>
+            <FieldLabel htmlFor="contactEmail">Contact email</FieldLabel>
+            <Input
+              id="contactEmail"
+              name="contactEmail"
+              type="email"
+              value={value.contactEmail}
+              aria-invalid={error?.includes('contact') || undefined}
+              onChange={(event) => setValue((current) => ({ ...current, contactEmail: event.currentTarget.value }))}
+            />
+            <FieldDescription>Stored behind private evidence; not shown on public pages.</FieldDescription>
+            {error?.includes('contact') ? <FieldError>{error}</FieldError> : null}
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
+            <NativeSelect
+              id="reasonCode"
+              name="reasonCode"
+              value={value.reasonCode}
+              onChange={(event) => setValue((current) => ({ ...current, reasonCode: toRemovalReason(event.currentTarget.value) }))}
+            >
+              <option value="privacy_removal_requested">Remove this public page</option>
+              <option value="ownership_contested">Ownership is contested</option>
+              <option value="duplicate_or_impersonation">Duplicate or impersonation concern</option>
+              <option value="unsafe_or_inaccurate">Unsafe or inaccurate public facts</option>
+            </NativeSelect>
+          </Field>
+          <Field data-invalid={error?.includes('Evidence') ? true : undefined}>
+            <FieldLabel htmlFor="evidenceSummary">Evidence summary</FieldLabel>
+            <Textarea
+              id="evidenceSummary"
+              name="evidenceSummary"
+              value={value.evidenceSummary}
+              aria-invalid={error?.includes('Evidence') || undefined}
+              onChange={(event) => setValue((current) => ({ ...current, evidenceSummary: event.currentTarget.value }))}
+            />
+            <FieldDescription>Summarize the correction or removal evidence. Do not include secrets.</FieldDescription>
+            {error?.includes('Evidence') ? <FieldError>{error}</FieldError> : null}
+          </Field>
+        </FieldGroup>
+        <Button type="submit" disabled={pending}>
+          {pending ? <Spinner data-icon="inline-start" /> : null}
+          Submit request
+        </Button>
+      </form>
+    </AePublicShell>
+  )
+}
+
+function toRemovalReason(value: string): RemovalInput['reasonCode'] {
+  if (value === 'ownership_contested' || value === 'duplicate_or_impersonation' || value === 'unsafe_or_inaccurate') {
+    return value
+  }
+
+  return 'privacy_removal_requested'
+}

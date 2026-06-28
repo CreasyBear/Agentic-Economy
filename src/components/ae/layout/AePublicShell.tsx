@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -23,7 +24,10 @@ export function AePublicShell({ children }: AePublicShellProps) {
           </a>
           <nav aria-label="Public" className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
-              <a href="/">Foundation</a>
+              <Link to="/claim">Claim</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/privacy/remove-business">Remove a business</Link>
             </Button>
           </nav>
         </div>
@@ -33,9 +37,8 @@ export function AePublicShell({ children }: AePublicShellProps) {
       </main>
       <Separator />
       <footer className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-muted-foreground md:px-6">
-        <span>Foundation slice only. Product routes open after their guardrails pass.</span>
+        <span>Bookings, payments, and automated actions are not live in this foundation slice.</span>
       </footer>
     </div>
   )
 }
-

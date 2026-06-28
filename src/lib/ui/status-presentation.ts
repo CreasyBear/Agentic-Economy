@@ -1,6 +1,12 @@
+import type { PublicStatus, TrustTier } from '@/modules/business/public'
+import type { FirstRequestMode, ServiceCapabilityStatus } from '@/modules/catalog/public'
+import type { DiscoveryStatus } from '@/modules/discovery/public'
+import type { IndexStatus } from '@/modules/registry/public'
+
 export const aeStatusValues = [
   'available',
   'claimed',
+  'contact_confirmed',
   'degraded',
   'failed',
   'guarded',
@@ -38,6 +44,12 @@ export const aeStatusPresentation = {
     label: 'Claimed',
     tone: 'success',
     description: 'An owner binding exists for this object.',
+    priority: 'medium',
+  },
+  contact_confirmed: {
+    label: 'Contact confirmed',
+    tone: 'success',
+    description: 'Source evidence supports public contact confidence.',
     priority: 'medium',
   },
   degraded: {
@@ -127,3 +139,54 @@ export function getStatusPresentation(status: AeStatus): AeStatusPresentation {
   return aeStatusPresentation[status]
 }
 
+export function publicStatusToAeStatus(status: PublicStatus): AeStatus {
+  if (status === 'published') {
+    return 'published'
+  }
+
+  if (status === 'suppressed') {
+    return 'suppressed'
+  }
+
+  return 'not_queued'
+}
+
+export function trustTierToAeStatus(trustTier: TrustTier): AeStatus {
+  if (trustTier === 'registry_verified') {
+    return 'registry_verified'
+  }
+
+  if (trustTier === 'contact_confirmed') {
+    return 'contact_confirmed'
+  }
+
+  if (trustTier === 'listed') {
+    return 'listed'
+  }
+
+  return 'claimed'
+}
+
+export function indexStatusToAeStatus(status: IndexStatus): AeStatus {
+  return status
+}
+
+export function discoveryStatusToAeStatus(status: DiscoveryStatus): AeStatus {
+  return status
+}
+
+export function capabilityStatusToAeStatus(status: ServiceCapabilityStatus): AeStatus {
+  return status
+}
+
+export function firstRequestModeLabel(mode: FirstRequestMode): string {
+  if (mode === 'quote_request_available') {
+    return 'Quote request instructions supplied'
+  }
+
+  if (mode === 'inquiry_available') {
+    return 'First request instructions supplied'
+  }
+
+  return 'First request not available yet'
+}

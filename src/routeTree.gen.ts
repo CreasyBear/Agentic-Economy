@@ -9,15 +9,45 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ClaimRouteImport } from './routes/claim'
+import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
+import { Route as OwnerStatusRouteImport } from './routes/owner.status'
+import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
 import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
 
+const ClaimRoute = ClaimRouteImport.update({
+  id: '/claim',
+  path: '/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SlugRoute = SlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
+  id: '/privacy/remove-business',
+  path: '/privacy/remove-business',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerStatusRoute = OwnerStatusRouteImport.update({
+  id: '/owner/status',
+  path: '/owner/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
+  id: '/success',
+  path: '/success',
+  getParentRoute: () => ClaimRoute,
 } as any)
 const AdminIndexHealthRoute = AdminIndexHealthRouteImport.update({
   id: '/admin/index-health',
@@ -37,52 +67,128 @@ const AdminAuditEventsRoute = AdminAuditEventsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/$slug': typeof SlugRoute
+  '/claim': typeof ClaimRouteWithChildren
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/claim/success': typeof ClaimSuccessRoute
+  '/owner/status': typeof OwnerStatusRoute
+  '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$slug': typeof SlugRoute
+  '/claim': typeof ClaimRouteWithChildren
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/claim/success': typeof ClaimSuccessRoute
+  '/owner/status': typeof OwnerStatusRoute
+  '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/$slug': typeof SlugRoute
+  '/claim': typeof ClaimRouteWithChildren
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/claim/success': typeof ClaimSuccessRoute
+  '/owner/status': typeof OwnerStatusRoute
+  '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/admin/audit-events' | '/admin/claims' | '/admin/index-health'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin/audit-events' | '/admin/claims' | '/admin/index-health'
-  id:
-    | '__root__'
     | '/'
+    | '/$slug'
+    | '/claim'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/claim/success'
+    | '/owner/status'
+    | '/privacy/remove-business'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/$slug'
+    | '/claim'
+    | '/admin/audit-events'
+    | '/admin/claims'
+    | '/admin/index-health'
+    | '/claim/success'
+    | '/owner/status'
+    | '/privacy/remove-business'
+  id:
+    | '__root__'
+    | '/'
+    | '/$slug'
+    | '/claim'
+    | '/admin/audit-events'
+    | '/admin/claims'
+    | '/admin/index-health'
+    | '/claim/success'
+    | '/owner/status'
+    | '/privacy/remove-business'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SlugRoute: typeof SlugRoute
+  ClaimRoute: typeof ClaimRouteWithChildren
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
   AdminClaimsRoute: typeof AdminClaimsRoute
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
+  OwnerStatusRoute: typeof OwnerStatusRoute
+  PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/claim': {
+      id: '/claim'
+      path: '/claim'
+      fullPath: '/claim'
+      preLoaderRoute: typeof ClaimRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$slug': {
+      id: '/$slug'
+      path: '/$slug'
+      fullPath: '/$slug'
+      preLoaderRoute: typeof SlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/privacy/remove-business': {
+      id: '/privacy/remove-business'
+      path: '/privacy/remove-business'
+      fullPath: '/privacy/remove-business'
+      preLoaderRoute: typeof PrivacyRemoveBusinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner/status': {
+      id: '/owner/status'
+      path: '/owner/status'
+      fullPath: '/owner/status'
+      preLoaderRoute: typeof OwnerStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/claim/success': {
+      id: '/claim/success'
+      path: '/success'
+      fullPath: '/claim/success'
+      preLoaderRoute: typeof ClaimSuccessRouteImport
+      parentRoute: typeof ClaimRoute
     }
     '/admin/index-health': {
       id: '/admin/index-health'
@@ -108,11 +214,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ClaimRouteChildren {
+  ClaimSuccessRoute: typeof ClaimSuccessRoute
+}
+
+const ClaimRouteChildren: ClaimRouteChildren = {
+  ClaimSuccessRoute: ClaimSuccessRoute,
+}
+
+const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SlugRoute: SlugRoute,
+  ClaimRoute: ClaimRouteWithChildren,
   AdminAuditEventsRoute: AdminAuditEventsRoute,
   AdminClaimsRoute: AdminClaimsRoute,
   AdminIndexHealthRoute: AdminIndexHealthRoute,
+  OwnerStatusRoute: OwnerStatusRoute,
+  PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
