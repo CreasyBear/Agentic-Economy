@@ -4,7 +4,7 @@ source_plan: 01-15
 status: blocked
 created: 2026-06-28
 updated: 2026-06-28
-evidence_timestamp_utc: 2026-06-28T10:38:00Z
+evidence_timestamp_utc: 2026-06-28T13:08:02Z
 requirements: [R10]
 owner_rows_recorded: 0
 owner_rows_required: 5
@@ -26,7 +26,7 @@ proof.
 | Share or interest evidence | BLOCKED | No real `share_url_copied` or consented `owner_interest_submitted` evidence was supplied. |
 | Attribution | BLOCKED | No real source/channel attribution rows were supplied. |
 | Friction/failure notes | BLOCKED | No observed owner friction or failure notes were supplied. |
-| No unresolved P0 evidence | BLOCKED | Non-browser local suite passed, but full local Playwright failed on `/registry`, Convex codegen is auth-gated, and deploy smoke inputs are missing. |
+| No unresolved P0 evidence | BLOCKED | Non-browser local suite and Convex codegen passed, but full local Playwright failed on `/registry` and deploy smoke inputs are missing. |
 | Claims-register proof | LOCAL ONLY | Copy/SEO/API/discovery claim scans passed locally; no live owner evidence exists. |
 
 ## Required Row Shape
@@ -72,7 +72,7 @@ owner attempts happened.
 | Unit/integration/scanner/SEO/UI/build | PASS | `npm run test:unit`, `npm run test:integration`, `npm run test:copy`, `npm run test:imports`, `npm run test:source-mining`, `npm run test:types`, `npm run test:ts-standards`, `npm run test:seo`, `npm run test:ui-contract`, `npm run build`. |
 | Local browser | FAIL CLOSED | `npm run test:e2e` failed 2 `/registry` checks because generated Convex public function `registry:listPublicBusinessCatalog` was unavailable to the local server. |
 | Local a11y | PASS LOCAL | `npm run test:a11y` passed with command-scoped local Clerk bypass. |
-| Convex codegen | AUTH GATE | `npm run check:convex-codegen` returned `401 Unauthorized: MissingAccessToken`. |
+| Convex codegen | PASS | `CLERK_JWT_ISSUER_DOMAIN` is set on dev deployment `loyal-peacock-107`; `npm run check:convex-codegen` passes with telemetry-constrained settings. |
 | Deploy smoke | BLOCKED | Required deploy URLs, storage states, and business slug were missing, so smoke was not run. |
 
 ## Verification
@@ -85,8 +85,7 @@ owner attempts happened.
 
 ## Required Next Evidence
 
-1. Authenticate the Convex CLI and rerun `npm run check:convex-codegen`.
-2. Provide real deployed Vercel/Convex/Clerk URLs and owner/admin storage states, then run `npm run test:deploy-smoke`.
-3. Collect five real owner attempts with durable activation readbacks.
-4. For each owner, record attribution, share/interest, friction/failure notes, no-P0 status, and claims-register proof.
-5. Only then mark internal-alpha readiness green.
+1. Provide real deployed Vercel/Convex/Clerk URLs and owner/admin storage states, then run `npm run test:deploy-smoke`.
+2. Collect five real owner attempts with durable activation readbacks.
+3. For each owner, record attribution, share/interest, friction/failure notes, no-P0 status, and claims-register proof.
+4. Only then mark internal-alpha readiness green.

@@ -2,6 +2,7 @@ node_modules/
 dist/
 .vinxi/
 .output/
+.vercel/
 .env
 .env.*
 .DS_Store

@@ -8,7 +8,7 @@ source_plan: 01-09-deploy-readback-closeout
 
 # Phase 01 Closeout
 
-Phase 01 is not closed. The non-browser local suite is green, the deploy smoke harness is executable and fail-closed, but the current full local Playwright run is not green, Convex codegen is auth-gated, live deploy smoke inputs are absent, and five-owner internal-alpha evidence does not exist.
+Phase 01 is not closed. The non-browser local suite is green and Convex codegen now passes, but the deploy smoke harness is still input-gated, the current full local Playwright run is not green, live deploy smoke inputs are absent, and five-owner internal-alpha evidence does not exist.
 
 ## Closeout Decision
 
@@ -16,7 +16,7 @@ Phase 01 is not closed. The non-browser local suite is green, the deploy smoke h
 |---|---|---|
 | Non-browser local implementation suite | Pass | Typecheck, unit, integration, copy, import, source-mining, type, standards, SEO, UI contract, and build passed on 2026-06-28. |
 | Local browser suite | Blocked | `npm run test:e2e` with command-scoped local Clerk bypass passed 16 checks and failed 2 `/registry` checks because the server could not find public function `registry:listPublicBusinessCatalog`. |
-| Convex codegen/readback | Auth-gated | `npm run check:convex-codegen` returned Convex `401 Unauthorized: MissingAccessToken`; real generated bindings, Clerk issuer, and Convex readbacks are not proven. |
+| Convex codegen/readback | Codegen pass; readback blocked | `npm run check:convex-codegen` now passes against dev deployment `loyal-peacock-107`; live Clerk/session and route readbacks are still blocked by missing deploy smoke inputs. |
 | Deployment readback | Blocked | `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, and `SMOKE_BUSINESS_SLUG` are missing from the shell environment and absent from `.env.local`. |
 | Deploy smoke harness | Ready but env-gated | `npm run test:deploy-smoke` is executable and fail-closed, but it was not run because required deploy URLs, storage states, and business slug were missing. |
 | Internal founder-assisted alpha | Not ready | `01-ALPHA-EVIDENCE.md` records 0 of 5 real friendly-owner activation rows. Current evidence is local instrumentation plus a Sam rehearsal only. |
@@ -39,7 +39,7 @@ Phase 01 is not closed. The non-browser local suite is green, the deploy smoke h
 | `npm run test:seo` | Pass | 2 files, 8 tests. |
 | `npm run test:ui-contract` | Pass | 2 files, 2 tests. |
 | `npm run build` | Pass | Client and SSR bundles built. |
-| `npm run check:convex-codegen` | Auth gate | Convex returned `401 Unauthorized: MissingAccessToken` and suggested `npx convex dev`. |
+| `npm run check:convex-codegen` | Pass | Re-run with telemetry-constrained settings; Convex reached `loyal-peacock-107`, generated bindings in dry-run mode, and completed TypeScript. |
 | `npm run test:deploy-smoke` | Not run | Required deploy inputs were missing; see `01-DEPLOY-READBACK-EVIDENCE.md`. |
 
 Browser commands used only command-scoped local values:
@@ -85,7 +85,7 @@ Storage-state files are local operator artifacts and must stay out of git.
 
 ## What Is Not Proven
 
-No live Vercel preview or production URL was tested in this run. No real Convex deployment was read back. No real Clerk session or middleware behavior was proven. No suppression or kill-switch behavior was exercised against a live deployment. The current full local Playwright suite is also not green because `/registry` fails without the generated Convex public function `registry:listPublicBusinessCatalog`.
+No live Vercel preview or production URL was tested in this run. Convex codegen now passes against the dev deployment, but no real deployed route readback was run because deploy-smoke inputs are still missing. No real Clerk session or middleware behavior was proven. No suppression or kill-switch behavior was exercised against a live deployment. The current full local Playwright suite is also not green because `/registry` fails without the generated Convex public function `registry:listPublicBusinessCatalog`.
 
 The deploy smoke test now encodes those expectations so the next operator run can fail on real evidence instead of passing silently.
 
@@ -93,7 +93,7 @@ The deploy smoke test now encodes those expectations so the next operator run ca
 
 | Artifact | Status | Decision |
 |---|---|---|
-| `01-DEPLOY-READBACK-EVIDENCE.md` | Blocked | Records local command results, Convex `MissingAccessToken`, local `/registry` browser failure, missing deploy inputs, and deploy harness coverage. |
+| `01-DEPLOY-READBACK-EVIDENCE.md` | Blocked | Records local command results, the now-passing Convex codegen gate, local `/registry` browser failure, missing deploy inputs, and deploy harness coverage. |
 | `01-ALPHA-EVIDENCE.md` | Blocked | Records 0 of 5 real owner activation rows and the required row shape. |
 | `01-INTERNAL-ALPHA-READINESS.md` | Not ready | Points to the alpha evidence artifact and keeps five-owner readiness blocked. |
 
@@ -116,7 +116,7 @@ Matt Pocock review context is prepared in `.planning/phases/01-ten-star-spine-fo
 
 ## Remaining Risks
 
-1. Convex codegen/deploy readback is blocked until Convex CLI authentication and real Clerk/Convex configuration are available.
+1. Convex codegen now passes; deploy readback remains blocked until live deploy URLs, storage states, and business slug inputs are available.
 2. Full local Playwright is not green until `/registry` can resolve generated Convex public function `registry:listPublicBusinessCatalog` or an approved local readback path.
 3. Admin transport-level HTTP denial is not proven live because no real Clerk/session deployment was available.
 4. Suppression, cache invalidation, operator repair, and kill-switch behavior are locally covered through module/route tests but not deployed/readback verified.

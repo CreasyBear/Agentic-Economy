@@ -4,15 +4,27 @@ source_plan: 01-15
 status: blocked
 created: 2026-06-28
 updated: 2026-06-28
-evidence_timestamp_utc: 2026-06-28T10:38:00Z
+evidence_timestamp_utc: 2026-06-28T13:08:02Z
 requirements: [R10]
 ---
 
 # Phase 01 Deploy and Readback Evidence
 
-R10 is blocked. This artifact records the final evidence gate exactly as run on
-2026-06-28 and does not treat local rehearsal, missing deploy inputs, or missing
-Convex authentication as green production evidence.
+R10 is blocked. This artifact records the final evidence gate and the latest
+2026-06-28 recheck. Local Clerk/Convex values are now present, the required
+Clerk issuer has been set on the Convex dev deployment, and Convex codegen now
+passes. Live deploy-smoke inputs are still absent.
+
+## Latest Recheck
+
+| Check | Result | Evidence |
+|---|---:|---|
+| Masked `.env.local` scan | PASS LOCAL | Clerk and Convex local keys are present-nonempty. Secret values were not printed. |
+| Convex-safe module path | FIXED LOCAL | Renamed the Convex helper module from `convex/source-state.ts` to `convex/source_state.ts`; Convex no longer rejects the hyphenated module path. |
+| `npm run typecheck` | PASS | `tsc --noEmit` exited 0 after the module rename. |
+| `npm run test:unit -- tests/unit/convex/source-state.test.ts tests/unit/convex/phase1-runtime.test.ts` | PASS | Package script ran the unit suite: 31 files, 110 tests passed. |
+| Convex deployment env set | PASS | `CLERK_JWT_ISSUER_DOMAIN` was set on dev deployment `loyal-peacock-107`; secret-like values were not printed. |
+| `CI=1 CONVEX_VERSION_API_ORIGIN=http://127.0.0.1:9 npm run check:convex-codegen` | PASS | Convex reached `https://loyal-peacock-107.convex.cloud`, uploaded/analyzed functions, generated TypeScript bindings in dry-run mode, and completed TypeScript. |
 
 ## Input Status
 
@@ -21,11 +33,11 @@ were not printed.
 
 | Input | Shell env status | `.env.local` key status | Evidence impact |
 |---|---|---|---|
-| `CLERK_JWT_ISSUER_DOMAIN` | missing | present-empty | Real Convex auth configuration is not proven. |
-| `CLERK_SECRET_KEY` | missing | present-empty | Real Clerk server auth is not proven. |
-| `CONVEX_DEPLOYMENT` | missing | present-nonempty | Deployment name exists locally, but CLI auth is missing. |
-| `VITE_CLERK_PUBLISHABLE_KEY` | missing | present-empty | Real browser Clerk proof is not available. |
-| `VITE_CONVEX_URL` | missing | present-nonempty | Convex URL exists locally, but codegen still auth-gates. |
+| `CLERK_JWT_ISSUER_DOMAIN` | missing | present-nonempty | Local value exists and has been set on the Convex dev deployment. |
+| `CLERK_SECRET_KEY` | missing | present-nonempty | Local Clerk server auth value exists; deployed Clerk behavior is not yet smoke-tested. |
+| `CONVEX_DEPLOYMENT` | missing | present-nonempty | Deployment name exists locally and CLI auth now reaches the deployment. |
+| `VITE_CLERK_PUBLISHABLE_KEY` | missing | present-nonempty | Local browser Clerk value exists; deployed Clerk behavior is not yet smoke-tested. |
+| `VITE_CONVEX_URL` | missing | present-nonempty | Convex URL exists locally; deployment codegen now passes. |
 | `DEPLOY_BASE_URL` | missing | absent | Deploy smoke cannot run. |
 | `DEPLOY_CONVEX_URL` | missing | absent | Deploy smoke cannot run. |
 | `SMOKE_ADMIN_STORAGE_STATE` | missing | absent | Admin deploy readback cannot run. |
@@ -49,24 +61,27 @@ were not printed.
 | `npm run build` | PASS | Client and SSR production builds completed. |
 | `npm run test:a11y` with command-scoped local Clerk bypass | PASS LOCAL | 4 Playwright accessibility tests passed. This is local route proof, not real Clerk/deploy proof. |
 | `npm run test:e2e` with command-scoped local Clerk bypass | FAIL CLOSED | 16 tests passed and 2 registry route tests failed. The Vite server reported `Could not find public function for 'registry:listPublicBusinessCatalog'`, so `/registry` did not render the expected heading in compact or wide Chromium. |
-| `npm run check:convex-codegen` | AUTH GATE | Convex CLI returned `401 Unauthorized: MissingAccessToken: An access token is required for this command.` The CLI suggested authenticating with `npx convex dev`. |
+| `npm run check:convex-codegen` | PASS | Re-run with `CI=1 CONVEX_VERSION_API_ORIGIN=http://127.0.0.1:9`; Convex codegen dry-run reached the deployment and completed. |
 
 The local Playwright bypass used only command-scoped placeholder values for route
 rendering. No fake Clerk keys were written to `.env.local`.
 
 ## Convex Codegen Readback
 
-`npm run check:convex-codegen` did not pass. The observed blocker is Convex CLI
-authentication:
+`npm run check:convex-codegen` now passes. The previous Convex CLI
+access-token blocker is cleared, and the deployment-side
+`CLERK_JWT_ISSUER_DOMAIN` blocker has been resolved on dev deployment
+`loyal-peacock-107`.
 
 ```text
-401 Unauthorized: MissingAccessToken: An access token is required for this command.
-Authenticate with `npx convex dev`
+Generating TypeScript bindings...
+Running TypeScript...
 ```
 
-Because the command stopped at the Convex access-token gate, this run does not
-prove generated function bindings, the real Clerk issuer, real Clerk keys, or
-live Convex deployment readbacks.
+This proves Convex can analyze the current functions and generate bindings
+against the configured dev deployment. It does not by itself prove deployed
+browser/session behavior or live route readbacks; those remain gated by deploy
+smoke inputs.
 
 ## Local Browser Readback
 

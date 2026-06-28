@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { loadPhaseOneSourceState, persistPhaseOneSourceState } from '../../../convex/source-state'
+import { loadPhaseOneSourceState, persistPhaseOneSourceState } from '../../../convex/source_state'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }

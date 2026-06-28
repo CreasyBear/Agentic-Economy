@@ -1,8 +1,8 @@
 import { queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { runtimeReader } from './source-state'
-import type { RuntimeDocument, RuntimeReader } from './source-state'
+import { runtimeReader } from './source_state'
+import type { RuntimeDocument, RuntimeReader } from './source_state'
 
 const firstRequestDto = v.object({
   mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
