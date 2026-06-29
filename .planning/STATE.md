@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 06
 status: executing
-stopped_at: Completed 06-05-observability-support-controls-PLAN.md
-last_updated: "2026-06-29T14:01:18.032Z"
+stopped_at: Completed 06-06-copy-source-smoke-gates-PLAN.md
+last_updated: "2026-06-29T14:20:23.175Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 31
-  completed_plans: 28
-  percent: 50
+  completed_plans: 29
+  percent: 67
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -59,8 +59,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-29T14:01:18.027Z
-**Stopped at:** Completed 06-05-observability-support-controls-PLAN.md
+**Last session:** 2026-06-29T14:19:52.150Z
+**Stopped at:** Completed 06-06-copy-source-smoke-gates-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -85,6 +85,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 06 P03 | 12min | 2 tasks | 4 files |
 | Phase 06 P06-04 | 27min | 2 tasks | 10 files |
 | Phase 06 P06-05 | 12min | 3 tasks | 4 files |
+| Phase 06 P06-06 | 12m 25s | 3 tasks | 8 files |
 
 ## Decisions
 
@@ -156,6 +157,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 06]: Public private-evidence projection returns hash/metadata only and explicitly excludes raw prompts, traces, provider payloads, Stripe payloads, customer identifiers, private endpoint refs, API keys, and webhook secrets.
 - [Phase 06]: source/local proof only; production proof not claimed — Plan 06-05 adds observability/support-control source validation only.
 - [Phase 06]: Do not add duplicate observability tables for Phase 6 support/private-evidence rows — 06-02 already owns durable business-action source persistence.
+- [Phase 06]: source/local proof only; production proof not claimed — Plan 06-06 adds copy/source/SEO/smoke gates without external provider proof.
+- [Phase 06]: Provider-smoke status is not external proof unless configured evidence passes — The Phase 6 Stripe smoke currently fails loudly because deployed source-owned evidence env is absent.
 
 ### Blockers
 
