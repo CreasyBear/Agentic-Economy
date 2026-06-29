@@ -1,5 +1,3 @@
-import type { StripeWebhookSignatureInput } from './internal/stripe-checkout'
-
 export {
   ActionReceiptOutcomeValues,
   AuthorizationCheckpointDecisionValues,
@@ -87,13 +85,3 @@ export type {
   RecordHermesEvidenceEventCommand,
   RecordHermesEvidenceEventResult,
 } from './internal/business-action'
-export type {
-  StripeWebhookAdmissionInput,
-  StripeWebhookAdmissionResult,
-  StripeWebhookSignatureInput,
-} from './internal/stripe-checkout'
-
-export async function verifyStripeWebhookSignature(input: StripeWebhookSignatureInput) {
-  const { verifyStripeWebhookSignature: verify } = await import('./internal/stripe-checkout')
-  return verify(input)
-}
