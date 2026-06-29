@@ -10,11 +10,8 @@ import {
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiPage, RegistrySourceState } from '@/modules/registry/public'
-import {
-  handleDurableListBusinessesRequest,
-  handleListBusinessesRequest,
-  setPublicRegistryQueryClientForTests,
-} from '@/routes/api.businesses'
+import { setPublicRegistryQueryClientForTests } from '@/modules/registry/registry.functions'
+import { handleDurableListBusinessesRequest, handleListBusinessesRequest } from '@/routes/api.businesses'
 import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { handleDurableSearchBusinessesRequest, handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
 import { loadRegistryRouteReadback } from '@/routes/registry'

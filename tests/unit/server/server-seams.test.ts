@@ -6,11 +6,14 @@ import {
   ConvexSourceError,
   callSourceMutation,
   createAuthenticatedConvexClient,
+  createAuthenticatedSourceTransport,
+  createPublicSourceTransport,
   readRequiredConvexAuthToken,
   readRequiredConvexUrl,
   sourceConvexApi,
   sourceConvexFunctions,
   sourceMutation,
+  sourceQuery,
 } from '@/lib/server/convex-source'
 import {
   readInquiryOperatorReconstructionThroughSource,
@@ -102,6 +105,31 @@ describe('server Convex source seam', () => {
       path: 'test:mutation',
       args: [{ value: 'publish' }],
     })
+  })
+
+  it('exposes authenticated and public source transports behind one small interface', async () => {
+    const calls: { url: string; init: RequestInit }[] = []
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init: init ?? {} })
+      return new Response(JSON.stringify({ status: 'success', value: 'stored' }))
+    }
+    const authenticated = await createAuthenticatedSourceTransport({
+      env: { CONVEX_URL: convexUrl },
+      authObject: { isAuthenticated: true, getToken: async () => 'owner.jwt' },
+      fetch,
+    })
+    const publicTransport = createPublicSourceTransport({ env: { CONVEX_URL: convexUrl }, fetch })
+
+    await expect(authenticated.query(sourceQuery<Record<string, never>, string>('test:query'), {})).resolves.toBe(
+      'stored'
+    )
+    await expect(
+      publicTransport.mutation(sourceMutation<{ value: string }, string>('test:publicMutation'), { value: 'publish' })
+    ).resolves.toBe('stored')
+
+    expect(calls.map((call) => call.url)).toEqual([`${convexUrl}/api/query`, `${convexUrl}/api/mutation`])
+    expect(calls[0]?.init.headers).toMatchObject({ Authorization: 'Bearer owner.jwt' })
+    expect(calls[1]?.init.headers).not.toMatchObject({ Authorization: expect.any(String) })
   })
 
   it('keeps source-owned function references available without generated Convex API output', () => {

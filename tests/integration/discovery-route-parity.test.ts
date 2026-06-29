@@ -14,9 +14,9 @@ import {
   buildSitemapXml,
   createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
-  setPublicDiscoveryQueryClientForTests,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
+import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
 import {
   getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
@@ -24,11 +24,11 @@ import {
 } from '@/modules/registry/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiPage } from '@/modules/registry/public'
+import { setPublicRegistryQueryClientForTests } from '@/modules/registry/registry.functions'
 import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import {
   handleDurableListBusinessesRequest,
   handleListBusinessesRequest,
-  setPublicRegistryQueryClientForTests,
 } from '@/routes/api.businesses'
 import {
   handleDurableSearchBusinessesRequest,

@@ -1,10 +1,13 @@
-import { auth } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
-import { ConvexHttpClient } from 'convex/browser'
-import { makeFunctionReference } from 'convex/server'
-import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
 import { z } from 'zod'
 
+import {
+  callPublicSourceQuery,
+  callSourceMutation,
+  callSourceQuery,
+  sourceMutation,
+  sourceQuery,
+} from '@/lib/server/convex-source'
 import {
   buildPublicOwnerStatusReadback,
   getDefaultPublicOwnerStatusReadback,
@@ -123,6 +126,13 @@ type PublicCatalogReadResult =
 
 type Env = Record<string, string | undefined>
 
+export type OwnerCatalogSourcePort = {
+  claim: (args: ClaimBusinessArgs) => Promise<ClaimBusinessResult>
+  publish: (args: PublishCatalogArgs) => Promise<PublishCatalogResult>
+  readCurrentOwnerCatalog: () => Promise<PublicCatalogReadResult>
+  readPublicCatalogBySlug: (args: { slug: string }) => Promise<PublicCatalogReadResult>
+}
+
 const claimBusinessMutation = sourceMutation<ClaimBusinessArgs, ClaimBusinessResult>('business:claimBusiness')
 const publishCatalogMutation = sourceMutation<PublishCatalogArgs, PublishCatalogResult>('catalog:publishBusinessCatalog')
 const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicCatalogReadResult>('catalog:getPublicBusinessCatalogBySlug')
@@ -147,7 +157,8 @@ export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowI
 
   const origin = requestOrigin()
   const operationSuffix = `${normalizeOperationPart(input.requestedSlug)}:${crypto.randomUUID()}`
-  const claim = await callAuthenticatedMutation(claimBusinessMutation, {
+  const source = ownerCatalogSourcePort()
+  const claim = await source.claim({
     name: input.businessName,
     category: input.category,
     suburb: input.suburb,
@@ -169,7 +180,7 @@ export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowI
     }
   }
 
-  const publish = await callAuthenticatedMutation(publishCatalogMutation, {
+  const publish = await source.publish({
     claimId: claim.claim.claimId,
     services: [toServiceCatalogArgs(input)],
     origin,
@@ -208,8 +219,8 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
 
   try {
     const result = readsCurrentOwner
-      ? await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
-      : await callPublicQuery(publicCatalogBySlugQuery, { slug })
+      ? await ownerCatalogSourcePort().readCurrentOwnerCatalog()
+      : await ownerCatalogSourcePort().readPublicCatalogBySlug({ slug })
 
     return result.kind === 'available'
       ? { kind: 'available', readback: redactOwnerStatusReadback(buildPublicOwnerStatusReadback(result.catalog)) }
@@ -237,7 +248,7 @@ export async function readPublicBusinessPageThroughSource(slug: string): Promise
     return redactPublicBusinessPageReadback(getLocalE2ePublicBusinessPageReadback(slug))
   }
 
-  const result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
+  const result = await ownerCatalogSourcePort().readPublicCatalogBySlug({ slug })
   return result.kind === 'available'
     ? { kind: 'available', catalog: redactCatalogSourceHashes(result.catalog) }
     : { kind: 'not_found', reason: 'not_public' }
@@ -336,72 +347,17 @@ function toServiceCatalogArgs(input: PublicOwnerClaimFlowInput): PublishCatalogA
   }
 }
 
-function sourceQuery<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
-  name: string
-): FunctionReference<'query', 'public', Args, Result> {
-  return makeFunctionReference<'query', Args, Result>(name)
-}
-
-function sourceMutation<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
-  name: string
-): FunctionReference<'mutation', 'public', Args, Result> {
-  return makeFunctionReference<'mutation', Args, Result>(name)
-}
-
-async function callAuthenticatedQuery<Query extends FunctionReference<'query'>>(
-  query: Query,
-  args: FunctionArgs<Query>
-): Promise<FunctionReturnType<Query>> {
-  const client = await createConvexClient({ authenticated: true })
-  return client.query(query, args)
-}
-
-async function callPublicQuery<Query extends FunctionReference<'query'>>(
-  query: Query,
-  args: FunctionArgs<Query>
-): Promise<FunctionReturnType<Query>> {
-  const client = await createConvexClient({ authenticated: false })
-  return client.query(query, args)
-}
-
-async function callAuthenticatedMutation<Mutation extends FunctionReference<'mutation'>>(
-  mutation: Mutation,
-  args: FunctionArgs<Mutation>
-): Promise<FunctionReturnType<Mutation>> {
-  const client = await createConvexClient({ authenticated: true })
-  return client.mutation(mutation, args)
-}
-
-async function createConvexClient(options: { authenticated: boolean }): Promise<ConvexHttpClient> {
-  const convexUrl = readRequiredConvexUrl(process.env)
-  if (!options.authenticated) {
-    return new ConvexHttpClient(convexUrl)
+function ownerCatalogSourcePort(): OwnerCatalogSourcePort {
+  return {
+    claim: (args) => callSourceMutation(claimBusinessMutation, args),
+    publish: (args) => callSourceMutation(publishCatalogMutation, args),
+    readCurrentOwnerCatalog: () => callSourceQuery(currentOwnerCatalogQuery, {}),
+    readPublicCatalogBySlug: (args) => callPublicSourceQuery(publicCatalogBySlugQuery, args),
   }
-
-  const authObject = await auth()
-  if (!authObject.isAuthenticated) {
-    throw new Error('Authenticated owner session is required for this Convex call.')
-  }
-
-  const token = await authObject.getToken({ template: 'convex' })
-  if (token === null || token.trim().length === 0) {
-    throw new Error('Clerk did not return a Convex auth token for this request.')
-  }
-
-  return new ConvexHttpClient(convexUrl, { auth: token })
 }
 
 function requestOrigin(): string {
   return readEnv(process.env, 'SITE_URL') ?? readEnv(process.env, 'VITE_SITE_URL') ?? 'https://ae.example'
-}
-
-function readRequiredConvexUrl(env: Env): string {
-  const value = readEnv(env, 'CONVEX_URL') ?? readEnv(env, 'VITE_CONVEX_URL')
-  if (value === undefined) {
-    throw new Error('CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.')
-  }
-
-  return value
 }
 
 function readEnv(env: Env, name: string): string | undefined {

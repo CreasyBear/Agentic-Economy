@@ -1,11 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import {
-  jsonResponse,
   legacyPublicRegistrySearch,
+  readPublicRegistrySearchPage,
+} from '@/modules/registry/registry.functions'
+import {
+  jsonResponse,
   optionalCursor,
   optionalLimit,
-  readPublicRegistrySearchPage,
 } from './api.businesses'
 
 export const Route = createFileRoute('/api/businesses/search')({

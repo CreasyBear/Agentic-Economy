@@ -1,9 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
-import { ConvexHttpClient } from 'convex/browser'
-import { makeFunctionReference } from 'convex/server'
-import type { DefaultFunctionArgs, FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
 import { z } from 'zod'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
@@ -15,14 +12,7 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
-import { getDefaultPublicOwnerStatusReadback, getPublicOwnerStatusReadbackBySlug } from '@/modules/catalog/public'
-import type { PublicCatalogContract } from '@/modules/catalog/public'
-import { brandNonEmpty } from '@/modules/common/ids'
-import {
-  createEmptyDisputeSourceState,
-  openRemovalDispute as openRemovalDisputeModule,
-} from '@/modules/security/public'
-import type { DisputeOpenResult } from '@/modules/security/public'
+import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
 
 const removalSchema = z.object({
   slug: z.string(),
@@ -32,82 +22,10 @@ const removalSchema = z.object({
 })
 
 type RemovalInput = z.infer<typeof removalSchema>
-type Env = Record<string, string | undefined>
-
-type PublicCatalogReadResult =
-  | { kind: 'available'; catalog: PublicCatalogContract }
-  | { kind: 'not_found'; reason: 'not_public' }
-
-type OpenRemovalDisputeArgs = {
-  businessId: string
-  targetType: 'business'
-  targetRef: string
-  reasonCode: RemovalInput['reasonCode']
-  contactEmail?: string
-  evidence: {
-    label: string
-    mediaType: 'text/plain'
-    byteLength: number
-    privateRef: string
-  }[]
-  publicMessage?: string
-  csrfToken?: string
-  csrfCookie?: string
-  origin?: string
-  operationKey: string
-  correlationId: string
-}
-
-const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicCatalogReadResult>('catalog:getPublicBusinessCatalogBySlug')
-const openRemovalDisputeMutation = sourceMutation<OpenRemovalDisputeArgs, DisputeOpenResult>('security:openRemovalDispute')
 
 const openRemovalServer = createServerFn({ method: 'POST' })
   .validator((data) => removalSchema.parse(data))
   .handler(async ({ data }) => openRemovalDisputeThroughSource(data))
-
-export async function openRemovalDisputeThroughSource(data: RemovalInput): Promise<DisputeOpenResult> {
-  if (usesLocalE2eBypass()) {
-    return openRemovalDisputeLocal(data)
-  }
-
-  try {
-    const slug = data.slug.trim()
-    if (slug.length === 0) {
-      return invalidRemovalTarget(false)
-    }
-
-    const result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
-    if (result.kind !== 'available') {
-      return invalidRemovalTarget(false)
-    }
-
-    const catalog = result.catalog
-    const operationSuffix = `${normalizeOperationPart(slug)}:${crypto.randomUUID()}`
-    return await callPublicMutation(openRemovalDisputeMutation, {
-      businessId: catalog.businessId,
-      targetType: 'business',
-      targetRef: catalog.businessId,
-      reasonCode: data.reasonCode,
-      contactEmail: data.contactEmail,
-      evidence: [
-        {
-          label: data.evidenceSummary,
-          mediaType: 'text/plain',
-          byteLength: Math.max(data.evidenceSummary.length, 1),
-          privateRef: `private:evidence:removal:${catalog.slug}`,
-        },
-      ],
-      publicMessage: slug,
-      csrfToken: 'csrf-removal',
-      csrfCookie: 'csrf-removal',
-      origin: requestOrigin(),
-      operationKey: `op:removal:${operationSuffix}`,
-      correlationId: `corr:removal:${operationSuffix}`,
-    })
-  } catch {
-    return invalidRemovalTarget(true)
-  }
-}
 
 export const Route = createFileRoute('/privacy/remove-business')({
   head: () => ({
@@ -276,118 +194,4 @@ function toRemovalReason(value: string): RemovalInput['reasonCode'] {
   }
 
   return 'privacy_removal_requested'
-}
-
-function openRemovalDisputeLocal(data: RemovalInput): DisputeOpenResult {
-  const slug = data.slug.trim()
-  const defaultReadback = getDefaultPublicOwnerStatusReadback()
-  const readback = slug === defaultReadback.catalog.slug ? defaultReadback : getPublicOwnerStatusReadbackBySlug(slug)
-  if (readback === undefined) {
-    return invalidRemovalTarget(false)
-  }
-
-  const state = createEmptyDisputeSourceState()
-  return openRemovalDisputeModule(state, {
-    businessId: readback.catalog.businessId,
-    targetType: 'business',
-    targetRef: readback.catalog.businessId,
-    reasonCode: data.reasonCode,
-    contact: { email: data.contactEmail },
-    evidence: [
-      {
-        label: data.evidenceSummary,
-        mediaType: 'text/plain',
-        byteLength: Math.max(data.evidenceSummary.length, 1),
-        privateRef: `private:evidence:removal:${readback.catalog.slug}`,
-      },
-    ],
-    publicMessage: slug,
-    security: {
-      csrf: {
-        csrfToken: 'csrf-removal',
-        csrfCookie: 'csrf-removal',
-        allowedOrigins: ['https://ae.example'],
-      },
-      rateLimit: {
-        scope: 'dispute_open',
-        key: `removal:${normalizeOperationPart(slug)}`,
-        now: 1_000,
-        limit: 3,
-        windowMs: 60_000,
-      },
-    },
-    operationKey: brandNonEmpty(`op:removal:${normalizeOperationPart(slug)}`, 'OperationKey'),
-    correlationId: brandNonEmpty(`corr:removal:${normalizeOperationPart(slug)}`, 'CorrelationId'),
-    now: 1_000,
-  })
-}
-
-function invalidRemovalTarget(retryable: boolean): DisputeOpenResult {
-  return {
-    kind: 'error',
-    code: 'dispute_invalid_target',
-    retryable,
-    reason: retryable
-      ? 'Removal request could not be recorded. Please try again.'
-      : 'No public service page matched that slug.',
-  }
-}
-
-function sourceQuery<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
-  name: string
-): FunctionReference<'query', 'public', Args, Result> {
-  return makeFunctionReference<'query', Args, Result>(name)
-}
-
-function sourceMutation<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
-  name: string
-): FunctionReference<'mutation', 'public', Args, Result> {
-  return makeFunctionReference<'mutation', Args, Result>(name)
-}
-
-async function callPublicQuery<Query extends FunctionReference<'query'>>(
-  query: Query,
-  args: FunctionArgs<Query>
-): Promise<FunctionReturnType<Query>> {
-  const client = new ConvexHttpClient(readRequiredConvexUrl(process.env))
-  return client.query(query, args)
-}
-
-async function callPublicMutation<Mutation extends FunctionReference<'mutation'>>(
-  mutation: Mutation,
-  args: FunctionArgs<Mutation>
-): Promise<FunctionReturnType<Mutation>> {
-  const client = new ConvexHttpClient(readRequiredConvexUrl(process.env))
-  return client.mutation(mutation, args)
-}
-
-function requestOrigin(): string {
-  return readEnv(process.env, 'SITE_URL') ?? readEnv(process.env, 'VITE_SITE_URL') ?? 'https://ae.example'
-}
-
-function readRequiredConvexUrl(env: Env): string {
-  const value = readEnv(env, 'CONVEX_URL') ?? readEnv(env, 'VITE_CONVEX_URL')
-  if (value === undefined) {
-    throw new Error('CONVEX_URL or VITE_CONVEX_URL is required for server Convex calls.')
-  }
-
-  return value
-}
-
-function readEnv(env: Env, name: string): string | undefined {
-  const value = env[name]
-  if (value === undefined || value.trim().length === 0) {
-    return undefined
-  }
-
-  return value.trim()
-}
-
-function normalizeOperationPart(value: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
-  return normalized.length === 0 ? 'removal' : normalized
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

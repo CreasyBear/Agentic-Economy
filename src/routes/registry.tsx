@@ -13,7 +13,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
-import { readPublicRegistryCatalogPage, readPublicRegistrySearchPage } from './api.businesses'
+import {
+  readPublicRegistryCatalogPage,
+  readPublicRegistrySearchPage,
+} from '@/modules/registry/registry.functions'
 
 type RegistrySearchParams = {
   q: string

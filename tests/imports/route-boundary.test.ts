@@ -12,10 +12,10 @@ describe('route boundary guardrail', () => {
 
     if (isFixtureMode()) {
       expect(violations.map((violation) => violation.rule)).toContain('route-convex-schema-import')
+      expect(violations.map((violation) => violation.rule)).toContain('route-owned-convex-transport')
       return
     }
 
     expect(violations).toEqual([])
   })
 })
-

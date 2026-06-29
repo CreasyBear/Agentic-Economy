@@ -32,6 +32,26 @@ export type CreateAuthenticatedConvexClientOptions = {
   skipConvexDeploymentUrlCheck?: boolean
 }
 
+export type CreatePublicConvexClientOptions = Pick<
+  CreateAuthenticatedConvexClientOptions,
+  'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'
+>
+
+export type ConvexSourceTransport = {
+  query<Query extends FunctionReference<'query'>>(
+    query: Query,
+    args: FunctionArgs<Query>
+  ): Promise<FunctionReturnType<Query>>
+  mutation<Mutation extends FunctionReference<'mutation'>>(
+    mutation: Mutation,
+    args: FunctionArgs<Mutation>
+  ): Promise<FunctionReturnType<Mutation>>
+  action<Action extends FunctionReference<'action'>>(
+    action: Action,
+    args: FunctionArgs<Action>
+  ): Promise<FunctionReturnType<Action>>
+}
+
 export const sourceConvexApi = anyApi
 
 export const sourceConvexFunctions = {
@@ -84,13 +104,31 @@ export function createPublicConvexClient(options: Pick<CreateAuthenticatedConvex
   })
 }
 
+export async function createAuthenticatedSourceTransport(
+  options: CreateAuthenticatedConvexClientOptions = {}
+): Promise<ConvexSourceTransport> {
+  return createConvexSourceTransport(await createAuthenticatedConvexClient(options))
+}
+
+export function createPublicSourceTransport(options: CreatePublicConvexClientOptions = {}): ConvexSourceTransport {
+  return createConvexSourceTransport(createPublicConvexClient(options))
+}
+
+export function createConvexSourceTransport(client: ConvexHttpClient): ConvexSourceTransport {
+  return {
+    query: (query, args) => client.query(query, args),
+    mutation: (mutation, args) => client.mutation(mutation, args),
+    action: (action, args) => client.action(action, args),
+  }
+}
+
 export async function callSourceQuery<Query extends FunctionReference<'query'>>(
   query: Query,
   args: FunctionArgs<Query>,
   options?: CreateAuthenticatedConvexClientOptions
 ): Promise<FunctionReturnType<Query>> {
-  const client = await createAuthenticatedConvexClient(options)
-  return client.query(query, args)
+  const transport = await createAuthenticatedSourceTransport(options)
+  return transport.query(query, args)
 }
 
 export async function callSourceMutation<Mutation extends FunctionReference<'mutation'>>(
@@ -98,26 +136,24 @@ export async function callSourceMutation<Mutation extends FunctionReference<'mut
   args: FunctionArgs<Mutation>,
   options?: CreateAuthenticatedConvexClientOptions
 ): Promise<FunctionReturnType<Mutation>> {
-  const client = await createAuthenticatedConvexClient(options)
-  return client.mutation(mutation, args)
+  const transport = await createAuthenticatedSourceTransport(options)
+  return transport.mutation(mutation, args)
 }
 
 export async function callPublicSourceQuery<Query extends FunctionReference<'query'>>(
   query: Query,
   args: FunctionArgs<Query>,
-  options?: Pick<CreateAuthenticatedConvexClientOptions, 'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'>
+  options?: CreatePublicConvexClientOptions
 ): Promise<FunctionReturnType<Query>> {
-  const client = createPublicConvexClient(options)
-  return client.query(query, args)
+  return createPublicSourceTransport(options).query(query, args)
 }
 
 export async function callPublicSourceMutation<Mutation extends FunctionReference<'mutation'>>(
   mutation: Mutation,
   args: FunctionArgs<Mutation>,
-  options?: Pick<CreateAuthenticatedConvexClientOptions, 'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'>
+  options?: CreatePublicConvexClientOptions
 ): Promise<FunctionReturnType<Mutation>> {
-  const client = createPublicConvexClient(options)
-  return client.mutation(mutation, args)
+  return createPublicSourceTransport(options).mutation(mutation, args)
 }
 
 export async function callSourceAction<Action extends FunctionReference<'action'>>(
@@ -125,8 +161,8 @@ export async function callSourceAction<Action extends FunctionReference<'action'
   args: FunctionArgs<Action>,
   options?: CreateAuthenticatedConvexClientOptions
 ): Promise<FunctionReturnType<Action>> {
-  const client = await createAuthenticatedConvexClient(options)
-  return client.action(action, args)
+  const transport = await createAuthenticatedSourceTransport(options)
+  return transport.action(action, args)
 }
 
 export function readRequiredConvexUrl(env: Env = process.env): string {

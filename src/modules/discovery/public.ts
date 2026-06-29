@@ -245,26 +245,6 @@ export type ReadCatalogDiscoveryManifestInput = {
 
 export type ReadCatalogDiscoveryManifestResult = BuildCatalogDiscoveryManifestResult
 
-export type PublicDiscoveryQueryClient = {
-  manifest: (input: ReadCatalogDiscoveryManifestInput) => Promise<ReadCatalogDiscoveryManifestResult>
-  llms: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
-  sitemap: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
-}
-
-let publicDiscoveryQueryClientForTests: PublicDiscoveryQueryClient | undefined
-
-export function setPublicDiscoveryQueryClientForTests(client: PublicDiscoveryQueryClient): () => void {
-  const previous = publicDiscoveryQueryClientForTests
-  publicDiscoveryQueryClientForTests = client
-  return () => {
-    publicDiscoveryQueryClientForTests = previous
-  }
-}
-
-export function getPublicDiscoveryQueryClientForTests(): PublicDiscoveryQueryClient | undefined {
-  return publicDiscoveryQueryClientForTests
-}
-
 export function readFixtureCatalogDiscoveryManifest(
   input: ReadCatalogDiscoveryManifestInput
 ): ReadCatalogDiscoveryManifestResult {

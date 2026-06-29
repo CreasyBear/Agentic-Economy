@@ -1,6 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { jsonResponse, legacyPublicRegistryDetail, readPublicRegistryBusinessDetail } from './api.businesses'
+import {
+  legacyPublicRegistryDetail,
+  readPublicRegistryBusinessDetail,
+} from '@/modules/registry/registry.functions'
+import { jsonResponse } from './api.businesses'
 
 export const Route = createFileRoute('/api/businesses/$slug')({
   server: {

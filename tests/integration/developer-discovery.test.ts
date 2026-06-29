@@ -5,7 +5,6 @@ import {
   buildSitemapXml,
   createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
-  setPublicDiscoveryQueryClientForTests,
 } from '@/modules/discovery/public'
 import type {
   DeveloperDiscoveryExamplesArtifact,
@@ -13,10 +12,12 @@ import type {
   DeveloperDiscoverySchemaArtifact,
   DiscoverySourceState,
 } from '@/modules/discovery/public'
+import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
+import { setPublicRegistryQueryClientForTests } from '@/modules/registry/registry.functions'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
-import { handleDurableListBusinessesRequest, setPublicRegistryQueryClientForTests } from '@/routes/api.businesses'
+import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
 import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.search'
 import { handleDeveloperDiscoveryExamplesRequest } from '@/routes/api.discovery.examples'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'

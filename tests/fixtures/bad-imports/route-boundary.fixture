@@ -1,3 +1,4 @@
 import schema from 'convex/schema'
+import { ConvexHttpClient } from 'convex/browser'
 
-export const routeBoundaryFixture = schema
+export const routeBoundaryFixture = { schema, ConvexHttpClient }

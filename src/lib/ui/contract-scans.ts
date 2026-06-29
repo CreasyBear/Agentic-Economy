@@ -76,6 +76,11 @@ export function scanRouteBoundaries(targets: readonly ScanTarget[]): readonly Sc
       pattern: /from\s+['"][^'"]*convex\/schema['"]/,
     },
     {
+      rule: 'route-owned-convex-transport',
+      message: 'Routes must call module source ports instead of owning Convex transport plumbing.',
+      pattern: /from\s+['"]convex\/(?:browser|server)['"]/,
+    },
+    {
       rule: 'route-private-module-import',
       message: 'Routes must import module public seams only.',
       pattern: /from\s+['"][^'"]*(?:@\/|~\/|src\/)?modules\/[^'"]+\/internal\/[^'"]+['"]/,

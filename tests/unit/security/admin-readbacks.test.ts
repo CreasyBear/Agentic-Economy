@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { readAdminRouteShell } from '@/modules/security/public'
 import type { AdminMembership, AdminReadbackRow } from '@/modules/security/public'
-import { buildIndexHealthRows } from '@/routes/admin.index-health'
+import { buildIndexHealthRows } from '@/modules/security/admin-readback.functions'
 
 describe('admin route readbacks', () => {
   it('denies missing membership with a 401 and returns no private rows', () => {

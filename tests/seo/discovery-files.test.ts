@@ -9,9 +9,9 @@ import {
   buildSitemapXml,
   createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
-  setPublicDiscoveryQueryClientForTests,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
+import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
 import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'

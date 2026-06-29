@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { readOwnerStatusThroughSource } from '@/modules/catalog/owner-claim.functions'
 import { resetPublicOwnerRouteReadbacksForTest } from '@/modules/catalog/public'
-import { openRemovalDisputeThroughSource } from '@/routes/privacy.remove-business'
+import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
 import { adminProtectedActionDetailServerToRouteReadback } from '@/routes/admin.protected-actions.$proposalId'
 import type { AdminContactFollowUpReconstructionServerResult } from '@/modules/protected-action/contact-follow-up.functions'
 
