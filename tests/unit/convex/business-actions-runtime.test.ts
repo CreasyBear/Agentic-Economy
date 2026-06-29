@@ -5,6 +5,8 @@ import schema from '../../../convex/schema'
 import {
   createBusinessActionCapabilityRequest,
   readCurrentOwnerBusinessActionReceipt,
+  recordBusinessActionGuardrailDecision,
+  recordBusinessActionHermesEvidence,
   recordBusinessActionOwnerCheckpoint,
   recordBusinessActionReceipt,
 } from '../../../convex/businessActions'
@@ -107,6 +109,31 @@ type ReceiptArgs = {
   sourceWrite?: SourceWriteAdmission
 }
 
+type GuardrailArgs = {
+  requestId: string
+  provider: 'nemo_guardrails' | 'nemotron'
+  modelName: string
+  modelVersion: string
+  decision: 'allow' | 'block' | 'refusal'
+  policyHash: string
+  privateTraceRefHash: string
+  payloadHash: string
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+type HermesArgs = {
+  requestId: string
+  checkpointId: string
+  evidenceKind: 'scope' | 'select' | 'request' | 'execute' | 'report'
+  providerRefHash: string
+  payloadHash: string
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
 const createRequestHandler = (createBusinessActionCapabilityRequest as unknown as {
   _handler: (ctx: AuthCtx, args: CreateRequestArgs) => Promise<unknown>
 })._handler
@@ -115,6 +142,12 @@ const checkpointHandler = (recordBusinessActionOwnerCheckpoint as unknown as {
 })._handler
 const receiptHandler = (recordBusinessActionReceipt as unknown as {
   _handler: (ctx: AuthCtx, args: ReceiptArgs) => Promise<unknown>
+})._handler
+const guardrailHandler = (recordBusinessActionGuardrailDecision as unknown as {
+  _handler: (ctx: AuthCtx, args: GuardrailArgs) => Promise<unknown>
+})._handler
+const hermesHandler = (recordBusinessActionHermesEvidence as unknown as {
+  _handler: (ctx: AuthCtx, args: HermesArgs) => Promise<unknown>
 })._handler
 const ownerReceiptHandler = (readCurrentOwnerBusinessActionReceipt as unknown as {
   _handler: (ctx: AuthCtx, args: { requestId: string }) => Promise<unknown>
@@ -308,10 +341,46 @@ describe('Convex business action runtime bridge', () => {
   it('exposes server function refs without importing business-action internals into routes', () => {
     expect(Object.keys(businessActionSourceFunctionRefs).sort()).toEqual([
       'createCapabilityRequest',
+      'recordGuardrailDecision',
+      'recordHermesEvidence',
       'readCurrentOwnerReceipt',
       'recordOwnerCheckpoint',
       'recordReceipt',
     ])
+  })
+
+  it('persists guardrail block and refusal evidence without downstream external evidence after refused checkpoint', async () => {
+    const db = new FakeDb({
+      owners: [{ _id: ownerId, clerkUserId: 'user_owner' }],
+      businesses: [{ _id: businessId, ownerId }],
+    })
+    await persistBusinessActionSlice(db, adapterSeedState())
+
+    const created = requireRuntimeOk(await createRequestHandler(authCtx(db, sam()), createRequestArgs('guardrail-refused')))
+    const requestId = created.request.id
+    const refused = requireRuntimeOk(
+      await checkpointHandler(authCtx(db, sam()), checkpointArgs(requestId, 'guardrail-refused', 'refused'))
+    )
+
+    for (const decision of ['block', 'refusal'] as const) {
+      const result = requireRuntimeOk(
+        await guardrailHandler(authCtx(db, sam()), guardrailArgs(requestId, decision))
+      )
+      expect(result.evidence).toMatchObject({ decision, requestId })
+    }
+
+    expect(db.dump('businessActionGuardrailDecisionEvidence')).toHaveLength(2)
+    expect(db.dump('businessActionExternalEvidenceEvents')).toHaveLength(0)
+
+    const hermes = await hermesHandler(
+      authCtx(db, sam()),
+      hermesArgs(requestId, refused.checkpoint.id, 'post-refusal')
+    )
+    expect(hermes).toMatchObject({
+      kind: 'error',
+      code: 'business_action_checkpoint_not_accepted',
+    })
+    expect(db.dump('businessActionExternalEvidenceEvents')).toHaveLength(0)
   })
 })
 
@@ -591,6 +660,33 @@ function receiptArgs(requestId: string, suffix: string): ReceiptArgs {
   })
 }
 
+function guardrailArgs(requestId: string, decision: GuardrailArgs['decision']): GuardrailArgs {
+  return withSourceWrite('protected_action', {
+    requestId,
+    provider: decision === 'refusal' ? 'nemotron' : 'nemo_guardrails',
+    modelName: 'nemotron-local',
+    modelVersion: 'test',
+    decision,
+    policyHash: `hash:policy:${decision}`,
+    privateTraceRefHash: `hash:trace:${decision}`,
+    payloadHash: `hash:guardrail:${decision}`,
+    operationKey: `business-action:guardrail:${decision}`,
+    correlationId: `correlation:business-action:guardrail:${decision}`,
+  })
+}
+
+function hermesArgs(requestId: string, checkpointId: string, suffix: string): HermesArgs {
+  return withSourceWrite('protected_action', {
+    requestId,
+    checkpointId,
+    evidenceKind: 'execute',
+    providerRefHash: `hash:hermes-ref:${suffix}`,
+    payloadHash: `hash:hermes:${suffix}`,
+    operationKey: `business-action:hermes:${suffix}`,
+    correlationId: `correlation:business-action:hermes:${suffix}`,
+  })
+}
+
 function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {
   return {
     db,
@@ -680,6 +776,7 @@ function requireRuntimeOk(value: unknown): {
   kind: 'ok'
   request: { id: string }
   checkpoint: { id: string; decision: string; ownerId?: string }
+  evidence: { id: string; decision?: string; requestId: string }
   receipt: { id: string }
   publicReadback: { receiptId: string; labels: string[] }
 } {
