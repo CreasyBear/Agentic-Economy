@@ -183,6 +183,10 @@ function ownerReceipt(status: BillingReceipt['status'], index: number): BillingR
     amountSummary: `A$${29 + index}.00`,
     status,
     payloadHash: sourceHash,
+    providerEvidenceRefs: [`provider:receipt:${status}`, `hash:${sourceHash}`],
+    paidStateTransition: status === 'paid' ? 'pending_provider_redirect->paid_active' : `paid_active->${status}`,
+    refundReversalDisputeRefs: status === 'paid' ? [] : [`provider:receipt:${status}`],
+    correlationId,
     issuedAt: 50 + index,
     recordedAt: 60 + index,
   }

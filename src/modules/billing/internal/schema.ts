@@ -68,6 +68,9 @@ export type BillingOfferStatus = (typeof BillingOfferStatusValues)[number]
 export const BillingSupportStatusValues = ['open', 'resolved', 'no_repair'] as const
 export type BillingSupportStatus = (typeof BillingSupportStatusValues)[number]
 
+export const BillingSupportCapabilityValues = ['human_inquiry_owner_inbox', 'paid_activation_money_rails'] as const
+export type BillingSupportCapability = (typeof BillingSupportCapabilityValues)[number]
+
 export type BillingOffer = {
   id: BillingOfferId
   businessId: BusinessId
@@ -129,6 +132,10 @@ export type BillingReceipt = {
   amountSummary?: string
   status: 'paid' | 'refunded' | 'disputed' | 'chargeback'
   payloadHash: SourceHash
+  providerEvidenceRefs: readonly string[]
+  paidStateTransition: string
+  refundReversalDisputeRefs: readonly string[]
+  correlationId: CorrelationId
   issuedAt: number
   recordedAt: number
 }
@@ -163,9 +170,11 @@ export type BillingReconciliation = {
   provider: BillingProvider
   retryCount: number
   retryAfter?: number
+  actorRef?: string
   reason?: string
   providerRefs: BillingProviderRef[]
   evidenceRefs: string[]
+  operatorNextAction: string
   createdAt: number
   updatedAt: number
 }
@@ -174,9 +183,26 @@ export type BillingSupportRecord = {
   id: BillingSupportRecordId
   operationId?: BillingOperationId
   businessId: BusinessId
+  capability?: BillingSupportCapability
   status: BillingSupportStatus
   reason: string
   evidenceRefs: string[]
+  primaryOwnerRef?: string
+  primaryAdminOperatorRef?: string
+  backupOwnerRef?: string
+  backupAdminOperatorRef?: string
+  supportedStage?: 'internal_alpha' | 'manual_support' | 'public_alpha'
+  supportedChannels?: readonly string[]
+  capacityThresholdJson?: string
+  backlogAgeThresholdMs?: number
+  phaseIncidentCountsJson?: string
+  supportEscalationPath?: string
+  claimDisablePath?: string
+  perChannelKillRulesJson?: string
+  sourceHash?: SourceHash
+  correlationId?: CorrelationId
+  lastReviewedAt?: number
+  operatorNextAction?: string
   createdAt: number
   updatedAt: number
 }
@@ -333,7 +359,7 @@ export const billingTables = {
     supportRecordId: v.string(),
     operationId: v.optional(v.string()),
     businessId: v.id('businesses'),
-    capability: v.optional(v.literal('human_inquiry_owner_inbox')),
+    capability: v.optional(literalUnion(BillingSupportCapabilityValues)),
     status: literalUnion(BillingSupportStatusValues),
     reason: v.string(),
     evidenceRefs: v.array(v.string()),

@@ -144,6 +144,7 @@ Ship one production paid-activation rail: Autumn Cloud is AE's billing and produ
 - Phase 5 starts no runtime work from provider screenshots, dashboard state, deployment env vars, or status labels. Proof is source-owned provider readback with timestamp, stable provider refs, payload hash, route/readback evidence, and operator next action.
 - Owner checkout and customer portal starts are owner-only. Admin/operator roles may reconcile, disable/rollback, and read support evidence; they do not initiate checkout or customer portal unless a future source-owned billing delegate model is explicitly designed and tested.
 - Public projections may expose selected paid activation availability and approved public offer/pricing copy only after evidence. Owner billing status, billing center links, portal links, receipts, invoices, provider refs, reconciliation, and private support evidence are owner/admin/operator-only.
+- Sprint hardening added on 2026-06-29: before any active provider-ingest or public-claim work, the executor must preserve the retention/private-evidence rules in `05-MONEY-RAIL-DECISION.md`, store Phase 5 support rows with capability `paid_activation_money_rails`, and keep `npm run test:provider-smoke:autumn-stripe` as the deployed provider/readback smoke gate. This command is expected to fail loudly until real deployed source-owned operation, receipt, provider-event, reconciliation, support/kill-rule, and public-claim evidence exists.
 
 ## Review findings covered or explicitly deferred
 
@@ -455,7 +456,7 @@ Ship one production paid-activation rail: Autumn Cloud is AE's billing and produ
     </action>
     <acceptance_criteria>
       <criterion>`05-MONEY-RAIL-DECISION.md` names retention class, export behavior, delete/tombstone behavior, lawful audit hash preservation, private evidence access policy, AUD/GST/tax/legal/terms/refund/dispute posture, and support escalation path.</criterion>
-      <criterion>`capabilityLaunchSupportRecords` can store primary owner, backup owner, admin/operator coverage, supported channels, launch stage, capacity threshold, maximum backlog age, incident count, claim-disable path, channel kill rules, and support next action.</criterion>
+      <criterion>`capabilityLaunchSupportRecords` can store capability `paid_activation_money_rails`, primary owner, backup owner, admin/operator coverage, supported channels, launch stage, capacity threshold, maximum backlog age, incident count, claim-disable path, channel kill rules, and support next action.</criterion>
       <criterion>Tests prove public paid claims are disabled when a support kill rule trips and re-enabled only after source-owned support/readback conditions recover.</criterion>
       <criterion>Redaction/export/delete tests prove raw payment payloads, provider secrets, unredacted provider errors, PAN/CVC/payment credentials, and raw private owner/contact data never appear in public projections, logs, audit payloads, or support views.</criterion>
     </acceptance_criteria>
@@ -540,6 +541,7 @@ Ship one production paid-activation rail: Autumn Cloud is AE's billing and produ
     <command>npm run test:copy</command>
     <command>npm run test:seo</command>
     <command>npm run test:ui-contract</command>
+    <command>npm run test:provider-smoke:autumn-stripe</command>
     <command>npm run build</command>
     <command>npm run test:all</command>
   </commands>

@@ -310,6 +310,77 @@ describe('billing rail contract', () => {
       ownerId,
       receiptId: receiptId!,
     })
-    expect(receipt).toMatchObject({ kind: 'ok', code: 'billing_receipt_read', receipt: { status: 'paid' } })
+    expect(receipt).toMatchObject({
+      kind: 'ok',
+      code: 'billing_receipt_read',
+      receipt: {
+        status: 'paid',
+        providerEvidenceRefs: [`provider:evt_paid`, `hash:${payloadHash}`],
+        paidStateTransition: 'pending_provider_redirect->paid_active',
+        refundReversalDisputeRefs: [],
+        correlationId,
+      },
+    })
+  })
+
+  it('records paid-activation support capability for evidence, no-repair, and disable gates', () => {
+    const evidence = billing.recordBillingEvidence(state(), {
+      authority: adminAuthority,
+      businessId,
+      provider: 'autumn_cloud',
+      connectionStatus: 'ready',
+      evidenceSource: 'provider_readback',
+      providerObjectId: 'autumn-customer:ready',
+      routeEvidenceRef: 'owner-billing-readback:ready',
+      payloadHash: stableHash({ provider: 'autumn_cloud', ready: true }),
+      operatorNextAction: 'provider smoke captured',
+      operationKey: brandNonEmpty('billing:evidence:support-capability', 'OperationKey'),
+      correlationId,
+      now,
+    })
+    expect(evidence).toMatchObject({
+      kind: 'ok',
+      supportRecord: {
+        capability: 'paid_activation_money_rails',
+        operatorNextAction: 'provider smoke captured',
+        correlationId,
+      },
+    })
+
+    const noRepair = billing.markBillingNoRepair(state(), {
+      authority: adminAuthority,
+      businessId,
+      reason: 'provider mismatch remained unresolved',
+      evidenceRefs: ['provider:evt_mismatch'],
+      operationKey: brandNonEmpty('billing:no-repair:support-capability', 'OperationKey'),
+      correlationId,
+      now,
+    })
+    expect(noRepair).toMatchObject({
+      kind: 'ok',
+      supportRecord: {
+        capability: 'paid_activation_money_rails',
+        status: 'no_repair',
+        operatorNextAction: expect.stringMatching(/public paid claims disabled/i),
+      },
+    })
+
+    const disabled = billing.disablePaidActivation(state(), {
+      authority: adminAuthority,
+      businessId,
+      reason: 'billing support kill rule tripped',
+      evidenceRefs: ['support:kill-rule'],
+      operationKey: brandNonEmpty('billing:disable:support-capability', 'OperationKey'),
+      correlationId,
+      now,
+    })
+    expect(disabled).toMatchObject({
+      kind: 'ok',
+      supportRecord: {
+        capability: 'paid_activation_money_rails',
+        status: 'open',
+        operatorNextAction: expect.stringMatching(/paid activation disabled/i),
+      },
+    })
   })
 })

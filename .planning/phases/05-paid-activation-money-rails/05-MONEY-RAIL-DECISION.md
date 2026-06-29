@@ -139,6 +139,37 @@ Evidence that does not count:
 - Webhook arrival without signature, binding, dedupe, and readback admission.
 - Copy claiming paid activation before behavior and readback exist.
 
+## Retention and private evidence
+
+Retention class:
+- Billing/payment evidence is `financial_provider_evidence`.
+- Raw card data, PAN, CVC, raw payment credentials, Link/SPT-style secrets, Stripe secrets, Autumn secrets, and unredacted provider payloads are not stored in AE source state.
+- Source-owned billing records may retain operation IDs, receipt IDs, provider family, stable provider object refs or hashes, payload hashes, normalized status fields, redacted payload summaries, reconciliation rows, support rows, and audit hashes.
+
+Export behavior:
+- Owner/admin export may include source-owned operation, receipt, reconciliation, support, and audit readbacks with stable refs and hashes.
+- Export must not include raw provider payloads, raw webhook bodies, secrets, card/payment credentials, unredacted provider errors, or private owner/customer content.
+- Provider-hosted invoice or portal URLs may appear only in owner/admin/private billing readbacks when the source-owned record authorizes them.
+
+Delete and tombstone behavior:
+- Deletion or privacy cleanup redacts private provider/payment evidence refs where legally allowed while preserving lawful audit hashes, reason codes, receipt/reversal/dispute/cancellation reconstruction, operation IDs, support/no-repair state, and financial/legal retention metadata.
+- Tombstones preserve the deletion timestamp, actor/ref, operation or receipt hash, reason code, and next action without re-exposing private payloads.
+
+Raw webhook body disposal:
+- Raw webhook bodies are used only for signature verification and payload hashing.
+- After verification, hash, normalization, and redaction, raw bodies are discarded unless a future decision record names a private evidence ref TTL and access policy.
+- Webhook arrival alone is never proof; signed, bound, deduped, normalized, and admitted readback is required.
+
+Private evidence access policy:
+- Public projections receive only approved paid-activation availability and public offer copy after smoke evidence passes.
+- Owner projections may read billing status, hosted provider handoff links, receipts, invoice URLs, and owner next actions for their own business.
+- Admin/operator projections may read redacted provider refs, reconciliation state, support/kill-rule state, and operator next actions.
+- No role may read secrets, raw card/payment credentials, raw webhook bodies, or unredacted provider payloads from AE source state.
+
+Private evidence TTL:
+- Default TTL for raw provider bodies is zero after verification/hash/normalization.
+- Redacted source-owned billing, receipt, reconciliation, support, and audit records persist for financial/legal reconstruction until a later explicit retention policy narrows them.
+
 ## Support and rollback
 
 Support owner: AE owner/admin/operator.

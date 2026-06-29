@@ -49,6 +49,7 @@ export type {
   BillingReconciliation,
   BillingReconciliationStatus,
   BillingSourceState,
+  BillingSupportCapability,
   BillingSupportRecord,
   BillingSupportStatus,
   BillingOwnerAuthority,
@@ -90,6 +91,7 @@ export {
   BillingProviderEventStatusValues,
   BillingProviderValues,
   BillingReconciliationStatusValues,
+  BillingSupportCapabilityValues,
   BillingSupportStatusValues,
   defaultBillingOperatorControls,
 } from './internal/schema'

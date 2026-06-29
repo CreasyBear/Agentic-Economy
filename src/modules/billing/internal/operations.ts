@@ -388,6 +388,10 @@ export async function startPaidActivation(
       amountSummary: `${attach.invoice.total} ${attach.invoice.currency}`,
       status: 'paid',
       payloadHash: attach.payloadHash,
+      providerEvidenceRefs: [`autumn:${attach.customerId}`, `stripe:${attach.invoice.stripeId}`, `hash:${attach.payloadHash}`],
+      paidStateTransition: 'attach_invoice_paid',
+      refundReversalDisputeRefs: [],
+      correlationId: command.correlationId,
       issuedAt: command.now,
       recordedAt: command.now,
     })
@@ -767,9 +771,12 @@ export function markBillingNoRepair(
   const supportRecord: BillingSupportRecord = {
     id: billingSupportRecordId(command.businessId, command.operationKey),
     businessId: command.businessId,
+    capability: 'paid_activation_money_rails',
     status: 'no_repair',
     reason: command.reason,
     evidenceRefs: [...command.evidenceRefs],
+    operatorNextAction: 'preserve billing evidence and keep public paid claims disabled until source-owned repair',
+    correlationId: command.correlationId,
     createdAt: command.now,
     updatedAt: command.now,
     ...(operation === undefined ? {} : { operationId: operation.id }),
@@ -841,9 +848,12 @@ export function recordBillingEvidence(
   const supportRecord: BillingSupportRecord = {
     id: billingSupportRecordId(command.businessId, command.operationKey),
     businessId: command.businessId,
+    capability: 'paid_activation_money_rails',
     status: ready ? 'resolved' : 'open',
     reason: `provider_${command.connectionStatus}:${command.operatorNextAction}`,
     evidenceRefs,
+    operatorNextAction: command.operatorNextAction,
+    correlationId: command.correlationId,
     createdAt: command.now,
     updatedAt: command.now,
   }
@@ -957,9 +967,12 @@ export function disablePaidActivation(
   const supportRecord: BillingSupportRecord = {
     id: billingSupportRecordId(command.businessId, command.operationKey),
     businessId: command.businessId,
+    capability: 'paid_activation_money_rails',
     status: 'open',
     reason: command.reason,
     evidenceRefs: [...command.evidenceRefs],
+    operatorNextAction: 'keep paid activation disabled until support closes the recorded issue',
+    correlationId: command.correlationId,
     createdAt: command.now,
     updatedAt: command.now,
   }
@@ -1098,6 +1111,10 @@ function createReceipt(operation: BillingOperation, command: BillingProviderEven
     providerReceiptId: command.receipt.providerReceiptId,
     status: command.receipt.status,
     payloadHash: command.payloadHash,
+    providerEvidenceRefs: [`provider:${command.providerEventId}`, `hash:${command.payloadHash}`],
+    paidStateTransition: `${operation.status}->${billingStatusForProviderEvent(command, operation)}`,
+    refundReversalDisputeRefs: reversalRefsForReceipt(command),
+    correlationId: command.correlationId,
     issuedAt: command.receipt.issuedAt,
     recordedAt: command.receivedAt,
     ...(command.receipt.invoiceUrl === undefined ? {} : { invoiceUrl: command.receipt.invoiceUrl }),
@@ -1140,9 +1157,34 @@ function createReconciliation(
     retryCount: operation.retryCount,
     providerRefs,
     evidenceRefs: providerRefs.map((ref) => `${ref.provider}:${ref.objectId}`),
+    operatorNextAction: operatorNextActionForReconciliation(status),
     createdAt: command.now,
     updatedAt: command.now,
+    ...(command.authority?.clerkUserId === undefined ? {} : { actorRef: command.authority.clerkUserId }),
     ...(reason === undefined ? {} : { reason }),
+  }
+}
+
+function reversalRefsForReceipt(command: BillingProviderEventCommand): string[] {
+  if (command.receipt?.status === 'refunded' || command.receipt?.status === 'disputed' || command.receipt?.status === 'chargeback') {
+    return [`provider:${command.providerEventId}`, `hash:${command.payloadHash}`]
+  }
+
+  return []
+}
+
+function operatorNextActionForReconciliation(status: BillingReconciliation['status']): string {
+  switch (status) {
+    case 'matched':
+      return 'keep receipt and entitlement readbacks reconstructable'
+    case 'retry_available':
+      return 'retry reconciliation after provider retry window'
+    case 'retry_exhausted':
+      return 'mark no-repair or disable public paid claims'
+    case 'no_repair':
+      return 'preserve evidence and keep public paid claims disabled'
+    default:
+      return 'review provider readback before making or restoring public paid claims'
   }
 }
 
