@@ -8,10 +8,10 @@
 - `PROJECT.md` — root engineering charter: ICP, problem, source authority, state contracts, module interfaces.
 - `ENGINEERING-STANDARDS.md` — implementation constitution: skills/modes, TypeScript, Convex, route, audit, tests, and review proof.
 - `SOURCE-MINING.md` — contract for mining `Agentic-Economy-Backup` without copying coupling.
-- `SECURITY-SPEC.md` — threat model, admin authority, audit union, redaction, abuse controls, P2-P5 private/provider/payment security.
+- `SECURITY-SPEC.md` — threat model, admin authority, audit union, redaction, abuse controls, P2-P6 private/provider/payment/business-action security.
 - `AI-SPEC.md` — UCP/llms/agent discovery support matrix and eval controls.
 - `SEO-AEO-SPEC.md` — public business service catalog page SEO, sitemap, robots, llms, schema, and AI visibility proof.
-- `GTM-READINESS.md` — 90-day launch proof, ORB channels, activation, claims register, and P2-P5 support/commercial readiness.
+- `GTM-READINESS.md` — 90-day launch proof, ORB channels, activation, claims register, and P2-P6 support/commercial readiness.
 - `FRONTEND-DESIGN-FRAMEWORK.md` — frontend design architecture: tokens, shadcn posture, AE component seams, route class policy, `/taste` + `/impeccable` proof.
 - `../DESIGN.md` — machine-readable visual seed for Agentic Economy colors, typography, spacing, radii, and component hints.
 - `../.impeccable/design.json` — rich design sidecar for agents/panels: tonal ramps, shadows, motion, breakpoints, and primitive previews.
@@ -33,6 +33,17 @@
 - `phases/04-owner-pending-protected-actions/04-UI-SPEC.md` — Phase 4 one owner-approved protected action, consequence UI, receipt/proof-gap, and copy contract.
 - `phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md` — Phase 5 Autumn/Stripe paid activation execution plan.
 - `phases/05-paid-activation-money-rails/05-UI-SPEC.md` — Phase 5 Autumn/Stripe paid activation, receipts, reconciliation, responsive, and copy contract.
+- `phases/06-agentic-business-action-receipts/06-SPEC.md` — Phase 6 receipt-backed autonomous business operation spec; planning/spike authority only until plan gates pass.
+- `phases/06-agentic-business-action-receipts/06-CONTEXT.md` — Phase 6 PRD-express context, decisions, hard cuts, and source references.
+- `phases/06-agentic-business-action-receipts/06-DISCUSSION-LOG.md` — Phase 6 hard-question closure from typed subagents and PRD Express Path.
+- `phases/06-agentic-business-action-receipts/06-RESEARCH.md` — Phase 6 source-grounded implementation research and verification gates.
+- `phases/06-agentic-business-action-receipts/06-PATTERNS.md` — Phase 6 codebase pattern map and drift guardrails.
+- `phases/06-agentic-business-action-receipts/06-FABLE-FOUNDATION-REVIEW.md` — adversarial foundation review and resolved plan-phase blockers.
+- `phases/06-agentic-business-action-receipts/06-MONEY-EVIDENCE-DECISION.md` — Phase 6 direct Stripe test-mode evidence decision.
+- `phases/06-agentic-business-action-receipts/06-CHECK.md` — typed plan-checker findings and split-plan remediation.
+- `phases/06-agentic-business-action-receipts/06-01-business-action-domain-verifier-PLAN.md` through `06-06-copy-source-smoke-gates-PLAN.md` — split Phase 6 execution plans.
+- `phases/06-agentic-business-action-receipts/06-ENGINEERING-REQUIREMENTS.md` — Phase 6 engineering synthesis and source-grounded implementation constraints.
+- `phases/06-agentic-business-action-receipts/06-SOURCE-DOC-GROUNDING.md` — Phase 6 Stripe/Link/NVIDIA/Hermes/source-doc grounding and prohibited rails.
 
 ## Supporting context
 
@@ -48,4 +59,6 @@
 
 ## Current phase
 
-Phase 1 — Ten-Star Spine Foundation.
+Phase 6 planning/spike — Agentic Business Action Receipts.
+
+Phase 6 is admitted only as planning plus hackathon-spike preparation. It may not claim production launch, live money movement, wallet/custody/settlement, generic marketplace, generic action runtime, or provider authority until a verified `06-*-PLAN.md` names passed preflight gates, spike exceptions, commands, files, and stop conditions.

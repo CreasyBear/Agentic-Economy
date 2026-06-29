@@ -20,6 +20,7 @@ A phase does not exist for narrative, protocol completeness, marketplace surface
 | Admin authority source-owned | One-way | 1 | No env-only admin authority. |
 | Search adapter | Two-way | 1 | Convex first; external search only after evidence. |
 | Money rails | One-way later | 5 | Requires decision record before code. |
+| Agentic business action receipts | One-way for Phase 6 spike | 6 | One source-owned receipt-backed business operation; no runtime/wallet/marketplace/provider authority. |
 
 ## Phase graph
 
@@ -39,9 +40,15 @@ P1 Spine Foundation
       |
       +--> P5 Paid Activation
              One Autumn Cloud + Stripe PSP paid-activation rail; Connect/x402/wallet/credits/custody stay out of P5
+             |
+             +--> P6 Agentic Business Action Receipts
+                    one Hermes-run paid-intake endpoint proof with AE checkpoint,
+                    Stripe/NVIDIA/Hermes evidence, and reconstructable receipts
 ```
 
 P2-P5 are planned as one production system and executed in order by default. P2 creates human demand and owner communication, P3 exposes only read-only public/discovery projections, P4 admits exactly one owner-approved non-money action, and P5 adds one paid activation rail after authority/receipt posture exists.
+
+P6 is admitted as a planning/hackathon-spike branch after the P4/P5 authority spine exists in source. P6 must keep hackathon proof separate from production acceptance, and direct Stripe/Link test-mode evidence requires a Phase 6 money-evidence decision before implementation. P6 cannot turn AE into an agent runtime, wallet, marketplace, settlement layer, sandbox, product catalog, generic API marketplace, or provider.
 
 ## Phase 1 — Ten-Star Spine Foundation
 
@@ -151,6 +158,29 @@ receipt/audit reconstruction
 
 **Exit proof:** provider readback, idempotent ledger/receipt, reversal/dispute, reconciliation, operator reconstruction.
 
+## Phase 6 — Agentic Business Action Receipts
+
+**Objective:** prove one Hermes-run, software-scoped autonomous business operation stayed inside mandate through source-owned action facts, buyer mandate, owner approval, checkpoint admission, external evidence, concrete result artifact, and reconstructable Action Receipt.
+
+**Engineering proof:** Business Action Cards may be advertised only as proposal-only, owner-approved, receipt-required capabilities. The single action slug is `provision-paid-intake-endpoint`. External Stripe/Link/Hermes/NVIDIA evidence is admitted only as bound evidence after the AE checkpoint, while pre-checkpoint guardrail allow/block decisions are recorded as decision evidence and never as downstream consequence.
+
+**Ship candidate:**
+
+```text
+Business Action Card
+buyer/operator mandate
+Capability Request
+owner authorization checkpoint
+GuardrailDecisionEvidence
+ExternalEvidenceEvent
+endpoint descriptor + JSON schema + private provisioning/payment-gate ref
+Action Receipt verifier
+```
+
+**Cut:** generic `executeAction`, arbitrary action slugs, provider `other`, broad action marketplace, hosted agent runtime, SDK/MCP/CLI/plugin platform, wallet, credits, balances, custody, Connect, x402, settlement, product marketplace, production autonomous/payment claims, and OS/process sandboxing claims from NeMo/Nemotron alone.
+
+**Exit proof:** receipt verifier reconstructs success, refusal, proof gap, evidence mismatch, tampered hash, stale card, expired mandate, unbound provider event, and private/public redaction. Direct Stripe test-mode evidence has `06-MONEY-EVIDENCE-DECISION.md`; live mode waits for a later production decision record.
+
 ## Bloat relapse detector
 
 Stop if a PR introduces:
@@ -160,6 +190,7 @@ Stop if a PR introduces:
 - one-implementation adapter for later,
 - protocol-first owner copy,
 - payment/provider field in core domain,
+- Phase 6 action/payment/provider field in core catalog/registry/discovery before source-owned card/checkpoint/receipt enforcement,
 - best-effort write without readback/repair,
 - boolean state soup,
 - backup source copied without source-mining ledger.

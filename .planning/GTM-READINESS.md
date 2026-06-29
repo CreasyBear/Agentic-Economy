@@ -1,8 +1,8 @@
-# GTM Readiness — Phases 1-5
+# GTM Readiness — Phases 1-6
 
 **Purpose:** prevent marketing bloat and false launch claims.
 
-Phase 1 is not launch-ready because tests pass. It is launch-ready when owner activation, channel attribution, abuse handling, copy claims, and discovery health are source-owned and measurable. Phases 2-5 extend the same rule: no inquiry, developer, action, or paid claim ships before source-owned evidence and support capacity exist.
+Phase 1 is not launch-ready because tests pass. It is launch-ready when owner activation, channel attribution, abuse handling, copy claims, and discovery health are source-owned and measurable. Phases 2-6 extend the same rule: no inquiry, developer, action, paid, or autonomous-business-operation claim ships before source-owned evidence and support capacity exist.
 
 ## 90-day launch stages
 
@@ -121,7 +121,7 @@ These may be stored as dedicated tables or as typed `auditEvents` variants only 
 
 All public assets must cite allowed claims. This includes landing pages, emails, social posts, partner pitches, SEO/AEO pages, launch listings, and developer-facing announcements.
 
-P2-P5 public capability claims also require a source-owned evidence row before publication. Each row must name `claimId`, `phase`, `exactPublicCopy`, `publicAsset`, `requiredRoute`, `requiredReadback`, `requiredFunnelEvent`, `evidenceStatus`, `supportOwner`, and `validLaunchStage`. Draft, future, or planning-only claims may stay in phase docs, but public route copy, launch pages, SEO/AEO files, `llms.txt`, UCP, API docs, email/social/partner copy, and generated discovery assets cannot use an allowed phrase until the evidence row is live.
+P2-P6 public capability claims also require a source-owned evidence row before publication. Each row must name `claimId`, `phase`, `exactPublicCopy`, `publicAsset`, `requiredRoute`, `requiredReadback`, `requiredFunnelEvent`, `evidenceStatus`, `supportOwner`, and `validLaunchStage`. Draft, future, or planning-only claims may stay in phase docs, but public route copy, launch pages, SEO/AEO files, `llms.txt`, UCP, API docs, email/social/partner copy, and generated discovery assets cannot use an allowed phrase until the evidence row is live.
 
 Allowed:
 
@@ -170,7 +170,7 @@ Phase 1 cannot be called launch-ready until:
 - public launch stage proof is green before broad traffic,
 - no banned claim appears in route copy, email/social copy, partner copy, SEO/AEO copy, API docs, or discovery files.
 
-## P2-P5 GTM expansion
+## P2-P6 GTM expansion
 
 The 90-day launch stages above still apply. New capabilities expand allowed claims only after their owning phase has live behavior, source-owned readback, support coverage, and copy scans.
 
@@ -182,6 +182,7 @@ The 90-day launch stages above still apply. New capabilities expand allowed clai
 | Builder/agent discovery | P3 | Builders/agents can read current public catalog docs/schema/examples/status generated from AE source state; optional read-only API keys only if the support matrix, source readback, and claim evidence register prove they shipped. | SDK, CLI, mutation API, API-key platform before proof, hosted MCP, Agent Router, callable tools/actions, payment/action descriptors. |
 | Owner-approved action | P4 | One named non-money action can be proposed, owner-approved/rejected, attempted once, and reconstructed. | Autonomous execution, broad action catalog, provider marketplace, booking/payment movement, no-approval actions. |
 | Paid activation | P5 | One selected paid activation rail can be started by an authorized owner and reconciled through Autumn/Stripe receipts/readbacks. | Wallet, credits/balance, custody, x402/crypto, Connect marketplace, split payouts, request-market settlement, direct Stripe subscription authority. |
+| Business action receipt | P6 | One `provision-paid-intake-endpoint` operation can be shown as receipt-backed only after source-owned card, mandate, owner checkpoint, guardrail decision evidence, bound Stripe/Hermes/NVIDIA evidence, concrete result artifact, verifier reconstruction, support/kill rule, and copy scans exist. | Production autonomous support, generic action marketplace, self-approving agents, agent checkout, wallet/custody/settlement, product marketplace, generic API marketplace, live money movement. |
 
 ### Additional funnel events
 
@@ -217,6 +218,14 @@ receipt_viewed
 refund_or_dispute_recorded
 billing_reconciliation_failed
 billing_reconciliation_repaired
+business_action_card_viewed
+business_action_request_started
+business_action_checkpoint_recorded
+business_action_guardrail_allowed
+business_action_guardrail_blocked
+business_action_evidence_ingested
+business_action_receipt_viewed
+business_action_proof_gap_recorded
 ```
 
 Each event keeps the Phase 1 privacy-safe envelope and adds capability, phase, public/private projection, provider family where relevant, and redacted failure code.
@@ -231,6 +240,7 @@ Before broad traffic for a capability, there must be named owner/admin/operator 
 - P3: stale docs/schema, route parity failure, accidental private data exposure, bot abuse/rate limits, key revoke/rotate if keys ship.
 - P4: owner claims action was unauthorized, provider attempt failed, proof gap, reversal/dispute posture, no-repair state.
 - P5: checkout failure, cancelled return, duplicate webhook, unbound provider event, receipt mismatch, refund/dispute/cancellation, reconciliation no-repair.
+- P6: stale/disabled action card, revoked/expired mandate, wrong owner, rejected checkpoint, guardrail block/refusal, unbound Stripe/Hermes/NVIDIA evidence, missing endpoint descriptor/schema/ref, proof gap, no-repair, copy kill rule.
 
 Support load exceeding owner/admin handling capacity stops the channel or capability claim until capacity exists.
 
@@ -257,9 +267,9 @@ copy scan rejects wallet/credits/custody/x402/Connect/settlement/direct-Stripe c
 - Product Hunt, broad developer launch, paid ads, and partner campaigns remain off until Phase 1 activation and the claimed phase's own readbacks are green.
 - Developer-channel launches wait for P3. Founder/manual customer outreach may mention P2 only as a human inquiry flow once P2 evidence exists.
 - Paid-channel copy waits for P5 provider evidence and support posture. Do not pre-sell wallet/marketplace/agent automation.
-- Claims about AI assistants should say they can read public catalog/discovery artifacts only when those artifacts exist. Do not imply AE runs autonomous agents or AI workflows.
+- Claims about AI assistants should say they can read public catalog/discovery artifacts only when those artifacts exist. Phase 6 hackathon copy may say `receipt-backed autonomous business operation` only after source-owned Phase 6 proof exists and must not imply production autonomous support, self-approval, wallet/custody/settlement, or generic marketplace execution.
 
-### P2-P5 claim acceptance
+### P2-P6 claim acceptance
 
 No capability can be called launch-ready until:
 
@@ -270,6 +280,23 @@ No capability can be called launch-ready until:
 - security/privacy acceptance for the capability has passed,
 - support owner and kill rule are explicit,
 - no banned claim for that capability appears anywhere public.
+
+### Phase 6 selected claim row
+
+| Field | Value |
+|---|---|
+| claimId | `p6_provision_paid_intake_endpoint_receipt_backed` |
+| phase | P6 |
+| exactPublicCopy | A Hermes-run paid-intake endpoint operation can be demonstrated as receipt-backed only when AE reconstructs the action card, buyer mandate, owner checkpoint, guardrail decision, bound Stripe/Hermes/NVIDIA evidence, concrete endpoint descriptor/schema/private ref, and Action Receipt. |
+| publicAsset | Demo route, owner/admin/private verifier, and discovery copy only when source readback permits. |
+| requiredRoute | Plan-owned; must include owner/admin/private verifier readback before public demo copy. |
+| requiredReadback | Business Action Card, mandate, request, checkpoint, guardrail decision evidence, external evidence, result artifact, receipt chain, support/kill rule, and public/private redaction. |
+| requiredFunnelEvent | `business_action_request_started`, `business_action_checkpoint_recorded`, `business_action_guardrail_allowed`, `business_action_guardrail_blocked`, `business_action_evidence_ingested`, `business_action_receipt_viewed`, `business_action_proof_gap_recorded` |
+| evidenceStatus | Planning/spike only until verified Phase 6 plan executes and source-owned proof exists. |
+| supportOwner | Must be named in the Phase 6 support/kill-rule record before public/demo claims. |
+| validLaunchStage | Hackathon/internal founder-assisted demo only; no production launch claim. |
+
+P6 banned claim list: production autonomous business operations, self-approving agents, unbounded autonomous spend, instant purchase, agent checkout, generic `executeAction`, broad action marketplace, product marketplace, generic API marketplace, AE wallet, credits, balances, stored value, custody, Connect, x402, settlement, seller payout, live money movement, OS/process sandboxing from NeMo/Nemotron alone.
 
 ### Phase 4 selected claim row
 

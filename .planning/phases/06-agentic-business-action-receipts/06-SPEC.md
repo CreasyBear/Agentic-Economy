@@ -15,7 +15,7 @@ The repo has a source-owned authority spine from Phase 4: proposals, policy, own
 
 Phase 5 now has a selected Autumn Cloud plus Stripe PSP paid-activation posture and a fail-loud provider-smoke command for deployed source-owned payment evidence. Phase 5 is about owner paid activation, not buyer-to-seller settlement and not direct Stripe subscription authority.
 
-Phase 6 currently has source-grounding and engineering-input docs only. No `06-CONTEXT.md`, `06-DISCUSSION-LOG.md`, `06-PLAN.md`, `src/modules/business-action/`, Convex tables, routes, or tests exist. Therefore Phase 6 code must not start until discuss/plan artifacts exist and the P4/P5 gates named below are satisfied.
+Phase 6 currently has source-grounding, engineering-input, spec, and context docs only. No `06-DISCUSSION-LOG.md`, `06-PLAN.md`, `src/modules/business-action/`, Convex tables, routes, or tests exist. Therefore Phase 6 code must not start until plan artifacts exist and the P4/P5/P6 gates named below are satisfied.
 
 ## Preflight Gates
 
@@ -24,7 +24,7 @@ These gates are part of the spec, not advisory notes.
 | Gate | Required before | Source / command | Pass condition | What remains forbidden until pass |
 |---|---|---|---|---|
 | P4 source authority spine | Any Phase 6 implementation plan can be marked executable. | `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md`; protected-action unit/import/copy tests selected by discuss/plan. | P4 source/local verification is recorded as passed and the plan names any deployed-proof gap honestly. | No production/deployed protected-action claim; no Phase 6 production launch claim. |
-| P5 money boundary | Any Stripe/Link/PaymentIntent/Checkout/Payment Link evidence is implemented. | `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md`; `npm run test:provider-smoke:autumn-stripe` when deployed provider evidence is claimed. | Either route through the P5 billing seam or create a narrow `06-MONEY-EVIDENCE-DECISION.md` test-mode-only record before code. | No live charges, public payment claim, direct Stripe subscription authority, Connect, x402, wallet, credits, balances, custody, settlement, or paid activation claim. |
+| P5/P6 money boundary | Any Stripe/Link/PaymentIntent/Checkout/Payment Link evidence is implemented for Phase 6. | `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md`; `06-MONEY-EVIDENCE-DECISION.md`; `npm run test:provider-smoke:autumn-stripe` only when deployed P5 provider evidence is claimed. | P5 remains owner paid activation. Phase 6 direct Stripe/Link evidence for paid intake requires `06-MONEY-EVIDENCE-DECISION.md` before code. | No live charges, public payment claim, direct Stripe subscription authority, Connect, x402, wallet, credits, balances, custody, settlement, or paid activation claim. |
 | Phase 6 planning artifacts | Any Phase 6 code starts. | `06-CONTEXT.md`, `06-DISCUSSION-LOG.md`, and at least one `06-*-PLAN.md`. | Discuss-phase has locked HOW decisions, exact files, commands, and stop conditions. | No `src/modules/business-action/`, Convex tables, routes, public copy, or demo route code. |
 | Phase 6 spike exemption | Hackathon demo proof without full production closure. | A plan section named `Hackathon Spike Exception`. | The plan labels every non-production gap, uses test-mode evidence by default, and forbids production/public claims. | No production launch copy, no live money movement, no generic marketplace positioning. |
 
@@ -52,17 +52,17 @@ These gates are part of the spec, not advisory notes.
 
 5. **External evidence only**: Hermes, Stripe, Link CLI, Nemotron, and NeMo Guardrails are evidence sources, not AE authority.
    - Current: Source docs identify sponsor rails but warn they can become authority by accident.
-   - Target: ExternalEvidenceEvents are stored only after an accepted checkpoint and must bind exact request, checkpoint, amount/currency when present, provider ref hash, payload hash, idempotency key, and correlation ID.
-   - Acceptance: Invalid, unsigned, unbound, stale, duplicate-conflicting, decorative, or wrong-request evidence is held/proof-gap, never accepted as authority or paid/provisioned truth.
+   - Target: Pre-checkpoint NeMo/Nemotron allow/block/refusal is recorded as `GuardrailDecisionEvidence`; post-checkpoint ExternalEvidenceEvents are stored only after an accepted checkpoint and must bind exact request, checkpoint, amount/currency when present, provider ref hash, payload hash, idempotency key, and correlation ID.
+   - Acceptance: Invalid, unsigned, unbound, stale, duplicate-conflicting, decorative, or wrong-request evidence is held/proof-gap, never accepted as authority or paid/provisioned truth. Guardrail block/refusal rows never create downstream provider/payment/action consequence.
 
 6. **Stripe money boundary**: Phase 6 may use Stripe test-mode revenue/payment-link evidence and optional Link CLI spend evidence only as downstream evidence.
    - Current: Phase 5 selects Autumn Cloud plus Stripe PSP for paid activation and cuts Connect, x402, custody, wallet, credits, balances, split payouts, and settlement.
-   - Target: Phase 6 may record Stripe Checkout Session, PaymentIntent, Payment Link, webhook/readback, Shared Payment Token, or Link CLI spend-request evidence only when exact request/action/amount/currency/mandate binding exists; direct Stripe test-mode use requires `06-MONEY-EVIDENCE-DECISION.md`, and live mode requires a later production decision record.
-   - Acceptance: Tests and scans reject direct Stripe subscription authority, Connect, x402, custody, wallet, credits, balances, settlement, client-supplied amount/currency/provider IDs, raw payment credentials, and public payment claims without the P5 billing seam or `06-MONEY-EVIDENCE-DECISION.md` plus receipt/reconciliation evidence.
+   - Target: Phase 6 may record Stripe Checkout Session, PaymentIntent, Payment Link, webhook/readback, Shared Payment Token, or Link CLI spend-request evidence only after `06-MONEY-EVIDENCE-DECISION.md` and only when exact request/action/amount/currency/mandate/checkpoint binding exists; live mode requires a later production decision record.
+   - Acceptance: Tests and scans reject direct Stripe subscription authority, Connect, x402, custody, wallet, credits, balances, settlement, client-supplied amount/currency/provider IDs, raw payment credentials, and public payment claims without `06-MONEY-EVIDENCE-DECISION.md` plus receipt/reconciliation evidence. The P5 seam cannot be used as paid-intake authority.
 
 7. **NVIDIA evidence**: NeMo Guardrails/Nemotron evidence must be observable and non-decorative.
    - Current: Source docs support model reasoning/safety and execution-rail evidence, not OS/process sandbox claims.
-   - Target: Phase 6 records at least one NeMo Guardrails execution-rail allow decision and one block/refusal decision tied to policy hash, request hash, model/provider/version, and private trace ref hash.
+   - Target: Phase 6 records at least one NeMo Guardrails execution-rail allow decision and one block/refusal decision as `GuardrailDecisionEvidence` tied to policy hash, request hash, model/provider/version, and private trace ref hash.
    - Acceptance: Tests or demo proof fail if NVIDIA evidence is only marketing copy, screenshots, raw prompts, model output as authority, or sandboxing claims unsupported by a separate sandbox source.
 
 8. **Receipt reconstruction**: ActionReceipt verifier reconstructs success, refusal, and proof-gap chains.
@@ -92,8 +92,8 @@ These gates are part of the spec, not advisory notes.
 
 13. **Concrete result artifact**: The demo success path must produce a named software artifact or an explicit proof-gap.
     - Current: Source grounding recommends endpoint descriptor/schema or blocked/proof-gap result, but no artifact contract exists.
-    - Target: The success path records an endpoint descriptor, JSON schema, private endpoint/provisioning artifact ref, webhook-verified owner inbox item, or another explicitly decision-recorded software artifact; otherwise the terminal state is proof-gap.
-    - Acceptance: Tests/demo proof fail if success is only a screenshot, model output, payment event, or status label without a bound result artifact or proof-gap receipt.
+    - Target: The success path records endpoint descriptor, JSON schema, and private endpoint/provisioning/payment-gate artifact ref; otherwise the terminal state is proof-gap. A webhook-verified owner inbox item may be supporting evidence, not sufficient success evidence.
+    - Acceptance: Tests/demo proof fail if success is only a screenshot, model output, payment event, generated report, owner inbox item alone, or status label without the required bound result artifacts or proof-gap receipt.
 
 ## Boundaries
 
@@ -101,7 +101,8 @@ These gates are part of the spec, not advisory notes.
 - One Business Action Card for `provision-paid-intake-endpoint`.
 - Buyer/operator mandate and source-owned Capability Request.
 - Authorization checkpoint with accept/refuse/clarify/proof-gap/expired outcomes.
-- External evidence event records for Hermes, NeMo Guardrails, Nemotron, Stripe API test-mode revenue evidence, and optional Link CLI/SPT spend evidence when bindable.
+- GuardrailDecisionEvidence records for NeMo Guardrails/Nemotron allow/block/refusal.
+- External evidence event records for Hermes, Stripe API test-mode revenue evidence, deployment/endpoint host evidence, and optional Link CLI/SPT spend evidence when bindable.
 - ActionReceipt and verifier reconstruction for success, refusal, and proof-gap.
 - Owner/operator/admin readbacks with private evidence refs redacted according to source policy.
 - Demo-safe copy that names receipt-backed operation only after source-owned evidence exists.
@@ -121,7 +122,7 @@ These gates are part of the spec, not advisory notes.
 - Phase 6 code execution waits for a `06-CONTEXT.md` and `06-PLAN.md`.
 - Production Phase 6 execution waits for P4 source/deployed proof posture to be reconciled and P5 money-boundary/provider-smoke proof to be explicit.
 - Stripe/Link live mode requires provider access and a decision record; test-mode evidence is the default.
-- Direct Stripe test-mode evidence requires `06-MONEY-EVIDENCE-DECISION.md` before code, unless the plan routes entirely through the P5 billing seam.
+- Direct Stripe/Link test-mode evidence for the Phase 6 paid-intake action requires `06-MONEY-EVIDENCE-DECISION.md` before code. The P5 billing seam remains owner paid-activation authority only.
 - Raw prompts, customer identifiers, private business notes, raw provider payloads, raw Stripe payloads, Link/SPT secrets, card data, and provider secrets are not public verifier output.
 - Public discovery may expose only source-owned action-card facts after card enforcement exists; it cannot mint authority.
 - If an external rail cannot be bound to exact request/action/amount/currency/mandate/checkpoint/receipt, that rail is cut from the Phase 6 demo.
@@ -134,14 +135,15 @@ These gates are part of the spec, not advisory notes.
 - [ ] Business Action Card tests cover immutable version/source hash, disabled/stale/unlisted visibility, optional service link, and public field redaction.
 - [ ] Mandate/request tests cover replay, conflict, TTL, revoked mandate, wrong business/action, amount over max, stale/disabled card, and no consequence before accepted checkpoint.
 - [ ] Authorization tests prove buyer mandate is not business authority; Hermes is delegated requester only; wrong owner, stale/revoked owner, missing owner decision, owner rejection, refused, clarification, proof-gap, and expired outcomes stop external consequence.
-- [ ] External evidence tests prove Hermes/Stripe/NVIDIA evidence is admitted only when bound to exact request/checkpoint/idempotency/correlation and is held otherwise.
-- [ ] Stripe tests/scans reject direct subscription authority, Connect, x402, wallet, credits, balances, custody, settlement, raw credentials, and client-supplied money/provider fields; direct Stripe test-mode evidence requires P5 seam routing or `06-MONEY-EVIDENCE-DECISION.md`.
+- [ ] Guardrail decision tests prove NeMo/Nemotron allow/block/refusal binds request/policy/model/trace hashes and never creates downstream consequence by itself.
+- [ ] External evidence tests prove Hermes/Stripe/deployment evidence is admitted only when bound to exact accepted request/checkpoint/idempotency/correlation and is held otherwise.
+- [ ] Stripe tests/scans reject direct subscription authority, Connect, x402, wallet, credits, balances, custody, settlement, raw credentials, and client-supplied money/provider fields; direct Stripe/Link test-mode evidence requires `06-MONEY-EVIDENCE-DECISION.md`.
 - [ ] NeMo/Nemotron tests or demo proof include one allow and one block/refusal tied to request and policy hash; no OS sandbox claim appears without separate sandbox evidence.
 - [ ] Receipt verifier tests reconstruct success, refusal, proof-gap, evidence mismatch, tampered hash, stale card, expired mandate, and unbound provider event.
 - [ ] Public/private projection tests prove public verifier exposes only labels, statuses, hashes, timestamps, and non-sensitive refs.
 - [ ] Copy/SEO/discovery scans reject production autonomous/payment claims and all forbidden marketplace/wallet/settlement/API-commerce language.
 - [ ] Audit/control/support tests prove new Phase 6 literals validate through observability modules, operator controls gate attempts/public claims, support kill rules disable claims, and no-repair is reconstructable.
-- [ ] Result artifact tests prove success requires endpoint descriptor, JSON schema, private endpoint/provisioning artifact ref, webhook-verified owner inbox item, or explicit decision-recorded substitute; otherwise proof-gap is recorded.
+- [ ] Result artifact tests prove success requires endpoint descriptor, JSON schema, and private endpoint/provisioning/payment-gate artifact ref; otherwise proof-gap is recorded.
 
 ## Edge Coverage
 
@@ -170,7 +172,7 @@ These gates are part of the spec, not advisory notes.
 | MUST NOT claim OS/process sandboxing from Nemotron or NeMo Guardrails alone. | R7 | specified | Discuss/plan must add copy/source scan plus judgment review. |
 | MUST NOT introduce Connect, x402, MPP, custody, wallet, credits, balances, split payouts, marketplace settlement, seller payout, or product marketplace claims. | R6/R10 | specified | Discuss/plan must add copy/source scan. |
 | MUST NOT create public paid/action discovery fields before source-owned card/checkpoint/receipt enforcement exists. | R2/R10 | specified | Discuss/plan must add discovery projection contract. |
-| MUST NOT let Stripe evidence create paid activation or subscription authority outside the Phase 5 Autumn decision boundary. | R6/R12 | specified | Discuss/plan must add money-boundary review and enforce P5 seam or `06-MONEY-EVIDENCE-DECISION.md`. |
+| MUST NOT let Stripe evidence create paid activation, paid-intake revenue authority, or subscription authority outside a decision record. | R6/R12 | specified | Discuss/plan must add money-boundary review and enforce `06-MONEY-EVIDENCE-DECISION.md` for Phase 6 direct Stripe/Link evidence. |
 
 ## Ambiguity Report
 

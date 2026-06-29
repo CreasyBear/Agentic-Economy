@@ -2,23 +2,23 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
-status: executing
-stopped_at: Phase 03 local/source verification passed 8/8 after route-parity gap closure; Phase 2 deploy/provider smokes and Phase 3 deployed proof remain unclaimed evidence items
-last_updated: "2026-06-29T05:10:58Z"
+current_phase: 06
+status: planning
+stopped_at: Phase 6 planning/spike authority opened after Phase 5 money-boundary hardening; Phase 2/3 deployed proof and Phase 5 provider smoke remain unclaimed evidence items
+last_updated: "2026-06-29T11:05:01Z"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 1
   total_plans: 19
   completed_plans: 15
-  percent: 20
+  percent: 16
 ---
 
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current phase:** 04
-**Status:** executing
+**Current phase:** 06 planning/spike
+**Status:** planning
 
 ## Active decision
 
@@ -44,13 +44,14 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 | Unauthorized claim/admin action | Active | Convex-derived actor/admin, CSRF, rate limit, duplicate detection, source-owned admin roles |
 | Suppression leaks through one public output | Active | one eligibility predicate; suppression tests across page/search/sitemap/llms/UCP |
 | ABN-first regression | Active | no-ABN claim/publish e2e and copy/form scan |
-| Payment readiness cosplay | Active | Phase 1 money-identifier quarantine; Stripe decision deferred to Phase 5 |
+| Payment readiness cosplay | Active | Phase 1 money-identifier quarantine; Phase 5 money decision; Phase 6 direct Stripe evidence requires `06-MONEY-EVIDENCE-DECISION.md` |
+| Agentic economy overclaim | Active | Phase 6 is one receipt-backed business operation proof, not a generic runtime, wallet, marketplace, settlement layer, sandbox, product catalog, or provider |
 | TypeScript contract drift | Active | domain-owned validators, exact unions, type tests, `test:ts-standards` |
 | GTM outruns product | Active | `GTM-READINESS.md`; internal alpha before public launch |
 
 ## Next action
 
-Continue Phase 4 from `.planning/phases/04-owner-pending-protected-actions/04-01-one-owner-approved-protected-action-PLAN.md` using typed GSD executor/verifier subagents and sprint-commit policy. Phase 3 local/source closeout is verified in `.planning/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md` with status `passed`, score `8/8`, and `behavior_unverified: 0` after additive gap plan `.planning/phases/03-standard-agent-builder-discovery/03-02-standard-agent-builder-discovery-route-parity-gaps-PLAN.md`; local route-handler/browser proof covers route-derived public API parity, executed route health, and builder/agent smoke, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Phase 2 source, UI, operator reconstruction, route isolation, local E2E/a11y, typecheck, unit, integration, import/source/copy/SEO/UI-contract, build, and Convex codegen gates are verified; `02-VERIFICATION.md` remains `gaps_found` with 17/18 must-haves verified and 0 behavior-unverified items. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. Do not create final `02-SUMMARY.md`, `02-UAT.md`, `02-DEPLOY-SMOKE-EVIDENCE.md`, or deployed Phase 3 proof artifacts until those smokes pass with non-secret evidence. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-5 execution progress.
+Continue Phase 6 from `.planning/phases/06-agentic-business-action-receipts/06-SPEC.md` and `.planning/phases/06-agentic-business-action-receipts/06-CONTEXT.md` using typed GSD researcher/planner/checker/executor/verifier subagents and sprint-commit policy. Phase 6 is planning/spike-only until a verified `06-*-PLAN.md` names preflight gates, spike exceptions, files, commands, and stop conditions. Phase 3 local/source closeout is verified in `.planning/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md` with status `passed`, score `8/8`, and `behavior_unverified: 0` after additive gap plan `.planning/phases/03-standard-agent-builder-discovery/03-02-standard-agent-builder-discovery-route-parity-gaps-PLAN.md`; local route-handler/browser proof covers route-derived public API parity, executed route health, and builder/agent smoke, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Phase 2 source, UI, operator reconstruction, route isolation, local E2E/a11y, typecheck, unit, integration, import/source/copy/SEO/UI-contract, build, and Convex codegen gates are verified; `02-VERIFICATION.md` remains `gaps_found` with 17/18 must-haves verified and 0 behavior-unverified items. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. Do not create final `02-SUMMARY.md`, `02-UAT.md`, `02-DEPLOY-SMOKE-EVIDENCE.md`, or deployed Phase 3 proof artifacts until those smokes pass with non-secret evidence. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-6 planning/execution progress when plans label the debt honestly. Phase 5 has Autumn/Stripe money-boundary hardening and a fail-loud `npm run test:provider-smoke:autumn-stripe`; do not claim deployed money proof until that smoke passes with source-owned provider evidence.
 
 ## Verification expectation
 
@@ -139,3 +140,5 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - Internal-alpha and public-launch claims still require five real owner rows.
 - Phase 2 still needs deployed `npm run test:phase2-support-smoke`, `npm run test:provider-smoke:resend`, and `npm run test:provider-smoke:novu` with source-owned inquiry-created dispatch IDs before final closeout artifacts may be written.
 - Phase 3 has local/source verification passed, but no deployed Phase 3 route/readback evidence artifact exists yet; do not claim deployed Phase 3 proof until a real deployed smoke is captured.
+- Phase 5 provider proof requires deployed `npm run test:provider-smoke:autumn-stripe` with source-owned Autumn/Stripe event, receipt, reconciliation, support, and claim evidence before any public paid claim.
+- Phase 6 production claims require a verified `06-*-PLAN.md`, `06-MONEY-EVIDENCE-DECISION.md` before direct Stripe/Link implementation, source-owned receipt reconstruction, support/kill rules, and copy scans for autonomous/payment/marketplace overclaims.

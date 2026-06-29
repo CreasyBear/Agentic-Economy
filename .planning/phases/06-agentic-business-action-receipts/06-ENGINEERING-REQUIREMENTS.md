@@ -339,7 +339,7 @@ type BusinessActionCard = {
   title: string
   description: string
   intents: readonly string[]
-  actionSlug: 'provision-paid-intake-endpoint' | string
+  actionSlug: 'provision-paid-intake-endpoint'
   visibility: 'public' | 'unlisted' | 'disabled'
   readiness: 'available' | 'degraded' | 'unavailable' | 'stale'
   callable: 'proposal_only'
@@ -372,7 +372,7 @@ type Mandate = {
   id: MandateId
   actorRef: string
   buyerRef: string
-  allowedActionSlugs: readonly string[]
+  allowedActionSlugs: readonly ['provision-paid-intake-endpoint']
   allowedBusinessIds?: readonly BusinessId[]
   maxCostCents: number
   currency: 'AUD'
@@ -402,7 +402,7 @@ type CapabilityRequest = {
   businessId: BusinessId
   cardId: BusinessActionCardId
   cardVersion: number
-  actionSlug: string
+  actionSlug: 'provision-paid-intake-endpoint'
   requestHash: SourceHash
   inputSummary: string
   requestedAmountCents?: number
@@ -492,6 +492,33 @@ Rules:
 - Owner/operator reconstruction can see richer private readback through source-owned authorization.
 
 
+### GuardrailDecisionEvidence
+
+```ts
+type GuardrailDecisionEvidence = {
+  id: GuardrailDecisionEvidenceId
+  requestId: CapabilityRequestId
+  provider: 'nemo_guardrails' | 'nemotron'
+  decision: 'allowed' | 'blocked' | 'refused'
+  policyHash: SourceHash
+  requestHash: SourceHash
+  modelProvider: 'nvidia'
+  modelVersion: string
+  privateTraceRefHash: SourceHash
+  payloadHash: SourceHash
+  idempotencyKey: OperationKey
+  correlationId: CorrelationId
+  recordedAt: number
+}
+```
+
+Rules:
+
+- Guardrail decision evidence can be recorded before or at the authorization checkpoint.
+- It is policy/tool-governance evidence only; it is not downstream provider evidence, payment proof, endpoint proof, owner approval, or AE authority.
+- A block/refusal can support a refused/proof-gap checkpoint and receipt, but it must not create spend, endpoint exposure, owner inbox items, or public success copy.
+- Raw prompts and traces stay private; public verifiers may expose labels, hashes, timestamps, and non-sensitive refs only.
+
 ### ExternalEvidenceEvent
 
 ```ts
@@ -499,10 +526,8 @@ type ExternalEvidenceEvent = {
   id: ExternalEvidenceEventId
   requestId: CapabilityRequestId
   checkpointId: AuthorizationCheckpointId
-  provider: 'hermes' | 'link_cli' | 'stripe_api' | 'nemo_guardrails' | 'nemotron' | 'deployment_target' | 'endpoint_host' | 'other'
+  provider: 'hermes' | 'link_cli' | 'stripe_api' | 'deployment_target' | 'endpoint_host'
   evidenceKind:
-    | 'execution_policy_admitted'
-    | 'execution_policy_blocked'
     | 'endpoint_descriptor_created'
     | 'json_schema_created'
     | 'private_endpoint_provisioned'
@@ -532,11 +557,11 @@ Rules:
 - External evidence is never authority by itself.
 - Link CLI evidence can prove approved spend posture; it cannot grant AE custody or settlement authority.
 - Stripe API evidence can prove payment-link or revenue posture; it cannot prove work quality.
-- NVIDIA/NeMo Guardrails evidence can prove model safety, refusal, and execution-rail allow/block posture; it cannot prove business approval or OS sandboxing.
+- NVIDIA/NeMo Guardrails decision evidence can prove model safety, refusal, and execution-rail allow/block posture; it cannot prove business approval, payment, endpoint hosting, downstream success, or OS sandboxing.
 - Hermes evidence can prove requested/planned/completed workflow posture; it cannot prove Stripe, execution policy, deployment-target state, or AE authority alone.
 ## Stripe evidence posture
 
-Stripe is allowed in the hackathon demo as external spend and revenue evidence downstream of AE authority.
+Stripe is allowed in the hackathon demo as test-mode external spend and revenue evidence downstream of AE authority only after `06-MONEY-EVIDENCE-DECISION.md`.
 
 Allowed spend flow:
 
@@ -547,7 +572,7 @@ accepted request -> optional Hermes Link CLI spend request -> human approval -> 
 Allowed revenue flow:
 
 ```text
-accepted request -> server-created Stripe PaymentIntent, Checkout Session, or Payment Link for the paid intake -> signed webhook/readback evidence -> owner inbox item created only after verified payment evidence -> bound to request/checkpoint/receipt
+accepted request -> server-created Stripe Checkout Session by default, or PaymentIntent/Payment Link only if the decision record proves equivalent binding -> signed webhook/readback evidence -> endpoint descriptor/schema/private ref and optional owner inbox item -> bound to request/checkpoint/receipt
 ```
 
 Not allowed:
@@ -558,6 +583,7 @@ agent creates endpoint or payment link -> Stripe/Link succeeds -> AE backfills a
 
 Rules:
 
+- No direct Stripe/Link implementation without `06-MONEY-EVIDENCE-DECISION.md`.
 - No Connect in the hackathon unless separately decision-recorded.
 - No AE-owned payout.
 - No AE custody.
@@ -567,11 +593,11 @@ Rules:
 - No buyer-to-seller settlement claim.
 - No card details, Link secrets, raw provider tokens, or payment credentials in AE source rows.
 - No client-supplied amount/currency/customer/provider id.
-- No public payment claim without readback and reconciliation.
-- Stripe event is evidence, not authority.
+- No public payment claim without readback, reconciliation, and Phase 6 receipt reconstruction.
+- Stripe event is evidence, not authority, and cannot be borrowed from P5 as paid-intake authority.
 - Human/Link approval is required for spend; Hermes cannot self-approve.
 
-If Stripe cannot be bound to exact request, action, amount, currency, business/operator mandate, idempotency key, and receipt, cut that Stripe step from the demo.
+If Stripe cannot be bound to exact request, action, amount, currency, business/operator mandate, accepted checkpoint, idempotency key, and receipt, cut that Stripe step from the demo.
 
 ## Discovery and public copy posture
 
@@ -809,7 +835,7 @@ The Phase 6 SPEC should explicitly allow these as **evidence-bound external hack
 - NVIDIA NeMo Guardrails execution-rail allow/block evidence,
 - Nemotron reasoning/safety evidence when observable,
 - one external service/API/infra provisioning attempt if approved and receipt-bound,
-- one paid intake endpoint descriptor, webhook-verified payment gate, inbox item, or deployed URL if evidence-bound and not claimed as AE fulfillment truth.
+- one paid intake endpoint descriptor, JSON schema, and private endpoint/provisioning/payment-gate ref if evidence-bound and not claimed as AE fulfillment truth. An inbox item or deployed URL is supporting evidence only.
 
 ## Kill criteria
 
@@ -854,7 +880,7 @@ If running `/skill:gsd-spec-phase 6 --auto`, use these defaults:
 2. Use **`provision-paid-intake-endpoint` under A$10 test-mode payment evidence** as the demo operation unless the user supplies a better software-scoped operation.
 3. Include both Stripe Link CLI spend evidence and Stripe API revenue/payment-link evidence only if each can be bound to exact request/action/amount.
 4. Allow one external service/API/infra provisioning attempt; no broad procurement.
-5. Result artifact is an endpoint descriptor, JSON schema, webhook-verified inbox item, deployed URL, generated report, or durable file hash recorded as evidence.
+5. Result artifact is endpoint descriptor, JSON schema, and private endpoint/provisioning/payment-gate ref. Webhook-verified inbox items, deployed URLs, generated reports, or durable file hashes may support the receipt but cannot satisfy success by themselves.
 6. NVIDIA/NeMo Guardrails must show at least one allow and one block/refusal tied to policy.
 7. Buyer/operator principal is **human buyer represented by Hermes-like delegated agent**.
 8. Business owner has source-owned prepublished action card and explicit accept/refuse checkpoint.

@@ -1,6 +1,6 @@
-# Security Spec — Phases 1-5
+# Security Spec — Phases 1-6
 
-**Status:** authority for claim/publish/admin/discovery security and P2-P5 execution planning controls.
+**Status:** authority for claim/publish/admin/discovery security and P2-P6 execution planning controls.
 
 ## Threat model
 
@@ -16,7 +16,8 @@
 - owner/contact PII,
 - claimant evidence,
 - provider URLs and future endpoint refs,
-- future token/payment/custody evidence.
+- future token/payment/custody evidence,
+- Phase 6 business action cards, mandates, authorization checkpoints, guardrail decisions, external evidence events, result artifacts, and Action Receipts.
 
 ### Actors
 
@@ -41,6 +42,7 @@ module -> public projection
 public projection -> internet/search/agents
 admin route -> source-owned admin role
 future provider URL -> internet
+Hermes/Stripe/Link/NVIDIA evidence -> Phase 6 business-action admission/readback
 ```
 
 ## P0 controls
@@ -257,9 +259,9 @@ Owner-authored text is untrusted data.
 
 ## P2-P5 security expansion
 
-The sections above remain Phase 1 authority. Phases 2-5 add private inquiry, notification delivery, agent-readable discovery, protected-action authority, and paid activation. Every phase extends the same source-owned model: Convex/domain state, idempotency, audit, redaction, operator readback, and explicit public projections. Provider events, dashboards, screenshots, emails, and webhooks are evidence, not authority.
+The sections above remain Phase 1 authority. Phases 2-6 add private inquiry, notification delivery, agent-readable discovery, protected-action authority, paid activation, and receipt-backed business-action evidence. Every phase extends the same source-owned model: Convex/domain state, idempotency, audit, redaction, operator readback, and explicit public projections. Provider events, dashboards, screenshots, emails, webhooks, model output, and agent traces are evidence, not authority.
 
-### P2-P5 authority rules
+### P2-P6 authority rules
 
 1. Browser input never supplies owner, manager/delegate, admin, provider, price, entitlement, or action authority.
 2. Routes adapt; phase modules own authorization, idempotency, provider binding, audit, and projection rules.
@@ -267,6 +269,8 @@ The sections above remain Phase 1 authority. Phases 2-5 add private inquiry, not
 4. Public projections are allowlisted builders. No row spread, provider payload spread, or "temporary debug" projection may reach page/search/API/sitemap/llms/UCP/docs/SEO.
 5. Provider success/failure can update only an admitted source-owned readback. It cannot create inquiry truth, action truth, or paid entitlement by itself.
 6. Every retryable or consequential transition has `correlationId`, scoped idempotency key, payload hash, redacted payload, typed result/error, audit event, and operator next action.
+7. Phase 6 buyer mandates, Hermes requests, Stripe/Link evidence, and NVIDIA/NeMo evidence never grant business authority. Business authority comes only from source-owned owner approval plus checkpoint admission.
+8. Phase 6 pre-checkpoint guardrail allow/block decisions may be recorded as `GuardrailDecisionEvidence`. They are not downstream consequence, payment proof, endpoint proof, or authority.
 
 ### Additional assets
 
@@ -277,6 +281,7 @@ notification outbox rows, Resend/Novu provider IDs, webhook events
 P3 public docs/schema/examples/support matrix and optional read-only API keys
 protected-action proposals, owner approvals/rejections, gateway admissions, attempts, receipts, proof gaps
 Autumn/Stripe billing operations, provider events, receipts, refunds, disputes, cancellations, reconciliation rows
+business action cards, buyer mandates, capability requests, authorization checkpoints, guardrail decisions, external evidence events, endpoint descriptors, JSON schemas, private provisioning/payment-gate refs, Action Receipts
 provider secrets, webhook secrets, API keys, customer portal refs, invoice/receipt refs
 ```
 
@@ -293,6 +298,7 @@ owner approval route -> protectedAction policy/gateway
 protectedAction gateway -> provider/internal attempt boundary
 billing start route -> Autumn/Stripe hosted flow
 Autumn/Stripe webhook -> raw-body signature verification -> billing reconciliation
+Hermes/NVIDIA/Stripe/Link evidence -> business-action checkpoint/evidence adapter -> Action Receipt verifier
 ```
 
 ### CSRF, Origin, and authorization matrix
@@ -315,6 +321,11 @@ Autumn/Stripe webhook -> raw-body signature verification -> billing reconciliati
 | P5 checkout/customer-portal start | CSRF or same-site Origin required. | Authenticated owner must bind to source-owned business, approved plan/offer, and source-controlled return/cancel URLs. | Creates pending billing operation/readback before provider redirect; client-supplied amount/currency/customer/provider IDs are ignored/rejected. |
 | P5 billing webhooks/readbacks | No CSRF. Raw-body Autumn/Stripe signature verification is required before admission. | Provider identity comes only from verified signature/secret plus binding to pending operation or known provider object. | Invalid rejected, duplicate idempotent, unbound held; no direct entitlement from webhook alone. |
 | P5 reconciliation retry/no-repair/operator controls | CSRF or same-site Origin required. | `owner_admin` or explicit source-owned billing operator permission. | Reconciliation can admit, repair, hold, retry, or mark no-repair with audit; original receipts remain append-only. |
+| P6 action-card/admin setup | CSRF or same-site Origin required. | `owner_admin` or explicit source-owned operator permission; owner-authored card changes require source-owned owner access. | Creates immutable card versions/source hashes. Public discovery may expose only allowlisted card facts after enforcement exists. |
+| P6 capability request | CSRF or same-site Origin for browser/session requests; machine requests require server-owned bearer or signed admission if shipped. | Buyer mandate can constrain request scope but cannot approve business consequence. Hermes is delegated requester only. | Creates request/readback only. No provider, payment, owner inbox, endpoint exposure, or external evidence consequence before accepted checkpoint. |
+| P6 owner checkpoint | CSRF or same-site Origin required; approval pages require frame-ancestor/clickjacking protection. | Source-owned business owner approval for the exact business/card/request; wrong, stale, revoked, missing, or rejected owners fail closed. | `accepted`, `refused`, `clarification_required`, `proof_gap`, and `expired` all produce reconstructable readback/receipts. Only accepted can admit downstream evidence. |
+| P6 guardrail decision evidence | No browser CSRF path when produced by server-side policy adapter. | Bound to request hash, policy hash, model/provider/version, private trace ref hash, idempotency key, and correlation ID. | Records allow/block/refusal policy evidence before or at checkpoint. It never creates downstream provider/payment/action consequence. |
+| P6 external evidence events | No CSRF for provider callbacks; raw-body signatures or server-owned secrets are required where the provider supports them. | Bound to an accepted checkpoint, exact request/action/amount/currency when present, provider ref hash, payload hash, idempotency key, and correlation ID. | Invalid, unsigned, unbound, duplicate-conflicting, stale, decorative, or wrong-request evidence is rejected/held/proof-gap; it never mints authority. |
 
 ### Provider webhook and readback requirements
 
@@ -336,6 +347,8 @@ Provider-specific requirements:
 | Novu | REST calls use server-only `Authorization: ApiKey <NOVU_SECRET_KEY>`. If Novu webhooks ship, implementation must verify the current official signed webhook mechanism against the raw body and configured webhook secret. | Dedupe by Novu event/workflow/transaction/message/subscriber refs plus AE dispatch ID and payload hash. `transactionId`/`Idempotency-Key` semantics are used for outbound trigger replay. | May update notification orchestration/readback only. If current Novu docs do not support verifiable signed webhooks for the selected path, do not expose a public Novu webhook; use authenticated polling/API readback and record the blocker. |
 | Autumn | Autumn webhooks/readbacks use the current official raw-body signature mechanism and Autumn webhook secret. | Dedupe by Autumn event ID plus Autumn customer/subscription/checkout/entitlement/invoice refs, AE billing operation ID, and payload hash. | Autumn is billing/product-ops evidence under the money decision record; admitted events can propose paid-state changes only through AE billing rules and reconciliation. |
 | Stripe | Direct Stripe webhook endpoints ship only when required for PSP evidence under Autumn or after an explicit Autumn blocker fallback. Verify `Stripe-Signature` against the exact raw body and endpoint secret. | Dedupe by `event.id` plus logical Stripe object IDs such as checkout session, customer, subscription, invoice, payment intent, charge, refund, dispute, and AE billing operation ID. | Stripe remains PSP evidence. A Stripe event alone never grants paid activation, plan access, wallet balance, settlement, or protected-action authority. |
+| Phase 6 Stripe/Link | Direct Stripe/Link use for the paid-intake action requires `06-MONEY-EVIDENCE-DECISION.md` before implementation. Verify raw-body Stripe signatures for webhooks and bind Checkout Session/PaymentIntent/Payment Link/SPT/Link refs to the exact request/checkpoint/amount/currency/mandate. | Dedupe by provider event/object ID plus Phase 6 request/checkpoint/receipt refs and payload hash. | Evidence only. It never grants paid activation, subscription authority, wallet balance, custody, settlement, seller payout, or production payment claim. |
+| Phase 6 Hermes/NVIDIA | Hermes/NVIDIA evidence must be server-admitted through source-owned adapters. NeMo/Nemotron evidence binds policy hash, request hash, model/provider/version, private trace ref hash, and correlation ID. | Dedupe by request/checkpoint/policy/trace refs and payload hash. | Evidence only. It cannot approve business consequence, prove Stripe truth, prove endpoint hosting, or claim OS/process sandboxing. |
 
 ### Environment and secret classification
 
@@ -353,6 +366,8 @@ Planning docs may name intended env vars. `.env.example` is updated only in the 
 | P5 Autumn | Autumn project/org/environment/API base/dashboard/portal refs | operational config | Public only if explicitly harmless and needed by UI; otherwise server-owned and redacted in readbacks. |
 | P5 Stripe | Stripe secret key and webhook secret | server secret | Server-only; no direct Stripe subscription authority unless an Autumn blocker decision record exists. |
 | P5 Stripe | Stripe publishable key or dashboard refs if required by hosted flow | public-safe config | Client exposure only when the chosen hosted flow requires it and it cannot grant server authority. |
+| P6 Stripe/Link | Stripe secret key, webhook secret, Link/SPT credentials if used | server secret | Server-only; direct test-mode evidence requires `06-MONEY-EVIDENCE-DECISION.md`; live mode requires a later production decision record. |
+| P6 Hermes/NVIDIA | Hermes bearer/API secrets, NVIDIA/Nemotron/NeMo keys or trace credentials if used | server secret | Server-only; private traces may be referenced by hash/ref, never public raw prompt, raw trace, or unrestricted credential. |
 
 Every provider secret requires a named owner, rotation path, local/dev/prod setup note, and deploy/readback smoke in the phase that first uses it. Secrets, webhook signing material, provider bearer tokens, cookies, Clerk/session tokens, API keys, raw payment credentials, and raw provider payloads are banned from logs, audit payloads, public docs, and copied support snippets.
 
@@ -369,6 +384,9 @@ Every provider secret requires a named owner, rotation path, local/dev/prod setu
 | Protected-action proposals/approvals/receipts | private/high-consequence operational data | Owner/admin/operator projections with consequence copy; public artifacts may expose only source-readbacked support status. | Receipts/proof gaps remain reconstructable; raw provider evidence follows private evidence-ref retention if needed. |
 | Protected-action provider/internal attempts | operational provider evidence | Egress allowlist, timeout/body caps, payload hash, stable refs, redacted error/result. | Raw downstream responses are discarded after hash/normalization unless private evidence retention is explicitly designed. |
 | Billing/payment evidence | payment/provider evidence | Hosted provider flows only; no PAN, CVC, raw payment credentials, custody, stored value, or wallet balances. Store receipts, stable refs, normalized paid/refund/dispute/cancel fields, payload hash, and redacted payload. | Money decision record must define legal/tax/refund/dispute retention. Raw webhook bodies are not retained beyond verification/hash/normalization without private evidence design. |
+| Business action cards/mandates/checkpoints | high-consequence operational data | Public projection may expose only allowlisted card labels/statuses after source enforcement exists; mandates and checkpoint internals stay owner/operator/admin scoped. | Action receipts remain reconstructable; expired/revoked/refused/proof-gap states preserve hashes and reason codes. |
+| Guardrail decision evidence | private AI/tool-governance evidence | Store redacted allow/block/refusal decision, policy hash, request hash, model/provider/version, private trace ref hash, and payload hash. | Raw prompts/traces are discarded or stored only behind explicit private evidence refs with TTL/access policy. |
+| Phase 6 external evidence/result artifacts | operational provider evidence | Store provider family, provider ref hash, payload hash, amount/currency when present, endpoint descriptor/schema/ref hashes, idempotency, correlation, and redacted payload. | Raw provider payloads are discarded after verification/hash/normalization unless a private evidence retention design exists. |
 | Audit events | reconstruction spine | Common envelope with redacted payload and payload hash; no raw secrets or private bodies. | Long-lived append-only reconstruction is allowed; deletion requests remove/redact private payload refs while preserving lawful audit hashes and reason codes. |
 
 No raw inquiry, provider, or payment payload may ship with "retain forever" as an implicit default. The owning phase execution plan must name the retention class, export/delete behavior, and private evidence access policy before raw private evidence exists.
@@ -453,6 +471,18 @@ billing.reconciliation_mismatch
 billing.reconciliation_failed
 billing.reconciliation_repaired
 billing.no_repair_marked
+business_action.card_versioned
+business_action.mandate_recorded
+business_action.request_proposed
+business_action.checkpoint_recorded
+business_action.guardrail_allowed
+business_action.guardrail_blocked
+business_action.evidence_ingested
+business_action.evidence_held
+business_action.result_artifact_recorded
+business_action.receipt_recorded
+business_action.proof_gap_recorded
+business_action.no_repair_marked
 ```
 
 Each event keeps the common envelope above and adds phase-specific fields only as redacted/allowlisted values:
@@ -488,6 +518,8 @@ Controls are source-owned, audited by `operator_control.changed`, and never env-
 | `paid_activation_enabled` | New checkout/customer-portal starts and paid public claims. | Receipt/status reads, refunds/disputes/cancellations, reconciliation, rollback readback. |
 | `billing_webhooks_enabled` | Admission of provider billing events as state transitions. | Signature rejection logs, held event hashes, manual reconciliation readback. |
 | `billing_reconciliation_enabled` | Automated or manual repair/retry transitions. | Read-only mismatch visibility and no-repair marking. |
+| `business_actions_enabled` | New Phase 6 action cards, capability requests, and public/demo business-action claims. | Existing request/checkpoint/receipt readback, refusal/proof-gap/no-repair, audit, and private evidence redaction. |
+| `business_action_attempts_enabled` | Accepted-checkpoint downstream evidence admission, endpoint/result artifact recording, and retries. | Card/request/checkpoint readback, guardrail decision evidence, receipt/proof-gap/no-repair reconstruction. |
 
 Retry rules:
 
@@ -498,7 +530,7 @@ Retry rules:
 
 ### Public projection allowlists and copy/claim safety
 
-The Phase 1 public projection allowlist remains the default. P2-P5 may add only the public fields below after route behavior and source-owned readback exist:
+The Phase 1 public projection allowlist remains the default. P2-P6 may add only the public fields below after route behavior and source-owned readback exist:
 
 | Phase | Public projection allowlist after evidence | Never public |
 |---|---|---|
@@ -506,6 +538,7 @@ The Phase 1 public projection allowlist remains the default. P2-P5 may add only 
 | P3 discovery | Support matrix status, route health, schema/cache version, freshness/degraded/unavailable reasons, public DTO examples/fixtures, AE-hosted fallback label. | Private inquiry/action/billing fields, mutation descriptors, tool-call authority, payment/action descriptors, API-key secrets, merchant-origin UCP claims without readback. |
 | P4 protected action | One selected action class name only after evidence, `ownerApprovalRequired`, proposal-only/owner-pending status, proof-gap honesty where public-safe. | Proposal details, owner decision details, provider payloads, direct-execute/callable/autonomous wording, provider-success guarantees, payment movement. |
 | P5 paid activation | Selected paid activation availability, public offer/pricing copy approved by the money decision record, and public-safe paid-state facts explicitly approved for discovery after route/readback proof. | Owner-only billing center links/status, customer portal refs, receipts, invoices, provider customer/subscription/payment IDs, PAN/CVC/payment credentials, wallet/credits/balance/custody/settlement fields, direct Stripe authority claims. |
+| P6 business action receipt | One selected action label, `proposal_only`, owner approval required, receipt required, checkpoint status, public-safe receipt/verifier labels/hashes/timestamps, and proof-gap honesty after card/checkpoint/receipt enforcement exists. | Buyer mandate internals, owner decision details, raw prompts/traces, private endpoint/provisioning refs, provider payloads, Stripe/Link object IDs, payment credentials, autonomous/direct-execute claims, wallet/custody/settlement/product marketplace claims. |
 
 Public copy, route labels, SEO/AEO files, `llms.txt`, UCP, docs/schema/examples, API docs, email/social/partner copy, and launch assets must pass positive allowlist and negative-claim scans before each capability is called live.
 
@@ -515,6 +548,7 @@ Allowed claim floor:
 - P3 may claim only read-only builder/agent discovery generated from current public source state.
 - P4 may claim only one named non-money owner-approved action with approval-required/reconstruction posture.
 - P5 may claim only one selected Autumn/Stripe paid activation rail with hosted flow, receipts, reversal/dispute/cancel handling, and reconciliation readback after money-decision and provider smoke evidence.
+- P6 may claim only one receipt-backed autonomous business operation proof after source-owned card, mandate, checkpoint, guardrail evidence, external evidence, concrete result artifact, receipt verifier, support/kill rules, and copy scans agree. Hackathon spike copy must not imply production support.
 
 Negative scans must fail on unproven claims including:
 
@@ -530,6 +564,10 @@ paymentRequired before P5 proof
 wallet/credits/balance/stored value/custody/x402/crypto/Connect/split payout/request-market settlement
 direct Stripe subscription authority unless an Autumn blocker decision record exists
 merchant-origin UCP/.well-known standard claims without merchant-origin readback
+generic executeAction/arbitrary action marketplace/provider other
+receipt-backed autonomous business operation before P6 source-owned proof
+agent checkout/instant purchase/self-approving agent/unbounded autonomous spend
+product marketplace/generic API marketplace/production autonomous payment support
 ```
 
 Provider evidence cannot satisfy a public claim by itself. A claim ships only when source-owned state, route behavior, audit/readback, support owner, kill rule, and copy scan all agree.
@@ -565,3 +603,13 @@ P5:
 - Webhook ingest requires raw-body signatures, durable dedupe, unbound-object hold, and no direct entitlement.
 - Refund/dispute/chargeback/cancellation handling preserves original receipts and records reversal/debt/hold/next-action state.
 - Money decision records must include AUD/GST/tax, terms/refund/legal review, provider credential ownership/rotation, incident/rollback owner, and proof that hosted flows keep AE out of custody/stored-value scope.
+
+P6:
+
+- Phase 6 implementation requires `06-CONTEXT.md`, a verified `06-*-PLAN.md`, and a plan-level preflight table naming P4/P5 evidence status, spike exceptions, commands, files, and stop conditions.
+- Direct Stripe/Link test-mode evidence requires `06-MONEY-EVIDENCE-DECISION.md`; live mode requires a later production decision record.
+- Business Action Cards are source-owned immutable versions for `provision-paid-intake-endpoint` only. No `| string`, `provider: "other"`, generic `executeAction`, broad action registry, or product/API marketplace shape is allowed.
+- Buyer mandates constrain request scope but do not grant owner/business authority. Accepted checkpoint requires source-owned owner approval unless the plan labels a spike proof-gap.
+- Guardrail allow/block/refusal evidence is recorded separately from post-checkpoint external evidence and never admits downstream consequence by itself.
+- Success requires endpoint descriptor, JSON schema, and private endpoint/provisioning/payment-gate ref; owner inbox item, report, screenshot, model output, payment event, or status label alone is not success.
+- Public verifier output exposes only public-safe labels, statuses, hashes, timestamps, and non-sensitive refs. Raw prompts, private traces, provider payloads, payment credentials, customer identifiers, and private endpoint refs stay private.
