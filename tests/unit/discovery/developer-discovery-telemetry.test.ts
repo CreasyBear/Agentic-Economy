@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { FunnelEventTypeValues } from '@/modules/observability/public'
-import { recordDeveloperDiscoveryFetch } from '@/modules/discovery/public'
+import { recordDeveloperDiscoveryFetch } from '@/modules/discovery/developer-discovery'
 
 const privateP2FieldNames = [
   'inquiryBody',

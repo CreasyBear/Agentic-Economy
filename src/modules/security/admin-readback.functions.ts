@@ -31,16 +31,6 @@ export type AdminReadbackSourcePort = {
   read: (surface: AdminReadbackSurface) => Promise<AdminShellReadback>
 }
 
-let adminReadbackSourcePortForTests: AdminReadbackSourcePort | undefined
-
-export function setAdminReadbackSourcePortForTests(port: AdminReadbackSourcePort): () => void {
-  const previous = adminReadbackSourcePortForTests
-  adminReadbackSourcePortForTests = port
-  return () => {
-    adminReadbackSourcePortForTests = previous
-  }
-}
-
 export function readAdminClaimsThroughSource(): Promise<AdminShellReadback> {
   return readAdminSurfaceThroughSource('claims_queue')
 }
@@ -93,10 +83,6 @@ async function readAdminSurfaceThroughSource(surface: AdminReadbackSurface): Pro
 }
 
 function getAdminReadbackSourcePort(): AdminReadbackSourcePort {
-  if (adminReadbackSourcePortForTests !== undefined) {
-    return adminReadbackSourcePortForTests
-  }
-
   return {
     read: (surface) => {
       switch (surface) {

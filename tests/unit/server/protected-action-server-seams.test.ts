@@ -111,6 +111,22 @@ describe('protected action server seams', () => {
       expect(JSON.stringify(admin)).not.toContain('customer@example.test')
     })
   })
+
+  it('does not serve local protected-action fixtures when source config is missing without explicit bypass', async () => {
+    await withMissingSourceConfig(async () => {
+      const queue = await readCurrentOwnerContactFollowUpQueueThroughSource()
+      expect(queue).toMatchObject({ kind: 'error', code: 'missing_convex_url' })
+      expect(JSON.stringify(queue)).not.toContain(localE2eProposalId)
+
+      const detail = await readCurrentOwnerContactFollowUpDetailThroughSource(localE2eProposalId)
+      expect(detail).toMatchObject({ kind: 'error', code: 'missing_convex_url' })
+      expect(JSON.stringify(detail)).not.toContain('receipt_recorded')
+
+      const admin = await readAdminContactFollowUpReconstructionThroughSource()
+      expect(admin).toMatchObject({ kind: 'denied', rows: [] })
+      expect(JSON.stringify(admin)).not.toContain(localE2eProposalId)
+    })
+  })
 })
 
 async function withLocalBypass(run: () => Promise<void>) {
@@ -118,6 +134,37 @@ async function withLocalBypass(run: () => Promise<void>) {
   const previousConvexUrl = process.env.CONVEX_URL
   const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
   process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+  delete process.env.CONVEX_URL
+  delete process.env.VITE_CONVEX_URL
+
+  try {
+    await run()
+  } finally {
+    if (previousBypass === undefined) {
+      delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    } else {
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousBypass
+    }
+
+    if (previousConvexUrl === undefined) {
+      delete process.env.CONVEX_URL
+    } else {
+      process.env.CONVEX_URL = previousConvexUrl
+    }
+
+    if (previousPublicConvexUrl === undefined) {
+      delete process.env.VITE_CONVEX_URL
+    } else {
+      process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+    }
+  }
+}
+
+async function withMissingSourceConfig(run: () => Promise<void>) {
+  const previousBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  const previousConvexUrl = process.env.CONVEX_URL
+  const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
+  delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
   delete process.env.CONVEX_URL
   delete process.env.VITE_CONVEX_URL
 

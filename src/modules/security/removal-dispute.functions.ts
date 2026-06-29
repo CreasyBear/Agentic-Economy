@@ -4,12 +4,14 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   getDefaultPublicOwnerStatusReadback,
   getPublicOwnerStatusReadbackBySlug,
 } from '@/modules/catalog/public'
 import type { PublicCatalogContract } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import {
   createEmptyDisputeSourceState,
   openRemovalDispute as openRemovalDisputeModule,
@@ -42,16 +44,10 @@ type OpenRemovalDisputeArgs = {
     privateRef: string
   }[]
   publicMessage?: string
-  csrfToken?: string
-  csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
-}
-
-export type RemovalDisputeSourcePort = {
-  readPublicCatalogBySlug: (args: { slug: string }) => Promise<PublicCatalogReadResult>
-  openRemovalDispute: (args: OpenRemovalDisputeArgs) => Promise<DisputeOpenResult>
 }
 
 const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicCatalogReadResult>(
@@ -61,7 +57,7 @@ const openRemovalDisputeMutation = sourceMutation<OpenRemovalDisputeArgs, Disput
   'security:openRemovalDispute'
 )
 
-export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput): Promise<DisputeOpenResult> {
+export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput, context?: unknown): Promise<DisputeOpenResult> {
   if (usesLocalE2eBypass()) {
     return openRemovalDisputeLocal(data)
   }
@@ -72,15 +68,16 @@ export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput)
       return invalidRemovalTarget(false)
     }
 
-    const source = removalDisputeSourcePort()
-    const result = await source.readPublicCatalogBySlug({ slug })
+    const result = await callPublicSourceQuery(publicCatalogBySlugQuery, { slug })
     if (result.kind !== 'available') {
       return invalidRemovalTarget(false)
     }
 
     const catalog = result.catalog
     const operationSuffix = `${normalizeOperationPart(slug)}:${crypto.randomUUID()}`
-    return await source.openRemovalDispute({
+    const operationKey = `op:removal:${operationSuffix}`
+    const correlationId = `corr:removal:${operationSuffix}`
+    return await callPublicSourceMutation(openRemovalDisputeMutation, {
       businessId: catalog.businessId,
       targetType: 'business',
       targetRef: catalog.businessId,
@@ -95,21 +92,27 @@ export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput)
         },
       ],
       publicMessage: slug,
-      csrfToken: 'csrf-removal',
-      csrfCookie: 'csrf-removal',
       origin: requestOrigin(),
-      operationKey: `op:removal:${operationSuffix}`,
-      correlationId: `corr:removal:${operationSuffix}`,
+      sourceWrite: await sourceWriteAdmissionFromContext({
+        context,
+        scope: 'removal_dispute',
+        operationKey,
+        correlationId,
+      }),
+      operationKey,
+      correlationId,
     })
-  } catch {
-    return invalidRemovalTarget(true)
-  }
-}
+  } catch (error) {
+    if (error instanceof SourceWriteAdmissionError) {
+      return {
+        kind: 'error',
+        code: 'dispute_csrf_rejected',
+        retryable: false,
+        reason: error.code,
+      }
+    }
 
-function removalDisputeSourcePort(): RemovalDisputeSourcePort {
-  return {
-    readPublicCatalogBySlug: (args) => callPublicSourceQuery(publicCatalogBySlugQuery, args),
-    openRemovalDispute: (args) => callPublicSourceMutation(openRemovalDisputeMutation, args),
+    return invalidRemovalTarget(true)
   }
 }
 
@@ -139,8 +142,7 @@ function openRemovalDisputeLocal(data: RemovalDisputeInput): DisputeOpenResult {
     publicMessage: slug,
     security: {
       csrf: {
-        csrfToken: 'csrf-removal',
-        csrfCookie: 'csrf-removal',
+        origin: 'https://ae.example',
         allowedOrigins: ['https://ae.example'],
       },
       rateLimit: {

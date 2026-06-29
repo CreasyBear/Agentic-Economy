@@ -8,10 +8,9 @@ import {
   buildRobotsTxt,
   buildSitemapXml,
   createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
+import { withDiscoverySourcePortForTest } from '../helpers/source-ports'
 import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
@@ -26,7 +25,7 @@ describe('discovery files', () => {
       suburb: 'Fremantle',
     })
 
-    await withDiscoveryQueryClient(state, async () => {
+    await withDiscoverySourcePortForTest(state, async () => {
       const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
       const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
       const llmsBody = await llms.text()
@@ -121,7 +120,7 @@ describe('discovery files', () => {
   })
 
   it('serves discovery files with no-store and nosniff headers', async () => {
-    await withDiscoveryQueryClient(createDefaultDiscoverySourceState(), async () => {
+    await withDiscoverySourcePortForTest(createDefaultDiscoverySourceState(), async () => {
       const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
       const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
       const robots = handleRobotsTxtRequest(new Request('https://ae.example/robots.txt'))
@@ -138,31 +137,6 @@ describe('discovery files', () => {
     })
   })
 })
-
-async function withDiscoveryQueryClient(state: DiscoverySourceState, run: () => Promise<void>): Promise<void> {
-  const reset = setPublicDiscoveryQueryClientForTests({
-    manifest: ({ slug, canonicalBaseUrl, now }) => {
-      const result = regenerateDiscoveryManifest(state, { slug: brandNonEmpty(slug, 'Slug') }, {
-        ...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl }),
-        now,
-      })
-
-      if (result.kind === 'ok') {
-        return Promise.resolve({ kind: 'available', manifest: result.manifest })
-      }
-
-      return Promise.resolve({ kind: 'hidden', reason: 'not_public' })
-    },
-    llms: (options) => Promise.resolve(buildLlmsTxt(state, options)),
-    sitemap: (options) => Promise.resolve(buildSitemapXml(state, options)),
-  })
-
-  try {
-    await run()
-  } finally {
-    reset()
-  }
-}
 
 function createDurablePublishedDiscoveryState(input: {
   businessName: string

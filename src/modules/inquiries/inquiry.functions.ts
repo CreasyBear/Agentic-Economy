@@ -9,10 +9,12 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import type { BusinessRecord } from '@/modules/business/public'
 import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import {
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesLocal,
   closeInquiry as closeInquiryLocal,
@@ -86,9 +88,8 @@ type PublicInquirySubmitArgs = {
   abuseBucketKey: string
   operationKey: string
   correlationId: string
-  csrfToken?: string
-  csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 type ConvexPublicInquirySubmitResult =
@@ -171,9 +172,8 @@ type OwnerMutationArgs = {
   expectedVersion: number
   operationKey: string
   correlationId: string
-  csrfToken?: string
-  csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 type OwnerReplyArgs = OwnerMutationArgs & {
@@ -248,7 +248,7 @@ const markReadOwnerInquiryMutation = sourceMutation<OwnerMutationArgs, OwnerInqu
 
 export const submitPublicInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => publicInquirySubmitSchema.parse(data))
-  .handler(async ({ data }) => submitPublicInquiryThroughSource(data))
+  .handler(async ({ data, context }) => submitPublicInquiryThroughSource(data, context))
 
 export const readCurrentOwnerInboxServer = createServerFn().handler(() => readCurrentOwnerInboxThroughSource())
 
@@ -262,18 +262,19 @@ export const readCurrentOwnerInquiryThreadServer = createServerFn()
 
 export const replyCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerReplySchema.parse(data))
-  .handler(async ({ data }) => replyCurrentOwnerInquiryThroughSource(data))
+  .handler(async ({ data, context }) => replyCurrentOwnerInquiryThroughSource(data, context))
 
 export const markCurrentOwnerInquiryReadServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
-  .handler(async ({ data }) => markCurrentOwnerInquiryReadThroughSource(data))
+  .handler(async ({ data, context }) => markCurrentOwnerInquiryReadThroughSource(data, context))
 
 export const closeCurrentOwnerInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerVersionedSchema.parse(data))
-  .handler(async ({ data }) => closeCurrentOwnerInquiryThroughSource(data))
+  .handler(async ({ data, context }) => closeCurrentOwnerInquiryThroughSource(data, context))
 
 export async function submitPublicInquiryThroughSource(
-  data: z.infer<typeof publicInquirySubmitSchema>
+  data: z.infer<typeof publicInquirySubmitSchema>,
+  context?: unknown
 ): Promise<PublicInquirySubmitServerResult> {
   if (usesLocalE2eBypass()) {
     return submitLocalE2ePublicInquiry(data)
@@ -281,15 +282,15 @@ export async function submitPublicInquiryThroughSource(
 
   try {
     const operationSuffix = `${normalizeOperationPart(data.target.businessId)}:${crypto.randomUUID()}`
+    const operationKey = `inquiry:${operationSuffix}`
+    const correlationId = `correlation:${operationSuffix}`
     const result = await callPublicSourceMutation(submitPublicInquiryMutation, {
       target: data.target,
       body: data.body,
       contact: compactContact(data.contact),
       pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
       abuseBucketKey: `public-inquiry:${normalizeOperationPart(data.target.businessId)}:${normalizeOperationPart(data.target.serviceId)}`,
-      ...browserMutationAdmission(),
-      operationKey: `inquiry:${operationSuffix}`,
-      correlationId: `correlation:${operationSuffix}`,
+      ...(await browserMutationAdmission(context, 'public_inquiry', operationKey, correlationId)),
     })
 
     if (result.kind === 'error') {
@@ -417,58 +418,67 @@ function deniedInquiryOperatorReconstruction(
   }
 }
 
-export async function markCurrentOwnerInquiryReadThroughSource(data: z.infer<typeof ownerVersionedSchema>): Promise<OwnerInquiryMutationServerResult> {
+export async function markCurrentOwnerInquiryReadThroughSource(
+  data: z.infer<typeof ownerVersionedSchema>,
+  context?: unknown
+): Promise<OwnerInquiryMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localOwnerMarkRead(data)
   }
 
   try {
     const operationSuffix = `${normalizeOperationPart(data.threadId)}:${crypto.randomUUID()}`
+    const operationKey = `inquiry:${operationSuffix}:read`
+    const correlationId = `correlation:${operationSuffix}:read`
     return await callSourceMutation(markReadOwnerInquiryMutation, {
       threadId: data.threadId,
       expectedVersion: data.expectedVersion,
-      ...browserMutationAdmission(),
-      operationKey: `inquiry:${operationSuffix}:read`,
-      correlationId: `correlation:${operationSuffix}:read`,
+      ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId)),
     })
   } catch (error) {
     return ownerSourceError(error)
   }
 }
 
-export async function replyCurrentOwnerInquiryThroughSource(data: z.infer<typeof ownerReplySchema>): Promise<OwnerInquiryMutationServerResult> {
+export async function replyCurrentOwnerInquiryThroughSource(
+  data: z.infer<typeof ownerReplySchema>,
+  context?: unknown
+): Promise<OwnerInquiryMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localOwnerReply(data)
   }
 
   try {
     const operationSuffix = `${normalizeOperationPart(data.threadId)}:${crypto.randomUUID()}`
+    const operationKey = `inquiry:${operationSuffix}:reply`
+    const correlationId = `correlation:${operationSuffix}:reply`
     return await callSourceMutation(replyOwnerInquiryMutation, {
       threadId: data.threadId,
       expectedVersion: data.expectedVersion,
       body: data.body,
-      ...browserMutationAdmission(),
-      operationKey: `inquiry:${operationSuffix}:reply`,
-      correlationId: `correlation:${operationSuffix}:reply`,
+      ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId)),
     })
   } catch (error) {
     return ownerSourceError(error)
   }
 }
 
-export async function closeCurrentOwnerInquiryThroughSource(data: z.infer<typeof ownerVersionedSchema>): Promise<OwnerInquiryMutationServerResult> {
+export async function closeCurrentOwnerInquiryThroughSource(
+  data: z.infer<typeof ownerVersionedSchema>,
+  context?: unknown
+): Promise<OwnerInquiryMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localOwnerClose(data)
   }
 
   try {
     const operationSuffix = `${normalizeOperationPart(data.threadId)}:${crypto.randomUUID()}`
+    const operationKey = `inquiry:${operationSuffix}:close`
+    const correlationId = `correlation:${operationSuffix}:close`
     return await callSourceMutation(closeOwnerInquiryMutation, {
       threadId: data.threadId,
       expectedVersion: data.expectedVersion,
-      ...browserMutationAdmission(),
-      operationKey: `inquiry:${operationSuffix}:close`,
-      correlationId: `correlation:${operationSuffix}:close`,
+      ...(await browserMutationAdmission(context, 'owner_inquiry', operationKey, correlationId)),
     })
   } catch (error) {
     return ownerSourceError(error)
@@ -648,6 +658,15 @@ function ownerDeniedResult(reason: Extract<OwnerInboxSourceResult, { kind: 'deni
 }
 
 function inquirySourceError(error: unknown): ServerErrorResult {
+  if (error instanceof SourceWriteAdmissionError) {
+    return {
+      kind: 'error',
+      code: error.code,
+      retryable: false,
+      reason: 'Inquiry source write admission was rejected.',
+    }
+  }
+
   if (error instanceof ConvexSourceError) {
     return {
       kind: 'error',
@@ -666,6 +685,15 @@ function inquirySourceError(error: unknown): ServerErrorResult {
 }
 
 function ownerSourceError(error: unknown): ServerErrorResult {
+  if (error instanceof SourceWriteAdmissionError) {
+    return {
+      kind: 'error',
+      code: error.code,
+      retryable: false,
+      reason: 'Owner inquiry source write admission was rejected.',
+    }
+  }
+
   if (error instanceof ConvexSourceError) {
     return {
       kind: 'error',
@@ -696,11 +724,22 @@ function compactContact(input: z.infer<typeof publicInquirySubmitSchema>['contac
   }
 }
 
-function browserMutationAdmission() {
+async function browserMutationAdmission(
+  context: unknown,
+  scope: 'public_inquiry' | 'owner_inquiry',
+  operationKey: string,
+  correlationId: string
+) {
   return {
-    csrfToken: 'csrf-inquiry',
-    csrfCookie: 'csrf-inquiry',
     origin: requestOrigin(),
+    sourceWrite: await sourceWriteAdmissionFromContext({
+      context,
+      scope,
+      operationKey,
+      correlationId,
+    }),
+    operationKey,
+    correlationId,
   }
 }
 

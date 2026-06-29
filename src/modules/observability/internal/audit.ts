@@ -84,6 +84,8 @@ const stateChangingEvents = new Set<AuditEventType>([
   'protected_action.receipt_recorded',
   'protected_action.proof_gap_recorded',
   'protected_action.no_repair_marked',
+  'protected_action.disputed',
+  'protected_action.reversed',
   'protected_action.callback_received',
   'protected_action.callback_rejected',
   'billing.checkout_started',

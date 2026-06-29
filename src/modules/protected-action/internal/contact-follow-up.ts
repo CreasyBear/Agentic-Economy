@@ -33,6 +33,24 @@ export type ContactFollowUpDecision = (typeof ContactFollowUpDecisionValues)[num
 export const ContactFollowUpAttemptOutcomeValues = ['receipt_recorded', 'proof_gap_recorded', 'failed'] as const
 export type ContactFollowUpAttemptOutcome = (typeof ContactFollowUpAttemptOutcomeValues)[number]
 
+export const ContactFollowUpReadbackStatusValues = [
+  'missing',
+  'awaiting_owner_review',
+  'owner_rejected',
+  'ready_for_attempt',
+  'gateway_admitted',
+  'receipt_recorded',
+  'proof_gap',
+  'failed',
+  'retry_exhausted',
+  'no_repair',
+  'stale',
+  'refused',
+  'disputed',
+  'reversed',
+] as const
+export type ContactFollowUpReadbackStatus = (typeof ContactFollowUpReadbackStatusValues)[number]
+
 export type ContactFollowUpProposalId = string & { readonly __contactFollowUpProposalId: 'ContactFollowUpProposalId' }
 export type ContactFollowUpPolicyId = string & { readonly __contactFollowUpPolicyId: 'ContactFollowUpPolicyId' }
 export type ContactFollowUpDecisionId = string & { readonly __contactFollowUpDecisionId: 'ContactFollowUpDecisionId' }
@@ -248,16 +266,7 @@ export type ContactFollowUpReconstruction = ContactFollowUpProposalQueueItem & {
   gatewayAdmission?: ContactFollowUpGatewayAdmission
   noRepair?: ContactFollowUpNoRepairRecord
   privateEvidenceRefs: readonly ContactFollowUpPrivateEvidenceRef[]
-  readbackStatus:
-    | 'missing'
-    | 'awaiting_owner_review'
-    | 'owner_rejected'
-    | 'ready_for_attempt'
-    | 'gateway_admitted'
-    | 'receipt_recorded'
-    | 'proof_gap'
-    | 'failed'
-    | 'no_repair'
+  readbackStatus: ContactFollowUpReadbackStatus
   repairAction: 'none' | 'owner_can_reject' | 'retry_available' | 'operator_review_required'
 }
 
@@ -660,6 +669,14 @@ export function decideContactFollowUpProposal(
     })
   }
 
+  const priorDecision = latestOwnerDecisionFor(state, proposal)
+  if (priorDecision !== undefined) {
+    return error('contact_follow_up_idempotency_conflict', false, {
+      reason: 'proposal_already_decided',
+      proposalId: proposal.id,
+    })
+  }
+
   const decision: ContactFollowUpOwnerDecisionRecord = {
     id: contactFollowUpDecisionId(proposal.id, command.idempotencyKey),
     proposalId: proposal.id,
@@ -1038,6 +1055,10 @@ export function readContactFollowUpReconstruction(
   }
   const gatewayAdmission = item.attempt === undefined ? latestGatewayFor(state, item.proposal) : gatewayForAttempt(state, item.attempt)
   const noRepair = latestNoRepairFor(state, item.proposal, item.attempt)
+  const attempts = attemptsForProposal(state, item.proposal.id)
+  const auditEvents = state.auditEvents.filter(
+    (event) => event.targetRef === proposalId || event.targetRef === item.attempt?.id || event.targetRef === gatewayAdmission?.id
+  )
 
   return {
     ...item,
@@ -1046,11 +1067,9 @@ export function readContactFollowUpReconstruction(
     privateEvidenceRefs: state.privateEvidenceRefs.filter(
       (ref) => ref.proposalId === proposalId || (item.attempt !== undefined && ref.attemptId === item.attempt.id)
     ),
-    auditEvents: state.auditEvents.filter(
-      (event) => event.targetRef === proposalId || event.targetRef === item.attempt?.id || event.targetRef === gatewayAdmission?.id
-    ),
-    readbackStatus: reconstructionStatus(item, noRepair, gatewayAdmission),
-    repairAction: repairAction(item, noRepair),
+    auditEvents,
+    readbackStatus: reconstructionStatus(item, noRepair, gatewayAdmission, attempts, auditEvents),
+    repairAction: repairAction(item, noRepair, attempts, auditEvents),
   }
 }
 
@@ -1102,6 +1121,12 @@ export function markContactFollowUpNoRepair(
     markedAt: command.now,
     ...(command.attemptId === undefined ? {} : { attemptId: command.attemptId }),
   }
+  const item = buildQueueItem(state, proposal)
+  const gatewayAdmission = latestGatewayFor(state, proposal)
+  const attempts = attemptsForProposal(state, proposal.id)
+  const auditEvents = state.auditEvents.filter(
+    (event) => event.targetRef === proposal.id || event.targetRef === item.attempt?.id || event.targetRef === gatewayAdmission?.id
+  )
   const auditEvent = buildContactFollowUpAuditEvent({
     eventType: 'protected_action.no_repair_marked',
     actorKind: 'owner',
@@ -1110,7 +1135,7 @@ export function markContactFollowUpNoRepair(
     businessId: proposal.businessId,
     operationKey: command.idempotencyKey,
     correlationId: command.correlationId,
-    beforeState: reconstructionStatus(buildQueueItem(state, proposal), undefined, latestGatewayFor(state, proposal)),
+    beforeState: reconstructionStatus(item, undefined, gatewayAdmission, attempts, auditEvents),
     afterState: 'no_repair',
     reasonCode: reason,
     evidenceRefs: command.evidenceRefs,
@@ -1432,10 +1457,29 @@ function latestNoRepairFor(
 function reconstructionStatus(
   item: ContactFollowUpProposalQueueItem,
   noRepair: ContactFollowUpNoRepairRecord | undefined,
-  gatewayAdmission: ContactFollowUpGatewayAdmission | undefined
+  gatewayAdmission: ContactFollowUpGatewayAdmission | undefined,
+  attempts: readonly ContactFollowUpAttempt[],
+  auditEvents: readonly AuditEventContract[]
 ): ContactFollowUpReconstruction['readbackStatus'] {
+  const auditedStatus = auditedReadbackStatus(auditEvents)
+  if (auditedStatus === 'disputed' || auditedStatus === 'reversed') {
+    return auditedStatus
+  }
+
   if (noRepair !== undefined) {
     return 'no_repair'
+  }
+
+  if (item.policy?.kind === 'expired') {
+    return 'stale'
+  }
+
+  if (item.policy !== undefined && !ownerCanDecide(item.policy)) {
+    return 'refused'
+  }
+
+  if (auditedStatus === 'retry_exhausted' || isRetryExhausted(attempts)) {
+    return 'retry_exhausted'
   }
 
   if (item.receipt?.kind === 'receipt') {
@@ -1463,10 +1507,30 @@ function reconstructionStatus(
 
 function repairAction(
   item: ContactFollowUpProposalQueueItem,
-  noRepair: ContactFollowUpNoRepairRecord | undefined
+  noRepair: ContactFollowUpNoRepairRecord | undefined,
+  attempts: readonly ContactFollowUpAttempt[],
+  auditEvents: readonly AuditEventContract[]
 ): ContactFollowUpReconstruction['repairAction'] {
+  const auditedStatus = auditedReadbackStatus(auditEvents)
+  if (auditedStatus === 'reversed') {
+    return 'none'
+  }
+
+  if (auditedStatus === 'disputed') {
+    return 'operator_review_required'
+  }
+
   if (noRepair !== undefined) {
     return 'none'
+  }
+
+  if (
+    item.policy?.kind === 'expired' ||
+    (item.policy !== undefined && !ownerCanDecide(item.policy)) ||
+    auditedStatus === 'retry_exhausted' ||
+    isRetryExhausted(attempts)
+  ) {
+    return 'operator_review_required'
   }
 
   if (item.receipt?.kind === 'proof_gap' || item.attempt?.outcome === 'failed') {
@@ -1478,6 +1542,35 @@ function repairAction(
   }
 
   return 'none'
+}
+
+function auditedReadbackStatus(auditEvents: readonly AuditEventContract[]): ContactFollowUpReconstruction['readbackStatus'] | undefined {
+  const latest = [...auditEvents]
+    .filter((event) =>
+      event.eventType === 'protected_action.retry_exhausted' ||
+      event.eventType === 'protected_action.disputed' ||
+      event.eventType === 'protected_action.reversed'
+    )
+    .sort((left, right) => right.createdAt - left.createdAt)[0]
+
+  if (latest?.eventType === 'protected_action.retry_exhausted') {
+    return 'retry_exhausted'
+  }
+
+  if (latest?.eventType === 'protected_action.disputed') {
+    return 'disputed'
+  }
+
+  if (latest?.eventType === 'protected_action.reversed') {
+    return 'reversed'
+  }
+
+  return undefined
+}
+
+function isRetryExhausted(attempts: readonly ContactFollowUpAttempt[]): boolean {
+  const latestAttempt = attempts.at(-1)
+  return latestAttempt !== undefined && isRetryableAttempt(latestAttempt) && attempts.length >= ContactFollowUpMaxAttemptCount
 }
 
 function proposalWithStatus(

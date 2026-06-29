@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createDefaultDiscoverySourceState,
+  regenerateDiscoveryManifest,
+} from '@/modules/discovery/public'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
   createDeveloperDiscoverySupportRecord,
   evaluateDeveloperDiscoveryLaunchSupport,
   readDeveloperDiscoveryPublicationControls,
   readDeveloperDiscoveryRoute,
-  regenerateDiscoveryManifest,
   renderDeveloperDiscoveryRouteCopy,
-} from '@/modules/discovery/public'
-import type { DiscoverySourceState } from '@/modules/discovery/public'
+} from '@/modules/discovery/developer-discovery'
 
 describe('developer discovery support records and kill controls', () => {
   it('requires a source-owned support record with channels, evidence, and incident thresholds', () => {

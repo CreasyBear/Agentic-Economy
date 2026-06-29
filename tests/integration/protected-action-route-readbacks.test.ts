@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessId, CorrelationId, OperationKey, OwnerId, ServiceId, SourceHash } from '@/modules/common/ids'
+import type { AuditEventContract, AuditEventType } from '@/modules/observability/public'
 import {
   ContactFollowUpActionSlug,
+  ContactFollowUpMaxAttemptCount,
   createContactFollowUpGatewayAdmission,
   createEmptyContactFollowUpSourceState,
   decideContactFollowUpProposal,
@@ -98,11 +100,70 @@ describe('selected protected-action route readbacks', () => {
     expect(serialized).not.toContain('customer@example.test')
     expect(serialized).not.toContain('raw provider')
   })
+
+  it('surfaces stale, refused, disputed, reversed, and retry-exhausted reconstruction posture', () => {
+    const stale = staleFlow('stale')
+    const refused = refusedFlow('refused')
+    const disputed = auditPostureFlow('disputed', 'protected_action.disputed')
+    const reversed = auditPostureFlow('reversed', 'protected_action.reversed')
+    const retryExhausted = retryExhaustedFlow('retry-exhausted')
+
+    expect(readOwnerContactFollowUpDetailRouteReadback({ state: stale.state, proposalId: stale.proposal.id })).toMatchObject({
+      readbackStatus: 'stale',
+      repairAction: 'operator_review_required',
+      policy: { kind: 'expired' },
+    })
+    expect(readOwnerContactFollowUpDetailRouteReadback({ state: refused.state, proposalId: refused.proposal.id })).toMatchObject({
+      readbackStatus: 'refused',
+      repairAction: 'operator_review_required',
+      policy: { kind: 'missing_proof' },
+    })
+    expect(readAdminProtectedActionDetailRouteReadback({ state: disputed.state, proposalId: disputed.proposal.id })).toMatchObject({
+      readbackStatus: 'disputed',
+      repairAction: 'operator_review_required',
+    })
+    expect(readAdminProtectedActionDetailRouteReadback({ state: reversed.state, proposalId: reversed.proposal.id })).toMatchObject({
+      readbackStatus: 'reversed',
+      repairAction: 'none',
+    })
+    expect(readOwnerContactFollowUpReceiptRouteReadback({ state: retryExhausted.state, proposalId: retryExhausted.proposal.id })).toMatchObject({
+      readbackStatus: 'retry_exhausted',
+      repairAction: 'operator_review_required',
+    })
+
+    expect(retryExhausted.state.attempts).toHaveLength(ContactFollowUpMaxAttemptCount)
+    expect(readAdminProtectedActionsRouteReadback({ state: disputed.state }).rows[0]?.auditEvents.map((event) => event.eventType)).toContain(
+      'protected_action.disputed'
+    )
+  })
 })
 
 type ReceiptFlow = {
   state: ContactFollowUpSourceState
   proposal: ContactFollowUpProposal
+}
+
+function proposalCommand(suffix: string) {
+  return {
+    authority: authority(),
+    selectedActionSlug: ContactFollowUpActionSlug,
+    target: {
+      businessId,
+      ownerId,
+      serviceId,
+      sourceEvidenceRef: `source-message:${suffix}`,
+    },
+    parameters: {
+      contactName: 'Pat Customer',
+      contactChannel: 'email' as const,
+      messageSummary: `Follow up about source message ${suffix}.`,
+      sourceMessageRef: `source-message:${suffix}`,
+    },
+    idempotencyKey: operationKey(`proposal:${suffix}`),
+    correlationId: correlationId(`proposal:${suffix}`),
+    deadlineAt: 1_000,
+    now: 10,
+  }
 }
 
 function receiptFlow(suffix: string): ReceiptFlow {
@@ -173,6 +234,63 @@ function noRepairFlow(suffix: string): ReceiptFlow {
   return { state: noRepair.state, proposal: proofGap.proposal }
 }
 
+function staleFlow(suffix: string): ReceiptFlow {
+  const proposed = expectOk(
+    proposeContactFollowUpRequest(createEmptyContactFollowUpSourceState(), {
+      ...proposalCommand(suffix),
+      deadlineAt: 100,
+      now: 10,
+    })
+  )
+  const policy = expectOk(evaluateContactFollowUpPolicy(proposed.state, { proposalId: proposed.proposal.id, now: 101 }))
+  return { state: policy.state, proposal: proposed.proposal }
+}
+
+function refusedFlow(suffix: string): ReceiptFlow {
+  const proposed = expectOk(
+    proposeContactFollowUpRequest(createEmptyContactFollowUpSourceState(), {
+      ...proposalCommand(suffix),
+      policyHints: { sourceProof: 'missing', requiresExternalAuthority: false },
+    })
+  )
+  const policy = expectOk(evaluateContactFollowUpPolicy(proposed.state, { proposalId: proposed.proposal.id, now: 20 }))
+  return { state: policy.state, proposal: proposed.proposal }
+}
+
+function auditPostureFlow(suffix: 'disputed' | 'reversed', eventType: Extract<AuditEventType, 'protected_action.disputed' | 'protected_action.reversed'>): ReceiptFlow {
+  const flow = receiptFlow(suffix)
+  const auditEvent = protectedActionPostureAudit(flow, eventType)
+  return { state: { ...flow.state, auditEvents: [...flow.state.auditEvents, auditEvent] }, proposal: flow.proposal }
+}
+
+function retryExhaustedFlow(suffix: string): ReceiptFlow {
+  const first = attemptFlow(`${suffix}:first`, { kind: 'proof_gap', gapReason: 'timeout', payloadHash })
+  const retryGateway = expectOk(
+    createContactFollowUpGatewayAdmission(first.state, {
+      authority: authority(),
+      proposalId: first.proposal.id,
+      idempotencyKey: operationKey(`gateway:${suffix}:second`),
+      correlationId: correlationId(`gateway:${suffix}:second`),
+      expiresAt: 900,
+      now: 50,
+    })
+  )
+  const second = expectOk(
+    recordContactFollowUpProviderAttempt(retryGateway.state, {
+      authority: authority(),
+      selectedActionSlug: ContactFollowUpActionSlug,
+      proposalId: first.proposal.id,
+      gatewayAdmissionId: retryGateway.gatewayAdmission.id,
+      idempotencyKey: operationKey(`attempt:${suffix}:second`),
+      correlationId: correlationId(`attempt:${suffix}:second`),
+      now: 60,
+      readback: { kind: 'failed', failureReason: 'provider_unavailable', payloadHash },
+    })
+  )
+
+  return { state: second.state, proposal: first.proposal }
+}
+
 function attemptFlow(suffix: string, readback: ContactFollowUpAttemptReadback): ReceiptFlow {
   const proposed = pendingFlow(suffix)
   const decided = expectOk(
@@ -212,6 +330,28 @@ function attemptFlow(suffix: string, readback: ContactFollowUpAttemptReadback): 
   )
 
   return { state: attempted.state, proposal: proposed.proposal }
+}
+
+function protectedActionPostureAudit(flow: ReceiptFlow, eventType: Extract<AuditEventType, 'protected_action.disputed' | 'protected_action.reversed'>): AuditEventContract {
+  const status = eventType === 'protected_action.disputed' ? 'disputed' : 'reversed'
+  return {
+    eventId: `audit:${status}:${flow.proposal.id}` as never,
+    eventType,
+    actorKind: 'admin',
+    actorRef: `admin:${status}`,
+    targetType: 'protected_action',
+    targetRef: flow.proposal.id,
+    businessId,
+    beforeState: 'receipt_recorded',
+    afterState: status,
+    idempotencyKey: operationKey(`audit:${status}`),
+    correlationId: correlationId(`audit:${status}`),
+    reasonCode: status,
+    evidenceRefs: [`operator:${status}`],
+    redactedPayload: { selectedActionSlug: ContactFollowUpActionSlug, proposalHash: flow.proposal.proposalHash },
+    payloadHash,
+    createdAt: 90,
+  }
 }
 
 function authority(): ContactFollowUpOwnerAuthority {

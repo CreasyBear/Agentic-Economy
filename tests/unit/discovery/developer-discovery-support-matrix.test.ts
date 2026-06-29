@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createDefaultDiscoverySourceState,
+  regenerateDiscoveryManifest,
+} from '@/modules/discovery/public'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
   evaluateDiscoveryProjectionGate,
   readDeveloperDiscoveryGatedExclusions,
   readDeveloperDiscoveryRoute,
   readDeveloperDiscoverySupportMatrix,
-  regenerateDiscoveryManifest,
-} from '@/modules/discovery/public'
-import type { DiscoverySourceState } from '@/modules/discovery/public'
+} from '@/modules/discovery/developer-discovery'
 
 describe('developer discovery support matrix', () => {
   it('ships only base public readback surfaces unless projection evidence accepts optional rows', () => {

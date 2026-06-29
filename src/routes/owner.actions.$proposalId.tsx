@@ -177,6 +177,8 @@ function OwnerContactFollowUpDetailRoute() {
     )
   }
   const reconstruction = readback.reconstruction
+  const decisionDisabledReason = ownerDecisionDisabledReason(reconstruction)
+  const canDecide = decisionDisabledReason === undefined
 
   return (
     <AePublicShell>
@@ -224,6 +226,12 @@ function OwnerContactFollowUpDetailRoute() {
                 <AlertDescription>{actionError}</AlertDescription>
               </Alert>
             )}
+            {decisionDisabledReason === undefined ? null : (
+              <Alert>
+                <AlertTitle>Owner decision disabled</AlertTitle>
+                <AlertDescription>{decisionDisabledReason}</AlertDescription>
+              </Alert>
+            )}
             <div className="grid gap-4 lg:grid-cols-2">
               <form onSubmit={handleApprove} className="grid gap-3 rounded-md border bg-muted/20 p-4" noValidate>
                 <FieldGroup>
@@ -244,7 +252,7 @@ function OwnerContactFollowUpDetailRoute() {
                   </Field>
                 </FieldGroup>
                 <Button
-                  disabled={!hydrated || pendingAction !== undefined || reconstruction.ownerDecision !== undefined}
+                  disabled={!hydrated || !canDecide || pendingAction !== undefined}
                   type="submit"
                 >
                   {pendingAction === 'approve' ? 'Approving...' : 'Approve contact follow-up'}
@@ -267,7 +275,7 @@ function OwnerContactFollowUpDetailRoute() {
                 </FieldGroup>
                 <Button
                   variant="outline"
-                  disabled={!hydrated || pendingAction !== undefined || reconstruction.ownerDecision !== undefined}
+                  disabled={!hydrated || !canDecide || pendingAction !== undefined}
                   type="submit"
                 >
                   {pendingAction === 'reject' ? 'Rejecting...' : 'Reject contact follow-up'}
@@ -282,6 +290,26 @@ function OwnerContactFollowUpDetailRoute() {
       </section>
     </AePublicShell>
   )
+}
+
+function ownerDecisionDisabledReason(reconstruction: ContactFollowUpReconstruction): string | undefined {
+  if (reconstruction.ownerDecision !== undefined) {
+    return 'This proposal already has an owner decision recorded in source state.'
+  }
+
+  if (reconstruction.policy === undefined) {
+    return 'Policy readback is required before an owner decision can be recorded.'
+  }
+
+  if (reconstruction.policy.kind === 'expired') {
+    return 'This contact follow-up request is stale because its approval deadline has expired.'
+  }
+
+  if (reconstruction.policy.kind !== 'review_required' && reconstruction.policy.kind !== 'time_bound') {
+    return `This contact follow-up request is policy-refused: ${reconstruction.policy.reason}.`
+  }
+
+  return undefined
 }
 
 export function ownerContactFollowUpDetailServerToRouteReadback(

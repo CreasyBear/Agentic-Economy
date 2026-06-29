@@ -91,6 +91,42 @@ describe('owner-pending contact follow-up flow', () => {
     expect(attemptConflict).toMatchObject({ kind: 'error', code: 'contact_follow_up_idempotency_conflict' })
   })
 
+  it('rejects concurrent owner decisions after one source-owned decision wins', () => {
+    const proposed = expectOkResult(proposeContactFollowUpRequest(createEmptyContactFollowUpSourceState(), proposalCommand('decision-race')))
+    const policy = expectOkResult(evaluateContactFollowUpPolicy(proposed.state, { proposalId: proposed.proposal.id, now: 20 }))
+    const approved = expectOkResult(
+      decideContactFollowUpProposal(policy.state, {
+        authority: authority(),
+        proposalId: proposed.proposal.id,
+        decision: 'approved',
+        reason: 'First owner decision wins.',
+        evidenceRefs: ['owner-review:decision-race'],
+        consequenceAccepted: true,
+        idempotencyKey: operationKey('decision:race:approve'),
+        correlationId: correlationId('decision:race:approve'),
+        now: 30,
+      })
+    )
+    const concurrentReject = decideContactFollowUpProposal(approved.state, {
+      authority: authority(),
+      proposalId: proposed.proposal.id,
+      decision: 'rejected',
+      reason: 'Concurrent rejection should not replace approval.',
+      evidenceRefs: ['owner-review:decision-race-reject'],
+      consequenceAccepted: false,
+      idempotencyKey: operationKey('decision:race:reject'),
+      correlationId: correlationId('decision:race:reject'),
+      now: 31,
+    })
+
+    expect(concurrentReject).toMatchObject({
+      kind: 'error',
+      code: 'contact_follow_up_idempotency_conflict',
+      reason: 'proposal_already_decided',
+    })
+    expect(approved.state.ownerDecisions).toHaveLength(1)
+  })
+
   it('rejects unknown slug, direct modes, suppressed targets, untrusted keys, blocked value fields, and wrong owner', () => {
     const state = createEmptyContactFollowUpSourceState()
 

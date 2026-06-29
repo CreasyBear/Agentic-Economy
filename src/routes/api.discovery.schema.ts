@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
 import {
-  createDefaultDiscoverySourceState,
   generateDeveloperDiscoverySchema,
   recordDeveloperDiscoveryFetch,
-} from '@/modules/discovery/public'
+} from '@/modules/discovery/developer-discovery'
 import type {
   DeveloperDiscoveryArtifact,
   DeveloperDiscoveryFetchKind,
@@ -14,9 +14,9 @@ import type {
   DeveloperDiscoveryRouteHealthErrorCode,
   DeveloperDiscoveryRouteSnapshot,
   DeveloperDiscoveryRouteSnapshotResponse,
-  DiscoverySourceState,
   ReadDeveloperDiscoveryRouteOptions,
-} from '@/modules/discovery/public'
+} from '@/modules/discovery/developer-discovery'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
 import type { PublicBusinessCatalogApiPage, PublicBusinessCatalogDetailResult } from '@/modules/registry/public'
 import { handleDurableBusinessDetailRequest } from './api.businesses.$slug'
 import { handleDurableListBusinessesRequest } from './api.businesses'

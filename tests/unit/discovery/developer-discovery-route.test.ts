@@ -4,15 +4,18 @@ import { createEmptyBusinessSourceState } from '@/modules/business/public'
 import { createEmptyCatalogSourceState } from '@/modules/catalog/public'
 import {
   createDefaultDiscoverySourceState,
+  regenerateDiscoveryManifest,
+} from '@/modules/discovery/public'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
   evaluateDiscoveryProjectionGate,
   mapDeveloperDiscoveryRouteExecutions,
   readDeveloperDiscoveryRoute,
   readDeveloperDiscoverySupportMatrix,
   readP2InquiryAvailabilityPublicStatus,
-  regenerateDiscoveryManifest,
   renderDeveloperDiscoveryRouteCopy,
-} from '@/modules/discovery/public'
-import type { DeveloperDiscoveryRouteSnapshot, DiscoverySourceState } from '@/modules/discovery/public'
+} from '@/modules/discovery/developer-discovery'
+import type { DeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery'
 import { loadDeveloperDiscoveryRoute } from '@/routes/developers.discovery'
 
 const forbiddenClaims = [

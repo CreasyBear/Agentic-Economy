@@ -3,11 +3,18 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
+import {
+  loadAdminContactFollowUpSlice,
+  loadContactFollowUpProposalSlice,
+  loadContactFollowUpProposalSliceByIdempotencyKey,
+  loadOwnerContactFollowUpQueueSlice,
+  persistContactFollowUpSlice,
+} from './protectedActionStore'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import type { BusinessId, CorrelationId, OperationKey, OwnerId, ServiceId, SourceHash } from '../src/modules/common/ids'
+import type { BusinessId, OwnerId, SourceHash } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { AuditEventContract, RedactedPayload } from '../src/modules/observability/public'
 import { assertCsrf } from '../src/modules/security/public'
@@ -17,8 +24,8 @@ import {
   ContactFollowUpDecisionValues,
   ContactFollowUpMaxAttemptCount,
   ContactFollowUpPolicyKindValues,
+  ContactFollowUpReadbackStatusValues,
   createContactFollowUpGatewayAdmission,
-  createEmptyContactFollowUpSourceState,
   decideContactFollowUpProposal,
   evaluateContactFollowUpPolicy,
   listOwnerContactFollowUpQueue,
@@ -30,32 +37,24 @@ import {
 import type {
   ContactFollowUpAttempt,
   ContactFollowUpAttemptReadback,
-  ContactFollowUpAttemptId,
   ContactFollowUpGatewayAdmission,
-  ContactFollowUpGatewayAdmissionId,
   ContactFollowUpNoRepairRecord,
-  ContactFollowUpNoRepairId,
   ContactFollowUpOwnerAuthority,
   ContactFollowUpOwnerDecisionRecord,
-  ContactFollowUpDecisionId,
   ContactFollowUpPolicyDecision,
-  ContactFollowUpPolicyHints,
-  ContactFollowUpPolicyId,
   ContactFollowUpPrivateEvidenceRef,
-  ContactFollowUpPrivateEvidenceRefId,
   ContactFollowUpProposal,
   ContactFollowUpProposalId,
   ContactFollowUpReceipt,
-  ContactFollowUpReceiptId,
   ContactFollowUpReconstruction,
   ContactFollowUpSourceState,
-  ContactFollowUpSupportRecord,
 } from '../src/modules/protected-action/public'
 
 const selectedActionSlug = v.literal(ContactFollowUpActionSlug)
 const policyKind = literalUnion(ContactFollowUpPolicyKindValues)
 const ownerDecision = literalUnion(ContactFollowUpDecisionValues)
 const attemptOutcome = literalUnion(ContactFollowUpAttemptOutcomeValues)
+const readbackStatus = literalUnion(ContactFollowUpReadbackStatusValues)
 const contactFollowUpRedactedPayload = v.object({
   selectedActionSlug,
   parameterKeys: v.optional(v.array(v.string())),
@@ -264,17 +263,7 @@ const contactFollowUpReconstruction = v.object({
   gatewayAdmission: v.optional(contactFollowUpGatewayAdmission),
   noRepair: v.optional(contactFollowUpNoRepair),
   privateEvidenceRefs: v.array(contactFollowUpPrivateEvidenceRef),
-  readbackStatus: v.union(
-    v.literal('missing'),
-    v.literal('awaiting_owner_review'),
-    v.literal('owner_rejected'),
-    v.literal('ready_for_attempt'),
-    v.literal('gateway_admitted'),
-    v.literal('receipt_recorded'),
-    v.literal('proof_gap'),
-    v.literal('failed'),
-    v.literal('no_repair')
-  ),
+  readbackStatus,
   repairAction: v.union(v.literal('none'), v.literal('owner_can_reject'), v.literal('retry_available'), v.literal('operator_review_required')),
 })
 
@@ -418,13 +407,13 @@ export const proposeCurrentOwnerContactFollowUp = mutationGeneric({
       return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
     }
 
-    const owner = await readCurrentOwnerAuthority(ctx)
+    const owner = await readCurrentOwnerAuthorityForBusiness(ctx, args.businessId)
     if (owner.kind === 'denied') {
       return protectedActionError(owner.reason, owner.reason)
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadContactFollowUpSourceState(db)
+    const state = await loadContactFollowUpProposalSliceByIdempotencyKey(db, args.operationKey)
     const now = Date.now()
     const proposed = proposeContactFollowUpRequest(state, {
       authority: owner.authority,
@@ -451,7 +440,7 @@ export const proposeCurrentOwnerContactFollowUp = mutationGeneric({
       return moduleError(policy)
     }
 
-    await persistContactFollowUpSourceState(db, policy.state)
+    await persistContactFollowUpSlice(db, policy.state)
     return {
       kind: 'ok' as const,
       reconstruction: serializeReconstruction(readContactFollowUpReconstruction(policy.state, proposed.proposal.id)),
@@ -463,13 +452,13 @@ export const listCurrentOwnerContactFollowUpQueue = queryGeneric({
   args: {},
   returns: ownerQueueResult,
   handler: async (ctx) => {
-    const owner = await readCurrentOwnerAuthority(ctx)
+    const owner = await readCurrentOwnerIdentity(ctx)
     if (owner.kind === 'denied') {
       return owner
     }
 
-    const state = await loadContactFollowUpSourceState(runtimeDb(ctx.db))
-    const queue = listOwnerContactFollowUpQueue(state, owner.authority.ownerId)
+    const state = await loadOwnerContactFollowUpQueueSlice(runtimeDb(ctx.db), owner.identity.ownerId)
+    const queue = listOwnerContactFollowUpQueue(state, owner.identity.ownerId)
     return {
       kind: 'allowed' as const,
       queue: queue.map(serializeQueueItem),
@@ -565,21 +554,22 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
       return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
     }
 
-    const owner = await readCurrentOwnerAuthority(ctx)
+    const owner = await readCurrentOwnerIdentity(ctx)
     if (owner.kind === 'denied') {
       return protectedActionError(owner.reason, owner.reason)
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadContactFollowUpSourceState(db)
+    const state = await loadContactFollowUpProposalSlice(db, args.proposalId)
     const reconstruction = readContactFollowUpReconstruction(state, args.proposalId as ContactFollowUpProposalId)
-    if (reconstruction.proposal.ownerId !== owner.authority.ownerId || !owner.authority.businessIds.includes(reconstruction.proposal.businessId)) {
+    const authority = await ownerAuthorityForProposal(db, owner.identity, reconstruction.proposal)
+    if (authority === undefined) {
       return protectedActionError('contact_follow_up_not_found', 'request_not_found')
     }
 
     const now = Date.now()
     const gateway = createContactFollowUpGatewayAdmission(state, {
-      authority: owner.authority,
+      authority,
       proposalId: reconstruction.proposal.id,
       idempotencyKey: brandNonEmpty(`${args.operationKey}:gateway`, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
@@ -591,7 +581,7 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
     }
 
     const attempted = recordContactFollowUpProviderAttempt(gateway.state, {
-      authority: owner.authority,
+      authority,
       selectedActionSlug: ContactFollowUpActionSlug,
       proposalId: reconstruction.proposal.id,
       gatewayAdmissionId: gateway.gatewayAdmission.id,
@@ -602,14 +592,14 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
     })
     if (attempted.kind === 'error') {
       if (attempted.code === 'contact_follow_up_retry_exhausted') {
-        const retryExhaustedAudit = retryExhaustedEvent(reconstruction, owner.authority, args.operationKey, args.correlationId, now)
+        const retryExhaustedAudit = retryExhaustedEvent(reconstruction, authority, args.operationKey, args.correlationId, now)
         const exhaustedState = { ...gateway.state, auditEvents: [...gateway.state.auditEvents, retryExhaustedAudit] }
-        await persistContactFollowUpSourceState(db, exhaustedState)
+        await persistContactFollowUpSlice(db, exhaustedState)
       }
       return moduleError(attempted)
     }
 
-    await persistContactFollowUpSourceState(db, attempted.state)
+    await persistContactFollowUpSlice(db, attempted.state)
     return {
       kind: 'ok' as const,
       code: attempted.code,
@@ -635,15 +625,21 @@ export const markCurrentOwnerContactFollowUpNoRepair = mutationGeneric({
       return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
     }
 
-    const owner = await readCurrentOwnerAuthority(ctx)
+    const owner = await readCurrentOwnerIdentity(ctx)
     if (owner.kind === 'denied') {
       return protectedActionError(owner.reason, owner.reason)
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadContactFollowUpSourceState(db)
+    const state = await loadContactFollowUpProposalSlice(db, args.proposalId)
+    const proposal = state.proposals.find((candidate) => candidate.id === args.proposalId)
+    const authority = proposal === undefined ? undefined : await ownerAuthorityForProposal(db, owner.identity, proposal)
+    if (authority === undefined) {
+      return protectedActionError('contact_follow_up_not_found', 'request_not_found')
+    }
+
     const result = markContactFollowUpNoRepair(state, {
-      authority: owner.authority,
+      authority,
       proposalId: args.proposalId as ContactFollowUpProposalId,
       ...(args.attemptId === undefined ? {} : { attemptId: args.attemptId as never }),
       reason: args.reason,
@@ -656,7 +652,7 @@ export const markCurrentOwnerContactFollowUpNoRepair = mutationGeneric({
       return moduleError(result)
     }
 
-    await persistContactFollowUpSourceState(db, result.state)
+    await persistContactFollowUpSlice(db, result.state)
     return {
       kind: 'ok' as const,
       code: result.code,
@@ -682,11 +678,8 @@ export const readAdminContactFollowUpReconstruction = queryGeneric({
       }
     }
 
-    const state = await loadContactFollowUpSourceState(db)
-    const rows =
-      args.proposalId === undefined
-        ? state.proposals.map((proposal) => readContactFollowUpReconstruction(state, proposal.id))
-        : [readContactFollowUpReconstruction(state, args.proposalId as ContactFollowUpProposalId)]
+    const state = await loadAdminContactFollowUpSlice(db, args)
+    const rows = state.proposals.map((proposal) => readContactFollowUpReconstruction(state, proposal.id))
 
     return {
       kind: 'allowed' as const,
@@ -699,14 +692,15 @@ export const readAdminContactFollowUpReconstruction = queryGeneric({
 })
 
 async function readOwnerReconstruction(ctx: RuntimeCtx, proposalId: string) {
-  const owner = await readCurrentOwnerAuthority(ctx)
+  const owner = await readCurrentOwnerIdentity(ctx)
   if (owner.kind === 'denied') {
     return protectedActionError(owner.reason, owner.reason)
   }
 
-  const state = await loadContactFollowUpSourceState(runtimeDb(ctx.db))
+  const db = runtimeDb(ctx.db)
+  const state = await loadContactFollowUpProposalSlice(db, proposalId)
   const proposal = state.proposals.find((candidate) => candidate.id === proposalId)
-  if (proposal !== undefined && (proposal.ownerId !== owner.authority.ownerId || !owner.authority.businessIds.includes(proposal.businessId))) {
+  if (proposal !== undefined && (await ownerAuthorityForProposal(db, owner.identity, proposal)) === undefined) {
     return protectedActionError('contact_follow_up_not_found', 'request_not_found')
   }
 
@@ -729,15 +723,16 @@ async function decideAndAttempt(
     readback?: ContactFollowUpAttemptReadback
   }
 ) {
-  const owner = await readCurrentOwnerAuthority(ctx)
+  const owner = await readCurrentOwnerIdentity(ctx)
   if (owner.kind === 'denied') {
     return protectedActionError(owner.reason, owner.reason)
   }
 
   const db = runtimeDb(ctx.db)
-  const state = await loadContactFollowUpSourceState(db)
+  const state = await loadContactFollowUpProposalSlice(db, input.proposalId)
   const proposal = state.proposals.find((candidate) => candidate.id === input.proposalId)
-  if (proposal === undefined || proposal.ownerId !== owner.authority.ownerId || !owner.authority.businessIds.includes(proposal.businessId)) {
+  const authority = proposal === undefined ? undefined : await ownerAuthorityForProposal(db, owner.identity, proposal)
+  if (proposal === undefined || authority === undefined) {
     return protectedActionError('contact_follow_up_not_found', 'request_not_found')
   }
 
@@ -745,7 +740,7 @@ async function decideAndAttempt(
     ? state
     : evaluateOrReturnState(state, proposal.id, Date.now())
   const decided = decideContactFollowUpProposal(policyState, {
-    authority: owner.authority,
+    authority,
     proposalId: proposal.id,
     decision: input.decision,
     reason: input.reason,
@@ -760,7 +755,7 @@ async function decideAndAttempt(
   }
 
   if (input.decision === 'rejected') {
-    await persistContactFollowUpSourceState(db, decided.state)
+    await persistContactFollowUpSlice(db, decided.state)
     return {
       kind: 'ok' as const,
       code: decided.code,
@@ -770,7 +765,7 @@ async function decideAndAttempt(
 
   const now = Date.now()
   const gateway = createContactFollowUpGatewayAdmission(decided.state, {
-    authority: owner.authority,
+    authority,
     proposalId: proposal.id,
     idempotencyKey: brandNonEmpty(`${input.operationKey}:gateway`, 'OperationKey'),
     correlationId: brandNonEmpty(input.correlationId, 'CorrelationId'),
@@ -782,7 +777,7 @@ async function decideAndAttempt(
   }
 
   const attempted = recordContactFollowUpProviderAttempt(gateway.state, {
-    authority: owner.authority,
+    authority,
     selectedActionSlug: ContactFollowUpActionSlug,
     proposalId: proposal.id,
     gatewayAdmissionId: gateway.gatewayAdmission.id,
@@ -795,7 +790,7 @@ async function decideAndAttempt(
     return moduleError(attempted)
   }
 
-  await persistContactFollowUpSourceState(db, attempted.state)
+  await persistContactFollowUpSlice(db, attempted.state)
   return {
     kind: 'ok' as const,
     code: attempted.code,
@@ -812,8 +807,13 @@ function evaluateOrReturnState(
   return policy.kind === 'ok' ? policy.state : state
 }
 
-async function readCurrentOwnerAuthority(ctx: RuntimeCtx): Promise<
-  | { kind: 'allowed'; authority: ContactFollowUpOwnerAuthority }
+type CurrentOwnerIdentity = {
+  ownerId: OwnerId
+  actorRef: string
+}
+
+async function readCurrentOwnerIdentity(ctx: RuntimeCtx): Promise<
+  | { kind: 'allowed'; identity: CurrentOwnerIdentity }
   | { kind: 'denied'; reason: 'missing_auth' | 'owner_not_found' }
 > {
   const actor = await resolveBusinessActor(ctx)
@@ -830,436 +830,65 @@ async function readCurrentOwnerAuthority(ctx: RuntimeCtx): Promise<
     return { kind: 'denied', reason: 'owner_not_found' }
   }
 
-  const businesses = await collect(db, 'businesses')
-  const businessIds = businesses.filter((row) => stringField(row, 'ownerId') === owner._id).map((row) => brandNonEmpty(row._id, 'BusinessId'))
+  return {
+    kind: 'allowed',
+    identity: {
+      ownerId: brandNonEmpty(owner._id, 'OwnerId'),
+      actorRef: actor.clerkUserId,
+    },
+  }
+}
 
+async function readCurrentOwnerAuthorityForBusiness(ctx: RuntimeCtx, businessId: string): Promise<
+  | { kind: 'allowed'; authority: ContactFollowUpOwnerAuthority }
+  | { kind: 'denied'; reason: 'missing_auth' | 'owner_not_found' }
+> {
+  const owner = await readCurrentOwnerIdentity(ctx)
+  if (owner.kind === 'denied') {
+    return owner
+  }
+
+  const ownedBusinessId = await readOwnedBusinessId(runtimeDb(ctx.db), owner.identity, businessId)
   return {
     kind: 'allowed',
     authority: {
-      ownerId: brandNonEmpty(owner._id, 'OwnerId'),
-      actorRef: actor.clerkUserId,
-      businessIds,
+      ...owner.identity,
+      businessIds: ownedBusinessId === undefined ? [] : [ownedBusinessId],
     },
   }
 }
 
-async function loadContactFollowUpSourceState(db: RuntimeDb): Promise<ContactFollowUpSourceState> {
-  const [proposals, policies, decisions, gateways, attempts, receipts, privateEvidenceRefs, noRepairRecords, supportRecords, auditEvents] =
-    await Promise.all([
-      collect(db, 'protectedActionProposals'),
-      collect(db, 'protectedActionPolicyDecisions'),
-      collect(db, 'protectedActionOwnerDecisions'),
-      collect(db, 'protectedActionGatewayAdmissions'),
-      collect(db, 'protectedActionAttempts'),
-      collect(db, 'protectedActionReceipts'),
-      collect(db, 'protectedActionPrivateEvidenceRefs'),
-      collect(db, 'protectedActionNoRepairRecords'),
-      collect(db, 'protectedActionSupportRecords'),
-      collect(db, 'auditEvents'),
-    ])
-
-  return createEmptyContactFollowUpSourceState({
-    proposals: proposals.map(toProposal),
-    policyDecisions: policies.map(toPolicyDecision),
-    ownerDecisions: decisions.map(toOwnerDecision),
-    gatewayAdmissions: gateways.map(toGatewayAdmission),
-    attempts: attempts.map(toAttempt),
-    receipts: receipts.map(toReceipt),
-    privateEvidenceRefs: privateEvidenceRefs.map(toPrivateEvidenceRef),
-    noRepairRecords: noRepairRecords.map(toNoRepairRecord),
-    supportRecords: supportRecords.map(toSupportRecord),
-    auditEvents: auditEvents.map(toAuditEvent).filter(isDefined),
-  })
-}
-
-async function persistContactFollowUpSourceState(db: RuntimeDb, state: ContactFollowUpSourceState): Promise<void> {
-  for (const proposal of state.proposals) {
-    await upsertByFields(db, 'protectedActionProposals', ['proposalId'], {
-      proposalId: proposal.id,
-      selectedActionSlug: ContactFollowUpActionSlug,
-      businessId: proposal.businessId,
-      ownerId: proposal.ownerId,
-      ...(proposal.serviceId === undefined ? {} : { serviceId: proposal.serviceId }),
-      actorRef: proposal.actorRef,
-      sourceEvidenceRef: proposal.target.sourceEvidenceRef,
-      allowedParametersJson: JSON.stringify(proposal.parameters),
-      policyHintsJson: JSON.stringify(proposal.policyHints),
-      canonicalContractHash: proposal.canonicalContractHash,
-      proposalHash: proposal.proposalHash,
-      idempotencyKey: proposal.idempotencyKey,
-      correlationId: proposal.correlationId,
-      deadlineAt: proposal.deadlineAt,
-      reversibility: proposal.reversibility,
-      proofExpectation: proposal.proofExpectation,
-      status: proposal.status,
-      createdAt: proposal.createdAt,
-      updatedAt: proposal.updatedAt,
-    })
-  }
-
-  for (const policy of state.policyDecisions) {
-    await upsertByFields(db, 'protectedActionPolicyDecisions', ['policyId'], {
-      policyId: policy.id,
-      proposalId: policy.proposalId,
-      selectedActionSlug: ContactFollowUpActionSlug,
-      kind: policy.kind,
-      reason: policy.reason,
-      proposalHash: policy.proposalHash,
-      policyHash: policy.policyHash,
-      correlationId: proposalCorrelationId(state, policy.proposalId),
-      evaluatedAt: policy.evaluatedAt,
-    })
-  }
-
-  for (const decision of state.ownerDecisions) {
-    await upsertByFields(db, 'protectedActionOwnerDecisions', ['decisionId'], {
-      decisionId: decision.id,
-      proposalId: decision.proposalId,
-      selectedActionSlug: ContactFollowUpActionSlug,
-      ownerId: decision.decidedBy,
-      decision: decision.decision,
-      reason: decision.reason,
-      evidenceRefs: decision.evidenceRefs,
-      proposalHash: decision.proposalHash,
-      policyHash: decision.policyHash,
-      decisionHash: decision.decisionHash,
-      idempotencyKey: decision.idempotencyKey,
-      correlationId: decision.correlationId,
-      decidedAt: decision.decidedAt,
-    })
-  }
-
-  for (const gateway of state.gatewayAdmissions) {
-    await upsertByFields(db, 'protectedActionGatewayAdmissions', ['gatewayAdmissionId'], {
-      gatewayAdmissionId: gateway.id,
-      proposalId: gateway.proposalId,
-      selectedActionSlug: ContactFollowUpActionSlug,
-      proposalHash: gateway.proposalHash,
-      policyHash: gateway.policyHash,
-      contractHash: gateway.contractHash,
-      ownerDecisionHash: gateway.ownerDecisionHash,
-      admissionHash: gateway.admissionHash,
-      idempotencyKey: gateway.idempotencyKey,
-      correlationId: gateway.correlationId,
-      status: gateway.status,
-      expiresAt: gateway.expiresAt,
-      createdAt: gateway.createdAt,
-      ...(gateway.consumedAt === undefined ? {} : { consumedAt: gateway.consumedAt }),
-    })
-  }
-
-  for (const attempt of state.attempts) {
-    await upsertByFields(db, 'protectedActionAttempts', ['attemptId'], {
-      attemptId: attempt.id,
-      proposalId: attempt.proposalId,
-      selectedActionSlug: ContactFollowUpActionSlug,
-      businessId: attempt.businessId,
-      ownerId: attempt.ownerId,
-      decisionId: attempt.decisionId,
-      gatewayAdmissionId: attempt.gatewayAdmissionId,
-      outcome: attempt.outcome,
-      attemptHash: attempt.attemptHash,
-      ...(attempt.receiptId === undefined ? {} : { receiptId: attempt.receiptId }),
-      ...(attempt.reason === undefined ? {} : { reason: attempt.reason }),
-      idempotencyKey: attempt.idempotencyKey,
-      correlationId: attempt.correlationId,
-      attemptedAt: attempt.attemptedAt,
-    })
-  }
-
-  for (const receipt of state.receipts) {
-    await upsertByFields(db, 'protectedActionReceipts', ['receiptId'], {
-      receiptId: receipt.id,
-      proposalId: receipt.proposalId,
-      attemptId: receipt.attemptId,
-      selectedActionSlug: ContactFollowUpActionSlug,
-      kind: receipt.kind,
-      providerBoundary: receipt.providerBoundary,
-      payloadHash: receipt.payloadHash,
-      redactedReadbackJson: JSON.stringify(receipt.redactedReadback),
-      recordedAt: receipt.recordedAt,
-    })
-  }
-
-  for (const privateEvidenceRef of state.privateEvidenceRefs) {
-    await upsertByFields(db, 'protectedActionPrivateEvidenceRefs', ['privateEvidenceRefId'], {
-      privateEvidenceRefId: privateEvidenceRef.id,
-      proposalId: privateEvidenceRef.proposalId,
-      ...(privateEvidenceRef.attemptId === undefined ? {} : { attemptId: privateEvidenceRef.attemptId }),
-      selectedActionSlug: ContactFollowUpActionSlug,
-      retentionClass: privateEvidenceRef.retentionClass,
-      accessPolicy: privateEvidenceRef.accessPolicy,
-      payloadHash: privateEvidenceRef.payloadHash,
-      ...(privateEvidenceRef.privatePayloadRef === undefined ? {} : { privatePayloadRef: privateEvidenceRef.privatePayloadRef }),
-      ttlExpiresAt: privateEvidenceRef.ttlExpiresAt,
-      ...(privateEvidenceRef.redactedAt === undefined ? {} : { redactedAt: privateEvidenceRef.redactedAt }),
-    })
-  }
-
-  for (const noRepair of state.noRepairRecords) {
-    await upsertByFields(db, 'protectedActionNoRepairRecords', ['noRepairId'], {
-      noRepairId: noRepair.id,
-      proposalId: noRepair.proposalId,
-      ...(noRepair.attemptId === undefined ? {} : { attemptId: noRepair.attemptId }),
-      selectedActionSlug: ContactFollowUpActionSlug,
-      reason: noRepair.reason,
-      evidenceRefs: noRepair.evidenceRefs,
-      noRepairHash: noRepair.noRepairHash,
-      idempotencyKey: noRepair.idempotencyKey,
-      correlationId: noRepair.correlationId,
-      markedBy: noRepair.markedBy,
-      markedAt: noRepair.markedAt,
-    })
-  }
-
-  for (const auditEvent of state.auditEvents) {
-    await upsertAuditEvent(db, auditEvent)
-    await upsertProtectedActionOperation(db, auditEvent)
-  }
-}
-
-async function upsertAuditEvent(db: RuntimeDb, auditEvent: AuditEventContract): Promise<void> {
-  await upsertByFields(db, 'auditEvents', ['eventId'], {
-    eventId: auditEvent.eventId,
-    eventType: auditEvent.eventType,
-    actorKind: auditEvent.actorKind,
-    actorRef: auditEvent.actorRef,
-    ...(auditEvent.businessId === undefined ? {} : { businessId: auditEvent.businessId }),
-    targetType: auditEvent.targetType,
-    targetRef: auditEvent.targetRef,
-    ...(auditEvent.beforeState === undefined ? {} : { beforeState: auditEvent.beforeState }),
-    ...(auditEvent.afterState === undefined ? {} : { afterState: auditEvent.afterState }),
-    idempotencyKey: auditEvent.idempotencyKey,
-    correlationId: auditEvent.correlationId,
-    ...(auditEvent.reasonCode === undefined ? {} : { reasonCode: auditEvent.reasonCode }),
-    evidenceRefs: auditEvent.evidenceRefs,
-    redactedPayloadJson: JSON.stringify(auditEvent.redactedPayload),
-    payloadHash: auditEvent.payloadHash,
-    createdAt: auditEvent.createdAt,
-  })
-}
-
-async function upsertProtectedActionOperation(db: RuntimeDb, auditEvent: AuditEventContract): Promise<void> {
-  await upsertByFields(db, 'operationKeys', ['scope', 'operationName', 'key'], {
-    scope: 'protected_action',
-    actorKind: auditEvent.actorKind,
-    actorRef: auditEvent.actorRef,
-    operationName: operationNameForAudit(auditEvent.eventType),
-    key: auditEvent.idempotencyKey,
-    requestHash: auditEvent.payloadHash,
-    sourceHash: auditEvent.targetRef,
-    status: 'succeeded',
-    resultHash: stableHash({ eventType: auditEvent.eventType, targetRef: auditEvent.targetRef }),
-    effectRefs: [`event:${auditEvent.eventType}`, `target:${auditEvent.targetRef}`],
-    createdAt: auditEvent.createdAt,
-    updatedAt: auditEvent.createdAt,
-  })
-}
-
-async function upsertByFields(
+async function ownerAuthorityForProposal(
   db: RuntimeDb,
-  tableName: string,
-  fields: readonly string[],
-  patch: Record<string, unknown>
-): Promise<void> {
-  const existing = (await collect(db, tableName)).find((row) => fields.every((field) => row[field] === patch[field]))
-  if (existing === undefined) {
-    await db.insert(tableName, patch)
-    return
-  }
-
-  await db.patch(existing._id, patch)
-}
-
-async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {
-  return db.query(tableName).collect()
-}
-
-function toProposal(row: RuntimeDocument): ContactFollowUpProposal {
-  const parameters = contactParametersFromJson(stringField(row, 'allowedParametersJson'))
-  const ownerId = brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId')
-  const businessId = brandNonEmpty(stringField(row, 'businessId'), 'BusinessId')
-  const serviceId = optionalStringField(row, 'serviceId')
-  return {
-    id: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    selectedActionSlug: ContactFollowUpActionSlug,
-    businessId,
-    ownerId,
-    ...(serviceId === undefined ? {} : { serviceId: brandNonEmpty(serviceId, 'ServiceId') }),
-    actorRef: stringField(row, 'actorRef'),
-    target: {
-      businessId,
-      ownerId,
-      ...(serviceId === undefined ? {} : { serviceId: brandNonEmpty(serviceId, 'ServiceId') }),
-      sourceEvidenceRef: stringField(row, 'sourceEvidenceRef'),
-      suppressed: false,
-    },
-    parameters,
-    canonicalContractHash: brandNonEmpty(stringField(row, 'canonicalContractHash'), 'SourceHash'),
-    proposalHash: brandNonEmpty(stringField(row, 'proposalHash'), 'SourceHash'),
-    idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    deadlineAt: numberField(row, 'deadlineAt'),
-    reversibility: 'owner_can_close_without_provider_reversal',
-    proofExpectation: 'source_owned_receipt_or_gap',
-    policyHints: policyHintsFromJson(optionalStringField(row, 'policyHintsJson')),
-    status: proposalStatus(row),
-    createdAt: numberField(row, 'createdAt'),
-    updatedAt: numberField(row, 'updatedAt'),
-  }
-}
-
-function toPolicyDecision(row: RuntimeDocument): ContactFollowUpPolicyDecision {
-  return {
-    id: stringField(row, 'policyId') as ContactFollowUpPolicyId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    kind: policyKindField(row),
-    reason: stringField(row, 'reason'),
-    proposalHash: brandNonEmpty(stringField(row, 'proposalHash'), 'SourceHash'),
-    policyHash: brandNonEmpty(stringField(row, 'policyHash'), 'SourceHash'),
-    evaluatedAt: numberField(row, 'evaluatedAt'),
-  }
-}
-
-function toOwnerDecision(row: RuntimeDocument): ContactFollowUpOwnerDecisionRecord {
-  return {
-    id: stringField(row, 'decisionId') as ContactFollowUpDecisionId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    decision: decisionField(row),
-    reason: stringField(row, 'reason'),
-    evidenceRefs: stringArrayField(row, 'evidenceRefs'),
-    proposalHash: brandNonEmpty(stringField(row, 'proposalHash'), 'SourceHash'),
-    policyHash: brandNonEmpty(stringField(row, 'policyHash'), 'SourceHash'),
-    decisionHash: brandNonEmpty(stringField(row, 'decisionHash'), 'SourceHash'),
-    idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    decidedBy: brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId'),
-    decidedAt: numberField(row, 'decidedAt'),
-  }
-}
-
-function toGatewayAdmission(row: RuntimeDocument): ContactFollowUpGatewayAdmission {
-  return {
-    id: stringField(row, 'gatewayAdmissionId') as ContactFollowUpGatewayAdmissionId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    selectedActionSlug: ContactFollowUpActionSlug,
-    proposalHash: brandNonEmpty(stringField(row, 'proposalHash'), 'SourceHash'),
-    policyHash: brandNonEmpty(stringField(row, 'policyHash'), 'SourceHash'),
-    contractHash: brandNonEmpty(stringField(row, 'contractHash'), 'SourceHash'),
-    ownerDecisionHash: brandNonEmpty(stringField(row, 'ownerDecisionHash'), 'SourceHash'),
-    admissionHash: brandNonEmpty(stringField(row, 'admissionHash'), 'SourceHash'),
-    idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    status: gatewayStatus(row),
-    expiresAt: numberField(row, 'expiresAt'),
-    createdAt: numberField(row, 'createdAt'),
-    ...(optionalNumberField(row, 'consumedAt') === undefined ? {} : { consumedAt: numberField(row, 'consumedAt') }),
-  }
-}
-
-function toAttempt(row: RuntimeDocument): ContactFollowUpAttempt {
-  return {
-    id: stringField(row, 'attemptId') as ContactFollowUpAttemptId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    selectedActionSlug: ContactFollowUpActionSlug,
-    businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
-    ownerId: brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId'),
-    decisionId: stringField(row, 'decisionId') as ContactFollowUpDecisionId,
-    gatewayAdmissionId: stringField(row, 'gatewayAdmissionId') as ContactFollowUpGatewayAdmissionId,
-    outcome: attemptOutcomeField(row),
-    attemptHash: brandNonEmpty(stringField(row, 'attemptHash'), 'SourceHash'),
-    ...(optionalStringField(row, 'receiptId') === undefined ? {} : { receiptId: stringField(row, 'receiptId') as ContactFollowUpReceiptId }),
-    ...(optionalStringField(row, 'reason') === undefined ? {} : { reason: stringField(row, 'reason') }),
-    idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    attemptedAt: numberField(row, 'attemptedAt'),
-  }
-}
-
-function toReceipt(row: RuntimeDocument): ContactFollowUpReceipt {
-  return {
-    id: stringField(row, 'receiptId') as ContactFollowUpReceiptId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    attemptId: stringField(row, 'attemptId') as ContactFollowUpAttemptId,
-    kind: receiptKind(row),
-    providerBoundary: 'source_owned_follow_up_outbox',
-    payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
-    redactedReadback: redactedReadbackFromJson(stringField(row, 'redactedReadbackJson')),
-    recordedAt: numberField(row, 'recordedAt'),
-  }
-}
-
-function toPrivateEvidenceRef(row: RuntimeDocument): ContactFollowUpPrivateEvidenceRef {
-  return {
-    id: stringField(row, 'privateEvidenceRefId') as ContactFollowUpPrivateEvidenceRefId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    ...(optionalStringField(row, 'attemptId') === undefined ? {} : { attemptId: stringField(row, 'attemptId') as ContactFollowUpAttemptId }),
-    retentionClass: 'protected_action_private_evidence',
-    accessPolicy: 'owner_admin_operator_only',
-    payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
-    ...(optionalStringField(row, 'privatePayloadRef') === undefined ? {} : { privatePayloadRef: stringField(row, 'privatePayloadRef') }),
-    ttlExpiresAt: numberField(row, 'ttlExpiresAt'),
-    ...(optionalNumberField(row, 'redactedAt') === undefined ? {} : { redactedAt: numberField(row, 'redactedAt') }),
-  }
-}
-
-function toNoRepairRecord(row: RuntimeDocument): ContactFollowUpNoRepairRecord {
-  return {
-    id: stringField(row, 'noRepairId') as ContactFollowUpNoRepairId,
-    proposalId: stringField(row, 'proposalId') as ContactFollowUpProposalId,
-    ...(optionalStringField(row, 'attemptId') === undefined ? {} : { attemptId: stringField(row, 'attemptId') as ContactFollowUpAttemptId }),
-    reason: stringField(row, 'reason'),
-    evidenceRefs: stringArrayField(row, 'evidenceRefs'),
-    noRepairHash: brandNonEmpty(stringField(row, 'noRepairHash'), 'SourceHash'),
-    idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    markedBy: stringField(row, 'markedBy'),
-    markedAt: numberField(row, 'markedAt'),
-  }
-}
-
-function toSupportRecord(row: RuntimeDocument): ContactFollowUpSupportRecord {
-  return {
-    supportRecordId: stringField(row, 'supportRecordId'),
-    selectedActionSlug: ContactFollowUpActionSlug,
-    primaryOwnerRef: stringField(row, 'primaryOwnerRef'),
-    backupOwnerRef: stringField(row, 'backupOwnerRef'),
-    primaryAdminOperatorRef: stringField(row, 'primaryAdminOperatorRef'),
-    supportedChannels: stringArrayField(row, 'supportedChannels'),
-    launchStage: 'internal_alpha',
-    capacityThreshold: numberField(row, 'capacityThreshold'),
-    backlogAgeThresholdMs: numberField(row, 'backlogAgeThresholdMs'),
-    phaseIncidentsBlocking: stringArrayField(row, 'phaseIncidentsBlocking'),
-    claimDisablePath: 'protected_actions_enabled',
-    perChannelKillRules: stringArrayField(row, 'perChannelKillRules'),
-    nextReviewAt: numberField(row, 'nextReviewAt'),
-    sourceHash: brandNonEmpty(stringField(row, 'sourceHash'), 'SourceHash'),
-  }
-}
-
-function toAuditEvent(row: RuntimeDocument): AuditEventContract | undefined {
-  if (!stringField(row, 'eventType').startsWith('protected_action.')) {
+  owner: CurrentOwnerIdentity,
+  proposal: ContactFollowUpProposal
+): Promise<ContactFollowUpOwnerAuthority | undefined> {
+  if (proposal.ownerId !== owner.ownerId) {
     return undefined
   }
 
-  const businessId = optionalStringField(row, 'businessId')
-  return {
-    eventId: brandNonEmpty(stringField(row, 'eventId'), 'AuditEventId'),
-    eventType: stringField(row, 'eventType') as AuditEventContract['eventType'],
-    actorKind: actorKind(row),
-    actorRef: stringField(row, 'actorRef'),
-    targetType: targetType(row),
-    targetRef: stringField(row, 'targetRef'),
-    ...(businessId === undefined ? {} : { businessId: brandNonEmpty(businessId, 'BusinessId') }),
-    ...(optionalStringField(row, 'beforeState') === undefined ? {} : { beforeState: stringField(row, 'beforeState') }),
-    ...(optionalStringField(row, 'afterState') === undefined ? {} : { afterState: stringField(row, 'afterState') }),
-    idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
-    correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
-    ...(optionalStringField(row, 'reasonCode') === undefined ? {} : { reasonCode: stringField(row, 'reasonCode') }),
-    evidenceRefs: stringArrayField(row, 'evidenceRefs'),
-    redactedPayload: parseJson(stringField(row, 'redactedPayloadJson')) as RedactedPayload,
-    payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
-    createdAt: numberField(row, 'createdAt'),
+  const ownedBusinessId = await readOwnedBusinessId(db, owner, proposal.businessId)
+  return ownedBusinessId === undefined ? undefined : { ...owner, businessIds: [ownedBusinessId] }
+}
+
+async function readOwnedBusinessId(
+  db: RuntimeDb,
+  owner: CurrentOwnerIdentity,
+  businessId: string
+): Promise<BusinessId | undefined> {
+  const business = await getRuntimeDocument(db, businessId)
+  if (business === null || stringField(business, 'ownerId') !== owner.ownerId) {
+    return undefined
+  }
+
+  return brandNonEmpty(business._id, 'BusinessId')
+}
+
+async function getRuntimeDocument(db: RuntimeDb, id: string): Promise<RuntimeDocument | null> {
+  try {
+    return await db.get(id)
+  } catch {
+    return null
   }
 }
 
@@ -1444,144 +1073,9 @@ function readEnv(name: string): string | undefined {
   return typeof process === 'undefined' ? undefined : process.env[name]
 }
 
-function proposalCorrelationId(state: ContactFollowUpSourceState, proposalId: ContactFollowUpProposalId): CorrelationId {
-  return state.proposals.find((proposal) => proposal.id === proposalId)?.correlationId ?? brandNonEmpty('correlation:protected-action:missing', 'CorrelationId')
-}
-
-function operationNameForAudit(eventType: string): string {
-  if (eventType === 'protected_action.proposed') return 'proposeContactFollowUpRequest'
-  if (eventType === 'protected_action.policy_evaluated') return 'evaluateContactFollowUpPolicy'
-  if (eventType === 'protected_action.approved' || eventType === 'protected_action.rejected') return 'decideContactFollowUpProposal'
-  if (eventType === 'protected_action.gateway_admitted' || eventType === 'protected_action.gateway_consumed') return 'contactFollowUpGateway'
-  if (eventType === 'protected_action.no_repair_marked') return 'markContactFollowUpNoRepair'
-  if (eventType === 'protected_action.retry_exhausted') return 'retryContactFollowUpAttempt'
-  return 'recordContactFollowUpProviderAttempt'
-}
-
-function contactParametersFromJson(value: string): ContactFollowUpProposal['parameters'] {
-  const parsed = parseJson(value)
-  if (
-    isRecord(parsed) &&
-    typeof parsed.contactName === 'string' &&
-    (parsed.contactChannel === 'email' || parsed.contactChannel === 'phone' || parsed.contactChannel === 'other') &&
-    typeof parsed.messageSummary === 'string' &&
-    typeof parsed.sourceMessageRef === 'string'
-  ) {
-    return {
-      contactName: parsed.contactName,
-      contactChannel: parsed.contactChannel,
-      messageSummary: parsed.messageSummary,
-      sourceMessageRef: parsed.sourceMessageRef,
-    }
-  }
-
-  return {
-    contactName: 'Unknown contact',
-    contactChannel: 'other',
-    messageSummary: 'Stored contact follow-up parameters were unavailable.',
-    sourceMessageRef: 'source-message:unavailable',
-  }
-}
-
-function policyHintsFromJson(value: string | undefined): ContactFollowUpPolicyHints {
-  const parsed = value === undefined ? undefined : parseJson(value)
-  if (
-    isRecord(parsed) &&
-    (parsed.sourceProof === 'present' || parsed.sourceProof === 'missing' || parsed.sourceProof === 'gap') &&
-    typeof parsed.requiresExternalAuthority === 'boolean'
-  ) {
-    return {
-      sourceProof: parsed.sourceProof,
-      requiresExternalAuthority: parsed.requiresExternalAuthority,
-    }
-  }
-
-  return { sourceProof: 'present', requiresExternalAuthority: false }
-}
-
-function redactedReadbackFromJson(value: string): ContactFollowUpReceipt['redactedReadback'] {
-  const parsed = parseJson(value)
-  if (isRecord(parsed) && typeof parsed.targetRef === 'string') {
-    return {
-      targetRef: parsed.targetRef,
-      ...(typeof parsed.resultRef === 'string' ? { resultRef: parsed.resultRef } : {}),
-      ...(typeof parsed.gapReason === 'string' ? { gapReason: parsed.gapReason } : {}),
-    }
-  }
-
-  return { targetRef: 'source-message:unavailable' }
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return null
-  }
-}
-
-function proposalStatus(row: RuntimeDocument): ContactFollowUpProposal['status'] {
-  const value = stringField(row, 'status')
-  return value === 'approved' || value === 'rejected' || value === 'attempted' ? value : 'proposed'
-}
-
-function policyKindField(row: RuntimeDocument): ContactFollowUpPolicyDecision['kind'] {
-  const value = stringField(row, 'kind')
-  return ContactFollowUpPolicyKindValues.includes(value as ContactFollowUpPolicyDecision['kind'])
-    ? (value as ContactFollowUpPolicyDecision['kind'])
-    : 'review_required'
-}
-
-function decisionField(row: RuntimeDocument): ContactFollowUpOwnerDecisionRecord['decision'] {
-  return stringField(row, 'decision') === 'rejected' ? 'rejected' : 'approved'
-}
-
-function gatewayStatus(row: RuntimeDocument): ContactFollowUpGatewayAdmission['status'] {
-  const value = stringField(row, 'status')
-  return value === 'consumed' || value === 'expired' || value === 'replay_rejected' ? value : 'admitted'
-}
-
-function attemptOutcomeField(row: RuntimeDocument): ContactFollowUpAttempt['outcome'] {
-  const value = stringField(row, 'outcome')
-  return value === 'proof_gap_recorded' || value === 'failed' ? value : 'receipt_recorded'
-}
-
-function receiptKind(row: RuntimeDocument): ContactFollowUpReceipt['kind'] {
-  return stringField(row, 'kind') === 'proof_gap' ? 'proof_gap' : 'receipt'
-}
-
-function actorKind(row: RuntimeDocument): AuditEventContract['actorKind'] {
-  const value = stringField(row, 'actorKind')
-  return value === 'admin' || value === 'system' || value === 'anonymous' ? value : 'owner'
-}
-
-function targetType(row: RuntimeDocument): AuditEventContract['targetType'] {
-  return stringField(row, 'targetType') === 'protected_action_attempt' ? 'protected_action_attempt' : 'protected_action'
-}
-
 function stringField(row: RuntimeDocument, field: string): string {
   const value = row[field]
   return typeof value === 'string' ? value : ''
-}
-
-function optionalStringField(row: RuntimeDocument, field: string): string | undefined {
-  const value = row[field]
-  return typeof value === 'string' ? value : undefined
-}
-
-function numberField(row: RuntimeDocument, field: string): number {
-  const value = row[field]
-  return typeof value === 'number' ? value : 0
-}
-
-function optionalNumberField(row: RuntimeDocument, field: string): number | undefined {
-  const value = row[field]
-  return typeof value === 'number' ? value : undefined
-}
-
-function stringArrayField(row: RuntimeDocument, field: string): string[] {
-  const value = row[field]
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }
 
 function stringValue(record: Record<string, unknown>, field: string): string | undefined {

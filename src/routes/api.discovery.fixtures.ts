@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { createDefaultDiscoverySourceState, generateDeveloperDiscoveryFixtureBundle } from '@/modules/discovery/public'
-import type { DiscoverySourceState, ReadDeveloperDiscoveryRouteOptions } from '@/modules/discovery/public'
+import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
+import { generateDeveloperDiscoveryFixtureBundle } from '@/modules/discovery/developer-discovery'
+import type { ReadDeveloperDiscoveryRouteOptions } from '@/modules/discovery/developer-discovery'
 import {
   developerDiscoveryJsonResponse,
   readDeveloperDiscoveryFetchReadback,

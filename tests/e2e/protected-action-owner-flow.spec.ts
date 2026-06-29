@@ -5,6 +5,9 @@ const forbiddenFutureSurfaceCopy =
 const approvedProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-proposal'
 const pendingProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-pending-proposal'
 const failedProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-failed-proposal'
+const staleProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-stale-proposal'
+const refusedProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-refused-proposal'
+const wrongOwnerProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-wrong-owner-proposal'
 
 test.describe('selected protected action routes', () => {
   test('owner queue and approval detail use populated contact-follow-up source state', async ({ page }) => {
@@ -16,6 +19,8 @@ test.describe('selected protected action routes', () => {
     await expect(page.getByText('Taylor Customer')).toBeVisible()
     await expect(page.getByText('Jordan Customer')).toBeVisible()
     await expect(page.getByText(/No contact follow-up requests/i)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /reject contact follow-up/i })).toHaveCount(0)
     expect(await page.locator('body').innerText()).not.toMatch(forbiddenFutureSurfaceCopy)
 
     await page.goto(pendingProposalPath)
@@ -70,6 +75,28 @@ test.describe('selected protected action routes', () => {
     await expect(page.getByRole('heading', { name: /protected action detail/i })).toBeVisible()
     await expect(page.getByText(/proof gap/i).first()).toBeVisible()
     await expect(page.getByText(/No raw provider payloads are exposed/i)).toBeVisible()
+    expect(await page.locator('body').innerText()).not.toMatch(forbiddenFutureSurfaceCopy)
+  })
+
+  test('expired refused and wrong-owner paths disable owner decisions honestly', async ({ page }) => {
+    await page.goto(staleProposalPath)
+    await expect(page.getByRole('heading', { name: /review contact follow-up/i })).toBeVisible()
+    await expect(page.getByText(/owner decision disabled/i)).toBeVisible()
+    await expect(page.getByText(/stale because its approval deadline has expired/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /reject contact follow-up/i })).toBeDisabled()
+
+    await page.goto(refusedProposalPath)
+    await expect(page.getByText(/owner decision disabled/i)).toBeVisible()
+    await expect(page.getByText(/policy-refused/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /reject contact follow-up/i })).toBeDisabled()
+
+    await page.goto(wrongOwnerProposalPath)
+    await expect(page.getByText(/contact follow-up unavailable/i)).toBeVisible()
+    await expect(page.getByText(/not found for this owner/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /reject contact follow-up/i })).toHaveCount(0)
     expect(await page.locator('body').innerText()).not.toMatch(forbiddenFutureSurfaceCopy)
   })
 })

@@ -4,13 +4,10 @@ import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/busines
 import { createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
-  buildLlmsTxt,
-  buildSitemapXml,
   createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
+import { withDiscoverySourcePortForTest } from '../helpers/source-ports'
 import { handleDurableUcpManifestRequest } from '@/routes/$slug.ucp'
 
 describe('discovery route handlers', () => {
@@ -23,7 +20,7 @@ describe('discovery route handlers', () => {
       suburb: 'Fremantle',
     })
 
-    await withDiscoveryQueryClient(state, async () => {
+    await withDiscoverySourcePortForTest(state, async () => {
       const response = await handleDurableUcpManifestRequest(
         new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
         'fremantle-heat-pump-repairs'
@@ -62,7 +59,7 @@ describe('discovery route handlers', () => {
   })
 
   it('serves the AE-hosted UCP fallback manifest with route-safe headers', async () => {
-    await withDiscoveryQueryClient(createDefaultDiscoverySourceState(), async () => {
+    await withDiscoverySourcePortForTest(createDefaultDiscoverySourceState(), async () => {
       const response = await handleDurableUcpManifestRequest(
         new Request('https://ae.example/parramatta-emergency-plumbing/ucp'),
         'parramatta-emergency-plumbing'
@@ -102,7 +99,7 @@ describe('discovery route handlers', () => {
   })
 
   it('returns an explicit not-found shape for absent or non-public slugs', async () => {
-    await withDiscoveryQueryClient(createDefaultDiscoverySourceState(), async () => {
+    await withDiscoverySourcePortForTest(createDefaultDiscoverySourceState(), async () => {
       const response = await handleDurableUcpManifestRequest(
         new Request('https://ae.example/missing-business/ucp'),
         'missing-business'
@@ -119,31 +116,6 @@ describe('discovery route handlers', () => {
     })
   })
 })
-
-async function withDiscoveryQueryClient(state: DiscoverySourceState, run: () => Promise<void>): Promise<void> {
-  const reset = setPublicDiscoveryQueryClientForTests({
-    manifest: ({ slug, canonicalBaseUrl, now }) => {
-      const result = regenerateDiscoveryManifest(state, { slug: brandNonEmpty(slug, 'Slug') }, {
-        ...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl }),
-        now,
-      })
-
-      if (result.kind === 'ok') {
-        return Promise.resolve({ kind: 'available', manifest: result.manifest })
-      }
-
-      return Promise.resolve({ kind: 'hidden', reason: 'not_public' })
-    },
-    llms: (options) => Promise.resolve(buildLlmsTxt(state, options)),
-    sitemap: (options) => Promise.resolve(buildSitemapXml(state, options)),
-  })
-
-  try {
-    await run()
-  } finally {
-    reset()
-  }
-}
 
 function createDurablePublishedDiscoveryState(input: {
   businessName: string

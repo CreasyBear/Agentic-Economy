@@ -6,6 +6,7 @@ import type {
   ContactFollowUpDecision,
   ContactFollowUpParameterKey,
   ContactFollowUpPolicyKind,
+  ContactFollowUpReadbackStatus,
 } from '@/modules/protected-action/public'
 import {
   ContactFollowUpActionSlug,
@@ -14,6 +15,7 @@ import {
   ContactFollowUpMaxAttemptCount,
   ContactFollowUpParameterKeyValues,
   ContactFollowUpPolicyKindValues,
+  ContactFollowUpReadbackStatusValues,
 } from '@/modules/protected-action/public'
 import type { OwnerContactFollowUpMutationServerResult } from '@/modules/protected-action/contact-follow-up.functions'
 
@@ -24,6 +26,7 @@ describe('protected action type contracts', () => {
     expectTypeOf<(typeof ContactFollowUpPolicyKindValues)[number]>().toEqualTypeOf<ContactFollowUpPolicyKind>()
     expectTypeOf<(typeof ContactFollowUpDecisionValues)[number]>().toEqualTypeOf<ContactFollowUpDecision>()
     expectTypeOf<(typeof ContactFollowUpAttemptOutcomeValues)[number]>().toEqualTypeOf<ContactFollowUpAttemptOutcome>()
+    expectTypeOf<(typeof ContactFollowUpReadbackStatusValues)[number]>().toEqualTypeOf<ContactFollowUpReadbackStatus>()
     expectTypeOf<typeof ContactFollowUpMaxAttemptCount>().toEqualTypeOf<2>()
   })
 
@@ -31,6 +34,7 @@ describe('protected action type contracts', () => {
     expect(ContactFollowUpActionSlug).toBe('contact-follow-up')
     expect(ContactFollowUpParameterKeyValues).not.toContain('amount')
     expect(ContactFollowUpDecisionValues).not.toContain('auto_approved')
+    expect(ContactFollowUpReadbackStatusValues).toEqual(expect.arrayContaining(['stale', 'refused', 'disputed', 'reversed', 'retry_exhausted']))
     expect(ContactFollowUpMaxAttemptCount).toBe(2)
   })
 

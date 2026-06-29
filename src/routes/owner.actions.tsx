@@ -139,8 +139,6 @@ function OwnerContactFollowUpQueue({ queue }: { queue: readonly ContactFollowUpP
 function OwnerContactFollowUpCard({ item }: { item: ContactFollowUpProposalQueueItem }) {
   const policy = item.policy?.kind ?? 'not_checked'
   const decision = item.ownerDecision?.decision ?? 'waiting'
-  const canDecide = item.ownerDecision === undefined && (item.policy?.kind === 'review_required' || item.policy?.kind === 'time_bound')
-
   return (
     <Card>
       <CardHeader>
@@ -171,12 +169,6 @@ function OwnerContactFollowUpCard({ item }: { item: ContactFollowUpProposalQueue
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="outline" size="sm">
             <a href={`/owner/actions/${encodeURIComponent(item.proposal.id)}`}>Review detail</a>
-          </Button>
-          <Button disabled={!canDecide} size="sm" type="button">
-            Approve contact follow-up
-          </Button>
-          <Button variant="outline" size="sm" type="button">
-            Reject contact follow-up
           </Button>
         </div>
       </CardContent>

@@ -8,6 +8,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   buildPublicOwnerStatusReadback,
   getDefaultPublicOwnerStatusReadback,
@@ -16,6 +17,7 @@ import {
   submitDurablePublicOwnerClaimFlow,
   submitPublicOwnerClaimFlow,
 } from '@/modules/catalog/public'
+import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type {
   PublicBusinessPageRouteReadbackResult,
   PublicBusinessPageReadbackResult,
@@ -64,6 +66,7 @@ type ClaimBusinessArgs = {
   ownerMessage?: string
   sourceRefs: readonly { label: string; evidenceRef: string }[]
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -103,6 +106,7 @@ type PublishCatalogArgs = {
         }
   }[]
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -140,7 +144,7 @@ const currentOwnerCatalogQuery = sourceQuery<Record<string, never>, PublicCatalo
 
 export const submitOwnerClaimServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerClaimInputSchema.parse(data))
-  .handler(async ({ data }) => submitOwnerClaimThroughSource(data))
+  .handler(async ({ data, context }) => submitOwnerClaimThroughSource(data, context))
 
 export const readOwnerStatusServer = createServerFn()
   .validator((data) => ownerStatusInputSchema.parse(data ?? {}))
@@ -150,63 +154,86 @@ export const readPublicBusinessPageServer = createServerFn()
   .validator((data) => publicPageInputSchema.parse(data))
   .handler(async ({ data }) => readPublicBusinessPageThroughSource(data.slug))
 
-export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowInput): Promise<PublicOwnerClaimFlowRouteResult> {
+export async function submitOwnerClaimThroughSource(
+  input: PublicOwnerClaimFlowInput,
+  context?: unknown
+): Promise<PublicOwnerClaimFlowRouteResult> {
   if (usesLocalE2eBypass()) {
     return redactOwnerClaimResult(submitDurablePublicOwnerClaimFlow(input))
   }
 
-  const origin = requestOrigin()
-  const operationSuffix = `${normalizeOperationPart(input.requestedSlug)}:${crypto.randomUUID()}`
-  const source = ownerCatalogSourcePort()
-  const claim = await source.claim({
-    name: input.businessName,
-    category: input.category,
-    suburb: input.suburb,
-    stateTerritory: input.stateTerritory,
-    requestedSlug: input.requestedSlug,
-    ...(input.ownerMessage.trim().length === 0 ? {} : { ownerMessage: input.ownerMessage }),
-    sourceRefs: [{ label: input.sourceLabel, evidenceRef: `owner-submitted:${normalizeOperationPart(input.requestedSlug)}` }],
-    origin,
-    operationKey: `claim:${operationSuffix}`,
-    correlationId: `claim:${operationSuffix}`,
-  })
+  try {
+    const origin = requestOrigin()
+    const operationSuffix = `${normalizeOperationPart(input.requestedSlug)}:${crypto.randomUUID()}`
+    const claimOperationKey = `claim:${operationSuffix}`
+    const claimCorrelationId = `claim:${operationSuffix}`
+    const publishOperationKey = `publish:${operationSuffix}`
+    const publishCorrelationId = `publish:${operationSuffix}`
+    const source = ownerCatalogSourcePort()
+    const claim = await source.claim({
+      name: input.businessName,
+      category: input.category,
+      suburb: input.suburb,
+      stateTerritory: input.stateTerritory,
+      requestedSlug: input.requestedSlug,
+      ...(input.ownerMessage.trim().length === 0 ? {} : { ownerMessage: input.ownerMessage }),
+      sourceRefs: [{ label: input.sourceLabel, evidenceRef: `owner-submitted:${normalizeOperationPart(input.requestedSlug)}` }],
+      origin,
+      sourceWrite: await sourceWriteAdmissionFromContext({
+        context,
+        scope: 'owner_claim',
+        operationKey: claimOperationKey,
+        correlationId: claimCorrelationId,
+      }),
+      operationKey: claimOperationKey,
+      correlationId: claimCorrelationId,
+    })
 
-  if (claim.kind === 'error') {
-    return {
-      kind: 'error',
-      code: 'claim_flow_claim_rejected',
-      retryable: claim.retryable,
-      reason: claim.reason,
+    if (claim.kind === 'error') {
+      return {
+        kind: 'error',
+        code: 'claim_flow_claim_rejected',
+        retryable: claim.retryable,
+        reason: claim.reason,
+      }
     }
-  }
 
-  const publish = await source.publish({
-    claimId: claim.claim.claimId,
-    services: [toServiceCatalogArgs(input)],
-    origin,
-    operationKey: `publish:${operationSuffix}`,
-    correlationId: `publish:${operationSuffix}`,
-  })
+    const publish = await source.publish({
+      claimId: claim.claim.claimId,
+      services: [toServiceCatalogArgs(input)],
+      origin,
+      sourceWrite: await sourceWriteAdmissionFromContext({
+        context,
+        scope: 'catalog_publish',
+        operationKey: publishOperationKey,
+        correlationId: publishCorrelationId,
+      }),
+      operationKey: publishOperationKey,
+      correlationId: publishCorrelationId,
+    })
 
-  if (publish.kind === 'error') {
-    return {
-      kind: 'error',
-      code: 'claim_flow_publish_rejected',
-      retryable: publish.retryable,
-      reason: publish.reason,
+    if (publish.kind === 'error') {
+      return {
+        kind: 'error',
+        code: 'claim_flow_publish_rejected',
+        retryable: publish.retryable,
+        reason: publish.reason,
+      }
     }
-  }
 
-  const publicCatalog = redactCatalogSourceHashes(publish.catalog)
+    const publicCatalog = redactCatalogSourceHashes(publish.catalog)
 
-  return {
-    kind: 'ok',
-    code: 'claim_flow_published',
-    catalog: publicCatalog,
-    readback: {
-      ...redactOwnerStatusReadback(buildPublicOwnerStatusReadback(publish.catalog)),
+    return {
+      kind: 'ok',
+      code: 'claim_flow_published',
       catalog: publicCatalog,
-    },
+      readback: {
+        ...redactOwnerStatusReadback(buildPublicOwnerStatusReadback(publish.catalog)),
+        catalog: publicCatalog,
+      },
+    }
+  } catch (error) {
+    return ownerClaimSourceWriteError(error)
   }
 }
 
@@ -367,6 +394,24 @@ function readEnv(env: Env, name: string): string | undefined {
   }
 
   return value.trim()
+}
+
+function ownerClaimSourceWriteError(error: unknown): PublicOwnerClaimFlowRouteResult {
+  if (error instanceof SourceWriteAdmissionError) {
+    return {
+      kind: 'error',
+      code: 'claim_flow_claim_rejected',
+      retryable: false,
+      reason: error.code,
+    }
+  }
+
+  return {
+    kind: 'error',
+    code: 'claim_flow_claim_rejected',
+    retryable: true,
+    reason: 'source_write_unavailable',
+  }
 }
 
 function usesLocalE2eBypass(): boolean {

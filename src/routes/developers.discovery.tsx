@@ -4,7 +4,7 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/public'
+import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/developer-discovery'
 
 export const Route = createFileRoute('/developers/discovery')({
   loader: loadDeveloperDiscoveryRoute,
@@ -21,8 +21,12 @@ export const Route = createFileRoute('/developers/discovery')({
 })
 
 export async function loadDeveloperDiscoveryRoute(): Promise<DeveloperDiscoveryRouteReadback> {
-  const [{ createDefaultDiscoverySourceState, readDeveloperDiscoveryRoute }, { buildDeveloperDiscoveryRouteSnapshot }] =
-    await Promise.all([import('@/modules/discovery/public'), import('./api.discovery.schema')])
+  const [{ readDeveloperDiscoveryRoute }, { buildDeveloperDiscoveryRouteSnapshot }, { createDefaultDiscoverySourceState }] =
+    await Promise.all([
+      import('@/modules/discovery/developer-discovery'),
+      import('./api.discovery.schema'),
+      import('@/modules/discovery/public'),
+    ])
   const request = new Request('https://ae.example/developers/discovery')
   const routeSnapshot = await buildDeveloperDiscoveryRouteSnapshot(request, {
     canonicalBaseUrl: 'https://ae.example',

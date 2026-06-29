@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createDefaultDiscoverySourceState,
+  regenerateDiscoveryManifest,
+} from '@/modules/discovery/public'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
   generateDeveloperDiscoveryExamples,
   generateDeveloperDiscoveryFixtureBundle,
   generateDeveloperDiscoverySchema,
-  regenerateDiscoveryManifest,
   withholdDeveloperDiscoveryArtifact,
-} from '@/modules/discovery/public'
-import type { DeveloperDiscoveryRouteSnapshot, DiscoverySourceState } from '@/modules/discovery/public'
+} from '@/modules/discovery/developer-discovery'
+import type { DeveloperDiscoveryRouteSnapshot } from '@/modules/discovery/developer-discovery'
 
 const forbiddenPrivateOrAuthorityPattern =
   /inquiryBody|ownerReply|claimantContact|ownerNotes|notificationPayload|providerPayload|adminEvidence|sourceHash|rawContact(?!Excluded)|private:evidence|callable":true|paymentRequired":true|providerOperation":true|requestMarket":true|mutation":true|payment":true|protectedAction":true/iu

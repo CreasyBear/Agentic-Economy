@@ -6,16 +6,16 @@ import {
   createDefaultDiscoverySourceState,
   regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
+import type { DiscoverySourceState } from '@/modules/discovery/public'
 import type {
   DeveloperDiscoveryExamplesArtifact,
   DeveloperDiscoveryFixtureBundleArtifact,
   DeveloperDiscoverySchemaArtifact,
-  DiscoverySourceState,
-} from '@/modules/discovery/public'
-import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
+} from '@/modules/discovery/developer-discovery'
+import { setPublicDiscoverySourcePortForTests } from '@/modules/discovery/discovery.functions'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
-import { setPublicRegistryQueryClientForTests } from '@/modules/registry/registry.functions'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import { handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { handleDurableListBusinessesRequest } from '@/routes/api.businesses'
 import { handleDurableSearchBusinessesRequest } from '@/routes/api.businesses.search'
@@ -193,7 +193,7 @@ async function withRouteClients(
   businesses: readonly PublicBusinessCatalogApiDto[],
   run: () => Promise<void>
 ): Promise<void> {
-  const registryReset = setPublicRegistryQueryClientForTests({
+  const registryReset = setPublicRegistrySourcePortForTests({
     list: () => Promise.resolve(routePage(businesses)),
     search: ({ query }) => Promise.resolve(query.trim().length === 0 ? routePage([]) : routePage(businesses, query)),
     detail: ({ slug }) => {
@@ -206,7 +206,7 @@ async function withRouteClients(
     },
   })
   const discoveryState = availableDiscoveryState()
-  const discoveryReset = setPublicDiscoveryQueryClientForTests({
+  const discoveryReset = setPublicDiscoverySourcePortForTests({
     manifest: ({ slug, canonicalBaseUrl, now }) => {
       const generated = regenerateDiscoveryManifest(discoveryState, { slug: 'parramatta-emergency-plumbing' }, {
         ...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl }),

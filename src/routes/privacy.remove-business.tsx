@@ -25,7 +25,7 @@ type RemovalInput = z.infer<typeof removalSchema>
 
 const openRemovalServer = createServerFn({ method: 'POST' })
   .validator((data) => removalSchema.parse(data))
-  .handler(async ({ data }) => openRemovalDisputeThroughSource(data))
+  .handler(async ({ data, context }) => openRemovalDisputeThroughSource(data, context))
 
 export const Route = createFileRoute('/privacy/remove-business')({
   head: () => ({

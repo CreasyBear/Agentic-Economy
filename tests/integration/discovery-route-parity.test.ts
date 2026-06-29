@@ -13,18 +13,10 @@ import {
   buildRobotsTxt,
   buildSitemapXml,
   createDefaultDiscoverySourceState,
-  regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { setPublicDiscoveryQueryClientForTests } from '@/modules/discovery/discovery.functions'
-import {
-  getPublicBusinessCatalogBySlug,
-  listPublicBusinessCatalog,
-  searchPublicBusinessCatalog,
-} from '@/modules/registry/public'
 import type { RegistrySourceState } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiPage } from '@/modules/registry/public'
-import { setPublicRegistryQueryClientForTests } from '@/modules/registry/registry.functions'
 import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import {
   handleDurableListBusinessesRequest,
@@ -39,6 +31,10 @@ import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { handleDurableUcpManifestRequest } from '@/routes/$slug.ucp'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
+import {
+  withDiscoverySourcePortForTest,
+  withRegistrySourcePortForTest,
+} from '../helpers/source-ports'
 
 describe('discovery route parity', () => {
   it('tracks one durable catalog and suppression across public page, registry/API, UCP, llms, and sitemap', async () => {
@@ -50,8 +46,8 @@ describe('discovery route parity', () => {
       suburb: 'Fremantle',
     })
 
-    await withRegistryQueryClient(state, async () => {
-      await withDiscoveryQueryClient(state, async () => {
+    await withRegistrySourcePortForTest(state, async () => {
+      await withDiscoverySourcePortForTest(state, async () => {
         const page = getPublicBusinessCatalog(state, {
           slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
           indexStatus: 'indexed',
@@ -129,8 +125,8 @@ describe('discovery route parity', () => {
 
     suppressFirstBusiness(state)
 
-    await withRegistryQueryClient(state, async () => {
-      await withDiscoveryQueryClient(state, async () => {
+    await withRegistrySourcePortForTest(state, async () => {
+      await withDiscoverySourcePortForTest(state, async () => {
         const page = getPublicBusinessCatalog(state, {
           slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
           indexStatus: 'indexed',
@@ -180,7 +176,7 @@ describe('discovery route parity', () => {
   it('resolves every URL advertised by manifest, llms, sitemap, and robots outputs', async () => {
     const origin = 'https://ae.example'
     const state = createDefaultDiscoverySourceState()
-    await withDiscoveryQueryClient(state, async () => {
+    await withDiscoverySourcePortForTest(state, async () => {
       const manifestResponse = await handleDurableUcpManifestRequest(
         new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
         'parramatta-emergency-plumbing'
@@ -296,45 +292,6 @@ function sitemapLocs(body: string): readonly string[] {
 
 function uniqueUrls(urls: readonly string[]): readonly string[] {
   return Array.from(new Set(urls))
-}
-
-async function withDiscoveryQueryClient(state: DiscoverySourceState, run: () => Promise<void>): Promise<void> {
-  const reset = setPublicDiscoveryQueryClientForTests({
-    manifest: ({ slug, canonicalBaseUrl, now }) => {
-      const result = regenerateDiscoveryManifest(state, { slug: brandNonEmpty(slug, 'Slug') }, {
-        ...(canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl }),
-        now,
-      })
-
-      if (result.kind === 'ok') {
-        return Promise.resolve({ kind: 'available', manifest: result.manifest })
-      }
-
-      return Promise.resolve({ kind: 'hidden', reason: 'not_public' })
-    },
-    llms: (options) => Promise.resolve(buildLlmsTxt(state, options)),
-    sitemap: (options) => Promise.resolve(buildSitemapXml(state, options)),
-  })
-
-  try {
-    await run()
-  } finally {
-    reset()
-  }
-}
-
-async function withRegistryQueryClient(state: RegistrySourceState, run: () => Promise<void>): Promise<void> {
-  const reset = setPublicRegistryQueryClientForTests({
-    list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
-    search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
-    detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
-  })
-
-  try {
-    await run()
-  } finally {
-    reset()
-  }
 }
 
 async function jsonBody(response: Promise<Response>): Promise<PublicBusinessCatalogApiPage> {

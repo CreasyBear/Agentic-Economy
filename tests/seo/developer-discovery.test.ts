@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createDefaultDiscoverySourceState,
-  generateDeveloperDiscoveryExamples,
-  generateDeveloperDiscoveryFixtureBundle,
-  generateDeveloperDiscoverySchema,
   regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
+import {
+  generateDeveloperDiscoveryExamples,
+  generateDeveloperDiscoveryFixtureBundle,
+  generateDeveloperDiscoverySchema,
+} from '@/modules/discovery/developer-discovery'
 import { handleDeveloperDiscoverySchemaRequest } from '@/routes/api.discovery.schema'
 
 const forbiddenSeoDiscoveryPattern =

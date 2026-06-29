@@ -17,8 +17,6 @@ export type PublicDiscoverySourcePort = {
   sitemap: (options: BuildDiscoveryFileOptions) => Promise<DiscoveryFileBuildResult>
 }
 
-export type PublicDiscoveryQueryClient = PublicDiscoverySourcePort
-
 const readCatalogDiscoveryManifestQuery = sourceQuery<
   ReadCatalogDiscoveryManifestInput,
   ReadCatalogDiscoveryManifestResult
@@ -37,8 +35,6 @@ export function setPublicDiscoverySourcePortForTests(port: PublicDiscoverySource
     publicDiscoverySourcePortForTests = previous
   }
 }
-
-export const setPublicDiscoveryQueryClientForTests = setPublicDiscoverySourcePortForTests
 
 export async function readPublicCatalogDiscoveryManifest(
   input: ReadCatalogDiscoveryManifestInput

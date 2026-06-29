@@ -10,11 +10,12 @@ import {
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
 import type { PublicBusinessCatalogApiPage, RegistrySourceState } from '@/modules/registry/public'
-import { setPublicRegistryQueryClientForTests } from '@/modules/registry/registry.functions'
+import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import { handleDurableListBusinessesRequest, handleListBusinessesRequest } from '@/routes/api.businesses'
 import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { handleDurableSearchBusinessesRequest, handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
 import { loadRegistryRouteReadback } from '@/routes/registry'
+import { withRegistrySourcePortForTest } from '../helpers/source-ports'
 
 describe('registry public API routes', () => {
   it('reads one non-default durable catalog through registry, search, API list, and API detail', async () => {
@@ -26,7 +27,7 @@ describe('registry public API routes', () => {
       suburb: 'Fremantle',
     })
 
-    await withRegistryQueryClient(state, async () => {
+    await withRegistrySourcePortForTest(state, async () => {
       const registry = await loadRegistryRouteReadback({ q: 'heat pump fremantle', limit: 10 })
       const list = await jsonBody(handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')))
       const search = await jsonBody(
@@ -73,7 +74,7 @@ describe('registry public API routes', () => {
     })
     suppressFirstBusiness(state)
 
-    await withRegistryQueryClient(state, async () => {
+    await withRegistrySourcePortForTest(state, async () => {
       const registry = await loadRegistryRouteReadback({ q: '', limit: 10 })
       const list = await jsonBody(handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')))
       const search = await jsonBody(
@@ -111,7 +112,7 @@ describe('registry public API routes', () => {
     })
     const listInputs: unknown[] = []
 
-    const reset = setPublicRegistryQueryClientForTests({
+    const reset = setPublicRegistrySourcePortForTests({
       list: (input) => {
         listInputs.push(input)
         expect(input).toEqual({ limit: 10 })
@@ -142,7 +143,7 @@ describe('registry public API routes', () => {
       suburb: 'Fremantle',
     })
 
-    await withRegistryQueryClient(state, async () => {
+    await withRegistrySourcePortForTest(state, async () => {
       const registry = await loadRegistryRouteReadback({ q: 'heat pump', limit: 10 })
       const list = await jsonBody(handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses')))
       const search = await jsonBody(
@@ -331,20 +332,6 @@ function addPublishedCatalogClone(
       createdAt: capability.createdAt + state.serviceCapabilities.length,
       updatedAt: capability.updatedAt + state.serviceCapabilities.length,
     })
-  }
-}
-
-async function withRegistryQueryClient(state: RegistrySourceState, run: () => Promise<void>): Promise<void> {
-  const reset = setPublicRegistryQueryClientForTests({
-    list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
-    search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
-    detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
-  })
-
-  try {
-    await run()
-  } finally {
-    reset()
   }
 }
 

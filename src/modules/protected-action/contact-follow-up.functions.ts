@@ -2,8 +2,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceMutation, callSourceQuery, ConvexSourceError, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, CorrelationId, OperationKey, OwnerId, ServiceId, SourceHash } from '@/modules/common/ids'
+import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import {
   ContactFollowUpActionSlug,
   createContactFollowUpGatewayAdmission,
@@ -141,9 +143,8 @@ type OwnerNoRepairMutationArgs = z.infer<typeof noRepairSchema> & BrowserMutatio
 type BrowserMutationAdmission = {
   operationKey: string
   correlationId: string
-  csrfToken?: string
-  csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 export const readCurrentOwnerContactFollowUpQueueServer = createServerFn()
@@ -159,19 +160,19 @@ export const readCurrentOwnerContactFollowUpReceiptServer = createServerFn()
 
 export const approveCurrentOwnerContactFollowUpServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerDecisionSchema.parse(data))
-  .handler(async ({ data }) => approveCurrentOwnerContactFollowUpThroughSource(data))
+  .handler(async ({ data, context }) => approveCurrentOwnerContactFollowUpThroughSource(data, context))
 
 export const rejectCurrentOwnerContactFollowUpServer = createServerFn({ method: 'POST' })
   .validator((data) => ownerDecisionSchema.parse(data))
-  .handler(async ({ data }) => rejectCurrentOwnerContactFollowUpThroughSource(data))
+  .handler(async ({ data, context }) => rejectCurrentOwnerContactFollowUpThroughSource(data, context))
 
 export const retryCurrentOwnerContactFollowUpServer = createServerFn({ method: 'POST' })
   .validator((data) => retrySchema.parse(data))
-  .handler(async ({ data }) => retryCurrentOwnerContactFollowUpThroughSource(data))
+  .handler(async ({ data, context }) => retryCurrentOwnerContactFollowUpThroughSource(data, context))
 
 export const markCurrentOwnerContactFollowUpNoRepairServer = createServerFn({ method: 'POST' })
   .validator((data) => noRepairSchema.parse(data))
-  .handler(async ({ data }) => markCurrentOwnerContactFollowUpNoRepairThroughSource(data))
+  .handler(async ({ data, context }) => markCurrentOwnerContactFollowUpNoRepairThroughSource(data, context))
 
 export const readAdminContactFollowUpReconstructionServer = createServerFn()
   .validator((data) => proposalIdSchema.partial().parse(data ?? {}))
@@ -233,7 +234,8 @@ export async function readCurrentOwnerContactFollowUpReceiptThroughSource(
 }
 
 export async function approveCurrentOwnerContactFollowUpThroughSource(
-  data: z.infer<typeof ownerDecisionSchema>
+  data: z.infer<typeof ownerDecisionSchema>,
+  context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localApprove(data)
@@ -242,7 +244,7 @@ export async function approveCurrentOwnerContactFollowUpThroughSource(
   try {
     return await callSourceMutation(approveOwnerMutation, {
       ...data,
-      ...browserMutationAdmission('approve', data.proposalId),
+      ...(await browserMutationAdmission(context, 'approve', data.proposalId)),
     })
   } catch (error) {
     return sourceError(error)
@@ -250,7 +252,8 @@ export async function approveCurrentOwnerContactFollowUpThroughSource(
 }
 
 export async function rejectCurrentOwnerContactFollowUpThroughSource(
-  data: z.infer<typeof ownerDecisionSchema>
+  data: z.infer<typeof ownerDecisionSchema>,
+  context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localReject(data)
@@ -259,7 +262,7 @@ export async function rejectCurrentOwnerContactFollowUpThroughSource(
   try {
     return await callSourceMutation(rejectOwnerMutation, {
       ...data,
-      ...browserMutationAdmission('reject', data.proposalId),
+      ...(await browserMutationAdmission(context, 'reject', data.proposalId)),
     })
   } catch (error) {
     return sourceError(error)
@@ -267,7 +270,8 @@ export async function rejectCurrentOwnerContactFollowUpThroughSource(
 }
 
 export async function retryCurrentOwnerContactFollowUpThroughSource(
-  data: z.infer<typeof retrySchema>
+  data: z.infer<typeof retrySchema>,
+  context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localRetry(data)
@@ -276,7 +280,7 @@ export async function retryCurrentOwnerContactFollowUpThroughSource(
   try {
     return await callSourceMutation(retryOwnerMutation, {
       ...data,
-      ...browserMutationAdmission('retry', data.proposalId),
+      ...(await browserMutationAdmission(context, 'retry', data.proposalId)),
     })
   } catch (error) {
     return sourceError(error)
@@ -284,7 +288,8 @@ export async function retryCurrentOwnerContactFollowUpThroughSource(
 }
 
 export async function markCurrentOwnerContactFollowUpNoRepairThroughSource(
-  data: z.infer<typeof noRepairSchema>
+  data: z.infer<typeof noRepairSchema>,
+  context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
   if (usesLocalE2eBypass()) {
     return localNoRepair(data)
@@ -293,7 +298,7 @@ export async function markCurrentOwnerContactFollowUpNoRepairThroughSource(
   try {
     return await callSourceMutation(markNoRepairOwnerMutation, {
       ...data,
-      ...browserMutationAdmission('no-repair', data.proposalId),
+      ...(await browserMutationAdmission(context, 'no-repair', data.proposalId)),
     })
   } catch (error) {
     return sourceError(error)
@@ -333,6 +338,15 @@ export async function readAdminContactFollowUpReconstructionThroughSource(
 }
 
 function localDetail(proposalId: string): OwnerContactFollowUpDetailServerResult {
+  if (proposalId === localWrongOwnerProposalId) {
+    return {
+      kind: 'error',
+      code: 'contact_follow_up_not_found',
+      retryable: false,
+      reason: 'Contact follow-up request was not found for this owner.',
+    }
+  }
+
   const state = createLocalE2eContactFollowUpSourceState()
   return {
     kind: 'ok',
@@ -485,6 +499,20 @@ function createLocalE2eContactFollowUpSourceState(): ContactFollowUpSourceState 
     consequenceAccepted: true,
   })
   const failed = createLocalE2eFailedContactFollowUpSourceState()
+  const stale = createLocalE2ePolicyBlockedContactFollowUpSourceState('stale', {
+    contactName: 'Riley Customer',
+    sourceSuffix: 'stale-action',
+    deadlineAt: localE2eNow + 500,
+    policyNow: localE2eNow + 1_000,
+    policyHints: { sourceProof: 'present', requiresExternalAuthority: false },
+  })
+  const refused = createLocalE2ePolicyBlockedContactFollowUpSourceState('refused', {
+    contactName: 'Casey Customer',
+    sourceSuffix: 'refused-action',
+    deadlineAt: localE2eNow + 180_000,
+    policyNow: localE2eNow + 1_000,
+    policyHints: { sourceProof: 'missing', requiresExternalAuthority: false },
+  })
 
   return {
     ...pending,
@@ -492,33 +520,52 @@ function createLocalE2eContactFollowUpSourceState(): ContactFollowUpSourceState 
       ...pending.proposals.filter((proposal) => proposal.id !== localE2eProposalId),
       ...(receipt.kind === 'ok' ? [receipt.reconstruction.proposal] : []),
       ...failed.proposals,
+      ...stale.proposals,
+      ...refused.proposals,
     ],
     policyDecisions: [
       ...pending.policyDecisions.filter((policy) => policy.proposalId !== localE2eProposalId),
       ...(receipt.kind === 'ok' && receipt.reconstruction.policy !== undefined ? [receipt.reconstruction.policy] : []),
       ...failed.policyDecisions,
+      ...stale.policyDecisions,
+      ...refused.policyDecisions,
     ],
     ownerDecisions: [
       ...(receipt.kind === 'ok' && receipt.reconstruction.ownerDecision !== undefined ? [receipt.reconstruction.ownerDecision] : []),
       ...failed.ownerDecisions,
+      ...stale.ownerDecisions,
+      ...refused.ownerDecisions,
     ],
     gatewayAdmissions: [
       ...(receipt.kind === 'ok' && receipt.reconstruction.gatewayAdmission !== undefined ? [receipt.reconstruction.gatewayAdmission] : []),
       ...failed.gatewayAdmissions,
+      ...stale.gatewayAdmissions,
+      ...refused.gatewayAdmissions,
     ],
     attempts: [
       ...(receipt.kind === 'ok' && receipt.reconstruction.attempt !== undefined ? [receipt.reconstruction.attempt] : []),
       ...failed.attempts,
+      ...stale.attempts,
+      ...refused.attempts,
     ],
     receipts: [
       ...(receipt.kind === 'ok' && receipt.reconstruction.receipt !== undefined ? [receipt.reconstruction.receipt] : []),
       ...failed.receipts,
+      ...stale.receipts,
+      ...refused.receipts,
     ],
     privateEvidenceRefs: [
       ...(receipt.kind === 'ok' ? receipt.reconstruction.privateEvidenceRefs : []),
       ...failed.privateEvidenceRefs,
+      ...stale.privateEvidenceRefs,
+      ...refused.privateEvidenceRefs,
     ],
-    auditEvents: [...(receipt.kind === 'ok' ? receipt.reconstruction.auditEvents : []), ...failed.auditEvents],
+    auditEvents: [
+      ...(receipt.kind === 'ok' ? receipt.reconstruction.auditEvents : []),
+      ...failed.auditEvents,
+      ...stale.auditEvents,
+      ...refused.auditEvents,
+    ],
   }
 }
 
@@ -650,6 +697,51 @@ function createLocalE2eFailedContactFollowUpSourceState(): ContactFollowUpSource
   return attempted.kind === 'ok' ? attempted.state : gateway.state
 }
 
+function createLocalE2ePolicyBlockedContactFollowUpSourceState(
+  kind: 'stale' | 'refused',
+  input: {
+    contactName: string
+    sourceSuffix: string
+    deadlineAt: number
+    policyNow: number
+    policyHints: { sourceProof: 'present' | 'missing' | 'gap'; requiresExternalAuthority: boolean }
+  }
+): ContactFollowUpSourceState {
+  const proposed = proposeContactFollowUpRequest(createEmptyContactFollowUpSourceState(), {
+    authority: localAuthority(),
+    selectedActionSlug: ContactFollowUpActionSlug,
+    target: {
+      businessId: localE2eBusinessId,
+      ownerId: localE2eOwnerId,
+      serviceId: localE2eServiceId,
+      sourceEvidenceRef: `source-message:local-e2e-${input.sourceSuffix}`,
+    },
+    parameters: {
+      contactName: input.contactName,
+      contactChannel: 'email',
+      messageSummary:
+        kind === 'stale'
+          ? 'Follow up after the protected-action approval deadline has expired.'
+          : 'Follow up without enough source proof for owner approval.',
+      sourceMessageRef: `source-message:local-e2e-${input.sourceSuffix}`,
+    },
+    idempotencyKey: operationKey(`contact-follow-up:local-e2e-${kind}-proposal`),
+    correlationId: correlationId(`correlation:contact-follow-up:local-e2e-${kind}-proposal`),
+    deadlineAt: input.deadlineAt,
+    policyHints: input.policyHints,
+    now: localE2eNow,
+  })
+  if (proposed.kind === 'error') {
+    return createEmptyContactFollowUpSourceState()
+  }
+
+  const policy = evaluateContactFollowUpPolicy(proposed.state, {
+    proposalId: proposed.proposal.id,
+    now: input.policyNow,
+  })
+  return policy.kind === 'ok' ? policy.state : proposed.state
+}
+
 function readbackForKind(kind: 'receipt' | 'proof_gap' | 'failed', suffix: string): ContactFollowUpAttemptReadback {
   if (kind === 'proof_gap') {
     return { kind, gapReason: 'mismatch', payloadHash: sourceHash(`hash:${suffix}:proof-gap`) }
@@ -691,6 +783,15 @@ function moduleError(errorResult: {
 }
 
 function sourceError(error: unknown): ContactFollowUpServerErrorResult {
+  if (error instanceof SourceWriteAdmissionError) {
+    return {
+      kind: 'error',
+      code: error.code,
+      retryable: false,
+      reason: 'Contact follow-up source write admission was rejected.',
+    }
+  }
+
   if (error instanceof ConvexSourceError) {
     return {
       kind: 'error',
@@ -711,14 +812,20 @@ function sourceError(error: unknown): ContactFollowUpServerErrorResult {
   }
 }
 
-function browserMutationAdmission(action: string, proposalId: string): BrowserMutationAdmission {
+async function browserMutationAdmission(context: unknown, action: string, proposalId: string): Promise<BrowserMutationAdmission> {
   const suffix = `${normalizeOperationPart(proposalId)}:${crypto.randomUUID()}`
+  const operationKey = `contact-follow-up:${action}:${suffix}`
+  const correlationId = `correlation:contact-follow-up:${action}:${suffix}`
   return {
-    csrfToken: 'csrf-protected-action',
-    csrfCookie: 'csrf-protected-action',
     origin: requestOrigin(),
-    operationKey: `contact-follow-up:${action}:${suffix}`,
-    correlationId: `correlation:contact-follow-up:${action}:${suffix}`,
+    sourceWrite: await sourceWriteAdmissionFromContext({
+      context,
+      scope: 'protected_action',
+      operationKey,
+      correlationId,
+    }),
+    operationKey,
+    correlationId,
   }
 }
 
@@ -736,10 +843,7 @@ function normalizeOperationPart(value: string): string {
 }
 
 function usesLocalE2eBypass(): boolean {
-  return (
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true' ||
-    (process.env.NODE_ENV !== 'production' && readEnv('CONVEX_URL') === undefined && readEnv('VITE_CONVEX_URL') === undefined)
-  )
+  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 function readEnv(name: string): string | undefined {
@@ -770,6 +874,9 @@ const localE2eServiceId = brandNonEmpty('service:contact-follow-up-local-e2e', '
 export const localE2eProposalId = 'contact-follow-up:contact-follow-up:local-e2e-proposal' as ContactFollowUpProposalId
 export const localPendingProposalId = 'contact-follow-up:contact-follow-up:local-e2e-pending-proposal' as ContactFollowUpProposalId
 export const localFailedProposalId = 'contact-follow-up:contact-follow-up:local-e2e-failed-proposal' as ContactFollowUpProposalId
+export const localStaleProposalId = 'contact-follow-up:contact-follow-up:local-e2e-stale-proposal' as ContactFollowUpProposalId
+export const localRefusedProposalId = 'contact-follow-up:contact-follow-up:local-e2e-refused-proposal' as ContactFollowUpProposalId
+export const localWrongOwnerProposalId = 'contact-follow-up:contact-follow-up:local-e2e-wrong-owner-proposal' as ContactFollowUpProposalId
 
 void (localE2eBusinessId satisfies BusinessId)
 void (localE2eServiceId satisfies ServiceId)

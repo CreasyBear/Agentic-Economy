@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
 const pendingProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-pending-proposal'
+const staleProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-stale-proposal'
+const wrongOwnerProposalPath = '/owner/actions/contact-follow-up%3Acontact-follow-up%3Alocal-e2e-wrong-owner-proposal'
 
 test.describe('selected protected action accessibility', () => {
   test('owner/admin protected-action routes keep keyboard-visible controls and mobile layout', async ({ page }) => {
@@ -27,6 +29,18 @@ test.describe('selected protected action accessibility', () => {
     await expect(page.getByLabel('Proposal ID')).toBeVisible()
     await expect(page.getByRole('button', { name: /filter/i })).toBeVisible()
     await expect(page.getByText(/receipt recorded/i).first()).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+
+    await page.goto(staleProposalPath)
+    await expect(page.getByText(/owner decision disabled/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toBeDisabled()
+    await page.keyboard.press('Tab')
+    await expect(page.locator(':focus')).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+
+    await page.goto(wrongOwnerProposalPath)
+    await expect(page.getByText(/contact follow-up unavailable/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toHaveCount(0)
     await expectNoHorizontalOverflow(page)
   })
 })
