@@ -124,3 +124,13 @@ function scanSourceFixture(source: string) {
     rmSync(root, { force: true, recursive: true })
   }
 }
+
+const requiredPhase6CloseoutPhrases = [
+  'source/local proof only',
+  'production proof not claimed',
+  'provider-smoke status is not external proof unless configured evidence passes',
+] as const
+
+function findPhase6CloseoutWordingGaps(markdown: string): readonly string[] {
+  return requiredPhase6CloseoutPhrases.filter((phrase) => !markdown.includes(phrase))
+}
