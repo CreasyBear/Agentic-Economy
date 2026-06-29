@@ -1,12 +1,20 @@
+import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
 import schema from '../../../convex/schema'
+import {
+  createBusinessActionCapabilityRequest,
+  readCurrentOwnerBusinessActionReceipt,
+  recordBusinessActionOwnerCheckpoint,
+  recordBusinessActionReceipt,
+} from '../../../convex/businessActions'
 import {
   exportBusinessActionPrivateEvidenceRefs,
   loadBusinessActionRequestSlice,
   persistBusinessActionSlice,
   tombstoneBusinessActionPrivateEvidenceRef,
 } from '../../../convex/businessActionStore'
+import { businessActionSourceFunctionRefs } from '../../../src/modules/business-action/business-action.functions'
 import type {
   ActionReceipt,
   BusinessActionCard,
@@ -41,6 +49,8 @@ import type {
   OwnerId,
   SourceHash,
 } from '../../../src/modules/common/ids'
+import type { SourceWriteAdmission } from '../../../src/modules/security/source-write-admission'
+import { withSourceWrite, withoutSourceWrite } from '../../helpers/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -62,6 +72,53 @@ type Db = {
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
+
+type AuthCtx = {
+  db: Db
+  auth: { getUserIdentity: () => Promise<UserIdentity | null> }
+}
+
+type CreateRequestArgs = {
+  cardId: string
+  mandateId: string
+  businessId: string
+  requestedBy: 'buyer' | 'hermes' | 'operator'
+  expiresAt: number
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+type CheckpointArgs = {
+  requestId: string
+  decision: 'accepted' | 'refused' | 'clarification_required' | 'proof_gap' | 'expired'
+  ownerDecisionRef: string
+  reasonCode: string
+  expiresAt: number
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+type ReceiptArgs = {
+  requestId: string
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+const createRequestHandler = (createBusinessActionCapabilityRequest as unknown as {
+  _handler: (ctx: AuthCtx, args: CreateRequestArgs) => Promise<unknown>
+})._handler
+const checkpointHandler = (recordBusinessActionOwnerCheckpoint as unknown as {
+  _handler: (ctx: AuthCtx, args: CheckpointArgs) => Promise<unknown>
+})._handler
+const receiptHandler = (recordBusinessActionReceipt as unknown as {
+  _handler: (ctx: AuthCtx, args: ReceiptArgs) => Promise<unknown>
+})._handler
+const ownerReceiptHandler = (readCurrentOwnerBusinessActionReceipt as unknown as {
+  _handler: (ctx: AuthCtx, args: { requestId: string }) => Promise<unknown>
+})._handler
 
 const now = 6_000
 const businessId = 'businesses:1' as BusinessId
@@ -176,6 +233,85 @@ describe('Convex business action source persistence', () => {
       }),
     ])
     expect(JSON.stringify(reloaded.privateEvidenceRefs)).not.toContain('private-endpoint://')
+  })
+})
+
+describe('Convex business action runtime bridge', () => {
+  it('rejects missing source-write admission and caller-supplied authority money provider or receipt fields', async () => {
+    const db = new FakeDb({
+      owners: [{ _id: ownerId, clerkUserId: 'user_owner' }],
+      businesses: [{ _id: businessId, ownerId }],
+    })
+    await persistBusinessActionSlice(db, createEmptyBusinessActionSourceState({ cards: [card()], mandates: [mandate()] }))
+
+    const missingAdmission = await createRequestHandler(authCtx(db, sam()), withoutSourceWrite(createRequestArgs('missing')))
+    expect(missingAdmission).toMatchObject({ kind: 'error', code: 'business_action_source_write_rejected' })
+    expect(db.dump('businessActionCapabilityRequests')).toHaveLength(0)
+
+    const forgedFields = await createRequestHandler(authCtx(db, sam()), {
+      ...createRequestArgs('forged'),
+      ownerId,
+      adminId: 'admin:forged',
+      amountCents: 1,
+      currency: 'usd',
+      providerId: 'stripe-session-forged',
+      receiptStatus: 'success',
+      checkpointResult: 'accepted',
+    } as CreateRequestArgs)
+
+    expect(forgedFields).toMatchObject({
+      kind: 'error',
+      code: 'business_action_untrusted_client_field',
+    })
+    expect(db.dump('businessActionCapabilityRequests')).toHaveLength(0)
+  })
+
+  it('derives owner authority server-side for checkpoints and redacted owner receipt readbacks', async () => {
+    const db = new FakeDb({
+      owners: [
+        { _id: ownerId, clerkUserId: 'user_owner' },
+        { _id: 'owners:2', clerkUserId: 'user_other' },
+      ],
+      businesses: [{ _id: businessId, ownerId }],
+    })
+    await persistBusinessActionSlice(db, createEmptyBusinessActionSourceState({ cards: [card()], mandates: [mandate()] }))
+
+    const created = requireRuntimeOk(await createRequestHandler(authCtx(db, sam()), createRequestArgs('accepted')))
+    const requestId = created.request.id
+
+    const wrongOwner = await checkpointHandler(authCtx(db, otherOwner()), checkpointArgs(requestId, 'wrong-owner'))
+    expect(wrongOwner).toMatchObject({ kind: 'error', code: 'business_action_owner_denied' })
+    expect(db.dump('businessActionAuthorizationCheckpoints')).toHaveLength(0)
+
+    const forgedCheckpoint = await checkpointHandler(authCtx(db, sam()), {
+      ...checkpointArgs(requestId, 'forged-checkpoint'),
+      ownerId: 'owners:2',
+      provider: 'hermes',
+      checkpointHash: 'hash:forged',
+      requestHash: 'hash:forged-request',
+    } as CheckpointArgs)
+    expect(forgedCheckpoint).toMatchObject({ kind: 'error', code: 'business_action_untrusted_client_field' })
+
+    const accepted = requireRuntimeOk(await checkpointHandler(authCtx(db, sam()), checkpointArgs(requestId, 'accepted')))
+    expect(accepted.checkpoint).toMatchObject({ decision: 'accepted', ownerId })
+    expect(db.dump('businessActionAuthorizationCheckpoints')).toHaveLength(1)
+
+    const receipt = requireRuntimeOk(await receiptHandler(authCtx(db, sam()), receiptArgs(requestId, 'receipt')))
+    expect(receipt.publicReadback.labels).toEqual(['source/local proof only', 'production proof not claimed'])
+    expect(JSON.stringify(receipt.publicReadback)).not.toContain('private-endpoint://')
+
+    const ownerReadback = requireRuntimeOk(await ownerReceiptHandler(authCtx(db, sam()), { requestId }))
+    expect(ownerReadback.publicReadback).toMatchObject({ receiptId: receipt.receipt.id })
+    expect(JSON.stringify(ownerReadback)).not.toContain('privatePayloadRef')
+  })
+
+  it('exposes server function refs without importing business-action internals into routes', () => {
+    expect(Object.keys(businessActionSourceFunctionRefs).sort()).toEqual([
+      'createCapabilityRequest',
+      'readCurrentOwnerReceipt',
+      'recordOwnerCheckpoint',
+      'recordReceipt',
+    ])
   })
 })
 
@@ -423,6 +559,61 @@ function receiptCommand(overrides: Partial<Parameters<typeof recordActionReceipt
   } as const
 }
 
+function createRequestArgs(suffix: string): CreateRequestArgs {
+  return withSourceWrite('protected_action', {
+    cardId: card().id,
+    mandateId: mandate().id,
+    businessId,
+    requestedBy: 'hermes',
+    expiresAt: now + 1_000,
+    operationKey: `business-action:request:${suffix}`,
+    correlationId: `correlation:business-action:request:${suffix}`,
+  })
+}
+
+function checkpointArgs(requestId: string, suffix: string, decision: CheckpointArgs['decision'] = 'accepted'): CheckpointArgs {
+  return withSourceWrite('protected_action', {
+    requestId,
+    decision,
+    ownerDecisionRef: `owner-decision:${suffix}`,
+    reasonCode: `owner_reviewed_${suffix}`,
+    expiresAt: now + 900,
+    operationKey: `business-action:checkpoint:${suffix}`,
+    correlationId: `correlation:business-action:checkpoint:${suffix}`,
+  })
+}
+
+function receiptArgs(requestId: string, suffix: string): ReceiptArgs {
+  return withSourceWrite('protected_action', {
+    requestId,
+    operationKey: `business-action:receipt:${suffix}`,
+    correlationId: `correlation:business-action:receipt:${suffix}`,
+  })
+}
+
+function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {
+  return {
+    db,
+    auth: { getUserIdentity: async () => identity },
+  }
+}
+
+function sam(): UserIdentity {
+  return identity('user_owner')
+}
+
+function otherOwner(): UserIdentity {
+  return identity('user_other')
+}
+
+function identity(subject: string): UserIdentity {
+  return {
+    subject,
+    tokenIdentifier: `token:${subject}`,
+    issuer: 'https://clerk.test',
+  } as UserIdentity
+}
+
 function privateEvidenceRef(): BusinessActionPrivateEvidenceRef {
   return {
     id: privateEvidenceRefId,
@@ -476,4 +667,17 @@ function requireOk<T extends { kind: string }>(value: T): Extract<T, { kind: 'ok
     throw new Error(`Expected ok result, received ${JSON.stringify(value)}`)
   }
   return value as Extract<T, { kind: 'ok' }>
+}
+
+function requireRuntimeOk(value: unknown): {
+  kind: 'ok'
+  request: { id: string }
+  checkpoint: { id: string; decision: string; ownerId?: string }
+  receipt: { id: string }
+  publicReadback: { receiptId: string; labels: string[] }
+} {
+  if (typeof value !== 'object' || value === null || !('kind' in value) || value.kind !== 'ok') {
+    throw new Error(`Expected runtime ok result, received ${JSON.stringify(value)}`)
+  }
+  return value as ReturnType<typeof requireRuntimeOk>
 }
