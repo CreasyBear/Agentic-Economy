@@ -82,7 +82,7 @@ describe('business action observability contracts', () => {
       'business_action_attempts_enabled',
     ] as const satisfies readonly OperatorControlKey[]
 
-    expect(OperatorControlKeyValues).toEqual(expect.arrayContaining(controls))
+    expect(OperatorControlKeyValues).toEqual(expect.arrayContaining([...controls]))
 
     for (const key of controls) {
       const state = operatorControlState()

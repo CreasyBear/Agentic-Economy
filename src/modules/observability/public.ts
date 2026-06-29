@@ -202,6 +202,8 @@ export const OperatorControlKeyValues = [
   'paid_activation_enabled',
   'billing_webhooks_enabled',
   'billing_reconciliation_enabled',
+  'business_actions_enabled',
+  'business_action_attempts_enabled',
 ] as const
 export type OperatorControlKey = (typeof OperatorControlKeyValues)[number]
 
@@ -412,6 +414,182 @@ export type SetOperatorControlResult =
       retryable: boolean
       reason: string
     }
+
+export const BusinessActionSupportKillRuleValues = [
+  'stale_card',
+  'disabled_card',
+  'revoked_mandate',
+  'expired_mandate',
+  'wrong_owner',
+  'rejected_checkpoint',
+  'guardrail_block',
+  'guardrail_refusal',
+  'unbound_evidence',
+  'missing_artifact',
+  'proof_gap',
+  'no_repair',
+  'support_capacity_breach',
+] as const
+export type BusinessActionSupportKillRule = (typeof BusinessActionSupportKillRuleValues)[number]
+
+export type BusinessActionClaimSafetyInput = {
+  cardStatus: 'active' | 'disabled' | 'stale'
+  mandateStatus: 'active' | 'expired' | 'revoked'
+  mandateExpiresAt: number
+  ownerMatches: boolean
+  checkpointDecision: 'accepted' | 'refused' | 'clarification_required' | 'proof_gap' | 'expired'
+  guardrailDecisions: readonly ('allow' | 'block' | 'refusal')[]
+  externalEvidenceBound: boolean
+  resultArtifactStatus: 'complete' | 'proof_gap' | undefined
+  noRepairMarked: boolean
+  supportCapacity: {
+    openIncidents: number
+    capacityThreshold: number
+  }
+  now: number
+}
+
+export type BusinessActionClaimSafetyDecision = {
+  publicDemoClaimsEnabled: boolean
+  killRules: readonly BusinessActionSupportKillRule[]
+  preserveHistoricalReadbacks: true
+  claimDisablePath: 'business_actions_enabled'
+  operatorNextAction: string
+}
+
+export function evaluateBusinessActionClaimSafety(
+  input: BusinessActionClaimSafetyInput
+): BusinessActionClaimSafetyDecision {
+  const killRules: BusinessActionSupportKillRule[] = []
+
+  if (input.cardStatus === 'stale') {
+    killRules.push('stale_card')
+  }
+  if (input.cardStatus === 'disabled') {
+    killRules.push('disabled_card')
+  }
+  if (input.mandateStatus === 'revoked') {
+    killRules.push('revoked_mandate')
+  }
+  if (input.mandateStatus === 'expired' || input.mandateExpiresAt <= input.now) {
+    killRules.push('expired_mandate')
+  }
+  if (!input.ownerMatches) {
+    killRules.push('wrong_owner')
+  }
+  if (
+    input.checkpointDecision === 'refused' ||
+    input.checkpointDecision === 'clarification_required' ||
+    input.checkpointDecision === 'expired'
+  ) {
+    killRules.push('rejected_checkpoint')
+  }
+  if (input.guardrailDecisions.includes('block')) {
+    killRules.push('guardrail_block')
+  }
+  if (input.guardrailDecisions.includes('refusal')) {
+    killRules.push('guardrail_refusal')
+  }
+  if (!input.externalEvidenceBound) {
+    killRules.push('unbound_evidence')
+  }
+  if (input.resultArtifactStatus === undefined) {
+    killRules.push('missing_artifact')
+  }
+  if (input.checkpointDecision === 'proof_gap' || input.resultArtifactStatus === 'proof_gap') {
+    killRules.push('proof_gap')
+  }
+  if (input.noRepairMarked) {
+    killRules.push('no_repair')
+  }
+  if (input.supportCapacity.openIncidents > input.supportCapacity.capacityThreshold) {
+    killRules.push('support_capacity_breach')
+  }
+
+  return {
+    publicDemoClaimsEnabled: killRules.length === 0,
+    killRules,
+    preserveHistoricalReadbacks: true,
+    claimDisablePath: 'business_actions_enabled',
+    operatorNextAction: killRules.length === 0 ? 'none' : `disable_public_demo_claims:${killRules.join(',')}`,
+  }
+}
+
+export type BusinessActionNoRepairReconstructionInput = {
+  noRepairMarked: boolean
+  auditEventType: AuditEventType
+  auditTargetType: AuditTargetType
+  requestHash: string
+  receiptReconstructionStatus: string
+  noRepairHash: string
+  evidenceRefs: readonly string[]
+  providerEvidenceBefore: readonly string[]
+  providerEvidenceAfter: readonly string[]
+}
+
+export type BusinessActionNoRepairReconstructionResult =
+  | {
+      valid: true
+      terminal: true
+      auditable: true
+      reconstructable: true
+      providerEvidenceRewritten: false
+    }
+  | {
+      valid: false
+      reason:
+        | 'no_repair_not_marked'
+        | 'missing_audit_event'
+        | 'missing_reconstruction_refs'
+        | 'provider_evidence_rewritten'
+    }
+
+export function validateBusinessActionNoRepairReconstruction(
+  input: BusinessActionNoRepairReconstructionInput
+): BusinessActionNoRepairReconstructionResult {
+  if (!input.noRepairMarked) {
+    return { valid: false, reason: 'no_repair_not_marked' }
+  }
+
+  if (
+    input.auditEventType !== 'business_action.no_repair_marked' ||
+    input.auditTargetType !== 'business_action_no_repair'
+  ) {
+    return { valid: false, reason: 'missing_audit_event' }
+  }
+
+  if (
+    input.requestHash.trim().length === 0 ||
+    input.receiptReconstructionStatus.trim().length === 0 ||
+    input.noRepairHash.trim().length === 0 ||
+    input.evidenceRefs.length === 0
+  ) {
+    return { valid: false, reason: 'missing_reconstruction_refs' }
+  }
+
+  if (!sameEvidenceSet(input.providerEvidenceBefore, input.providerEvidenceAfter)) {
+    return { valid: false, reason: 'provider_evidence_rewritten' }
+  }
+
+  return {
+    valid: true,
+    terminal: true,
+    auditable: true,
+    reconstructable: true,
+    providerEvidenceRewritten: false,
+  }
+}
+
+function sameEvidenceSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  const normalizedLeft = [...left].sort()
+  const normalizedRight = [...right].sort()
+
+  return normalizedLeft.every((value, index) => value === normalizedRight[index])
+}
 
 export type {
   AuditEventInput,

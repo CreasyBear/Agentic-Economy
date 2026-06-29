@@ -28,6 +28,8 @@ const defaultControlValues = {
   paid_activation_enabled: true,
   billing_webhooks_enabled: true,
   billing_reconciliation_enabled: true,
+  business_actions_enabled: true,
+  business_action_attempts_enabled: true,
 } satisfies Record<OperatorControlKey, boolean>
 
 export function setOperatorControl(

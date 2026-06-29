@@ -46,7 +46,9 @@ const operatorControlKey = v.union(
   v.literal('protected_action_attempts_enabled'),
   v.literal('paid_activation_enabled'),
   v.literal('billing_webhooks_enabled'),
-  v.literal('billing_reconciliation_enabled')
+  v.literal('billing_reconciliation_enabled'),
+  v.literal('business_actions_enabled'),
+  v.literal('business_action_attempts_enabled')
 )
 
 const operatorControlReadback = v.object({
