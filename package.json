@@ -19,6 +19,7 @@
     "test:provider-smoke:resend": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts",
     "test:provider-smoke:novu": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts",
     "test:provider-smoke:autumn-stripe": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase5-paid-activation-provider-smoke.spec.ts",
+    "test:provider-smoke:business-action-stripe": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts",
     "test:e2e:a11y": "playwright test tests/e2e/a11y",
     "test:a11y": "playwright test tests/e2e/a11y",
     "test:types": "vitest run tests/types",
