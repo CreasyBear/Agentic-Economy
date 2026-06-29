@@ -38,6 +38,8 @@ import type {
 import { readOwnerBusinessActionDetailRouteReadback } from '@/routes/owner.business-actions.$requestId'
 import { readOwnerBusinessActionReceiptRouteReadback } from '@/routes/owner.business-actions.$requestId.receipt'
 import { readOwnerBusinessActionRouteReadback } from '@/routes/owner.business-actions'
+import { readAdminBusinessActionDetailRouteReadback } from '@/routes/admin.business-actions.$requestId'
+import { readAdminBusinessActionsRouteReadback } from '@/routes/admin.business-actions'
 
 const businessId = 'business:p6-route' as BusinessId
 const ownerId = 'owner:p6-route' as OwnerId
@@ -164,6 +166,104 @@ describe('business-action owner route readbacks', () => {
         receipt: { outcome: 'proof_gap', reconstructionStatus: 'proof_gap' },
       },
     })
+  })
+})
+
+describe('business-action admin route readbacks', () => {
+  it('reconstructs success, refusal, and proof-gap states from source-owned rows', () => {
+    const success = completeFlow('admin-success')
+    const refused = checkpointOnlyFlow('admin-refused', 'refused')
+    const proofGap = acceptedFlow('admin-proof-gap', 'proof_gap')
+
+    expect(readAdminBusinessActionDetailRouteReadback({ state: success.state, requestId: success.requestId })).toMatchObject({
+      kind: 'ok',
+      reconstruction: {
+        request: { id: success.requestId, status: 'accepted' },
+        checkpoint: { decision: 'accepted' },
+        receipt: { outcome: 'success', reconstructionStatus: 'complete' },
+        resultArtifactState: { status: 'complete' },
+      },
+    })
+    expect(readAdminBusinessActionDetailRouteReadback({ state: refused.state, requestId: refused.requestId })).toMatchObject({
+      kind: 'ok',
+      reconstruction: {
+        request: { status: 'refused' },
+        checkpoint: { decision: 'refused' },
+        receipt: { outcome: 'refused', reconstructionStatus: 'refused_no_consequence' },
+      },
+    })
+    expect(readAdminBusinessActionDetailRouteReadback({ state: proofGap.state, requestId: proofGap.requestId })).toMatchObject({
+      kind: 'ok',
+      reconstruction: {
+        request: { status: 'accepted' },
+        checkpoint: { decision: 'accepted' },
+        receipt: { outcome: 'proof_gap', reconstructionStatus: 'proof_gap' },
+        resultArtifactState: { status: 'proof_gap' },
+      },
+    })
+    expect(readAdminBusinessActionsRouteReadback({ state: success.state }).rows).toHaveLength(1)
+  })
+
+  it('keeps guardrail decision evidence separate from post-checkpoint external evidence', () => {
+    const flow = completeFlow('admin-evidence-separation')
+    const readback = readAdminBusinessActionDetailRouteReadback({ state: flow.state, requestId: flow.requestId })
+
+    expect(readback).toMatchObject({
+      kind: 'ok',
+      reconstruction: {
+        guardrailDecisions: [
+          {
+            provider: 'nemo_guardrails',
+            decision: 'allow',
+            modelName: 'nemotron',
+          },
+        ],
+        externalEvidenceEvents: [
+          {
+            provider: 'hermes',
+            status: 'accepted',
+            evidenceKind: 'execute',
+          },
+        ],
+      },
+    })
+
+    const reconstruction = readback.kind === 'ok' ? readback.reconstruction : undefined
+    expect(reconstruction?.guardrailDecisions[0]?.provider).not.toBe(reconstruction?.externalEvidenceEvents[0]?.provider)
+    expect(JSON.stringify(reconstruction?.guardrailDecisions)).not.toContain('hermes')
+    expect(JSON.stringify(reconstruction?.externalEvidenceEvents)).not.toContain('nemo_guardrails')
+  })
+
+  it('redacts private evidence families while preserving operator metadata', () => {
+    const flow = completeFlow('admin-redaction')
+    const readback = readAdminBusinessActionDetailRouteReadback({ state: flow.state, requestId: flow.requestId })
+
+    expect(readback).toMatchObject({
+      kind: 'ok',
+      reconstruction: {
+        privateEvidenceMetadata: {
+          count: 1,
+          refs: [
+            {
+              payloadHash: 'hash:private-payload',
+              retentionClass: 'business_action_private_evidence',
+              accessPolicy: 'owner_admin_operator_only',
+            },
+          ],
+        },
+        supportRecords: [{ status: 'open', claimDisablePath: 'business_actions_enabled' }],
+        noRepair: { reason: 'No private endpoint artifact can be reconstructed.' },
+      },
+    })
+
+    const serialized = JSON.stringify(readback)
+    expect(serialized).not.toContain('private-endpoint://')
+    expect(serialized).not.toContain('privatePayloadRef')
+    expect(serialized).not.toContain('raw provider payload')
+    expect(serialized).not.toContain('rawPrompt')
+    expect(serialized).not.toContain('rawTrace')
+    expect(serialized).not.toContain('sk_test_')
+    expect(serialized).not.toContain('whsec_')
   })
 })
 
