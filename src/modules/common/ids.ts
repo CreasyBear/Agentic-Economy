@@ -22,6 +22,17 @@ export type BillingSupportRecordId = Brand<string, 'BillingSupportRecordId'>
 export type NotificationDispatchId = Brand<string, 'NotificationDispatchId'>
 export type NotificationDispatchAttemptId = Brand<string, 'NotificationDispatchAttemptId'>
 export type NotificationWebhookEventId = Brand<string, 'NotificationWebhookEventId'>
+export type BusinessActionCardId = Brand<string, 'BusinessActionCardId'>
+export type BuyerMandateId = Brand<string, 'BuyerMandateId'>
+export type CapabilityRequestId = Brand<string, 'CapabilityRequestId'>
+export type AuthorizationCheckpointId = Brand<string, 'AuthorizationCheckpointId'>
+export type GuardrailDecisionEvidenceId = Brand<string, 'GuardrailDecisionEvidenceId'>
+export type ExternalEvidenceEventId = Brand<string, 'ExternalEvidenceEventId'>
+export type BusinessActionResultArtifactId = Brand<string, 'BusinessActionResultArtifactId'>
+export type ActionReceiptId = Brand<string, 'ActionReceiptId'>
+export type BusinessActionPrivateEvidenceRefId = Brand<string, 'BusinessActionPrivateEvidenceRefId'>
+export type BusinessActionSupportRecordId = Brand<string, 'BusinessActionSupportRecordId'>
+export type BusinessActionNoRepairId = Brand<string, 'BusinessActionNoRepairId'>
 
 export type BrandedId =
   | OwnerId
@@ -42,6 +53,17 @@ export type BrandedId =
   | NotificationDispatchId
   | NotificationDispatchAttemptId
   | NotificationWebhookEventId
+  | BusinessActionCardId
+  | BuyerMandateId
+  | CapabilityRequestId
+  | AuthorizationCheckpointId
+  | GuardrailDecisionEvidenceId
+  | ExternalEvidenceEventId
+  | BusinessActionResultArtifactId
+  | ActionReceiptId
+  | BusinessActionPrivateEvidenceRefId
+  | BusinessActionSupportRecordId
+  | BusinessActionNoRepairId
 
 export function brandNonEmpty<Value extends string, Name extends string>(value: Value, label: Name): Brand<Value, Name> {
   if (value.trim().length === 0) {
