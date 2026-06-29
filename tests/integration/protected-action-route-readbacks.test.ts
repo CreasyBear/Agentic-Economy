@@ -7,8 +7,10 @@ import {
   createEmptyContactFollowUpSourceState,
   decideContactFollowUpProposal,
   evaluateContactFollowUpPolicy,
+  markContactFollowUpNoRepair,
   proposeContactFollowUpRequest,
   recordContactFollowUpProviderAttempt,
+  type ContactFollowUpAttemptReadback,
   type ContactFollowUpOwnerAuthority,
   type ContactFollowUpProposal,
   type ContactFollowUpSourceState,
@@ -58,6 +60,44 @@ describe('selected protected-action route readbacks', () => {
       proposal: { selectedActionSlug: 'contact-follow-up', parameters: { contactName: 'Missing request' } },
     })
   })
+
+  it('surfaces owner-pending, rejected, proof-gap, failed, and no-repair states without private payloads', () => {
+    const pending = pendingFlow('pending')
+    const rejected = rejectedFlow('rejected')
+    const proofGap = attemptFlow('proof-gap', { kind: 'proof_gap', gapReason: 'timeout', payloadHash })
+    const failed = attemptFlow('failed', { kind: 'failed', failureReason: 'provider_unavailable', payloadHash })
+    const noRepair = noRepairFlow('no-repair')
+
+    expect(readOwnerContactFollowUpDetailRouteReadback({ state: pending.state, proposalId: pending.proposal.id })).toMatchObject({
+      readbackStatus: 'awaiting_owner_review',
+      repairAction: 'owner_can_reject',
+      proposal: { selectedActionSlug: 'contact-follow-up' },
+    })
+    expect(readOwnerContactFollowUpDetailRouteReadback({ state: rejected.state, proposalId: rejected.proposal.id })).toMatchObject({
+      readbackStatus: 'owner_rejected',
+      repairAction: 'none',
+      ownerDecision: { decision: 'rejected' },
+    })
+    expect(readOwnerContactFollowUpReceiptRouteReadback({ state: proofGap.state, proposalId: proofGap.proposal.id })).toMatchObject({
+      readbackStatus: 'proof_gap',
+      repairAction: 'retry_available',
+      receipt: { kind: 'proof_gap' },
+    })
+    expect(readAdminProtectedActionDetailRouteReadback({ state: failed.state, proposalId: failed.proposal.id })).toMatchObject({
+      readbackStatus: 'failed',
+      repairAction: 'retry_available',
+      attempt: { outcome: 'failed' },
+    })
+    expect(readAdminProtectedActionsRouteReadback({ state: noRepair.state, proposalId: noRepair.proposal.id }).rows[0]).toMatchObject({
+      readbackStatus: 'no_repair',
+      repairAction: 'none',
+      noRepair: { reason: 'Operator evidence is insufficient to repair this source-owned proof gap.' },
+    })
+
+    const serialized = JSON.stringify([proofGap.state, failed.state, noRepair.state])
+    expect(serialized).not.toContain('customer@example.test')
+    expect(serialized).not.toContain('raw provider')
+  })
 })
 
 type ReceiptFlow = {
@@ -66,6 +106,10 @@ type ReceiptFlow = {
 }
 
 function receiptFlow(suffix: string): ReceiptFlow {
+  return attemptFlow(suffix, { kind: 'receipt', resultRef: `source-receipt:${suffix}`, payloadHash })
+}
+
+function pendingFlow(suffix: string): ReceiptFlow {
   const proposed = expectOk(
     proposeContactFollowUpRequest(createEmptyContactFollowUpSourceState(), {
       authority: authority(),
@@ -89,8 +133,50 @@ function receiptFlow(suffix: string): ReceiptFlow {
     })
   )
   const policy = expectOk(evaluateContactFollowUpPolicy(proposed.state, { proposalId: proposed.proposal.id, now: 20 }))
+  return { state: policy.state, proposal: proposed.proposal }
+}
+
+function rejectedFlow(suffix: string): ReceiptFlow {
+  const proposed = pendingFlow(suffix)
   const decided = expectOk(
-    decideContactFollowUpProposal(policy.state, {
+    decideContactFollowUpProposal(proposed.state, {
+      authority: authority(),
+      proposalId: proposed.proposal.id,
+      decision: 'rejected',
+      reason: `rejected:${suffix}`,
+      evidenceRefs: [`owner-review:${suffix}`],
+      consequenceAccepted: false,
+      idempotencyKey: operationKey(`decision:${suffix}`),
+      correlationId: correlationId(`decision:${suffix}`),
+      now: 30,
+    })
+  )
+
+  return { state: decided.state, proposal: proposed.proposal }
+}
+
+function noRepairFlow(suffix: string): ReceiptFlow {
+  const proofGap = attemptFlow(suffix, { kind: 'proof_gap', gapReason: 'timeout', payloadHash })
+  const noRepair = expectOk(
+    markContactFollowUpNoRepair(proofGap.state, {
+      authority: authority(),
+      proposalId: proofGap.proposal.id,
+      ...(proofGap.state.attempts[0] === undefined ? {} : { attemptId: proofGap.state.attempts[0].id }),
+      reason: 'Operator evidence is insufficient to repair this source-owned proof gap.',
+      evidenceRefs: [`operator:${suffix}`],
+      idempotencyKey: operationKey(`no-repair:${suffix}`),
+      correlationId: correlationId(`no-repair:${suffix}`),
+      now: 50,
+    })
+  )
+
+  return { state: noRepair.state, proposal: proofGap.proposal }
+}
+
+function attemptFlow(suffix: string, readback: ContactFollowUpAttemptReadback): ReceiptFlow {
+  const proposed = pendingFlow(suffix)
+  const decided = expectOk(
+    decideContactFollowUpProposal(proposed.state, {
       authority: authority(),
       proposalId: proposed.proposal.id,
       decision: 'approved',
@@ -121,11 +207,11 @@ function receiptFlow(suffix: string): ReceiptFlow {
       idempotencyKey: operationKey(`attempt:${suffix}`),
       correlationId: correlationId(`attempt:${suffix}`),
       now: 40,
-      readback: { kind: 'receipt', resultRef: `source-receipt:${suffix}`, payloadHash },
+      readback,
     })
   )
 
-  return { state: attempted.state, proposal: decided.proposal }
+  return { state: attempted.state, proposal: proposed.proposal }
 }
 
 function authority(): ContactFollowUpOwnerAuthority {

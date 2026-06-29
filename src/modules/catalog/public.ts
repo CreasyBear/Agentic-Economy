@@ -207,6 +207,11 @@ export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'ca
   catalog: PublicRouteCatalogContract
 }
 
+export type PublicOwnerStatusRouteReadbackResult =
+  | { kind: 'available'; readback: PublicOwnerStatusRouteReadback }
+  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
+
 export type PublicOwnerClaimFlowRouteResult =
   | Extract<PublicOwnerClaimFlowResult, { kind: 'error' }>
   | {

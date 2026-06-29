@@ -20,6 +20,7 @@ export const protectedActionTables = {
     actorRef: v.string(),
     sourceEvidenceRef: v.string(),
     allowedParametersJson: v.string(),
+    policyHintsJson: v.optional(v.string()),
     canonicalContractHash: v.string(),
     proposalHash: v.string(),
     idempotencyKey: v.string(),
@@ -140,6 +141,23 @@ export const protectedActionTables = {
     .index('by_privateEvidenceRefId', ['privateEvidenceRefId'])
     .index('by_proposal', ['proposalId'])
     .index('by_ttlExpiresAt', ['ttlExpiresAt']),
+
+  protectedActionNoRepairRecords: defineTable({
+    noRepairId: v.string(),
+    proposalId: v.string(),
+    attemptId: v.optional(v.string()),
+    selectedActionSlug: v.literal(ContactFollowUpActionSlug),
+    reason: v.string(),
+    evidenceRefs: v.array(v.string()),
+    noRepairHash: v.string(),
+    idempotencyKey: v.string(),
+    correlationId: v.string(),
+    markedBy: v.string(),
+    markedAt: v.number(),
+  })
+    .index('by_noRepairId', ['noRepairId'])
+    .index('by_proposal', ['proposalId'])
+    .index('by_idempotencyKey', ['idempotencyKey']),
 
   protectedActionSupportRecords: defineTable({
     supportRecordId: v.string(),

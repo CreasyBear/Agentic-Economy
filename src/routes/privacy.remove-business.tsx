@@ -16,6 +16,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { getDefaultPublicOwnerStatusReadback, getPublicOwnerStatusReadbackBySlug } from '@/modules/catalog/public'
+import type { PublicCatalogContract } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
   createEmptyDisputeSourceState,
@@ -32,6 +33,10 @@ const removalSchema = z.object({
 
 type RemovalInput = z.infer<typeof removalSchema>
 type Env = Record<string, string | undefined>
+
+type PublicCatalogReadResult =
+  | { kind: 'available'; catalog: PublicCatalogContract }
+  | { kind: 'not_found'; reason: 'not_public' }
 
 type OpenRemovalDisputeArgs = {
   businessId: string
@@ -53,6 +58,7 @@ type OpenRemovalDisputeArgs = {
   correlationId: string
 }
 
+const publicCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicCatalogReadResult>('catalog:getPublicBusinessCatalogBySlug')
 const openRemovalDisputeMutation = sourceMutation<OpenRemovalDisputeArgs, DisputeOpenResult>('security:openRemovalDispute')
 
 const openRemovalServer = createServerFn({ method: 'POST' })
@@ -65,12 +71,22 @@ export async function openRemovalDisputeThroughSource(data: RemovalInput): Promi
   }
 
   try {
-    const readback = getPublicOwnerStatusReadbackBySlug(data.slug) ?? getDefaultPublicOwnerStatusReadback()
-    const operationSuffix = `${normalizeOperationPart(data.slug)}:${crypto.randomUUID()}`
+    const slug = data.slug.trim()
+    if (slug.length === 0) {
+      return invalidRemovalTarget(false)
+    }
+
+    const result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
+    if (result.kind !== 'available') {
+      return invalidRemovalTarget(false)
+    }
+
+    const catalog = result.catalog
+    const operationSuffix = `${normalizeOperationPart(slug)}:${crypto.randomUUID()}`
     return await callPublicMutation(openRemovalDisputeMutation, {
-      businessId: readback.catalog.businessId,
+      businessId: catalog.businessId,
       targetType: 'business',
-      targetRef: readback.catalog.businessId,
+      targetRef: catalog.businessId,
       reasonCode: data.reasonCode,
       contactEmail: data.contactEmail,
       evidence: [
@@ -78,10 +94,10 @@ export async function openRemovalDisputeThroughSource(data: RemovalInput): Promi
           label: data.evidenceSummary,
           mediaType: 'text/plain',
           byteLength: Math.max(data.evidenceSummary.length, 1),
-          privateRef: `private:evidence:removal:${readback.catalog.slug}`,
+          privateRef: `private:evidence:removal:${catalog.slug}`,
         },
       ],
-      publicMessage: data.slug,
+      publicMessage: slug,
       csrfToken: 'csrf-removal',
       csrfCookie: 'csrf-removal',
       origin: requestOrigin(),
@@ -89,12 +105,7 @@ export async function openRemovalDisputeThroughSource(data: RemovalInput): Promi
       correlationId: `corr:removal:${operationSuffix}`,
     })
   } catch {
-    return {
-      kind: 'error',
-      code: 'dispute_invalid_target',
-      retryable: true,
-      reason: 'Removal request could not be recorded. Please try again.',
-    }
+    return invalidRemovalTarget(true)
   }
 }
 
@@ -268,7 +279,13 @@ function toRemovalReason(value: string): RemovalInput['reasonCode'] {
 }
 
 function openRemovalDisputeLocal(data: RemovalInput): DisputeOpenResult {
-  const readback = getPublicOwnerStatusReadbackBySlug(data.slug) ?? getDefaultPublicOwnerStatusReadback()
+  const slug = data.slug.trim()
+  const defaultReadback = getDefaultPublicOwnerStatusReadback()
+  const readback = slug === defaultReadback.catalog.slug ? defaultReadback : getPublicOwnerStatusReadbackBySlug(slug)
+  if (readback === undefined) {
+    return invalidRemovalTarget(false)
+  }
+
   const state = createEmptyDisputeSourceState()
   return openRemovalDisputeModule(state, {
     businessId: readback.catalog.businessId,
@@ -284,7 +301,7 @@ function openRemovalDisputeLocal(data: RemovalInput): DisputeOpenResult {
         privateRef: `private:evidence:removal:${readback.catalog.slug}`,
       },
     ],
-    publicMessage: data.slug,
+    publicMessage: slug,
     security: {
       csrf: {
         csrfToken: 'csrf-removal',
@@ -293,22 +310,47 @@ function openRemovalDisputeLocal(data: RemovalInput): DisputeOpenResult {
       },
       rateLimit: {
         scope: 'dispute_open',
-        key: `removal:${normalizeOperationPart(data.slug)}`,
+        key: `removal:${normalizeOperationPart(slug)}`,
         now: 1_000,
         limit: 3,
         windowMs: 60_000,
       },
     },
-    operationKey: brandNonEmpty(`op:removal:${normalizeOperationPart(data.slug)}`, 'OperationKey'),
-    correlationId: brandNonEmpty(`corr:removal:${normalizeOperationPart(data.slug)}`, 'CorrelationId'),
+    operationKey: brandNonEmpty(`op:removal:${normalizeOperationPart(slug)}`, 'OperationKey'),
+    correlationId: brandNonEmpty(`corr:removal:${normalizeOperationPart(slug)}`, 'CorrelationId'),
     now: 1_000,
   })
+}
+
+function invalidRemovalTarget(retryable: boolean): DisputeOpenResult {
+  return {
+    kind: 'error',
+    code: 'dispute_invalid_target',
+    retryable,
+    reason: retryable
+      ? 'Removal request could not be recorded. Please try again.'
+      : 'No public service page matched that slug.',
+  }
+}
+
+function sourceQuery<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
+  name: string
+): FunctionReference<'query', 'public', Args, Result> {
+  return makeFunctionReference<'query', Args, Result>(name)
 }
 
 function sourceMutation<Args extends DefaultFunctionArgs = DefaultFunctionArgs, Result = unknown>(
   name: string
 ): FunctionReference<'mutation', 'public', Args, Result> {
   return makeFunctionReference<'mutation', Args, Result>(name)
+}
+
+async function callPublicQuery<Query extends FunctionReference<'query'>>(
+  query: Query,
+  args: FunctionArgs<Query>
+): Promise<FunctionReturnType<Query>> {
+  const client = new ConvexHttpClient(readRequiredConvexUrl(process.env))
+  return client.query(query, args)
 }
 
 async function callPublicMutation<Mutation extends FunctionReference<'mutation'>>(

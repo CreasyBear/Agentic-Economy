@@ -2,8 +2,8 @@
 phase: 02-human-inquiry-owner-inbox
 status: blocked
 created: "2026-06-29T03:10:27Z"
-updated: "2026-06-29T06:04:00Z"
-blocker: deploy-provider-smoke-inputs-missing
+updated: "2026-06-29T06:30:00Z"
+blocker: deploy-support-state-and-provider-smoke-inputs-missing
 secret_handling: "Env var names and presence/absence only; no secret values recorded."
 ---
 
@@ -29,7 +29,7 @@ Key-presence recheck at 2026-06-29T05:57Z still found the required smoke keys mi
 
 Operator support-smoke attempts against `https://agentic-economy-phi.vercel.app` with `plumbing-demo` and `parramatta-emergency-plumbing` both returned body `Not found`. Local source contains the `/$slug/inquiry` route and generated route-tree entries, so deployed closeout also requires proving the target deployment is serving the current route set before provider evidence can count.
 
-Live route probe distinction: the Vercel host is reachable, but the current Phase 2 route set is not visible there.
+Live route probe distinction before the GitHub sprint push: the Vercel host was reachable, but the current Phase 2 route set was not visible there.
 
 | Probe | Result |
 |---|---|
@@ -41,6 +41,30 @@ Live route probe distinction: the Vercel host is reachable, but the current Phas
 | `GET /admin/inquiries` | `404` |
 | `POST /api/notification/resend-dispatch` | `404` |
 | `POST /api/notification/novu-dispatch` | `404` |
+
+## 2026-06-29 Post-Push Deployment Recheck
+
+After sprint commit `82b8600` reached `origin/main`, the Vercel host began serving the current route set. Route availability is no longer the blocker.
+
+| Probe | Result |
+|---|---|
+| `GET https://agentic-economy-phi.vercel.app/` | `200` |
+| `GET /registry` | `200` |
+| `GET /developers/discovery` | `200` |
+| `GET /api/discovery/schema` | `200` |
+| `GET /api/discovery/examples` | `200` |
+| `GET /plumbing-demo/inquiry` | `200`, renders `Inquiry unavailable` / `This service page is not public` |
+| `GET /parramatta-emergency-plumbing/inquiry` | `200`, renders `Inquiry unavailable` / `This service page is not public` |
+| `GET /owner/inquiries` | `200` |
+| `GET /admin/inquiries` | `200` |
+| `GET /owner/actions` | `200` |
+| `GET /admin/protected-actions` | `200` |
+| `POST /api/notification/resend-dispatch` | `500`, `missing_notification_outbox_secret` |
+| `POST /api/notification/novu-dispatch` | `500`, `missing_notification_outbox_secret` |
+
+`DEPLOY_BASE_URL=https://agentic-economy-phi.vercel.app SMOKE_PHASE2_BUSINESS_SLUG=plumbing-demo npm run test:phase2-support-smoke` was rerun after route deployment. It reached the deployed route but failed because the required `Send a human inquiry to the owner` heading was absent; the deployed page rendered `Inquiry unavailable` with reason `This service page is not public`.
+
+Current blocker: deploy/source state must expose a published eligible service with a complete `human_inquiry_owner_inbox` support row, then provider smoke inputs and server env must be configured.
 
 ## Required Deployed Setup
 
@@ -93,8 +117,8 @@ Current typed-executor rerun at `2026-06-29T05:53:51Z` checked key presence only
 
 1. Configure the five command-side env vars above in the shell or approved local secret mechanism without committing or recording values.
 2. Verify the deployed server has the required runtime settings listed above.
-3. Verify the target deployed host is serving the current route tree, including `/{slug}/inquiry`, `/admin/inquiries`, `/api/notification/resend-dispatch`, and `/api/notification/novu-dispatch`.
-4. Verify deployed Convex source state has a complete `human_inquiry_owner_inbox` support record for the target published service.
+3. Verify deployed Convex source state has a published eligible service and complete `human_inquiry_owner_inbox` support record for the target smoke slug.
+4. Verify `/{slug}/inquiry` renders the human inquiry form, not the unavailable state.
 5. Use the public inquiry path to create or identify source-owned owner Resend and Novu dispatch IDs.
 6. Prove those dispatch IDs are bound to inquiry-created owner notifications through `/admin/inquiries` or equivalent operator reconstruction.
 7. Run the blocked commands in this order: support smoke, Resend provider smoke, Novu provider smoke.

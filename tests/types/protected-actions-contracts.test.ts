@@ -11,9 +11,11 @@ import {
   ContactFollowUpActionSlug,
   ContactFollowUpAttemptOutcomeValues,
   ContactFollowUpDecisionValues,
+  ContactFollowUpMaxAttemptCount,
   ContactFollowUpParameterKeyValues,
   ContactFollowUpPolicyKindValues,
 } from '@/modules/protected-action/public'
+import type { OwnerContactFollowUpMutationServerResult } from '@/modules/protected-action/contact-follow-up.functions'
 
 describe('protected action type contracts', () => {
   it('keeps selected contact follow-up literal unions in sync with exported values', () => {
@@ -22,12 +24,25 @@ describe('protected action type contracts', () => {
     expectTypeOf<(typeof ContactFollowUpPolicyKindValues)[number]>().toEqualTypeOf<ContactFollowUpPolicyKind>()
     expectTypeOf<(typeof ContactFollowUpDecisionValues)[number]>().toEqualTypeOf<ContactFollowUpDecision>()
     expectTypeOf<(typeof ContactFollowUpAttemptOutcomeValues)[number]>().toEqualTypeOf<ContactFollowUpAttemptOutcome>()
+    expectTypeOf<typeof ContactFollowUpMaxAttemptCount>().toEqualTypeOf<2>()
   })
 
   it('keeps runtime values selected-action-specific', () => {
     expect(ContactFollowUpActionSlug).toBe('contact-follow-up')
     expect(ContactFollowUpParameterKeyValues).not.toContain('amount')
     expect(ContactFollowUpDecisionValues).not.toContain('auto_approved')
+    expect(ContactFollowUpMaxAttemptCount).toBe(2)
+  })
+
+  it('keeps owner mutation server result selected-action scoped', () => {
+    const result = {
+      kind: 'error',
+      code: 'contact_follow_up_source_unavailable',
+      retryable: true,
+      reason: 'Contact follow-up source state is not reachable right now.',
+    } satisfies OwnerContactFollowUpMutationServerResult
+
+    expect(result.code).toBe('contact_follow_up_source_unavailable')
   })
 })
 

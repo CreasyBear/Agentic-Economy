@@ -10,17 +10,32 @@ import {
   type ContactFollowUpReconstruction,
   type ContactFollowUpSourceState,
 } from '@/modules/protected-action/public'
+import {
+  readAdminContactFollowUpReconstructionServer,
+  type AdminContactFollowUpReconstructionServerResult,
+} from '@/modules/protected-action/contact-follow-up.functions'
 
 export type AdminProtectedActionDetailRouteInput = {
   state?: ContactFollowUpSourceState
   proposalId: ContactFollowUpProposalId
 }
 
+export type AdminProtectedActionDetailRouteReadback =
+  | {
+      kind: 'ok'
+      reconstruction: ContactFollowUpReconstruction
+    }
+  | {
+      kind: 'not_found'
+      reason: string
+    }
+  | {
+      kind: 'error'
+      reason: string
+    }
+
 export const Route = createFileRoute('/admin/protected-actions/$proposalId')({
-  loader: ({ params }) =>
-    readAdminProtectedActionDetailRouteReadback({
-      proposalId: params.proposalId as ContactFollowUpProposalId,
-    }),
+  loader: ({ params }) => readAdminContactFollowUpReconstructionServer({ data: { proposalId: params.proposalId } }),
   head: () => ({
     meta: [
       { title: 'Protected action detail | Agentic Economy' },
@@ -38,7 +53,25 @@ export function readAdminProtectedActionDetailRouteReadback(
 }
 
 function AdminProtectedActionDetailRoute() {
-  const readback = Route.useLoaderData()
+  const readback = adminProtectedActionDetailServerToRouteReadback(Route.useLoaderData())
+
+  if (readback.kind !== 'ok') {
+    return (
+      <AeAdminShell
+        title="Protected action detail"
+        description="Operator reconstruction for one contact follow-up proposal, gateway, attempt, receipt, and no-repair path."
+        currentPath="/admin/protected-actions"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>{readback.kind === 'not_found' ? 'Protected action not found' : 'Protected action unavailable'}</CardTitle>
+            <CardDescription>{readback.reason}</CardDescription>
+          </CardHeader>
+        </Card>
+      </AeAdminShell>
+    )
+  }
+  const reconstruction = readback.reconstruction
 
   return (
     <AeAdminShell
@@ -49,30 +82,43 @@ function AdminProtectedActionDetailRoute() {
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{readback.readbackStatus.replaceAll('_', ' ')}</Badge>
-            <Badge variant="outline">{readback.proposal.selectedActionSlug}</Badge>
+            <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
+            <Badge variant="outline">{reconstruction.proposal.selectedActionSlug}</Badge>
           </div>
-          <CardTitle className="break-words">{readback.proposal.id}</CardTitle>
+          <CardTitle className="break-words">{reconstruction.proposal.id}</CardTitle>
           <CardDescription>No raw provider payloads are exposed in this reconstruction.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
           <FactGrid
             facts={[
-              { label: 'Proposal hash', value: readback.proposal.proposalHash },
-              { label: 'Policy hash', value: readback.policy?.policyHash ?? 'missing' },
-              { label: 'Decision hash', value: readback.ownerDecision?.decisionHash ?? 'missing' },
-              { label: 'Gateway hash', value: readback.gatewayAdmission?.admissionHash ?? 'missing' },
-              { label: 'Attempt hash', value: readback.attempt?.attemptHash ?? 'missing' },
-              { label: 'Receipt hash', value: readback.receipt?.payloadHash ?? 'missing' },
-              { label: 'Private evidence refs', value: String(readback.privateEvidenceRefs.length) },
-              { label: 'Audit events', value: String(readback.auditEvents.length) },
-              { label: 'No repair reason', value: readback.noRepair?.reason ?? 'none' },
+              { label: 'Proposal hash', value: reconstruction.proposal.proposalHash },
+              { label: 'Policy hash', value: reconstruction.policy?.policyHash ?? 'missing' },
+              { label: 'Decision hash', value: reconstruction.ownerDecision?.decisionHash ?? 'missing' },
+              { label: 'Gateway hash', value: reconstruction.gatewayAdmission?.admissionHash ?? 'missing' },
+              { label: 'Attempt hash', value: reconstruction.attempt?.attemptHash ?? 'missing' },
+              { label: 'Receipt hash', value: reconstruction.receipt?.payloadHash ?? 'missing' },
+              { label: 'Private evidence refs', value: String(reconstruction.privateEvidenceRefs.length) },
+              { label: 'Audit events', value: String(reconstruction.auditEvents.length) },
+              { label: 'No repair reason', value: reconstruction.noRepair?.reason ?? 'none' },
             ]}
           />
         </CardContent>
       </Card>
     </AeAdminShell>
   )
+}
+
+export function adminProtectedActionDetailServerToRouteReadback(
+  result: AdminContactFollowUpReconstructionServerResult
+): AdminProtectedActionDetailRouteReadback {
+  if (result.kind === 'allowed') {
+    const reconstruction = result.rows[0]
+    return reconstruction === undefined
+      ? { kind: 'not_found', reason: 'No protected-action reconstruction matched that proposal.' }
+      : { kind: 'ok', reconstruction }
+  }
+
+  return { kind: 'error', reason: result.publicMessage }
 }
 
 function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {

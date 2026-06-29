@@ -14,6 +14,10 @@ import {
   type ContactFollowUpReconstruction,
   type ContactFollowUpSourceState,
 } from '@/modules/protected-action/public'
+import {
+  readAdminContactFollowUpReconstructionServer,
+  type AdminContactFollowUpReconstructionServerResult,
+} from '@/modules/protected-action/contact-follow-up.functions'
 
 type AdminProtectedActionSearch = {
   proposalId?: string
@@ -25,6 +29,7 @@ export type AdminProtectedActionsRouteInput = {
 }
 
 export type AdminProtectedActionsRouteReadback = {
+  deniedReason?: string
   rows: readonly ContactFollowUpReconstruction[]
 }
 
@@ -35,9 +40,9 @@ export const Route = createFileRoute('/admin/protected-actions')({
   },
   loaderDeps: ({ search }) => search,
   loader: ({ deps }) =>
-    readAdminProtectedActionsRouteReadback(
-      deps.proposalId === undefined ? {} : { proposalId: deps.proposalId as ContactFollowUpProposalId }
-    ),
+    readAdminContactFollowUpReconstructionServer({
+      data: deps.proposalId === undefined ? {} : { proposalId: deps.proposalId },
+    }),
   head: () => ({
     meta: [
       { title: 'Protected action reconstruction | Agentic Economy' },
@@ -63,7 +68,7 @@ export function readAdminProtectedActionsRouteReadback(
 
 function AdminProtectedActionsRoute() {
   const location = useLocation()
-  const readback = Route.useLoaderData()
+  const readback = adminProtectedActionsServerToRouteReadback(Route.useLoaderData())
   const search = Route.useSearch()
 
   if (location.pathname !== '/admin/protected-actions') {
@@ -77,9 +82,30 @@ function AdminProtectedActionsRoute() {
       currentPath="/admin/protected-actions"
     >
       {search.proposalId === undefined ? <FilterPanel /> : <FilterPanel proposalId={search.proposalId} />}
+      {readback.deniedReason === undefined ? null : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Admin reconstruction unavailable</CardTitle>
+            <CardDescription>{readback.deniedReason}</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
       {readback.rows.length === 0 ? <EmptyState /> : <ReconstructionRows rows={readback.rows} />}
     </AeAdminShell>
   )
+}
+
+export function adminProtectedActionsServerToRouteReadback(
+  result: AdminContactFollowUpReconstructionServerResult
+): AdminProtectedActionsRouteReadback {
+  if (result.kind === 'allowed') {
+    return { rows: result.rows }
+  }
+
+  return {
+    deniedReason: result.publicMessage,
+    rows: [],
+  }
 }
 
 function FilterPanel({ proposalId }: { proposalId?: string }) {

@@ -4,6 +4,7 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
 
 type OwnerStatusSearch = {
@@ -27,7 +28,8 @@ export const Route = createFileRoute('/owner/status')({
 })
 
 function OwnerStatusRoute() {
-  const readback = Route.useLoaderData()
+  const result = Route.useLoaderData()
+  const readback = result.kind === 'available' ? result.readback : undefined
 
   return (
     <AePublicShell>
@@ -37,8 +39,23 @@ function OwnerStatusRoute() {
         description="Public page, index, discovery, trust, and capability states stay separate so unavailable work is visible."
       />
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        <AeStatusCard readback={readback} />
-        <AeCapabilityList catalog={readback.catalog} />
+        {readback === undefined ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>{result.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}</CardTitle>
+              <CardDescription>
+                {result.kind === 'not_found'
+                  ? 'No public service page matched that slug.'
+                  : 'Source readback is unavailable right now. Try again once source access is restored.'}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : (
+          <>
+            <AeStatusCard readback={readback} />
+            <AeCapabilityList catalog={readback.catalog} />
+          </>
+        )}
       </section>
     </AePublicShell>
   )

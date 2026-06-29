@@ -163,6 +163,8 @@ export type ContactFollowUpAttempt = {
   attemptedAt: number
 }
 
+export const ContactFollowUpMaxAttemptCount = 2 as const
+
 export type ContactFollowUpReceipt = {
   id: ContactFollowUpReceiptId
   proposalId: ContactFollowUpProposalId
@@ -422,18 +424,20 @@ export type MarkContactFollowUpNoRepairResult = ContactFollowUpStateResult<
   }
 >
 
-export function createEmptyContactFollowUpSourceState(): ContactFollowUpSourceState {
+export function createEmptyContactFollowUpSourceState(
+  initial: Partial<ContactFollowUpSourceState> = {}
+): ContactFollowUpSourceState {
   return {
-    proposals: [],
-    policyDecisions: [],
-    ownerDecisions: [],
-    gatewayAdmissions: [],
-    attempts: [],
-    receipts: [],
-    privateEvidenceRefs: [],
-    noRepairRecords: [],
-    supportRecords: [],
-    auditEvents: [],
+    proposals: initial.proposals ?? [],
+    policyDecisions: initial.policyDecisions ?? [],
+    ownerDecisions: initial.ownerDecisions ?? [],
+    gatewayAdmissions: initial.gatewayAdmissions ?? [],
+    attempts: initial.attempts ?? [],
+    receipts: initial.receipts ?? [],
+    privateEvidenceRefs: initial.privateEvidenceRefs ?? [],
+    noRepairRecords: initial.noRepairRecords ?? [],
+    supportRecords: initial.supportRecords ?? [],
+    auditEvents: initial.auditEvents ?? [],
   }
 }
 
@@ -862,21 +866,34 @@ export function recordContactFollowUpProviderAttempt(
     selectedActionSlug: ContactFollowUpActionSlug,
     readback: readbackHashValue(command.readback),
   })
-  const existing = state.attempts.find((attempt) => attempt.proposalId === proposal.id)
-  if (existing !== undefined) {
-    if (existing.idempotencyKey === command.idempotencyKey && existing.attemptHash === attemptHash) {
-      const receipt = state.receipts.find((candidate) => candidate.attemptId === existing.id)
+  const existingByIdempotencyKey = state.attempts.find(
+    (attempt) => attempt.proposalId === proposal.id && attempt.idempotencyKey === command.idempotencyKey
+  )
+  if (existingByIdempotencyKey !== undefined) {
+    if (existingByIdempotencyKey.attemptHash === attemptHash) {
+      const receipt = state.receipts.find((candidate) => candidate.attemptId === existingByIdempotencyKey.id)
       return ok('contact_follow_up_attempt_replayed', {
         state,
-        attempt: existing,
+        attempt: existingByIdempotencyKey,
         ...(receipt === undefined ? {} : { receipt }),
       })
     }
 
     return error('contact_follow_up_idempotency_conflict', false, {
-      reason: 'attempt_already_recorded',
+      reason: 'attempt_idempotency_conflict',
       proposalId: proposal.id,
     })
+  }
+
+  const previousAttempts = attemptsForProposal(state, proposal.id)
+  if (previousAttempts.length > 0) {
+    const latestAttempt = previousAttempts[previousAttempts.length - 1]
+    if (latestAttempt === undefined || !isRetryableAttempt(latestAttempt) || previousAttempts.length >= ContactFollowUpMaxAttemptCount) {
+      return error('contact_follow_up_retry_exhausted', false, {
+        reason: 'retry_exhausted',
+        proposalId: proposal.id,
+      })
+    }
   }
 
   if (gatewayAdmission.status !== 'admitted') {
@@ -904,6 +921,7 @@ export function recordContactFollowUpProviderAttempt(
     ...(command.readback.kind === 'failed' ? { reason: command.readback.failureReason } : {}),
   }
   const receipt = receiptForAttempt(proposal, attempt, command.readback, command.now)
+  const privateEvidenceRef = privateEvidenceRefForAttempt(proposal, attempt, command.readback, command.now)
   const nextProposal = proposalWithStatus(state, proposal, 'attempted', command.now)
   const consumedGateway: ContactFollowUpGatewayAdmission = {
     ...gatewayAdmission,
@@ -962,6 +980,7 @@ export function recordContactFollowUpProviderAttempt(
           gatewayAdmissions: replaceGatewayAdmission(state.gatewayAdmissions, consumedGateway),
           attempts: [...state.attempts, attempt],
           receipts: receipt === undefined ? state.receipts : [...state.receipts, receipt],
+          privateEvidenceRefs: [...state.privateEvidenceRefs, privateEvidenceRef],
         },
         gatewayAuditEvent
       ),
@@ -1348,7 +1367,7 @@ function latestOwnerDecisionFor(
 function buildQueueItem(state: ContactFollowUpSourceState, proposal: ContactFollowUpProposal): ContactFollowUpProposalQueueItem {
   const policy = latestPolicyFor(state, proposal)
   const ownerDecision = latestOwnerDecisionFor(state, proposal)
-  const attempt = state.attempts.find((candidate) => candidate.proposalId === proposal.id)
+  const attempt = latestAttemptFor(state, proposal)
   const receipt = attempt === undefined ? undefined : state.receipts.find((candidate) => candidate.attemptId === attempt.id)
 
   return {
@@ -1358,6 +1377,26 @@ function buildQueueItem(state: ContactFollowUpSourceState, proposal: ContactFoll
     ...(attempt === undefined ? {} : { attempt }),
     ...(receipt === undefined ? {} : { receipt }),
   }
+}
+
+function attemptsForProposal(
+  state: ContactFollowUpSourceState,
+  proposalId: ContactFollowUpProposalId
+): readonly ContactFollowUpAttempt[] {
+  return state.attempts
+    .filter((attempt) => attempt.proposalId === proposalId)
+    .sort((left, right) => left.attemptedAt - right.attemptedAt)
+}
+
+function latestAttemptFor(
+  state: ContactFollowUpSourceState,
+  proposal: ContactFollowUpProposal
+): ContactFollowUpAttempt | undefined {
+  return attemptsForProposal(state, proposal.id).at(-1)
+}
+
+function isRetryableAttempt(attempt: ContactFollowUpAttempt): boolean {
+  return attempt.outcome === 'proof_gap_recorded' || attempt.outcome === 'failed'
 }
 
 function latestGatewayFor(
@@ -1524,6 +1563,23 @@ function receiptForAttempt(
         ? { targetRef: proposal.parameters.sourceMessageRef, resultRef: readback.resultRef }
         : { targetRef: proposal.parameters.sourceMessageRef, gapReason: readback.gapReason },
     recordedAt,
+  }
+}
+
+function privateEvidenceRefForAttempt(
+  proposal: ContactFollowUpProposal,
+  attempt: ContactFollowUpAttempt,
+  readback: ContactFollowUpAttemptReadback,
+  recordedAt: number
+): ContactFollowUpPrivateEvidenceRef {
+  return {
+    id: `contact-follow-up-private-evidence:${proposal.id}:${attempt.idempotencyKey}` as ContactFollowUpPrivateEvidenceRefId,
+    proposalId: proposal.id,
+    attemptId: attempt.id,
+    retentionClass: 'protected_action_private_evidence',
+    accessPolicy: 'owner_admin_operator_only',
+    payloadHash: readback.payloadHash,
+    ttlExpiresAt: recordedAt + 30 * 24 * 60 * 60 * 1_000,
   }
 }
 

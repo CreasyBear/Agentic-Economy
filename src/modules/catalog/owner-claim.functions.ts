@@ -20,6 +20,7 @@ import type {
   PublicOwnerClaimFlowRouteResult,
   PublicOwnerClaimFlowInput,
   PublicOwnerClaimFlowResult,
+  PublicOwnerStatusRouteReadbackResult,
   PublicOwnerStatusRouteReadback,
   PublicOwnerStatusReadback,
   PublicRouteCatalogContract,
@@ -198,33 +199,37 @@ export async function submitOwnerClaimThroughSource(input: PublicOwnerClaimFlowI
   }
 }
 
-export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusRouteReadback> {
+export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {
   if (usesLocalE2eBypass()) {
-    if (slug === undefined || slug.trim().length === 0) {
-      return redactOwnerStatusReadback(getDefaultPublicOwnerStatusReadback())
-    }
-
-    return redactOwnerStatusReadback(getPublicOwnerStatusReadbackBySlug(slug) ?? getDefaultPublicOwnerStatusReadback())
+    return readLocalOwnerStatus(slug)
   }
 
   const readsCurrentOwner = slug === undefined || slug.trim().length === 0
-  let result: PublicCatalogReadResult
 
-  if (readsCurrentOwner) {
-    try {
-      result = await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
-    } catch {
-      return redactOwnerStatusReadback(getDefaultPublicOwnerStatusReadback())
-    }
-  } else {
-    result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
+  try {
+    const result = readsCurrentOwner
+      ? await callAuthenticatedQuery(currentOwnerCatalogQuery, {})
+      : await callPublicQuery(publicCatalogBySlugQuery, { slug })
+
+    return result.kind === 'available'
+      ? { kind: 'available', readback: redactOwnerStatusReadback(buildPublicOwnerStatusReadback(result.catalog)) }
+      : { kind: 'not_found', reason: result.reason }
+  } catch {
+    return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
+  }
+}
+
+function readLocalOwnerStatus(slug: string | undefined): PublicOwnerStatusRouteReadbackResult {
+  const defaultReadback = getDefaultPublicOwnerStatusReadback()
+  const normalizedSlug = slug?.trim()
+  if (normalizedSlug === undefined || normalizedSlug.length === 0 || normalizedSlug === defaultReadback.catalog.slug) {
+    return { kind: 'available', readback: redactOwnerStatusReadback(defaultReadback) }
   }
 
-  if (result.kind === 'available') {
-    return redactOwnerStatusReadback(buildPublicOwnerStatusReadback(result.catalog))
-  }
-
-  return redactOwnerStatusReadback(getDefaultPublicOwnerStatusReadback())
+  const readback = getPublicOwnerStatusReadbackBySlug(normalizedSlug)
+  return readback === undefined
+    ? { kind: 'not_found', reason: 'not_public' }
+    : { kind: 'available', readback: redactOwnerStatusReadback(readback) }
 }
 
 export async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {

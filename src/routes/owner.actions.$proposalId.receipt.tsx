@@ -11,17 +11,28 @@ import {
   type ContactFollowUpReconstruction,
   type ContactFollowUpSourceState,
 } from '@/modules/protected-action/public'
+import {
+  readCurrentOwnerContactFollowUpReceiptServer,
+  type OwnerContactFollowUpDetailServerResult,
+} from '@/modules/protected-action/contact-follow-up.functions'
 
 export type OwnerContactFollowUpReceiptRouteInput = {
   state?: ContactFollowUpSourceState
   proposalId: ContactFollowUpProposalId
 }
 
+export type OwnerContactFollowUpReceiptRouteReadback =
+  | {
+      kind: 'ok'
+      reconstruction: ContactFollowUpReconstruction
+    }
+  | {
+      kind: 'error'
+      reason: string
+    }
+
 export const Route = createFileRoute('/owner/actions/$proposalId/receipt')({
-  loader: ({ params }) =>
-    readOwnerContactFollowUpReceiptRouteReadback({
-      proposalId: params.proposalId as ContactFollowUpProposalId,
-    }),
+  loader: ({ params }) => readCurrentOwnerContactFollowUpReceiptServer({ data: { proposalId: params.proposalId } }),
   head: () => ({
     meta: [
       { title: 'Contact follow-up receipt | Agentic Economy' },
@@ -39,7 +50,28 @@ export function readOwnerContactFollowUpReceiptRouteReadback(
 }
 
 function OwnerContactFollowUpReceiptRoute() {
-  const readback = Route.useLoaderData()
+  const readback = ownerContactFollowUpReceiptServerToRouteReadback(Route.useLoaderData())
+
+  if (readback.kind === 'error') {
+    return (
+      <AePublicShell>
+        <AePageHeader
+          eyebrow="Receipt readback"
+          title="Contact follow-up reconstruction"
+          description="The owner readback separates source-owned proposal, decision, gateway, attempt, and receipt state."
+        />
+        <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Receipt unavailable</CardTitle>
+              <CardDescription>{readback.reason}</CardDescription>
+            </CardHeader>
+          </Card>
+        </section>
+      </AePublicShell>
+    )
+  }
+  const reconstruction = readback.reconstruction
 
   return (
     <AePublicShell>
@@ -52,21 +84,21 @@ function OwnerContactFollowUpReceiptRoute() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{readback.readbackStatus.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{readback.repairAction.replaceAll('_', ' ')}</Badge>
+              <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
+              <Badge variant="outline">{reconstruction.repairAction.replaceAll('_', ' ')}</Badge>
             </div>
-            <CardTitle>{readback.proposal.parameters.contactName}</CardTitle>
+            <CardTitle>{reconstruction.proposal.parameters.contactName}</CardTitle>
             <CardDescription>Source-owned receipt or proof-gap readback only. No raw provider payload is shown.</CardDescription>
           </CardHeader>
           <CardContent>
             <FactGrid
               facts={[
-                { label: 'Proposal', value: readback.proposal.id },
-                { label: 'Gateway', value: readback.gatewayAdmission?.status ?? 'missing' },
-                { label: 'Attempt', value: readback.attempt?.outcome ?? 'not attempted' },
-                { label: 'Receipt', value: readback.receipt?.kind ?? 'none' },
-                { label: 'Private evidence refs', value: String(readback.privateEvidenceRefs.length) },
-                { label: 'Audit events', value: String(readback.auditEvents.length) },
+                { label: 'Proposal', value: reconstruction.proposal.id },
+                { label: 'Gateway', value: reconstruction.gatewayAdmission?.status ?? 'missing' },
+                { label: 'Attempt', value: reconstruction.attempt?.outcome ?? 'not attempted' },
+                { label: 'Receipt', value: reconstruction.receipt?.kind ?? 'none' },
+                { label: 'Private evidence refs', value: String(reconstruction.privateEvidenceRefs.length) },
+                { label: 'Audit events', value: String(reconstruction.auditEvents.length) },
               ]}
             />
           </CardContent>
@@ -74,6 +106,16 @@ function OwnerContactFollowUpReceiptRoute() {
       </section>
     </AePublicShell>
   )
+}
+
+export function ownerContactFollowUpReceiptServerToRouteReadback(
+  result: OwnerContactFollowUpDetailServerResult
+): OwnerContactFollowUpReceiptRouteReadback {
+  if (result.kind === 'ok') {
+    return { kind: 'ok', reconstruction: result.reconstruction }
+  }
+
+  return { kind: 'error', reason: result.reason }
 }
 
 function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {

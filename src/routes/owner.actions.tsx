@@ -15,6 +15,10 @@ import {
   type ContactFollowUpReconstruction,
   type ContactFollowUpSourceState,
 } from '@/modules/protected-action/public'
+import {
+  readCurrentOwnerContactFollowUpQueueServer,
+  type OwnerContactFollowUpQueueServerResult,
+} from '@/modules/protected-action/contact-follow-up.functions'
 
 export type OwnerContactFollowUpRouteInput = {
   state?: ContactFollowUpSourceState
@@ -23,6 +27,7 @@ export type OwnerContactFollowUpRouteInput = {
 }
 
 export type OwnerContactFollowUpRouteReadback = {
+  unavailableReason?: string
   queue: readonly ContactFollowUpProposalQueueItem[]
   reconstructions: readonly ContactFollowUpReconstruction[]
 }
@@ -30,7 +35,7 @@ export type OwnerContactFollowUpRouteReadback = {
 const defaultOwnerId = 'owner:contact-follow-up' as OwnerId
 
 export const Route = createFileRoute('/owner/actions')({
-  loader: () => readOwnerContactFollowUpRouteReadback(),
+  loader: () => readCurrentOwnerContactFollowUpQueueServer(),
   head: () => ({
     meta: [
       { title: 'Contact follow-up requests | Agentic Economy' },
@@ -59,7 +64,7 @@ export function readOwnerContactFollowUpRouteReadback(
 
 function OwnerActionsRoute() {
   const location = useLocation()
-  const readback = Route.useLoaderData()
+  const readback = ownerContactFollowUpQueueServerToRouteReadback(Route.useLoaderData())
 
   if (location.pathname !== '/owner/actions') {
     return <Outlet />
@@ -79,10 +84,33 @@ function OwnerActionsRoute() {
             Contact follow-up is owner-pending. AE does not book work, charge money, or record a follow-up attempt until the owner approves this exact proposal.
           </AlertDescription>
         </Alert>
+        {readback.unavailableReason === undefined ? null : (
+          <Alert>
+            <AlertTitle>Source readback unavailable</AlertTitle>
+            <AlertDescription>{readback.unavailableReason}</AlertDescription>
+          </Alert>
+        )}
         <OwnerContactFollowUpQueue queue={readback.queue} />
       </section>
     </AePublicShell>
   )
+}
+
+export function ownerContactFollowUpQueueServerToRouteReadback(
+  result: OwnerContactFollowUpQueueServerResult
+): OwnerContactFollowUpRouteReadback {
+  if (result.kind === 'ok') {
+    return {
+      queue: result.queue,
+      reconstructions: result.reconstructions,
+    }
+  }
+
+  return {
+    unavailableReason: result.reason,
+    queue: [],
+    reconstructions: [],
+  }
 }
 
 function OwnerContactFollowUpQueue({ queue }: { queue: readonly ContactFollowUpProposalQueueItem[] }) {

@@ -7,6 +7,8 @@ import { scanCopyClaims } from '@/lib/ui/contract-scans'
 const phase4Files = [
   '.planning/phases/04-owner-pending-protected-actions/04-ACTION-SELECTION.md',
   '.planning/phases/04-owner-pending-protected-actions/04-UI-SPEC.md',
+  'convex/protectedActions.ts',
+  'src/modules/protected-action/contact-follow-up.functions.ts',
   'src/modules/protected-action/internal/contact-follow-up.ts',
   'src/routes/owner.actions.tsx',
   'src/routes/owner.actions.$proposalId.tsx',
