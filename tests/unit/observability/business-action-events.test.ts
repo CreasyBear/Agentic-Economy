@@ -4,17 +4,23 @@ import { brandNonEmpty } from '@/modules/common/ids'
 import {
   AuditEventTypeValues,
   AuditTargetTypeValues,
+  BusinessActionPrivateEvidenceAccessPolicy,
+  BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues,
+  BusinessActionPrivateEvidenceRetentionClass,
   BusinessActionSupportKillRuleValues,
   FunnelEventTypeValues,
   OperatorControlKeyValues,
   evaluateBusinessActionClaimSafety,
+  projectBusinessActionPrivateEvidenceForPublic,
   readOperatorControls,
   setOperatorControl,
+  validateBusinessActionPrivateEvidencePolicy,
   validateBusinessActionNoRepairReconstruction,
 } from '@/modules/observability/public'
 import { observabilityTables } from '@/modules/observability/internal/schema'
 import type {
   BusinessActionClaimSafetyInput,
+  BusinessActionPrivateEvidencePolicyInput,
   BusinessActionSupportKillRule,
   OperatorControlKey,
   OperatorControlSourceState,
@@ -210,6 +216,94 @@ describe('business action observability contracts', () => {
       })
     ).toEqual({ valid: false, reason: 'provider_evidence_rewritten' })
   })
+
+  it('requires private evidence retention access ttl export delete and tombstone metadata', () => {
+    expect(BusinessActionPrivateEvidenceRetentionClass).toBe('business_action_private_evidence')
+    expect(BusinessActionPrivateEvidenceAccessPolicy).toBe('owner_admin_operator_only')
+
+    expect(validateBusinessActionPrivateEvidencePolicy(privateEvidenceInput())).toMatchObject({
+      valid: true,
+      retentionClass: 'business_action_private_evidence',
+      accessPolicy: 'owner_admin_operator_only',
+      exportBehavior: 'redacted_hash_only',
+      deleteBehavior: 'raw_ref_retained_until_ttl',
+      publicProjectionAllowed: false,
+    })
+
+    expect(
+      validateBusinessActionPrivateEvidencePolicy(
+        privateEvidenceInput({
+          privatePayloadRef: undefined,
+          redactedAt: 30,
+          deletedAt: 30,
+          tombstoneHash: 'hash:tombstone',
+        })
+      )
+    ).toMatchObject({
+      valid: true,
+      deleteBehavior: 'raw_ref_tombstoned',
+    })
+
+    expect(validateBusinessActionPrivateEvidencePolicy(privateEvidenceInput({ retentionClass: 'generic_private' }))).toEqual({
+      valid: false,
+      reason: 'invalid_retention_class',
+    })
+    expect(validateBusinessActionPrivateEvidencePolicy(privateEvidenceInput({ accessPolicy: 'public' }))).toEqual({
+      valid: false,
+      reason: 'invalid_access_policy',
+    })
+    expect(validateBusinessActionPrivateEvidencePolicy(privateEvidenceInput({ ttlExpiresAt: 20 }))).toEqual({
+      valid: false,
+      reason: 'ttl_not_future',
+    })
+  })
+
+  it('excludes private evidence raw fields from public projection', () => {
+    expect(BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues).toEqual([
+      'raw_prompt',
+      'trace',
+      'provider_payload',
+      'stripe_payload',
+      'customer_identifier',
+      'private_endpoint_ref',
+      'api_key',
+      'webhook_secret',
+    ])
+
+    const projection = projectBusinessActionPrivateEvidenceForPublic(
+      privateEvidenceInput({
+        unsafeRawFields: {
+          raw_prompt: 'call this endpoint',
+          trace: 'private trace payload',
+          provider_payload: '{"provider":"hermes"}',
+          stripe_payload: '{"id":"evt_123"}',
+          customer_identifier: 'owner@example.com',
+          private_endpoint_ref: 'private-endpoint://paid-intake',
+          api_key: 'sk_test_secret',
+          webhook_secret: 'whsec_secret',
+        },
+      })
+    )
+
+    expect(projection).toEqual({
+      id: 'private-evidence:paid-intake',
+      requestRef: 'business-action-request:paid-intake',
+      retentionClass: 'business_action_private_evidence',
+      accessPolicy: 'owner_admin_operator_only',
+      payloadHash: 'hash:private-payload',
+      ttlExpiresAt: 100,
+      redactedAt: undefined,
+      tombstoned: false,
+      excludedFields: BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues,
+    })
+    expect(JSON.stringify(projection)).not.toContain('call this endpoint')
+    expect(JSON.stringify(projection)).not.toContain('private trace payload')
+    expect(JSON.stringify(projection)).not.toContain('evt_123')
+    expect(JSON.stringify(projection)).not.toContain('owner@example.com')
+    expect(JSON.stringify(projection)).not.toContain('private-endpoint://paid-intake')
+    expect(JSON.stringify(projection)).not.toContain('sk_test_secret')
+    expect(JSON.stringify(projection)).not.toContain('whsec_secret')
+  })
 })
 
 function operatorControlState(): OperatorControlSourceState {
@@ -266,6 +360,23 @@ function claimSafetyInput(overrides: Partial<BusinessActionClaimSafetyInput> = {
       capacityThreshold: 2,
     },
     now: 20,
+    ...overrides,
+  }
+}
+
+function privateEvidenceInput(
+  overrides: Partial<BusinessActionPrivateEvidencePolicyInput> = {}
+): BusinessActionPrivateEvidencePolicyInput {
+  return {
+    id: 'private-evidence:paid-intake',
+    requestRef: 'business-action-request:paid-intake',
+    retentionClass: 'business_action_private_evidence',
+    accessPolicy: 'owner_admin_operator_only',
+    payloadHash: 'hash:private-payload',
+    privatePayloadRef: 'private-endpoint://trace/paid-intake',
+    ttlExpiresAt: 100,
+    now: 30,
+    unsafeRawFields: {},
     ...overrides,
   }
 }
