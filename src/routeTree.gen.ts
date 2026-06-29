@@ -42,6 +42,7 @@ import { Route as ApiDiscoveryFixturesRouteImport } from './routes/api.discovery
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
+import { Route as ApiBusinessActionsStripeWebhookRouteImport } from './routes/api.business-actions.stripe-webhook'
 import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
 import { Route as OwnerActionsProposalIdReceiptRouteImport } from './routes/owner.actions.$proposalId.receipt'
 
@@ -213,6 +214,12 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
+const ApiBusinessActionsStripeWebhookRoute =
+  ApiBusinessActionsStripeWebhookRouteImport.update({
+    id: '/api/business-actions/stripe-webhook',
+    path: '/api/business-actions/stripe-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AdminProtectedActionsProposalIdRoute =
   AdminProtectedActionsProposalIdRouteImport.update({
     id: '/$proposalId',
@@ -251,6 +258,7 @@ export interface FileRoutesByFullPath {
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
@@ -288,6 +296,7 @@ export interface FileRoutesByTo {
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
@@ -326,6 +335,7 @@ export interface FileRoutesById {
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/sign-in/$'
     | '/sign-up/$'
     | '/admin/protected-actions/$proposalId'
+    | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/discovery/examples'
@@ -402,6 +413,7 @@ export interface FileRouteTypes {
     | '/sign-in/$'
     | '/sign-up/$'
     | '/admin/protected-actions/$proposalId'
+    | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/discovery/examples'
@@ -439,6 +451,7 @@ export interface FileRouteTypes {
     | '/sign-in/$'
     | '/sign-up/$'
     | '/admin/protected-actions/$proposalId'
+    | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
     | '/api/discovery/examples'
@@ -473,6 +486,7 @@ export interface RootRouteChildren {
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
+  ApiBusinessActionsStripeWebhookRoute: typeof ApiBusinessActionsStripeWebhookRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoveryFixturesRoute: typeof ApiDiscoveryFixturesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
@@ -714,6 +728,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
     }
+    '/api/business-actions/stripe-webhook': {
+      id: '/api/business-actions/stripe-webhook'
+      path: '/api/business-actions/stripe-webhook'
+      fullPath: '/api/business-actions/stripe-webhook'
+      preLoaderRoute: typeof ApiBusinessActionsStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/protected-actions/$proposalId': {
       id: '/admin/protected-actions/$proposalId'
       path: '/$proposalId'
@@ -839,6 +860,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
+  ApiBusinessActionsStripeWebhookRoute: ApiBusinessActionsStripeWebhookRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoveryFixturesRoute: ApiDiscoveryFixturesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,

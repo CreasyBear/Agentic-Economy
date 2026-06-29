@@ -68,6 +68,9 @@ describe('Stripe Checkout Session evidence binding', () => {
 
     expect(createdRequests).toHaveLength(1)
     const [stripeRequest] = createdRequests
+    if (stripeRequest === undefined) {
+      throw new Error('expected Stripe create request')
+    }
     expect(stripeRequest.idempotencyKey).toBe(`business-action:stripe-checkout:${request}:${checkpoint}`)
     expect(stripeRequest.authorizationHeader).toBe('Bearer sk_test_paid_intake')
     expect(stripeRequest.body.get('mode')).toBe('payment')
