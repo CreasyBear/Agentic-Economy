@@ -9,6 +9,7 @@
   --ae-surface: oklch(1 0 0);
   --ae-surface-raised: oklch(0.975 0.007 252);
   --ae-surface-command: oklch(0.22 0.04 255);
+  --ae-command-fg: oklch(0.96 0.006 255);
   --ae-border: oklch(0.87 0.014 252);
   --ae-ring: oklch(0.56 0.18 252);
 
@@ -26,6 +27,8 @@
   --ae-radius-pill: 999px;
   --ae-shadow-raised: 0 1px 2px oklch(0.2 0.02 255 / 0.08), 0 12px 36px oklch(0.2 0.02 255 / 0.08);
   --ae-shadow-command: 0 24px 80px oklch(0.2 0.04 255 / 0.18);
+  --ae-shadow-border: 0 0 0 1px oklch(0.2 0.02 255 / 0.08), 0 1px 2px -1px oklch(0.2 0.02 255 / 0.08), 0 2px 4px oklch(0.2 0.02 255 / 0.04);
+  --ae-shadow-border-hover: 0 0 0 1px oklch(0.2 0.02 255 / 0.12), 0 1px 2px -1px oklch(0.2 0.02 255 / 0.10), 0 4px 10px oklch(0.2 0.02 255 / 0.06);
   --ae-focus-ring: 0 0 0 3px oklch(0.56 0.18 252 / 0.30);
 
   --ae-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -69,4 +72,10 @@
   --ae-primary: oklch(0.68 0.15 252);
   --ae-primary-strong: oklch(0.74 0.14 252);
   --ae-primary-fg: oklch(0.15 0.026 255);
+  --ae-info: oklch(0.74 0.12 235);
+  --ae-success: oklch(0.74 0.12 155);
+  --ae-warning: oklch(0.82 0.13 78);
+  --ae-danger: oklch(0.74 0.14 28);
+  --ae-shadow-border: 0 0 0 1px oklch(1 0 0 / 0.09);
+  --ae-shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.15);
 }
