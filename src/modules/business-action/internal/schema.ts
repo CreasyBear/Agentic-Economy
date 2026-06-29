@@ -254,6 +254,7 @@ export type BusinessActionResultArtifact = {
   endpointDescriptorHash?: SourceHash
   jsonSchemaHash?: SourceHash
   privateEndpointProvisioningPaymentGateRefHash?: SourceHash
+  supportingEvidenceLabels?: readonly string[]
   artifactHash: SourceHash
   idempotencyKey: OperationKey
   correlationId: CorrelationId
@@ -290,6 +291,8 @@ export type ActionReceipt = {
   signatureRefHash: SourceHash
   reconstructionStatus: ReceiptReconstructionStatus
   payloadHash: SourceHash
+  idempotencyKey: OperationKey
+  correlationId: CorrelationId
   recordedAt: number
 }
 
