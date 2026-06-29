@@ -6,7 +6,6 @@ import type {
   BusinessActionGuardrailDecision,
   BusinessActionGuardrailProvider,
   BusinessActionResultArtifactRequirement,
-  BusinessActionSlug as BusinessActionSlugType,
   ReceiptReconstructionStatus,
 } from '@/modules/business-action/public'
 import {
@@ -22,8 +21,8 @@ import {
 
 describe('business action type contracts', () => {
   it('keeps exported runtime values aligned with exact literal unions', () => {
-    expectTypeOf<typeof BusinessActionSlug>().toEqualTypeOf<BusinessActionSlugType>()
-    expectTypeOf<(typeof BusinessActionSlugValues)[number]>().toEqualTypeOf<BusinessActionSlugType>()
+    expectTypeOf<typeof BusinessActionSlug>().toEqualTypeOf<'provision-paid-intake-endpoint'>()
+    expectTypeOf<(typeof BusinessActionSlugValues)[number]>().toEqualTypeOf<typeof BusinessActionSlug>()
     expectTypeOf<(typeof BusinessActionExternalEvidenceProviderValues)[number]>().toEqualTypeOf<BusinessActionExternalEvidenceProvider>()
     expectTypeOf<(typeof BusinessActionGuardrailProviderValues)[number]>().toEqualTypeOf<BusinessActionGuardrailProvider>()
     expectTypeOf<(typeof BusinessActionGuardrailDecisionValues)[number]>().toEqualTypeOf<BusinessActionGuardrailDecision>()
@@ -54,7 +53,7 @@ describe('business action type contracts', () => {
 })
 
 // @ts-expect-error arbitrary action strings cannot replace the single Phase 6 slug
-const invalidActionSlug: BusinessActionSlugType = 'executeAction'
+const invalidActionSlug: typeof BusinessActionSlug = 'executeAction'
 void invalidActionSlug
 
 // @ts-expect-error provider "other" is not a valid external evidence provider

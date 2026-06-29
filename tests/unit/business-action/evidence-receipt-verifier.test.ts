@@ -54,16 +54,16 @@ describe('business action receipt verifier', () => {
     expect(verification.reconstructionStatus).toBe('complete')
     expect(verification.publicReadback.hashes.resultArtifactHash).toBe(artifact.artifact.artifactHash)
     expect(JSON.stringify(verification.publicReadback)).not.toContain('private_endpoint_provisioning_payment_gate_ref')
-    expect(verification.privateReadback?.resultArtifact.privateEndpointProvisioningPaymentGateRefHash).toBe(
-      'hash:private-artifact' as SourceHash
-    )
+    const privateArtifact = verification.privateReadback?.resultArtifact
+    expect(privateArtifact).toBeDefined()
+    expect(privateArtifact?.privateEndpointProvisioningPaymentGateRefHash).toBe('hash:private-artifact' as SourceHash)
   })
 
   it('records proof_gap when any required result artifact component is missing', () => {
     for (const command of [
-      completeArtifactCommand({ endpointDescriptorHash: undefined }),
-      completeArtifactCommand({ jsonSchemaHash: undefined }),
-      completeArtifactCommand({ privateEndpointProvisioningPaymentGateRefHash: undefined }),
+      incompleteArtifactCommand('endpoint_descriptor'),
+      incompleteArtifactCommand('json_schema'),
+      incompleteArtifactCommand('private_endpoint_provisioning_payment_gate_ref'),
     ]) {
       const result = recordBusinessActionResultArtifact(createAcceptedState(), command)
       expect(result.kind).toBe('ok')
@@ -157,11 +157,7 @@ describe('business action receipt verifier', () => {
   it('does not accept owner inbox report screenshot model output payment event or status label alone as success', () => {
     for (const supportingLabel of ['owner_inbox_item', 'generated_report', 'screenshot', 'model_output', 'payment_event', 'status_label']) {
       const artifact = recordBusinessActionResultArtifact(createAcceptedState(), {
-        ...completeArtifactCommand({
-          endpointDescriptorHash: undefined,
-          jsonSchemaHash: undefined,
-          privateEndpointProvisioningPaymentGateRefHash: undefined,
-        }),
+        ...supportOnlyArtifactCommand(),
         supportingEvidenceLabels: [supportingLabel],
       })
       expect(artifact.kind).toBe('ok')
@@ -306,6 +302,36 @@ function completeArtifactCommand(overrides: Partial<Parameters<typeof recordBusi
     supportingEvidenceLabels: [],
     ...overrides,
   } as const
+}
+
+function incompleteArtifactCommand(
+  missing: 'endpoint_descriptor' | 'json_schema' | 'private_endpoint_provisioning_payment_gate_ref'
+) {
+  const base = completeArtifactCommand()
+
+  if (missing === 'endpoint_descriptor') {
+    const { endpointDescriptorHash: _omitted, ...command } = base
+    return command
+  }
+
+  if (missing === 'json_schema') {
+    const { jsonSchemaHash: _omitted, ...command } = base
+    return command
+  }
+
+  const { privateEndpointProvisioningPaymentGateRefHash: _omitted, ...command } = base
+  return command
+}
+
+function supportOnlyArtifactCommand() {
+  const {
+    endpointDescriptorHash: _endpointDescriptorHash,
+    jsonSchemaHash: _jsonSchemaHash,
+    privateEndpointProvisioningPaymentGateRefHash: _privateEndpointProvisioningPaymentGateRefHash,
+    ...command
+  } = completeArtifactCommand()
+
+  return command
 }
 
 function receiptCommand(overrides: Partial<Parameters<typeof recordActionReceipt>[1]> = {}) {

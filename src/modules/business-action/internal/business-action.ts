@@ -268,8 +268,8 @@ export function createCapabilityRequest(
 
   const mandate = state.mandates.find((candidate) => candidate.id === command.mandateId)
   const mandateError = validateMandate(mandate, command)
-  if (mandateError !== undefined) {
-    return error('business_action_mandate_invalid', false, { reason: mandateError })
+  if (mandateError !== undefined || mandate === undefined) {
+    return error('business_action_mandate_invalid', false, { reason: mandateError ?? 'mandate_not_found' })
   }
 
   const requestHash = stableHash({

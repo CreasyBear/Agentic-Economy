@@ -52,7 +52,6 @@ export type {
   BusinessActionResultArtifact,
   BusinessActionResultArtifactRequirement,
   BusinessActionResultArtifactStatus,
-  BusinessActionSlug,
   BusinessActionSupportRecord,
   BusinessActionSupportStatus,
   BuyerMandate,
