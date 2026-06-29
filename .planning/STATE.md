@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 06
 status: executing
-stopped_at: Completed 06-02-business-action-convex-source-PLAN.md
-last_updated: "2026-06-29T12:48:12.425Z"
+stopped_at: Completed 06-03-stripe-test-mode-evidence-PLAN.md
+last_updated: "2026-06-29T13:07:28.736Z"
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 31
-  completed_plans: 25
-  percent: 81
+  completed_plans: 26
+  percent: 84
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -59,8 +59,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-29T12:48:12.420Z
-**Stopped at:** Completed 06-02-business-action-convex-source-PLAN.md
+**Last session:** 2026-06-29T13:07:28.731Z
+**Stopped at:** Completed 06-03-stripe-test-mode-evidence-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -82,6 +82,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P15 | 12min | 3 tasks | 5 files |
 | Phase 06 P01 | 19m 21s | 3 tasks | 10 files |
 | Phase 06 P02 | 26min | 3 tasks | 5 files |
+| Phase 06 P03 | 12min | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -143,6 +144,10 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 06]: Private evidence exports are redacted hash-only with raw-ref tombstones — Public readbacks and owner/admin exports must not leak raw traces, prompts, provider payloads, private endpoint refs, keys, or webhook secrets.
 - [Phase 06]: source/local proof only; production proof not claimed — Phase 6 Plan 06-02 persists local/source evidence and explicitly excludes external provider or production proof.
 - [Phase 06]: Business-action Convex adapters remain thin public-seam delegates — Validators, source-write admission, authority derivation, persistence, and redacted returns belong in Convex; domain rules remain in src/modules/business-action/public.ts.
+- [Phase 06]: source/local proof only; production proof not claimed — Phase 6 Plan 06-03 adds Stripe test-mode evidence only and explicitly excludes live money, production provider proof, paid activation, Connect, x402, wallet, custody, settlement, and public payment claims.
+- [Phase 06]: Stripe Checkout Sessions are server-created test-mode evidence only — Checkout creation binds source request/checkpoint refs and rejects client-supplied amount, currency, customer/provider IDs, success/cancel URLs, paid state, entitlement, and receipt status before any Stripe call.
+- [Phase 06]: Stripe webhook admission verifies raw body before source admission — The route checks Stripe-Signature with timestamp tolerance against the exact raw body and only then forwards normalized evidence input; invalid signatures are rejected before source admission.
+- [Phase 06]: Webhook route default source admission fails closed — Until a later plan wires durable source persistence for Stripe webhook admission, the route returns a typed unavailable result rather than creating false payment or receipt proof.
 
 ### Blockers
 
