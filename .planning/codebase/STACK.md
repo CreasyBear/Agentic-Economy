@@ -100,7 +100,7 @@
 - Parked route surfaces: `src/future-phases/05-paid-activation-money-rails/routes/owner.billing*.tsx` and `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`.
 - Current webhook posture: `src/lib/server/billing-provider.ts` refuses Autumn callbacks until a real signature verifier is configured.
 - Current Stripe posture: direct Stripe SDK/client is not installed; Stripe appears only as PSP evidence under Autumn in `src/modules/billing/internal/schema.ts` and `src/modules/billing/internal/provider-readback.ts`.
-- Phase 5 execution status is blocked on P1-P4 authority/readback and the money decision record per `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`.
+- Phase 5 execution status is ready for execution prep after `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md`; live/provider claims remain blocked on durable billing runtime, signature verification, provider smoke/readback, receipts, reconciliation, and rollback evidence.
 
 **Verification commands:**
 - `npm run check:convex-codegen` - Convex codegen/type surface check from `package.json`.

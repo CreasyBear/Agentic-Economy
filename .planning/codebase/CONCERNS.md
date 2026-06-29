@@ -11,9 +11,9 @@
 - Phase 5 implication: Planners may rely on P4 source-owned authority and reconstruction patterns, but must not claim deployed protected-action proof or provider proof from P4.
 
 **Phase 5 money rail proof is not closed:**
-- Evidence: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md` has `status: blocked_on_p1_p4_authority_and_money_decision_record`; `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` is absent; `src/future-phases/05-paid-activation-money-rails/routes/*` uses `createParkedFileRoute`.
+- Evidence: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md` has `status: ready_for_execution_after_money_decision_record`; `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` records the selected Autumn Cloud plus Stripe PSP rail; `src/future-phases/05-paid-activation-money-rails/routes/*` uses `createParkedFileRoute`.
 - Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`, `.planning/phases/05-paid-activation-money-rails/05-CONTEXT.md`, `.planning/phases/05-paid-activation-money-rails/05-UI-SPEC.md`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`
-- Boundary: The repo has partial local billing scaffolding, schema, pure module tests, and parked UI helpers. It does not have an accepted money decision record, active billing routes, Convex billing functions, real Autumn webhook verification, Stripe PSP evidence ingest, or deployed provider smoke.
+- Boundary: The repo has an accepted money decision record, partial local billing scaffolding, schema, pure module tests, and parked UI helpers. It does not have active billing routes, Convex billing functions, real Autumn webhook verification, Stripe PSP evidence ingest, or deployed provider smoke.
 - Phase 5 implication: The next money-rail phase must treat all paid activation as not live until source-owned provider readback, receipt, reversal/dispute, reconciliation, and deployed smoke evidence exist.
 
 ## Tech Debt
@@ -24,11 +24,11 @@
 - Impact: Pure-module tests prove contract behavior, but deployed source state cannot yet create or reconstruct money-rail operations through the live Convex API.
 - Fix approach: Add `convex/billing.ts` with indexed operation-scoped loaders/persist adapters, route all owner/admin/server calls through `src/modules/billing/public.ts`, and add runtime tests equivalent to `tests/unit/convex/protected-actions-runtime.test.ts`.
 
-**Money decision record is missing while billing scaffolding exists:**
-- Issue: Phase 5 planning requires `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` before runtime changes, but that file is absent while `.env.example`, `convex/schema.ts`, `src/modules/billing/*`, and parked route files already contain Autumn/Stripe scaffolding.
+**Money decision record now exists while billing scaffolding remains partial:**
+- Issue: Phase 5 planning requires `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` before runtime changes, and that file now exists. Runtime code must still verify and preserve it while `.env.example`, `convex/schema.ts`, `src/modules/billing/*`, and parked route files contain only partial Autumn/Stripe scaffolding.
 - Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`, `.env.example`, `src/modules/billing/internal/schema.ts`, `src/lib/server/billing-provider.ts`
-- Impact: Provider ownership, offer/free boundary, AUD/GST/tax/legal/refund/dispute posture, credential rotation, support/rollback, public claims, and rejected rails are not accepted as the product authority.
-- Fix approach: Create `05-MONEY-RAIL-DECISION.md` with the headings and content required by `05-01-autumn-stripe-paid-activation-PLAN.md` before expanding live billing behavior.
+- Impact: Provider ownership, offer/free boundary, AUD/GST/tax/legal/refund/dispute posture, credential rotation, support/rollback, public claims, and rejected rails are now accepted for execution prep, but live implementation still has to prove provider behavior rather than rely on the document.
+- Fix approach: Treat `05-MONEY-RAIL-DECISION.md` as the rail contract for P5-T01 and update it before any direct Stripe fallback, pricing/tax/legal change, public paid claim, or core catalog/registry/discovery paid field lands.
 
 **Billing pure-state and Convex table shapes are not fully aligned:**
 - Issue: `src/modules/billing/internal/schema.ts` Convex tables require append-only receipt fields such as `providerEvidenceRefs`, `paidStateTransition`, `refundReversalDisputeRefs`, and `correlationId`, while `BillingReceipt` and `createReceipt` in `src/modules/billing/internal/operations.ts` do not model those fields.
@@ -159,11 +159,11 @@
 
 ## Missing Critical Features
 
-**Phase 5 money decision record is a hard blocker:**
-- Problem: The required `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` does not exist.
+**Phase 5 money decision record is no longer the first blocker:**
+- Problem: The required `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` now exists, so the next blockers are implementation proof, provider verification, and launch evidence.
 - Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `.planning/phases/05-paid-activation-money-rails/05-CONTEXT.md`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`
-- Blocks: Runtime expansion, public claims, provider credential ownership, support/rollback posture, legal/tax/refund/dispute posture, and direct-Stripe fallback decisions.
-- Fix approach: Complete P5-T01 before money runtime work; then reconcile existing billing scaffolding against the decision record.
+- Blocks: Public claims and Phase 5 closeout still remain blocked until runtime expansion, provider credential ownership, support/rollback posture, legal/tax/refund/dispute behavior, and provider smoke evidence are proven.
+- Fix approach: Execute P5-T01 verification against the record, then reconcile existing billing scaffolding and P5-T02 through P5-T08 against the decision record.
 
 **Active owner billing and provider routes are missing:**
 - Problem: Owner activation, redirect, return, cancel, Billing Center, receipt, admin monetization, and provider webhook routes are parked future files, not mounted `src/routes` entries.

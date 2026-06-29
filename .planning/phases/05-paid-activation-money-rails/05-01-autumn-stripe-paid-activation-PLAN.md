@@ -3,7 +3,7 @@ phase: "05"
 plan: "05-01"
 type: execution
 slug: autumn-stripe-paid-activation
-status: blocked_on_p1_p4_authority_and_money_decision_record
+status: ready_for_execution_after_money_decision_record
 wave: 1
 autonomous: false
 depends_on:
@@ -11,6 +11,7 @@ depends_on:
   - .planning/phases/05-paid-activation-money-rails/05-SPEC.md
   - .planning/phases/05-paid-activation-money-rails/05-CONTEXT.md
   - .planning/phases/05-paid-activation-money-rails/05-UI-SPEC.md
+  - .planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md
   - .planning/phases/02-05-PRODUCTION-MATURITY-PLAN.md
   - .planning/SECURITY-SPEC.md
   - .planning/GTM-READINESS.md
@@ -139,7 +140,7 @@ Ship one production paid-activation rail: Autumn Cloud is AE's billing and produ
 
 ## Execution boundary
 
-- This plan is blocked until P1-P4 authority/readback closeout exists and the money decision record below is accepted.
+- This plan is ready for execution prep because local/source P1-P4 authority/readback posture exists and `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` records the selected Autumn Cloud plus Stripe PSP rail. Deployed/provider proof remains a Phase 5 closeout requirement, not a pre-execution claim.
 - Phase 5 starts no runtime work from provider screenshots, dashboard state, deployment env vars, or status labels. Proof is source-owned provider readback with timestamp, stable provider refs, payload hash, route/readback evidence, and operator next action.
 - Owner checkout and customer portal starts are owner-only. Admin/operator roles may reconcile, disable/rollback, and read support evidence; they do not initiate checkout or customer portal unless a future source-owned billing delegate model is explicitly designed and tested.
 - Public projections may expose selected paid activation availability and approved public offer/pricing copy only after evidence. Owner billing status, billing center links, portal links, receipts, invoices, provider refs, reconciliation, and private support evidence are owner/admin/operator-only.
