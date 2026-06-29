@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -7,9 +9,11 @@ import {
   recordAuthorizationCheckpoint,
 } from '@/modules/business-action/public'
 import {
+  admitStripeWebhookEvent,
   createStripeCheckoutSessionEvidence,
   type StripeCheckoutSessionCreateRequest,
 } from '@/modules/business-action/internal/stripe-checkout'
+import { handleBusinessActionStripeWebhookRequest } from '@/routes/api.business-actions.stripe-webhook'
 import type {
   AuthorizationCheckpointId,
   BusinessActionCardId,
@@ -155,6 +159,188 @@ describe('Stripe Checkout Session evidence binding', () => {
   })
 })
 
+describe('Stripe webhook event admission', () => {
+  const webhookSecret = 'whsec_phase6_paid_intake'
+
+  it('accepts checkout.session.completed only when signature and source refs match', () => {
+    const state = createAcceptedState()
+    const rawBody = stripeEventBody(state, {
+      id: 'evt_test_completed',
+      type: 'checkout.session.completed',
+    })
+    const result = admitStripeWebhookEvent(state, {
+      rawBody,
+      headers: signedStripeHeaders(webhookSecret, rawBody),
+      webhookSecret,
+      now,
+    })
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') {
+      throw new Error(result.error.reason)
+    }
+    expect(result.code).toBe('business_action_stripe_webhook_received')
+    expect(result.evidence).toMatchObject({
+      provider: 'stripe_test_mode',
+      status: 'accepted',
+      requestId: request,
+      checkpointId: checkpoint,
+      amountCents: 4_500,
+      currency: 'aud',
+    })
+    expect(result.evidence.payloadHash).toMatch(/^hash:/)
+    expect(result.evidence.providerRefHash).toMatch(/^hash:/)
+    expect(result.state.externalEvidenceEvents).toEqual([
+      expect.objectContaining({
+        provider: 'stripe_test_mode',
+        status: 'accepted',
+        payloadHash: result.evidence.payloadHash,
+      }),
+    ])
+    expect(JSON.stringify(result)).not.toContain('checkout.session')
+    expect(JSON.stringify(result)).not.toContain(rawBody)
+  })
+
+  it('rejects invalid signatures before the route forwards anything to source admission', async () => {
+    const state = createAcceptedState()
+    const rawBody = stripeEventBody(state, { id: 'evt_test_invalid_signature' })
+    let forwarded = false
+    const response = await handleBusinessActionStripeWebhookRequest(
+      new Request('https://agentic.test/api/business-actions/stripe-webhook', {
+        method: 'POST',
+        body: rawBody,
+        headers: signedStripeHeaders(webhookSecret, `${rawBody}tampered`),
+      }),
+      {
+        env: { STRIPE_WEBHOOK_SECRET: webhookSecret },
+        now,
+        admitWebhook: () => {
+          forwarded = true
+          return {
+            kind: 'error',
+            error: { code: 'business_action_stripe_unreachable', reason: 'should_not_forward' },
+          }
+        },
+      }
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'business_action_stripe_invalid_signature',
+    })
+    expect(response.status).toBe(401)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    expect(forwarded).toBe(false)
+  })
+
+  it('dedupes exact repeats and holds same-event conflicts for operator review', () => {
+    const state = createAcceptedState()
+    const rawBody = stripeEventBody(state, { id: 'evt_test_duplicate' })
+    const accepted = admitStripeWebhookEvent(state, {
+      rawBody,
+      headers: signedStripeHeaders(webhookSecret, rawBody),
+      webhookSecret,
+      now,
+    })
+    if (accepted.kind !== 'ok') {
+      throw new Error('expected accepted event')
+    }
+
+    const duplicate = admitStripeWebhookEvent(accepted.state, {
+      rawBody,
+      headers: signedStripeHeaders(webhookSecret, rawBody),
+      webhookSecret,
+      now,
+    })
+    expect(duplicate).toMatchObject({
+      kind: 'ok',
+      code: 'business_action_stripe_webhook_duplicate',
+      evidence: { status: 'duplicate' },
+    })
+
+    const conflictBody = stripeEventBody(state, {
+      id: 'evt_test_duplicate',
+      amountTotal: 4_501,
+    })
+    const conflict = admitStripeWebhookEvent(accepted.state, {
+      rawBody: conflictBody,
+      headers: signedStripeHeaders(webhookSecret, conflictBody),
+      webhookSecret,
+      now,
+    })
+    expect(conflict).toMatchObject({
+      kind: 'ok',
+      code: 'business_action_stripe_webhook_held',
+      evidence: { status: 'held_for_operator', reason: 'stripe_event_payload_conflict' },
+    })
+  })
+
+  it('holds unbound wrong amount currency checkpoint expired failed and unknown events', () => {
+    const state = createAcceptedState()
+    const cases = [
+      {
+        name: 'unbound',
+        body: stripeEventBody(state, { id: 'evt_test_unbound', requestId: 'capability_request:unknown' }),
+        reason: 'unbound_provider_event',
+      },
+      {
+        name: 'wrong amount',
+        body: stripeEventBody(state, { id: 'evt_test_wrong_amount', amountTotal: 4_501 }),
+        reason: 'amount_mismatch',
+      },
+      {
+        name: 'wrong currency',
+        body: stripeEventBody(state, { id: 'evt_test_wrong_currency', currency: 'usd' }),
+        reason: 'currency_mismatch',
+      },
+      {
+        name: 'wrong checkpoint',
+        body: stripeEventBody(state, {
+          id: 'evt_test_wrong_checkpoint',
+          checkpointId: 'authorization_checkpoint:wrong',
+        }),
+        reason: 'checkpoint_mismatch',
+      },
+      {
+        name: 'expired',
+        body: stripeEventBody(state, { id: 'evt_test_expired', type: 'checkout.session.expired' }),
+        reason: 'checkout_session_expired',
+      },
+      {
+        name: 'failed',
+        body: stripeEventBody(state, { id: 'evt_test_failed', type: 'payment_intent.payment_failed' }),
+        reason: 'payment_intent_failed',
+      },
+      {
+        name: 'unknown',
+        body: stripeEventBody(state, { id: 'evt_test_unknown', type: 'customer.created' }),
+        reason: 'unsupported_event_type',
+      },
+    ]
+
+    for (const entry of cases) {
+      const result = admitStripeWebhookEvent(state, {
+        rawBody: entry.body,
+        headers: signedStripeHeaders(webhookSecret, entry.body),
+        webhookSecret,
+        now,
+      })
+
+      expect(result, entry.name).toMatchObject({
+        kind: 'ok',
+        code: 'business_action_stripe_webhook_held',
+        evidence: {
+          status: 'held_for_operator',
+          reason: entry.reason,
+        },
+      })
+      if (result.kind === 'ok') {
+        expect(result.state.externalEvidenceEvents.filter((event) => event.status === 'accepted')).toHaveLength(0)
+      }
+    }
+  })
+})
+
 function createAcceptedState(): BusinessActionSourceState {
   const requested = createCapabilityRequest(
     createEmptyBusinessActionSourceState({ cards: [card()], mandates: [mandate()] }),
@@ -234,4 +420,60 @@ function mandate(overrides: Partial<BuyerMandate> = {}): BuyerMandate {
     expiresAt: now + 1_000,
     ...overrides,
   }
+}
+
+function stripeEventBody(
+  state: BusinessActionSourceState,
+  overrides: Partial<{
+    id: string
+    type: string
+    requestId: string
+    checkpointId: string
+    amountTotal: number
+    currency: string
+  }> = {}
+): string {
+  const sourceRequest = state.requests[0]
+  const sourceCheckpoint = state.checkpoints[0]
+  if (sourceRequest === undefined || sourceCheckpoint === undefined) {
+    throw new Error('stripe webhook fixture needs accepted source state')
+  }
+
+  const requestId = overrides.requestId ?? sourceRequest.id
+  const checkpointId = overrides.checkpointId ?? sourceCheckpoint.id
+
+  return JSON.stringify({
+    id: overrides.id ?? 'evt_test_completed',
+    type: overrides.type ?? 'checkout.session.completed',
+    data: {
+      object: {
+        id: 'cs_test_paid_intake',
+        object: 'checkout.session',
+        payment_intent: 'pi_test_paid_intake',
+        client_reference_id: requestId,
+        amount_total: overrides.amountTotal ?? sourceRequest.amountCents,
+        currency: overrides.currency ?? sourceRequest.currency,
+        metadata: {
+          ae_action_slug: BusinessActionSlug,
+          ae_business_action_request_id: requestId,
+          ae_authorization_checkpoint_id: checkpointId,
+          ae_mandate_hash: sourceRequest.mandateHash,
+          ae_request_hash: sourceRequest.requestHash,
+          ae_card_hash: sourceRequest.cardHash,
+          ae_amount_cents: String(overrides.amountTotal ?? sourceRequest.amountCents),
+          ae_currency: overrides.currency ?? sourceRequest.currency,
+          ae_idempotency_key: sourceRequest.idempotencyKey,
+          ae_correlation_id: sourceRequest.correlationId,
+        },
+      },
+    },
+  })
+}
+
+function signedStripeHeaders(secret: string, rawBody: string, timestamp = Math.floor(now / 1_000)): Headers {
+  const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')
+  return new Headers({
+    'content-type': 'application/json',
+    'stripe-signature': `t=${timestamp},v1=${signature}`,
+  })
 }
