@@ -242,7 +242,7 @@ describe('Convex business action runtime bridge', () => {
       owners: [{ _id: ownerId, clerkUserId: 'user_owner' }],
       businesses: [{ _id: businessId, ownerId }],
     })
-    await persistBusinessActionSlice(db, createEmptyBusinessActionSourceState({ cards: [card()], mandates: [mandate()] }))
+    await persistBusinessActionSlice(db, adapterSeedState())
 
     const missingAdmission = await createRequestHandler(authCtx(db, sam()), withoutSourceWrite(createRequestArgs('missing')))
     expect(missingAdmission).toMatchObject({ kind: 'error', code: 'business_action_source_write_rejected' })
@@ -274,7 +274,7 @@ describe('Convex business action runtime bridge', () => {
       ],
       businesses: [{ _id: businessId, ownerId }],
     })
-    await persistBusinessActionSlice(db, createEmptyBusinessActionSourceState({ cards: [card()], mandates: [mandate()] }))
+    await persistBusinessActionSlice(db, adapterSeedState())
 
     const created = requireRuntimeOk(await createRequestHandler(authCtx(db, sam()), createRequestArgs('accepted')))
     const requestId = created.request.id
@@ -565,7 +565,7 @@ function createRequestArgs(suffix: string): CreateRequestArgs {
     mandateId: mandate().id,
     businessId,
     requestedBy: 'hermes',
-    expiresAt: now + 1_000,
+    expiresAt: Date.now() + 60_000,
     operationKey: `business-action:request:${suffix}`,
     correlationId: `correlation:business-action:request:${suffix}`,
   })
@@ -577,7 +577,7 @@ function checkpointArgs(requestId: string, suffix: string, decision: CheckpointA
     decision,
     ownerDecisionRef: `owner-decision:${suffix}`,
     reasonCode: `owner_reviewed_${suffix}`,
-    expiresAt: now + 900,
+    expiresAt: Date.now() + 60_000,
     operationKey: `business-action:checkpoint:${suffix}`,
     correlationId: `correlation:business-action:checkpoint:${suffix}`,
   })
@@ -612,6 +612,13 @@ function identity(subject: string): UserIdentity {
     tokenIdentifier: `token:${subject}`,
     issuer: 'https://clerk.test',
   } as UserIdentity
+}
+
+function adapterSeedState(): BusinessActionSourceState {
+  return createEmptyBusinessActionSourceState({
+    cards: [card()],
+    mandates: [mandate({ expiresAt: Date.now() + 120_000 })],
+  })
 }
 
 function privateEvidenceRef(): BusinessActionPrivateEvidenceRef {

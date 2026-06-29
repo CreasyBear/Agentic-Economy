@@ -1128,7 +1128,7 @@ function toExternalEvidenceEvent(row: RuntimeDocument): ExternalEvidenceEvent {
     ...event,
     provider: 'hermes',
     evidenceKind: hermesEvidenceKindField(row),
-  }
+  } as HermesEvidenceEvent
 }
 
 function toResultArtifact(row: RuntimeDocument): BusinessActionResultArtifact {
