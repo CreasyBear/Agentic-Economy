@@ -19,6 +19,10 @@ import {
   type PublicActionReceiptReadback,
   type ReceiptReconstructionStatus,
 } from '@/modules/business-action/public'
+import {
+  readCurrentOwnerBusinessActionQueueServer,
+  type OwnerBusinessActionSourceStateServerResult,
+} from '@/modules/business-action/business-action.functions'
 import type { BusinessId, CapabilityRequestId, OwnerId } from '@/modules/common/ids'
 
 export type OwnerBusinessActionRouteInput = {
@@ -81,8 +85,13 @@ export type OwnerBusinessActionDetailRouteReadback =
       kind: 'not_found'
       reason: 'business_action_owner_readback_not_found'
     }
+  | {
+      kind: 'error'
+      reason: string
+    }
 
 export const Route = createFileRoute('/owner/business-actions')({
+  loader: () => readCurrentOwnerBusinessActionQueueServer(),
   head: () => ({
     meta: [
       { title: 'Business action requests | Agentic Economy' },
@@ -134,6 +143,34 @@ export function readOwnerBusinessActionDetailRouteReadback(
   }
 }
 
+export function ownerBusinessActionQueueServerToRouteReadback(
+  result: OwnerBusinessActionSourceStateServerResult
+): OwnerBusinessActionRouteReadback {
+  if (result.kind === 'ok') {
+    return readOwnerBusinessActionRouteReadback({ state: result.state })
+  }
+
+  return {
+    unavailableReason: result.reason,
+    queue: [],
+    reconstructions: [],
+  }
+}
+
+export function ownerBusinessActionDetailServerToRouteReadback(
+  result: OwnerBusinessActionSourceStateServerResult,
+  requestId: CapabilityRequestId
+): OwnerBusinessActionDetailRouteReadback {
+  if (result.kind === 'ok') {
+    return readOwnerBusinessActionDetailRouteReadback({ state: result.state, requestId })
+  }
+
+  return {
+    kind: 'error',
+    reason: result.reason,
+  }
+}
+
 export function buildOwnerBusinessActionRouteReconstruction(
   state: BusinessActionSourceState,
   request: CapabilityRequest
@@ -181,7 +218,7 @@ export function buildOwnerBusinessActionRouteReconstruction(
 
 function OwnerBusinessActionsRoute() {
   const location = useLocation()
-  const readback = readOwnerBusinessActionRouteReadback()
+  const readback = ownerBusinessActionQueueServerToRouteReadback(Route.useLoaderData())
 
   if (location.pathname !== '/owner/business-actions') {
     return <Outlet />
@@ -201,6 +238,12 @@ function OwnerBusinessActionsRoute() {
             production proof not claimed. This queue is for local receipt inspection and does not publish a callable, payment, wallet, marketplace, or autonomous execution claim.
           </AlertDescription>
         </Alert>
+        {readback.unavailableReason === undefined ? null : (
+          <Alert>
+            <AlertTitle>Business action source unavailable</AlertTitle>
+            <AlertDescription>{readback.unavailableReason}</AlertDescription>
+          </Alert>
+        )}
         <OwnerBusinessActionQueue queue={readback.queue} />
       </section>
     </AePublicShell>

@@ -3,8 +3,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { readAdminBusinessActionReconstructionServer } from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
+  adminBusinessActionServerToDetailRouteReadback,
   readAdminBusinessActionDetailRouteReadback as readAdminBusinessActionDetailFromSource,
   type AdminBusinessActionDetailRouteReadback,
   type AdminBusinessActionsRouteInput,
@@ -12,6 +14,7 @@ import {
 import { FactGrid } from '@/routes/owner.business-actions'
 
 export const Route = createFileRoute('/admin/business-actions/$requestId')({
+  loader: ({ params }) => readAdminBusinessActionReconstructionServer({ data: { requestId: params.requestId } }),
   head: () => ({
     meta: [
       { title: 'Business action detail | Agentic Economy' },
@@ -31,7 +34,7 @@ export function readAdminBusinessActionDetailRouteReadback(
 function AdminBusinessActionDetailRoute() {
   const params = Route.useParams()
   const requestId = params.requestId as CapabilityRequestId
-  const readback = readAdminBusinessActionDetailFromSource({ requestId })
+  const readback = adminBusinessActionServerToDetailRouteReadback(Route.useLoaderData(), requestId)
 
   if (readback.kind !== 'ok') {
     return (

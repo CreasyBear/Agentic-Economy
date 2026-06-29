@@ -14,6 +14,10 @@ import type {
   GuardrailDecisionEvidence,
 } from '@/modules/business-action/public'
 import { createEmptyBusinessActionSourceState } from '@/modules/business-action/public'
+import {
+  readAdminBusinessActionReconstructionServer,
+  type AdminBusinessActionSourceStateServerResult,
+} from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
   FactGrid,
@@ -80,6 +84,7 @@ export type AdminBusinessActionRouteReconstruction = OwnerBusinessActionRouteRec
 }
 
 export type AdminBusinessActionRouteReadback = {
+  deniedReason?: string
   rows: readonly AdminBusinessActionRouteReconstruction[]
 }
 
@@ -98,6 +103,8 @@ export const Route = createFileRoute('/admin/business-actions')({
     const requestId = typeof search.requestId === 'string' && search.requestId.trim().length > 0 ? search.requestId.trim() : undefined
     return requestId === undefined ? {} : { requestId }
   },
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => readAdminBusinessActionReconstructionServer({ data: compactAdminSearch(deps) }),
   head: () => ({
     meta: [
       { title: 'Business action reconstruction | Agentic Economy' },
@@ -121,6 +128,37 @@ export function readAdminBusinessActionsRouteReadback(
 
   return {
     rows: requests.map((request) => buildAdminBusinessActionRouteReconstruction(state, request.id)),
+  }
+}
+
+export function adminBusinessActionServerToRouteReadback(
+  result: AdminBusinessActionSourceStateServerResult,
+  requestId?: CapabilityRequestId
+): AdminBusinessActionRouteReadback {
+  if (result.kind === 'allowed') {
+    return readAdminBusinessActionsRouteReadback({
+      state: result.state,
+      ...(requestId === undefined ? {} : { requestId }),
+    })
+  }
+
+  return {
+    deniedReason: result.publicMessage,
+    rows: [],
+  }
+}
+
+export function adminBusinessActionServerToDetailRouteReadback(
+  result: AdminBusinessActionSourceStateServerResult,
+  requestId: CapabilityRequestId
+): AdminBusinessActionDetailRouteReadback {
+  if (result.kind === 'allowed') {
+    return readAdminBusinessActionDetailRouteReadback({ state: result.state, requestId })
+  }
+
+  return {
+    kind: 'not_found',
+    reason: 'business_action_admin_readback_not_found',
   }
 }
 
@@ -203,9 +241,8 @@ export function buildAdminBusinessActionRouteReconstruction(
 function AdminBusinessActionsRoute() {
   const location = useLocation()
   const search = Route.useSearch()
-  const readback = readAdminBusinessActionsRouteReadback({
-    ...(search.requestId === undefined ? {} : { requestId: search.requestId as CapabilityRequestId }),
-  })
+  const requestId = search.requestId === undefined ? undefined : (search.requestId as CapabilityRequestId)
+  const readback = adminBusinessActionServerToRouteReadback(Route.useLoaderData(), requestId)
 
   if (location.pathname !== '/admin/business-actions') {
     return <Outlet />
@@ -218,9 +255,21 @@ function AdminBusinessActionsRoute() {
       currentPath="/admin/business-actions"
     >
       {search.requestId === undefined ? <FilterPanel /> : <FilterPanel requestId={search.requestId} />}
+      {readback.deniedReason === undefined ? null : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Business action reconstruction unavailable</CardTitle>
+            <CardDescription>{readback.deniedReason}</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
       {readback.rows.length === 0 ? <EmptyState /> : <AdminBusinessActionRows rows={readback.rows} />}
     </AeAdminShell>
   )
+}
+
+function compactAdminSearch(search: AdminBusinessActionSearch): { requestId?: string } {
+  return search.requestId === undefined ? {} : { requestId: search.requestId }
 }
 
 function FilterPanel({ requestId }: { requestId?: string }) {

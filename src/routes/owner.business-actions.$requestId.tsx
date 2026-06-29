@@ -4,17 +4,18 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { readCurrentOwnerBusinessActionReceiptServer } from '@/modules/business-action/business-action.functions'
+import { readCurrentOwnerBusinessActionDetailServer } from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
   FactGrid,
+  ownerBusinessActionDetailServerToRouteReadback,
   readOwnerBusinessActionDetailRouteReadback as readOwnerBusinessActionDetailFromSource,
   type OwnerBusinessActionDetailRouteInput,
   type OwnerBusinessActionDetailRouteReadback,
 } from '@/routes/owner.business-actions'
 
 export const Route = createFileRoute('/owner/business-actions/$requestId')({
-  loader: ({ params }) => readCurrentOwnerBusinessActionReceiptServer({ data: { requestId: params.requestId } }),
+  loader: ({ params }) => readCurrentOwnerBusinessActionDetailServer({ data: { requestId: params.requestId } }),
   head: () => ({
     meta: [
       { title: 'Review business action request | Agentic Economy' },
@@ -32,9 +33,13 @@ export function readOwnerBusinessActionDetailRouteReadback(
 }
 
 function OwnerBusinessActionDetailRoute() {
-  const serverReadback = Route.useLoaderData()
+  const params = Route.useParams()
+  const readback = ownerBusinessActionDetailServerToRouteReadback(
+    Route.useLoaderData(),
+    params.requestId as CapabilityRequestId
+  )
 
-  if (serverReadback.kind !== 'ok') {
+  if (readback.kind !== 'ok') {
     return (
       <AePublicShell>
         <AePageHeader
@@ -46,15 +51,14 @@ function OwnerBusinessActionDetailRoute() {
           <Card>
             <CardHeader>
               <CardTitle>Readback unavailable</CardTitle>
-              <CardDescription>{serverReadback.reason}</CardDescription>
+              <CardDescription>{readback.reason}</CardDescription>
             </CardHeader>
           </Card>
         </section>
       </AePublicShell>
     )
   }
-  const receipt = serverReadback.receipt as Record<string, unknown>
-  const publicReadback = serverReadback.publicReadback as Record<string, unknown>
+  const reconstruction = readback.reconstruction
 
   return (
     <AePublicShell>
@@ -67,20 +71,20 @@ function OwnerBusinessActionDetailRoute() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{stringValue(receipt.outcome, 'missing').replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{stringValue(publicReadback.reconstructionStatus, 'missing').replaceAll('_', ' ')}</Badge>
+              <Badge>{reconstruction.checkpoint?.decision.replaceAll('_', ' ') ?? 'missing checkpoint'}</Badge>
+              <Badge variant="outline">{reconstruction.resultArtifactState.status.replaceAll('_', ' ')}</Badge>
             </div>
-            <CardTitle className="break-words text-lg">{stringValue(receipt.requestId, 'missing') as CapabilityRequestId}</CardTitle>
+            <CardTitle className="break-words text-lg">{reconstruction.request.id}</CardTitle>
             <CardDescription>Owner-visible receipt hashes only. Raw provider payloads and private endpoint refs are excluded.</CardDescription>
           </CardHeader>
           <CardContent>
             <FactGrid
               facts={[
-                { label: 'Action', value: stringValue(receipt.actionSlug, 'missing') },
-                { label: 'Card version', value: stringValue(receipt.cardVersion, 'missing') },
-                { label: 'Receipt', value: stringValue(receipt.id, 'missing') },
-                { label: 'Recorded', value: new Date(numberValue(receipt.recordedAt, 0)).toISOString() },
-                { label: 'Proof label', value: stringArrayValue(publicReadback.labels).join(', ') },
+                { label: 'Action', value: reconstruction.request.actionSlug },
+                { label: 'Request status', value: reconstruction.request.status.replaceAll('_', ' ') },
+                { label: 'Receipt', value: reconstruction.receipt?.id ?? 'missing' },
+                { label: 'Private endpoint ref', value: reconstruction.resultArtifactState.privateEndpointRef.replaceAll('_', ' ') },
+                { label: 'Proof label', value: reconstruction.publicReadback?.labels.join(', ') ?? 'missing' },
               ]}
             />
           </CardContent>
@@ -88,16 +92,4 @@ function OwnerBusinessActionDetailRoute() {
       </section>
     </AePublicShell>
   )
-}
-
-function stringValue(value: unknown, fallback: string): string {
-  return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback
-}
-
-function numberValue(value: unknown, fallback: number): number {
-  return typeof value === 'number' ? value : fallback
-}
-
-function stringArrayValue(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }
