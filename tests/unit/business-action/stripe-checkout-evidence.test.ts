@@ -1,7 +1,8 @@
 import { createHmac } from 'node:crypto'
 
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { admitBusinessActionStripeWebhookThroughSource } from '@/modules/business-action/business-action.functions'
 import {
   BusinessActionSlug,
   createCapabilityRequest,
@@ -27,12 +28,21 @@ import type {
 } from '@/modules/common/ids'
 import type { BusinessActionCard, BuyerMandate, BusinessActionSourceState } from '@/modules/business-action/public'
 
+vi.mock('@/modules/business-action/business-action.functions', () => ({
+  admitBusinessActionStripeWebhookThroughSource: vi.fn(),
+}))
+
 const now = 4_000
 const businessId = 'business:plumbing-demo' as BusinessId
 const ownerId = 'owner:plumbing-demo' as OwnerId
 const request = 'capability_request:operation:request' as CapabilityRequestId
 const checkpoint =
   'authorization_checkpoint:capability_request:operation:request:operation:checkpoint' as AuthorizationCheckpointId
+const mockedAdmitBusinessActionStripeWebhookThroughSource = vi.mocked(admitBusinessActionStripeWebhookThroughSource)
+
+beforeEach(() => {
+  mockedAdmitBusinessActionStripeWebhookThroughSource.mockReset()
+})
 
 describe('Stripe Checkout Session evidence binding', () => {
   it('creates a test-mode Checkout Session bound to AE source refs and hashes', async () => {
@@ -236,6 +246,56 @@ describe('Stripe webhook event admission', () => {
     expect(forwarded).toBe(false)
   })
 
+  it('forwards valid signed route webhooks to default source admission', async () => {
+    const state = createAcceptedState()
+    const rawBody = stripeEventBody(state, { id: 'evt_test_route_default' })
+    mockedAdmitBusinessActionStripeWebhookThroughSource.mockResolvedValueOnce({
+      kind: 'ok',
+      code: 'business_action_stripe_webhook_received',
+      evidence: {
+        provider: 'stripe_test_mode',
+        status: 'accepted',
+        providerRefHash: 'hash:stripe-ref',
+        payloadHash: 'hash:stripe-payload',
+        requestId: request,
+        checkpointId: checkpoint,
+        amountCents: 4_500,
+        currency: 'aud',
+      },
+    })
+
+    const env = {
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      AE_SOURCE_WRITE_SECRET: 'source-write-secret',
+      CONVEX_URL: 'https://convex.test',
+    }
+    const response = await handleBusinessActionStripeWebhookRequest(
+      new Request('https://agentic.test/api/business-actions/stripe-webhook', {
+        method: 'POST',
+        body: rawBody,
+        headers: signedStripeHeaders(webhookSecret, rawBody),
+      }),
+      { env, now }
+    )
+
+    await expect(response.json()).resolves.toEqual({
+      kind: 'ok',
+      code: 'business_action_stripe_webhook_received',
+    })
+    expect(response.status).toBe(200)
+    expect(mockedAdmitBusinessActionStripeWebhookThroughSource).toHaveBeenCalledWith(
+      expect.objectContaining({
+        rawBody,
+        payloadHash: expect.stringMatching(/^hash:/),
+        receivedAt: now,
+      }),
+      expect.objectContaining({
+        request: expect.any(Request),
+        env,
+      })
+    )
+  })
+
   it('dedupes exact repeats and holds same-event conflicts for operator review', () => {
     const state = createAcceptedState()
     const rawBody = stripeEventBody(state, { id: 'evt_test_duplicate' })
@@ -339,7 +399,61 @@ describe('Stripe webhook event admission', () => {
       })
       if (result.kind === 'ok') {
         expect(result.state.externalEvidenceEvents.filter((event) => event.status === 'accepted')).toHaveLength(0)
+        expect(result.state.externalEvidenceEvents).toEqual([
+          expect.objectContaining({
+            provider: 'stripe_test_mode',
+            status: 'held_for_operator',
+            payloadHash: result.evidence.payloadHash,
+            reason: entry.reason,
+          }),
+        ])
       }
+    }
+  })
+
+  it('fails loudly instead of acknowledging unbound non-checkout held events', () => {
+    const state = createAcceptedState()
+    for (const entry of [
+      {
+        name: 'failed payment intent',
+        body: JSON.stringify({
+          id: 'evt_test_payment_intent_failed_unbound',
+          type: 'payment_intent.payment_failed',
+          data: {
+            object: {
+              id: 'pi_test_failed_unbound',
+              amount: 4_500,
+              currency: 'aud',
+            },
+          },
+        }),
+      },
+      {
+        name: 'unsupported customer event',
+        body: JSON.stringify({
+          id: 'evt_test_customer_unbound',
+          type: 'customer.created',
+          data: {
+            object: {
+              id: 'cus_test_unbound',
+            },
+          },
+        }),
+      },
+    ]) {
+      const result = admitStripeWebhookEvent(state, {
+        rawBody: entry.body,
+        headers: signedStripeHeaders(webhookSecret, entry.body),
+        webhookSecret,
+        now,
+      })
+
+      expect(result, entry.name).toMatchObject({
+        kind: 'error',
+        error: {
+          code: 'business_action_stripe_unbound_held_event',
+        },
+      })
     }
   })
 })

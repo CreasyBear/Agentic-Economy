@@ -51,6 +51,22 @@ export async function sourceWriteAdmissionFromContext(input: {
   })
 }
 
+export async function sourceWriteAdmissionFromRequest(input: {
+  request: Request
+  scope: SourceWriteAdmissionScope
+  operationKey: string
+  correlationId: string
+  env?: Env
+}): Promise<SourceWriteAdmission> {
+  return createSourceWriteAdmission({
+    secret: readRequiredSourceWriteSecret(input.env),
+    request: requestAdmissionContext(input.request),
+    scope: input.scope,
+    operationKey: input.operationKey,
+    correlationId: input.correlationId,
+  })
+}
+
 export function readRequiredSourceWriteSecret(env: Env = process.env): string {
   if (readEnv(env, publicSourceWriteSecretName) !== undefined) {
     throw new SourceWriteAdmissionError(

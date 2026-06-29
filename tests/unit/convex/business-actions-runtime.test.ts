@@ -4,14 +4,19 @@ import { describe, expect, it } from 'vitest'
 import schema from '../../../convex/schema'
 import {
   createBusinessActionCapabilityRequest,
+  readAdminBusinessActionReconstruction,
+  readCurrentOwnerBusinessActionDetail,
+  readCurrentOwnerBusinessActionQueue,
   readCurrentOwnerBusinessActionReceipt,
   recordBusinessActionGuardrailDecision,
   recordBusinessActionHermesEvidence,
   recordBusinessActionOwnerCheckpoint,
   recordBusinessActionReceipt,
+  recordBusinessActionStripeWebhook,
 } from '../../../convex/businessActions'
 import {
   exportBusinessActionPrivateEvidenceRefs,
+  loadAdminBusinessActionSlice,
   loadBusinessActionRequestSlice,
   persistBusinessActionSlice,
   tombstoneBusinessActionPrivateEvidenceRef,
@@ -19,12 +24,14 @@ import {
 import { businessActionSourceFunctionRefs } from '../../../src/modules/business-action/business-action.functions'
 import type {
   ActionReceipt,
+  AuthorizationCheckpoint,
   BusinessActionCard,
   BusinessActionNoRepairRecord,
   BusinessActionPrivateEvidenceRef,
   BusinessActionSourceState,
   BusinessActionSupportRecord,
   BuyerMandate,
+  CapabilityRequest,
 } from '../../../src/modules/business-action/public'
 import {
   BusinessActionSlug,
@@ -52,6 +59,7 @@ import type {
   SourceHash,
 } from '../../../src/modules/common/ids'
 import type { SourceWriteAdmission } from '../../../src/modules/security/source-write-admission'
+import { stableHash } from '../../../src/modules/common/stable-hash'
 import { withSourceWrite, withoutSourceWrite } from '../../helpers/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
@@ -134,6 +142,15 @@ type HermesArgs = {
   sourceWrite?: SourceWriteAdmission
 }
 
+type StripeWebhookArgs = {
+  rawBody: string
+  payloadHash: string
+  receivedAt: number
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
 const createRequestHandler = (createBusinessActionCapabilityRequest as unknown as {
   _handler: (ctx: AuthCtx, args: CreateRequestArgs) => Promise<unknown>
 })._handler
@@ -149,8 +166,20 @@ const guardrailHandler = (recordBusinessActionGuardrailDecision as unknown as {
 const hermesHandler = (recordBusinessActionHermesEvidence as unknown as {
   _handler: (ctx: AuthCtx, args: HermesArgs) => Promise<unknown>
 })._handler
+const stripeWebhookHandler = (recordBusinessActionStripeWebhook as unknown as {
+  _handler: (ctx: AuthCtx, args: StripeWebhookArgs) => Promise<unknown>
+})._handler
 const ownerReceiptHandler = (readCurrentOwnerBusinessActionReceipt as unknown as {
   _handler: (ctx: AuthCtx, args: { requestId: string }) => Promise<unknown>
+})._handler
+const ownerQueueHandler = (readCurrentOwnerBusinessActionQueue as unknown as {
+  _handler: (ctx: AuthCtx, args: Record<string, never>) => Promise<unknown>
+})._handler
+const ownerDetailHandler = (readCurrentOwnerBusinessActionDetail as unknown as {
+  _handler: (ctx: AuthCtx, args: { requestId: string }) => Promise<unknown>
+})._handler
+const adminReconstructionHandler = (readAdminBusinessActionReconstruction as unknown as {
+  _handler: (ctx: AuthCtx, args: { requestId?: string }) => Promise<unknown>
 })._handler
 
 const now = 6_000
@@ -193,6 +222,9 @@ describe('Convex business action source persistence', () => {
     expect(tableIndexes.businessActionPrivateEvidenceRefs).toEqual(
       expect.arrayContaining(['by_privateEvidenceRefId', 'by_request', 'by_ttlExpiresAt'])
     )
+    expect(tableIndexes.businessActionCapabilityRequests).toEqual(
+      expect.arrayContaining(['by_requestId', 'by_status', 'by_business_status', 'by_owner_status', 'by_idempotencyKey'])
+    )
   })
 
   it('persists and replays the source slice without duplicate durable rows', async () => {
@@ -234,6 +266,30 @@ describe('Convex business action source persistence', () => {
     expect(verification.reconstructionStatus).toBe('complete')
     expect(JSON.stringify(verification.publicReadback)).not.toContain('privatePayloadRef')
     expect(JSON.stringify(verification.publicReadback)).not.toContain('private-endpoint://')
+  })
+
+  it('loads admin all-list business-action slices by status without hard-coded empty business ids', async () => {
+    const db = new FakeDb({})
+    await persistBusinessActionSlice(db, completeSourceState())
+
+    db.clearReadLog()
+    const allList = await loadAdminBusinessActionSlice(db, {})
+
+    expect(allList.requests).toEqual([
+      expect.objectContaining({
+        id: request,
+        businessId,
+      }),
+    ])
+    expect(db.reads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tableName: 'businessActionCapabilityRequests',
+          indexName: 'by_status',
+        }),
+      ])
+    )
+    expectNoBusinessActionBareScans(db)
   })
 
   it('exports private evidence as redacted hashes and tombstones raw refs on delete', async () => {
@@ -338,6 +394,166 @@ describe('Convex business action runtime bridge', () => {
     expect(JSON.stringify(ownerReadback)).not.toContain('privatePayloadRef')
   })
 
+  it('exports owner/admin business-action read queries with source-owned auth and non-empty business ids', async () => {
+    const db = new FakeDb({
+      owners: [
+        { _id: ownerId, clerkUserId: 'user_owner' },
+        { _id: 'owners:2', clerkUserId: 'user_other' },
+      ],
+      businesses: [{ _id: businessId, ownerId }],
+      adminMemberships: [
+        {
+          _id: 'adminMemberships:1',
+          clerkUserId: 'user_admin',
+          role: 'owner_admin',
+          state: 'active',
+          grantedBy: 'system',
+          grantedAt: 1,
+        },
+      ],
+    })
+    await persistBusinessActionSlice(db, adapterSeedState())
+    const created = requireRuntimeOk(await createRequestHandler(authCtx(db, sam()), createRequestArgs('read-exports')))
+    const requestId = created.request.id
+
+    await expect(ownerQueueHandler(authCtx(db, null), {})).resolves.toMatchObject({
+      kind: 'error',
+      code: 'business_action_owner_denied',
+    })
+    await expect(ownerDetailHandler(authCtx(db, otherOwner()), { requestId })).resolves.toMatchObject({
+      kind: 'error',
+      code: 'business_action_owner_denied',
+    })
+
+    const ownerQueue = requireStateOk(await ownerQueueHandler(authCtx(db, sam()), {}))
+    expect(ownerQueue.state.requests).toEqual([
+      expect.objectContaining({
+        id: requestId,
+        businessId,
+      }),
+    ])
+
+    const ownerDetail = requireStateOk(await ownerDetailHandler(authCtx(db, sam()), { requestId }))
+    expect(ownerDetail.state.requests).toEqual([
+      expect.objectContaining({
+        id: requestId,
+        businessId,
+      }),
+    ])
+
+    await expect(adminReconstructionHandler(authCtx(db, null), {})).resolves.toMatchObject({
+      kind: 'denied',
+      httpStatus: 401,
+      reason: 'missing_membership',
+      state: expect.objectContaining({ requests: [] }),
+    })
+
+    db.clearReadLog()
+    const adminReadback = requireAdminAllowed(await adminReconstructionHandler(authCtx(db, admin()), {}))
+    expect(adminReadback.actorRef).toBe('user_admin')
+    expect(adminReadback.state.requests).toEqual([
+      expect.objectContaining({
+        id: requestId,
+        businessId,
+      }),
+    ])
+    expect(db.reads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tableName: 'businessActionCapabilityRequests',
+          indexName: 'by_status',
+        }),
+      ])
+    )
+    expectNoBusinessActionBareScans(db)
+  })
+
+  it('admits signed Stripe webhook evidence through the public source mutation', async () => {
+    const db = new FakeDb({
+      owners: [{ _id: ownerId, clerkUserId: 'user_owner' }],
+      businesses: [{ _id: businessId, ownerId }],
+    })
+    await persistBusinessActionSlice(db, adapterSeedState())
+    const created = requireRuntimeOk(await createRequestHandler(authCtx(db, sam()), createRequestArgs('stripe-webhook')))
+    const accepted = requireRuntimeOk(await checkpointHandler(authCtx(db, sam()), checkpointArgs(created.request.id, 'stripe-webhook')))
+    const source = await loadBusinessActionRequestSlice(db, created.request.id)
+    const [sourceRequest] = source.requests
+    const [sourceCheckpoint] = source.checkpoints
+    if (sourceRequest === undefined || sourceCheckpoint === undefined) {
+      throw new Error('expected source request and checkpoint')
+    }
+
+    const rawBody = stripeWebhookBody(sourceRequest, sourceCheckpoint)
+    const admitted = await stripeWebhookHandler(authCtx(db, null), stripeWebhookArgs(rawBody))
+    expect(admitted).toMatchObject({
+      kind: 'ok',
+      code: 'business_action_stripe_webhook_received',
+      evidence: {
+        provider: 'stripe_test_mode',
+        status: 'accepted',
+        requestId: created.request.id,
+        checkpointId: accepted.checkpoint.id,
+        amountCents: 5_000,
+        currency: 'aud',
+      },
+    })
+
+    const reloaded = await loadBusinessActionRequestSlice(db, created.request.id)
+    expect(reloaded.externalEvidenceEvents).toEqual([
+      expect.objectContaining({
+        provider: 'stripe_test_mode',
+        status: 'accepted',
+        requestId: created.request.id,
+        checkpointId: accepted.checkpoint.id,
+      }),
+    ])
+  })
+
+  it('persists held Stripe webhook evidence for operator review', async () => {
+    const db = new FakeDb({
+      owners: [{ _id: ownerId, clerkUserId: 'user_owner' }],
+      businesses: [{ _id: businessId, ownerId }],
+    })
+    await persistBusinessActionSlice(db, adapterSeedState())
+    const created = requireRuntimeOk(await createRequestHandler(authCtx(db, sam()), createRequestArgs('stripe-held-webhook')))
+    const accepted = requireRuntimeOk(await checkpointHandler(authCtx(db, sam()), checkpointArgs(created.request.id, 'stripe-held-webhook')))
+    const source = await loadBusinessActionRequestSlice(db, created.request.id)
+    const [sourceRequest] = source.requests
+    const [sourceCheckpoint] = source.checkpoints
+    if (sourceRequest === undefined || sourceCheckpoint === undefined) {
+      throw new Error('expected source request and checkpoint')
+    }
+
+    const rawBody = stripeWebhookBody(sourceRequest, sourceCheckpoint, { amountTotal: 5_001 })
+    const admitted = await stripeWebhookHandler(authCtx(db, null), stripeWebhookArgs(rawBody))
+    expect(admitted).toMatchObject({
+      kind: 'ok',
+      code: 'business_action_stripe_webhook_held',
+      evidence: {
+        provider: 'stripe_test_mode',
+        status: 'held_for_operator',
+        requestId: created.request.id,
+        checkpointId: accepted.checkpoint.id,
+        amountCents: 5_001,
+        currency: 'aud',
+        reason: 'amount_mismatch',
+      },
+    })
+
+    const reloaded = await loadBusinessActionRequestSlice(db, created.request.id)
+    expect(reloaded.externalEvidenceEvents).toEqual([
+      expect.objectContaining({
+        provider: 'stripe_test_mode',
+        status: 'held_for_operator',
+        requestId: created.request.id,
+        checkpointId: accepted.checkpoint.id,
+        amountCents: 5_001,
+        currency: 'aud',
+        reason: 'amount_mismatch',
+      }),
+    ])
+  })
+
   it('exposes server function refs without importing business-action internals into routes', () => {
     expect(Object.keys(businessActionSourceFunctionRefs).sort()).toEqual([
       'createCapabilityRequest',
@@ -346,6 +562,7 @@ describe('Convex business action runtime bridge', () => {
       'recordHermesEvidence',
       'recordOwnerCheckpoint',
       'recordReceipt',
+      'recordStripeWebhook',
     ])
   })
 
@@ -687,6 +904,53 @@ function hermesArgs(requestId: string, checkpointId: string, suffix: string): He
   })
 }
 
+function stripeWebhookArgs(rawBody: string): StripeWebhookArgs {
+  const payloadHash = stableHash(rawBody)
+  return withSourceWrite('protected_action', {
+    rawBody,
+    payloadHash,
+    receivedAt: now + 45,
+    operationKey: `business-action:stripe-webhook:${payloadHash}`,
+    correlationId: `correlation:business-action:stripe-webhook:${payloadHash}`,
+  })
+}
+
+function stripeWebhookBody(
+  request: CapabilityRequest,
+  checkpoint: AuthorizationCheckpoint,
+  overrides: { amountTotal?: number; currency?: string; checkpointId?: string } = {}
+): string {
+  if (request.amountCents === undefined || request.currency === undefined) {
+    throw new Error('Stripe webhook fixture requires source-owned money fields')
+  }
+
+  return JSON.stringify({
+    id: 'evt_test_convex_source',
+    type: 'checkout.session.completed',
+    data: {
+      object: {
+        id: 'cs_test_convex_source',
+        payment_intent: 'pi_test_convex_source',
+        client_reference_id: request.id,
+        amount_total: overrides.amountTotal ?? request.amountCents,
+        currency: overrides.currency ?? request.currency,
+        metadata: {
+          ae_action_slug: BusinessActionSlug,
+          ae_business_action_request_id: request.id,
+          ae_authorization_checkpoint_id: overrides.checkpointId ?? checkpoint.id,
+          ae_mandate_hash: request.mandateHash,
+          ae_request_hash: request.requestHash,
+          ae_card_hash: request.cardHash,
+          ae_amount_cents: String(request.amountCents),
+          ae_currency: request.currency,
+          ae_idempotency_key: request.idempotencyKey,
+          ae_correlation_id: request.correlationId,
+        },
+      },
+    },
+  })
+}
+
 function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {
   return {
     db,
@@ -700,6 +964,10 @@ function sam(): UserIdentity {
 
 function otherOwner(): UserIdentity {
   return identity('user_other')
+}
+
+function admin(): UserIdentity {
+  return identity('user_admin')
 }
 
 function identity(subject: string): UserIdentity {
@@ -784,4 +1052,25 @@ function requireRuntimeOk(value: unknown): {
     throw new Error(`Expected runtime ok result, received ${JSON.stringify(value)}`)
   }
   return value as ReturnType<typeof requireRuntimeOk>
+}
+
+function requireStateOk(value: unknown): {
+  kind: 'ok'
+  state: BusinessActionSourceState
+} {
+  if (typeof value !== 'object' || value === null || !('kind' in value) || value.kind !== 'ok') {
+    throw new Error(`Expected state ok result, received ${JSON.stringify(value)}`)
+  }
+  return value as ReturnType<typeof requireStateOk>
+}
+
+function requireAdminAllowed(value: unknown): {
+  kind: 'allowed'
+  actorRef: string
+  state: BusinessActionSourceState
+} {
+  if (typeof value !== 'object' || value === null || !('kind' in value) || value.kind !== 'allowed') {
+    throw new Error(`Expected admin allowed result, received ${JSON.stringify(value)}`)
+  }
+  return value as ReturnType<typeof requireAdminAllowed>
 }

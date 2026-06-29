@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 06
-status: executing
+status: completed
 stopped_at: Completed 06-06-copy-source-smoke-gates-PLAN.md
-last_updated: "2026-06-29T14:20:23.175Z"
+last_updated: "2026-06-29T15:25:41.336Z"
 progress:
   total_phases: 6
   completed_phases: 4
@@ -18,7 +18,7 @@ progress:
 
 **Created:** 2026-06-27
 **Current phase:** 06
-**Status:** Executing Phase 06
+**Status:** Phase 6 complete
 
 ## Active decision
 
@@ -44,14 +44,14 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 | Unauthorized claim/admin action | Active | Convex-derived actor/admin, CSRF, rate limit, duplicate detection, source-owned admin roles |
 | Suppression leaks through one public output | Active | one eligibility predicate; suppression tests across page/search/sitemap/llms/UCP |
 | ABN-first regression | Active | no-ABN claim/publish e2e and copy/form scan |
-| Payment readiness cosplay | Active | Phase 1 money-identifier quarantine; Phase 5 money decision; Phase 6 direct Stripe evidence requires `06-MONEY-EVIDENCE-DECISION.md` |
+| Payment readiness cosplay | Active | Phase 1 money-identifier quarantine; Phase 5 money decision; Phase 6 direct Stripe evidence is test-mode/source-local only and does not prove production money readiness |
 | Agentic economy overclaim | Active | Phase 6 is one receipt-backed business operation proof, not a generic runtime, wallet, marketplace, settlement layer, sandbox, product catalog, or provider |
 | TypeScript contract drift | Active | domain-owned validators, exact unions, type tests, `test:ts-standards` |
 | GTM outruns product | Active | `GTM-READINESS.md`; internal alpha before public launch |
 
 ## Next action
 
-Continue Phase 6 from `.planning/phases/06-agentic-business-action-receipts/06-SPEC.md` and `.planning/phases/06-agentic-business-action-receipts/06-CONTEXT.md` using typed GSD researcher/planner/checker/executor/verifier subagents and sprint-commit policy. Phase 6 is planning/spike-only until a verified `06-*-PLAN.md` names preflight gates, spike exceptions, files, commands, and stop conditions. Phase 3 local/source closeout is verified in `.planning/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md` with status `passed`, score `8/8`, and `behavior_unverified: 0` after additive gap plan `.planning/phases/03-standard-agent-builder-discovery/03-02-standard-agent-builder-discovery-route-parity-gaps-PLAN.md`; local route-handler/browser proof covers route-derived public API parity, executed route health, and builder/agent smoke, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Phase 2 source, UI, operator reconstruction, route isolation, local E2E/a11y, typecheck, unit, integration, import/source/copy/SEO/UI-contract, build, and Convex codegen gates are verified; `02-VERIFICATION.md` remains `gaps_found` with 17/18 must-haves verified and 0 behavior-unverified items. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. Do not create final `02-SUMMARY.md`, `02-UAT.md`, `02-DEPLOY-SMOKE-EVIDENCE.md`, or deployed Phase 3 proof artifacts until those smokes pass with non-secret evidence. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-6 planning/execution progress when plans label the debt honestly. Phase 5 has Autumn/Stripe money-boundary hardening and a fail-loud `npm run test:provider-smoke:autumn-stripe`; do not claim deployed money proof until that smoke passes with source-owned provider evidence.
+Phase 6 is closed as source/local proof in `.planning/phases/06-agentic-business-action-receipts/06-VERIFICATION.md`; Round 4 code review passed with CR-01 through CR-06 and WR-01 resolved, and copy/language gates were explicitly waived by the user for this closeout only. Phase 3 local/source closeout is verified in `.planning/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md`, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-6 planning/execution progress when plans label the debt honestly. Phase 5 has Autumn/Stripe money-boundary hardening and a fail-loud `npm run test:provider-smoke:autumn-stripe`; do not claim deployed money proof until that smoke passes with source-owned provider evidence. Phase 6 production/deployed Stripe proof likewise remains a future provider-smoke/deployment evidence task.
 
 ## Verification expectation
 
@@ -150,7 +150,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 06]: source/local proof only; production proof not claimed — Phase 6 Plan 06-03 adds Stripe test-mode evidence only and explicitly excludes live money, production provider proof, paid activation, Connect, x402, wallet, custody, settlement, and public payment claims.
 - [Phase 06]: Stripe Checkout Sessions are server-created test-mode evidence only — Checkout creation binds source request/checkpoint refs and rejects client-supplied amount, currency, customer/provider IDs, success/cancel URLs, paid state, entitlement, and receipt status before any Stripe call.
 - [Phase 06]: Stripe webhook admission verifies raw body before source admission — The route checks Stripe-Signature with timestamp tolerance against the exact raw body and only then forwards normalized evidence input; invalid signatures are rejected before source admission.
-- [Phase 06]: Webhook route default source admission fails closed — Until a later plan wires durable source persistence for Stripe webhook admission, the route returns a typed unavailable result rather than creating false payment or receipt proof.
+- [Phase 06]: Webhook route default source admission now forwards signed Stripe evidence through server source-write admission to the Convex source mutation — invalid signatures, unnormalized held events, and unsafe provider facts still fail closed instead of creating false payment or receipt proof.
 - [Phase 06]: source/local proof only; production proof not claimed — Plan 06-04 adds owner/admin business-action route readbacks without public production proof claims.
 - [Phase 06]: Owner/admin business-action routes read through module server seams — Route components do not own Business Action fixture arrays or raw private evidence.
 - [Phase 06]: Business-action operator controls use the existing source-owned operator-control path instead of env-only switches.
@@ -167,4 +167,4 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - Phase 2 still needs deployed `npm run test:phase2-support-smoke`, `npm run test:provider-smoke:resend`, and `npm run test:provider-smoke:novu` with source-owned inquiry-created dispatch IDs before final closeout artifacts may be written.
 - Phase 3 has local/source verification passed, but no deployed Phase 3 route/readback evidence artifact exists yet; do not claim deployed Phase 3 proof until a real deployed smoke is captured.
 - Phase 5 provider proof requires deployed `npm run test:provider-smoke:autumn-stripe` with source-owned Autumn/Stripe event, receipt, reconciliation, support, and claim evidence before any public paid claim.
-- Phase 6 production claims require a verified `06-*-PLAN.md`, `06-MONEY-EVIDENCE-DECISION.md` before direct Stripe/Link implementation, source-owned receipt reconstruction, support/kill rules, and copy scans for autonomous/payment/marketplace overclaims.
+- Phase 6 production/deployed claims require real provider-smoke evidence for signed Stripe webhook admission, source-owned receipt reconstruction, support/kill rules, and no-overclaim copy scans; the 2026-06-29 closeout waived copy as a blocking gate only for source/local Phase 6 closure, not for production claims.

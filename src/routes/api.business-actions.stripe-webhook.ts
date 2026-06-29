@@ -2,6 +2,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 
 import { createFileRoute } from '@tanstack/react-router'
 
+import { admitBusinessActionStripeWebhookThroughSource } from '@/modules/business-action/business-action.functions'
+import type { SourceHash } from '@/modules/common/ids'
+import { stableHash } from '@/modules/common/stable-hash'
+
 export const Route = createFileRoute('/api/business-actions/stripe-webhook')({
   server: {
     handlers: {
@@ -18,6 +22,7 @@ type StripeWebhookAdmissionInput = {
   webhookSecret: string | undefined
   now: number
   toleranceSeconds?: number
+  payloadHash: SourceHash
 }
 
 type StripeWebhookAdmissionResult =
@@ -37,6 +42,7 @@ type StripeWebhookAdmissionResult =
 type StripeWebhookSignatureResult =
   | {
       kind: 'ok'
+      payloadHash: SourceHash
     }
   | Extract<StripeWebhookAdmissionResult, { kind: 'error' }>
 
@@ -58,6 +64,7 @@ export async function handleBusinessActionStripeWebhookRequest(
     headers: request.headers,
     webhookSecret: readStripeWebhookSecret(env),
     now,
+    payloadHash: stableHash(rawBody),
   }
   const signature = await verifyStripeWebhookSignature(input)
   if (signature.kind === 'error') {
@@ -72,7 +79,10 @@ export async function handleBusinessActionStripeWebhookRequest(
     )
   }
 
-  const result = await (options.admitWebhook ?? failClosedAdmission)(input)
+  const result = await (options.admitWebhook ?? ((admissionInput) => defaultSourceAdmission(request, admissionInput, env)))({
+    ...input,
+    payloadHash: signature.payloadHash,
+  })
   if (result.kind === 'error') {
     return stripeWebhookJsonResponse(
       {
@@ -103,17 +113,6 @@ function readStripeWebhookSecret(env: Env): string | undefined {
   return value.trim()
 }
 
-function failClosedAdmission(): StripeWebhookAdmissionResult {
-  return {
-    kind: 'error',
-    error: {
-      code: 'business_action_stripe_source_admission_unavailable',
-      reason: 'business_action_stripe_source_admission_unavailable',
-      status: 503,
-    },
-  }
-}
-
 function verifyStripeWebhookSignature(input: StripeWebhookAdmissionInput): StripeWebhookSignatureResult {
   if (input.webhookSecret === undefined || input.webhookSecret.trim().length === 0) {
     return stripeWebhookError('business_action_stripe_missing_webhook_secret', 'stripe_webhook_secret_required', 500)
@@ -141,7 +140,46 @@ function verifyStripeWebhookSignature(input: StripeWebhookAdmissionInput): Strip
     return stripeWebhookError('business_action_stripe_invalid_signature', 'stripe_signature_verification_failed', 401)
   }
 
-  return { kind: 'ok' }
+  return { kind: 'ok', payloadHash: input.payloadHash }
+}
+
+async function defaultSourceAdmission(
+  request: Request,
+  input: StripeWebhookAdmissionInput,
+  env: Env
+): Promise<StripeWebhookAdmissionResult> {
+  const result = await admitBusinessActionStripeWebhookThroughSource(
+    {
+      rawBody: input.rawBody,
+      payloadHash: input.payloadHash,
+      receivedAt: input.now,
+    },
+    { request, env }
+  )
+
+  if (result.kind === 'ok') {
+    return {
+      kind: 'ok',
+      code: result.code,
+    }
+  }
+
+  return {
+    kind: 'error',
+    error: {
+      code: result.code,
+      reason: result.reason,
+      status: stripeWebhookSourceErrorStatus(result.code),
+    },
+  }
+}
+
+function stripeWebhookSourceErrorStatus(code: string): number {
+  return code === 'missing_convex_url' ||
+    code === 'business_action_source_unavailable' ||
+    code === 'business_action_stripe_unbound_held_event'
+    ? 503
+    : 400
 }
 
 function parseStripeSignatureHeader(value: string): { timestamp: number; signatures: readonly string[] } | undefined {

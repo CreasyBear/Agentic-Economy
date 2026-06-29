@@ -155,6 +155,7 @@ export const businessActionTables = {
   })
     .index('by_requestId', ['requestId'])
     .index('by_card', ['cardId'])
+    .index('by_status', ['status'])
     .index('by_business_status', ['businessId', 'status'])
     .index('by_owner_status', ['ownerId', 'status'])
     .index('by_idempotencyKey', ['idempotencyKey']),
@@ -406,10 +407,7 @@ export async function loadAdminBusinessActionSlice(
   const requests = (
     await Promise.all(
       statuses.map((status) =>
-        collectByIndex(db, 'businessActionCapabilityRequests', 'by_business_status', [
-          { field: 'businessId', value: '' },
-          { field: 'status', value: status },
-        ])
+        collectByIndex(db, 'businessActionCapabilityRequests', 'by_status', [{ field: 'status', value: status }])
       )
     )
   ).flat()

@@ -506,7 +506,7 @@ export function recordHermesEvidenceEvent(
   })
   const existing = state.hermesEvidenceEvents.find((event) => event.idempotencyKey === command.idempotencyKey)
   if (existing !== undefined) {
-    if (stableHash(hermesEventHashValue(existing)) === evidenceHash) {
+    if (stableHash(hermesEventHashValue(existing, request.requestHash, checkpoint.checkpointHash)) === evidenceHash) {
       return ok('business_action_hermes_evidence_replayed', { state, evidence: existing })
     }
 
@@ -641,16 +641,18 @@ export function verifyActionReceipt(
   options: ActionReceiptVerificationOptions = {}
 ): ActionReceiptVerification {
   const request = state.requests.find((candidate) => candidate.id === receipt.requestId)
-  const checkpoint = receipt.checkpointHash === undefined
-    ? undefined
-    : state.checkpoints.find((candidate) => candidate.requestId === receipt.requestId && candidate.checkpointHash === receipt.checkpointHash)
+  const checkpoint = request === undefined ? undefined : latestCheckpointFor(state, request)
   const card = request === undefined ? undefined : state.cards.find((candidate) => candidate.id === request.cardId)
   const mandate = request === undefined ? undefined : state.mandates.find((candidate) => candidate.id === request.mandateId)
-  const resultArtifact = receipt.resultArtifactHash === undefined
-    ? undefined
-    : state.resultArtifacts.find((candidate) => candidate.artifactHash === receipt.resultArtifactHash)
+  const resultArtifact = request === undefined ? undefined : latestResultArtifactFor(state, request, checkpoint)
   const externalEvidence = state.externalEvidenceEvents.filter((event) => receipt.externalEvidenceRefHashes.includes(event.payloadHash))
   const guardrailDecisions = state.guardrailDecisions.filter((event) => receipt.guardrailEvidenceRefHashes.includes(event.decisionHash))
+  const sourceExternalEvidence = checkpoint === undefined || checkpoint.decision !== 'accepted'
+    ? []
+    : state.externalEvidenceEvents.filter(
+        (event) => event.requestId === receipt.requestId && event.checkpointId === checkpoint.id && event.status === 'accepted'
+      )
+  const sourceGuardrailDecisions = state.guardrailDecisions.filter((event) => event.requestId === receipt.requestId)
   const reconstructionStatus = verifyReceiptStatus(state, receipt, {
     request,
     checkpoint,
@@ -658,6 +660,8 @@ export function verifyActionReceipt(
     mandate,
     resultArtifact,
     externalEvidence,
+    sourceExternalEvidence,
+    sourceGuardrailDecisions,
   })
   const publicReadback: PublicActionReceiptReadback = {
     receiptId: receipt.id,
@@ -907,9 +911,19 @@ function verifyReceiptStatus(
     mandate: BuyerMandate | undefined
     resultArtifact: BusinessActionResultArtifact | undefined
     externalEvidence: readonly ExternalEvidenceEvent[]
+    sourceExternalEvidence: readonly ExternalEvidenceEvent[]
+    sourceGuardrailDecisions: readonly GuardrailDecisionEvidence[]
   }
 ): ReceiptReconstructionStatus {
-  if (context.card?.status === 'stale' || context.card?.status === 'disabled') {
+  if (context.request === undefined) {
+    return 'evidence_mismatch'
+  }
+
+  if (context.card === undefined || context.card.id !== context.request.cardId) {
+    return 'evidence_mismatch'
+  }
+
+  if (context.card.status === 'stale' || context.card.status === 'disabled') {
     return 'stale_source'
   }
 
@@ -934,30 +948,50 @@ function verifyReceiptStatus(
     return 'evidence_mismatch'
   }
 
-  if (receipt.payloadHash !== recomputeReceiptPayloadHash(receipt)) {
+  const expectedOutcome = receiptOutcome(context.checkpoint, context.resultArtifact)
+  const expectedReconstructionStatus = receiptReconstructionStatus(expectedOutcome, context.checkpoint, context.resultArtifact)
+  const expectedExternalEvidenceRefHashes = context.sourceExternalEvidence.map((event) => event.payloadHash)
+  const expectedGuardrailEvidenceRefHashes = context.sourceGuardrailDecisions.map((decision) => decision.decisionHash)
+  const expectedSignatureRefHash = stableHash({
+    requestId: context.request.id,
+    idempotencyKey: receipt.idempotencyKey,
+    correlationId: receipt.correlationId,
+    recordedAt: receipt.recordedAt,
+    outcome: expectedOutcome,
+  })
+  const expectedPayloadHash = stableHash(
+    receiptPayloadHashValue({
+      request: context.request,
+      checkpoint: context.checkpoint,
+      resultArtifact: context.resultArtifact,
+      outcome: expectedOutcome,
+      reconstructionStatus: expectedReconstructionStatus,
+      externalEvidenceRefHashes: expectedExternalEvidenceRefHashes,
+      guardrailEvidenceRefHashes: expectedGuardrailEvidenceRefHashes,
+      signatureRefHash: expectedSignatureRefHash,
+      recordedAt: receipt.recordedAt,
+    })
+  )
+
+  if (
+    receipt.actionSlug !== BusinessActionSlug ||
+    receipt.outcome !== expectedOutcome ||
+    receipt.cardHash !== context.request.cardHash ||
+    receipt.cardVersion !== context.request.cardVersion ||
+    receipt.mandateHash !== context.request.mandateHash ||
+    receipt.requestHash !== context.request.requestHash ||
+    receipt.checkpointHash !== context.checkpoint?.checkpointHash ||
+    receipt.resultArtifactHash !== context.resultArtifact?.artifactHash ||
+    receipt.reconstructionStatus !== expectedReconstructionStatus ||
+    receipt.signatureRefHash !== expectedSignatureRefHash ||
+    receipt.payloadHash !== expectedPayloadHash ||
+    !sameStringSet(receipt.externalEvidenceRefHashes, expectedExternalEvidenceRefHashes) ||
+    !sameStringSet(receipt.guardrailEvidenceRefHashes, expectedGuardrailEvidenceRefHashes)
+  ) {
     return 'tampered'
   }
 
   return receipt.reconstructionStatus
-}
-
-function recomputeReceiptPayloadHash(receipt: ActionReceipt): SourceHash {
-  return stableHash({
-    requestId: receipt.requestId,
-    actionSlug: receipt.actionSlug,
-    outcome: receipt.outcome,
-    cardHash: receipt.cardHash,
-    cardVersion: receipt.cardVersion,
-    mandateHash: receipt.mandateHash,
-    requestHash: receipt.requestHash,
-    checkpointHash: receipt.checkpointHash ?? null,
-    resultArtifactHash: receipt.resultArtifactHash ?? null,
-    externalEvidenceRefHashes: [...receipt.externalEvidenceRefHashes].sort(),
-    guardrailEvidenceRefHashes: [...receipt.guardrailEvidenceRefHashes].sort(),
-    signatureRefHash: receipt.signatureRefHash,
-    reconstructionStatus: receipt.reconstructionStatus,
-    recordedAt: receipt.recordedAt,
-  })
 }
 
 function receiptPayloadHashValue(input: {
@@ -989,17 +1023,31 @@ function receiptPayloadHashValue(input: {
   }
 }
 
-function hermesEventHashValue(event: HermesEvidenceEvent) {
+function hermesEventHashValue(
+  event: HermesEvidenceEvent,
+  requestHash: SourceHash | null = null,
+  checkpointHash: SourceHash | null = null
+) {
   return {
     requestId: event.requestId,
-    requestHash: null,
+    requestHash,
     checkpointId: event.checkpointId,
-    checkpointHash: null,
+    checkpointHash,
     provider: event.provider,
     evidenceKind: event.evidenceKind,
     providerRefHash: event.providerRefHash,
     payloadHash: event.payloadHash,
   }
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  const sortedLeft = [...left].sort()
+  const sortedRight = [...right].sort()
+  return sortedLeft.every((value, index) => value === sortedRight[index])
 }
 
 function replaceRequest(

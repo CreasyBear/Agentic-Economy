@@ -82,6 +82,30 @@ describe('business action Hermes evidence', () => {
     expect(wrongRequest.kind).toBe('error')
     expect(wrongRequest.code).toBe('business_action_not_found')
   })
+
+  it('replays identical Hermes evidence and rejects same-key drift', () => {
+    const recorded = recordHermesEvidenceEvent(createAcceptedState(), hermesCommand())
+    expect(recorded.kind).toBe('ok')
+    if (recorded.kind !== 'ok') {
+      throw new Error('expected Hermes evidence')
+    }
+
+    const replay = recordHermesEvidenceEvent(recorded.state, hermesCommand())
+    expect(replay.kind).toBe('ok')
+    expect(replay.code).toBe('business_action_hermes_evidence_replayed')
+    if (replay.kind !== 'ok') {
+      throw new Error('expected Hermes replay')
+    }
+    expect(replay.evidence).toEqual(recorded.evidence)
+    expect(replay.state.hermesEvidenceEvents).toHaveLength(1)
+
+    const drift = recordHermesEvidenceEvent(
+      recorded.state,
+      hermesCommand({ payloadHash: 'hash:hermes:changed' as SourceHash })
+    )
+    expect(drift.kind).toBe('error')
+    expect(drift.code).toBe('business_action_idempotency_conflict')
+  })
 })
 
 export function createRequestState() {

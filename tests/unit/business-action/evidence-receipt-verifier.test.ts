@@ -10,6 +10,7 @@ import {
   recordHermesEvidenceEvent,
   verifyActionReceipt,
 } from '@/modules/business-action/public'
+import { stableHash } from '@/modules/common/stable-hash'
 import type { ActionReceipt, BusinessActionCard, BuyerMandate } from '@/modules/business-action/public'
 import type {
   AuthorizationCheckpointId,
@@ -124,6 +125,12 @@ describe('business action receipt verifier', () => {
     ).toBe('stale_source')
     expect(
       verifyActionReceipt(
+        { ...success.state, cards: [] },
+        success.receipt
+      ).reconstructionStatus
+    ).toBe('evidence_mismatch')
+    expect(
+      verifyActionReceipt(
         { ...success.state, mandates: success.state.mandates.map((entry) => ({ ...entry, expiresAt: 1 })) },
         success.receipt
       ).reconstructionStatus
@@ -152,6 +159,18 @@ describe('business action receipt verifier', () => {
         { ...success.receipt, externalEvidenceRefHashes: [...success.receipt.externalEvidenceRefHashes, 'hash:rogue-payload' as SourceHash] }
       ).reconstructionStatus
     ).toBe('unbound_provider_event')
+  })
+
+  it('detects self-consistent receipt field tampering against source state', () => {
+    const success = createSuccessReceipt()
+
+    for (const tampered of [
+      recomputeReceiptSelfHash({ ...success.receipt, requestHash: 'hash:tampered-request' as SourceHash }),
+      recomputeReceiptSelfHash({ ...success.receipt, resultArtifactHash: 'hash:tampered-artifact' as SourceHash }),
+      recomputeReceiptSelfHash({ ...success.receipt, outcome: 'proof_gap', reconstructionStatus: 'proof_gap' }),
+    ]) {
+      expect(verifyActionReceipt(success.state, tampered).reconstructionStatus).toBe('tampered')
+    }
   })
 
   it('does not accept owner inbox report screenshot model output payment event or status label alone as success', () => {
@@ -342,4 +361,26 @@ function receiptCommand(overrides: Partial<Parameters<typeof recordActionReceipt
     recordedAt: 3_050,
     ...overrides,
   } as const
+}
+
+function recomputeReceiptSelfHash(receipt: ActionReceipt): ActionReceipt {
+  return {
+    ...receipt,
+    payloadHash: stableHash({
+      requestId: receipt.requestId,
+      actionSlug: receipt.actionSlug,
+      outcome: receipt.outcome,
+      cardHash: receipt.cardHash,
+      cardVersion: receipt.cardVersion,
+      mandateHash: receipt.mandateHash,
+      requestHash: receipt.requestHash,
+      checkpointHash: receipt.checkpointHash ?? null,
+      resultArtifactHash: receipt.resultArtifactHash ?? null,
+      externalEvidenceRefHashes: [...receipt.externalEvidenceRefHashes].sort(),
+      guardrailEvidenceRefHashes: [...receipt.guardrailEvidenceRefHashes].sort(),
+      signatureRefHash: receipt.signatureRefHash,
+      reconstructionStatus: receipt.reconstructionStatus,
+      recordedAt: receipt.recordedAt,
+    }),
+  }
 }

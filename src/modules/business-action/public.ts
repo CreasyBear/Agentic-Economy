@@ -23,6 +23,14 @@ export {
   isBusinessActionSlug,
 } from './internal/schema'
 export {
+  admitSignedStripeWebhookEvent,
+} from './internal/stripe-webhook-source'
+export type {
+  StripeWebhookAdmissionEvidence,
+  StripeWebhookAdmissionResult,
+  StripeWebhookSourceAdmissionInput,
+} from './internal/stripe-webhook-source'
+export {
   createCapabilityRequest,
   createEmptyBusinessActionSourceState,
   isPostCheckpointExternalProvider,

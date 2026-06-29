@@ -2,10 +2,12 @@ import type { UserIdentity } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
-import { resolveBusinessActor } from './authz'
+import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import {
+  loadAdminBusinessActionSlice,
   loadBusinessActionRequestCreationSlice,
   loadBusinessActionRequestSlice,
+  loadOwnerBusinessActionSlice,
   persistBusinessActionSlice,
 } from './businessActionStore'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
@@ -17,14 +19,22 @@ import type { BusinessId, CapabilityRequestId, OperationKey, OwnerId } from '../
 import {
   ActionReceiptOutcomeValues,
   AuthorizationCheckpointDecisionValues,
+  BusinessActionCardStatusValues,
+  BusinessActionExternalEvidenceProviderValues,
   BusinessActionExternalEvidenceStatusValues,
   BusinessActionGuardrailDecisionValues,
   BusinessActionGuardrailProviderValues,
+  BusinessActionOperatorControlKeyValues,
+  BusinessActionResultArtifactStatusValues,
   BusinessActionSlug,
+  BusinessActionSupportStatusValues,
+  BuyerMandateStatusValues,
   CapabilityRequestStatusValues,
   HermesEvidenceKindValues,
   ReceiptReconstructionStatusValues,
+  admitSignedStripeWebhookEvent,
   createCapabilityRequest,
+  createEmptyBusinessActionSourceState,
   recordActionReceipt,
   recordAuthorizationCheckpoint,
   recordGuardrailDecisionEvidence,
@@ -68,14 +78,20 @@ const sourceWriteProtectedActionArgs = {
 
 const currency = v.union(v.literal('aud'), v.literal('usd'))
 const actionSlug = v.literal(BusinessActionSlug)
+const cardStatus = literalUnion(BusinessActionCardStatusValues)
+const mandateStatus = literalUnion(BuyerMandateStatusValues)
 const requestStatus = literalUnion(CapabilityRequestStatusValues)
 const checkpointDecision = literalUnion(AuthorizationCheckpointDecisionValues)
 const guardrailProvider = literalUnion(BusinessActionGuardrailProviderValues)
 const guardrailDecision = literalUnion(BusinessActionGuardrailDecisionValues)
+const evidenceProvider = literalUnion(BusinessActionExternalEvidenceProviderValues)
 const evidenceStatus = literalUnion(BusinessActionExternalEvidenceStatusValues)
 const hermesEvidenceKind = literalUnion(HermesEvidenceKindValues)
+const resultArtifactStatus = literalUnion(BusinessActionResultArtifactStatusValues)
 const receiptOutcome = literalUnion(ActionReceiptOutcomeValues)
 const receiptReconstructionStatus = literalUnion(ReceiptReconstructionStatusValues)
+const supportStatus = literalUnion(BusinessActionSupportStatusValues)
+const operatorControl = literalUnion(BusinessActionOperatorControlKeyValues)
 
 const businessActionRequest = v.object({
   id: v.string(),
@@ -189,6 +205,145 @@ const publicReadback = v.object({
   recordedAt: v.number(),
 })
 
+const businessActionCard = v.object({
+  id: v.string(),
+  actionSlug,
+  version: v.number(),
+  ownerId: v.optional(v.string()),
+  sourceHash: v.string(),
+  status: cardStatus,
+  publicLabel: v.string(),
+  serviceId: v.optional(v.string()),
+  posture: v.literal('proposal_only'),
+  callable: v.literal(false),
+  paymentRequired: v.literal(false),
+  ownerApprovalRequired: v.literal(true),
+  receiptRequired: v.literal(true),
+  updatedAt: v.number(),
+})
+
+const buyerMandate = v.object({
+  id: v.string(),
+  buyerRef: v.string(),
+  allowedBusinessId: v.string(),
+  allowedActionSlug: actionSlug,
+  maxAmountCents: v.optional(v.number()),
+  currency: v.optional(currency),
+  status: mandateStatus,
+  mandateHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  createdAt: v.number(),
+  expiresAt: v.number(),
+  revokedAt: v.optional(v.number()),
+})
+
+const externalEvidenceEvent = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  checkpointId: v.string(),
+  actionSlug,
+  provider: evidenceProvider,
+  status: evidenceStatus,
+  providerRefHash: v.string(),
+  payloadHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  amountCents: v.optional(v.number()),
+  currency: v.optional(currency),
+  reason: v.optional(v.string()),
+  evidenceKind: v.optional(hermesEvidenceKind),
+  receivedAt: v.number(),
+})
+
+const hermesEvidenceEvent = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  checkpointId: v.string(),
+  actionSlug,
+  provider: v.literal('hermes'),
+  status: evidenceStatus,
+  providerRefHash: v.string(),
+  payloadHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  amountCents: v.optional(v.number()),
+  currency: v.optional(currency),
+  reason: v.optional(v.string()),
+  evidenceKind: hermesEvidenceKind,
+  receivedAt: v.number(),
+})
+
+const businessActionResultArtifact = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  checkpointId: v.string(),
+  actionSlug,
+  status: resultArtifactStatus,
+  endpointDescriptorHash: v.optional(v.string()),
+  jsonSchemaHash: v.optional(v.string()),
+  privateEndpointProvisioningPaymentGateRefHash: v.optional(v.string()),
+  supportingEvidenceLabels: v.optional(v.array(v.string())),
+  artifactHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  recordedAt: v.number(),
+  proofGapReason: v.optional(v.string()),
+})
+
+const privateEvidenceRef = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  retentionClass: v.literal('business_action_private_evidence'),
+  accessPolicy: v.literal('owner_admin_operator_only'),
+  payloadHash: v.string(),
+  privatePayloadRef: v.optional(v.string()),
+  ttlExpiresAt: v.number(),
+  redactedAt: v.optional(v.number()),
+})
+
+const supportRecord = v.object({
+  id: v.string(),
+  actionSlug,
+  businessId: v.string(),
+  status: supportStatus,
+  reason: v.string(),
+  evidenceRefs: v.array(v.string()),
+  claimDisablePath: operatorControl,
+  operatorNextAction: v.string(),
+  sourceHash: v.string(),
+  correlationId: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+
+const noRepairRecord = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  reason: v.string(),
+  evidenceRefs: v.array(v.string()),
+  noRepairHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  markedBy: v.string(),
+  markedAt: v.number(),
+})
+
+const businessActionSourceState = v.object({
+  cards: v.array(businessActionCard),
+  mandates: v.array(buyerMandate),
+  requests: v.array(businessActionRequest),
+  checkpoints: v.array(businessActionCheckpoint),
+  guardrailDecisions: v.array(guardrailEvidence),
+  externalEvidenceEvents: v.array(externalEvidenceEvent),
+  hermesEvidenceEvents: v.array(hermesEvidenceEvent),
+  resultArtifacts: v.array(businessActionResultArtifact),
+  receipts: v.array(businessActionReceipt),
+  privateEvidenceRefs: v.array(privateEvidenceRef),
+  supportRecords: v.array(supportRecord),
+  noRepairRecords: v.array(noRepairRecord),
+})
+
 const serverError = v.object({
   kind: v.literal('error'),
   code: businessActionErrorCode,
@@ -219,6 +374,63 @@ const mutationResult = v.union(
     publicReadback: v.optional(publicReadback),
   }),
   serverError
+)
+
+const stripeWebhookAdmissionEvidence = v.object({
+  provider: v.literal('stripe_test_mode'),
+  status: v.union(v.literal('accepted'), v.literal('duplicate'), v.literal('held_for_operator')),
+  providerRefHash: v.string(),
+  payloadHash: v.string(),
+  requestId: v.optional(v.string()),
+  checkpointId: v.optional(v.string()),
+  amountCents: v.optional(v.number()),
+  currency: v.optional(currency),
+  reason: v.optional(v.string()),
+})
+
+const stripeWebhookMutationResult = v.union(
+  v.object({
+    kind: v.literal('ok'),
+    code: v.union(
+      v.literal('business_action_stripe_webhook_received'),
+      v.literal('business_action_stripe_webhook_duplicate'),
+      v.literal('business_action_stripe_webhook_held')
+    ),
+    evidence: stripeWebhookAdmissionEvidence,
+  }),
+  v.object({
+    kind: v.literal('error'),
+    code: v.string(),
+    retryable: v.boolean(),
+    reason: v.string(),
+    field: v.optional(v.string()),
+  })
+)
+
+const ownerSourceStateResult = v.union(
+  v.object({
+    kind: v.literal('ok'),
+    state: businessActionSourceState,
+  }),
+  serverError
+)
+
+const adminSourceStateResult = v.union(
+  v.object({
+    kind: v.literal('allowed'),
+    httpStatus: v.literal(200),
+    generatedAt: v.number(),
+    actorRef: v.string(),
+    state: businessActionSourceState,
+  }),
+  v.object({
+    kind: v.literal('denied'),
+    httpStatus: v.union(v.literal(401), v.literal(403)),
+    reason: v.union(v.literal('missing_membership'), v.literal('inactive_membership'), v.literal('action_not_allowed')),
+    generatedAt: v.number(),
+    publicMessage: v.string(),
+    state: businessActionSourceState,
+  })
 )
 
 type RuntimeCtx = {
@@ -596,6 +808,57 @@ export const recordBusinessActionHermesEvidence = mutationGeneric({
   },
 })
 
+export const recordBusinessActionStripeWebhook = mutationGeneric({
+  args: {
+    rawBody: v.string(),
+    payloadHash: v.string(),
+    receivedAt: v.number(),
+    ...sourceWriteProtectedActionArgs,
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: stripeWebhookMutationResult,
+  handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        kind: 'error' as const,
+        code: 'business_action_source_write_rejected',
+        retryable: false,
+        reason: sourceWrite.reason,
+      }
+    }
+
+    const db = runtimeDb(ctx.db)
+    const requestId = stripeWebhookRequestId(args.rawBody)
+    const state = requestId === undefined
+      ? createEmptyBusinessActionSourceState()
+      : await loadBusinessActionRequestSlice(db, requestId)
+    const result = admitSignedStripeWebhookEvent(state, {
+      rawBody: args.rawBody,
+      payloadHash: brandNonEmpty(args.payloadHash, 'SourceHash'),
+      now: args.receivedAt,
+    })
+    if (result.kind === 'error') {
+      return {
+        kind: 'error' as const,
+        code: result.error.code,
+        retryable: false,
+        reason: result.error.reason,
+      }
+    }
+
+    await persistBusinessActionSlice(db, result.state)
+    return {
+      kind: 'ok' as const,
+      code: result.code,
+      evidence: {
+        ...result.evidence,
+      },
+    }
+  },
+})
+
 export const readCurrentOwnerBusinessActionReceipt = queryGeneric({
   args: { requestId: v.string() },
   returns: v.union(
@@ -629,6 +892,73 @@ export const readCurrentOwnerBusinessActionReceipt = queryGeneric({
       kind: 'ok' as const,
       receipt: serializeReceipt(receipt),
       publicReadback: serializePublicReadback(verification.publicReadback),
+    }
+  },
+})
+
+export const readCurrentOwnerBusinessActionQueue = queryGeneric({
+  args: {},
+  returns: ownerSourceStateResult,
+  handler: async (ctx) => {
+    const owner = await readCurrentOwnerIdentity(ctx)
+    if (owner.kind === 'denied') {
+      return adapterError('business_action_owner_denied', 'source_owned_owner_required')
+    }
+
+    const state = await loadOwnerBusinessActionSlice(runtimeDb(ctx.db), owner.identity.ownerId)
+    return {
+      kind: 'ok' as const,
+      state: serializeSourceState(state),
+    }
+  },
+})
+
+export const readCurrentOwnerBusinessActionDetail = queryGeneric({
+  args: { requestId: v.string() },
+  returns: ownerSourceStateResult,
+  handler: async (ctx, args) => {
+    const db = runtimeDb(ctx.db)
+    const state = await loadBusinessActionRequestSlice(db, args.requestId)
+    const request = requestForState(state, args.requestId)
+    if (request === undefined) {
+      return adapterError('business_action_not_found', 'request_not_found')
+    }
+
+    const owner = await readCurrentOwnerIdentity(ctx)
+    if (owner.kind === 'denied' || (await ownerAuthorityForRequest(db, owner.identity, request)) === undefined) {
+      return adapterError('business_action_owner_denied', 'source_owned_owner_required')
+    }
+
+    return {
+      kind: 'ok' as const,
+      state: serializeSourceState(state),
+    }
+  },
+})
+
+export const readAdminBusinessActionReconstruction = queryGeneric({
+  args: { requestId: v.optional(v.string()) },
+  returns: adminSourceStateResult,
+  handler: async (ctx, args) => {
+    const db = runtimeDb(ctx.db)
+    const authority = await resolveAdminAuthority({ db, auth: ctx.auth }, 'read_admin_readbacks')
+    if (authority.kind === 'denied') {
+      return {
+        kind: 'denied' as const,
+        httpStatus: authority.reason === 'missing_membership' ? 401 as const : 403 as const,
+        reason: authority.reason,
+        generatedAt: Date.now(),
+        publicMessage: 'Admin business-action reconstruction requires active source-owned membership.',
+        state: serializeSourceState(createEmptyBusinessActionSourceState()),
+      }
+    }
+
+    return {
+      kind: 'allowed' as const,
+      httpStatus: 200 as const,
+      generatedAt: Date.now(),
+      actorRef: authority.membership.clerkUserId,
+      state: serializeSourceState(await loadAdminBusinessActionSlice(db, args)),
     }
   },
 })
@@ -692,6 +1022,28 @@ function requestForState(state: BusinessActionSourceState, requestId: string): C
   return state.requests.find((candidate) => candidate.id === requestId)
 }
 
+function stripeWebhookRequestId(rawBody: string): string | undefined {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(rawBody)
+  } catch {
+    return undefined
+  }
+
+  if (!isRecordValue(parsed)) {
+    return undefined
+  }
+
+  const data = parsed.data
+  if (!isRecordValue(data) || !isRecordValue(data.object)) {
+    return undefined
+  }
+
+  const metadata = data.object.metadata
+  const metadataRequestId = isRecordValue(metadata) ? stringRecordField(metadata, 'ae_business_action_request_id') : undefined
+  return metadataRequestId ?? stringRecordField(data.object, 'client_reference_id')
+}
+
 function firstForbiddenField(args: Record<string, unknown>, fields: readonly string[]): string | undefined {
   return fields.find((field) => Object.prototype.hasOwnProperty.call(args, field))
 }
@@ -718,6 +1070,35 @@ function serializeGuardrailEvidence(evidence: GuardrailDecisionEvidence) {
 
 function serializeHermesEvidence(evidence: HermesEvidenceEvent) {
   return { ...evidence }
+}
+
+function serializeSourceState(state: BusinessActionSourceState) {
+  return {
+    cards: state.cards.map((entry) => ({ ...entry })),
+    mandates: state.mandates.map((entry) => ({ ...entry })),
+    requests: state.requests.map((entry) => ({ ...entry })),
+    checkpoints: state.checkpoints.map((entry) => ({ ...entry })),
+    guardrailDecisions: state.guardrailDecisions.map((entry) => ({ ...entry })),
+    externalEvidenceEvents: state.externalEvidenceEvents.map((entry) => ({ ...entry })),
+    hermesEvidenceEvents: state.hermesEvidenceEvents.map((entry) => ({ ...entry })),
+    resultArtifacts: state.resultArtifacts.map((entry) => {
+      const { supportingEvidenceLabels, ...rest } = entry
+      return {
+        ...rest,
+        ...(supportingEvidenceLabels === undefined ? {} : { supportingEvidenceLabels: [...supportingEvidenceLabels] }),
+      }
+    }),
+    receipts: state.receipts.map((entry) => serializeReceipt(entry)),
+    privateEvidenceRefs: state.privateEvidenceRefs.map((entry) => ({ ...entry })),
+    supportRecords: state.supportRecords.map((entry) => {
+      const { evidenceRefs, ...rest } = entry
+      return { ...rest, evidenceRefs: [...evidenceRefs] }
+    }),
+    noRepairRecords: state.noRepairRecords.map((entry) => {
+      const { evidenceRefs, ...rest } = entry
+      return { ...rest, evidenceRefs: [...evidenceRefs] }
+    }),
+  }
 }
 
 function serializePublicReadback(readback: ReturnType<typeof verifyActionReceipt>['publicReadback']) {
@@ -752,6 +1133,15 @@ function adapterError(code: BusinessActionRuntimeErrorCode, reason: string, fiel
     reason,
     ...(field === undefined ? {} : { field }),
   }
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringRecordField(record: Record<string, unknown>, field: string): string | undefined {
+  const value = record[field]
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function stringField(row: RuntimeDocument, field: string): string {

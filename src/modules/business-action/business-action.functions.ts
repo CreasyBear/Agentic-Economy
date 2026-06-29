@@ -1,8 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
-import { callSourceMutation, callSourceQuery, ConvexSourceError, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
-import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
+import {
+  callPublicSourceMutation,
+  callSourceMutation,
+  callSourceQuery,
+  ConvexSourceError,
+  sourceMutation,
+  sourceQuery,
+} from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromContext, sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
 import type {
   AuthorizationCheckpointDecision,
   BusinessActionCard,
@@ -76,6 +83,12 @@ const hermesEvidenceSchema = z.object({
   evidenceKind: z.enum(['scope', 'select', 'request', 'execute', 'report']),
   providerRefHash: z.string().min(1),
   payloadHash: z.string().min(1),
+})
+
+const stripeWebhookSchema = z.object({
+  rawBody: z.string().min(1),
+  payloadHash: z.string().min(1),
+  receivedAt: z.number(),
 })
 
 type BrowserMutationAdmission = {
@@ -157,6 +170,10 @@ export const businessActionSourceFunctionRefs = {
     z.infer<typeof hermesEvidenceSchema> & BrowserMutationAdmission,
     BusinessActionMutationServerResult
   >('businessActions:recordBusinessActionHermesEvidence'),
+  recordStripeWebhook: sourceMutation<
+    z.infer<typeof stripeWebhookSchema> & BrowserMutationAdmission,
+    BusinessActionMutationServerResult
+  >('businessActions:recordBusinessActionStripeWebhook'),
   readCurrentOwnerReceipt: sourceQuery<z.infer<typeof receiptSchema>, BusinessActionReceiptServerResult>(
     'businessActions:readCurrentOwnerBusinessActionReceipt'
   ),
@@ -272,6 +289,30 @@ export async function recordBusinessActionHermesEvidenceThroughSource(
     return await callSourceMutation(businessActionSourceFunctionRefs.recordHermesEvidence, {
       ...data,
       ...(await browserMutationAdmission(context, 'hermes-evidence', `${data.requestId}:${data.checkpointId}`)),
+    })
+  } catch (error) {
+    return sourceError(error)
+  }
+}
+
+export async function admitBusinessActionStripeWebhookThroughSource(
+  data: z.infer<typeof stripeWebhookSchema>,
+  options: { request: Request; env?: Record<string, string | undefined> }
+): Promise<BusinessActionMutationServerResult> {
+  const operationKey = `business-action:stripe-webhook:${data.payloadHash}`
+  const correlationId = `correlation:business-action:stripe-webhook:${data.payloadHash}`
+  try {
+    return await callPublicSourceMutation(businessActionSourceFunctionRefs.recordStripeWebhook, {
+      ...data,
+      operationKey,
+      correlationId,
+      sourceWrite: await sourceWriteAdmissionFromRequest({
+        request: options.request,
+        scope: 'protected_action',
+        operationKey,
+        correlationId,
+        ...(options.env === undefined ? {} : { env: options.env }),
+      }),
     })
   } catch (error) {
     return sourceError(error)
