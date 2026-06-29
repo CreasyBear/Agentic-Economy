@@ -591,6 +591,118 @@ function sameEvidenceSet(left: readonly string[], right: readonly string[]): boo
   return normalizedLeft.every((value, index) => value === normalizedRight[index])
 }
 
+export const BusinessActionPrivateEvidenceRetentionClass = 'business_action_private_evidence' as const
+export const BusinessActionPrivateEvidenceAccessPolicy = 'owner_admin_operator_only' as const
+
+export const BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues = [
+  'raw_prompt',
+  'trace',
+  'provider_payload',
+  'stripe_payload',
+  'customer_identifier',
+  'private_endpoint_ref',
+  'api_key',
+  'webhook_secret',
+] as const
+export type BusinessActionPrivateEvidencePublicProjectionExcludedField =
+  (typeof BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues)[number]
+
+export type BusinessActionPrivateEvidencePolicyInput = {
+  id: string
+  requestRef: string
+  retentionClass: string
+  accessPolicy: string
+  payloadHash: string
+  privatePayloadRef: string | undefined
+  ttlExpiresAt: number
+  redactedAt?: number
+  deletedAt?: number
+  tombstoneHash?: string
+  now: number
+  unsafeRawFields: Partial<Record<BusinessActionPrivateEvidencePublicProjectionExcludedField, string>>
+}
+
+export type BusinessActionPrivateEvidencePolicyResult =
+  | {
+      valid: true
+      retentionClass: typeof BusinessActionPrivateEvidenceRetentionClass
+      accessPolicy: typeof BusinessActionPrivateEvidenceAccessPolicy
+      exportBehavior: 'redacted_hash_only'
+      deleteBehavior: 'raw_ref_retained_until_ttl' | 'raw_ref_tombstoned'
+      publicProjectionAllowed: false
+    }
+  | {
+      valid: false
+      reason:
+        | 'invalid_retention_class'
+        | 'invalid_access_policy'
+        | 'missing_payload_hash'
+        | 'ttl_not_future'
+        | 'invalid_tombstone'
+    }
+
+export type BusinessActionPrivateEvidencePublicProjection = {
+  id: string
+  requestRef: string
+  retentionClass: typeof BusinessActionPrivateEvidenceRetentionClass
+  accessPolicy: typeof BusinessActionPrivateEvidenceAccessPolicy
+  payloadHash: string
+  ttlExpiresAt: number
+  redactedAt: number | undefined
+  tombstoned: boolean
+  excludedFields: typeof BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues
+}
+
+export function validateBusinessActionPrivateEvidencePolicy(
+  input: BusinessActionPrivateEvidencePolicyInput
+): BusinessActionPrivateEvidencePolicyResult {
+  if (input.retentionClass !== BusinessActionPrivateEvidenceRetentionClass) {
+    return { valid: false, reason: 'invalid_retention_class' }
+  }
+
+  if (input.accessPolicy !== BusinessActionPrivateEvidenceAccessPolicy) {
+    return { valid: false, reason: 'invalid_access_policy' }
+  }
+
+  if (input.payloadHash.trim().length === 0) {
+    return { valid: false, reason: 'missing_payload_hash' }
+  }
+
+  if (input.ttlExpiresAt <= input.now) {
+    return { valid: false, reason: 'ttl_not_future' }
+  }
+
+  const tombstoned = input.privatePayloadRef === undefined
+  if (tombstoned && (input.redactedAt === undefined || input.deletedAt === undefined || input.tombstoneHash === undefined)) {
+    return { valid: false, reason: 'invalid_tombstone' }
+  }
+
+  return {
+    valid: true,
+    retentionClass: BusinessActionPrivateEvidenceRetentionClass,
+    accessPolicy: BusinessActionPrivateEvidenceAccessPolicy,
+    exportBehavior: 'redacted_hash_only',
+    deleteBehavior: tombstoned ? 'raw_ref_tombstoned' : 'raw_ref_retained_until_ttl',
+    publicProjectionAllowed: false,
+  }
+}
+
+export function projectBusinessActionPrivateEvidenceForPublic(
+  input: BusinessActionPrivateEvidencePolicyInput
+): BusinessActionPrivateEvidencePublicProjection {
+  return {
+    id: input.id,
+    requestRef: input.requestRef,
+    retentionClass: BusinessActionPrivateEvidenceRetentionClass,
+    accessPolicy: BusinessActionPrivateEvidenceAccessPolicy,
+    payloadHash: input.payloadHash,
+    ttlExpiresAt: input.ttlExpiresAt,
+    redactedAt: input.redactedAt,
+    tombstoned: input.privatePayloadRef === undefined,
+    excludedFields: BusinessActionPrivateEvidencePublicProjectionExcludedFieldValues,
+  }
+}
+
 export type {
   AuditEventInput,
   AuditValidationResult,
