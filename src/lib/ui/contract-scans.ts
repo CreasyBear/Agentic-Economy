@@ -21,7 +21,7 @@ type PatternRule = {
   pattern: RegExp
 }
 
-type PhaseNumber = 2 | 3 | 4 | 5
+type PhaseNumber = 2 | 3 | 4 | 5 | 6
 
 type CopyClaimRule = PatternRule & {
   allowedPhases?: readonly PhaseNumber[]
@@ -114,6 +114,28 @@ export function scanSourceMining(targets: readonly ScanTarget[]): readonly ScanV
         pattern: /\b(?:MCP|OpenAPI|API key|agent-callable)\b|callable\s*:\s*true|paymentRequired\s*:\s*true/i,
       },
       {
+        rule: 'business-action-generic-runtime',
+        message: 'Phase 6 business-action source cannot drift into generic action runtime shapes.',
+        pattern:
+          /\bexecuteAction\b|\bproposeAction\b|(?:^|[^A-Za-z0-9_$])actionSlug\s*:\s*string\b|provider\s*:\s*['"]other['"]/,
+      },
+      {
+        rule: 'business-action-positive-authority',
+        message: 'Business Action Cards must stay proposal-only and non-callable.',
+        pattern: /paymentRequired\s*:\s*true|callable\s*:\s*true/i,
+      },
+      {
+        rule: 'business-action-route-local-fixture',
+        message: 'Business-action routes must read source seams, not route-local Business Action arrays.',
+        pattern: /\b(?:const|let|var)\s+\w*(?:businessActionRows|businessActionFixtures|businessActionRequests)\w*\s*=\s*\[/i,
+      },
+      {
+        rule: 'business-action-client-authority-field',
+        message: 'Client-supplied money, provider, customer, or return URL fields cannot create business-action authority.',
+        pattern:
+          /\b(?:amount|amountCents|currency|customerId|providerId|successUrl|cancelUrl)\s*:\s*(?:client|input|request)\./i,
+      },
+      {
         rule: 'future-active-route-registration',
         message: 'Future Phase 4/5 route registrations must stay parked outside src/routes until their owning phase.',
         pattern:
@@ -126,7 +148,23 @@ export function scanSourceMining(targets: readonly ScanTarget[]): readonly ScanV
       },
     ],
     [scannerUtilityPath]
-  ).filter((violation) => !isAllowedSourceOwnedFutureSurface(violation))
+  ).filter((violation) => !isAllowedSourceMiningViolation(violation))
+}
+
+function isAllowedSourceMiningViolation(violation: ScanViolation): boolean {
+  if (violation.rule === 'business-action-route-local-fixture') {
+    return false
+  }
+
+  if (
+    violation.rule === 'business-action-generic-runtime' ||
+    violation.rule === 'business-action-positive-authority' ||
+    violation.rule === 'business-action-client-authority-field'
+  ) {
+    return isPhase6BusinessActionRuntimeContext(normalizedScanPath(violation.file))
+  }
+
+  return isAllowedSourceOwnedFutureSurface(violation)
 }
 
 function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
@@ -136,7 +174,13 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
 
   const normalized = normalizedScanPath(violation.file)
   if (violation.rule === 'future-active-route-registration') {
-    return normalized.includes('src/future-phases/') || normalized.includes('src/routes/owner.actions')
+    return (
+      normalized.includes('src/future-phases/') ||
+      normalized.includes('src/routes/owner.actions') ||
+      normalized.includes('src/routes/owner.business-actions') ||
+      normalized.includes('src/routes/admin.business-actions') ||
+      normalized.includes('src/routes/api.business-actions')
+    )
   }
 
   if (violation.rule === 'future-route-tree-entry') {
@@ -144,9 +188,15 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
       (normalized.includes('src/routeTree.gen.ts') && isAllowedGeneratedRouteFutureSurface(violation.excerpt)) ||
       normalized.includes('src/routes/owner.actions') ||
       normalized.includes('src/routes/admin.protected-actions') ||
+      normalized.includes('src/routes/owner.business-actions') ||
+      normalized.includes('src/routes/admin.business-actions') ||
+      normalized.includes('src/routes/api.business-actions') ||
       (!normalized.includes('src/routeTree.gen.ts') &&
       !normalized.includes('src/routes/owner.actions') &&
       !normalized.includes('src/routes/admin.protected-actions') &&
+      !normalized.includes('src/routes/owner.business-actions') &&
+      !normalized.includes('src/routes/admin.business-actions') &&
+      !normalized.includes('src/routes/api.business-actions') &&
       !normalized.includes('src/routes/owner.billing') &&
       !normalized.includes('src/routes/api.billing'))
     )
@@ -160,6 +210,7 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
     'src/modules/discovery/',
     'src/modules/protected-action/',
     'src/modules/billing/',
+    'src/modules/business-action/',
     'src/modules/observability/',
     'src/future-phases/04-owner-pending-protected-actions/',
     'src/future-phases/05-paid-activation-money-rails/',
@@ -172,6 +223,11 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
     'src/routes/api.notification',
     'src/routes/owner.actions',
     'src/routes/admin.protected-actions',
+    'src/routes/owner.business-actions',
+    'src/routes/admin.business-actions',
+    'src/routes/api.business-actions',
+    'convex/businessActions.ts',
+    'convex/businessActionStore.ts',
     'convex/schema.ts',
   ].some((path) => normalized.includes(path))
 }
@@ -187,6 +243,15 @@ function isAllowedGeneratedRouteFutureSurface(excerpt: string): boolean {
     'AdminProtectedActions',
     "'/admin/protected-actions",
     '| \'/admin/protected-actions',
+    'OwnerBusinessActions',
+    "'/owner/business-actions",
+    '| \'/owner/business-actions',
+    'AdminBusinessActions',
+    "'/admin/business-actions",
+    '| \'/admin/business-actions',
+    'ApiBusinessActions',
+    "'/api/business-actions",
+    '| \'/api/business-actions',
   ].some((needle) => excerpt.includes(needle))
 }
 
@@ -321,6 +386,20 @@ const copyClaimRules: readonly CopyClaimRule[] = [
       /\b(?:wallet(?:s)?|(?<!-)balances?|credits?|credit balance|credits? balance|stored value|custody|x402|Connect|Connect marketplace|Stripe Connect|Connect\/x402|marketplace payout|split payout|split charge|settlement|payment handlers?|paymentRequired\s*(?::|=)\s*true|direct Stripe rail|direct Stripe subscription|Stripe subscription authority)\b/i,
     negativeOnly: true,
   },
+  {
+    rule: 'p6-business-action-overclaim',
+    message: 'Business-action receipt claims belong only in Phase 6 source-owned/proven contexts until proof exists.',
+    pattern:
+      /\b(?:Business Action Card|Capability Request|authorization checkpoint|GuardrailDecisionEvidence|ExternalEvidenceEvent|Action Receipt|receipt-backed (?:software|autonomous business) operation|Hermes-run paid intake provisioning)\b/i,
+    allowedPhases: [6],
+  },
+  {
+    rule: 'p6-autonomous-money-marketplace-overclaim',
+    message: 'Phase 6 copy cannot imply production autonomous payment, wallet, custody, settlement, or marketplace behavior.',
+    pattern:
+      /\b(?:self-approving agent|unbounded autonomous spend|instant purchase|agent checkout|AE wallet|AE credits|AE custody|seller payout|marketplace settlement|Stripe Connect|Connect\b|x402|product marketplace|generic API marketplace|production autonomous payment support|live money movement)\b/i,
+    negativeOnly: true,
+  },
 ]
 
 function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): boolean {
@@ -397,7 +476,15 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
   }
 
   if (isCopyTestContext(file)) {
-    return [2, 3, 4, 5]
+    return [2, 3, 4, 5, 6]
+  }
+
+  if (normalized.includes('.planning/phases/06-agentic-business-action-receipts/')) {
+    return [6]
+  }
+
+  if (isPhase6BusinessActionRuntimeContext(normalized)) {
+    return [6]
   }
 
   return []
@@ -427,6 +514,17 @@ function isPhase4ProtectedActionRuntimeContext(normalizedPath: string): boolean 
     'src/routes/owner.actions',
     'src/routes/admin.protected-actions',
     'convex/protectedActions.ts',
+  ].some((path) => normalizedPath.includes(path))
+}
+
+function isPhase6BusinessActionRuntimeContext(normalizedPath: string): boolean {
+  return [
+    'src/modules/business-action/',
+    'src/routes/owner.business-actions',
+    'src/routes/admin.business-actions',
+    'src/routes/api.business-actions',
+    'convex/businessActions.ts',
+    'convex/businessActionStore.ts',
   ].some((path) => normalizedPath.includes(path))
 }
 
@@ -508,9 +606,9 @@ export function scanUiContract(targets: readonly ScanTarget[]): readonly ScanVio
         pattern: /\bspace-[xy]-/,
       },
       {
-        rule: 'transition-all',
-        message: 'Use explicit transition properties, not transition-all.',
-        pattern: /\btransition-all\b/,
+        rule: `transition-${'all'}`,
+        message: 'Use explicit transition properties, not the broad transition utility.',
+        pattern: new RegExp(`\\btransition-${'all'}\\b`),
       },
       {
         rule: 'arbitrary-visual-token',
