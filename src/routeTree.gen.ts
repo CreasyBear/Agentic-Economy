@@ -30,6 +30,7 @@ import { Route as AdminProtectedActionsRouteImport } from './routes/admin.protec
 import { Route as AdminInquiriesRouteImport } from './routes/admin.inquiries'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
 import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
+import { Route as AdminBusinessActionsRouteImport } from './routes/admin.business-actions'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
@@ -46,6 +47,7 @@ import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiBusinessActionsStripeWebhookRouteImport } from './routes/api.business-actions.stripe-webhook'
 import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
+import { Route as AdminBusinessActionsRequestIdRouteImport } from './routes/admin.business-actions.$requestId'
 import { Route as OwnerBusinessActionsRequestIdReceiptRouteImport } from './routes/owner.business-actions.$requestId.receipt'
 import { Route as OwnerActionsProposalIdReceiptRouteImport } from './routes/owner.actions.$proposalId.receipt'
 
@@ -154,6 +156,11 @@ const AdminClaimsRoute = AdminClaimsRouteImport.update({
   path: '/admin/claims',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminBusinessActionsRoute = AdminBusinessActionsRouteImport.update({
+  id: '/admin/business-actions',
+  path: '/admin/business-actions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminAuditEventsRoute = AdminAuditEventsRouteImport.update({
   id: '/admin/audit-events',
   path: '/admin/audit-events',
@@ -240,6 +247,12 @@ const AdminProtectedActionsProposalIdRoute =
     path: '/$proposalId',
     getParentRoute: () => AdminProtectedActionsRoute,
   } as any)
+const AdminBusinessActionsRequestIdRoute =
+  AdminBusinessActionsRequestIdRouteImport.update({
+    id: '/$requestId',
+    path: '/$requestId',
+    getParentRoute: () => AdminBusinessActionsRoute,
+  } as any)
 const OwnerBusinessActionsRequestIdReceiptRoute =
   OwnerBusinessActionsRequestIdReceiptRouteImport.update({
     id: '/receipt',
@@ -264,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
+  '/admin/business-actions': typeof AdminBusinessActionsRouteWithChildren
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/admin/inquiries': typeof AdminInquiriesRoute
@@ -278,6 +292,7 @@ export interface FileRoutesByFullPath {
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
+  '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
   '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -305,6 +320,7 @@ export interface FileRoutesByTo {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
+  '/admin/business-actions': typeof AdminBusinessActionsRouteWithChildren
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/admin/inquiries': typeof AdminInquiriesRoute
@@ -319,6 +335,7 @@ export interface FileRoutesByTo {
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
+  '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
   '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -347,6 +364,7 @@ export interface FileRoutesById {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
+  '/admin/business-actions': typeof AdminBusinessActionsRouteWithChildren
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/admin/inquiries': typeof AdminInquiriesRoute
@@ -361,6 +379,7 @@ export interface FileRoutesById {
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
+  '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
   '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
@@ -390,6 +409,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
+    | '/admin/business-actions'
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
@@ -404,6 +424,7 @@ export interface FileRouteTypes {
     | '/privacy/remove-business'
     | '/sign-in/$'
     | '/sign-up/$'
+    | '/admin/business-actions/$requestId'
     | '/admin/protected-actions/$proposalId'
     | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
@@ -431,6 +452,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
+    | '/admin/business-actions'
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
@@ -445,6 +467,7 @@ export interface FileRouteTypes {
     | '/privacy/remove-business'
     | '/sign-in/$'
     | '/sign-up/$'
+    | '/admin/business-actions/$requestId'
     | '/admin/protected-actions/$proposalId'
     | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
@@ -472,6 +495,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
+    | '/admin/business-actions'
     | '/admin/claims'
     | '/admin/index-health'
     | '/admin/inquiries'
@@ -486,6 +510,7 @@ export interface FileRouteTypes {
     | '/privacy/remove-business'
     | '/sign-in/$'
     | '/sign-up/$'
+    | '/admin/business-actions/$requestId'
     | '/admin/protected-actions/$proposalId'
     | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
@@ -512,6 +537,7 @@ export interface RootRouteChildren {
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
+  AdminBusinessActionsRoute: typeof AdminBusinessActionsRouteWithChildren
   AdminClaimsRoute: typeof AdminClaimsRoute
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
   AdminInquiriesRoute: typeof AdminInquiriesRoute
@@ -683,6 +709,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminClaimsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/business-actions': {
+      id: '/admin/business-actions'
+      path: '/admin/business-actions'
+      fullPath: '/admin/business-actions'
+      preLoaderRoute: typeof AdminBusinessActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/audit-events': {
       id: '/admin/audit-events'
       path: '/admin/audit-events'
@@ -795,6 +828,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminProtectedActionsProposalIdRouteImport
       parentRoute: typeof AdminProtectedActionsRoute
     }
+    '/admin/business-actions/$requestId': {
+      id: '/admin/business-actions/$requestId'
+      path: '/$requestId'
+      fullPath: '/admin/business-actions/$requestId'
+      preLoaderRoute: typeof AdminBusinessActionsRequestIdRouteImport
+      parentRoute: typeof AdminBusinessActionsRoute
+    }
     '/owner/business-actions/$requestId/receipt': {
       id: '/owner/business-actions/$requestId/receipt'
       path: '/receipt'
@@ -833,6 +873,17 @@ const ClaimRouteChildren: ClaimRouteChildren = {
 }
 
 const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
+
+interface AdminBusinessActionsRouteChildren {
+  AdminBusinessActionsRequestIdRoute: typeof AdminBusinessActionsRequestIdRoute
+}
+
+const AdminBusinessActionsRouteChildren: AdminBusinessActionsRouteChildren = {
+  AdminBusinessActionsRequestIdRoute: AdminBusinessActionsRequestIdRoute,
+}
+
+const AdminBusinessActionsRouteWithChildren =
+  AdminBusinessActionsRoute._addFileChildren(AdminBusinessActionsRouteChildren)
 
 interface AdminProtectedActionsRouteChildren {
   AdminProtectedActionsProposalIdRoute: typeof AdminProtectedActionsProposalIdRoute
@@ -935,6 +986,7 @@ const rootRouteChildren: RootRouteChildren = {
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   AdminAuditEventsRoute: AdminAuditEventsRoute,
+  AdminBusinessActionsRoute: AdminBusinessActionsRouteWithChildren,
   AdminClaimsRoute: AdminClaimsRoute,
   AdminIndexHealthRoute: AdminIndexHealthRoute,
   AdminInquiriesRoute: AdminInquiriesRoute,
