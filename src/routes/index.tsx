@@ -68,7 +68,7 @@ function Home() {
           <p className="max-w-xl text-sm font-medium leading-6 text-muted-foreground">Agentic commerce starts with source truth.</p>
           <div className="grid gap-5">
             <h1 className="max-w-4xl text-balance font-heading text-5xl font-semibold leading-[1.02] tracking-normal text-foreground lg:text-5xl xl:text-6xl">
-              Source-owned truth for agentic commerce.
+              Service truth for agentic commerce.
             </h1>
             <p className="max-w-2xl text-pretty text-lg leading-8 text-muted-foreground">
               Publish local-service facts assistants can read without pretending bookings, payments, or actions are live.
