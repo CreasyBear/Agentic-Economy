@@ -17,6 +17,8 @@ describe('TypeScript standards guardrail', () => {
           'non-null-assertion',
           'convex-any-validator',
           'broad-status-string',
+          'hard-coded-source-csrf',
+          'client-exposed-source-write-secret',
         ])
       )
       return
@@ -25,4 +27,3 @@ describe('TypeScript standards guardrail', () => {
     expect(violations).toEqual([])
   })
 })
-

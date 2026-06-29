@@ -2,3 +2,5 @@ const value: any = input as any
 const status: string = 'published'
 const sure = maybe!
 v.any()
+const csrfToken = 'csrf-fixture'
+const leakedSecret = 'VITE_AE_SOURCE_WRITE_SECRET'

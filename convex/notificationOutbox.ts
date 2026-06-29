@@ -3,13 +3,13 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { RedactedPayload } from '../src/modules/observability/public'
-import { assertCsrf } from '../src/modules/security/public'
 import {
   createEmptyNotificationOutboxSourceState,
   dispatchNotificationOutbox as dispatchNotificationOutboxModule,
@@ -52,6 +52,7 @@ const csrfArgs = {
   csrfToken: v.optional(v.string()),
   csrfCookie: v.optional(v.string()),
   origin: v.optional(v.string()),
+  ...sourceWriteArgs,
 } as const
 
 const notificationErrorCode = v.union(
@@ -543,9 +544,9 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
   },
   returns: notificationRepairResult,
   handler: async (ctx, args) => {
-    const csrfDecision = assertNotificationCsrf(args)
-    if (csrfDecision.kind === 'rejected') {
-      return notificationRuntimeError('notification_csrf_rejected', csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'notification_repair')
+    if (sourceWrite.kind === 'rejected') {
+      return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
     }
 
     const db = runtimeDb(ctx.db)
@@ -591,9 +592,9 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
   },
   returns: notificationRepairResult,
   handler: async (ctx, args) => {
-    const csrfDecision = assertNotificationCsrf(args)
-    if (csrfDecision.kind === 'rejected') {
-      return notificationRuntimeError('notification_csrf_rejected', csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'notification_repair')
+    if (sourceWrite.kind === 'rejected') {
+      return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
     }
 
     const db = runtimeDb(ctx.db)
@@ -1236,25 +1237,6 @@ function notificationRuntimeError(
     retryable: false,
     reason,
   }
-}
-
-function assertNotificationCsrf(args: { csrfToken?: string; csrfCookie?: string; origin?: string }) {
-  return assertCsrf({
-    ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-    ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-    ...(args.origin === undefined ? {} : { origin: args.origin }),
-    allowedOrigins: sourceAllowedOrigins(),
-  })
-}
-
-function sourceAllowedOrigins(): readonly string[] {
-  const configured = readEnv('AE_ALLOWED_ORIGINS') ?? readEnv('VITE_AE_ALLOWED_ORIGINS') ?? readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL')
-  const origins = configured === undefined ? [] : configured.split(',').map((origin) => origin.trim()).filter(Boolean)
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
-}
-
-function readEnv(name: string): string | undefined {
-  return typeof process === 'undefined' ? undefined : process.env[name]
 }
 
 function requireNotificationSystemAccess(systemKey: string): { kind: 'allowed' } | { kind: 'denied'; reason: string } {

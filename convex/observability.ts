@@ -3,6 +3,7 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { readActiveAdminMembership } from './authz'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import {
   loadPhaseOneSourceState,
   persistPhaseOneSourceState,
@@ -146,11 +147,22 @@ export const setOperatorControl = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: setOperatorControlResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        kind: 'error' as const,
+        code: 'operator_control_csrf_rejected' as const,
+        retryable: false,
+        reason: sourceWrite.reason,
+      }
+    }
+
     const db = runtimeDb(ctx.db)
     const source = await loadPhaseOneSourceState(db)
     const adminMembership = await readCurrentActiveMembership(ctx)
@@ -187,12 +199,7 @@ export const setOperatorControl = mutationGeneric({
       evidenceRefs: args.evidenceRefs,
       ...(args.expiresAt === undefined ? {} : { expiresAt: args.expiresAt }),
       security: {
-        csrf: {
-          ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-          ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-          ...(args.origin === undefined ? {} : { origin: args.origin }),
-          allowedOrigins: sourceAllowedOrigins(),
-        },
+        csrf: sourceWrite.csrf,
       },
       operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
@@ -313,21 +320,6 @@ function summarizeMembershipAudit(event: AdminDecisionAudit) {
   }
 }
 
-
-function sourceAllowedOrigins(): readonly string[] {
-  const origins = [
-    ...envList('AE_ALLOWED_ORIGINS'),
-    ...envList('VITE_AE_ALLOWED_ORIGINS'),
-    ...envList('SITE_URL'),
-    ...envList('VITE_SITE_URL'),
-  ]
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
-}
-
-function envList(name: string): string[] {
-  const value = typeof process === 'undefined' ? undefined : process.env[name]
-  return value === undefined ? [] : value.split(',').map((item) => item.trim()).filter(Boolean)
-}
 
 export type {
   AuditEventContract,

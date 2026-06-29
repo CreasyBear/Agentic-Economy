@@ -127,6 +127,23 @@ describe('protected action server seams', () => {
       expect(JSON.stringify(admin)).not.toContain(localE2eProposalId)
     })
   })
+
+  it('does not serve local protected-action mutation fixtures when source write secret is missing', async () => {
+    await withMissingSourceWriteSecret(async () => {
+      const approved = await approveCurrentOwnerContactFollowUpThroughSource(
+        {
+          proposalId: localE2eProposalId,
+          reason: 'Owner accepted consequence.',
+          evidenceRefs: ['owner-review:test'],
+          consequenceAccepted: true,
+        },
+        sourceWriteContext()
+      )
+      expect(approved).toMatchObject({ kind: 'error', code: 'missing_source_write_secret' })
+      expect(JSON.stringify(approved)).not.toContain(localE2eProposalId)
+      expect(JSON.stringify(approved)).not.toContain('receipt_recorded')
+    })
+  })
 })
 
 async function withLocalBypass(run: () => Promise<void>) {
@@ -188,5 +205,38 @@ async function withMissingSourceConfig(run: () => Promise<void>) {
     } else {
       process.env.VITE_CONVEX_URL = previousPublicConvexUrl
     }
+  }
+}
+
+async function withMissingSourceWriteSecret(run: () => Promise<void>) {
+  const previousBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  const previousSecret = process.env.AE_SOURCE_WRITE_SECRET
+  delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  delete process.env.AE_SOURCE_WRITE_SECRET
+
+  try {
+    await run()
+  } finally {
+    if (previousBypass === undefined) {
+      delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    } else {
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousBypass
+    }
+
+    if (previousSecret === undefined) {
+      delete process.env.AE_SOURCE_WRITE_SECRET
+    } else {
+      process.env.AE_SOURCE_WRITE_SECRET = previousSecret
+    }
+  }
+}
+
+function sourceWriteContext() {
+  return {
+    sourceWriteRequest: {
+      method: 'POST',
+      origin: 'https://ae.example',
+      pathname: '/protected-actions',
+    },
   }
 }

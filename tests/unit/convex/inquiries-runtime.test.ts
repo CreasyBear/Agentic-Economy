@@ -13,6 +13,11 @@ import {
   requestCurrentOwnerInquiryExport,
   submitPublicInquiry,
 } from '../../../convex/inquiries'
+import {
+  withSourceWrite,
+  withoutSourceWrite,
+} from '../../helpers/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -55,6 +60,7 @@ type SubmitArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 type SubmitOk = {
@@ -314,21 +320,25 @@ describe('Convex inquiry runtime bridge', () => {
     expect(db.dump('notificationDispatches')).toHaveLength(2)
   })
 
-  it('accepts same-site Origin admission for Phase 2 inquiry mutations', async () => {
+  it('rejects same-site Origin without source admission for Phase 2 inquiry mutations', async () => {
     const db = seededInquiryDb()
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), withOriginOnly(submitArgs('origin-submit'))))
+    const rejectedSubmit = await submitHandler(authCtx(db, null), withOriginOnly(submitArgs('origin-submit')))
+    expect(rejectedSubmit).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
+
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('origin-seed')))
 
     const read = await markReadHandler(authCtx(db, sam()), withOriginOnly(ownerVersionedArgs(submitted.thread.threadId, 1, 'origin-read')))
-    expect(read).toMatchObject({ kind: 'ok', code: 'inquiry_read_marked' })
+    expect(read).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
 
     const reply = await replyHandler(authCtx(db, sam()), {
       ...withOriginOnly(ownerVersionedArgs(submitted.thread.threadId, 2, 'origin-reply')),
       body: 'Same-site Origin admitted owner reply.',
     })
-    expect(reply).toMatchObject({ kind: 'ok', code: 'inquiry_replied' })
+    expect(reply).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
 
     const close = await closeHandler(authCtx(db, sam()), withOriginOnly(ownerVersionedArgs(submitted.thread.threadId, 3, 'origin-close')))
-    expect(close).toMatchObject({ kind: 'ok', code: 'inquiry_closed' })
+    expect(close).toMatchObject({ kind: 'error', code: 'inquiry_csrf_rejected' })
+    expect(db.dump('inquiryThreads')[0]).toMatchObject({ status: 'unread', version: 1 })
   })
 
   it('persists owner delivery readback, export, privacy delete, tombstone, replay, and conflict outcomes', async () => {
@@ -361,12 +371,7 @@ describe('Convex inquiry runtime bridge', () => {
     const wrongOwnerExport = await exportHandler(authCtx(db, alex()), { threadId: submitted.thread.threadId })
     expect(wrongOwnerExport).toMatchObject({ kind: 'error', code: 'inquiry_not_found' })
 
-    const deleted = await deletePrivateHandler(authCtx(db, sam()), {
-      threadId: submitted.thread.threadId,
-      reasonCode: 'privacy_delete_requested',
-      operationKey: 'inquiry:privacy-delete',
-      correlationId: 'correlation:privacy-delete',
-    })
+    const deleted = await deletePrivateHandler(authCtx(db, sam()), ownerPrivacyDeleteArgs(submitted.thread.threadId))
     expect(deleted).toMatchObject({
       kind: 'ok',
       code: 'inquiry_private_content_deleted',
@@ -406,21 +411,14 @@ describe('Convex inquiry runtime bridge', () => {
       tombstones: [expect.objectContaining({ status: 'applied', operationKey: 'inquiry:privacy-delete' })],
     })
 
-    const replay = await deletePrivateHandler(authCtx(db, sam()), {
-      threadId: submitted.thread.threadId,
-      reasonCode: 'privacy_delete_requested',
-      operationKey: 'inquiry:privacy-delete',
-      correlationId: 'correlation:privacy-delete',
-    })
+    const replay = await deletePrivateHandler(authCtx(db, sam()), ownerPrivacyDeleteArgs(submitted.thread.threadId))
     expect(replay).toMatchObject({ kind: 'ok', code: 'inquiry_private_content_delete_replayed' })
     expect(db.dump('inquiryPrivacyTombstones')).toHaveLength(1)
 
-    const conflict = await deletePrivateHandler(authCtx(db, sam()), {
-      threadId: submitted.thread.threadId,
-      reasonCode: 'changed_reason',
-      operationKey: 'inquiry:privacy-delete',
-      correlationId: 'correlation:privacy-delete',
-    })
+    const conflict = await deletePrivateHandler(
+      authCtx(db, sam()),
+      ownerPrivacyDeleteArgs(submitted.thread.threadId, 'changed_reason')
+    )
     expect(conflict).toMatchObject({ kind: 'error', code: 'inquiry_duplicate_conflict' })
 
     expect(db.dump('operationKeys').map((operation) => operation.operationName)).toContain('deleteInquiryPrivateContent')
@@ -435,6 +433,7 @@ type OwnerVersionedArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 type OwnerReplyArgs = OwnerVersionedArgs & {
@@ -446,6 +445,10 @@ type OwnerPrivacyDeleteArgs = {
   reasonCode: string
   operationKey: string
   correlationId: string
+  csrfToken?: string
+  csrfCookie?: string
+  origin?: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -697,7 +700,9 @@ function seedOwnerInquiryRow(
 }
 
 function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArgs {
-  return {
+  const operationKey = `inquiry:${key}`
+  const correlationId = `correlation:${key}`
+  return withSourceWrite('public_inquiry', {
     target: {
       businessId: 'businesses:1',
       serviceId: 'businessServices:1',
@@ -707,37 +712,48 @@ function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArg
     contact: { name: 'Sam Customer', email: 'sam.customer@example.test' },
     pseudonymousSessionId: `session:${key}`,
     abuseBucketKey: 'ip:127.0.0.1',
-    ...csrfEvidence(),
-    operationKey: `inquiry:${key}`,
-    correlationId: `correlation:${key}`,
+    csrfToken: 'csrf-inquiry',
+    csrfCookie: 'csrf-inquiry',
+    operationKey,
+    correlationId,
     ...overrides,
-  }
+  })
 }
 
 function ownerVersionedArgs(threadId: string, expectedVersion: number, key: string, overrides: Partial<OwnerVersionedArgs> = {}): OwnerVersionedArgs {
-  return {
+  const operationKey = `inquiry:${key}`
+  const correlationId = `correlation:${key}`
+  return withSourceWrite('owner_inquiry', {
     threadId,
     expectedVersion,
-    ...csrfEvidence(),
-    operationKey: `inquiry:${key}`,
-    correlationId: `correlation:${key}`,
-    ...overrides,
-  }
-}
-
-function csrfEvidence() {
-  return {
     csrfToken: 'csrf-inquiry',
     csrfCookie: 'csrf-inquiry',
-  }
+    operationKey,
+    correlationId,
+    ...overrides,
+  })
 }
 
-function withoutCsrf<T extends { csrfToken?: string; csrfCookie?: string; origin?: string }>(args: T): T {
-  const { csrfToken: _csrfToken, csrfCookie: _csrfCookie, origin: _origin, ...rest } = args
+function ownerPrivacyDeleteArgs(
+  threadId: string,
+  reasonCode = 'privacy_delete_requested'
+): OwnerPrivacyDeleteArgs {
+  return withSourceWrite('owner_inquiry', {
+    threadId,
+    reasonCode,
+    csrfToken: 'csrf-inquiry',
+    csrfCookie: 'csrf-inquiry',
+    operationKey: 'inquiry:privacy-delete',
+    correlationId: 'correlation:privacy-delete',
+  })
+}
+
+function withoutCsrf<T extends { csrfToken?: string; csrfCookie?: string; origin?: string; sourceWrite?: SourceWriteAdmission }>(args: T): T {
+  const { csrfToken: _csrfToken, csrfCookie: _csrfCookie, origin: _origin, ...rest } = withoutSourceWrite(args)
   return rest as T
 }
 
-function withOriginOnly<T extends { csrfToken?: string; csrfCookie?: string; origin?: string }>(args: T): T {
+function withOriginOnly<T extends { csrfToken?: string; csrfCookie?: string; origin?: string; sourceWrite?: SourceWriteAdmission }>(args: T): T {
   return {
     ...withoutCsrf(args),
     origin: 'https://ae.example',

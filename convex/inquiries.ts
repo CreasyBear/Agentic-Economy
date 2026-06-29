@@ -5,6 +5,7 @@ import { v } from 'convex/values'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
@@ -74,7 +75,6 @@ import type {
   NotificationWebhookEventStatus,
 } from '../src/modules/notification-outbox/public'
 import type { RedactedPayload } from '../src/modules/observability/public'
-import { assertCsrf } from '../src/modules/security/public'
 import type { AbuseRateLimitBucketRecord, SuppressionRuleRecord } from '../src/modules/security/public'
 
 const publicInquiryContact = v.object({
@@ -93,6 +93,7 @@ const csrfArgs = {
   csrfToken: v.optional(v.string()),
   csrfCookie: v.optional(v.string()),
   origin: v.optional(v.string()),
+  ...sourceWriteArgs,
 } as const
 
 const submitInquiryErrorCode = v.union(
@@ -352,6 +353,7 @@ const deleteInquiryPrivateContentResult = v.union(
     code: v.union(
       v.literal('inquiry_not_found'),
       v.literal('inquiry_duplicate_conflict'),
+      v.literal('inquiry_csrf_rejected'),
       v.literal('missing_auth'),
       v.literal('owner_not_found')
     ),
@@ -556,9 +558,9 @@ export const submitPublicInquiry = mutationGeneric({
   },
   returns: submitInquiryResult,
   handler: async (ctx, args) => {
-    const csrfDecision = assertInquiryCsrf(args)
-    if (csrfDecision.kind === 'rejected') {
-      return inquiryCsrfError(csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'public_inquiry')
+    if (sourceWrite.kind === 'rejected') {
+      return inquiryCsrfError(sourceWrite.reason)
     }
 
     const db = runtimeDb(ctx.db)
@@ -765,9 +767,9 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
   },
   returns: ownerInquiryMutationResult,
   handler: async (ctx, args) => {
-    const csrfDecision = assertInquiryCsrf(args)
-    if (csrfDecision.kind === 'rejected') {
-      return ownerMutationCsrfError(csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    if (sourceWrite.kind === 'rejected') {
+      return ownerMutationCsrfError(sourceWrite.reason)
     }
 
     const owner = await readCurrentOwner(ctx)
@@ -798,11 +800,17 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
   args: {
     threadId: v.string(),
     reasonCode: v.string(),
+    ...csrfArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: deleteInquiryPrivateContentResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    if (sourceWrite.kind === 'rejected') {
+      return inquiryPrivacyCsrfError(sourceWrite.reason)
+    }
+
     const owner = await readCurrentOwner(ctx)
     if (owner.kind === 'denied') {
       return ownerAuthError(owner.reason)
@@ -870,9 +878,9 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
   },
   returns: ownerInquiryMutationResult,
   handler: async (ctx, args) => {
-    const csrfDecision = assertInquiryCsrf(args)
-    if (csrfDecision.kind === 'rejected') {
-      return ownerMutationCsrfError(csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    if (sourceWrite.kind === 'rejected') {
+      return ownerMutationCsrfError(sourceWrite.reason)
     }
 
     const owner = await readCurrentOwner(ctx)
@@ -911,9 +919,9 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
   },
   returns: ownerInquiryMutationResult,
   handler: async (ctx, args) => {
-    const csrfDecision = assertInquiryCsrf(args)
-    if (csrfDecision.kind === 'rejected') {
-      return ownerMutationCsrfError(csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    if (sourceWrite.kind === 'rejected') {
+      return ownerMutationCsrfError(sourceWrite.reason)
     }
 
     const owner = await readCurrentOwner(ctx)
@@ -1860,23 +1868,13 @@ function ownerMutationCsrfError(reason: 'missing_csrf' | 'foreign_origin') {
   return inquiryCsrfError(reason)
 }
 
-function assertInquiryCsrf(args: { csrfToken?: string; csrfCookie?: string; origin?: string }) {
-  return assertCsrf({
-    ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-    ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-    ...(args.origin === undefined ? {} : { origin: args.origin }),
-    allowedOrigins: sourceAllowedOrigins(),
-  })
-}
-
-function sourceAllowedOrigins(): readonly string[] {
-  const configured = readEnv('AE_ALLOWED_ORIGINS') ?? readEnv('VITE_AE_ALLOWED_ORIGINS') ?? readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL')
-  const origins = configured === undefined ? [] : configured.split(',').map((origin) => origin.trim()).filter(Boolean)
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
-}
-
-function readEnv(name: string): string | undefined {
-  return typeof process === 'undefined' ? undefined : process.env[name]
+function inquiryPrivacyCsrfError(reason: 'missing_csrf' | 'foreign_origin') {
+  return {
+    kind: 'error' as const,
+    code: 'inquiry_csrf_rejected' as const,
+    retryable: false,
+    reason,
+  }
 }
 
 function operationNameForResult(resultCode: string): string {

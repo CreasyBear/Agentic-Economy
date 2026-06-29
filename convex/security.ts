@@ -8,6 +8,7 @@ import {
   runtimeDb,
 } from './source_state'
 import { readActiveAdminMembership } from './authz'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import { validateAuditEvent } from '../src/modules/observability/public'
@@ -255,11 +256,17 @@ export const bootstrapOwnerAdmin = mutationGeneric({
   args: {
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: adminMutationResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    if (sourceWrite.kind === 'rejected') {
+      return adminSourceWriteDenied(sourceWrite.reason)
+    }
+
     const db = runtimeDb(ctx.db)
     const source = await loadPhaseOneSourceState(db)
     const identity = await ctx.auth.getUserIdentity()
@@ -285,11 +292,17 @@ export const grantAdminMembership = mutationGeneric({
     role: adminRole,
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: adminMutationResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    if (sourceWrite.kind === 'rejected') {
+      return adminSourceWriteDenied(sourceWrite.reason)
+    }
+
     const db = runtimeDb(ctx.db)
     const source = await loadPhaseOneSourceState(db)
     const actorMembership = await readCurrentActiveMembership(ctx)
@@ -314,11 +327,17 @@ export const revokeAdminMembership = mutationGeneric({
     targetClerkUserId: v.string(),
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: adminMutationResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    if (sourceWrite.kind === 'rejected') {
+      return adminSourceWriteDenied(sourceWrite.reason)
+    }
+
     const db = runtimeDb(ctx.db)
     const source = await loadPhaseOneSourceState(db)
     const actorMembership = await readCurrentActiveMembership(ctx)
@@ -381,11 +400,22 @@ export const openRemovalDispute = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: openDisputeResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'removal_dispute')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        kind: 'error' as const,
+        code: 'dispute_csrf_rejected' as const,
+        retryable: false,
+        reason: sourceWrite.reason,
+      }
+    }
+
     const db = runtimeDb(ctx.db)
     const source = await loadPhaseOneSourceState(db)
     const state = disputeSourceState(source)
@@ -403,10 +433,7 @@ export const openRemovalDispute = mutationGeneric({
       ...(args.publicMessage === undefined ? {} : { publicMessage: args.publicMessage }),
       security: {
         csrf: {
-          ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-          ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-          ...(args.origin === undefined ? {} : { origin: args.origin }),
-          allowedOrigins: sourceAllowedOrigins(),
+          ...sourceWrite.csrf,
         },
         rateLimit: {
           scope: 'dispute_open',
@@ -433,11 +460,22 @@ export const closeRemovalDispute = mutationGeneric({
     disputeId: v.string(),
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: closeDisputeResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        kind: 'error' as const,
+        code: 'admin_action_denied' as const,
+        retryable: false,
+        reason: sourceWrite.reason,
+      }
+    }
+
     const db = runtimeDb(ctx.db)
     const source = await loadPhaseOneSourceState(db)
     const actorMembership = await readCurrentActiveMembership(ctx)
@@ -807,14 +845,13 @@ function bootstrapPrincipalIds(): readonly string[] {
   return envList('ADMIN_BOOTSTRAP_PRINCIPAL_IDS')
 }
 
-function sourceAllowedOrigins(): readonly string[] {
-  const origins = [
-    ...envList('AE_ALLOWED_ORIGINS'),
-    ...envList('VITE_AE_ALLOWED_ORIGINS'),
-    ...envList('SITE_URL'),
-    ...envList('VITE_SITE_URL'),
-  ]
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
+function adminSourceWriteDenied(reason: 'missing_csrf' | 'foreign_origin') {
+  return {
+    kind: 'error' as const,
+    code: 'admin_action_denied' as const,
+    retryable: false,
+    reason,
+  }
 }
 
 function envList(name: string): string[] {

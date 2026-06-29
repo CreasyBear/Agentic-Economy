@@ -10,6 +10,7 @@ import {
   loadOwnerContactFollowUpQueueSlice,
   persistContactFollowUpSlice,
 } from './protectedActionStore'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
@@ -17,7 +18,6 @@ import { brandNonEmpty } from '../src/modules/common/ids'
 import type { BusinessId, OwnerId, SourceHash } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { AuditEventContract, RedactedPayload } from '../src/modules/observability/public'
-import { assertCsrf } from '../src/modules/security/public'
 import {
   ContactFollowUpActionSlug,
   ContactFollowUpAttemptOutcomeValues,
@@ -359,6 +359,7 @@ const csrfArgs = {
   csrfToken: v.optional(v.string()),
   csrfCookie: v.optional(v.string()),
   origin: v.optional(v.string()),
+  ...sourceWriteArgs,
 } as const
 
 type RuntimeCtx = {
@@ -402,9 +403,9 @@ export const proposeCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerDetailResult,
   handler: async (ctx, args) => {
-    const csrf = assertProtectedActionCsrf(args)
-    if (csrf.kind === 'rejected') {
-      return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
 
     const owner = await readCurrentOwnerAuthorityForBusiness(ctx, args.businessId)
@@ -491,9 +492,9 @@ export const approveCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const csrf = assertProtectedActionCsrf(args)
-    if (csrf.kind === 'rejected') {
-      return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
 
     return decideAndAttempt(ctx, {
@@ -521,9 +522,9 @@ export const rejectCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const csrf = assertProtectedActionCsrf(args)
-    if (csrf.kind === 'rejected') {
-      return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
 
     return decideAndAttempt(ctx, {
@@ -549,9 +550,9 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const csrf = assertProtectedActionCsrf(args)
-    if (csrf.kind === 'rejected') {
-      return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
 
     const owner = await readCurrentOwnerIdentity(ctx)
@@ -620,9 +621,9 @@ export const markCurrentOwnerContactFollowUpNoRepair = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const csrf = assertProtectedActionCsrf(args)
-    if (csrf.kind === 'rejected') {
-      return protectedActionError('contact_follow_up_csrf_rejected', csrf.reason)
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
 
     const owner = await readCurrentOwnerIdentity(ctx)
@@ -1052,25 +1053,6 @@ function protectedActionError(code: string, reason: string) {
     retryable: false,
     reason,
   }
-}
-
-function assertProtectedActionCsrf(args: { csrfToken?: string; csrfCookie?: string; origin?: string }) {
-  return assertCsrf({
-    ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-    ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-    ...(args.origin === undefined ? {} : { origin: args.origin }),
-    allowedOrigins: sourceAllowedOrigins(),
-  })
-}
-
-function sourceAllowedOrigins(): readonly string[] {
-  const configured = readEnv('AE_ALLOWED_ORIGINS') ?? readEnv('VITE_AE_ALLOWED_ORIGINS') ?? readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL')
-  const origins = configured === undefined ? [] : configured.split(',').map((origin) => origin.trim()).filter(Boolean)
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
-}
-
-function readEnv(name: string): string | undefined {
-  return typeof process === 'undefined' ? undefined : process.env[name]
 }
 
 function stringField(row: RuntimeDocument, field: string): string {

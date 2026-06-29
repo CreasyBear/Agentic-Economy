@@ -27,7 +27,7 @@ export const sourceWriteArgs = {
 } as const
 
 export type SourceWriteArgs = {
-  sourceWrite?: SourceWriteAdmission
+  sourceWrite?: unknown
   operationKey?: string
   correlationId?: string
 }
@@ -41,10 +41,11 @@ export async function requireSourceWrite(
   scope: SourceWriteAdmissionScope
 ): Promise<SourceWriteCheck> {
   const secret = readEnv('AE_SOURCE_WRITE_SECRET')
-  const expectedOperationKey = args.operationKey ?? args.sourceWrite?.operationKey ?? ''
-  const expectedCorrelationId = args.correlationId ?? args.sourceWrite?.correlationId ?? ''
+  const admission = isSourceWriteAdmission(args.sourceWrite) ? args.sourceWrite : undefined
+  const expectedOperationKey = args.operationKey ?? admission?.operationKey ?? ''
+  const expectedCorrelationId = args.correlationId ?? admission?.correlationId ?? ''
   const verification = await verifySourceWriteAdmission({
-    ...(args.sourceWrite === undefined ? {} : { admission: args.sourceWrite }),
+    ...(admission === undefined ? {} : { admission }),
     ...(secret === undefined ? {} : { secret }),
     expected: {
       scope,
@@ -67,6 +68,27 @@ export async function requireSourceWrite(
       allowedOrigins: [verification.admission.origin],
     },
   }
+}
+
+function isSourceWriteAdmission(value: unknown): value is SourceWriteAdmission {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return (
+    record.version === 'source-write:v1' &&
+    typeof record.scope === 'string' &&
+    SourceWriteAdmissionScopeValues.includes(record.scope as SourceWriteAdmissionScope) &&
+    typeof record.operationKey === 'string' &&
+    typeof record.correlationId === 'string' &&
+    typeof record.issuedAt === 'number' &&
+    typeof record.nonce === 'string' &&
+    typeof record.method === 'string' &&
+    typeof record.origin === 'string' &&
+    typeof record.pathname === 'string' &&
+    typeof record.signature === 'string'
+  )
 }
 
 function readEnv(name: string): string | undefined {

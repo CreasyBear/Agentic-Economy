@@ -447,9 +447,9 @@ function correlationId(value: string): CorrelationId {
 }
 
 function matchingCsrf(key: string) {
+  void key
   return {
-    csrfToken: `csrf-${key}`,
-    csrfCookie: `csrf-${key}`,
+    origin: 'https://ae.example',
     allowedOrigins: ['https://ae.example'],
   }
 }

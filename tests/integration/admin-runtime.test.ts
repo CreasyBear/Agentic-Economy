@@ -12,6 +12,8 @@ import {
   readOperatorControls,
   setOperatorControl,
 } from '../../convex/observability'
+import { withSourceWrite } from '../helpers/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -54,6 +56,7 @@ type AdminBootstrapArgs = {
   evidenceRefs: string[]
   operationKey: string
   correlationId: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 type GrantArgs = {
@@ -63,6 +66,7 @@ type GrantArgs = {
   evidenceRefs: string[]
   operationKey: string
   correlationId: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 type SetControlArgs = {
@@ -76,6 +80,7 @@ type SetControlArgs = {
   origin?: string
   operationKey: string
   correlationId: string
+  sourceWrite?: SourceWriteAdmission
 }
 
 describe('admin Convex runtime controls', () => {
@@ -133,14 +138,17 @@ describe('admin Convex runtime controls', () => {
   it('lets owner_admin grant support while support is denied destructive controls with audit evidence', async () => {
     const db = seededAdminDb()
 
-    const grant = await grantHandler(authCtx(db, ownerAdmin()), {
-      targetClerkUserId: 'user_new_support',
-      role: 'support',
-      reasonCode: 'support_queue_access',
-      evidenceRefs: ['private:evidence:grant'],
-      operationKey: 'op:admin:grant:new-support',
-      correlationId: 'corr:admin:grant:new-support',
-    })
+    const grant = await grantHandler(
+      authCtx(db, ownerAdmin()),
+      withSourceWrite('admin_operator', {
+        targetClerkUserId: 'user_new_support',
+        role: 'support',
+        reasonCode: 'support_queue_access',
+        evidenceRefs: ['private:evidence:grant'],
+        operationKey: 'op:admin:grant:new-support',
+        correlationId: 'corr:admin:grant:new-support',
+      })
+    )
     expect(grant).toMatchObject({ kind: 'ok', code: 'admin_membership_granted' })
 
     const supportDenied = await setControlHandler(authCtx(db, support()), operatorArgs('support-denied'))
@@ -367,16 +375,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function bootstrapArgs(key: string): AdminBootstrapArgs {
-  return {
+  return withSourceWrite('admin_operator', {
     reasonCode: 'source_owned_setup',
     evidenceRefs: ['private:evidence:bootstrap'],
     operationKey: `op:admin:bootstrap:${key}`,
     correlationId: `corr:admin:bootstrap:${key}`,
-  }
+  })
 }
 
 function operatorArgs(key: string): SetControlArgs {
-  return {
+  return withSourceWrite('admin_operator', {
     key: 'claims_enabled',
     enabled: false,
     reasonCode: 'abuse_spike',
@@ -386,5 +394,5 @@ function operatorArgs(key: string): SetControlArgs {
     csrfCookie: `csrf-${key}`,
     operationKey: `op:operator:${key}`,
     correlationId: `corr:operator:${key}`,
-  }
+  })
 }

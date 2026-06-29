@@ -24,6 +24,8 @@ import {
   proposeContactFollowUpRequest,
   recordContactFollowUpProviderAttempt,
 } from '../../../src/modules/protected-action/public'
+import { withSourceWrite, withoutSourceWrite } from '../../helpers/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -70,6 +72,7 @@ type ProposeArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -82,6 +85,7 @@ type DecisionArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -93,6 +97,7 @@ type RetryArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -123,6 +128,20 @@ const adminHandler = (readAdminContactFollowUpReconstruction as unknown as {
 })._handler
 
 describe('Convex protected action runtime bridge', () => {
+  it('rejects forged static protected-action CSRF before source rows', async () => {
+    const db = seededProtectedActionDb()
+    const rejected = await proposeHandler(authCtx(db, sam()), {
+      ...withoutSourceWrite(proposeArgs('forged-csrf')),
+      csrfToken: 'csrf-protected-action',
+      csrfCookie: 'csrf-protected-action',
+    })
+
+    expect(rejected).toMatchObject({ kind: 'error', code: 'contact_follow_up_csrf_rejected' })
+    expect(db.dump('protectedActionProposals')).toHaveLength(0)
+    expect(db.dump('operationKeys')).toHaveLength(0)
+    expectNoProtectedActionBareScans(db)
+  })
+
   it('persists proposal, policy, owner approval, one-use attempt, receipt, audit, and operation rows', async () => {
     const db = seededProtectedActionDb()
     const proposed = requireOk(await proposeHandler(authCtx(db, sam()), proposeArgs('approve')))
@@ -513,7 +532,7 @@ function identity(subject: string): UserIdentity {
 }
 
 function proposeArgs(suffix: string): ProposeArgs {
-  return {
+  return withSourceWrite('protected_action', {
     businessId: 'businesses:1',
     serviceId: 'services:1',
     sourceEvidenceRef: `source-message:${suffix}`,
@@ -524,10 +543,9 @@ function proposeArgs(suffix: string): ProposeArgs {
       sourceMessageRef: `source-message:${suffix}`,
     },
     deadlineAt: Date.now() + 60_000,
-    ...csrf(),
     operationKey: `contact-follow-up:proposal:${suffix}`,
     correlationId: `correlation:contact-follow-up:proposal:${suffix}`,
-  }
+  })
 }
 
 function decisionArgs(
@@ -535,27 +553,25 @@ function decisionArgs(
   suffix: string,
   overrides: Partial<DecisionArgs> = {}
 ): DecisionArgs {
-  return {
+  return withSourceWrite('protected_action', {
     proposalId,
     reason: `Owner reviewed ${suffix}.`,
     evidenceRefs: [`owner-review:${suffix}`],
     consequenceAccepted: false,
-    ...csrf(),
     operationKey: `contact-follow-up:decision:${suffix}`,
     correlationId: `correlation:contact-follow-up:decision:${suffix}`,
     ...overrides,
-  }
+  })
 }
 
 function retryArgs(proposalId: string, suffix: string, readbackKind: RetryArgs['readbackKind'] = 'receipt'): RetryArgs {
-  return {
+  return withSourceWrite('protected_action', {
     proposalId,
     readbackKind,
     reason: `Retry reviewed ${suffix}.`,
-    ...csrf(),
     operationKey: `contact-follow-up:retry:${suffix}`,
     correlationId: `correlation:contact-follow-up:retry:${suffix}`,
-  }
+  })
 }
 
 async function seedRetryableProofGapProposal(db: Db, suffix: string): Promise<string> {
@@ -626,14 +642,6 @@ async function seedRetryableProofGapProposal(db: Db, suffix: string): Promise<st
 
   await persistContactFollowUpSlice(db as Parameters<typeof persistContactFollowUpSlice>[0], attempted.state)
   return proposed.proposal.id
-}
-
-function csrf() {
-  return {
-    csrfToken: 'csrf-protected-action',
-    csrfCookie: 'csrf-protected-action',
-    origin: 'https://ae.example',
-  }
 }
 
 function requireOk(value: unknown): { kind: 'ok'; reconstruction: { proposal: { id: string }; [key: string]: unknown } } {

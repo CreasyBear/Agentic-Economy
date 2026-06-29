@@ -2,11 +2,11 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
+import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeMutationCtx, runtimeReader } from './source_state'
 import type { RuntimeDocument, RuntimeMutationCtx, RuntimeReader, RuntimeWriter } from './source_state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { BusinessMutationActor } from '../src/modules/business/public'
-import { assertCsrf } from '../src/modules/security/public'
 
 const routeResult = v.object({
   kind: v.union(v.literal('business_page'), v.literal('ucp_manifest'), v.literal('api_detail')),
@@ -213,6 +213,7 @@ export const regenerateDiscoveryManifest = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   returns: regenerateResult,
   handler: async (ctx, args) => {
@@ -252,6 +253,7 @@ export const invalidateDiscoveryManifest = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   returns: invalidateResult,
   handler: async (ctx, args) => {
@@ -385,6 +387,7 @@ type OwnerMutationArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteArgs['sourceWrite']
 }
 
 type OwnerMutationAuth =
@@ -556,14 +559,9 @@ type DiscoveryAuditEvent = {
 }
 
 async function requireOwnerMutation(ctx: RuntimeMutationCtx, args: OwnerMutationArgs): Promise<OwnerMutationAuth> {
-  const csrfDecision = assertCsrf({
-    ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-    ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-    ...(args.origin === undefined ? {} : { origin: args.origin }),
-    allowedOrigins: sourceAllowedOrigins(),
-  })
-  if (csrfDecision.kind === 'rejected') {
-    return { kind: 'error', error: discoveryError('discovery_manifest_csrf_rejected', csrfDecision.reason) }
+  const sourceWrite = await requireSourceWrite(args, 'discovery_repair')
+  if (sourceWrite.kind === 'rejected') {
+    return { kind: 'error', error: discoveryError('discovery_manifest_csrf_rejected', sourceWrite.reason) }
   }
 
   const actor = await resolveBusinessActor(ctx, args)
@@ -1256,12 +1254,6 @@ function firstRequestFromRecord(capability: Record<string, unknown>): FirstReque
     publicChannel: publicChannelRecord(firstRequest),
     ...(stringFromRecord(firstRequest, 'noContactReason').length === 0 ? {} : { noContactReason: stringFromRecord(firstRequest, 'noContactReason') }),
   }
-}
-
-function sourceAllowedOrigins(): readonly string[] {
-  const configured = readEnv('AE_ALLOWED_ORIGINS') ?? readEnv('VITE_AE_ALLOWED_ORIGINS') ?? readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL')
-  const origins = configured === undefined ? [] : configured.split(',').map((origin) => origin.trim()).filter(Boolean)
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
 }
 
 function readEnv(name: string): string | undefined {

@@ -16,6 +16,11 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import {
+  readRequiredSourceWriteSecret,
+  sourceWriteAdmissionFromContext,
+} from '@/lib/server/source-write-admission'
+import { verifySourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
   readInquiryOperatorReconstructionThroughSource,
   readCurrentOwnerInboxThroughSource,
   readCurrentOwnerInquiryThreadThroughSource,
@@ -135,6 +140,78 @@ describe('server Convex source seam', () => {
   it('keeps source-owned function references available without generated Convex API output', () => {
     expect(sourceConvexApi).toBeTruthy()
     expect(getFunctionName(sourceConvexFunctions.catalog.publishBusinessCatalog)).toBe('catalog:publishBusinessCatalog')
+  })
+
+  it('creates request-bound source write admission from a server-only secret', async () => {
+    const admission = await sourceWriteAdmissionFromContext({
+      context: sourceWriteContext(),
+      env: { AE_SOURCE_WRITE_SECRET: 'server-only-source-write-secret' },
+      scope: 'public_inquiry',
+      operationKey: 'op:inquiry:server-seam',
+      correlationId: 'corr:inquiry:server-seam',
+    })
+
+    expect(admission).toMatchObject({
+      version: 'source-write:v1',
+      scope: 'public_inquiry',
+      operationKey: 'op:inquiry:server-seam',
+      correlationId: 'corr:inquiry:server-seam',
+      method: 'POST',
+      origin: 'https://ae.example',
+      pathname: '/inquiries',
+    })
+
+    await expect(
+      verifySourceWriteAdmission({
+        admission,
+        secret: 'server-only-source-write-secret',
+        expected: {
+          scope: 'public_inquiry',
+          operationKey: 'op:inquiry:server-seam',
+          correlationId: 'corr:inquiry:server-seam',
+        },
+      })
+    ).resolves.toMatchObject({ kind: 'accepted' })
+  })
+
+  it('requires source write secrets to stay server-only', () => {
+    expect(() => readRequiredSourceWriteSecret({})).toThrow(
+      expect.objectContaining({ code: 'missing_source_write_secret' })
+    )
+    expect(() =>
+      readRequiredSourceWriteSecret({
+        AE_SOURCE_WRITE_SECRET: 'server-secret',
+        [`${publicEnvPrefix}AE_SOURCE_WRITE_SECRET`]: 'client-secret',
+      })
+    ).toThrow(expect.objectContaining({ code: 'client_exposed_source_write_secret' }))
+  })
+
+  it('does not turn missing source write admission into local inquiry mutation fixtures', async () => {
+    const previousBypass = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousSecret = process.env.AE_SOURCE_WRITE_SECRET
+    delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    delete process.env.AE_SOURCE_WRITE_SECRET
+
+    try {
+      const result = await markCurrentOwnerInquiryReadThroughSource(
+        { threadId: 'thread:source-write-missing', expectedVersion: 1 },
+        sourceWriteContext()
+      )
+      expect(result).toMatchObject({ kind: 'error', code: 'missing_source_write_secret' })
+      expect(JSON.stringify(result)).not.toContain('local-e2e')
+    } finally {
+      if (previousBypass === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousBypass
+      }
+
+      if (previousSecret === undefined) {
+        delete process.env.AE_SOURCE_WRITE_SECRET
+      } else {
+        process.env.AE_SOURCE_WRITE_SECRET = previousSecret
+      }
+    }
   })
 
   it('serves deterministic owner inquiry readbacks only for local Clerk-bypass evidence', async () => {
@@ -1159,6 +1236,16 @@ function signedResendHeaders(secret: string, rawBody: string, svixId: string, sv
     'svix-timestamp': svixTimestamp,
     'svix-signature': `v1,${signature}`,
   })
+}
+
+function sourceWriteContext() {
+  return {
+    sourceWriteRequest: {
+      method: 'POST',
+      origin: 'https://ae.example',
+      pathname: '/inquiries',
+    },
+  }
 }
 
 function dispatchSendReadback() {

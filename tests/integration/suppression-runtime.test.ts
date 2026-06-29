@@ -10,6 +10,8 @@ import {
   openRemovalDispute,
 } from '../../convex/security'
 import { getPublicBusinessCatalogBySlug } from '../../convex/registry'
+import { withSourceWrite } from '../helpers/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -47,6 +49,7 @@ type SuppressionArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -64,6 +67,7 @@ type OpenDisputeArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -72,6 +76,7 @@ type CloseDisputeArgs = {
   disputeId: string
   reasonCode: string
   evidenceRefs: string[]
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -343,7 +348,7 @@ function support(): UserIdentity {
 }
 
 function suppressionArgs(key: string): SuppressionArgs {
-  return {
+  return withSourceWrite('admin_operator', {
     businessId: 'businesses:1',
     reasonCode: 'privacy_removal_requested',
     evidenceRefs: ['private:evidence:suppression'],
@@ -351,11 +356,11 @@ function suppressionArgs(key: string): SuppressionArgs {
     csrfCookie: `csrf-${key}`,
     operationKey: `op:suppression:${key}`,
     correlationId: `corr:suppression:${key}`,
-  }
+  })
 }
 
 function openDisputeArgs(key: string): OpenDisputeArgs {
-  return {
+  return withSourceWrite('removal_dispute', {
     businessId: 'businesses:1',
     targetType: 'business',
     targetRef: 'businesses:1',
@@ -376,15 +381,15 @@ function openDisputeArgs(key: string): OpenDisputeArgs {
     csrfCookie: `csrf-${key}`,
     operationKey: `op:dispute:${key}`,
     correlationId: `corr:dispute:${key}`,
-  }
+  })
 }
 
 function closeDisputeArgs(key: string): CloseDisputeArgs {
-  return {
+  return withSourceWrite('admin_operator', {
     disputeId: 'disputes:1',
     reasonCode: 'removal_resolved',
     evidenceRefs: ['private:evidence:close-dispute'],
     operationKey: `op:dispute:close:${key}`,
     correlationId: `corr:dispute:close:${key}`,
-  }
+  })
 }

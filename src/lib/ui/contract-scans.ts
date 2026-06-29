@@ -224,6 +224,16 @@ export function scanTypeScriptStandards(targets: readonly ScanTarget[]): readonl
         message: 'Convex functions must expose exact result contracts.',
         pattern: /returns\s*:\s*v\.any\s*\(|Promise\s*<\s*unknown\s*>/,
       },
+      {
+        rule: 'hard-coded-source-csrf',
+        message: 'Runtime source writes must use source-write admission, not hard-coded CSRF literals.',
+        pattern: /['"`]csrf-[^'"`]*['"`]|`csrf-\$\{/,
+      },
+      {
+        rule: 'client-exposed-source-write-secret',
+        message: 'Source write admission secrets must stay server-only and never use a VITE_ prefix.',
+        pattern: /\bVITE_AE_SOURCE_WRITE_SECRET\b/,
+      },
     ],
     ['src/routeTree.gen.ts', 'convex/_generated']
   )

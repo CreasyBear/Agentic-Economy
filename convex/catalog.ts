@@ -2,12 +2,12 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { resolveBusinessActor } from './authz'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { stableHash } from '../src/modules/common/stable-hash'
 import { validateServiceCatalogInput } from '../src/modules/catalog/public'
 import type { ServiceCatalogInput, ValidatedServiceCatalogInput } from '../src/modules/catalog/public'
-import { assertCsrf } from '../src/modules/security/public'
 
 const firstRequestArg = v.object({
   mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
@@ -214,18 +214,14 @@ export const publishBusinessCatalog = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
     services: v.array(serviceArg),
   },
   returns: v.union(catalogOkResult, catalogErrorResult),
   handler: async (ctx, args) => {
-    const csrfDecision = assertCsrf({
-      ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-      ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-      ...(args.origin === undefined ? {} : { origin: args.origin }),
-      allowedOrigins: sourceAllowedOrigins(),
-    })
-    if (csrfDecision.kind === 'rejected') {
-      return catalogError('catalog_publish_csrf_rejected', csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'catalog_publish')
+    if (sourceWrite.kind === 'rejected') {
+      return catalogError('catalog_publish_csrf_rejected', sourceWrite.reason)
     }
 
     const actor = await resolveBusinessActor(ctx, args)
@@ -1095,16 +1091,6 @@ async function hasActiveBusinessSuppression(db: RuntimeDb, businessId: string): 
     .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active'))
     .unique()
   return suppression !== null
-}
-
-function sourceAllowedOrigins(): readonly string[] {
-  const configured = readEnv('AE_ALLOWED_ORIGINS') ?? readEnv('VITE_AE_ALLOWED_ORIGINS') ?? readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL')
-  const origins = configured === undefined ? [] : configured.split(',').map((origin) => origin.trim()).filter(Boolean)
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
-}
-
-function readEnv(name: string): string | undefined {
-  return typeof process === 'undefined' ? undefined : process.env[name]
 }
 
 function stringField(document: RuntimeDocument, field: string): string {

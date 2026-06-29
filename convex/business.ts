@@ -3,13 +3,14 @@ import { mutationGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
+import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import { loadPhaseOneSourceState, persistPhaseOneSourceState, runtimeDb, runtimeWriter } from './source_state'
 import type { RuntimeDocument, RuntimeWriter } from './source_state'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import { suppressBusiness as suppressBusinessModule, unsuppressBusiness as unsuppressBusinessModule } from '../src/modules/business/public'
 import type { BusinessMutationActor, BusinessSuppressionState } from '../src/modules/business/public'
-import { assertCsrf, recordAdminActionDenied, requireAdminAuthority, normalizeClaimFingerprint } from '../src/modules/security/public'
+import { recordAdminActionDenied, requireAdminAuthority, normalizeClaimFingerprint } from '../src/modules/security/public'
 import type { AdminAuthorityState, AdminDecisionAudit, AdminMembership } from '../src/modules/security/public'
 import type { AuditEventContract } from '../src/modules/observability/public'
 
@@ -175,19 +176,15 @@ export const claimBusiness = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
   returns: v.union(claimOkResult, claimErrorResult),
   handler: async (ctx, args) => {
-    const csrfDecision = assertCsrf({
-      ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-      ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-      ...(args.origin === undefined ? {} : { origin: args.origin }),
-      allowedOrigins: sourceAllowedOrigins(),
-    })
-    if (csrfDecision.kind === 'rejected') {
-      return claimError('claim_csrf_rejected', csrfDecision.reason)
+    const sourceWrite = await requireSourceWrite(args, 'owner_claim')
+    if (sourceWrite.kind === 'rejected') {
+      return claimError('claim_csrf_rejected', sourceWrite.reason)
     }
 
     const actor = await resolveBusinessActor(ctx, args)
@@ -380,6 +377,7 @@ export const suppressBusiness = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
@@ -395,6 +393,7 @@ export const unsuppressBusiness = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    ...sourceWriteArgs,
     operationKey: v.string(),
     correlationId: v.string(),
   },
@@ -409,6 +408,7 @@ type VisibilityMutationArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteArgs['sourceWrite']
   operationKey: string
   correlationId: string
 }
@@ -425,6 +425,16 @@ async function runVisibilityChange(
   mode: 'suppress' | 'unsuppress',
   args: VisibilityMutationArgs
 ) {
+  const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+  if (sourceWrite.kind === 'rejected') {
+    return {
+      kind: 'error' as const,
+      code: mode === 'suppress' ? 'business_suppress_csrf_rejected' as const : 'business_unsuppress_csrf_rejected' as const,
+      retryable: false,
+      reason: sourceWrite.reason,
+    }
+  }
+
   const db = runtimeDb(ctx.db)
   const source = await loadPhaseOneSourceState(db)
   const adminMembership = await readCurrentActiveMembership(ctx)
@@ -468,12 +478,7 @@ async function runVisibilityChange(
     adminMembership,
     businessId,
     security: {
-      csrf: {
-        ...(args.csrfToken === undefined ? {} : { csrfToken: args.csrfToken }),
-        ...(args.csrfCookie === undefined ? {} : { csrfCookie: args.csrfCookie }),
-        ...(args.origin === undefined ? {} : { origin: args.origin }),
-        allowedOrigins: sourceAllowedOrigins(),
-      },
+      csrf: sourceWrite.csrf,
     },
     reasonCode: args.reasonCode,
     evidenceRefs: args.evidenceRefs,
@@ -735,16 +740,6 @@ async function incrementClaimRateLimit(ctx: RuntimeCtx, clerkUserId: string, now
   const nextCount = count + 1
   await db.patch(bucketId, { count: nextCount, state: nextCount >= limit ? 'limited' : 'open', updatedAt: now })
   return undefined
-}
-
-function sourceAllowedOrigins(): readonly string[] {
-  const configured = readEnv('AE_ALLOWED_ORIGINS') ?? readEnv('VITE_AE_ALLOWED_ORIGINS') ?? readEnv('SITE_URL') ?? readEnv('VITE_SITE_URL')
-  const origins = configured === undefined ? [] : configured.split(',').map((origin) => origin.trim()).filter(Boolean)
-  return ['https://ae.example', ...origins.filter((origin) => origin !== 'https://ae.example')]
-}
-
-function readEnv(name: string): string | undefined {
-  return typeof process === 'undefined' ? undefined : process.env[name]
 }
 
 function normalizePublicText(value: string): string {

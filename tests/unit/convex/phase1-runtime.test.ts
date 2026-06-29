@@ -5,6 +5,11 @@ import { claimBusiness } from '../../../convex/business'
 import { publishBusinessCatalog } from '../../../convex/catalog'
 import { readDiscoveryHealth, regenerateDiscoveryManifest } from '../../../convex/discovery'
 import { getPublicBusinessCatalogBySlug } from '../../../convex/registry'
+import {
+  sourceWriteAdmission,
+  withSourceWrite,
+} from '../../helpers/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -48,6 +53,7 @@ type ClaimArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   operationKey: string
   correlationId: string
 }
@@ -59,6 +65,7 @@ type PublishArgs = {
   csrfToken?: string
   csrfCookie?: string
   origin?: string
+  sourceWrite?: SourceWriteAdmission
   services: ServiceArg[]
 }
 
@@ -99,20 +106,24 @@ const regenerateHandler = (regenerateDiscoveryManifest as unknown as {
     csrfToken?: string
     csrfCookie?: string
     origin?: string
+    sourceWrite?: SourceWriteAdmission
   }>
 })._handler
 
 describe('Convex Phase 1 runtime bridge', () => {
-  it('authenticates owner claims, persists source rows, and rejects missing CSRF plus duplicate slugs', async () => {
+  it('authenticates owner claims, persists source rows, and rejects forged static CSRF plus duplicate slugs', async () => {
     const db = new FakeDb()
 
-    const missingCsrf = await claimHandler(authCtx(db, sam()), claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-missing'))
+    const missingCsrf = await claimHandler(
+      authCtx(db, sam()),
+      claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-missing', { csrfToken: 'csrf-claim', csrfCookie: 'csrf-claim' })
+    )
     expect(missingCsrf).toMatchObject({ kind: 'error', code: 'claim_csrf_rejected' })
     expect(db.dump('owners')).toHaveLength(0)
 
     const created = await claimHandler(
       authCtx(db, sam()),
-      claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-created', { csrfToken: 'csrf-claim', csrfCookie: 'csrf-claim' })
+      withSourceWrite('owner_claim', claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-created'))
     )
     const claim = requireClaimOk(created)
     expect(claim.business).toMatchObject({ slug: 'sam-plumbing' })
@@ -123,10 +134,7 @@ describe('Convex Phase 1 runtime bridge', () => {
 
     const duplicateSlug = await claimHandler(
       authCtx(db, sam()),
-      claimArgs('Different Plumbing', 'sam-plumbing', 'claim-duplicate-slug', {
-        csrfToken: 'csrf-duplicate',
-        csrfCookie: 'csrf-duplicate',
-      })
+      withSourceWrite('owner_claim', claimArgs('Different Plumbing', 'sam-plumbing', 'claim-duplicate-slug'))
     )
     expect(duplicateSlug).toMatchObject({ kind: 'error', code: 'claim_slug_conflict' })
     expect(db.dump('businesses')).toHaveLength(1)
@@ -137,7 +145,7 @@ describe('Convex Phase 1 runtime bridge', () => {
     const created = requireClaimOk(
       await claimHandler(
         authCtx(db, sam()),
-        claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-created', { csrfToken: 'csrf-claim', csrfCookie: 'csrf-claim' })
+        withSourceWrite('owner_claim', claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-created'))
       )
     )
 
@@ -181,6 +189,7 @@ describe('Convex Phase 1 runtime bridge', () => {
       businessId: created.business.businessId,
       csrfToken: 'csrf-discovery',
       csrfCookie: 'csrf-discovery',
+      sourceWrite: sourceWriteAdmission('discovery_repair', 'discovery:regenerate:sam'),
     })
     expect(regenerated).toMatchObject({ kind: 'ok', code: 'discovery_manifest_generated' })
 
@@ -318,14 +327,14 @@ function claimArgs(name: string, slug: string, key: string, csrf: { csrfToken?: 
 }
 
 function publishArgs(claimId: string, key: string, services: ServiceArg[], csrf: string): PublishArgs {
-  return {
+  return withSourceWrite('catalog_publish', {
     claimId,
     operationKey: key,
     correlationId: `corr:${key}`,
     csrfToken: csrf,
     csrfCookie: csrf,
     services,
-  }
+  })
 }
 
 function validServices(): ServiceArg[] {
