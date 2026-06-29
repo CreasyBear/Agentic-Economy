@@ -54,6 +54,17 @@ export const AuditTargetTypeValues = [
   'billing',
   'billing_provider_event',
   'billing_reconciliation',
+  'business_action_card',
+  'business_action_mandate',
+  'business_action_request',
+  'business_action_checkpoint',
+  'business_action_guardrail_evidence',
+  'business_action_external_evidence',
+  'business_action_result_artifact',
+  'business_action_receipt',
+  'business_action_support',
+  'business_action_private_evidence',
+  'business_action_no_repair',
 ] as const
 export type AuditTargetType = (typeof AuditTargetTypeValues)[number]
 
@@ -159,6 +170,18 @@ export const AuditEventTypeValues = [
   'billing.reconciliation_failed',
   'billing.reconciliation_repaired',
   'billing.no_repair_marked',
+  'business_action.card_versioned',
+  'business_action.mandate_recorded',
+  'business_action.request_proposed',
+  'business_action.checkpoint_recorded',
+  'business_action.guardrail_allowed',
+  'business_action.guardrail_blocked',
+  'business_action.evidence_ingested',
+  'business_action.evidence_held',
+  'business_action.result_artifact_recorded',
+  'business_action.receipt_recorded',
+  'business_action.proof_gap_recorded',
+  'business_action.no_repair_marked',
 ] as const
 export type AuditEventType = (typeof AuditEventTypeValues)[number]
 
@@ -238,6 +261,14 @@ export const FunnelEventTypeValues = [
   'refund_or_dispute_recorded',
   'billing_reconciliation_failed',
   'billing_reconciliation_repaired',
+  'business_action_card_viewed',
+  'business_action_request_started',
+  'business_action_checkpoint_recorded',
+  'business_action_guardrail_allowed',
+  'business_action_guardrail_blocked',
+  'business_action_evidence_ingested',
+  'business_action_receipt_viewed',
+  'business_action_proof_gap_recorded',
 ] as const
 export type FunnelEventType = (typeof FunnelEventTypeValues)[number]
 
