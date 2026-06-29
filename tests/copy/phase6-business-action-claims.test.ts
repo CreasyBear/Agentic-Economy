@@ -83,6 +83,19 @@ describe('Phase 6 business-action copy guardrail', () => {
       ]),
     )
   })
+
+  it('requires closeout wording to keep provider smoke out of external-proof claims', () => {
+    const compliant = [
+      'source/local proof only',
+      'production proof not claimed',
+      'provider-smoke status is not external proof unless configured evidence passes',
+    ].join('\n')
+
+    expect(findPhase6CloseoutWordingGaps(compliant)).toEqual([])
+    expect(findPhase6CloseoutWordingGaps('source/local proof only\nproduction proof not claimed')).toContain(
+      'provider-smoke status is not external proof unless configured evidence passes',
+    )
+  })
 })
 
 function scanCopyFixture(relativeFile: string, copy: string) {

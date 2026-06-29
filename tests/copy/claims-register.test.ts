@@ -264,6 +264,18 @@ describe('claims register seed copy', () => {
     expect(gtm).not.toMatch(/Phase 1 is launch-ready/i)
   })
 
+  it('keeps the Phase 6 claim row source-owned and support-gated', () => {
+    const gtm = readFileSync('.planning/GTM-READINESS.md', 'utf8')
+
+    expect(gtm).toContain('p6_provision_paid_intake_endpoint_receipt_backed')
+    expect(gtm).toContain('receipt-backed')
+    expect(gtm).toContain('source readback permits')
+    expect(gtm).toContain('support/kill-rule')
+    expect(gtm).toContain('Planning/spike only')
+    expect(gtm).toContain('Hackathon/internal founder-assisted demo only')
+    expect(gtm).not.toMatch(/production autonomous business operations are live/i)
+  })
+
   it('treats optional product-marketing context as non-public draft until evidence exists', () => {
     if (!existsSync('.agents/product-marketing.md')) {
       return
