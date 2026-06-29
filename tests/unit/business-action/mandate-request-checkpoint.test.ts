@@ -179,6 +179,7 @@ function card(overrides: Partial<BusinessActionCard> = {}): BusinessActionCard {
     id: 'business_action_card:paid-intake' as BusinessActionCardId,
     actionSlug: BusinessActionSlug,
     version: 1,
+    ownerId,
     sourceHash: 'hash:card' as SourceHash,
     status: 'active',
     publicLabel: 'Provision paid intake endpoint',

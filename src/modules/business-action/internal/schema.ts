@@ -137,6 +137,7 @@ export type BusinessActionCard = {
   id: BusinessActionCardId | string
   actionSlug: BusinessActionSlug
   version: number
+  ownerId?: OwnerId
   sourceHash: SourceHash | string
   status: BusinessActionCardStatus
   publicLabel: string
@@ -174,6 +175,7 @@ export type CapabilityRequest = {
   mandateHash: SourceHash
   actionSlug: BusinessActionSlug
   businessId: BusinessId
+  ownerId?: OwnerId
   serviceId?: ServiceId
   amountCents?: number
   currency?: BusinessActionCurrency
@@ -214,6 +216,7 @@ export type GuardrailDecisionEvidence = {
   modelVersion: string
   decision: BusinessActionGuardrailDecision
   privateTraceRefHash: SourceHash
+  decisionHash: SourceHash
   payloadHash: SourceHash
   idempotencyKey: OperationKey
   correlationId: CorrelationId

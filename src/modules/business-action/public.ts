@@ -22,6 +22,13 @@ export {
   isBusinessActionGuardrailProvider,
   isBusinessActionSlug,
 } from './internal/schema'
+export {
+  createCapabilityRequest,
+  createEmptyBusinessActionSourceState,
+  isPostCheckpointExternalProvider,
+  recordAuthorizationCheckpoint,
+  recordGuardrailDecisionEvidence,
+} from './internal/business-action'
 export type {
   ActionReceipt,
   ActionReceiptOutcome,
@@ -55,3 +62,15 @@ export type {
   PublicActionReceiptReadback,
   ReceiptReconstructionStatus,
 } from './internal/schema'
+export type {
+  BusinessActionErrorCode,
+  BusinessActionErrorPayload,
+  BusinessActionOwnerAuthority,
+  BusinessActionSourceState,
+  CreateCapabilityRequestCommand,
+  CreateCapabilityRequestResult,
+  RecordAuthorizationCheckpointCommand,
+  RecordAuthorizationCheckpointResult,
+  RecordGuardrailDecisionEvidenceCommand,
+  RecordGuardrailDecisionEvidenceResult,
+} from './internal/business-action'
