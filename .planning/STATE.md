@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 06
 status: executing
-stopped_at: Phase 6 planning/spike authority opened after Phase 5 money-boundary hardening; Phase 2/3 deployed proof and Phase 5 provider smoke remain unclaimed evidence items
-last_updated: "2026-06-29T12:13:59.635Z"
+stopped_at: Completed 06-02-business-action-convex-source-PLAN.md
+last_updated: "2026-06-29T12:48:12.425Z"
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 31
-  completed_plans: 24
-  percent: 50
+  completed_plans: 25
+  percent: 81
 ---
 
 # State — Agentic Economy Fresh Repo
@@ -59,8 +59,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-29T12:13:59.629Z
-**Stopped at:** Phase 03 local/source verification passed 8/8 after route-parity gap closure; Phase 2 deploy/provider smokes and Phase 3 deployed proof remain unclaimed evidence items
+**Last session:** 2026-06-29T12:48:12.420Z
+**Stopped at:** Completed 06-02-business-action-convex-source-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -81,6 +81,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P14 | 19min | 3 tasks | 10 files |
 | Phase 01 P15 | 12min | 3 tasks | 5 files |
 | Phase 06 P01 | 19m 21s | 3 tasks | 10 files |
+| Phase 06 P02 | 26min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -138,6 +139,10 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 06]: BusinessActionSlug remains the single literal provision-paid-intake-endpoint with proposal-only, non-callable, non-payment public posture.
 - [Phase 06]: GuardrailDecisionEvidence is pre-checkpoint decision evidence and never creates downstream ExternalEvidenceEvent consequence.
 - [Phase 06]: Hermes evidence is admitted only after source-owned accepted owner checkpoint and is evidence only, not authority.
+- [Phase 06]: Use existing protected_action source-write admission scope for Phase 6 business-action writes — Adding a new business_action admission scope would touch files outside 06-02, while the adapter still enforces business-action-specific source/local policy.
+- [Phase 06]: Private evidence exports are redacted hash-only with raw-ref tombstones — Public readbacks and owner/admin exports must not leak raw traces, prompts, provider payloads, private endpoint refs, keys, or webhook secrets.
+- [Phase 06]: source/local proof only; production proof not claimed — Phase 6 Plan 06-02 persists local/source evidence and explicitly excludes external provider or production proof.
+- [Phase 06]: Business-action Convex adapters remain thin public-seam delegates — Validators, source-write admission, authority derivation, persistence, and redacted returns belong in Convex; domain rules remain in src/modules/business-action/public.ts.
 
 ### Blockers
 
