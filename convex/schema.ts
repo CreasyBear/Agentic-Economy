@@ -1,5 +1,6 @@
 import { defineSchema } from 'convex/server'
 
+import { businessActionTables } from './businessActionStore'
 import { businessTables } from '../src/modules/business/internal/schema'
 import { billingTables } from '../src/modules/billing/internal/schema'
 import { catalogTables } from '../src/modules/catalog/internal/schema'
@@ -13,6 +14,7 @@ import { securityTables } from '../src/modules/security/internal/schema'
 
 export default defineSchema({
   ...billingTables,
+  ...businessActionTables,
   ...businessTables,
   ...catalogTables,
   ...registryTables,
