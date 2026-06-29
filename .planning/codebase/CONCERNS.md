@@ -2,197 +2,217 @@
 
 **Analysis Date:** 2026-06-29
 
+## Phase 4 / Phase 5 Readiness Boundary
+
+**Phase 4 local/source proof is closed:**
+- Evidence: `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md` records `status: passed`, `score: "8/8 must-haves verified"`, and `deployed_proof: not_claimed`.
+- Files: `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md`, `convex/protectedActions.ts`, `tests/unit/convex/protected-actions-runtime.test.ts`, `tests/integration/protected-action-route-readbacks.test.ts`, `tests/e2e/protected-action-owner-flow.spec.ts`
+- Boundary: Phase 4 proves selected `contact-follow-up` proposal, owner decision, gateway, attempt, receipt/proof-gap/no-repair/retry reconstruction, copy scans, and local/source tests. It does not prove deployed owner/provider behavior.
+- Phase 5 implication: Planners may rely on P4 source-owned authority and reconstruction patterns, but must not claim deployed protected-action proof or provider proof from P4.
+
+**Phase 5 money rail proof is not closed:**
+- Evidence: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md` has `status: blocked_on_p1_p4_authority_and_money_decision_record`; `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` is absent; `src/future-phases/05-paid-activation-money-rails/routes/*` uses `createParkedFileRoute`.
+- Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`, `.planning/phases/05-paid-activation-money-rails/05-CONTEXT.md`, `.planning/phases/05-paid-activation-money-rails/05-UI-SPEC.md`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`
+- Boundary: The repo has partial local billing scaffolding, schema, pure module tests, and parked UI helpers. It does not have an accepted money decision record, active billing routes, Convex billing functions, real Autumn webhook verification, Stripe PSP evidence ingest, or deployed provider smoke.
+- Phase 5 implication: The next money-rail phase must treat all paid activation as not live until source-owned provider readback, receipt, reversal/dispute, reconciliation, and deployed smoke evidence exist.
+
 ## Tech Debt
 
-**Protected-action runtime standards drift:**
-- Issue: `npm run test:ts-standards` fails because `convex/protectedActions.ts:231` uses `v.any()` for `redactedPayload`, which violates the project guardrail in `.planning/ENGINEERING-STANDARDS.md` and the Convex skill constraints in `.codex/skills/convex-best-practices/SKILL.md`.
-- Files: `convex/protectedActions.ts`, `tests/imports/ts-standards.test.ts`, `src/lib/ui/contract-scans.ts`, `.planning/ENGINEERING-STANDARDS.md`
-- Impact: `npm run test:all` is blocked even though `npm run typecheck` passes, and the protected-action audit payload accepts untyped runtime data at a security-sensitive boundary.
-- Fix approach: Replace `v.any()` with an explicit redacted payload validator, add a type/contract test for the redaction shape, then rerun `npm run test:ts-standards`.
+**Phase 5 implementation has source modules without an active Convex billing adapter:**
+- Issue: `convex/schema.ts` includes `billingTables`, and `src/modules/billing/public.ts` exposes the intended route-facing API, but there is no active `convex/billing.ts` or server-function adapter that persists `startPaidActivation`, `ingestBillingProviderEvent`, receipts, or reconciliation rows into Convex.
+- Files: `convex/schema.ts`, `src/modules/billing/public.ts`, `src/modules/billing/internal/operations.ts`, `src/modules/billing/internal/schema.ts`, `tests/unit/billing/rail.test.ts`, `tests/unit/schema/convex-schema.test.ts`
+- Impact: Pure-module tests prove contract behavior, but deployed source state cannot yet create or reconstruct money-rail operations through the live Convex API.
+- Fix approach: Add `convex/billing.ts` with indexed operation-scoped loaders/persist adapters, route all owner/admin/server calls through `src/modules/billing/public.ts`, and add runtime tests equivalent to `tests/unit/convex/protected-actions-runtime.test.ts`.
 
-**Source-state snapshot adapters:**
-- Issue: Runtime paths hydrate whole source domains into in-memory aggregate state before applying a small operation. `convex/source_state.ts` loads Phase 1 tables in bulk, and `convex/protectedActions.ts` loads all protected-action tables plus `auditEvents` for each queue/detail/decision operation.
-- Files: `convex/source_state.ts`, `convex/protectedActions.ts`, `convex/business.ts`, `convex/security.ts`, `convex/observability.ts`
-- Impact: Small mutations depend on broad table scans, large object mapping, and generic upsert loops. This makes correctness easier to reuse from pure modules but raises transaction size, latency, and write-conflict risk.
-- Fix approach: Keep pure-domain reducers, but move Convex adapters to indexed, operation-scoped reads and writes. Load only rows for the actor, business, proposal, operation key, or correlation ID required by the command.
+**Money decision record is missing while billing scaffolding exists:**
+- Issue: Phase 5 planning requires `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` before runtime changes, but that file is absent while `.env.example`, `convex/schema.ts`, `src/modules/billing/*`, and parked route files already contain Autumn/Stripe scaffolding.
+- Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`, `.env.example`, `src/modules/billing/internal/schema.ts`, `src/lib/server/billing-provider.ts`
+- Impact: Provider ownership, offer/free boundary, AUD/GST/tax/legal/refund/dispute posture, credential rotation, support/rollback, public claims, and rejected rails are not accepted as the product authority.
+- Fix approach: Create `05-MONEY-RAIL-DECISION.md` with the headings and content required by `05-01-autumn-stripe-paid-activation-PLAN.md` before expanding live billing behavior.
 
-**Large runtime modules concentrate too many responsibilities:**
-- Issue: Several files exceed 1,000 lines and mix validators, DTO conversion, authorization, persistence, state reconstruction, and error mapping.
-- Files: `convex/inquiries.ts`, `src/modules/discovery/public.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `src/modules/inquiries/internal/commands.ts`, `convex/protectedActions.ts`, `convex/discovery.ts`, `convex/notificationOutbox.ts`
-- Impact: Changes require broad file reads, edge cases are easy to miss, and targeted tests must understand internal helper ordering.
-- Fix approach: Split by stable ownership seams: Convex validators, persistence adapters, domain reducers, DTO projection, and route/server result mapping. Preserve public exports from `src/modules/*/public.ts`.
+**Billing pure-state and Convex table shapes are not fully aligned:**
+- Issue: `src/modules/billing/internal/schema.ts` Convex tables require append-only receipt fields such as `providerEvidenceRefs`, `paidStateTransition`, `refundReversalDisputeRefs`, and `correlationId`, while `BillingReceipt` and `createReceipt` in `src/modules/billing/internal/operations.ts` do not model those fields.
+- Files: `src/modules/billing/internal/schema.ts`, `src/modules/billing/internal/operations.ts`, `tests/unit/billing/rail.test.ts`, `tests/unit/schema/convex-schema.test.ts`
+- Impact: The pure module can pass while the eventual Convex adapter lacks enough source-owned receipt lineage to satisfy P5 append-only receipt and reversal/dispute acceptance.
+- Fix approach: Align `BillingReceipt` with `billingReceipts` before building `convex/billing.ts`, and add tests proving paid, refund, dispute, chargeback, and cancellation receipts retain operation, evidence, transition, and correlation refs.
 
-**Planning evidence drift around Phase 4:**
-- Issue: `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md` records gaps for missing protected-action Convex runtime, while the current worktree contains protected-action runtime functions and server-backed routes. The verification artifact is no longer a reliable current-state source.
-- Files: `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md`, `convex/protectedActions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, `src/routes/owner.actions.$proposalId.tsx`, `src/routes/admin.protected-actions.tsx`
-- Impact: Planners can route work from obsolete evidence and miss the current blockers: standards failure, runtime test gaps, and synthetic receipt/provider-boundary concerns.
-- Fix approach: Regenerate Phase 4 verification after standards and runtime tests are green, and mark stale verification sections as superseded only through the phase workflow.
+**P5 support record schema still names the P2 capability:**
+- Issue: `capabilityLaunchSupportRecords` in `src/modules/billing/internal/schema.ts` has `capability: v.optional(v.literal('human_inquiry_owner_inbox'))`, which does not represent paid activation as the Phase 5 capability.
+- Files: `src/modules/billing/internal/schema.ts`, `src/modules/inquiries/internal/schema.ts`, `convex/inquiries.ts`, `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`
+- Impact: Billing support/readiness rows can be structurally biased toward the Phase 2 inquiry capability and fail to encode paid-activation-specific support ownership, kill rules, and launch stage.
+- Fix approach: Introduce an explicit paid-activation capability literal or a shared validated capability union before using this table for P5 support and claim-disable evidence.
 
 ## Known Bugs
 
-**Privacy removal can target the default business for an unknown slug:**
-- Symptoms: `src/routes/privacy.remove-business.tsx` resolves `data.slug` with `getPublicOwnerStatusReadbackBySlug(data.slug) ?? getDefaultPublicOwnerStatusReadback()`, then sends the default catalog `businessId` to `convex/security.ts`.
-- Files: `src/routes/privacy.remove-business.tsx`, `src/modules/catalog/internal/owner-public-flow.ts`, `src/modules/catalog/public.ts`, `convex/security.ts`
-- Trigger: Submit `/privacy/remove-business` with a slug that is not present in the local in-memory public owner state.
-- Workaround: None in the route. The mutation may fail later, but the target resolution already selected a fallback business.
-- Fix approach: Resolve the submitted slug through the durable public catalog query used by `src/modules/catalog/owner-claim.functions.ts`, return a typed not-found result for unknown/non-public slugs, and never fall back to `getDefaultPublicOwnerStatusReadback()` for removal requests.
+**Autumn webhook route always rejects provider callbacks:**
+- Symptoms: `verifyAutumnWebhook` throws `BillingProviderError('unverified_webhook', ...)` for every input, and the parked webhook route returns a typed 401 error.
+- Files: `src/lib/server/billing-provider.ts`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`, `tests/unit/server/server-seams.test.ts`
+- Trigger: POST any Autumn callback to the parked `/api/billing/webhook` handler.
+- Workaround: None for live provider ingest; the fail-closed behavior is correct until real signature verification exists.
+- Fix approach: Implement current official Autumn raw-body signature verification, keep raw bytes before JSON parsing, bind events to existing operations, and test missing/malformed/stale/invalid/valid signature paths.
 
-**Owner status can show default public catalog data for unknown slugs:**
-- Symptoms: `readOwnerStatusThroughSource` falls back to `getDefaultPublicOwnerStatusReadback()` when a slug-specific readback is missing or source access fails.
-- Files: `src/modules/catalog/owner-claim.functions.ts`, `src/modules/catalog/internal/owner-public-flow.ts`, `src/modules/catalog/public.ts`
-- Trigger: Request owner/public status for an unknown slug or during source unavailability.
-- Workaround: None. Callers receive a valid-looking default readback.
-- Fix approach: Return a typed unavailable/not-found result, and let route components render an explicit unavailable state rather than substituting default catalog data.
+**Parked billing routes are not active product routes:**
+- Symptoms: Billing UI and webhook files live under `src/future-phases/05-paid-activation-money-rails/routes/` and use `createParkedFileRoute`; `src/routes` and `src/routeTree.gen.ts` do not contain active `/owner/billing` or `/api/billing/webhook` routes.
+- Files: `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.activate.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`, `src/future-phases/route-helpers.ts`, `src/routeTree.gen.ts`
+- Trigger: Attempt to reach Phase 5 billing routes through the active TanStack route tree.
+- Workaround: Tests import helper functions directly from parked route modules.
+- Fix approach: Mount routes only after the money decision record and server/Convex source adapter exist, then add browser and server-backed route tests.
 
-**Owner queue approve/reject controls are no-op buttons:**
-- Symptoms: The queue card in `src/routes/owner.actions.tsx` renders `Approve contact follow-up` and `Reject contact follow-up` buttons without handlers or form actions. The detail route has functional `useServerFn` handlers, but the queue buttons do not navigate or mutate.
-- Files: `src/routes/owner.actions.tsx`, `src/routes/owner.actions.$proposalId.tsx`, `src/modules/protected-action/contact-follow-up.functions.ts`
-- Trigger: Open `/owner/actions` with a populated queue and click approve or reject on a card.
-- Workaround: Use the `Review detail` link, then approve or reject from `/owner/actions/$proposalId`.
-- Fix approach: Convert queue approve/reject controls into links to the detail route or wire them to the same server functions with confirmation, validation, and focus recovery.
-
-**Admin detail can fabricate a missing reconstruction row:**
-- Symptoms: `adminProtectedActionDetailServerToRouteReadback` returns a synthetic `contact-follow-up:missing-admin-route` reconstruction when the server result is allowed but contains no rows.
-- Files: `src/routes/admin.protected-actions.$proposalId.tsx`, `src/modules/protected-action/contact-follow-up.functions.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`
-- Trigger: Request `/admin/protected-actions/$proposalId` for an allowed admin query that returns no matching row.
-- Workaround: The page displays a reconstruction-shaped object rather than a distinct not-found state.
-- Fix approach: Return a typed not-found/error branch from the route adapter when `result.rows[0]` is absent, and avoid constructing placeholder domain state in mounted routes.
+**Billing return paths are not aligned with parked route paths:**
+- Symptoms: `startPaidActivation` writes `returnPath: /owner/billing/return/<operationId>` and `cancelPath: /owner/billing/cancel/<operationId>`, while parked route handles are `/owner/billing/return` and `/owner/billing/cancel`.
+- Files: `src/modules/billing/internal/operations.ts`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.return.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.cancel.tsx`, `tests/unit/billing/owner-routes.test.ts`
+- Trigger: A real provider redirect uses the operation-specific return/cancel path from the operation state.
+- Workaround: None in active routes because the routes are parked.
+- Fix approach: Decide whether operation IDs are path params or search params, align route definitions with source-controlled return/cancel keys, and test return/cancel against mounted routes.
 
 ## Security Considerations
 
-**CSRF checks trust user-supplied Convex args:**
-- Risk: `assertCsrf` accepts any non-empty equal `csrfToken`/`csrfCookie` pair or an allowed `origin`, but those values are passed as Convex function arguments. Several server seams synthesize fixed token/cookie pairs instead of validating request headers and cookies at the boundary.
-- Files: `src/modules/security/internal/duplicates.ts`, `convex/inquiries.ts`, `convex/security.ts`, `convex/protectedActions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, `src/routes/privacy.remove-business.tsx`, `tests/unit/security/csrf-rate-limit.test.ts`
-- Current mitigation: `src/start.ts` installs TanStack `createCsrfMiddleware` for `serverFn` handlers, and protected owner/admin mutations also rely on Clerk/Convex identity where applicable.
-- Recommendations: Keep TanStack CSRF for server functions, but do not treat browser-provided Convex args as CSRF proof for public Convex mutations. Route public writes through server functions that read same-site request evidence, or add a verifiable nonce/session binding that direct Convex callers cannot mint.
+**Provider signature trust is a caller-supplied boolean inside the pure module:**
+- Risk: `ingestBillingProviderEvent` trusts `command.signatureVerified` and can move a bound operation to `paid_active` when that boolean is true. The server boundary correctly has no verifier yet, but the module itself does not prove the signature.
+- Files: `src/modules/billing/internal/operations.ts`, `src/lib/server/billing-provider.ts`, `tests/unit/billing/rail.test.ts`, `tests/unit/server/server-seams.test.ts`
+- Current mitigation: `verifyAutumnWebhook` refuses all callbacks; tests prove unsigned events are rejected by the pure module and unverified callbacks receive 401.
+- Recommendations: Keep signature verification at the raw request boundary, make the verified webhook type unforgeable by app code, and ensure provider ingest accepts only verified/bound normalized events from the server adapter.
 
-**Admin routes lack route-level `beforeLoad` guards:**
-- Risk: Admin pages rely on loader/server/Convex denial readbacks, but the route definitions do not use TanStack `beforeLoad` UX guards. The Clerk skill in `.codex/skills/clerk-tanstack-patterns/SKILL.md` expects route guards plus server-side auth for protected pages.
-- Files: `src/routes/admin.claims.tsx`, `src/routes/admin.audit-events.tsx`, `src/routes/admin.index-health.tsx`, `src/routes/admin.inquiries.tsx`, `src/routes/admin.protected-actions.tsx`, `src/routes/admin.protected-actions.$proposalId.tsx`, `src/start.ts`
-- Current mitigation: Admin loaders call authenticated source/server functions and render denied readbacks when membership checks fail.
-- Recommendations: Add shared admin `beforeLoad` guards for UX and navigation clarity, while keeping source-owned membership checks in Convex/server functions as the authorization authority.
+**Owner-private billing projection exposes provider URLs and refs before active auth wiring exists:**
+- Risk: `readOwnerBillingProjection` can return `checkoutUrl`, `portalUrl`, `invoiceUrl`, and provider-safe refs from in-memory state; parked route helpers render those without a live server-authenticated owner boundary.
+- Files: `src/modules/billing/internal/projections.ts`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.tsx`, `tests/unit/billing/owner-routes.test.ts`
+- Current mitigation: Files are parked under `src/future-phases/` and are not registered in `src/routes`.
+- Recommendations: When mounting Phase 5 routes, source owner authority from Clerk/Convex/server functions, never browser state, and prove wrong-owner/admin/operator denial for checkout, portal, receipts, and redirects.
 
-**Local E2E bypass is exposed through a public `VITE_` flag:**
-- Risk: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true` disables Clerk middleware and `ClerkProvider`, and several server seams use deterministic local fixtures when the flag is set. The protected-action server seam also falls back to local fixtures in non-production when Convex URLs are missing.
-- Files: `src/start.ts`, `src/routes/__root.tsx`, `src/modules/protected-action/contact-follow-up.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/routes/privacy.remove-business.tsx`, `src/routes/api.businesses.ts`, `src/routes/owner.inquiries.$threadId.tsx`
-- Current mitigation: Existing planning docs describe the flag as command-scoped for local Playwright, and `src/modules/protected-action/contact-follow-up.functions.ts` gates automatic fixture fallback on `NODE_ENV !== 'production'`.
-- Recommendations: Replace the browser-exposed `VITE_` bypass with a server-only flag for server behavior, assert that bypass flags are impossible in production/deployed hosts, and make missing Convex configuration fail closed outside explicit test commands.
+**Public paid activation projection can expose offers from source state without claim-evidence gating:**
+- Risk: `readPublicPaidActivationProjection` returns active offer name, description, CTA, price summary, and terms whenever an active offer exists and `paidActivationEnabled` is true; P5 requires public claims only after route/readback/provider smoke evidence.
+- Files: `src/modules/billing/internal/projections.ts`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`, `.planning/GTM-READINESS.md`, `tests/copy/claims-register.test.ts`
+- Current mitigation: Public routes do not import the billing projection, and copy scans reject unsupported public paid claims.
+- Recommendations: Add a claim-evidence/support/kill-rule gate to public paid activation projection before any catalog, registry, discovery, SEO, UCP, llms, or API surface consumes it.
 
-**Local auth state is ignored only by local Git exclude:**
-- Risk: `.auth/admin.json` and `.auth/owner.json` exist and are ignored by `.git/info/exclude`, not by committed `.gitignore`. Another checkout or CI environment can accidentally make `.auth/` visible to Git.
-- Files: `.auth/admin.json`, `.auth/owner.json`, `.gitignore`, `.git/info/exclude`, `.clerk/.tmp/keyless.json`, `.env.local`, `.env.example`
-- Current mitigation: `.clerk/` and `.env.*` are ignored by `.gitignore`, and `.env.example` is explicitly allowed. No secret values were read for this audit.
-- Recommendations: Add `.auth/` to `.gitignore`, keep storage-state files outside the repo where possible, and review `.env.example` manually for placeholder-only values before commits.
+**Provider secrets are placeholders only, not readiness proof:**
+- Risk: `.env.example` contains `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`; these names can be mistaken for a ready provider configuration.
+- Files: `.env.example`, `src/lib/server/billing-provider.ts`, `tests/unit/billing/rail.test.ts`, `.planning/SECURITY-SPEC.md`
+- Current mitigation: `.env.example` states provider readiness is proven by source-owned readback rows, and `recordBillingEvidence` rejects `evidenceSource: 'env'` for ready status.
+- Recommendations: Preserve the env-not-proof invariant in implementation closeout and provider smoke evidence; never use secret presence, dashboard status, return URL arrival, or webhook arrival alone as paid-state proof.
 
 ## Performance Bottlenecks
 
-**Public registry queries perform collect-plus-N+1 projection:**
-- Problem: `listPublicBusinessCatalog`, `searchPublicBusinessCatalog`, and `getPublicBusinessCatalogBySlug` call `readPublicCatalogs`, which collects all published businesses, then queries suppression, context, services, and capabilities per business before filtering/searching in memory.
-- Files: `convex/registry.ts`, `src/modules/registry/internal/search.ts`, `convex/discovery.ts`
-- Cause: The current implementation favors a simple projection builder over paginated/indexed query plans.
-- Improvement path: Use slug-specific indexes for detail reads, indexed search/projection rows for list/search, and precomputed public catalog projection tables for discovery and registry responses.
+**Registry public reads still collect and project per business:**
+- Problem: `readPublicCatalogs` collects published businesses, checks suppression, then builds each catalog with per-business context, service, capability, index, and discovery queries.
+- Files: `convex/registry.ts`, `src/modules/registry/internal/search.ts`, `tests/integration/registry-api.test.ts`
+- Cause: The registry favors dynamic projection over precomputed public catalog read models.
+- Improvement path: Build indexed public projection rows for list/search/detail, and keep P5 paid-state facts out of these projections until the money decision and claim-evidence gates approve them.
 
-**Protected-action reads and writes scan complete protected-action state:**
-- Problem: `loadContactFollowUpSourceState` collects every protected-action table plus `auditEvents`; `persistContactFollowUpSourceState` loops over aggregate arrays and calls generic `upsertByFields`.
-- Files: `convex/protectedActions.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `src/modules/protected-action/internal/schema.ts`
-- Cause: The durable adapter mirrors the pure in-memory source-state shape instead of executing operation-scoped indexed reads and writes.
-- Improvement path: Add proposal/owner/business/correlation indexes where needed, load only rows for the requested proposal or current owner, and persist only changed rows returned by the domain command.
-
-**Phase 1 shared source loader is a broad transaction hotspot:**
-- Problem: `loadPhaseOneSourceState` collects more than twenty tables for operations that often need a narrow subset.
+**Phase 1 source loader remains broad for shared operations:**
+- Problem: `loadPhaseOneSourceState` collects more than twenty tables, and `persistPhaseOneSourceState` uses generic upsert loops that collect existing rows per table while persisting.
 - Files: `convex/source_state.ts`, `convex/business.ts`, `convex/security.ts`, `convex/observability.ts`
-- Cause: Business, catalog, registry, discovery, security, and observability state share one aggregate loader.
-- Improvement path: Split loaders by operation family and keep a compatibility adapter only for tests that need the full aggregate.
+- Cause: Shared source reducers use aggregate snapshots for many domains.
+- Improvement path: Keep aggregate helpers for tests, but use operation-scoped indexed adapters for new Phase 5 money writes so billing does not inherit the broad Phase 1 transaction pattern.
+
+**Phase 5 billing must not copy old aggregate persistence patterns:**
+- Problem: The billing module currently has pure source state but no Convex persistence layer. A naive adapter that loads all `billingOperations`, `billingProviderEvents`, `billingReceipts`, and `billingReconciliations` per webhook will become a money-rail hotspot.
+- Files: `src/modules/billing/internal/operations.ts`, `src/modules/billing/internal/schema.ts`, `convex/schema.ts`
+- Cause: The implementation seam is ready for adapters, but adapter shape is still open.
+- Improvement path: Query billing by `operationId`, `idempotencyKey`, `provider/providerEventId`, `businessId/status`, and receipt indexes; persist only changed rows for the current operation/event.
 
 ## Fragile Areas
 
-**Protected-action approval records a synthetic receipt immediately:**
-- Files: `convex/protectedActions.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`
-- Why fragile: `approveCurrentOwnerContactFollowUp` calls the attempt path with a generated `source-receipt:<proposalId>` readback. This proves a source-owned placeholder but not an independently observed provider/internal boundary.
-- Safe modification: Keep owner decision, gateway consumption, provider/internal attempt, and receipt recording as separate observable steps unless the selected action is explicitly defined as an internal outbox write. Persist a distinct proof-gap state when the downstream boundary is unavailable.
-- Test coverage: Add runtime tests around approval-without-provider, proof-gap, failed downstream, retry, retry-exhausted, and no-repair paths in `tests/unit/convex/protected-actions-runtime.test.ts`.
+**Phase 5 provider HTTP contract lacks provider smoke proof:**
+- Files: `src/modules/billing/internal/provider-readback.ts`, `src/lib/server/billing-provider.ts`, `tests/unit/billing/rail.test.ts`, `tests/unit/server/server-seams.test.ts`
+- Why fragile: `createAutumnHttpProvider` normalizes expected Autumn responses and calls Autumn endpoints, but no test exercises a sandbox Autumn account, real checkout, customer portal, customer readback, or Stripe PSP evidence under Autumn.
+- Safe modification: Treat `AutumnProvider` as an adapter boundary, add contract tests with recorded redacted fixtures, and require sandbox/deployed smoke before public claims.
+- Test coverage: Pure deterministic provider tests exist in `tests/unit/billing/rail.test.ts`; provider integration and deploy smoke tests are absent.
 
-**Server seams mix production source calls and local deterministic fixtures:**
-- Files: `src/modules/protected-action/contact-follow-up.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/routes/privacy.remove-business.tsx`
-- Why fragile: Missing configuration or bypass flags can silently switch behavior from Convex-backed data to deterministic local state, making browser tests pass while deploy/source behavior is unavailable.
-- Safe modification: Make fixture mode explicit per test command, expose fixture state in test names/assertions, and return typed source-unavailable results when production-like configuration is missing.
-- Test coverage: Add server seam tests proving fixture mode is impossible when `NODE_ENV=production` and proving missing Convex config does not produce public success readbacks.
+**Billing reconciliation status coverage is narrower than the Phase 5 plan:**
+- Files: `src/modules/billing/internal/schema.ts`, `src/modules/billing/internal/operations.ts`, `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`
+- Why fragile: Plan acceptance requires stale, missing, duplicate, disputed, mismatched, unbound, provider-unavailable, retry-exhausted, and no-repair readbacks. Current `BillingReconciliationStatusValues` covers only `matched`, `missing`, `mismatched`, `provider_unavailable`, `retry_available`, `retry_exhausted`, and `no_repair`.
+- Safe modification: Expand the reconciliation model before building operator UI, and map each state to owner/operator next actions, evidence refs, retry/no-repair controls, and redacted payload display.
+- Test coverage: `tests/unit/billing/rail.test.ts` does not yet cover duplicate, disputed, unbound, stale, retry-after, concurrent retry, or no-repair reconciliation matrices.
 
-**Direct route helper exports can diverge from mounted route behavior:**
-- Files: `src/routes/owner.actions.tsx`, `src/routes/owner.actions.$proposalId.tsx`, `src/routes/owner.actions.$proposalId.receipt.tsx`, `src/routes/admin.protected-actions.tsx`, `src/routes/admin.protected-actions.$proposalId.tsx`, `tests/integration/protected-action-route-readbacks.test.ts`
-- Why fragile: Integration tests call pure helper functions with injected in-memory state, while mounted routes call server functions and Convex source functions. A helper can pass while route loaders, auth, CSRF, or source mappings are broken.
-- Safe modification: Keep helper tests for presentation mapping, but add server-backed route adapter tests and browser tests for the mounted paths.
-- Test coverage: `tests/integration/protected-action-route-readbacks.test.ts` covers injected source state, not the mounted server/Convex read path.
+**Phase 4 source-owned receipt patterns must not be treated as money receipts:**
+- Files: `convex/protectedActions.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `tests/unit/convex/protected-actions-runtime.test.ts`, `src/modules/billing/internal/operations.ts`
+- Why fragile: P4 records `source-receipt:<proposalId>` for a source-owned contact-follow-up outbox boundary, while P5 receipts require provider evidence, payment/refund/dispute lineage, and financial/legal retention.
+- Safe modification: Reuse P4 gateway/reconstruction discipline, but create separate P5 billing receipt evidence with Autumn/Stripe refs, payload hash, signature status, provider readback, and reconciliation state.
+- Test coverage: P4 local/source tests are strong; P5 money receipt tests only cover pure in-memory signed event handling with deterministic data.
 
 ## Scaling Limits
 
-**Current capacity depends on seed/smoke-scale tables:**
-- Current capacity: The registry and source-state adapters are acceptable for small local seed data and smoke fixtures.
-- Limit: Full-table `collect()` calls in `convex/source_state.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/inquiries.ts`, and `convex/protectedActions.ts` degrade as rows grow and can exceed Convex transaction/read limits.
-- Scaling path: Build source-owned projection tables, query by indexed owner/business/proposal keys, and avoid reconstructing complete domain aggregates for list/detail views.
+**Billing tables have indexes for the first pass, but provider-event binding needs complete query coverage:**
+- Current capacity: `billingOperations` has `by_idempotencyKey` and `by_operationId`; `billingProviderEvents` has `by_provider_event` and `by_operation`; `billingReceipts` has `by_operation` and `by_business_recordedAt`.
+- Files: `src/modules/billing/internal/schema.ts`, `tests/unit/schema/convex-schema.test.ts`
+- Limit: P5 plan also needs logical provider object dedupe, unbound-event queues, business/status reconciliation queues, support kill rules, and provider-unavailable scans.
+- Scaling path: Add indexes for logical provider object key, provider event status, business/status, support capability/status, and reconciliation status before live webhook volume exists.
 
-**Audit-event reuse can create noisy scans:**
-- Current capacity: `auditEvents` is collected into multiple aggregate loaders and protected-action reconstructions.
-- Limit: Audit volume grows faster than business/proposal volume, so broad audit scans become a dominant read cost and can slow admin pages.
-- Scaling path: Store event family/target indexes and query `auditEvents` by proposal, business, operation, or actor in `convex/protectedActions.ts` and `convex/source_state.ts`.
+**Public registry/search cannot absorb paid-state joins at runtime:**
+- Current capacity: Public registry routes support small seed/smoke catalogs through dynamic projections.
+- Files: `convex/registry.ts`, `src/modules/billing/internal/projections.ts`, `src/modules/catalog/public.ts`, `src/modules/discovery/public.ts`
+- Limit: Joining billing status into public catalog/discovery at request time risks slow public surfaces and accidental owner-private provider leaks.
+- Scaling path: Publish only explicitly approved public paid-state facts into a redacted projection after P5 smoke evidence, and keep owner/admin billing details in private projections.
 
 ## Dependencies at Risk
 
-**Nitro nightly dependency with caret range:**
-- Risk: `package.json` uses `nitro` as `npm:nitro-nightly@^3.0.1-20260628-090458-3df69609`. A nightly plus caret range can change behavior across installs.
-- Impact: Build/runtime behavior for TanStack Start/Vite deployment can shift without a source change, making deploy failures hard to reproduce.
-- Migration plan: Pin an exact nightly while needed, document why it is required, and move to a stable Nitro release when the upstream TanStack Start/Vite path supports it.
+**Autumn API and webhook contracts are unverified in source:**
+- Risk: `src/modules/billing/internal/provider-readback.ts` implements an HTTP adapter, but webhook verification is intentionally missing and no provider smoke validates endpoint paths, response shapes, API version, or signature semantics.
+- Impact: Phase 5 cannot claim live paid activation, customer portal, receipts, provider readback, or reconciliation until the adapter is proven against the selected Autumn environment.
+- Migration plan: After the money decision record, verify current official Autumn and Stripe docs, implement raw-body verification, add redacted provider fixtures, and run sandbox/deployed smoke with stable provider refs and payload hashes.
+
+**Direct Stripe fallback remains quarantined:**
+- Risk: Phase 5 allows direct Stripe subscription authority only after an evidence-backed Autumn blocker record, but `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` placeholders can invite premature direct Stripe work.
+- Impact: Direct Stripe subscription logic can violate the selected Autumn Cloud + Stripe PSP responsibility split and create unsupported public/payment claims.
+- Migration plan: Keep Stripe code as PSP evidence under Autumn only; require an Autumn blocker record before any direct Stripe subscription authority is introduced.
 
 ## Missing Critical Features
 
-**Phase 2 deployed support/provider proof is still blocked:**
-- Problem: Deployed support/provider smokes cannot close because required smoke inputs and deployed source/provider setup are missing or unverified.
-- Files: `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`, `.planning/phases/02-human-inquiry-owner-inbox/02-VERIFICATION.md`, `tests/deploy-smoke/phase2-support-record-smoke.spec.ts`, `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts`, `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts`
-- Blocks: Final Phase 2 closeout, provider dispatch proof, and claims that deployed inquiry support is ready.
-- Fix approach: Configure only the required env var names in approved secret storage, prove deployed source state has a published eligible service and support row, create source-owned dispatch IDs, then run `npm run test:phase2-support-smoke`, `npm run test:provider-smoke:resend`, and `npm run test:provider-smoke:novu`.
+**Phase 5 money decision record is a hard blocker:**
+- Problem: The required `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md` does not exist.
+- Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `.planning/phases/05-paid-activation-money-rails/05-CONTEXT.md`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`
+- Blocks: Runtime expansion, public claims, provider credential ownership, support/rollback posture, legal/tax/refund/dispute posture, and direct-Stripe fallback decisions.
+- Fix approach: Complete P5-T01 before money runtime work; then reconcile existing billing scaffolding against the decision record.
 
-**Phase 4 deployed protected-action proof is absent:**
-- Problem: Source code has selected-action routes and runtime functions, but current evidence does not prove a deployed proposal, owner decision, gateway, attempt, receipt/proof-gap, and admin reconstruction chain.
-- Files: `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md`, `.planning/phases/04-owner-pending-protected-actions/04-02-owner-approved-protected-action-durable-runtime-gaps-PLAN.md`, `convex/protectedActions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, `tests/e2e/protected-action-owner-flow.spec.ts`
-- Blocks: Public/deployed claims for owner-approved protected actions.
-- Fix approach: First restore local standards/tests, then capture non-secret deployed evidence for a real contact-follow-up proposal through owner approval/rejection and admin reconstruction.
+**Active owner billing and provider routes are missing:**
+- Problem: Owner activation, redirect, return, cancel, Billing Center, receipt, admin monetization, and provider webhook routes are parked future files, not mounted `src/routes` entries.
+- Files: `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.activate.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.return.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.cancel.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.receipts.$receiptId.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`, `src/routes`, `src/routeTree.gen.ts`
+- Blocks: Browser proof, owner payment start, return/cancel readback, receipt viewing, webhook delivery, and provider smoke.
+- Fix approach: Mount routes after source adapters exist, use server functions for owner/admin actions, and add E2E/a11y tests for 375px and wide states required by `05-UI-SPEC.md`.
 
-**Request-bound CSRF for direct public Convex calls is missing:**
-- Problem: Public mutations accept CSRF-like fields as args rather than deriving them from a trusted request boundary.
-- Files: `convex/inquiries.ts`, `convex/security.ts`, `convex/discovery.ts`, `convex/notificationOutbox.ts`, `convex/catalog.ts`, `convex/protectedActions.ts`, `src/modules/security/internal/duplicates.ts`
-- Blocks: Strong same-site assurance for direct Convex clients.
-- Fix approach: Funnel public writes through server functions with TanStack CSRF/request inspection or bind Convex mutations to server-issued nonce/session state.
+**Provider signature, binding, receipt, reversal/dispute, and reconciliation proof is missing:**
+- Problem: P5 requires signed Autumn webhook/readback ingest, Stripe PSP evidence under Autumn, append-only receipts, failed payment/refund/reversal/dispute/cancellation handling, and operator reconciliation. The source has pure state helpers but no verified provider boundary or deployed evidence.
+- Files: `src/lib/server/billing-provider.ts`, `src/modules/billing/internal/operations.ts`, `src/modules/billing/internal/provider-readback.ts`, `tests/unit/billing/rail.test.ts`, `tests/unit/server/server-seams.test.ts`, `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`
+- Blocks: Paid activation launch, public/GTM/discovery paid claims, and Phase 5 closeout.
+- Fix approach: Implement raw-body verification, provider retrieval where required, binding/dedupe/admission rows, receipt/reversal/dispute ledger rows, reconciliation queues, retry/no-repair controls, and deployed sandbox smoke evidence.
+
+**Phase 4 deployed protected-action proof remains absent:**
+- Problem: Phase 4 local/source proof is passed, but `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md` explicitly says `deployed_proof: not_claimed`.
+- Files: `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md`, `convex/protectedActions.ts`, `tests/e2e/protected-action-owner-flow.spec.ts`
+- Blocks: Any deployed/public claim that a real protected-action proposal, owner decision, attempt, receipt/proof-gap, and admin reconstruction chain has been proven in production-like infrastructure.
+- Fix approach: Treat this as separate deployed evidence work; do not make Phase 5 money proof depend on unclaimed P4 deployment proof.
 
 ## Test Coverage Gaps
 
-**Protected-action durable runtime tests are missing:**
-- What's not tested: The current `convex/protectedActions.ts` functions are not covered by a dedicated runtime test file for auth, proposal persistence, policy matrix, decision idempotency, gateway consumption, attempt/receipt/proof-gap/no-repair, admin reconstruction, and CSRF rejection.
-- Files: `convex/protectedActions.ts`, `tests/unit/convex`, `tests/unit/protected-action`, `tests/integration/protected-action-route-readbacks.test.ts`
-- Risk: The pure module can remain correct while the Convex adapter mis-maps rows, skips indexes, writes synthetic receipts incorrectly, or accepts broad payloads.
+**No Convex billing runtime tests exist:**
+- What's not tested: Convex mutations/actions/queries for billing offers, checkout starts, provider events, receipts, reconciliation, no-repair, support records, and operator controls.
+- Files: `src/modules/billing/internal/operations.ts`, `src/modules/billing/internal/schema.ts`, `convex/schema.ts`, `tests/unit/billing/rail.test.ts`, `tests/unit/schema/convex-schema.test.ts`
+- Risk: Pure module behavior can pass while live Convex persistence, indexing, auth, idempotency, and redaction mappings are broken.
 - Priority: High
 
-**Protected-action server seam tests are missing:**
-- What's not tested: `src/modules/protected-action/contact-follow-up.functions.ts` lacks focused tests for `createServerFn` validators, Convex source errors, production fixture blocking, browser admission data, retry/no-repair paths, and admin denied readbacks.
-- Files: `src/modules/protected-action/contact-follow-up.functions.ts`, `tests/unit/server/server-seams.test.ts`, `tests/unit/server`
-- Risk: Mounted routes can behave differently from pure helper tests and can silently fall back to local fixtures.
+**No mounted Phase 5 browser or route tests exist:**
+- What's not tested: Active `/owner/billing/*`, `/admin/monetization/*`, and `/api/billing/*` route behavior through TanStack routing, server functions, auth, CSRF/origin, loaders, focus, mobile layout, and route-generated metadata.
+- Files: `src/future-phases/05-paid-activation-money-rails/routes/owner.billing.tsx`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`, `tests/unit/billing/owner-routes.test.ts`
+- Risk: Parked helper tests can pass while mounted route behavior, auth, redirects, and source-readback wiring are absent.
 - Priority: High
 
-**Protected-action browser tests do not exercise populated approve/reject flows:**
-- What's not tested: `tests/e2e/protected-action-owner-flow.spec.ts` checks route presence/copy and missing-route states; `tests/e2e/a11y/protected-action-a11y.spec.ts` checks layout and disabled controls. They do not create or load a populated proposal and click approve/reject through mounted server functions.
-- Files: `tests/e2e/protected-action-owner-flow.spec.ts`, `tests/e2e/a11y/protected-action-a11y.spec.ts`, `src/routes/owner.actions.tsx`, `src/routes/owner.actions.$proposalId.tsx`, `src/routes/admin.protected-actions.tsx`
-- Risk: UI regressions in decision submission, focus recovery, mobile layout with real data, and admin reconstruction can pass the browser suite.
+**No real Autumn/Stripe provider smoke tests exist:**
+- What's not tested: Autumn checkout/customer portal start, signed Autumn webhook, provider readback retrieval, Stripe PSP invoice/refund/dispute evidence under Autumn, unbound event hold, provider unavailable, and reconciliation mismatch against a provider sandbox.
+- Files: `src/lib/server/billing-provider.ts`, `src/modules/billing/internal/provider-readback.ts`, `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`, `tests/unit/server/server-seams.test.ts`, `tests/deploy-smoke`
+- Risk: Local pure tests can be mistaken for live money-rail proof.
 - Priority: High
 
-**CSRF tests validate the permissive token/cookie model, not request-bound protection:**
-- What's not tested: Direct Convex clients that supply matching arbitrary `csrfToken`/`csrfCookie` values are not rejected; current tests assert that matching values are accepted.
-- Files: `tests/unit/security/csrf-rate-limit.test.ts`, `src/modules/security/internal/duplicates.ts`, `convex/inquiries.ts`, `convex/security.ts`, `convex/protectedActions.ts`
-- Risk: Public mutations can appear CSRF-protected while accepting caller-minted proof.
-- Priority: High
+**Copy and SEO scans reject premature paid claims but do not yet validate allowed post-smoke claims:**
+- What's not tested: A successful P5 claim evidence register row that allows a precise public paid-activation claim only after provider route/readback/funnel/support evidence exists.
+- Files: `tests/copy/claims-register.test.ts`, `tests/copy/phase1-banned-copy.test.ts`, `tests/seo`, `src/lib/ui/contract-scans.ts`, `.planning/GTM-READINESS.md`
+- Risk: Public paid claims can remain blocked even after legitimate evidence, or future changes can bypass the evidence gate without a positive-path test.
+- Priority: Medium
 
-**Deploy smoke tests are blocked by environment/source setup:**
-- What's not tested: Deployed Phase 2 support records, Resend dispatch, Novu dispatch, and deployed Phase 4 protected-action readbacks.
-- Files: `tests/deploy-smoke/phase2-support-record-smoke.spec.ts`, `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts`, `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts`, `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`, `.planning/phases/04-owner-pending-protected-actions/04-VERIFICATION.md`
-- Risk: Local/source proof can be mistaken for deployed/provider readiness.
+**Deployed proof separation needs explicit tests/evidence for P5:**
+- What's not tested: Deployed checkout start, return/cancel readback, signed webhook, receipt, refund/dispute, reconciliation mismatch, retry/no-repair, disable/rollback, and public claim evidence rows.
+- Files: `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`, `tests/deploy-smoke`, `playwright.deploy-smoke.config.ts`
+- Risk: Env configuration, dashboards, or local fixtures can be mistaken for deployed/provider readiness.
 - Priority: High
 
 ---

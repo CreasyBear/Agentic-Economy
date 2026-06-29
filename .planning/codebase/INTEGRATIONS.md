@@ -5,95 +5,104 @@
 ## APIs & External Services
 
 **Backend Database and Functions:**
-- Convex - Source-of-truth database, query/mutation runtime, and public source-state read/write API.
+- Convex - Source-of-truth database, query/mutation/action runtime, and route-facing source state API.
   - SDK/Client: `convex` 1.42.0 from `package.json`.
-  - Auth: `CONVEX_URL` or `VITE_CONVEX_URL` in `src/lib/server/convex-source.ts`; Clerk token template `convex` in `src/lib/server/convex-source.ts`; Clerk issuer domain `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`.
-  - Implementation: schema composition in `convex/schema.ts`, domain functions in `convex/*.ts`, table schema fragments in `src/modules/*/internal/schema.ts`, and HTTP clients in `src/lib/server/convex-source.ts`.
+  - Auth: `CONVEX_URL` or `VITE_CONVEX_URL` in `src/lib/server/convex-source.ts`; Clerk token template `convex` in `src/lib/server/convex-source.ts`; Clerk issuer `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`.
+  - Implementation: schema composition in `convex/schema.ts`, domain functions in `convex/*.ts`, schema fragments in `src/modules/*/internal/schema.ts`, and server HTTP clients in `src/lib/server/convex-source.ts`.
 
 **Authentication and Identity:**
-- Clerk - Browser auth UI, request middleware, server auth, Convex JWT issuer, and owner email lookup for notification dispatch.
+- Clerk - Browser auth provider, TanStack Start request middleware, server auth reads, Convex JWT issuer, and owner email lookup for notification dispatch.
   - SDK/Client: `@clerk/tanstack-react-start` 1.4.9 from `package.json`.
-  - Auth: Clerk SDK env by provider convention; source explicitly reads `CLERK_SECRET_KEY` in `src/lib/server/notification-provider.ts` and `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`.
-  - Implementation: `clerkMiddleware()` in `src/start.ts`, `ClerkProvider` in `src/routes/__root.tsx`, sign-in route `src/routes/sign-in.$.tsx`, sign-up route `src/routes/sign-up.$.tsx`, server `auth()` use in `src/lib/server/convex-source.ts`, and Clerk REST owner lookup in `src/lib/server/notification-provider.ts`.
+  - Auth: Clerk SDK env by provider convention; source explicitly reads `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts` and `CLERK_SECRET_KEY` in `src/lib/server/notification-provider.ts`.
+  - Implementation: `clerkMiddleware()` in `src/start.ts`, `ClerkProvider` in `src/routes/__root.tsx`, hosted auth routes in `src/routes/sign-in.$.tsx` and `src/routes/sign-up.$.tsx`, server `auth()` in `src/lib/server/convex-source.ts`, and Clerk REST user lookup in `src/lib/server/notification-provider.ts`.
   - External endpoint: `https://api.clerk.com/v1/users/{clerkUserId}` in `src/lib/server/notification-provider.ts`.
+
+**Billing and Paid Activation:**
+- Autumn Cloud - Default Phase 5 billing/product-ops authority for paid activation, checkout attach, customer portal, and customer readback.
+  - SDK/Client: No Autumn npm SDK; raw `fetch` provider in `src/modules/billing/internal/provider-readback.ts`, exported through `src/modules/billing/server.ts` and configured by `src/lib/server/billing-provider.ts`.
+  - Auth: `AUTUMN_SECRET_KEY`, optional `AUTUMN_API_BASE_URL`, optional `AUTUMN_API_VERSION`, and optional `AUTUMN_WEBHOOK_SECRET` in `src/lib/server/billing-provider.ts`.
+  - External endpoints: default `https://api.useautumn.com/v1/billing.attach`, `https://api.useautumn.com/v1/billing.open_customer_portal`, and `https://api.useautumn.com/v1/customers.get` in `src/modules/billing/internal/provider-readback.ts`.
+  - Source seam: `startPaidActivation`, `startCustomerPortal`, `ingestBillingProviderEvent`, `recordBillingEvidence`, `readBillingStatus`, `readReceipt`, `readBillingReconciliation`, `retryBillingReconciliation`, `markBillingNoRepair`, `disablePaidActivation`, and billing projections exported by `src/modules/billing/public.ts`.
+  - Webhook posture: parked route `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts` preserves raw request text, but `verifyAutumnWebhook` in `src/lib/server/billing-provider.ts` rejects callbacks with `unverified_webhook`.
+- Stripe PSP - Payment collection, invoices/receipts, refunds, disputes, and PSP evidence beneath Autumn for Phase 5.
+  - SDK/Client: Not installed; no `stripe` package in `package.json`.
+  - Auth: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are Phase 5 planned env vars in `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`; current source does not read them.
+  - Implementation: provider value `stripe_psp` exists in `src/modules/billing/internal/schema.ts`; Stripe invoice IDs and hosted invoice URLs are normalized from Autumn readbacks in `src/modules/billing/internal/provider-readback.ts`.
+  - Constraint: Direct Stripe subscription authority is out of scope unless an evidence-backed Autumn blocker record exists, per `.planning/phases/05-paid-activation-money-rails/05-SPEC.md` and `.planning/phases/05-paid-activation-money-rails/05-CONTEXT.md`.
 
 **Email Delivery:**
 - Resend - Owner inquiry email dispatch and delivery webhook ingestion.
-  - SDK/Client: No Resend npm SDK; raw `fetch` implementation in `src/lib/server/notification-provider.ts`.
-  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, and webhook secret `RESEND_WEBHOOK_SECRET` in `src/lib/server/notification-provider.ts`.
+  - SDK/Client: No Resend npm SDK; raw `fetch` in `src/lib/server/notification-provider.ts`.
+  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, and `RESEND_WEBHOOK_SECRET` in `src/lib/server/notification-provider.ts`.
   - Dispatch route: `/api/notification/resend-dispatch` implemented by `src/routes/api.notification.resend-dispatch.ts`.
   - Webhook route: `/api/notification/resend-webhook` implemented by `src/routes/api.notification.resend-webhook.ts`.
   - External endpoint: `https://api.resend.com/emails` in `src/lib/server/notification-provider.ts`.
 
 **Notification Workflow:**
 - Novu - Owner inquiry workflow trigger and message readback.
-  - SDK/Client: No Novu npm SDK; raw `fetch` implementation in `src/lib/server/notification-provider.ts`.
+  - SDK/Client: No Novu npm SDK; raw `fetch` in `src/lib/server/notification-provider.ts`.
   - Auth: `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, optional `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, and optional `NOVU_API_BASE_URL` in `src/lib/server/notification-provider.ts`.
   - Dispatch route: `/api/notification/novu-dispatch` implemented by `src/routes/api.notification.novu-dispatch.ts`.
   - External endpoints: `https://api.novu.co/v1/events/trigger` and `https://api.novu.co/v1/messages` in `src/lib/server/notification-provider.ts`.
 
-**Billing Provider:**
-- Autumn Cloud - Paid activation attach, customer portal, customer readback, and provider event model.
-  - SDK/Client: No Autumn npm SDK; raw `fetch` provider in `src/modules/billing/internal/provider-readback.ts`, surfaced through `src/lib/server/billing-provider.ts`.
-  - Auth: `AUTUMN_SECRET_KEY`, optional `AUTUMN_API_BASE_URL`, optional `AUTUMN_API_VERSION`, and optional `AUTUMN_WEBHOOK_SECRET` in `src/lib/server/billing-provider.ts`.
-  - External endpoint: default `https://api.useautumn.com` in `src/modules/billing/internal/provider-readback.ts`.
-  - Webhook state: parked route `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts` calls `verifyAutumnWebhook`, and `src/lib/server/billing-provider.ts` rejects unverified callbacks.
-  - Stripe surface: Stripe invoice IDs and hosted invoice URLs are normalized from Autumn responses in `src/modules/billing/internal/provider-readback.ts`; no direct Stripe SDK or Stripe API client is declared in `package.json`.
-
-**Public HTTP API Surface:**
-- TanStack Start API routes - Public catalog, discovery, notification, sitemap, robots, and llms endpoints.
-  - SDK/Client: `@tanstack/react-router` route handlers and `@tanstack/react-start` runtime from `package.json`.
-  - Auth: Public routes use public Convex clients or route-specific checks; server-to-server notification routes require `AE_NOTIFICATION_OUTBOX_SECRET` in `src/routes/api.notification.resend-dispatch.ts` and `src/routes/api.notification.novu-dispatch.ts`.
-  - Implementation: API route files under `src/routes/api.*.ts`, text/XML routes `src/routes/robots[.]txt.ts`, `src/routes/sitemap[.]xml.ts`, and `src/routes/llms[.]txt.ts`.
+**Public HTTP Surface:**
+- TanStack Start routes - Public catalog, discovery, notification, sitemap, robots, llms, owner, admin, and parked future Phase 5 route handlers.
+  - SDK/Client: `@tanstack/react-start` and `@tanstack/react-router` from `package.json`.
+  - Auth: Clerk middleware in `src/start.ts`; route-specific Convex or notification secrets in `src/lib/server/convex-source.ts` and `src/lib/server/notification-provider.ts`.
+  - Implementation: API route files under `src/routes/api.*.ts`, public text/XML routes under `src/routes/robots[.]txt.ts`, `src/routes/sitemap[.]xml.ts`, `src/routes/llms[.]txt.ts`, and parked Phase 5 routes under `src/future-phases/05-paid-activation-money-rails/routes/`.
 
 ## Data Storage
 
 **Databases:**
 - Convex document database.
-  - Connection: `CONVEX_URL` or `VITE_CONVEX_URL`, read by `src/lib/server/convex-source.ts` and route helpers such as `src/routes/api.businesses.ts`.
-  - Client: `ConvexHttpClient` from `convex/browser` in `src/lib/server/convex-source.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, and multiple server routes under `src/routes/`.
-  - Schema: `convex/schema.ts` composes table modules from `src/modules/business/internal/schema.ts`, `src/modules/catalog/internal/schema.ts`, `src/modules/registry/internal/schema.ts`, `src/modules/discovery/internal/schema.ts`, `src/modules/inquiries/internal/convex-schema.ts`, `src/modules/notification-outbox/internal/schema.ts`, `src/modules/protected-action/internal/schema.ts`, `src/modules/observability/internal/schema.ts`, `src/modules/security/internal/schema.ts`, and `src/modules/billing/internal/schema.ts`.
-  - Major tables: business/owner/claim tables in `src/modules/business/internal/schema.ts`, catalog tables in `src/modules/catalog/internal/schema.ts`, inquiry tables in `src/modules/inquiries/internal/convex-schema.ts`, notification dispatch/webhook tables in `src/modules/notification-outbox/internal/schema.ts`, audit/funnel/operation tables in `src/modules/observability/internal/schema.ts`, admin/security tables in `src/modules/security/internal/schema.ts`, protected-action tables in `src/modules/protected-action/internal/schema.ts`, and billing tables in `src/modules/billing/internal/schema.ts`.
+  - Connection: `CONVEX_URL` or `VITE_CONVEX_URL`, read by `src/lib/server/convex-source.ts`.
+  - Client: `ConvexHttpClient` from `convex/browser` in `src/lib/server/convex-source.ts` and server-function/route helpers under `src/modules/` and `src/routes/`.
+  - Schema root: `convex/schema.ts`.
+  - Billing tables: `billingOffers`, `billingOperations`, `billingProviderEvents`, `billingReceipts`, `billingReconciliations`, and `capabilityLaunchSupportRecords` in `src/modules/billing/internal/schema.ts`.
+  - Billing state policy: provider events store `payloadHash`, `redactedPayloadJson`, normalized fields, signature status, retrieval status, and correlation IDs in `src/modules/billing/internal/schema.ts`; raw provider/payment bodies are not modeled.
+  - Notification tables: `src/modules/notification-outbox/internal/schema.ts`.
+  - Observability tables: `src/modules/observability/internal/schema.ts`.
 
 **File Storage:**
-- Local/generated artifacts only - Generated app output lives under `.output/`, screenshots/proofs under `output/playwright/`, and test results under `test-results/`.
-- No Convex file storage, S3, GCS, R2, or upload SDK usage is detected in `src/` or `convex/`.
+- Local/generated artifacts only - Build output lives under `.output/`, Playwright/test output under `test-results/` and `output/playwright/` when generated.
+- External object storage: Not detected in `package.json`, `src/`, or `convex/`.
 
 **Caching:**
-- Convex query caching/reactivity - Provided by Convex query runtime used in `convex/*.ts`.
-- HTTP caching is explicit per route - Notification and business API responses set `Cache-Control: no-store` in `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`, `src/routes/api.notification.resend-webhook.ts`, `src/routes/api.businesses.ts`, and `src/lib/http/discovery-response.ts`.
-- Developer discovery cache metadata is internal source state - Cache version and headers are modeled in `src/modules/discovery/public.ts` and route `src/routes/api.discovery.schema.ts`.
-- External cache service: Not detected in `package.json`, `src/`, or `convex/`.
+- Convex query caching/reactivity - Provided by Convex for `convex/*.ts`.
+- HTTP no-store controls - Notification and provider callback routes set no-store behavior in `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`, `src/routes/api.notification.resend-webhook.ts`, and `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`.
+- External cache service: Not detected.
 
 ## Authentication & Identity
 
 **Auth Provider:**
 - Clerk with Convex JWT integration.
-  - Implementation: `clerkMiddleware()` in `src/start.ts`, `ClerkProvider` in `src/routes/__root.tsx`, hosted Clerk UI components in `src/routes/sign-in.$.tsx` and `src/routes/sign-up.$.tsx`, server `auth()` integration in `src/lib/server/convex-source.ts`, and Convex JWT provider config in `convex/auth.config.ts`.
+  - Implementation: request middleware in `src/start.ts`, provider wrapper in `src/routes/__root.tsx`, hosted auth routes in `src/routes/sign-in.$.tsx` and `src/routes/sign-up.$.tsx`, Convex token read in `src/lib/server/convex-source.ts`, and Convex auth config in `convex/auth.config.ts`.
   - Convex token template: `convex`, requested by `readRequiredConvexAuthToken` in `src/lib/server/convex-source.ts`.
-  - Local bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` disables Clerk middleware/provider in `src/start.ts` and `src/routes/__root.tsx` for local E2E paths.
-  - Admin identity: Clerk user IDs are persisted and indexed through `src/modules/business/internal/schema.ts` (`owners.by_clerkUserId`) and `src/modules/security/internal/schema.ts` (`adminMemberships.by_clerkUserId_state`).
+  - Local E2E bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` disables Clerk middleware/provider in `src/start.ts` and `src/routes/__root.tsx`.
+  - Billing authority: owner-only starts are enforced by `requireBillingOwner` in `src/modules/billing/internal/authority.ts`; operator read/reconcile/disable/no-repair permissions are enforced by `requireBillingOperator` in `src/modules/billing/internal/authority.ts`.
 
 ## Monitoring & Observability
 
 **Error Tracking:**
 - External error tracking: Not detected in `package.json`, `src/`, or `convex/`; no Sentry package is installed.
-- Internal audit/observability: Convex-backed audit events, funnel events, operation keys, operator controls, notification readbacks, and billing readbacks are defined in `src/modules/observability/public.ts`, `src/modules/observability/internal/schema.ts`, `convex/observability.ts`, and feature-specific Convex modules such as `convex/inquiries.ts` and `convex/notificationOutbox.ts`.
+- Internal audit/readback: Audit events, funnel events, operator controls, provider evidence, receipts, and reconciliation records are modeled in `src/modules/observability/public.ts`, `src/modules/observability/internal/schema.ts`, `convex/observability.ts`, and `src/modules/billing/internal/operations.ts`.
 
 **Logs:**
-- Runtime logging framework: Not detected; errors are represented as typed results and JSON responses in server routes such as `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`, and `src/routes/api.notification.resend-webhook.ts`.
-- Test reporting: Vitest uses `vitest.config.ts`; Playwright reporters are configured in `playwright.config.ts` and `playwright.deploy-smoke.config.ts`.
+- Runtime logging framework: Not detected.
+- Provider evidence posture: `src/modules/billing/internal/operations.ts` records redacted payload JSON, hashes, provider refs, and audit events; `tests/unit/billing/rail.test.ts` asserts raw provider bodies are not stored on provider events.
+- Test reporting: Vitest uses `vitest.config.ts`; Playwright local and deploy smoke reporters are configured in `playwright.config.ts` and `playwright.deploy-smoke.config.ts`.
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Nitro node server output - `.output/nitro.json` identifies preset `node-server` and server entry `.output/server/index.mjs`.
-- Vercel link marker - `.vercel/README.txt` indicates the project directory is linked to Vercel; no `vercel.json` deployment config is detected.
-- Convex deployment - Convex source exists under `convex/`, generated Convex artifacts are under `convex/_generated/`, and `package.json` includes `check:convex-codegen`.
+- Nitro node server output - `.output/nitro.json` identifies preset `node-server` and server entry `server/index.mjs`.
+- Vercel link marker - `.vercel/README.txt` indicates the local directory is linked to a Vercel project; `.vercel/` metadata is not source configuration and should not be shared.
+- Convex deployment - Convex source lives under `convex/`, generated artifacts under `convex/_generated/`, and `package.json` includes `check:convex-codegen`.
 
 **CI Pipeline:**
 - GitHub Actions: Not detected; `.github/` is absent.
-- Package scripts: `package.json` provides `test:all`, `test:e2e`, deploy smoke scripts, provider smoke scripts, and `build` for local or external CI orchestration.
+- Root deployment config: No `vercel.json`, Netlify, Docker, Fly, Railway, or other root deploy config detected.
+- Package-script gates: `package.json` provides local verification through `test:all`, E2E/a11y scripts, deploy smoke scripts, provider smoke scripts, `typecheck`, `check:convex-codegen`, and `build`.
 
 ## Environment Configuration
 
@@ -102,35 +111,53 @@
 - Convex/Clerk auth: `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`.
 - Clerk owner lookup: `CLERK_SECRET_KEY` in `src/lib/server/notification-provider.ts`.
 - Clerk local bypass: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` in `src/start.ts` and `src/routes/__root.tsx`.
-- Public URLs: `SITE_URL` or `VITE_SITE_URL` in `src/modules/inquiries/inquiry.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, and `src/routes/privacy.remove-business.tsx`.
-- Allowed origins: `AE_ALLOWED_ORIGINS` or `VITE_AE_ALLOWED_ORIGINS` in `convex/catalog.ts`, `convex/business.ts`, `convex/discovery.ts`, `convex/inquiries.ts`, `convex/notificationOutbox.ts`, `convex/observability.ts`, and `convex/security.ts`.
-- Notification system auth: `AE_NOTIFICATION_OUTBOX_SECRET` in `src/lib/server/notification-provider.ts`, `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`, and `src/routes/api.notification.resend-webhook.ts`.
+- Public URLs: `SITE_URL` or `VITE_SITE_URL` in source modules under `src/modules/inquiries/`, `src/modules/catalog/`, and `src/modules/security/`.
+- Source write admission: `AE_SOURCE_WRITE_SECRET` in `src/lib/server/source-write-admission.ts`.
+- Notification outbox: `AE_NOTIFICATION_OUTBOX_SECRET` in `src/lib/server/notification-provider.ts`, notification routes under `src/routes/`, and `convex/notificationOutbox.ts`.
 - Resend: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, and `RESEND_WEBHOOK_SECRET` in `src/lib/server/notification-provider.ts`.
 - Novu: `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, optional `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, and optional `NOVU_API_BASE_URL` in `src/lib/server/notification-provider.ts`.
-- Autumn: `AUTUMN_SECRET_KEY`, optional `AUTUMN_API_BASE_URL`, optional `AUTUMN_API_VERSION`, and optional `AUTUMN_WEBHOOK_SECRET` in `src/lib/server/billing-provider.ts`.
+- Autumn current source: `AUTUMN_SECRET_KEY`, optional `AUTUMN_API_BASE_URL`, optional `AUTUMN_API_VERSION`, and optional `AUTUMN_WEBHOOK_SECRET` in `src/lib/server/billing-provider.ts`.
+- Phase 5 planned additions: `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_PORTAL_RETURN_BASE_URL`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` are named in `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md` but are not read by current source.
 - Playwright local E2E: `PLAYWRIGHT_BASE_URL` in `playwright.config.ts`.
 - Deploy smoke: `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `SMOKE_ADMIN_STORAGE_STATE`, `SMOKE_OWNER_STORAGE_STATE`, `SMOKE_BUSINESS_SLUG`, `SMOKE_PHASE2_BUSINESS_SLUG`, `SMOKE_NOTIFICATION_DISPATCH_ID`, and `SMOKE_NOVU_NOTIFICATION_DISPATCH_ID` in `tests/deploy-smoke/*.spec.ts`.
 
 **Secrets location:**
 - `.env.local` file present - contains local environment configuration and was not read.
-- `.env.example` file present - existence noted and contents were not read under the repository secret-handling rules.
-- `.vercel/` link marker present - `.vercel/README.txt` describes project/org IDs in Vercel link metadata; do not treat `.vercel/` as source configuration for runtime secrets.
-- Runtime provider secrets are read from `process.env` in `src/lib/server/notification-provider.ts`, `src/lib/server/billing-provider.ts`, `src/lib/server/convex-source.ts`, and `convex/auth.config.ts`.
+- `.env.example` file present - existence noted and contents were not read.
+- `.vercel/` marker present - `.vercel/README.txt` says it contains linked project/org IDs and should not be shared.
+- Runtime secrets are read from `process.env` in `src/lib/server/convex-source.ts`, `src/lib/server/source-write-admission.ts`, `src/lib/server/notification-provider.ts`, `src/lib/server/billing-provider.ts`, and `convex/auth.config.ts`.
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- `/api/notification/resend-webhook` - Resend webhook endpoint in `src/routes/api.notification.resend-webhook.ts`; verifies Svix-style `svix-id`, `svix-timestamp`, and `svix-signature` headers using `RESEND_WEBHOOK_SECRET` in `src/lib/server/notification-provider.ts`, then writes to Convex mutation `notificationOutbox:ingestNotificationWebhookEvent`.
-- `/api/billing/webhook` - Parked billing webhook route in `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`; `verifyAutumnWebhook` in `src/lib/server/billing-provider.ts` rejects unverified callbacks.
-- Public API reads - `/api/businesses`, `/api/businesses/search`, `/api/businesses/$slug`, `/api/discovery/schema`, `/api/discovery/examples`, `/api/discovery/fixtures`, `/sitemap.xml`, `/robots.txt`, `/llms.txt`, and `/$slug.ucp` are implemented in `src/routes/` and primarily read Convex state.
+- `/api/notification/resend-webhook` - Resend webhook endpoint in `src/routes/api.notification.resend-webhook.ts`; verifies Svix-style headers using `RESEND_WEBHOOK_SECRET` in `src/lib/server/notification-provider.ts`.
+- `/api/billing/webhook` - Parked Phase 5 billing webhook route in `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`; preserves raw body text and currently returns typed refusal because `verifyAutumnWebhook` in `src/lib/server/billing-provider.ts` is not configured.
+- Public read endpoints - `/api/businesses`, `/api/businesses/search`, `/api/businesses/$slug`, `/api/discovery/schema`, `/api/discovery/examples`, `/api/discovery/fixtures`, `/sitemap.xml`, `/robots.txt`, `/llms.txt`, and `/$slug.ucp` are implemented under `src/routes/`.
 
 **Outgoing:**
-- Convex calls - Server routes and server functions call Convex queries/mutations through `ConvexHttpClient` in `src/lib/server/convex-source.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, and route-specific helpers in `src/routes/`.
+- Convex calls - Server routes and server functions call Convex through `src/lib/server/convex-source.ts` and route/module helpers under `src/modules/` and `src/routes/`.
 - Clerk REST - Owner delivery address lookup calls Clerk users API from `src/lib/server/notification-provider.ts`.
-- Resend REST - Owner email dispatch posts to Resend from `src/lib/server/notification-provider.ts` and is orchestrated by `src/routes/api.notification.resend-dispatch.ts`.
-- Novu REST - Workflow trigger and message readback call Novu from `src/lib/server/notification-provider.ts` and are orchestrated by `src/routes/api.notification.novu-dispatch.ts`.
-- Autumn REST - Billing attach, portal, and customer readback call Autumn from `src/modules/billing/internal/provider-readback.ts` and are configured by `src/lib/server/billing-provider.ts`.
-- Server-to-server dispatch callbacks - `/api/notification/resend-dispatch` and `/api/notification/novu-dispatch` require `Authorization: Bearer ${AE_NOTIFICATION_OUTBOX_SECRET}` in `src/routes/api.notification.resend-dispatch.ts` and `src/routes/api.notification.novu-dispatch.ts`.
+- Resend REST - Owner email dispatch posts to Resend from `src/lib/server/notification-provider.ts`, orchestrated by `src/routes/api.notification.resend-dispatch.ts`.
+- Novu REST - Workflow trigger and message readback call Novu from `src/lib/server/notification-provider.ts`, orchestrated by `src/routes/api.notification.novu-dispatch.ts`.
+- Autumn REST - Billing attach, customer portal, and customer readback call Autumn from `src/modules/billing/internal/provider-readback.ts`, configured by `src/lib/server/billing-provider.ts`.
+- Server-to-server dispatch callbacks - `/api/notification/resend-dispatch` and `/api/notification/novu-dispatch` require `Authorization: Bearer ${AE_NOTIFICATION_OUTBOX_SECRET}` in route implementations under `src/routes/`.
+
+## Phase 5 Autumn+Stripe Readiness
+
+**Ready in source:**
+- Route-facing billing API seam exists in `src/modules/billing/public.ts`.
+- Autumn raw HTTP provider exists in `src/modules/billing/internal/provider-readback.ts`.
+- Billing authority checks exist in `src/modules/billing/internal/authority.ts`.
+- Billing source schema and Convex table definitions exist in `src/modules/billing/internal/schema.ts` and are included by `convex/schema.ts`.
+- Owner/admin/private/public projections exist in `src/modules/billing/internal/projections.ts`.
+- Contract tests exist in `tests/unit/billing/rail.test.ts`, `tests/unit/billing/owner-routes.test.ts`, `tests/unit/schema/convex-schema.test.ts`, `tests/copy/claims-register.test.ts`, and `tests/unit/server/server-seams.test.ts`.
+
+**Blocked or not configured:**
+- Money decision record is required before Phase 5 runtime work per `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`.
+- Autumn webhook signature verification is not configured; `src/lib/server/billing-provider.ts` returns `unverified_webhook`.
+- Stripe direct SDK/API integration is not present in `package.json`; Stripe remains PSP evidence under Autumn unless an Autumn blocker record selects fallback.
+- Live provider readiness cannot be proven by env vars, screenshots, or dashboard state; `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md` requires source-owned readback rows with timestamp, stable provider refs, payload hash, route or smoke evidence, and operator next action.
+- Phase 5 closeout requires provider smoke for checkout start, return, cancel, signed webhook, receipt, refund/dispute, reconciliation mismatch, retry/no-repair, disable/rollback, and selected public claim evidence per `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`.
 
 ---
 

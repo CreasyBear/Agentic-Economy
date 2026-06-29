@@ -13,6 +13,7 @@ test-results/
 coverage/
 output/
 .codex/
+graphify-out/
 
 # clerk configuration (can include secrets)
 /.clerk/
