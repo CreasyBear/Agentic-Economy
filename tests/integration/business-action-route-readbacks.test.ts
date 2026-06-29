@@ -179,7 +179,7 @@ function completeFlow(suffix: string): Flow {
 }
 
 function acceptedFlow(suffix: string, artifactMode: 'complete' | 'proof_gap'): Flow {
-  const checkpointed = checkpointOnlyFlow(suffix, 'accepted')
+  const checkpointed = checkpointFlow(suffix, 'accepted', { receipt: false })
   const hermes = expectOk(recordHermesEvidenceEvent(checkpointed.state, hermesCommand(checkpointed.requestId, checkpointed.checkpointId, suffix)))
   const artifact = expectOk(
     recordBusinessActionResultArtifact(hermes.state, {
@@ -216,6 +216,14 @@ function acceptedFlow(suffix: string, artifactMode: 'complete' | 'proof_gap'): F
 }
 
 function checkpointOnlyFlow(suffix: string, decision: AuthorizationCheckpointDecision): Flow {
+  return checkpointFlow(suffix, decision, { receipt: true })
+}
+
+function checkpointFlow(
+  suffix: string,
+  decision: AuthorizationCheckpointDecision,
+  options: { receipt: boolean }
+): Flow {
   const created = expectOk(
     createCapabilityRequest(createEmptyBusinessActionSourceState({ cards: [card(suffix)], mandates: [mandate(suffix)] }), {
       actionSlug: BusinessActionSlug,
@@ -245,20 +253,22 @@ function checkpointOnlyFlow(suffix: string, decision: AuthorizationCheckpointDec
       expiresAt: now + 900,
     })
   )
-  const receipted = expectOk(
-    recordActionReceipt(checkpointed.state, {
-      requestId: created.request.id,
-      idempotencyKey: operationKey(`receipt:${suffix}`),
-      correlationId: correlationId(`receipt:${suffix}`),
-      recordedAt: now + 40,
-    })
-  )
+  const receipted = options.receipt
+    ? expectOk(
+        recordActionReceipt(checkpointed.state, {
+          requestId: created.request.id,
+          idempotencyKey: operationKey(`receipt:${suffix}`),
+          correlationId: correlationId(`receipt:${suffix}`),
+          recordedAt: now + 40,
+        })
+      )
+    : undefined
 
   return {
-    state: addPrivateRouteEvidence(receipted.state, created.request.id),
+    state: addPrivateRouteEvidence(receipted?.state ?? checkpointed.state, created.request.id),
     requestId: created.request.id,
     checkpointId: checkpointed.checkpoint.id,
-    receipt: receipted.receipt,
+    ...(receipted === undefined ? {} : { receipt: receipted.receipt }),
   }
 }
 

@@ -21,6 +21,7 @@ import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
 import { Route as OwnerInquiriesRouteImport } from './routes/owner.inquiries'
+import { Route as OwnerBusinessActionsRouteImport } from './routes/owner.business-actions'
 import { Route as OwnerActionsRouteImport } from './routes/owner.actions'
 import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
@@ -33,6 +34,7 @@ import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-event
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as OwnerInquiriesThreadIdRouteImport } from './routes/owner.inquiries.$threadId'
+import { Route as OwnerBusinessActionsRequestIdRouteImport } from './routes/owner.business-actions.$requestId'
 import { Route as OwnerActionsProposalIdRouteImport } from './routes/owner.actions.$proposalId'
 import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
 import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
@@ -44,6 +46,7 @@ import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiBusinessActionsStripeWebhookRouteImport } from './routes/api.business-actions.stripe-webhook'
 import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
+import { Route as OwnerBusinessActionsRequestIdReceiptRouteImport } from './routes/owner.business-actions.$requestId.receipt'
 import { Route as OwnerActionsProposalIdReceiptRouteImport } from './routes/owner.actions.$proposalId.receipt'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -106,6 +109,11 @@ const OwnerInquiriesRoute = OwnerInquiriesRouteImport.update({
   path: '/owner/inquiries',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OwnerBusinessActionsRoute = OwnerBusinessActionsRouteImport.update({
+  id: '/owner/business-actions',
+  path: '/owner/business-actions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OwnerActionsRoute = OwnerActionsRouteImport.update({
   id: '/owner/actions',
   path: '/owner/actions',
@@ -166,6 +174,12 @@ const OwnerInquiriesThreadIdRoute = OwnerInquiriesThreadIdRouteImport.update({
   path: '/$threadId',
   getParentRoute: () => OwnerInquiriesRoute,
 } as any)
+const OwnerBusinessActionsRequestIdRoute =
+  OwnerBusinessActionsRequestIdRouteImport.update({
+    id: '/$requestId',
+    path: '/$requestId',
+    getParentRoute: () => OwnerBusinessActionsRoute,
+  } as any)
 const OwnerActionsProposalIdRoute = OwnerActionsProposalIdRouteImport.update({
   id: '/$proposalId',
   path: '/$proposalId',
@@ -226,6 +240,12 @@ const AdminProtectedActionsProposalIdRoute =
     path: '/$proposalId',
     getParentRoute: () => AdminProtectedActionsRoute,
   } as any)
+const OwnerBusinessActionsRequestIdReceiptRoute =
+  OwnerBusinessActionsRequestIdReceiptRouteImport.update({
+    id: '/receipt',
+    path: '/receipt',
+    getParentRoute: () => OwnerBusinessActionsRequestIdRoute,
+  } as any)
 const OwnerActionsProposalIdReceiptRoute =
   OwnerActionsProposalIdReceiptRouteImport.update({
     id: '/receipt',
@@ -252,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/claim/success': typeof ClaimSuccessRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/owner/actions': typeof OwnerActionsRouteWithChildren
+  '/owner/business-actions': typeof OwnerBusinessActionsRouteWithChildren
   '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -268,8 +289,10 @@ export interface FileRoutesByFullPath {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
+  '/owner/business-actions/$requestId': typeof OwnerBusinessActionsRequestIdRouteWithChildren
   '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
   '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
+  '/owner/business-actions/$requestId/receipt': typeof OwnerBusinessActionsRequestIdReceiptRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -290,6 +313,7 @@ export interface FileRoutesByTo {
   '/claim/success': typeof ClaimSuccessRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/owner/actions': typeof OwnerActionsRouteWithChildren
+  '/owner/business-actions': typeof OwnerBusinessActionsRouteWithChildren
   '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -306,8 +330,10 @@ export interface FileRoutesByTo {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
+  '/owner/business-actions/$requestId': typeof OwnerBusinessActionsRequestIdRouteWithChildren
   '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
   '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
+  '/owner/business-actions/$requestId/receipt': typeof OwnerBusinessActionsRequestIdReceiptRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -329,6 +355,7 @@ export interface FileRoutesById {
   '/claim/success': typeof ClaimSuccessRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
   '/owner/actions': typeof OwnerActionsRouteWithChildren
+  '/owner/business-actions': typeof OwnerBusinessActionsRouteWithChildren
   '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -345,8 +372,10 @@ export interface FileRoutesById {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
+  '/owner/business-actions/$requestId': typeof OwnerBusinessActionsRequestIdRouteWithChildren
   '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
   '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
+  '/owner/business-actions/$requestId/receipt': typeof OwnerBusinessActionsRequestIdReceiptRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -369,6 +398,7 @@ export interface FileRouteTypes {
     | '/claim/success'
     | '/developers/discovery'
     | '/owner/actions'
+    | '/owner/business-actions'
     | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
@@ -385,8 +415,10 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/owner/actions/$proposalId'
+    | '/owner/business-actions/$requestId'
     | '/owner/inquiries/$threadId'
     | '/owner/actions/$proposalId/receipt'
+    | '/owner/business-actions/$requestId/receipt'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -407,6 +439,7 @@ export interface FileRouteTypes {
     | '/claim/success'
     | '/developers/discovery'
     | '/owner/actions'
+    | '/owner/business-actions'
     | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
@@ -423,8 +456,10 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/owner/actions/$proposalId'
+    | '/owner/business-actions/$requestId'
     | '/owner/inquiries/$threadId'
     | '/owner/actions/$proposalId/receipt'
+    | '/owner/business-actions/$requestId/receipt'
   id:
     | '__root__'
     | '/'
@@ -445,6 +480,7 @@ export interface FileRouteTypes {
     | '/claim/success'
     | '/developers/discovery'
     | '/owner/actions'
+    | '/owner/business-actions'
     | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
@@ -461,8 +497,10 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/owner/actions/$proposalId'
+    | '/owner/business-actions/$requestId'
     | '/owner/inquiries/$threadId'
     | '/owner/actions/$proposalId/receipt'
+    | '/owner/business-actions/$requestId/receipt'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -481,6 +519,7 @@ export interface RootRouteChildren {
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
   OwnerActionsRoute: typeof OwnerActionsRouteWithChildren
+  OwnerBusinessActionsRoute: typeof OwnerBusinessActionsRouteWithChildren
   OwnerInquiriesRoute: typeof OwnerInquiriesRouteWithChildren
   OwnerStatusRoute: typeof OwnerStatusRoute
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
@@ -581,6 +620,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OwnerInquiriesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/owner/business-actions': {
+      id: '/owner/business-actions'
+      path: '/owner/business-actions'
+      fullPath: '/owner/business-actions'
+      preLoaderRoute: typeof OwnerBusinessActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/owner/actions': {
       id: '/owner/actions'
       path: '/owner/actions'
@@ -665,6 +711,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OwnerInquiriesThreadIdRouteImport
       parentRoute: typeof OwnerInquiriesRoute
     }
+    '/owner/business-actions/$requestId': {
+      id: '/owner/business-actions/$requestId'
+      path: '/$requestId'
+      fullPath: '/owner/business-actions/$requestId'
+      preLoaderRoute: typeof OwnerBusinessActionsRequestIdRouteImport
+      parentRoute: typeof OwnerBusinessActionsRoute
+    }
     '/owner/actions/$proposalId': {
       id: '/owner/actions/$proposalId'
       path: '/$proposalId'
@@ -741,6 +794,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/protected-actions/$proposalId'
       preLoaderRoute: typeof AdminProtectedActionsProposalIdRouteImport
       parentRoute: typeof AdminProtectedActionsRoute
+    }
+    '/owner/business-actions/$requestId/receipt': {
+      id: '/owner/business-actions/$requestId/receipt'
+      path: '/receipt'
+      fullPath: '/owner/business-actions/$requestId/receipt'
+      preLoaderRoute: typeof OwnerBusinessActionsRequestIdReceiptRouteImport
+      parentRoute: typeof OwnerBusinessActionsRequestIdRoute
     }
     '/owner/actions/$proposalId/receipt': {
       id: '/owner/actions/$proposalId/receipt'
@@ -827,6 +887,33 @@ const OwnerActionsRouteWithChildren = OwnerActionsRoute._addFileChildren(
   OwnerActionsRouteChildren,
 )
 
+interface OwnerBusinessActionsRequestIdRouteChildren {
+  OwnerBusinessActionsRequestIdReceiptRoute: typeof OwnerBusinessActionsRequestIdReceiptRoute
+}
+
+const OwnerBusinessActionsRequestIdRouteChildren: OwnerBusinessActionsRequestIdRouteChildren =
+  {
+    OwnerBusinessActionsRequestIdReceiptRoute:
+      OwnerBusinessActionsRequestIdReceiptRoute,
+  }
+
+const OwnerBusinessActionsRequestIdRouteWithChildren =
+  OwnerBusinessActionsRequestIdRoute._addFileChildren(
+    OwnerBusinessActionsRequestIdRouteChildren,
+  )
+
+interface OwnerBusinessActionsRouteChildren {
+  OwnerBusinessActionsRequestIdRoute: typeof OwnerBusinessActionsRequestIdRouteWithChildren
+}
+
+const OwnerBusinessActionsRouteChildren: OwnerBusinessActionsRouteChildren = {
+  OwnerBusinessActionsRequestIdRoute:
+    OwnerBusinessActionsRequestIdRouteWithChildren,
+}
+
+const OwnerBusinessActionsRouteWithChildren =
+  OwnerBusinessActionsRoute._addFileChildren(OwnerBusinessActionsRouteChildren)
+
 interface OwnerInquiriesRouteChildren {
   OwnerInquiriesThreadIdRoute: typeof OwnerInquiriesThreadIdRoute
 }
@@ -855,6 +942,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
   OwnerActionsRoute: OwnerActionsRouteWithChildren,
+  OwnerBusinessActionsRoute: OwnerBusinessActionsRouteWithChildren,
   OwnerInquiriesRoute: OwnerInquiriesRouteWithChildren,
   OwnerStatusRoute: OwnerStatusRoute,
   PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,

@@ -4,7 +4,7 @@ import {
   verifyStripeWebhookSignature,
   type StripeWebhookAdmissionInput,
   type StripeWebhookAdmissionResult,
-} from '@/modules/business-action/internal/stripe-checkout'
+} from '@/modules/business-action/public'
 
 export const Route = createFileRoute('/api/business-actions/stripe-webhook')({
   server: {
@@ -35,7 +35,7 @@ export async function handleBusinessActionStripeWebhookRequest(
     webhookSecret: readStripeWebhookSecret(env),
     now,
   }
-  const signature = verifyStripeWebhookSignature(input)
+  const signature = await verifyStripeWebhookSignature(input)
   if (signature.kind === 'error') {
     return stripeWebhookJsonResponse(
       {
