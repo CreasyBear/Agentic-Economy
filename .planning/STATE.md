@@ -3,22 +3,22 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 06
-status: planning
+status: executing
 stopped_at: Phase 6 planning/spike authority opened after Phase 5 money-boundary hardening; Phase 2/3 deployed proof and Phase 5 provider smoke remain unclaimed evidence items
-last_updated: "2026-06-29T11:05:01Z"
+last_updated: "2026-06-29T12:13:59.635Z"
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 19
-  completed_plans: 15
-  percent: 16
+  completed_phases: 3
+  total_plans: 31
+  completed_plans: 24
+  percent: 50
 ---
 
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current phase:** 06 planning/spike
-**Status:** planning
+**Current phase:** 06
+**Status:** Executing Phase 06
 
 ## Active decision
 
@@ -59,7 +59,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-28T10:46:35.875Z
+**Last session:** 2026-06-29T12:13:59.629Z
 **Stopped at:** Phase 03 local/source verification passed 8/8 after route-parity gap closure; Phase 2 deploy/provider smokes and Phase 3 deployed proof remain unclaimed evidence items
 **Resume file:** None
 
@@ -80,6 +80,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 01 P13 | 12min | 3 tasks | 5 files |
 | Phase 01 P14 | 19min | 3 tasks | 10 files |
 | Phase 01 P15 | 12min | 3 tasks | 5 files |
+| Phase 06 P01 | 19m 21s | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -133,6 +134,10 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 02]: Replaced placeholder owner inbox loading with a server-backed source seam and recorded rendered inquiry UI evidence. — `/owner/inquiries` now uses `readCurrentOwnerInboxServer`; local Clerk-bypass evidence covers `/plumbing-demo`, `/plumbing-demo/inquiry`, `/owner/inquiries`, and `/owner/inquiries/inquiry_thread%3Ahash%3Af3e29153` with compact/wide screenshots plus public/owner focus proof.
 - [Phase 02]: Added the human-inquiry capability launch support-record gate and deployed smoke harness. — New inquiry submissions and state-backed public availability now require a complete `human_inquiry_owner_inbox` support record with named primary/backup owners/operators, channels, thresholds, incident counts, disable path, kill rules, evidence refs, source hash, correlation ID, and last-reviewed timestamp; Convex runtime loads matching rows from `capabilityLaunchSupportRecords`, and `npm run test:phase2-support-smoke` fails loudly until a deployed smoke slug proves the row through the real public inquiry form.
 - [Phase 03]: Closed route-parity gaps before accepting builder discovery. — `03-VERIFICATION.md` moved from `gaps_found` 5/8 to `passed` 8/8 only after `03-02` wired discovery artifacts to durable public route snapshots, replaced synthetic route health with executed readbacks, and expanded builder/agent smoke without claiming deployed proof.
+- [Phase 06]: Plan 06-01 is source/local proof only; production proof not claimed.
+- [Phase 06]: BusinessActionSlug remains the single literal provision-paid-intake-endpoint with proposal-only, non-callable, non-payment public posture.
+- [Phase 06]: GuardrailDecisionEvidence is pre-checkpoint decision evidence and never creates downstream ExternalEvidenceEvent consequence.
+- [Phase 06]: Hermes evidence is admitted only after source-owned accepted owner checkpoint and is evidence only, not authority.
 
 ### Blockers
 
