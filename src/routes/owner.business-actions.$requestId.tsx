@@ -53,6 +53,8 @@ function OwnerBusinessActionDetailRoute() {
       </AePublicShell>
     )
   }
+  const receipt = serverReadback.receipt as Record<string, unknown>
+  const publicReadback = serverReadback.publicReadback as Record<string, unknown>
 
   return (
     <AePublicShell>
@@ -65,20 +67,20 @@ function OwnerBusinessActionDetailRoute() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{serverReadback.receipt.outcome.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{serverReadback.publicReadback.reconstructionStatus.replaceAll('_', ' ')}</Badge>
+              <Badge>{stringValue(receipt.outcome, 'missing').replaceAll('_', ' ')}</Badge>
+              <Badge variant="outline">{stringValue(publicReadback.reconstructionStatus, 'missing').replaceAll('_', ' ')}</Badge>
             </div>
-            <CardTitle className="break-words text-lg">{serverReadback.receipt.requestId as CapabilityRequestId}</CardTitle>
+            <CardTitle className="break-words text-lg">{stringValue(receipt.requestId, 'missing') as CapabilityRequestId}</CardTitle>
             <CardDescription>Owner-visible receipt hashes only. Raw provider payloads and private endpoint refs are excluded.</CardDescription>
           </CardHeader>
           <CardContent>
             <FactGrid
               facts={[
-                { label: 'Action', value: serverReadback.receipt.actionSlug },
-                { label: 'Card version', value: String(serverReadback.receipt.cardVersion) },
-                { label: 'Receipt', value: serverReadback.receipt.id },
-                { label: 'Recorded', value: new Date(serverReadback.receipt.recordedAt).toISOString() },
-                { label: 'Proof label', value: serverReadback.publicReadback.labels.join(', ') },
+                { label: 'Action', value: stringValue(receipt.actionSlug, 'missing') },
+                { label: 'Card version', value: stringValue(receipt.cardVersion, 'missing') },
+                { label: 'Receipt', value: stringValue(receipt.id, 'missing') },
+                { label: 'Recorded', value: new Date(numberValue(receipt.recordedAt, 0)).toISOString() },
+                { label: 'Proof label', value: stringArrayValue(publicReadback.labels).join(', ') },
               ]}
             />
           </CardContent>
@@ -86,4 +88,16 @@ function OwnerBusinessActionDetailRoute() {
       </section>
     </AePublicShell>
   )
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback
+}
+
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' ? value : fallback
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }

@@ -3,15 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type {
   ActionReceipt,
   AuthorizationCheckpointDecision,
-  AuthorizationCheckpointId,
   BusinessActionCard,
-  BusinessActionCardId,
   BusinessActionNoRepairRecord,
-  BusinessActionNoRepairId,
   BusinessActionPrivateEvidenceRef,
-  BusinessActionPrivateEvidenceRefId,
   BusinessActionSupportRecord,
-  BusinessActionSupportRecordId,
   BuyerMandate,
 } from '@/modules/business-action/public'
 import {
@@ -28,6 +23,11 @@ import {
 } from '@/modules/business-action/public'
 import type {
   BusinessId,
+  AuthorizationCheckpointId,
+  BusinessActionCardId,
+  BusinessActionNoRepairId,
+  BusinessActionPrivateEvidenceRefId,
+  BusinessActionSupportRecordId,
   BuyerMandateId,
   CapabilityRequestId,
   CorrelationId,

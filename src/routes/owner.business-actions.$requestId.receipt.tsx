@@ -52,6 +52,9 @@ function OwnerBusinessActionReceiptRoute() {
       </AePublicShell>
     )
   }
+  const receipt = serverReadback.receipt as Record<string, unknown>
+  const publicReadback = serverReadback.publicReadback as Record<string, unknown>
+  const hashes = objectValue(publicReadback.hashes)
 
   return (
     <AePublicShell>
@@ -64,20 +67,20 @@ function OwnerBusinessActionReceiptRoute() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{serverReadback.receipt.outcome.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{serverReadback.publicReadback.reconstructionStatus.replaceAll('_', ' ')}</Badge>
+              <Badge>{stringValue(receipt.outcome, 'missing').replaceAll('_', ' ')}</Badge>
+              <Badge variant="outline">{stringValue(publicReadback.reconstructionStatus, 'missing').replaceAll('_', ' ')}</Badge>
             </div>
-            <CardTitle className="break-words text-lg">{serverReadback.receipt.id}</CardTitle>
+            <CardTitle className="break-words text-lg">{stringValue(receipt.id, 'missing')}</CardTitle>
             <CardDescription>Public-safe receipt readback only. Private endpoint refs remain redacted.</CardDescription>
           </CardHeader>
           <CardContent>
             <FactGrid
               facts={[
-                { label: 'Request hash', value: serverReadback.publicReadback.hashes.requestHash },
-                { label: 'Checkpoint hash', value: serverReadback.publicReadback.hashes.checkpointHash ?? 'missing' },
-                { label: 'Result artifact hash', value: serverReadback.publicReadback.hashes.resultArtifactHash ?? 'missing' },
-                { label: 'External evidence refs', value: String(serverReadback.receipt.externalEvidenceRefHashes.length) },
-                { label: 'Guardrail evidence refs', value: String(serverReadback.receipt.guardrailEvidenceRefHashes.length) },
+                { label: 'Request hash', value: stringValue(hashes.requestHash, 'missing') },
+                { label: 'Checkpoint hash', value: stringValue(hashes.checkpointHash, 'missing') },
+                { label: 'Result artifact hash', value: stringValue(hashes.resultArtifactHash, 'missing') },
+                { label: 'External evidence refs', value: String(arrayValue(receipt.externalEvidenceRefHashes).length) },
+                { label: 'Guardrail evidence refs', value: String(arrayValue(receipt.guardrailEvidenceRefHashes).length) },
               ]}
             />
           </CardContent>
@@ -85,4 +88,16 @@ function OwnerBusinessActionReceiptRoute() {
       </section>
     </AePublicShell>
   )
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : fallback
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function arrayValue(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
 }

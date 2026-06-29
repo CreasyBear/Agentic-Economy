@@ -1,3 +1,5 @@
+import type { StripeWebhookSignatureInput } from './internal/stripe-checkout'
+
 export {
   ActionReceiptOutcomeValues,
   AuthorizationCheckpointDecisionValues,

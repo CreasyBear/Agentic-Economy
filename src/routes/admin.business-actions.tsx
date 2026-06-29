@@ -217,7 +217,7 @@ function AdminBusinessActionsRoute() {
       description="source/local proof only. production proof not claimed."
       currentPath="/admin/business-actions"
     >
-      <FilterPanel requestId={search.requestId} />
+      {search.requestId === undefined ? <FilterPanel /> : <FilterPanel requestId={search.requestId} />}
       {readback.rows.length === 0 ? <EmptyState /> : <AdminBusinessActionRows rows={readback.rows} />}
     </AeAdminShell>
   )
