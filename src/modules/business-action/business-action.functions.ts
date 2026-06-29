@@ -25,6 +25,25 @@ const receiptSchema = z.object({
   requestId: z.string().min(1),
 })
 
+const guardrailDecisionSchema = z.object({
+  requestId: z.string().min(1),
+  provider: z.enum(['nemo_guardrails', 'nemotron']),
+  modelName: z.string().min(1).max(160),
+  modelVersion: z.string().min(1).max(160),
+  decision: z.enum(['allow', 'block', 'refusal']),
+  policyHash: z.string().min(1),
+  privateTraceRefHash: z.string().min(1),
+  payloadHash: z.string().min(1),
+})
+
+const hermesEvidenceSchema = z.object({
+  requestId: z.string().min(1),
+  checkpointId: z.string().min(1),
+  evidenceKind: z.enum(['scope', 'select', 'request', 'execute', 'report']),
+  providerRefHash: z.string().min(1),
+  payloadHash: z.string().min(1),
+})
+
 type BrowserMutationAdmission = {
   operationKey: string
   correlationId: string
@@ -48,6 +67,7 @@ type BusinessActionMutationServerResult =
       code: string
       request?: SerializableRecord
       checkpoint?: SerializableRecord
+      evidence?: SerializableRecord
       receipt?: SerializableRecord
       publicReadback?: SerializableRecord
     }
@@ -71,6 +91,14 @@ export const businessActionSourceFunctionRefs = {
   recordReceipt: sourceMutation<z.infer<typeof receiptSchema> & BrowserMutationAdmission, BusinessActionMutationServerResult>(
     'businessActions:recordBusinessActionReceipt'
   ),
+  recordGuardrailDecision: sourceMutation<
+    z.infer<typeof guardrailDecisionSchema> & BrowserMutationAdmission,
+    BusinessActionMutationServerResult
+  >('businessActions:recordBusinessActionGuardrailDecision'),
+  recordHermesEvidence: sourceMutation<
+    z.infer<typeof hermesEvidenceSchema> & BrowserMutationAdmission,
+    BusinessActionMutationServerResult
+  >('businessActions:recordBusinessActionHermesEvidence'),
   readCurrentOwnerReceipt: sourceQuery<z.infer<typeof receiptSchema>, BusinessActionReceiptServerResult>(
     'businessActions:readCurrentOwnerBusinessActionReceipt'
   ),
@@ -87,6 +115,14 @@ export const recordBusinessActionOwnerCheckpointServer = createServerFn({ method
 export const recordBusinessActionReceiptServer = createServerFn({ method: 'POST' })
   .validator((data) => receiptSchema.parse(data))
   .handler(async ({ data, context }) => recordBusinessActionReceiptThroughSource(data, context))
+
+export const recordBusinessActionGuardrailDecisionServer = createServerFn({ method: 'POST' })
+  .validator((data) => guardrailDecisionSchema.parse(data))
+  .handler(async ({ data, context }) => recordBusinessActionGuardrailDecisionThroughSource(data, context))
+
+export const recordBusinessActionHermesEvidenceServer = createServerFn({ method: 'POST' })
+  .validator((data) => hermesEvidenceSchema.parse(data))
+  .handler(async ({ data, context }) => recordBusinessActionHermesEvidenceThroughSource(data, context))
 
 export const readCurrentOwnerBusinessActionReceiptServer = createServerFn()
   .validator((data) => receiptSchema.parse(data))
@@ -128,6 +164,34 @@ export async function recordBusinessActionReceiptThroughSource(
     return await callSourceMutation(businessActionSourceFunctionRefs.recordReceipt, {
       ...data,
       ...(await browserMutationAdmission(context, 'receipt', data.requestId)),
+    })
+  } catch (error) {
+    return sourceError(error)
+  }
+}
+
+export async function recordBusinessActionGuardrailDecisionThroughSource(
+  data: z.infer<typeof guardrailDecisionSchema>,
+  context?: unknown
+): Promise<BusinessActionMutationServerResult> {
+  try {
+    return await callSourceMutation(businessActionSourceFunctionRefs.recordGuardrailDecision, {
+      ...data,
+      ...(await browserMutationAdmission(context, 'guardrail', `${data.requestId}:${data.decision}`)),
+    })
+  } catch (error) {
+    return sourceError(error)
+  }
+}
+
+export async function recordBusinessActionHermesEvidenceThroughSource(
+  data: z.infer<typeof hermesEvidenceSchema>,
+  context?: unknown
+): Promise<BusinessActionMutationServerResult> {
+  try {
+    return await callSourceMutation(businessActionSourceFunctionRefs.recordHermesEvidence, {
+      ...data,
+      ...(await browserMutationAdmission(context, 'hermes-evidence', `${data.requestId}:${data.checkpointId}`)),
     })
   } catch (error) {
     return sourceError(error)

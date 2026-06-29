@@ -17,12 +17,18 @@ import type { BusinessId, CapabilityRequestId, OperationKey, OwnerId } from '../
 import {
   ActionReceiptOutcomeValues,
   AuthorizationCheckpointDecisionValues,
+  BusinessActionExternalEvidenceStatusValues,
+  BusinessActionGuardrailDecisionValues,
+  BusinessActionGuardrailProviderValues,
   BusinessActionSlug,
   CapabilityRequestStatusValues,
+  HermesEvidenceKindValues,
   ReceiptReconstructionStatusValues,
   createCapabilityRequest,
   recordActionReceipt,
   recordAuthorizationCheckpoint,
+  recordGuardrailDecisionEvidence,
+  recordHermesEvidenceEvent,
   verifyActionReceipt,
 } from '../src/modules/business-action/public'
 import type {
@@ -31,6 +37,8 @@ import type {
   BusinessActionOwnerAuthority,
   BusinessActionSourceState,
   CapabilityRequest,
+  GuardrailDecisionEvidence,
+  HermesEvidenceEvent,
 } from '../src/modules/business-action/public'
 
 const businessActionErrorCode = v.union(
@@ -62,6 +70,10 @@ const currency = v.union(v.literal('aud'), v.literal('usd'))
 const actionSlug = v.literal(BusinessActionSlug)
 const requestStatus = literalUnion(CapabilityRequestStatusValues)
 const checkpointDecision = literalUnion(AuthorizationCheckpointDecisionValues)
+const guardrailProvider = literalUnion(BusinessActionGuardrailProviderValues)
+const guardrailDecision = literalUnion(BusinessActionGuardrailDecisionValues)
+const evidenceStatus = literalUnion(BusinessActionExternalEvidenceStatusValues)
+const hermesEvidenceKind = literalUnion(HermesEvidenceKindValues)
 const receiptOutcome = literalUnion(ActionReceiptOutcomeValues)
 const receiptReconstructionStatus = literalUnion(ReceiptReconstructionStatusValues)
 
@@ -127,6 +139,39 @@ const businessActionReceipt = v.object({
   recordedAt: v.number(),
 })
 
+const guardrailEvidence = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  actionSlug,
+  policyHash: v.string(),
+  requestHash: v.string(),
+  provider: guardrailProvider,
+  modelName: v.string(),
+  modelVersion: v.string(),
+  decision: guardrailDecision,
+  privateTraceRefHash: v.string(),
+  decisionHash: v.string(),
+  payloadHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  recordedAt: v.number(),
+})
+
+const hermesEvidence = v.object({
+  id: v.string(),
+  requestId: v.string(),
+  checkpointId: v.string(),
+  actionSlug,
+  provider: v.literal('hermes'),
+  status: evidenceStatus,
+  providerRefHash: v.string(),
+  payloadHash: v.string(),
+  idempotencyKey: v.string(),
+  correlationId: v.string(),
+  evidenceKind: hermesEvidenceKind,
+  receivedAt: v.number(),
+})
+
 const publicReadback = v.object({
   receiptId: v.string(),
   actionSlug,
@@ -160,11 +205,16 @@ const mutationResult = v.union(
       v.literal('business_action_request_replayed'),
       v.literal('business_action_checkpoint_recorded'),
       v.literal('business_action_checkpoint_replayed'),
+      v.literal('business_action_guardrail_recorded'),
+      v.literal('business_action_guardrail_replayed'),
+      v.literal('business_action_hermes_evidence_recorded'),
+      v.literal('business_action_hermes_evidence_replayed'),
       v.literal('business_action_receipt_recorded'),
       v.literal('business_action_receipt_replayed')
     ),
     request: v.optional(businessActionRequest),
     checkpoint: v.optional(businessActionCheckpoint),
+    evidence: v.optional(v.union(guardrailEvidence, hermesEvidence)),
     receipt: v.optional(businessActionReceipt),
     publicReadback: v.optional(publicReadback),
   }),
@@ -265,6 +315,27 @@ const forbiddenReceiptFields = [
   'receiptOutcome',
   'checkpointResult',
   'status',
+] as const
+
+const forbiddenEvidenceFields = [
+  'ownerId',
+  'adminId',
+  'actorRef',
+  'ownerAuthority',
+  'adminAuthority',
+  'businessAuthority',
+  'providerId',
+  'providerObjectId',
+  'providerRef',
+  'amountCents',
+  'currency',
+  'receiptStatus',
+  'receiptOutcome',
+  'checkpointResult',
+  'status',
+  'rawPrompt',
+  'rawTrace',
+  'rawProviderPayload',
 ] as const
 
 export const createBusinessActionCapabilityRequest = mutationGeneric({
@@ -423,6 +494,108 @@ export const recordBusinessActionReceipt = mutationGeneric({
   },
 })
 
+export const recordBusinessActionGuardrailDecision = mutationGeneric({
+  args: {
+    requestId: v.string(),
+    provider: guardrailProvider,
+    modelName: v.string(),
+    modelVersion: v.string(),
+    decision: guardrailDecision,
+    policyHash: v.string(),
+    privateTraceRefHash: v.string(),
+    payloadHash: v.string(),
+    ...sourceWriteProtectedActionArgs,
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: mutationResult,
+  handler: async (ctx, args) => {
+    const forbidden = firstForbiddenField(args, forbiddenEvidenceFields)
+    if (forbidden !== undefined) {
+      return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
+    }
+
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return adapterError('business_action_source_write_rejected', sourceWrite.reason)
+    }
+
+    const db = runtimeDb(ctx.db)
+    const state = await loadBusinessActionRequestSlice(db, args.requestId)
+    const result = recordGuardrailDecisionEvidence(state, {
+      requestId: args.requestId as CapabilityRequestId,
+      provider: args.provider,
+      modelName: args.modelName,
+      modelVersion: args.modelVersion,
+      decision: args.decision,
+      policyHash: brandNonEmpty(args.policyHash, 'SourceHash'),
+      privateTraceRefHash: brandNonEmpty(args.privateTraceRefHash, 'SourceHash'),
+      payloadHash: brandNonEmpty(args.payloadHash, 'SourceHash'),
+      idempotencyKey: brandNonEmpty(args.operationKey, 'OperationKey'),
+      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
+      recordedAt: Date.now(),
+    })
+    if (result.kind === 'error') {
+      return moduleError(result)
+    }
+
+    await persistBusinessActionSlice(db, result.state)
+    return {
+      kind: 'ok' as const,
+      code: result.code,
+      evidence: serializeGuardrailEvidence(result.evidence),
+    }
+  },
+})
+
+export const recordBusinessActionHermesEvidence = mutationGeneric({
+  args: {
+    requestId: v.string(),
+    checkpointId: v.string(),
+    evidenceKind: hermesEvidenceKind,
+    providerRefHash: v.string(),
+    payloadHash: v.string(),
+    ...sourceWriteProtectedActionArgs,
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: mutationResult,
+  handler: async (ctx, args) => {
+    const forbidden = firstForbiddenField(args, forbiddenEvidenceFields)
+    if (forbidden !== undefined) {
+      return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
+    }
+
+    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return adapterError('business_action_source_write_rejected', sourceWrite.reason)
+    }
+
+    const db = runtimeDb(ctx.db)
+    const state = await loadBusinessActionRequestSlice(db, args.requestId)
+    const result = recordHermesEvidenceEvent(state, {
+      requestId: args.requestId as CapabilityRequestId,
+      checkpointId: args.checkpointId as never,
+      evidenceKind: args.evidenceKind,
+      providerRefHash: brandNonEmpty(args.providerRefHash, 'SourceHash'),
+      payloadHash: brandNonEmpty(args.payloadHash, 'SourceHash'),
+      idempotencyKey: brandNonEmpty(args.operationKey, 'OperationKey'),
+      correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
+      receivedAt: Date.now(),
+    })
+    if (result.kind === 'error') {
+      return moduleError(result)
+    }
+
+    await persistBusinessActionSlice(db, result.state)
+    return {
+      kind: 'ok' as const,
+      code: result.code,
+      evidence: serializeHermesEvidence(result.evidence),
+    }
+  },
+})
+
 export const readCurrentOwnerBusinessActionReceipt = queryGeneric({
   args: { requestId: v.string() },
   returns: v.union(
@@ -537,6 +710,14 @@ function serializeReceipt(receipt: ActionReceipt) {
     externalEvidenceRefHashes: [...receipt.externalEvidenceRefHashes],
     guardrailEvidenceRefHashes: [...receipt.guardrailEvidenceRefHashes],
   }
+}
+
+function serializeGuardrailEvidence(evidence: GuardrailDecisionEvidence) {
+  return { ...evidence }
+}
+
+function serializeHermesEvidence(evidence: HermesEvidenceEvent) {
+  return { ...evidence }
 }
 
 function serializePublicReadback(readback: ReturnType<typeof verifyActionReceipt>['publicReadback']) {
