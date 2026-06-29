@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 06
 status: executing
-stopped_at: Completed 06-04-business-action-routes-PLAN.md
-last_updated: "2026-06-29T13:43:34.965Z"
+stopped_at: Completed 06-05-observability-support-controls-PLAN.md
+last_updated: "2026-06-29T14:01:18.032Z"
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 31
-  completed_plans: 27
+  completed_plans: 28
   percent: 50
 ---
 
@@ -59,8 +59,8 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 
 ## Session
 
-**Last session:** 2026-06-29T13:43:34.960Z
-**Stopped at:** Completed 06-04-business-action-routes-PLAN.md
+**Last session:** 2026-06-29T14:01:18.027Z
+**Stopped at:** Completed 06-05-observability-support-controls-PLAN.md
 **Resume file:** None
 
 ## Performance Metrics
@@ -84,6 +84,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 | Phase 06 P02 | 26min | 3 tasks | 5 files |
 | Phase 06 P03 | 12min | 2 tasks | 4 files |
 | Phase 06 P06-04 | 27min | 2 tasks | 10 files |
+| Phase 06 P06-05 | 12min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -151,6 +152,10 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 06]: Webhook route default source admission fails closed — Until a later plan wires durable source persistence for Stripe webhook admission, the route returns a typed unavailable result rather than creating false payment or receipt proof.
 - [Phase 06]: source/local proof only; production proof not claimed — Plan 06-04 adds owner/admin business-action route readbacks without public production proof claims.
 - [Phase 06]: Owner/admin business-action routes read through module server seams — Route components do not own Business Action fixture arrays or raw private evidence.
+- [Phase 06]: Business-action operator controls use the existing source-owned operator-control path instead of env-only switches.
+- [Phase 06]: Public private-evidence projection returns hash/metadata only and explicitly excludes raw prompts, traces, provider payloads, Stripe payloads, customer identifiers, private endpoint refs, API keys, and webhook secrets.
+- [Phase 06]: source/local proof only; production proof not claimed — Plan 06-05 adds observability/support-control source validation only.
+- [Phase 06]: Do not add duplicate observability tables for Phase 6 support/private-evidence rows — 06-02 already owns durable business-action source persistence.
 
 ### Blockers
 
