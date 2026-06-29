@@ -1,15 +1,15 @@
 ---
 phase: 01-ten-star-spine-foundation
 verified: 2026-06-28T15:26:38Z
-status: gaps_found
-score: 9/10 requirement groups verified; R10 partially verified
+status: passed_with_deferred_debt
+score: 10/10 requirement groups dispositioned; R10 owner evidence explicitly deferred
 behavior_unverified: 1
-overrides_applied: 0
-requirements_source: ".planning/phases/01-ten-star-spine-foundation/01-SPEC.md and plan frontmatter; .planning/REQUIREMENTS.md absent"
-next_action: "Collect remaining R10 human evidence or explicitly rescope internal-alpha/review gates before milestone close."
-next_command: "$gsd-plan-phase --gaps 01"
-gaps:
-  - "R10: technical local/codegen/deploy smoke gates pass, but five real friendly-owner activation rows are still 0/5, the external Matt Pocock two-axis review is not executed, and .planning/REQUIREMENTS.md is absent for clean milestone traceability."
+overrides_applied: 1
+requirements_source: ".planning/REQUIREMENTS.md, .planning/phases/01-ten-star-spine-foundation/01-SPEC.md, and plan frontmatter"
+next_action: "Continue Phase 2-5 execution; collect five-owner activation evidence before internal-alpha or public-launch claims."
+next_command: "$gsd-execute-phase 02"
+deferred_debt:
+  - "R10 owner-evidence gate: five real friendly-owner activation rows remain 0/5. User explicitly instructed on 2026-06-28 not to block Phase 2-5 progress on this gate. This is accepted deferred debt, not proof of internal-alpha readiness."
 ---
 
 # Phase 01 Verification Report
@@ -17,8 +17,8 @@ gaps:
 **Phase Goal:** A launch-ICP Australian urgent/local-service owner can claim without ABN, publish a truthful public business service catalog, appear in registry/search/API and AE-hosted discovery, see visibility and discovery health, and be safely suppressed or repaired by source-owned operator controls.
 
 **Formal rerun:** 2026-06-28T15:26:38Z
-**Status:** gaps_found  
-**Closeout decision:** do not clean-close yet. The technical spine is green, but the Phase 1 spec also requires internal-alpha/review evidence that is not present.
+**Status:** passed_with_deferred_debt
+**Closeout decision:** continue execution. The technical spine, requirements traceability, and Matt review are recorded. The five-owner internal-alpha evidence gate remains deferred debt and must not be used as proof of internal-alpha or public-launch readiness.
 
 ## Verification Summary
 
@@ -33,7 +33,7 @@ gaps:
 | R7 AE-hosted discovery | PASS | Discovery route parity, SEO tests, UCP redaction, llms/sitemap/robots, and live deploy smoke pass. |
 | R8 admin/suppression/dispute/operator controls | PASS | Unit/integration coverage plus live admin/owner storage-state deploy smoke. |
 | R9 lifecycle descriptor-only contract | PASS | Lifecycle tests and copy/import gates preserve descriptor-only boundary. |
-| R10 closeout/readiness proof | PARTIAL | Local/codegen/deploy smoke pass. Internal-alpha rows remain 0/5; external Matt review is prepared but not executed; milestone requirements traceability file is absent. |
+| R10 closeout/readiness proof | DEFERRED DEBT | Local/codegen/deploy smoke pass, milestone requirements traceability exists, and the Matt two-axis review is recorded. Internal-alpha rows remain 0/5 and are explicitly deferred for Phase 2-5 execution progress. |
 
 ## Command Evidence
 
@@ -62,20 +62,17 @@ gaps:
 - Added the command-scoped local registry bypass used only when `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true`, keeping local E2E deterministic while production/deploy smoke continues through Convex.
 - Refreshed Clerk admin/owner storage states via sign-in tokens so deploy smoke proved real app-domain sessions.
 
-## Remaining Gap
+## Deferred Debt
 
-Phase 01 still cannot be clean-closed under the current spec because R10 is broader than technical deployment:
+Phase 01 is no longer blocking Phase 2-5 execution because the user explicitly accepted the five-owner evidence gap as deferred debt on 2026-06-28. The deferred debt remains:
 
 - `01-ALPHA-EVIDENCE.md` records `owner_rows_recorded: 0` and `owner_rows_required: 5`.
 - `01-INTERNAL-ALPHA-READINESS.md` remains `not alpha-ready`.
-- `01-MATT-REVIEW-CONTEXT.md` prepares the Standards/Spec axes, but this rerun did not execute an external `/mattpocock-review`.
-- `.planning/REQUIREMENTS.md` is absent, so `gsd-complete-milestone` cannot complete clean milestone traceability.
+- `01-MATT-REVIEW.md` records the Standards/Spec review; its remaining Spec blocker is the same five-owner evidence gap.
+- `.planning/REQUIREMENTS.md` has been restored for clean milestone traceability.
 
 ## GSD Gate
 
-`audit-open` should continue to report this phase as a verification gap until either:
+`audit-open` should not treat this phase as an execution blocker after the explicit deferral. This does not make Phase 01 internal-alpha ready. It only allows Phase 2-5 work to proceed while the owner-evidence debt remains tracked.
 
-1. the five-owner and review/traceability evidence is collected, or
-2. the user explicitly rescope/defers those R10 exit criteria and records the deferral as an override closeout.
-
-No override was applied in this verification rerun.
+Override applied: user instructed "dont block on the 0/5 owner activation rows - lets keep moving" on 2026-06-28.

@@ -17,6 +17,17 @@ const defaultControlValues = {
   registry_enabled: true,
   discovery_enabled: true,
   public_copy_safe_mode: false,
+  inquiries_enabled: true,
+  inquiry_owner_replies_enabled: true,
+  notification_dispatch_enabled: true,
+  notification_webhooks_enabled: true,
+  developer_discovery_publish_enabled: true,
+  discovery_api_keys_enabled: true,
+  protected_actions_enabled: true,
+  protected_action_attempts_enabled: true,
+  paid_activation_enabled: true,
+  billing_webhooks_enabled: true,
+  billing_reconciliation_enabled: true,
 } satisfies Record<OperatorControlKey, boolean>
 
 export function setOperatorControl(

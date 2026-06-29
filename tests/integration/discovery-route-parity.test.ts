@@ -38,6 +38,7 @@ import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { handleDurableUcpManifestRequest } from '@/routes/$slug.ucp'
+import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
 
 describe('discovery route parity', () => {
   it('tracks one durable catalog and suppression across public page, registry/API, UCP, llms, and sitemap', async () => {
@@ -75,6 +76,11 @@ describe('discovery route parity', () => {
         const llmsBody = await llms.text()
         const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
         const sitemapBody = await sitemap.text()
+        const fixtures = await (
+          await handleDeveloperDiscoveryFixturesRequest(new Request('https://ae.example/api/discovery/fixtures'), undefined, {
+            now: 13_000,
+          })
+        ).json()
 
         expect(page).toMatchObject({
           kind: 'available',
@@ -93,6 +99,28 @@ describe('discovery route parity', () => {
         })
         expect(llmsBody).toContain('slug=fremantle-heat-pump-repairs')
         expect(sitemapBody).toContain('https://ae.example/fremantle-heat-pump-repairs')
+        expect(fixtures).toMatchObject({
+          kind: 'public_catalog_fixture_bundle',
+          state: 'degraded',
+          examples: [expect.objectContaining({ slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' })],
+          routeHealth: expect.arrayContaining([
+            expect.objectContaining({
+              route: 'https://ae.example/api/businesses',
+              status: 'available',
+              schemaVersion: 'public-business-catalog-api:v1',
+            }),
+            expect.objectContaining({
+              route: 'https://ae.example/api/businesses/fremantle-heat-pump-repairs',
+              status: 'available',
+              schemaVersion: 'public-business-catalog-api:v1',
+            }),
+            expect.objectContaining({
+              route: 'https://ae.example/fremantle-heat-pump-repairs/ucp',
+              status: 'available',
+              schemaVersion: 'ae-ucp-fallback:v1',
+            }),
+          ]),
+        })
         expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llmsBody, sitemapBody })).not.toContain(
           'parramatta-emergency-plumbing'
         )

@@ -38,10 +38,10 @@ P1 Spine Foundation
       |      propose -> policy -> owner approve/reject -> receipt/audit
       |
       +--> P5 Paid Activation
-             Stripe Billing/Checkout first; Connect/x402 only after authority/readback decision record
+             One Autumn Cloud + Stripe PSP paid-activation rail; Connect/x402/wallet/credits/custody stay out of P5
 ```
 
-P2 and P3 may run in either order after P1. P4 requires enough human/discovery context to propose actions safely. P5 requires authority, receipts, and operator reconstruction.
+P2-P5 are planned as one production system and executed in order by default. P2 creates human demand and owner communication, P3 exposes only read-only public/discovery projections, P4 admits exactly one owner-approved non-money action, and P5 adds one paid activation rail after authority/receipt posture exists.
 
 ## Phase 1 — Ten-Star Spine Foundation
 
@@ -72,19 +72,19 @@ P2 and P3 may run in either order after P1. P4 requires enough human/discovery c
 
 The public business service catalog page must explain demand risk and next owner action in one screen, pass banned-claim copy scan, and state unavailable capabilities explicitly.
 
-Manifest/llms/sitemap gates are engineering readbacks, not owner-facing success.
+Manifest/llms/sitemap checks are engineering readbacks, not owner-facing success.
 
 **Owner activated:** publish succeeded, owner viewed status/readback, owner copied/shared URL or submitted consented next-capability interest, and attribution exists.
 
 **Cut:** payments, wallet, protected actions, request market, skills, expert profiles, hosted agents, voice, persona UI, benchmarks, native mobile, API keys, MCP/OpenAPI tools, developer platform.
 
-**Exit gate:** all Phase 1 plan gates green, GTM internal-alpha gate green, deployment/readback smoke green.
+**Exit proof:** all Phase 1 plan checks green, GTM internal-alpha proof green, deployment/readback smoke green.
 
 ## Phase 2 — Human Inquiry + Owner Inbox
 
 **Objective:** one conservative customer inquiry path.
 
-**Engineering gate:** `firstRequestMode` may expose inquiry only when contact/consent policy, durable message state, owner read/reply, notification readback, abuse controls, and copy tests exist.
+**Engineering proof:** `firstRequestMode` may expose inquiry only when contact/consent policy, durable message state, owner read/reply, notification readback, abuse controls, and copy tests exist.
 
 **Ship:**
 
@@ -98,13 +98,13 @@ durable message/audit state
 
 **Cut:** autonomous replies, AI handling, booking, payment, action execution, multi-channel support bloat.
 
-**Exit gate:** customer message persists, owner sees it, owner can reply, notification failure is visible and does not lose the message.
+**Exit proof:** customer message persists, owner sees it, owner can reply, notification failure is visible and does not lose the message.
 
 ## Phase 3 — Standard Agent/Builder Discovery
 
 **Objective:** extend readonly discovery only after P1 truth exists and public list/search/detail APIs have shipped.
 
-**Engineering gate:** builder/agent discovery must be read-only until documented public facts, tested caching, schema parity, unsupported-action flags, and operational readback exist. API keys, MCP, and OpenAPI remain read-only unless a later phase ships server-enforced action capability.
+**Engineering proof:** builder/agent discovery must be read-only until documented public facts, tested caching, schema parity, unsupported-action flags, and operational readback exist. API keys, MCP, and OpenAPI remain read-only unless a later phase ships server-enforced action capability.
 
 **Ship candidates:**
 
@@ -117,13 +117,13 @@ schema fixtures/evals
 
 **Cut:** invocation, tools/actions, payment descriptors, SDK/CLI/plugin unless demand proven.
 
-**Exit gate:** builder can discover public facts and unsupported/degraded capabilities through documented, valid, cached outputs; no P3 surface duplicates the P1 public catalog without adding source-owned capability.
+**Exit proof:** builder can discover public facts and unsupported/degraded capabilities through documented, valid, cached outputs; no P3 surface duplicates the P1 public catalog without adding source-owned capability.
 
 ## Phase 4 — Owner-Pending Protected Actions
 
 **Objective:** consequential actions start as proposals and end in owner-approved receipts.
 
-**Engineering gate:** protected actions may be advertised only as owner-pending; every action requires policy check, owner approval/rejection, provider attempt state, receipt, audit, and dispute/reversal posture.
+**Engineering proof:** protected actions may be advertised only as owner-pending; every action requires policy check, owner approval/rejection, provider attempt state, receipt, audit, and dispute/reversal posture.
 
 **Ship:**
 
@@ -137,19 +137,19 @@ receipt/audit reconstruction
 
 **Cut:** autonomous protected execution.
 
-**Exit gate:** every action reconstructs actor, policy, approval, provider attempt, outcome, receipt, and dispute/reversal posture.
+**Exit proof:** every action reconstructs actor, policy, approval, provider attempt, outcome, receipt, and dispute/reversal posture.
 
 ## Phase 5 — Paid Activation + Money Rails
 
 **Objective:** add money only after authority and receipt posture.
 
-**Engineering gate:** payment may be advertised only when a concrete rail has provider readback, idempotency, receipt, reversal/dispute, reconciliation, and operator reconstruction.
+**Engineering proof:** payment may be advertised only when a concrete rail has provider readback, idempotency, receipt, reversal/dispute, reconciliation, and operator reconstruction.
 
-**Default:** Stripe Billing + Checkout Sessions for subscriptions. Connect Accounts v2 only with explicit controller responsibilities and one charge model. x402/crypto rails remain adapters.
+**Default:** Autumn Cloud as billing/product-ops authority with Stripe as PSP/Checkout/invoice/refund/dispute layer underneath. Direct Stripe Billing + Checkout Sessions as AE's subscription engine is fallback only after an explicit Autumn blocker decision record. Connect Accounts v2, x402/crypto rails, wallet/credits/balance, custody, split payouts, marketplace settlement, request-market settlement, and multi-rail commerce stay out of P5.
 
-**Money rail quarantine:** no `stripe*`, `x402`, `wallet`, `credits`, `balance`, `paymentHandler`, or rail-specific fields in `business`, `registry`, or `discovery` before Phase 5 decision record.
+**Money rail quarantine:** no `autumn*`, `AUTUMN_`, `stripe*`, `x402`, `wallet`, `credits`, `balance`, `paymentHandler`, provider refs, or rail-specific fields in `business`, `registry`, or `discovery` before the Phase 5 money decision record and owning implementation.
 
-**Exit gate:** provider readback, idempotent ledger/receipt, reversal/dispute, reconciliation, operator reconstruction.
+**Exit proof:** provider readback, idempotent ledger/receipt, reversal/dispute, reconciliation, operator reconstruction.
 
 ## Bloat relapse detector
 

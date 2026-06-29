@@ -6,27 +6,27 @@
 
 ## Goal
 
-AE can charge for paid activation through one selected money rail with provider readback, idempotent billing state, receipts, reversal/dispute handling, reconciliation, and operator reconstruction without leaking rail concepts into core catalog/discovery state.
+AE can charge for paid activation through one selected Autumn+Stripe rail with provider readback, idempotent billing state, receipts, reversal/dispute handling, reconciliation, and operator reconstruction without leaking rail concepts into core catalog/discovery state.
 
 ## Background
 
-Current repo state is planning-only and Phase 5 does not yet have a GSD phase directory. ROADMAP.md quarantines money until Phase 5 and sets Stripe Billing + Checkout Sessions as the default, while requiring a decision record for Connect/x402 and forbidding rail-specific fields in core business/registry/discovery before the phase. The payment scout found useful backup invariants in server-created Checkout sessions, signed raw-body webhook verification, provider evidence normalization, idempotent ledger/receipt state, refund/reversal readbacks, and operator reconciliation; it also found wallet/credits/request-market/crypto/provider-console topology that must not be copied as the domain model.
+Current repo state is planning-only and Phase 5 does not yet have a GSD phase directory. ROADMAP.md quarantines money until Phase 5 and now sets Autumn Cloud + Stripe PSP as the default: Autumn owns generic billing/product-ops, product/price configuration, subscription lifecycle, entitlement/readback, and customer portal workflows; Stripe handles payment collection, Checkout, invoices/receipts, refunds, and disputes beneath Autumn. The payment scout found useful backup invariants in Autumn-backed provider mapping, server-created billing operations, signed raw-body webhook verification, provider evidence normalization, idempotent ledger/receipt state, refund/reversal readbacks, and operator reconciliation; it also found wallet/credits/request-market/crypto/provider-console topology that…
 
 ## Requirements
 
-1. **Money-rail decision record**: Phase 5 begins with a money-rail decision record that selects one default paid-activation rail, normally Stripe Billing plus Checkout Sessions, and keeps Connect, x402, wallet, credits, and provider-specific identifiers out of core business/registry/discovery state unless separately approved.
+1. **Money-rail decision record**: Phase 5 begins with a money-rail decision record that selects the default paid-activation rail: Autumn Cloud owns billing/product-ops authority and Stripe PSP handles checkout, invoices/receipts, refunds, disputes, and payment collection underneath.
    - Current: Phase 1-4 must not contain money rail fields; only future-money-safe IDs, audit, idempotency, and receipts are planned.
-   - Target: A decision record fixes rail, product/pricing object, charge model, controller responsibilities, non-goals, data boundaries, and rollback/disable plan before code.
-   - Acceptance: Verifier can locate the decision record and prove core business/catalog/registry/discovery schemas do not contain rail-specific IDs or wallet/credit/balance fields unless the record explicitly approves them.
+   - Target: A decision record fixes the Autumn+Stripe rail, product/pricing object, charge model, controller responsibilities, non-goals, data boundaries, and rollback/disable plan before code. Direct Stripe subscription authority is allowed only as a fallback after an evidence-backed Autumn blocker decision; Connect, x402, wallet, credits, custody, split payout, marketplace settlement, provider-specific billing IDs, and rail-specific fields stay out of core business/catalog/registry/discovery state.
+   - Acceptance: Verifier can locate the decision record and prove core business/catalog/registry/discovery schemas do not contain rail-specific IDs or wallet/credit/balance fields.
 
-2. **Server-created checkout/subscription**: Checkout or subscription creation is server-side only, binds authenticated owner/business authority, plan or quote source state, idempotency key, correlation ID, and pending billing operation, and never trusts client-supplied amount, currency, customer ID, or entitlement.
+2. **Server-created billing start**: Autumn attach/checkout/customer-portal or equivalent selected-rail start is server-side only, binds authenticated owner/business authority, plan or quote source state, idempotency key, correlation ID, and pending billing operation, and never trusts client-supplied amount, currency, customer ID, provider IDs, or entitlement.
    - Current: No checkout, subscription, billing, or payment state exists.
-   - Target: One paid activation flow creates a provider session/subscription from source-owned pricing/plan state and stores pending operation/readback before redirecting.
+   - Target: One paid activation flow starts from source-owned pricing/plan state through the selected Autumn+Stripe rail and stores pending operation/readback before redirecting or opening provider-managed billing UI.
    - Acceptance: Tests prove valid creation stores pending operation; anonymous, wrong-owner, suppressed business, invalid plan, client-supplied amount/currency/customer/entitlement, duplicate replay, and same-key/different-body paths fail safely.
 
-3. **Provider webhook and readback ingest**: Provider webhook/readback ingest verifies signed raw payloads, retrieves provider state when required, normalizes allowed paid/refunded/disputed events, deduplicates logical object keys, binds to pending operations, and never grants entitlement directly from a webhook alone.
+3. **Provider webhook and readback ingest**: Autumn webhook/readback ingest and any Stripe PSP readback verify signed raw payloads, retrieve provider state when required, normalize allowed paid/refunded/disputed events, deduplicate logical object keys, bind to pending operations, and never grant entitlement directly from a webhook alone.
    - Current: No provider webhook/readback adapter exists.
-   - Target: Provider events become normalized evidence rows and candidates for billing state transitions only after signature, binding, dedupe, and admission checks pass.
+   - Target: Autumn/Stripe evidence rows become candidates for billing state transitions only after signature, binding, dedupe, and admission checks pass.
    - Acceptance: Tests prove invalid signature/raw-body mismatch fails closed, duplicate webhook is idempotent, unbound object is held for operator readback, direct subscription event does not grant entitlement, and retrieved provider state is required where configured.
 
 4. **Append-only billing state and receipts**: Billing state, receipts, and paid activation are append-only and idempotent, with stable operation IDs, provider evidence refs, internal receipt IDs, running entitlement/readback state, and replay returning the stored result without duplicate side effects.
@@ -57,9 +57,9 @@ Current repo state is planning-only and Phase 5 does not yet have a GSD phase di
 ## Boundaries
 
 **In scope:**
-- One money-rail decision record and one selected paid-activation rail.
-- Server-created checkout/subscription or equivalent selected-rail start flow.
-- Provider webhook/readback ingest with signature, retrieval, normalization, binding, dedupe, and admission checks.
+- One money-rail decision record and one selected Autumn Cloud + Stripe PSP paid-activation rail; direct Stripe subscription authority is fallback only after the decision record names an evidence-backed Autumn blocker.
+- Server-created Autumn attach/checkout/customer-portal or equivalent selected-rail start flow.
+- Autumn webhook/readback ingest plus Stripe PSP evidence where applicable with signature, retrieval, normalization, binding, dedupe, and admission checks.
 - Append-only billing/receipt/readback state with idempotent replay and stable refs.
 - Refund/reversal/dispute/failed-payment/cancellation posture and owner/operator next actions.
 - Operator reconciliation and repair/no-repair readbacks.
@@ -68,18 +68,18 @@ Current repo state is planning-only and Phase 5 does not yet have a GSD phase di
 
 **Out of scope:**
 - Wallet/credits/balance/request-market settlement as the default domain model.
-- Stripe Connect Accounts v2, marketplace payouts, split charges, or controller responsibilities without a separate decision record.
+- Direct Stripe Billing/Checkout subscription authority, Stripe Connect Accounts v2, marketplace payouts, split charges, or controller responsibilities unless an evidence-backed Autumn blocker decision explicitly selects direct Stripe fallback for this paid-activation slice.
 - x402/crypto/USDC/custody/payment-handler rails except as quarantined adapter candidates with explicit approval.
-- Client-created amounts, currencies, customer IDs, entitlements, or direct webhook entitlement grants.
+- Client-created amounts, currencies, customer IDs, provider IDs, entitlements, or direct webhook entitlement grants.
 - Payment fields in core business/catalog/registry/discovery state unless approved by the money decision record.
 - Provider-proof theatre from screenshots/env/config without server readback and reconciliation.
 - Public payment/custody/settlement claims before provider readback, receipts, reversal/dispute, reconciliation, and smoke tests pass.
 
 ## Constraints
 
-- Use stripe-best-practices before implementing or reviewing Stripe code.
-- Default rail is Stripe Billing + Checkout Sessions unless the decision record selects otherwise.
-- Checkout keeps AE out of raw card handling; do not expand PCI/custody scope without explicit decision.
+- Use current official Autumn and Stripe docs before implementing or reviewing money code.
+- Default rail is Autumn Cloud + Stripe PSP; direct Stripe subscription authority is fallback only after an evidence-backed Autumn blocker, and all other rails remain out of scope.
+- Autumn/Stripe hosted payment flows keep AE out of raw card handling; do not expand PCI/custody scope without explicit decision.
 - Every provider event is untrusted until signature, binding, dedupe, and readback admission pass.
 - Entitlement/paid activation derives from internal source-owned billing state, not provider webhooks alone.
 - Provider secrets, raw payloads, PII, and payment details are redacted from logs/audit/readbacks.
@@ -87,9 +87,9 @@ Current repo state is planning-only and Phase 5 does not yet have a GSD phase di
 
 ## Acceptance Criteria
 
-- [ ] Money-rail decision record selects one default rail, product/pricing object, charge model, controller responsibilities, data boundaries, rollback/disable plan, and non-goals.
-- [ ] Core business/catalog/registry/discovery schemas remain free of unapproved stripe*, x402, wallet, credits, balance, paymentHandler, provider IDs, and rail-specific fields.
-- [ ] Server checkout/subscription creation binds owner/business authority, source-owned plan/quote, idempotency, correlation, and pending billing operation; client-supplied amount/currency/customer/entitlement is ignored or rejected.
+- [ ] Money-rail decision record selects one Autumn Cloud + Stripe PSP rail, product/pricing object, charge model, controller responsibilities, data boundaries, rollback/disable plan, and non-goals; direct Stripe subscription authority is selected only if the record proves an evidence-backed Autumn blocker.
+- [ ] Core business/catalog/registry/discovery schemas remain free of unapproved Autumn refs, stripe*, x402, wallet, credits, balance, paymentHandler, provider IDs, and rail-specific fields.
+- [ ] Server billing start binds owner/business authority, source-owned plan/quote, idempotency, correlation, pending operation, and selected Autumn+Stripe provider refs; client-supplied amount/currency/customer/provider/entitlement is ignored or rejected.
 - [ ] Provider webhook/readback verifies signed raw payloads, retrieves provider state when required, normalizes allowed events, dedupes logical objects, binds pending operations, and does not grant direct entitlement.
 - [ ] Paid activation creates append-only billing/receipt/readback state with stable operation/evidence/receipt refs and idempotent replay.
 - [ ] Failed payment, refund, reversal, dispute, cancellation, missing evidence, and manual no-repair states preserve history and expose next actions.
@@ -103,7 +103,7 @@ Current repo state is planning-only and Phase 5 does not yet have a GSD phase di
 **Mode:** Shape/Harden for future implementation. Paid activation is a high-consequence owner/operator flow; copy, state, permission, and reversibility clarity are part of the payment contract.
 
 **Primary user/job/object/outcome:**
-- User: owner/admin starting paid activation, customer/payment provider redirect participant where applicable, and operator reconciling provider/internal state.
+- User: authorized owner starts and manages paid activation; hosted checkout/customer portal is a redirect destination, not an AE user role; admin/operator reconciles provider/internal state without initiating owner payment flows.
 - Job: choose or confirm paid activation, complete server-created checkout/subscription, understand paid/failed/refunded/disputed state, and recover provider/internal mismatches.
 - Object: money-rail decision, plan/quote, checkout/subscription operation, provider event/readback, receipt, entitlement/readback, reversal/dispute, and reconciliation record.
 - Outcome: the owner sees exactly what they are paying for and what happened, while AE grants paid state only from source-owned, idempotent, reconciled evidence.
@@ -112,8 +112,8 @@ Current repo state is planning-only and Phase 5 does not yet have a GSD phase di
 
 **Product decisions locked:**
 - One selected rail starts paid activation; provider/rail choice and controller responsibilities are decision-recorded before UI copy claims capability.
-- Client UI never supplies amount, currency, customer ID, entitlement, or business authority.
-- Entitlement copy follows internal billing/readback state, not raw webhook arrival.
+- Client UI never supplies amount, currency, customer ID, provider ID, entitlement, or business authority.
+- Entitlement copy follows internal billing/readback state, not raw Autumn/Stripe webhook arrival.
 - Refunds, disputes, reversals, and failed payments preserve history and expose next action instead of erasing receipts.
 
 **Reachable states that implementation must render:** paid activation unavailable, plan unavailable, owner unauthorized, valid plan confirmation, checkout creating, redirecting, canceled return, pending provider readback, paid/active, duplicate replay, failed payment, refund, reversal, dispute hold, cancellation, provider unavailable, invalid signature/unbound object held, reconciliation stale/missing/duplicate/mismatched, retry/no-repair, redacted provider error, mobile 375px, keyboard/focus path, and long plan/provider text.
@@ -167,8 +167,8 @@ Status: ✓ = met minimum, ⚠ = below minimum.
 | Round | Perspective | Question summary | Decision locked |
 |-------|-------------|------------------|-----------------|
 | 0 | Researcher | Current state scout | P5 is roadmap-only; Phase 1-4 must keep money fields quarantined while building authority/audit/idempotency. |
-| 1 | Simplifier | What is the safest default money rail? | Stripe Billing + Checkout Sessions unless a decision record explicitly selects another rail. |
-| 1 | Boundary Keeper | What must stay out? | No wallet/credits/request-market settlement, Connect/x402/custody, direct webhook entitlements, or rail fields in core without decision approval. |
+| 1 | Simplifier | What is the safest default money rail? | Autumn Cloud + Stripe PSP unless an evidence-backed Autumn blocker decision explicitly selects direct Stripe fallback for this paid-activation slice. |
+| 1 | Boundary Keeper | What must stay out? | No direct Stripe subscription engine without an Autumn blocker decision, wallet/credits/request-market settlement, Connect/x402/custody, direct webhook entitlements, or rail fields in core without decision approval. |
 | 2 | Edge Probe | Resolve 12 applicable edge probes | Boundary/precision/idempotency/concurrency cases are specified; non-data decision/claims rows dismissed with reasons. |
 | 3 | Prohibition Probe | Resolve Phase 5 must-NOTs | Six money-specific prohibitions are resolved into tests or judgment review. |
 

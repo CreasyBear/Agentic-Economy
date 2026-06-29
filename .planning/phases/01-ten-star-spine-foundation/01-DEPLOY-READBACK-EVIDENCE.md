@@ -63,4 +63,4 @@ The live smoke covered:
 
 ## Remaining Non-Deploy Evidence
 
-This artifact is passed, but Phase 01 R10 as a whole is not fully passed until `01-ALPHA-EVIDENCE.md` has five real owner activation rows and the review/requirements traceability gaps recorded in `01-VERIFICATION.md` are resolved or explicitly deferred.
+This artifact is passed. Phase 01 owner activation evidence remains 0/5 as explicit deferred debt; it still blocks internal-alpha and launch claims, but no longer blocks Phase 2-5 execution progress.

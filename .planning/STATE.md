@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 01
+current_phase: 04
 status: executing
-stopped_at: Completed 01-15-PLAN.md with R10 blocked evidence artifacts
-last_updated: "2026-06-28T10:46:57.018Z"
+stopped_at: Phase 03 local/source verification passed 8/8 after route-parity gap closure; Phase 2 deploy/provider smokes and Phase 3 deployed proof remain unclaimed evidence items
+last_updated: "2026-06-29T05:10:58Z"
 progress:
   total_phases: 5
   completed_phases: 1
@@ -17,7 +17,7 @@ progress:
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current phase:** 01
+**Current phase:** 04
 **Status:** executing
 
 ## Active decision
@@ -50,7 +50,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Execute `.planning/phases/01-ten-star-spine-foundation/01-11-PLAN.md` next. Plan 01-10 added Convex auth/source-state helpers and runtime bridge coverage; route-level durable claim/publish work still needs real Clerk issuer/keys and clean typecheck after unrelated dirty billing work is reconciled.
+Continue Phase 4 from `.planning/phases/04-owner-pending-protected-actions/04-01-one-owner-approved-protected-action-PLAN.md` using typed GSD executor/verifier subagents and sprint-commit policy. Phase 3 local/source closeout is verified in `.planning/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md` with status `passed`, score `8/8`, and `behavior_unverified: 0` after additive gap plan `.planning/phases/03-standard-agent-builder-discovery/03-02-standard-agent-builder-discovery-route-parity-gaps-PLAN.md`; local route-handler/browser proof covers route-derived public API parity, executed route health, and builder/agent smoke, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Phase 2 source, UI, operator reconstruction, route isolation, local E2E/a11y, typecheck, unit, integration, import/source/copy/SEO/UI-contract, build, and Convex codegen gates are verified; `02-VERIFICATION.md` remains `gaps_found` with 17/18 must-haves verified and 0 behavior-unverified items. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. Do not create final `02-SUMMARY.md`, `02-UAT.md`, `02-DEPLOY-SMOKE-EVIDENCE.md`, or deployed Phase 3 proof artifacts until those smokes pass with non-secret evidence. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-5 execution progress.
 
 ## Verification expectation
 
@@ -59,7 +59,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 ## Session
 
 **Last session:** 2026-06-28T10:46:35.875Z
-**Stopped at:** Completed 01-15-PLAN.md with R10 blocked evidence artifacts
+**Stopped at:** Phase 03 local/source verification passed 8/8 after route-parity gap closure; Phase 2 deploy/provider smokes and Phase 3 deployed proof remain unclaimed evidence items
 **Resume file:** None
 
 ## Performance Metrics
@@ -102,7 +102,7 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Deploy smoke fails loudly when deployment env, Convex URL, Clerk storage states, or business slug are absent. — A silent skip would create false deploy/readback proof.
 - [Phase 01]: Plan 01-10 continued existing dirty Convex bridge work but staged only auth/source-state files and required schema/test support. — Preserved useful partial work while avoiding unrelated billing, Phase 2-5, ROADMAP, and future-surface changes.
 - [Phase 01]: Convex actor authority now derives from `ctx.auth.getUserIdentity()` plus source-owned admin membership rows. — Browser-supplied owner/admin/Clerk fields are ignored by the shared authz helper.
-- [Phase 01]: Convex codegen proof remains blocked by empty Clerk issuer/keys and rejected outbound codegen network access. — Missing setup is recorded as fail-closed evidence, not a green proof.
+- [Phase 01]: Convex codegen proof later passed during the formal R10 rerun against `loyal-peacock-107`. — Earlier auth/network blockers remain historical evidence, but current closeout state uses `01-DEPLOY-READBACK-EVIDENCE.md`.
 - [Phase 01]: Adopted a claim-specific server helper for 01-11 instead of touching unrelated dirty src/lib/server work. — Preserved the dirty-worktree boundary while completing durable claim/readback routing.
 - [Phase 01]: Kept 01-11 local e2e bypass command-scoped through VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E. — Production claim/readback authority still requires Clerk-authenticated Convex calls.
 - [Phase 01]: Used slug search params for 01-11 success/status readbacks without treating the slug as authority. — The slug selects a public DTO while owner/admin identity remains server-derived.
@@ -110,13 +110,32 @@ Phase 1 cannot close until the exact command suite in the plan passes, rendered 
 - [Phase 01]: Public registry/API runtime handlers now call Convex registry query references; legacy synchronous API helper exports are fixture-only for existing guardrail tests. — Preserves dirty-worktree test compatibility while removing route-local default source factories from runtime handlers.
 - [Phase 01]: Discovery route server handlers now use durable Convex query references; synchronous helper exports are fixture-only for existing guardrail tests.
 - [Phase 01]: Plan 01-14 used index-only staging for src/modules/discovery/public.ts to preserve pre-existing developer-discovery worktree edits.
-- [Phase 01]: Plan 01-15 kept R10 blocked because Convex codegen auth, deploy-smoke inputs, full local Playwright, and five-owner evidence were not green. — Evidence gate must fail closed rather than overclaim Phase 01 readiness.
+- [Phase 01]: Plan 01-15 initially kept R10 blocked because Convex codegen auth, deploy-smoke inputs, full local Playwright, and five-owner evidence were not green; the formal rerun later cleared technical/codegen/deploy gates. — Five-owner evidence is now explicit deferred debt and no longer blocks Phase 2-5 execution.
+- [Phase 01]: Matt Pocock two-axis review is recorded in `01-MATT-REVIEW.md`. — Standards found no hard violations; Spec still blocks on five friendly-owner rows.
+- [Phase 01]: User explicitly accepted the 0/5 friendly-owner rows as non-blocking execution debt on 2026-06-28. — Internal-alpha and launch claims remain blocked until rows exist.
+- [Phase 02]: Began execution despite deferred Phase 1 owner rows and tightened inquiry idempotency before provider work. — Same-key owner retries now replay original effects before stale/terminal gates; tests cover replay, duplicate conflict, wrong-owner, stale, disabled-reply, and terminal reply branches.
+- [Phase 02]: Reused the Phase 1 source-owned rate-limit helper for inquiry abuse buckets. — Public submit now writes private abuse bucket state, returns retryable `inquiry_rate_limited`, and does not create additional inquiry rows on limited attempts.
+- [Phase 02]: Added Convex-only inquiry schema tables through `src/modules/inquiries/internal/convex-schema.ts`. — Schema tests, import guards, typecheck, and Convex dry-run codegen pass while frontend inquiry schema remains free of Convex imports.
+- [Phase 02]: Added durable inquiry Convex submit/list/detail adapters. — Public submit persists private inquiry rows and redacted audit/funnel effects; current-owner inbox/detail readbacks derive owner authority from Clerk plus the owner row and fail closed for wrong owners.
+- [Phase 02]: Added durable owner inquiry mark-read, reply, and close mutations. — Owner actions reuse the module state machine, persist idempotent thread/message/notification/audit/funnel effects, and cover wrong-owner, stale, replay, conflict, and terminal branches.
+- [Phase 02]: Added durable owner delivery readback, inquiry export, private-content delete, and privacy tombstone readbacks. — Owner-scoped Convex functions preserve hashes, operation refs, tombstones, and audit refs while replacing raw customer/owner message text after privacy delete.
+- [Phase 02]: Added public inquiry and owner thread route surfaces backed by route readbacks and Convex server seams. — `/{slug}/inquiry` and `/owner/inquiries/$threadId` now render source-owned availability/detail/delivery/tombstone states with local/build evidence; live provider and rendered-browser proof remain open.
+- [Phase 02]: Added AE-owned notification outbox domain and durable Convex table fragment. — Dispatches, attempts, and webhook events now support redacted Resend/Novu provider refs, provider/orchestrator missing states, held webhook readback, duplicate handling, and operator-only retry/no-repair controls; actual provider adapters and smoke remain open.
+- [Phase 02]: Added notification outbox Convex runtime adapters without provider-network claims. — Runtime functions now persist enqueue, provider-missing attempt, webhook readback, owner-scoped readback, operator retry, and no-repair states; actual Resend/Novu sends and signed HTTP webhook proof remain open.
+- [Phase 02]: Added a Resend signed webhook route behind a server-held outbox key. — `/api/notification/resend-webhook` verifies Svix raw-body signatures and forwards only redacted provider metadata to Convex; later work resolved owner delivery address from Clerk at send time because owner rows store only `emailHash`.
+- [Phase 02]: Resolve owner delivery address from Clerk at send time instead of storing raw owner email in source rows. — Server helpers use `CLERK_SECRET_KEY` to select the Clerk primary email only for immediate delivery while durable owner/outbox rows retain hashes and provider refs.
+- [Phase 02]: Record Resend send results through the AE outbox instead of treating provider success as message truth. — A system-keyed send readback exposes dispatch/business/owner Clerk identity, and `dispatchNotificationOutbox` can persist a server-supplied provider result with Resend message id and response hash.
+- [Phase 02]: Added a guarded Resend dispatch route for the actual server send bridge. — `/api/notification/resend-dispatch` requires the outbox bearer secret, reads a system-keyed dispatch snapshot, resolves Clerk email only at send time, sends Resend, and records the provider result without returning raw owner email.
+- [Phase 02]: Added a fail-loud Resend provider smoke harness rather than claiming local provider proof. — `npm run test:provider-smoke:resend` now fails as a named deploy-smoke test until `DEPLOY_BASE_URL`, `AE_NOTIFICATION_OUTBOX_SECRET`, and `SMOKE_NOTIFICATION_DISPATCH_ID` identify a real deployed dispatch.
+- [Phase 02]: Added server-only Novu trigger and authenticated readback helpers without claiming webhook proof. — Novu uses `ApiKey`, the AE outbox idempotency key, transaction-scoped message readback, and returns only redacted provider refs for later outbox persistence.
+- [Phase 02]: Added a guarded Novu dispatch route and fail-loud provider smoke harness. — `/api/notification/novu-dispatch` requires the outbox bearer secret, triggers or confirms a Novu-backed owner dispatch, records redacted provider refs, performs authenticated transaction readback, and `npm run test:provider-smoke:novu` fails until real deployed inputs identify a matching dispatch.
+- [Phase 02]: Replaced placeholder owner inbox loading with a server-backed source seam and recorded rendered inquiry UI evidence. — `/owner/inquiries` now uses `readCurrentOwnerInboxServer`; local Clerk-bypass evidence covers `/plumbing-demo`, `/plumbing-demo/inquiry`, `/owner/inquiries`, and `/owner/inquiries/inquiry_thread%3Ahash%3Af3e29153` with compact/wide screenshots plus public/owner focus proof.
+- [Phase 02]: Added the human-inquiry capability launch support-record gate and deployed smoke harness. — New inquiry submissions and state-backed public availability now require a complete `human_inquiry_owner_inbox` support record with named primary/backup owners/operators, channels, thresholds, incident counts, disable path, kill rules, evidence refs, source hash, correlation ID, and last-reviewed timestamp; Convex runtime loads matching rows from `capabilityLaunchSupportRecords`, and `npm run test:phase2-support-smoke` fails loudly until a deployed smoke slug proves the row through the real public inquiry form.
+- [Phase 03]: Closed route-parity gaps before accepting builder discovery. — `03-VERIFICATION.md` moved from `gaps_found` 5/8 to `passed` 8/8 only after `03-02` wired discovery artifacts to durable public route snapshots, replaced synthetic route health with executed readbacks, and expanded builder/agent smoke without claiming deployed proof.
 
 ### Blockers
 
-- Phase 01 live deploy/readback remains blocked pending real DEPLOY_BASE_URL, DEPLOY_CONVEX_URL, Clerk admin/owner storage states, and explicit network approval.
-- Phase 01 Convex codegen remains blocked pending real VITE_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_JWT_ISSUER_DOMAIN, and approved outbound Convex CLI/network access.
-- Phase 01 Plan 01-11 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
-- Phase 01 Plan 01-11 full public-owner Playwright spec is blocked in this dirty checkout by unrelated untracked src/routes/owner.actions.tsx route-generator overlay; the focused claim-readback regression passes serially.
-- Phase 01 Plan 01-14 Convex codegen verification is auth-gated: npm run check:convex-codegen returns 401 MissingAccessToken until Convex CLI authentication is present.
-- Phase 01 Plan 01-15 R10 remains blocked: Convex MissingAccessToken, missing deploy smoke inputs/storage states/business slug, local /registry Playwright failure, and 0/5 friendly-owner rows.
+- Phase 01 five-owner activation evidence remains 0/5 as deferred debt.
+- Internal-alpha and public-launch claims still require five real owner rows.
+- Phase 2 still needs deployed `npm run test:phase2-support-smoke`, `npm run test:provider-smoke:resend`, and `npm run test:provider-smoke:novu` with source-owned inquiry-created dispatch IDs before final closeout artifacts may be written.
+- Phase 3 has local/source verification passed, but no deployed Phase 3 route/readback evidence artifact exists yet; do not claim deployed Phase 3 proof until a real deployed smoke is captured.

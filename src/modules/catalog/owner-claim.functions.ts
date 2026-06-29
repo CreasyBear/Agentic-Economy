@@ -11,6 +11,7 @@ import {
   getPublicBusinessPageReadback,
   getPublicOwnerStatusReadbackBySlug,
   submitDurablePublicOwnerClaimFlow,
+  submitPublicOwnerClaimFlow,
 } from '@/modules/catalog/public'
 import type {
   PublicBusinessPageRouteReadbackResult,
@@ -228,7 +229,7 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
 
 export async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {
   if (usesLocalE2eBypass()) {
-    return redactPublicBusinessPageReadback(getPublicBusinessPageReadback(slug))
+    return redactPublicBusinessPageReadback(getLocalE2ePublicBusinessPageReadback(slug))
   }
 
   const result = await callPublicQuery(publicCatalogBySlugQuery, { slug })
@@ -262,6 +263,32 @@ function redactOwnerStatusReadback(readback: PublicOwnerStatusReadback): PublicO
 
 function redactPublicBusinessPageReadback(readback: PublicBusinessPageReadbackResult): PublicBusinessPageRouteReadbackResult {
   return readback.kind === 'available' ? { ...readback, catalog: redactCatalogSourceHashes(readback.catalog) } : readback
+}
+
+function getLocalE2ePublicBusinessPageReadback(slug: string): PublicBusinessPageReadbackResult {
+  if (slug !== 'plumbing-demo') {
+    return getPublicBusinessPageReadback(slug)
+  }
+
+  const result = submitPublicOwnerClaimFlow({
+    businessName: 'Demo Plumbing',
+    category: 'Emergency plumbing',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    requestedSlug: 'plumbing-demo',
+    ownerMessage: 'Local e2e inquiry-capable service facts.',
+    sourceLabel: 'Local e2e service facts',
+    serviceName: 'Emergency plumbing',
+    serviceCategory: 'Emergency plumbing',
+    serviceSummary: 'Human triage for urgent plumbing issues.',
+    serviceArea: 'Parramatta',
+    hoursOrUnknown: 'Hours supplied by owner',
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
+    noContactReason: '',
+  })
+
+  return result.kind === 'ok' ? { kind: 'available', catalog: result.catalog } : { kind: 'not_found', reason: 'not_public' }
 }
 
 function redactCatalogSourceHashes(catalog: PublicCatalogContract): PublicRouteCatalogContract {

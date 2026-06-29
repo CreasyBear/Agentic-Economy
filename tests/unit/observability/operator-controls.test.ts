@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { brandNonEmpty } from '@/modules/common/ids'
 import { readOperatorControls, setOperatorControl } from '@/modules/observability/public'
-import type { OperatorControlSourceState, SetOperatorControlCommand } from '@/modules/observability/public'
+import type { OperatorControlKey, OperatorControlSourceState, SetOperatorControlCommand } from '@/modules/observability/public'
 import type { AdminMembership } from '@/modules/security/public'
 
 describe('operator controls', () => {
@@ -79,6 +79,55 @@ describe('operator controls', () => {
       source: 'default',
     })
     expect(JSON.stringify(readOperatorControls(state, 30))).not.toContain('private:evidence')
+  })
+
+  it('defaults P2-P5 kill controls to enabled and keeps paid activation source-owned when disabled', () => {
+    const p2ToP5Controls = [
+      'inquiries_enabled',
+      'notification_dispatch_enabled',
+      'developer_discovery_publish_enabled',
+      'protected_actions_enabled',
+      'paid_activation_enabled',
+      'billing_reconciliation_enabled',
+    ] as const satisfies readonly OperatorControlKey[]
+
+    const defaultReadbacks = readOperatorControls(emptyState(), 10)
+
+    for (const key of p2ToP5Controls) {
+      expect(defaultReadbacks.find((control) => control.key === key)).toMatchObject({
+        configuredEnabled: true,
+        effectiveEnabled: true,
+        source: 'default',
+      })
+    }
+
+    const state = emptyState()
+    const disabledPaidActivation = setOperatorControl(
+      state,
+      validCommand({
+        key: 'paid_activation_enabled',
+        operationKey: brandNonEmpty('op:operator:paid-activation', 'OperationKey'),
+        correlationId: brandNonEmpty('corr:operator:paid-activation', 'CorrelationId'),
+      })
+    )
+
+    expect(disabledPaidActivation).toMatchObject({
+      kind: 'ok',
+      control: {
+        key: 'paid_activation_enabled',
+        enabled: false,
+      },
+      readback: {
+        configuredEnabled: false,
+        effectiveEnabled: false,
+        source: 'source_owned',
+      },
+      auditEvent: {
+        eventType: 'operator_control.changed',
+        beforeState: 'default:true',
+        afterState: 'disabled:100',
+      },
+    })
   })
 })
 

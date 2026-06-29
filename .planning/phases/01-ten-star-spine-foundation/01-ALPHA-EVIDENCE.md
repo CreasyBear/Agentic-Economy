@@ -1,7 +1,7 @@
 ---
 phase: 01-ten-star-spine-foundation
 source_plan: 01-15
-status: blocked
+status: deferred_debt
 created: 2026-06-28
 updated: 2026-06-28
 evidence_timestamp_utc: 2026-06-28T15:26:38Z
@@ -12,20 +12,19 @@ owner_rows_required: 5
 
 # Phase 01 Alpha Evidence
 
-R10 internal-alpha readiness is blocked. No real friendly-owner activation rows
-were available during Plan 01-15, so this artifact records the missing evidence
-instead of converting local Sam rehearsal or instrumentation tests into owner
-proof.
+R10 internal-alpha readiness is not proven. No real friendly-owner activation rows were available during Plan 01-15, so this artifact records the missing evidence instead of converting local Sam rehearsal or instrumentation tests into owner proof.
+
+User instruction on 2026-06-28 explicitly accepted the 0/5 owner rows as deferred debt for Phase 2-5 execution progress. This deferral does not prove internal-alpha readiness and must not be used for public-launch claims.
 
 ## Gate Decision
 
 | Gate | Status | Evidence |
 |---|---|---|
-| Five real owner activation rows | BLOCKED | 0 of 5 rows recorded. |
+| Five real owner activation rows | DEFERRED DEBT | 0 of 5 rows recorded; accepted as non-blocking for Phase 2-5 execution on 2026-06-28. |
 | Durable activation readback fields | READY LOCAL | Query/readback model exists, but no real owner rows were supplied. |
-| Share or interest evidence | BLOCKED | No real `share_url_copied` or consented `owner_interest_submitted` evidence was supplied. |
-| Attribution | BLOCKED | No real source/channel attribution rows were supplied. |
-| Friction/failure notes | BLOCKED | No observed owner friction or failure notes were supplied. |
+| Share or interest evidence | DEFERRED DEBT | No real `share_url_copied` or consented `owner_interest_submitted` evidence was supplied. |
+| Attribution | DEFERRED DEBT | No real source/channel attribution rows were supplied. |
+| Friction/failure notes | DEFERRED DEBT | No observed owner friction or failure notes were supplied. |
 | No unresolved P0 evidence | TECHNICAL PASS | Local suite, Convex codegen, and deploy smoke passed; no real owner rows exist. |
 | Claims-register proof | LOCAL ONLY | Copy/SEO/API/discovery claim scans passed locally; no live owner evidence exists. |
 
@@ -83,9 +82,8 @@ owner attempts happened.
 | `test -f .planning/phases/01-ten-star-spine-foundation/01-ALPHA-EVIDENCE.md` | PASS | Artifact exists. |
 | `awk '!/^#/ && /friendly-owner-row/ { count += 1 } END { print count + 0 }' .planning/phases/01-ten-star-spine-foundation/01-ALPHA-EVIDENCE.md` | BLOCKED | Output was `0`; five real rows are missing. |
 
-## Required Next Evidence
+## Required Later Evidence
 
 1. Collect five real owner attempts with durable activation readbacks.
 2. For each owner, record attribution, share/interest, friction/failure notes, no-P0 status, and claims-register proof.
-3. Run or explicitly defer the external Standards/Spec review.
-4. Only then mark internal-alpha readiness green.
+3. Only then mark internal-alpha readiness green.

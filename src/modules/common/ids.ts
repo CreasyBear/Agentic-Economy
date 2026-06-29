@@ -13,6 +13,15 @@ export type OperationKey = Brand<string, 'OperationKey'>
 export type CorrelationId = Brand<string, 'CorrelationId'>
 export type SourceHash = Brand<string, 'SourceHash'>
 export type AuditEventId = Brand<string, 'AuditEventId'>
+export type BillingOperationId = Brand<string, 'BillingOperationId'>
+export type BillingReceiptId = Brand<string, 'BillingReceiptId'>
+export type BillingProviderEventId = Brand<string, 'BillingProviderEventId'>
+export type BillingReconciliationId = Brand<string, 'BillingReconciliationId'>
+export type BillingOfferId = Brand<string, 'BillingOfferId'>
+export type BillingSupportRecordId = Brand<string, 'BillingSupportRecordId'>
+export type NotificationDispatchId = Brand<string, 'NotificationDispatchId'>
+export type NotificationDispatchAttemptId = Brand<string, 'NotificationDispatchAttemptId'>
+export type NotificationWebhookEventId = Brand<string, 'NotificationWebhookEventId'>
 
 export type BrandedId =
   | OwnerId
@@ -24,6 +33,15 @@ export type BrandedId =
   | CorrelationId
   | SourceHash
   | AuditEventId
+  | BillingOperationId
+  | BillingReceiptId
+  | BillingProviderEventId
+  | BillingReconciliationId
+  | BillingOfferId
+  | BillingSupportRecordId
+  | NotificationDispatchId
+  | NotificationDispatchAttemptId
+  | NotificationWebhookEventId
 
 export function brandNonEmpty<Value extends string, Name extends string>(value: Value, label: Name): Brand<Value, Name> {
   if (value.trim().length === 0) {

@@ -75,10 +75,10 @@ Current repo state is planning-only and Phase 2 does not yet have a GSD phase di
 
 ## Constraints
 
-- Convex remains source of truth; browser input never supplies owner/admin authority.
+- Convex remains source of truth; browser input never supplies owner/admin/manager/delegate authority.
 - Public submit may be anonymous but must be abuse-limited, idempotent, and redacted.
-- Owner access derives from Clerk/Convex owner membership; unauthorized inquiry reads should not leak existence across owners.
-- Notification adapter identity is a discuss-phase implementation choice; the SPEC locks the durable outbox/readback contract, not the provider.
+- Owner access derives from Clerk/Convex principal plus source-owned owner membership; manager/delegate access is absent unless a source-owned business-access seam and tests are added. Unauthorized inquiry reads should not leak existence across owners.
+- Phase 2 uses Resend/Novu per context decision; the SPEC still locks the durable outbox/readback contract above provider success.
 - Inquiry content is private user data; audit/log/readback stores redacted payloads or hashes unless a private vault is explicitly designed.
 - Suppression/operator controls must disable new public inquiry entry and preserve private owner/admin reconstruction of already-submitted messages.
 - Phase 2 must reuse Phase 1 audit, idempotency, redaction, and copy-scan standards rather than creating parallel systems.
@@ -101,7 +101,7 @@ Current repo state is planning-only and Phase 2 does not yet have a GSD phase di
 **Mode:** Shape/Harden for future implementation. This spec changes what customers and owners can do, so product decisions, copy, and reachable states are part of the locked requirement.
 
 **Primary user/job/object/outcome:**
-- User: customer needing a safe first contact, source-owned business owner/manager, and operator handling delivery failures.
+- User: customer needing a safe first contact, source-owned business owner, explicitly modeled manager/delegate if added, and operator handling delivery failures.
 - Job: customer submits one conservative inquiry; owner reads, replies, and understands delivery/readback state.
 - Object: inquiry thread, owner reply, notification outbox, and private audit/readback.
 - Outcome: the message is not lost, the owner is not impersonated by AI, and no one mistakes an inquiry for booking/payment/provider execution.

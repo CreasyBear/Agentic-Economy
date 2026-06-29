@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 import { discoveryStatusToAeStatus, indexStatusToAeStatus, publicStatusToAeStatus, trustTierToAeStatus } from '@/lib/ui/status-presentation'
+import { buildPublicInquiryAffordance, type PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
 export const Route = createFileRoute('/$slug')({
   loader: async ({ params }) => {
@@ -52,7 +53,13 @@ export const Route = createFileRoute('/$slug')({
 })
 
 function PublicBusinessRoute() {
+  const { slug } = Route.useParams()
+  const location = useLocation()
   const { page } = Route.useLoaderData()
+
+  if (location.pathname !== `/${slug}`) {
+    return <Outlet />
+  }
 
   if (page.kind === 'not_found') {
     return (
@@ -73,6 +80,7 @@ function PublicBusinessRoute() {
   }
 
   const catalog = page.catalog
+  const inquiryAffordance = buildPublicInquiryAffordance(catalog)
 
   return (
     <AePublicShell>
@@ -111,6 +119,7 @@ function PublicBusinessRoute() {
           <AeCapabilityList catalog={catalog} />
         </div>
         <aside className="grid content-start gap-4">
+          <PublicInquiryAffordanceCard affordance={inquiryAffordance} />
           <Card>
             <CardHeader>
               <CardTitle>Readback</CardTitle>
@@ -129,5 +138,38 @@ function PublicBusinessRoute() {
         </aside>
       </section>
     </AePublicShell>
+  )
+}
+
+function PublicInquiryAffordanceCard({ affordance }: { affordance: PublicInquiryAffordance }) {
+  if (affordance.kind === 'available') {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Human inquiry</CardTitle>
+          <CardDescription>{affordance.disclosure}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <p className="text-sm text-muted-foreground">
+            Your message is saved for owner review. It is not a booking, payment, or automated action.
+          </p>
+          <Button asChild>
+            <a href={affordance.href}>{affordance.label}</a>
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Human inquiry</CardTitle>
+        <CardDescription>{affordance.reason}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground">Customers can read published service facts here without a first-contact form.</p>
+      </CardContent>
+    </Card>
   )
 }

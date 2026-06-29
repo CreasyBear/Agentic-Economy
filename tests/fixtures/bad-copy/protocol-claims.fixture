@@ -1,0 +1,3 @@
+Standard merchant-origin UCP is live at /.well-known/ucp with MCP tools available.
+OpenAPI action descriptor and action endpoint are ready for agent-callable tool-call use.
+Payment handler and callable endpoint are live for builders.

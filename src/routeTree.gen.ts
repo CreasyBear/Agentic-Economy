@@ -20,14 +20,30 @@ import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
+import { Route as OwnerInquiriesRouteImport } from './routes/owner.inquiries'
+import { Route as OwnerActionsRouteImport } from './routes/owner.actions'
+import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
+import { Route as AdminProtectedActionsRouteImport } from './routes/admin.protected-actions'
+import { Route as AdminInquiriesRouteImport } from './routes/admin.inquiries'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
 import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
 import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
+import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
+import { Route as OwnerInquiriesThreadIdRouteImport } from './routes/owner.inquiries.$threadId'
+import { Route as OwnerActionsProposalIdRouteImport } from './routes/owner.actions.$proposalId'
+import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
+import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
+import { Route as ApiNotificationNovuDispatchRouteImport } from './routes/api.notification.novu-dispatch'
+import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
+import { Route as ApiDiscoveryFixturesRouteImport } from './routes/api.discovery.fixtures'
+import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
+import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
+import { Route as OwnerActionsProposalIdReceiptRouteImport } from './routes/owner.actions.$proposalId.receipt'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -84,6 +100,21 @@ const OwnerStatusRoute = OwnerStatusRouteImport.update({
   path: '/owner/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OwnerInquiriesRoute = OwnerInquiriesRouteImport.update({
+  id: '/owner/inquiries',
+  path: '/owner/inquiries',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnerActionsRoute = OwnerActionsRouteImport.update({
+  id: '/owner/actions',
+  path: '/owner/actions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevelopersDiscoveryRoute = DevelopersDiscoveryRouteImport.update({
+  id: '/developers/discovery',
+  path: '/developers/discovery',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
   id: '/success',
   path: '/success',
@@ -92,6 +123,16 @@ const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
 const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
   id: '/api/businesses',
   path: '/api/businesses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminProtectedActionsRoute = AdminProtectedActionsRouteImport.update({
+  id: '/admin/protected-actions',
+  path: '/admin/protected-actions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminInquiriesRoute = AdminInquiriesRouteImport.update({
+  id: '/admin/inquiries',
+  path: '/admin/inquiries',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexHealthRoute = AdminIndexHealthRouteImport.update({
@@ -114,6 +155,54 @@ const SlugUcpRoute = SlugUcpRouteImport.update({
   path: '/ucp',
   getParentRoute: () => SlugRoute,
 } as any)
+const SlugInquiryRoute = SlugInquiryRouteImport.update({
+  id: '/inquiry',
+  path: '/inquiry',
+  getParentRoute: () => SlugRoute,
+} as any)
+const OwnerInquiriesThreadIdRoute = OwnerInquiriesThreadIdRouteImport.update({
+  id: '/$threadId',
+  path: '/$threadId',
+  getParentRoute: () => OwnerInquiriesRoute,
+} as any)
+const OwnerActionsProposalIdRoute = OwnerActionsProposalIdRouteImport.update({
+  id: '/$proposalId',
+  path: '/$proposalId',
+  getParentRoute: () => OwnerActionsRoute,
+} as any)
+const ApiNotificationResendWebhookRoute =
+  ApiNotificationResendWebhookRouteImport.update({
+    id: '/api/notification/resend-webhook',
+    path: '/api/notification/resend-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiNotificationResendDispatchRoute =
+  ApiNotificationResendDispatchRouteImport.update({
+    id: '/api/notification/resend-dispatch',
+    path: '/api/notification/resend-dispatch',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiNotificationNovuDispatchRoute =
+  ApiNotificationNovuDispatchRouteImport.update({
+    id: '/api/notification/novu-dispatch',
+    path: '/api/notification/novu-dispatch',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDiscoverySchemaRoute = ApiDiscoverySchemaRouteImport.update({
+  id: '/api/discovery/schema',
+  path: '/api/discovery/schema',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDiscoveryFixturesRoute = ApiDiscoveryFixturesRouteImport.update({
+  id: '/api/discovery/fixtures',
+  path: '/api/discovery/fixtures',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
+  id: '/api/discovery/examples',
+  path: '/api/discovery/examples',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -124,6 +213,18 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
+const AdminProtectedActionsProposalIdRoute =
+  AdminProtectedActionsProposalIdRouteImport.update({
+    id: '/$proposalId',
+    path: '/$proposalId',
+    getParentRoute: () => AdminProtectedActionsRoute,
+  } as any)
+const OwnerActionsProposalIdReceiptRoute =
+  OwnerActionsProposalIdReceiptRouteImport.update({
+    id: '/receipt',
+    path: '/receipt',
+    getParentRoute: () => OwnerActionsProposalIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -133,18 +234,34 @@ export interface FileRoutesByFullPath {
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/admin/inquiries': typeof AdminInquiriesRoute
+  '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
+  '/developers/discovery': typeof DevelopersDiscoveryRoute
+  '/owner/actions': typeof OwnerActionsRouteWithChildren
+  '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
+  '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
+  '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
+  '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
+  '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
+  '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
+  '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
+  '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
+  '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -154,18 +271,34 @@ export interface FileRoutesByTo {
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/admin/inquiries': typeof AdminInquiriesRoute
+  '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
+  '/developers/discovery': typeof DevelopersDiscoveryRoute
+  '/owner/actions': typeof OwnerActionsRouteWithChildren
+  '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
+  '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
+  '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
+  '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
+  '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
+  '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
+  '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
+  '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
+  '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -176,18 +309,34 @@ export interface FileRoutesById {
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
   '/admin/claims': typeof AdminClaimsRoute
   '/admin/index-health': typeof AdminIndexHealthRoute
+  '/admin/inquiries': typeof AdminInquiriesRoute
+  '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
+  '/developers/discovery': typeof DevelopersDiscoveryRoute
+  '/owner/actions': typeof OwnerActionsRouteWithChildren
+  '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
+  '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
+  '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
+  '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
+  '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
+  '/api/notification/novu-dispatch': typeof ApiNotificationNovuDispatchRoute
+  '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
+  '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
+  '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
+  '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
+  '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -199,18 +348,34 @@ export interface FileRouteTypes {
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/admin/inquiries'
+    | '/admin/protected-actions'
     | '/api/businesses'
     | '/claim/success'
+    | '/developers/discovery'
+    | '/owner/actions'
+    | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
     | '/sign-in/$'
     | '/sign-up/$'
+    | '/admin/protected-actions/$proposalId'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/discovery/examples'
+    | '/api/discovery/fixtures'
+    | '/api/discovery/schema'
+    | '/api/notification/novu-dispatch'
+    | '/api/notification/resend-dispatch'
+    | '/api/notification/resend-webhook'
+    | '/owner/actions/$proposalId'
+    | '/owner/inquiries/$threadId'
+    | '/owner/actions/$proposalId/receipt'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -220,18 +385,34 @@ export interface FileRouteTypes {
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/admin/inquiries'
+    | '/admin/protected-actions'
     | '/api/businesses'
     | '/claim/success'
+    | '/developers/discovery'
+    | '/owner/actions'
+    | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
     | '/sign-in/$'
     | '/sign-up/$'
+    | '/admin/protected-actions/$proposalId'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/discovery/examples'
+    | '/api/discovery/fixtures'
+    | '/api/discovery/schema'
+    | '/api/notification/novu-dispatch'
+    | '/api/notification/resend-dispatch'
+    | '/api/notification/resend-webhook'
+    | '/owner/actions/$proposalId'
+    | '/owner/inquiries/$threadId'
+    | '/owner/actions/$proposalId/receipt'
   id:
     | '__root__'
     | '/'
@@ -241,18 +422,34 @@ export interface FileRouteTypes {
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
     | '/admin/claims'
     | '/admin/index-health'
+    | '/admin/inquiries'
+    | '/admin/protected-actions'
     | '/api/businesses'
     | '/claim/success'
+    | '/developers/discovery'
+    | '/owner/actions'
+    | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
     | '/sign-in/$'
     | '/sign-up/$'
+    | '/admin/protected-actions/$proposalId'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
+    | '/api/discovery/examples'
+    | '/api/discovery/fixtures'
+    | '/api/discovery/schema'
+    | '/api/notification/novu-dispatch'
+    | '/api/notification/resend-dispatch'
+    | '/api/notification/resend-webhook'
+    | '/owner/actions/$proposalId'
+    | '/owner/inquiries/$threadId'
+    | '/owner/actions/$proposalId/receipt'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -266,11 +463,22 @@ export interface RootRouteChildren {
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
   AdminClaimsRoute: typeof AdminClaimsRoute
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
+  AdminInquiriesRoute: typeof AdminInquiriesRoute
+  AdminProtectedActionsRoute: typeof AdminProtectedActionsRouteWithChildren
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
+  DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
+  OwnerActionsRoute: typeof OwnerActionsRouteWithChildren
+  OwnerInquiriesRoute: typeof OwnerInquiriesRouteWithChildren
   OwnerStatusRoute: typeof OwnerStatusRoute
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
+  ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
+  ApiDiscoveryFixturesRoute: typeof ApiDiscoveryFixturesRoute
+  ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
+  ApiNotificationNovuDispatchRoute: typeof ApiNotificationNovuDispatchRoute
+  ApiNotificationResendDispatchRoute: typeof ApiNotificationResendDispatchRoute
+  ApiNotificationResendWebhookRoute: typeof ApiNotificationResendWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -352,6 +560,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OwnerStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/owner/inquiries': {
+      id: '/owner/inquiries'
+      path: '/owner/inquiries'
+      fullPath: '/owner/inquiries'
+      preLoaderRoute: typeof OwnerInquiriesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owner/actions': {
+      id: '/owner/actions'
+      path: '/owner/actions'
+      fullPath: '/owner/actions'
+      preLoaderRoute: typeof OwnerActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/developers/discovery': {
+      id: '/developers/discovery'
+      path: '/developers/discovery'
+      fullPath: '/developers/discovery'
+      preLoaderRoute: typeof DevelopersDiscoveryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/claim/success': {
       id: '/claim/success'
       path: '/success'
@@ -364,6 +593,20 @@ declare module '@tanstack/react-router' {
       path: '/api/businesses'
       fullPath: '/api/businesses'
       preLoaderRoute: typeof ApiBusinessesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/protected-actions': {
+      id: '/admin/protected-actions'
+      path: '/admin/protected-actions'
+      fullPath: '/admin/protected-actions'
+      preLoaderRoute: typeof AdminProtectedActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/inquiries': {
+      id: '/admin/inquiries'
+      path: '/admin/inquiries'
+      fullPath: '/admin/inquiries'
+      preLoaderRoute: typeof AdminInquiriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/index-health': {
@@ -394,6 +637,69 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SlugUcpRouteImport
       parentRoute: typeof SlugRoute
     }
+    '/$slug/inquiry': {
+      id: '/$slug/inquiry'
+      path: '/inquiry'
+      fullPath: '/$slug/inquiry'
+      preLoaderRoute: typeof SlugInquiryRouteImport
+      parentRoute: typeof SlugRoute
+    }
+    '/owner/inquiries/$threadId': {
+      id: '/owner/inquiries/$threadId'
+      path: '/$threadId'
+      fullPath: '/owner/inquiries/$threadId'
+      preLoaderRoute: typeof OwnerInquiriesThreadIdRouteImport
+      parentRoute: typeof OwnerInquiriesRoute
+    }
+    '/owner/actions/$proposalId': {
+      id: '/owner/actions/$proposalId'
+      path: '/$proposalId'
+      fullPath: '/owner/actions/$proposalId'
+      preLoaderRoute: typeof OwnerActionsProposalIdRouteImport
+      parentRoute: typeof OwnerActionsRoute
+    }
+    '/api/notification/resend-webhook': {
+      id: '/api/notification/resend-webhook'
+      path: '/api/notification/resend-webhook'
+      fullPath: '/api/notification/resend-webhook'
+      preLoaderRoute: typeof ApiNotificationResendWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/notification/resend-dispatch': {
+      id: '/api/notification/resend-dispatch'
+      path: '/api/notification/resend-dispatch'
+      fullPath: '/api/notification/resend-dispatch'
+      preLoaderRoute: typeof ApiNotificationResendDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/notification/novu-dispatch': {
+      id: '/api/notification/novu-dispatch'
+      path: '/api/notification/novu-dispatch'
+      fullPath: '/api/notification/novu-dispatch'
+      preLoaderRoute: typeof ApiNotificationNovuDispatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discovery/schema': {
+      id: '/api/discovery/schema'
+      path: '/api/discovery/schema'
+      fullPath: '/api/discovery/schema'
+      preLoaderRoute: typeof ApiDiscoverySchemaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discovery/fixtures': {
+      id: '/api/discovery/fixtures'
+      path: '/api/discovery/fixtures'
+      fullPath: '/api/discovery/fixtures'
+      preLoaderRoute: typeof ApiDiscoveryFixturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discovery/examples': {
+      id: '/api/discovery/examples'
+      path: '/api/discovery/examples'
+      fullPath: '/api/discovery/examples'
+      preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/businesses/search': {
       id: '/api/businesses/search'
       path: '/search'
@@ -408,14 +714,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBusinessesSlugRouteImport
       parentRoute: typeof ApiBusinessesRoute
     }
+    '/admin/protected-actions/$proposalId': {
+      id: '/admin/protected-actions/$proposalId'
+      path: '/$proposalId'
+      fullPath: '/admin/protected-actions/$proposalId'
+      preLoaderRoute: typeof AdminProtectedActionsProposalIdRouteImport
+      parentRoute: typeof AdminProtectedActionsRoute
+    }
+    '/owner/actions/$proposalId/receipt': {
+      id: '/owner/actions/$proposalId/receipt'
+      path: '/receipt'
+      fullPath: '/owner/actions/$proposalId/receipt'
+      preLoaderRoute: typeof OwnerActionsProposalIdReceiptRouteImport
+      parentRoute: typeof OwnerActionsProposalIdRoute
+    }
   }
 }
 
 interface SlugRouteChildren {
+  SlugInquiryRoute: typeof SlugInquiryRoute
   SlugUcpRoute: typeof SlugUcpRoute
 }
 
 const SlugRouteChildren: SlugRouteChildren = {
+  SlugInquiryRoute: SlugInquiryRoute,
   SlugUcpRoute: SlugUcpRoute,
 }
 
@@ -431,6 +753,19 @@ const ClaimRouteChildren: ClaimRouteChildren = {
 
 const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
 
+interface AdminProtectedActionsRouteChildren {
+  AdminProtectedActionsProposalIdRoute: typeof AdminProtectedActionsProposalIdRoute
+}
+
+const AdminProtectedActionsRouteChildren: AdminProtectedActionsRouteChildren = {
+  AdminProtectedActionsProposalIdRoute: AdminProtectedActionsProposalIdRoute,
+}
+
+const AdminProtectedActionsRouteWithChildren =
+  AdminProtectedActionsRoute._addFileChildren(
+    AdminProtectedActionsRouteChildren,
+  )
+
 interface ApiBusinessesRouteChildren {
   ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
   ApiBusinessesSearchRoute: typeof ApiBusinessesSearchRoute
@@ -445,6 +780,44 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
+interface OwnerActionsProposalIdRouteChildren {
+  OwnerActionsProposalIdReceiptRoute: typeof OwnerActionsProposalIdReceiptRoute
+}
+
+const OwnerActionsProposalIdRouteChildren: OwnerActionsProposalIdRouteChildren =
+  {
+    OwnerActionsProposalIdReceiptRoute: OwnerActionsProposalIdReceiptRoute,
+  }
+
+const OwnerActionsProposalIdRouteWithChildren =
+  OwnerActionsProposalIdRoute._addFileChildren(
+    OwnerActionsProposalIdRouteChildren,
+  )
+
+interface OwnerActionsRouteChildren {
+  OwnerActionsProposalIdRoute: typeof OwnerActionsProposalIdRouteWithChildren
+}
+
+const OwnerActionsRouteChildren: OwnerActionsRouteChildren = {
+  OwnerActionsProposalIdRoute: OwnerActionsProposalIdRouteWithChildren,
+}
+
+const OwnerActionsRouteWithChildren = OwnerActionsRoute._addFileChildren(
+  OwnerActionsRouteChildren,
+)
+
+interface OwnerInquiriesRouteChildren {
+  OwnerInquiriesThreadIdRoute: typeof OwnerInquiriesThreadIdRoute
+}
+
+const OwnerInquiriesRouteChildren: OwnerInquiriesRouteChildren = {
+  OwnerInquiriesThreadIdRoute: OwnerInquiriesThreadIdRoute,
+}
+
+const OwnerInquiriesRouteWithChildren = OwnerInquiriesRoute._addFileChildren(
+  OwnerInquiriesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
@@ -456,11 +829,22 @@ const rootRouteChildren: RootRouteChildren = {
   AdminAuditEventsRoute: AdminAuditEventsRoute,
   AdminClaimsRoute: AdminClaimsRoute,
   AdminIndexHealthRoute: AdminIndexHealthRoute,
+  AdminInquiriesRoute: AdminInquiriesRoute,
+  AdminProtectedActionsRoute: AdminProtectedActionsRouteWithChildren,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
+  DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
+  OwnerActionsRoute: OwnerActionsRouteWithChildren,
+  OwnerInquiriesRoute: OwnerInquiriesRouteWithChildren,
   OwnerStatusRoute: OwnerStatusRoute,
   PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
+  ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
+  ApiDiscoveryFixturesRoute: ApiDiscoveryFixturesRoute,
+  ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,
+  ApiNotificationNovuDispatchRoute: ApiNotificationNovuDispatchRoute,
+  ApiNotificationResendDispatchRoute: ApiNotificationResendDispatchRoute,
+  ApiNotificationResendWebhookRoute: ApiNotificationResendWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -10,7 +10,7 @@ One observed consequential action can be proposed, policy-checked, approved or r
 
 ## Background
 
-Current repo state is planning-only and Phase 4 does not yet have a GSD phase directory. ROADMAP.md defines Phase 4 as owner-pending protected actions: proposeAction, policy check, owner approve/reject, provider attempt/proof gap, receipt/audit reconstruction, and a hard cut on autonomous protected execution. Phase 1 preserves lifecycle primitives as descriptor-only and bans protected action runtime. The action scout found useful backup patterns in exact action contracts, owner-pending review, idempotency/correlation, one-use gateway admission, proof-gap/receipt readbacks, and reconstruction; it also found broad action catalogs, hosted agents, MCP/OpenAPI/SDK mutations, request-market, wallet/payment, and progressive auto-resolve surfaces that must stay out.
+Current repo state is planning-only and Phase 4 does not yet have a GSD phase directory. ROADMAP.md defines Phase 4 as owner-pending protected actions: selected-action proposal, policy check, owner approve/reject, provider attempt/proof gap, receipt/audit reconstruction, and a hard cut on autonomous protected execution. Phase 1 preserves lifecycle primitives as descriptor-only and bans protected action runtime. The action scout found useful backup patterns in exact action contracts, owner-pending review, idempotency/correlation, one-use gateway admission, proof-gap/receipt readbacks, and reconstruction; it also found broad action catalogs, hosted agents, MCP/OpenAPI/SDK mutations, request-market, wallet/payment, and progressive auto-resolve surfaces that must stay out.
 
 ## Requirements
 
@@ -19,10 +19,10 @@ Current repo state is planning-only and Phase 4 does not yet have a GSD phase di
    - Target: A decision record names one action class, user/job, provider or internal attempt boundary, owner consequence, non-goals, and rollback/disable posture.
    - Acceptance: Verifier can point to Phase 2/3 evidence, the chosen action contract, and explicit rejection of broad catalogs, money movement, and autonomous execution.
 
-2. **Proposal contract**: proposeAction creates a durable candidate action from an allowlisted contract with actor principal, business/service target, owner context, canonical contract hash, idempotency key, correlation ID, parameter allowlist, and typed rejection states.
+2. **Selected proposal contract**: `propose{SelectedActionPascal}` or an equivalent selected-action-specific command creates a durable candidate action from the chosen allowlisted contract with actor principal, business/service target, owner context, canonical contract hash, idempotency key, correlation ID, parameter allowlist, and typed rejection states. A route-facing generic `proposeAction` seam is not allowed in Phase 4.
    - Current: No proposal table, contract schema, or command exists.
-   - Target: proposeAction is the only proposal seam and cannot execute providers; it stores exact candidate/proposal state and audit.
-   - Acceptance: Tests prove valid proposal creates one candidate/audit; unknown action class, invalid target, untrusted parameter key, duplicate replay, same-key/different-body, suppressed target, and wrong actor authority are rejected.
+   - Target: The selected-action-specific proposal seam is the only proposal entrypoint and cannot execute providers; it stores exact candidate/proposal state and audit.
+   - Acceptance: Tests prove valid proposal creates one candidate/audit; an unselected action class, invalid target, untrusted parameter key, duplicate replay, same-key/different-body, suppressed target, and wrong actor authority are rejected.
 
 3. **Policy and lifecycle classification**: Policy evaluation classifies each proposal using source-owned owner authority, action class, lifecycle primitive, risk, time-bound/external-authority/proof-gap requirements, and returns review_required, refused, expired, or proof_gap without provider side effects.
    - Current: Lifecycle primitives exist only as future descriptor contract.
@@ -58,7 +58,7 @@ Current repo state is planning-only and Phase 4 does not yet have a GSD phase di
 
 **In scope:**
 - One non-money, owner-approved action class selected from Phase 2/3 evidence.
-- proposeAction candidate contract, policy evaluation, owner decision, provider/internal attempt, proof-gap/receipt, and reconstruction readback.
+- Selected-action-specific proposal command, policy evaluation, owner decision, provider/internal attempt, proof-gap/receipt, and reconstruction readback.
 - Source-owned action proposal, owner decision, gateway/attempt, proof-gap, receipt, audit, and repair/no-repair state.
 - Owner queue/detail UI for approve/reject with consequence, reversibility, deadline, proof requirements, disabled reasons, and accessible states.
 - Discovery copy/schema updates that describe owner-pending proposals only when true.
@@ -85,7 +85,7 @@ Current repo state is planning-only and Phase 4 does not yet have a GSD phase di
 ## Acceptance Criteria
 
 - [ ] Decision record selects exactly one non-money action class from observed Phase 2/3 evidence and rejects broad catalogs/autonomy.
-- [ ] proposeAction persists one candidate/audit with canonical hash, idempotency, correlation, actor principal, target, owner context, and parameter allowlist.
+- [ ] The selected-action-specific proposal command persists one candidate/audit with canonical hash, idempotency, correlation, actor principal, target, owner context, and parameter allowlist.
 - [ ] Proposal rejects unknown action class, invalid/suppressed target, untrusted parameter key, duplicate-different-body, replay, wrong actor, and missing required context.
 - [ ] Policy returns typed review_required, refused, expired, or proof_gap without provider side effects.
 - [ ] Owner approval/rejection requires source-owned owner access, visible consequence, reason/evidence where required, and writes audit before provider attempt.

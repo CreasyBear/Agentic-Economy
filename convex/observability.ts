@@ -34,7 +34,18 @@ const operatorControlKey = v.union(
   v.literal('publish_enabled'),
   v.literal('registry_enabled'),
   v.literal('discovery_enabled'),
-  v.literal('public_copy_safe_mode')
+  v.literal('public_copy_safe_mode'),
+  v.literal('inquiries_enabled'),
+  v.literal('inquiry_owner_replies_enabled'),
+  v.literal('notification_dispatch_enabled'),
+  v.literal('notification_webhooks_enabled'),
+  v.literal('developer_discovery_publish_enabled'),
+  v.literal('discovery_api_keys_enabled'),
+  v.literal('protected_actions_enabled'),
+  v.literal('protected_action_attempts_enabled'),
+  v.literal('paid_activation_enabled'),
+  v.literal('billing_webhooks_enabled'),
+  v.literal('billing_reconciliation_enabled')
 )
 
 const operatorControlReadback = v.object({
@@ -125,13 +136,6 @@ type RuntimeCtx = {
   }
 }
 
-type PhaseOneOperatorControlKey =
-  | 'claims_enabled'
-  | 'publish_enabled'
-  | 'registry_enabled'
-  | 'discovery_enabled'
-  | 'public_copy_safe_mode'
-
 export const setOperatorControl = mutationGeneric({
   args: {
     key: operatorControlKey,
@@ -219,7 +223,6 @@ export const readOperatorControls = queryGeneric({
     return {
       kind: 'allowed' as const,
       controls: readOperatorControlsModule(operatorControlState(source), Date.now())
-        .filter(isPhaseOneOperatorControlReadback)
         .map(summarizeOperatorReadback),
     }
   },
@@ -260,9 +263,6 @@ function summarizeSetOperatorControl(result: ReturnType<typeof setOperatorContro
 }
 
 function summarizeOperatorRecord(control: OperatorControlRecord) {
-  if (!isPhaseOneOperatorControlKey(control.key)) {
-    throw new Error(`Unexpected non-Phase-1 operator control key: ${control.key}`)
-  }
 
   return {
     key: control.key,
@@ -278,9 +278,6 @@ function summarizeOperatorRecord(control: OperatorControlRecord) {
 }
 
 function summarizeOperatorReadback(control: OperatorControlReadback) {
-  if (!isPhaseOneOperatorControlKey(control.key)) {
-    throw new Error(`Unexpected non-Phase-1 operator control key: ${control.key}`)
-  }
 
   return {
     key: control.key,
@@ -316,21 +313,6 @@ function summarizeMembershipAudit(event: AdminDecisionAudit) {
   }
 }
 
-function isPhaseOneOperatorControlReadback(
-  control: OperatorControlReadback
-): control is OperatorControlReadback & { key: PhaseOneOperatorControlKey } {
-  return isPhaseOneOperatorControlKey(control.key)
-}
-
-function isPhaseOneOperatorControlKey(key: string): key is PhaseOneOperatorControlKey {
-  return (
-    key === 'claims_enabled' ||
-    key === 'publish_enabled' ||
-    key === 'registry_enabled' ||
-    key === 'discovery_enabled' ||
-    key === 'public_copy_safe_mode'
-  )
-}
 
 function sourceAllowedOrigins(): readonly string[] {
   const origins = [

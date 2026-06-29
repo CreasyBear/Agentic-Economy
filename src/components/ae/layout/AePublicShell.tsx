@@ -18,11 +18,11 @@ export function AePublicShell({ children }: AePublicShellProps) {
         Skip to content
       </a>
       <header className="border-b bg-background/95">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 md:px-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
           <a href="/" className="font-heading text-sm font-semibold tracking-normal text-foreground">
             Agentic Economy
           </a>
-          <nav aria-label="Public" className="flex items-center gap-2">
+          <nav aria-label="Public" className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link to="/registry" search={{ q: '', limit: 10 }}>Registry</Link>
             </Button>

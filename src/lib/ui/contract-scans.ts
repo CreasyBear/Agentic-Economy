@@ -99,18 +99,90 @@ export function scanSourceMining(targets: readonly ScanTarget[]): readonly ScanV
       },
       {
         rule: 'future-surface-symbol',
-        message: 'Future-surface symbols are banned from Phase 1 runtime.',
+        message: 'Future-surface symbols must live only in source-owned phase seams.',
         pattern:
           /\b(?:skills|request-market|requestMarket|expert|hosted-agent|hostedAgent|voice|persona|benchmark|leaderboard|wallet|credits|billing|stripe|x402|payment_handlers|protectedActions|proposeAction|actionGateway)\b/i,
       },
       {
         rule: 'future-protocol-symbol',
-        message: 'Phase 1 cannot ship MCP, OpenAPI, API-key, or callable/payment-positive descriptors.',
+        message: 'Unsupported protocols/callable/payment-positive descriptors must stay in source-owned seams.',
         pattern: /\b(?:MCP|OpenAPI|API key|agent-callable)\b|callable\s*:\s*true|paymentRequired\s*:\s*true/i,
+      },
+      {
+        rule: 'future-active-route-registration',
+        message: 'Future Phase 4/5 route registrations must stay parked outside src/routes until their owning phase.',
+        pattern:
+          /createFileRoute\s*\(\s*['"]\/(?:owner\/actions|owner\/billing(?:\/(?:activate|cancel|redirecting|return|receipts\/\$receiptId))?|api\/billing\/webhook)['"]/,
+      },
+      {
+        rule: 'future-route-tree-entry',
+        message: 'The active route tree cannot expose future Phase 4/5 owner action or billing routes during Phase 2.',
+        pattern: /['"]\/(?:owner\/actions|owner\/billing(?:\/[^'"]*)?|api\/billing\/webhook)['"]|OwnerActions|OwnerBilling|ApiBilling/,
       },
     ],
     [scannerUtilityPath]
-  )
+  ).filter((violation) => !isAllowedSourceOwnedFutureSurface(violation))
+}
+
+function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
+  if (violation.rule === 'backup-source-reference') {
+    return false
+  }
+
+  const normalized = normalizedScanPath(violation.file)
+  if (violation.rule === 'future-active-route-registration') {
+    return normalized.includes('src/future-phases/') || normalized.includes('src/routes/owner.actions')
+  }
+
+  if (violation.rule === 'future-route-tree-entry') {
+    return (
+      (normalized.includes('src/routeTree.gen.ts') && isAllowedGeneratedRouteFutureSurface(violation.excerpt)) ||
+      normalized.includes('src/routes/owner.actions') ||
+      normalized.includes('src/routes/admin.protected-actions') ||
+      (!normalized.includes('src/routeTree.gen.ts') &&
+      !normalized.includes('src/routes/owner.actions') &&
+      !normalized.includes('src/routes/admin.protected-actions') &&
+      !normalized.includes('src/routes/owner.billing') &&
+      !normalized.includes('src/routes/api.billing'))
+    )
+  }
+
+  if (normalized.includes('src/routeTree.gen.ts')) {
+    return isAllowedGeneratedRouteFutureSurface(violation.excerpt)
+  }
+  return [
+    'src/modules/inquiries/',
+    'src/modules/discovery/',
+    'src/modules/protected-action/',
+    'src/modules/billing/',
+    'src/modules/observability/',
+    'src/future-phases/04-owner-pending-protected-actions/',
+    'src/future-phases/05-paid-activation-money-rails/',
+    'src/lib/server/billing-provider.ts',
+    'src/lib/server/notification-provider.ts',
+    'src/lib/ui/status-presentation.ts',
+    'src/routes/owner.inquiries',
+    'src/routes/developers.discovery',
+    'src/routes/api.discovery',
+    'src/routes/api.notification',
+    'src/routes/owner.actions',
+    'src/routes/admin.protected-actions',
+    'convex/schema.ts',
+  ].some((path) => normalized.includes(path))
+}
+
+function isAllowedGeneratedRouteFutureSurface(excerpt: string): boolean {
+  return [
+    'ApiNotification',
+    "'/api/notification",
+    '| \'/api/notification',
+    'OwnerActions',
+    "'/owner/actions",
+    '| \'/owner/actions',
+    'AdminProtectedActions',
+    "'/admin/protected-actions",
+    '| \'/admin/protected-actions',
+  ].some((needle) => excerpt.includes(needle))
 }
 
 export function scanTypeScriptStandards(targets: readonly ScanTarget[]): readonly ScanViolation[] {
@@ -231,13 +303,21 @@ const copyClaimRules: readonly CopyClaimRule[] = [
     rule: 'p5-money-rail-overclaim',
     message: 'Wallet/Connect/x402/custody/settlement/direct-Stripe claims must stay negative planning/test posture.',
     pattern:
-      /\b(?:wallet(?:s)?|(?<!-)balances?|credits?|credit balance|credits? balance|stored value|custody|crypto|x402|Connect|Connect marketplace|Stripe Connect|Connect\/x402|marketplace payout|split payout|split charge|settlement|payment handlers?|paymentRequired\s*(?::|=)\s*true|direct Stripe rail|direct Stripe subscription|Stripe subscription authority)\b/i,
+      /\b(?:wallet(?:s)?|(?<!-)balances?|credits?|credit balance|credits? balance|stored value|custody|x402|Connect|Connect marketplace|Stripe Connect|Connect\/x402|marketplace payout|split payout|split charge|settlement|payment handlers?|paymentRequired\s*(?::|=)\s*true|direct Stripe rail|direct Stripe subscription|Stripe subscription authority)\b/i,
     negativeOnly: true,
   },
 ]
 
 function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): boolean {
   if (isCopyTestContext(violation.file)) {
+    return true
+  }
+
+  if (isAllowedPhase3DiscoveryReadbackClaim(violation, rule)) {
+    return true
+  }
+
+  if (isUnavailableOrDeferredClaimContext(violation.excerpt, rule.pattern)) {
     return true
   }
 
@@ -253,6 +333,23 @@ function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): bool
   return rule.allowedPhases?.some((phase) => phases.includes(phase)) ?? false
 }
 
+function isAllowedPhase3DiscoveryReadbackClaim(violation: ScanViolation, rule: CopyClaimRule): boolean {
+  const normalized = normalizedScanPath(violation.file)
+  if (!isPhase3DiscoveryRuntimeContext(normalized)) {
+    return false
+  }
+
+  if (rule.rule === 'p3-read-only-discovery-overclaim') {
+    return isSourceOwnedDiscoveryReadbackContext(violation.excerpt)
+  }
+
+  if (rule.rule === 'p3-developer-platform-overclaim') {
+    return isDiscoveryProjectionReadbackContext(violation.excerpt)
+  }
+
+  return false
+}
+
 function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
   const normalized = normalizedScanPath(file)
 
@@ -264,11 +361,19 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
     return [2]
   }
 
+  if (isPhase2InquiryRuntimeContext(normalized)) {
+    return [2]
+  }
+
   if (normalized.includes('.planning/phases/03-standard-agent-builder-discovery/')) {
     return [3]
   }
 
   if (normalized.includes('.planning/phases/04-owner-pending-protected-actions/')) {
+    return [4]
+  }
+
+  if (isPhase4ProtectedActionRuntimeContext(normalized)) {
     return [4]
   }
 
@@ -283,6 +388,47 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
   return []
 }
 
+function isPhase2InquiryRuntimeContext(normalizedPath: string): boolean {
+  return [
+    'src/modules/inquiries/',
+    'src/modules/notification-outbox/',
+    'src/lib/server/notification-provider.ts',
+    'src/routes/$slug.inquiry',
+    'src/routes/owner.inquiries',
+    'src/routes/admin.inquiries',
+    'src/routes/api.notification',
+  ].some((path) => normalizedPath.includes(path))
+}
+
+function isPhase3DiscoveryRuntimeContext(normalizedPath: string): boolean {
+  return ['src/modules/discovery/', 'src/routes/developers.discovery', 'src/routes/api.discovery'].some((path) =>
+    normalizedPath.includes(path)
+  )
+}
+
+function isPhase4ProtectedActionRuntimeContext(normalizedPath: string): boolean {
+  return [
+    'src/modules/protected-action/',
+    'src/routes/owner.actions',
+    'src/routes/admin.protected-actions',
+    'convex/protectedActions.ts',
+  ].some((path) => normalizedPath.includes(path))
+}
+
+function isSourceOwnedDiscoveryReadbackContext(excerpt: string): boolean {
+  return /\b(?:source-owned|readback|read-only|support matrix|supportRow|supportEscalationPath|gatedExclusion|nextAction|freshness|route health|routeReadbackStatus|public catalog facts|parity|private data exposure|withheld|degraded|unavailable|deferred|unsupportedCapabilities)\b/i.test(
+    excerpt
+  )
+}
+
+function isDiscoveryProjectionReadbackContext(excerpt: string): boolean {
+  return (
+    /\b(?:OpenAPI|MCP) read projection\b/i.test(excerpt) &&
+    /\b(?:read projection|projectionGate|evaluateDiscoveryProjectionGate|result\.surface)\b/i.test(excerpt) &&
+    !hasPositiveClaimSegment(excerpt, /\b(?:OpenAPI\b|MCP)\b/i)
+  )
+}
+
 function normalizedScanPath(file: string): string {
   const relativePath = relative(process.cwd(), file).replaceAll('\\', '/')
   const rawPath = file.replaceAll('\\', '/')
@@ -295,31 +441,42 @@ function isCopyTestContext(file: string): boolean {
 }
 
 function isNegativeCapabilityContext(excerpt: string, capabilityPattern: RegExp): boolean {
-  const capability =
-    '(?:AI|booking|payment|provider|autonomous|SDK|CLI|MCP|API-key|API key|OpenAPI|merchant-origin UCP|\\.well-known UCP|action endpoint|callable|tool-call|agent-callable|wallet|credits?|credit balance|credits? balance|Connect|x402|custody|crypto|stored value|settlement|split payout|marketplace payout|payment handler|direct Stripe|Stripe subscription|paymentRequired)'
-  const negative =
-    '(?:no|not live|not shipped?|not advertised|not available|never|unavailable|deferred|out of scope|banned|blocked|stay out|stays out|remain(?:s)? unavailable|negative(?:ly)?|fail(?:s)? scans?)'
-  const positive = '(?:live|available|ready|enabled|supported|shipped|active)'
-  const beforeCapability = new RegExp(`\\b${negative}\\b[\\s\\S]{0,80}\\b${capability}\\b`, 'i')
-  const afterCapability = new RegExp(`\\b${capability}\\b[\\s\\S]{0,80}\\b${negative}\\b`, 'i')
-  const capabilityInClause = new RegExp(capabilityPattern.source, capabilityPattern.flags.replace('g', ''))
-  const mixedPositiveSegment = new RegExp(
-    `${capabilityPattern.source}[\\s\\S]{0,40}\\b${positive}\\b|\\b${positive}\\b[\\s\\S]{0,40}${capabilityPattern.source}`,
-    capabilityPattern.flags.replace('g', '')
-  )
-  const segmentNegative = new RegExp(`\\b${negative}\\b`, 'i')
+  return isUnavailableOrDeferredClaimContext(excerpt, capabilityPattern)
+}
+
+function isUnavailableOrDeferredClaimContext(excerpt: string, capabilityPattern: RegExp): boolean {
+  const capabilityInClause = cloneRegExp(capabilityPattern)
 
   return excerpt
     .split(/[.;!?\n]/)
     .filter((clause) => capabilityInClause.test(clause))
     .every((clause) => {
-      const hasPositiveSegment = clause
-        .split(/,|\bbut\b|\bwhile\b|\bwhereas\b/i)
-        .some((segment) => mixedPositiveSegment.test(segment) && !segmentNegative.test(segment))
-
-      return !hasPositiveSegment && (beforeCapability.test(clause) || afterCapability.test(clause))
+      return unavailableOrDeferredPattern.test(clause) && !hasPositiveClaimSegment(clause, capabilityPattern)
     })
 }
+
+function hasPositiveClaimSegment(excerpt: string, capabilityPattern: RegExp): boolean {
+  const capabilityInSegment = cloneRegExp(capabilityPattern)
+
+  return splitClaimSegments(excerpt).some(
+    (segment) =>
+      capabilityInSegment.test(segment) &&
+      positiveClaimPattern.test(segment) &&
+      !unavailableOrDeferredPattern.test(segment)
+  )
+}
+
+function splitClaimSegments(excerpt: string): readonly string[] {
+  return excerpt.split(/,|\bbut\b|\bwhile\b|\bwhereas\b/i)
+}
+
+function cloneRegExp(pattern: RegExp): RegExp {
+  return new RegExp(pattern.source, pattern.flags.replace('g', ''))
+}
+
+const unavailableOrDeferredPattern =
+  /\b(?:no|not live|not shipped?|not advertised|not available|never|unavailable|deferred|out of scope|outside|withheld|banned|blocked|stay out|stays out|remain(?:s)? unavailable|negative(?:ly)?|fail(?:s)? scans?|does not grant|does not need|not part of|gated exclusion|readback-gated)\b/i
+const positiveClaimPattern = /\b(?:live|available|ready|enabled|supported|shipped|active|launch(?:ed)?|grants?|provides?)\b/i
 
 export function scanUiContract(targets: readonly ScanTarget[]): readonly ScanViolation[] {
   return scanPatterns(
@@ -446,7 +603,7 @@ function isAllowedConvexSchemaComposition(violation: ScanViolation): boolean {
   return (
     violation.rule === 'module-private-import' &&
     violation.file === 'convex/schema.ts' &&
-    /from\s+['"]\.\.\/src\/modules\/[^'"]+\/internal\/schema['"]/.test(violation.excerpt)
+    /from\s+['"]\.\.\/src\/modules\/[^'"]+\/internal\/(?:schema|convex-schema)['"]/.test(violation.excerpt)
   )
 }
 

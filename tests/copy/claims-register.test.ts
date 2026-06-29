@@ -140,6 +140,15 @@ describe('claims register seed copy', () => {
     )
   })
 
+  it('allows explicit public unavailable/deferred future-capability exclusions', () => {
+    const violations = scanFixture(
+      'public-copy/gated-exclusions.fixture',
+      'Public page: Stripe Checkout and subscription remain unavailable; SDK/CLI platform, MCP tools, OpenAPI action endpoint, callable endpoint, API-key platform, protected action proposal, wallet credits, Connect/x402, marketplace payout, and payment handler are deferred or out of scope.',
+    )
+
+    expect(violations).toEqual([])
+  })
+
   it('rejects mixed negative and positive future-capability copy', () => {
     const moneyViolations = scanFixture(
       'public-copy/overclaim.fixture',

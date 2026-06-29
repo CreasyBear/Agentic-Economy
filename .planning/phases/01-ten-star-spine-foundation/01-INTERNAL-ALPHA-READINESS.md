@@ -1,19 +1,19 @@
 # Phase 01 Internal Alpha Readiness Evidence
 
-**Status:** not alpha-ready.  
-**Reason:** five friendly-owner evidence rows do not exist. `01-ALPHA-EVIDENCE.md` records 0 of 5 real owner rows.
+**Status:** not alpha-ready; deferred as execution debt.
+**Reason:** five friendly-owner evidence rows do not exist. `01-ALPHA-EVIDENCE.md` records 0 of 5 real owner rows. User explicitly accepted this as non-blocking for Phase 2-5 execution on 2026-06-28.
 
 ## Gate Decision
 
-Phase 1 can be used for local founder-assisted rehearsal and technical deploy readback. It must not be called internal-alpha ready, launch-ready, or public-ready until real owner evidence exists.
+Phase 1 can be used for local founder-assisted rehearsal, technical deploy readback, and Phase 2-5 execution. It must not be called internal-alpha ready, launch-ready, or public-ready until real owner evidence exists.
 
-Blocking evidence gaps as of 2026-06-28T15:26:38Z:
+Deferred owner-evidence debt as of 2026-06-28T15:26:38Z:
 
 1. Fewer than five friendly-owner attempts have been recorded.
 2. No live channel-attribution rows exist for real owners.
 3. No real owner share/interest evidence exists.
 4. No real owner friction/failure notes exist.
-5. The external Standards/Spec review is prepared but not executed.
+5. The external Standards/Spec review is executed; its remaining Spec finding is this same five-owner evidence gap.
 
 Technical evidence that is now green:
 
@@ -64,9 +64,8 @@ Evidence currently covered by tests:
 - GTM readiness copy: `.planning/GTM-READINESS.md`, asserted by `tests/copy/claims-register.test.ts`
 - Optional product-marketing draft, if present: `.agents/product-marketing.md`, asserted as non-public draft by `tests/copy/claims-register.test.ts`
 
-## Next Evidence Needed
+## Later Evidence Needed
 
 1. Recruit five friendly owners through founder outreach only.
 2. For each owner, collect activation readback, share/interest event, friction/failure note, source/channel attribution, and support-owner signoff.
-3. Run or explicitly defer the external Standards/Spec review.
-4. Keep broad launch, paid ads, developer launch, and protocol launch blocked until the GTM stage evidence is actually green.
+3. Keep broad launch, paid ads, developer launch, and protocol launch blocked until the GTM stage evidence is actually green.

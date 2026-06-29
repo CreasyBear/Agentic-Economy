@@ -12,8 +12,19 @@ import type { IndexStatus } from '@/modules/registry/public'
 import { IndexStatusSchema } from '@/modules/registry/internal/validators'
 import type { AdminRole } from '@/modules/security/public'
 import { AdminRoleSchema } from '@/modules/security/internal/validators'
-import type { AuditEventType, OperatorControlKey } from '@/modules/observability/public'
-import { AuditEventTypeSchema, OperatorControlKeySchema } from '@/modules/observability/internal/validators'
+import type { AuditEventType, AuditTargetType, FunnelEventType, OperatorControlKey } from '@/modules/observability/public'
+import {
+  AuditEventTypeValues,
+  AuditTargetTypeValues,
+  FunnelEventTypeValues,
+  OperatorControlKeyValues,
+} from '@/modules/observability/public'
+import {
+  AuditEventTypeSchema,
+  AuditTargetTypeSchema,
+  FunnelEventTypeSchema,
+  OperatorControlKeySchema,
+} from '@/modules/observability/internal/validators'
 
 describe('domain-owned state contracts', () => {
   it('keeps validators equal to exported domain unions', () => {
@@ -27,12 +38,26 @@ describe('domain-owned state contracts', () => {
     expectTypeOf<z.infer<typeof AdminRoleSchema>>().toEqualTypeOf<AdminRole>()
     expectTypeOf<z.infer<typeof AuditEventTypeSchema>>().toEqualTypeOf<AuditEventType>()
     expectTypeOf<z.infer<typeof OperatorControlKeySchema>>().toEqualTypeOf<OperatorControlKey>()
+    expectTypeOf<z.infer<typeof AuditTargetTypeSchema>>().toEqualTypeOf<AuditTargetType>()
+    expectTypeOf<z.infer<typeof FunnelEventTypeSchema>>().toEqualTypeOf<FunnelEventType>()
+    expectTypeOf<(typeof AuditTargetTypeValues)[number]>().toEqualTypeOf<AuditTargetType>()
+    expectTypeOf<(typeof FunnelEventTypeValues)[number]>().toEqualTypeOf<FunnelEventType>()
+    expectTypeOf<(typeof OperatorControlKeyValues)[number]>().toEqualTypeOf<OperatorControlKey>()
+    expectTypeOf<(typeof AuditEventTypeValues)[number]>().toEqualTypeOf<AuditEventType>()
   })
 
   it('rejects invalid status strings at runtime', () => {
     expect(ClaimStatusSchema.safeParse('active').success).toBe(false)
     expect(PublicStatusSchema.safeParse('live').success).toBe(false)
     expect(IndexStatusSchema.safeParse('ready').success).toBe(false)
+  })
+
+  it('accepts representative P2-P5 observability substrate literals at runtime', () => {
+    expect(AuditEventTypeSchema.parse('notification.webhook_held')).toBe('notification.webhook_held')
+    expect(AuditEventTypeSchema.parse('billing.provider_event_held')).toBe('billing.provider_event_held')
+    expect(AuditTargetTypeSchema.parse('protected_action_attempt')).toBe('protected_action_attempt')
+    expect(FunnelEventTypeSchema.parse('paid_activation_started')).toBe('paid_activation_started')
+    expect(OperatorControlKeySchema.parse('billing_reconciliation_enabled')).toBe('billing_reconciliation_enabled')
   })
 
   it('keeps authority state values exact', () => {
