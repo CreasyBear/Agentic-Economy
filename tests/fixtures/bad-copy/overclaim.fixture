@@ -3,3 +3,4 @@ Customer inquiry and owner inbox are live with Resend/Novu email notification de
 Developer discovery API docs are live with an SDK/CLI platform, MCP mutation, and API-key platform.
 Protected action proposal with owner approval can auto-approve a provider/internal attempt.
 Autumn+Stripe paid activation checkout and subscription are live with wallet/credits, Connect/x402, x402 checkout, custody rail, and settlement platform.
+Receipt-backed autonomous business operation is live with a self-approving agent, unbounded autonomous spend, instant purchase, agent checkout, AE wallet, AE credits, AE custody, seller payout, marketplace settlement, Stripe Connect, product marketplace, generic API marketplace, and production autonomous payment support.

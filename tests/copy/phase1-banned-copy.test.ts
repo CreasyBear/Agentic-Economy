@@ -36,6 +36,8 @@ describe('Phase 1 public copy guardrail', () => {
           'p4-autonomous-action-overclaim',
           'p5-paid-activation-overclaim',
           'p5-money-rail-overclaim',
+          'p6-business-action-overclaim',
+          'p6-autonomous-money-marketplace-overclaim',
         ])
       )
       return
@@ -44,4 +46,3 @@ describe('Phase 1 public copy guardrail', () => {
     expect(violations).toEqual([])
   })
 })
-

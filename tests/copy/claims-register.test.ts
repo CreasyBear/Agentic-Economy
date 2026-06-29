@@ -35,6 +35,11 @@ const phaseOwnedCopyExamples = [
     relativeFile: '.planning/phases/05-paid-activation-money-rails/05-UI-SPEC.fixture',
     copy: 'Phase 5 Autumn+Stripe paid activation shows Stripe PSP checkout, subscription, customer portal, and billing reconciliation; wallet/credits, balance, stored value, Connect/x402, x402 checkout, custody rail, direct Stripe subscription authority, marketplace payout, split payout, and settlement platform remain unavailable.',
   },
+  {
+    phase: 'P6 business action receipt',
+    relativeFile: '.planning/phases/06-agentic-business-action-receipts/06-UI-SPEC.fixture',
+    copy: 'Phase 6 Business Action Card and Capability Request show the authorization checkpoint, GuardrailDecisionEvidence, ExternalEvidenceEvent, Action Receipt, receipt-backed software operation, receipt-backed autonomous business operation, and Hermes-run paid intake provisioning as source/local proof only; self-approving agent, agent checkout, AE wallet, Connect/x402, product marketplace, generic API marketplace, and production autonomous payment support remain unavailable.',
+  },
 ] as const
 
 const publicOverclaimExamples = [
@@ -71,6 +76,14 @@ const publicOverclaimExamples = [
     copy: 'Public page: wallet/credits, balance, stored value, Connect/x402, x402 checkout, custody rail, direct Stripe subscription authority, marketplace payout, split payout, and settlement platform are ready.',
   },
   {
+    rule: 'p6-business-action-overclaim',
+    copy: 'Public page: receipt-backed autonomous business operation is live for every business.',
+  },
+  {
+    rule: 'p6-autonomous-money-marketplace-overclaim',
+    copy: 'Public page: self-approving agent, unbounded autonomous spend, instant purchase, agent checkout, AE wallet, AE credits, AE custody, seller payout, marketplace settlement, Stripe Connect, x402, product marketplace, generic API marketplace, and production autonomous payment support are ready.',
+  },
+  {
     rule: 'payment-or-booking-overclaim',
     copy: 'Public page: bookings are available and payments are live.',
   },
@@ -104,6 +117,11 @@ const wrongPhaseExamples = [
     rule: 'p5-paid-activation-overclaim',
     relativeFile: '.planning/phases/04-owner-pending-protected-actions/wrong-phase.fixture',
     copy: 'Autumn+Stripe paid activation checkout is ready for protected actions.',
+  },
+  {
+    rule: 'p6-business-action-overclaim',
+    relativeFile: '.planning/phases/05-paid-activation-money-rails/wrong-phase.fixture',
+    copy: 'Business Action Card and receipt-backed autonomous business operation are ready for paid activation.',
   },
 ] as const
 
