@@ -24,6 +24,8 @@ const DEFAULT_EXAMPLES: readonly string[] = [
   'Electrician same day Geelong',
 ]
 
+const QUERY_MAX_LENGTH = 200
+
 export function AeAnswerPromptInput({
   onSubmit,
   defaultValue = '',
@@ -31,10 +33,12 @@ export function AeAnswerPromptInput({
   busy = false,
 }: AeAnswerPromptInputProps) {
   const inputId = useId()
-  const [value, setValue] = useState(defaultValue)
+  const [value, setValue] = useState(defaultValue.slice(0, QUERY_MAX_LENGTH))
+  const charactersRemaining = QUERY_MAX_LENGTH - value.length
+  const showCharacterLimit = charactersRemaining <= 40
 
   function submitQuery(query: string) {
-    const trimmed = query.trim()
+    const trimmed = query.slice(0, QUERY_MAX_LENGTH).trim()
     if (trimmed.length === 0) {
       return
     }
@@ -93,6 +97,7 @@ export function AeAnswerPromptInput({
             className="ae-query-box__input"
             placeholder="No hot water in Preston 3072"
             value={value}
+            maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => setValue(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
             autoComplete="off"
@@ -117,6 +122,7 @@ export function AeAnswerPromptInput({
 
       <p id={`${inputId}-hint`} className="ae-query-box__hint">
         Type a real need and a place. The answer cites listed local businesses.
+        {showCharacterLimit ? ` ${charactersRemaining} characters left.` : null}
       </p>
     </div>
   )

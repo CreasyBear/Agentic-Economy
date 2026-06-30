@@ -25,7 +25,7 @@ describe('formatTurnQueryLabel', () => {
         seq: 2,
       }),
     ).toEqual({
-      text: '→ What AE can do',
+      text: '→ What AE can safely do',
       role: 'follow-up',
     })
   })

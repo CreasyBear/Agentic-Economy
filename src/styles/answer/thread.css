@@ -100,6 +100,19 @@
   width: 100%;
 }
 
+.ae-chat-empty {
+  width: min(100%, 36rem);
+  margin: var(--ae-public-space-xl) auto;
+}
+
+.ae-chat-empty a {
+  color: var(--ae-public-ink);
+  font-weight: var(--ae-public-weight-semibold);
+  text-decoration: underline;
+  text-decoration-color: var(--ae-public-amber);
+  text-underline-offset: 0.2em;
+}
+
 .ae-thread-transcript__turn {
   display: flex;
   flex-direction: column;
@@ -118,16 +131,18 @@
 .ae-follow-up-chips__chip {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   min-height: 2.25rem;
   padding: var(--ae-public-space-2xs) var(--ae-public-space-sm);
   border: 1px solid var(--ae-public-line-strong);
   border-radius: 4px !important;
   background: var(--ae-public-field);
   color: var(--ae-public-muted-strong);
-  font-family: var(--ae-public-font-mono);
-  font-size: var(--ae-public-text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: var(--ae-public-font-body);
+  font-size: var(--ae-public-text-sm);
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
   cursor: pointer;
   transition: border-color var(--ae-public-duration-hover) var(--ae-public-ease),
               color var(--ae-public-duration-hover) var(--ae-public-ease),
@@ -364,4 +379,3 @@
   font-size: var(--ae-public-text-sm);
   color: var(--ae-public-muted-strong);
 }
-

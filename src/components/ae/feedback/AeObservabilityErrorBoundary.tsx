@@ -18,7 +18,7 @@ function AeObservabilityErrorBoundaryClient({ children }: { children: ReactNode 
 
   useEffect(() => {
     void import('@/lib/observability/sentry.client').then(({ Sentry }) => {
-      setBoundary(Sentry.ErrorBoundary)
+      setBoundary(() => Sentry.ErrorBoundary)
     })
   }, [])
 

@@ -35,6 +35,7 @@ import {
 } from '../answer-thread.functions'
 import { assertAnswerTurnAccess } from './turn-guard'
 import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
+import { filterProvidersBySuburb, parseNarrowToSuburb } from './follow-up-query'
 import { parseFrozenEvidence } from './public-projection'
 
 const DEFAULT_LIMIT = 10
@@ -89,8 +90,8 @@ export async function streamAnswerTurn(
 
   send({ type: 'thread', threadId, turnId, turnSeq })
 
-  const priorFrozen = collectFrozenProviders(priorTurns)
-  const priorAllowedSlugs = collectFrozenAllowedSlugs(priorTurns)
+  const priorFrozen = collectLatestFrozenProviders(priorTurns)
+  const priorAllowedSlugs = collectLatestFrozenAllowedSlugs(priorTurns)
   let captured: AnswerSnapshot | undefined
   let errorCopyId: string | undefined
   let bufferedToolCalls: AnswerToolCallRecord[] = []
@@ -162,6 +163,9 @@ async function streamToolLedTurn(input: {
     case 'frozen_compare': {
       // Frozen-evidence intents reuse prior providers with no registry tool call.
       const frozen = selectFrozenProviders(route.kind, input.priorProviders)
+      if (input.priorProviders.length === 0 || (route.kind === 'frozen_compare' && frozen.length < 2)) {
+        return streamInsufficientFrozenContextTurn(input, route.kind)
+      }
       return streamAgentTurn(input, {
         query: input.query,
         priorProviders: frozen,
@@ -170,13 +174,63 @@ async function streamToolLedTurn(input: {
         disableTools: true,
       })
     }
-    case 'tool_search':
+    case 'tool_search': {
       // refine_search: the only route that exposes registry tools to the agent.
+      const narrowSuburb = parseNarrowToSuburb(input.query)
+      if (narrowSuburb !== undefined && input.priorProviders.length > 0) {
+        return streamAgentTurn(input, {
+          query: input.query,
+          priorProviders: reindexProviders(filterProvidersBySuburb(input.priorProviders, narrowSuburb)),
+          priorAllowedSlugs: input.priorAllowedSlugs,
+          followUpIntent: input.intent,
+          disableTools: true,
+        })
+      }
       return streamAgentTurn(input, {
         query: input.query,
         followUpIntent: input.intent,
       })
+    }
   }
+}
+
+async function streamInsufficientFrozenContextTurn(
+  input: {
+    query: string
+    intent: FollowUpIntent
+    priorTurnsCount: number
+    signal: AbortSignal | undefined
+    send: (event: AnswerEvent) => void
+  },
+  routeKind: 'frozen_filter' | 'frozen_compare',
+): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined }> {
+  const isCompare = routeKind === 'frozen_compare'
+  const snapshot = withFollowUpLayout(
+    {
+      query: input.query,
+      oneLine: isCompare ? 'No two listed businesses to compare yet.' : 'No listed businesses to filter yet.',
+      providers: [],
+      summary: isCompare
+        ? 'There are not enough listed providers in the latest answer to compare.'
+        : 'There are no listed providers in the latest answer to filter.',
+      nextStep: 'Ask for a need and place, then compare or filter the listed businesses that appear.',
+      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
+    },
+    input.priorTurnsCount,
+    input.intent,
+  )
+
+  for await (const event of emitSnapshotEvents(snapshot, {
+    emitThinking: true,
+    emitComplete: false,
+  })) {
+    if (input.signal?.aborted === true) {
+      break
+    }
+    input.send(event)
+  }
+
+  return { snapshot, toolCalls: [], errorCopyId: undefined }
 }
 
 function selectFrozenProviders(
@@ -304,7 +358,7 @@ async function readPriorCompleteTurns(threadId: string | undefined) {
   }
 }
 
-type AnswerTurnRecordLite = Pick<AnswerTurnRecord, 'evidenceJson' | 'query' | 'status'>
+type AnswerTurnRecordLite = Pick<AnswerTurnRecord, 'evidenceJson' | 'query' | 'seq' | 'status'>
 
 async function persistTurn(input: {
   sessionId: string
@@ -370,33 +424,24 @@ async function persistTurn(input: {
   }
 }
 
-function collectFrozenProviders(priorTurns: readonly { evidenceJson: string }[]): AnswerSource[] {
-  const slugs = new Set<string>()
-  const providers: AnswerSource[] = []
-
-  for (const turn of priorTurns) {
-    const evidence = parseFrozenEvidence(turn.evidenceJson)
-    for (const provider of evidence.providers) {
-      if (slugs.has(provider.slug)) {
-        continue
-      }
-      slugs.add(provider.slug)
-      providers.push(provider)
-    }
-  }
-
-  return providers
+function collectLatestFrozenProviders(priorTurns: readonly AnswerTurnRecordLite[]): AnswerSource[] {
+  return readLatestFrozenEvidence(priorTurns)?.providers.slice() ?? []
 }
 
-function collectFrozenAllowedSlugs(priorTurns: readonly { evidenceJson: string }[]): string[] {
-  const slugs = new Set<string>()
-  for (const turn of priorTurns) {
-    const evidence = parseFrozenEvidence(turn.evidenceJson)
-    for (const slug of evidence.allowedSlugs) {
-      slugs.add(slug)
+function collectLatestFrozenAllowedSlugs(priorTurns: readonly AnswerTurnRecordLite[]): string[] {
+  return [...(readLatestFrozenEvidence(priorTurns)?.allowedSlugs ?? [])]
+}
+
+function readLatestFrozenEvidence(priorTurns: readonly AnswerTurnRecordLite[]): FrozenTurnEvidence | undefined {
+  const sorted = priorTurns.slice().sort((left, right) => right.seq - left.seq)
+  for (const turn of sorted) {
+    try {
+      return parseFrozenEvidence(turn.evidenceJson)
+    } catch {
+      // Skip malformed legacy evidence and keep looking for the latest usable turn.
     }
   }
-  return [...slugs]
+  return undefined
 }
 
 function reindexProviders(providers: readonly AnswerSource[]): AnswerSource[] {

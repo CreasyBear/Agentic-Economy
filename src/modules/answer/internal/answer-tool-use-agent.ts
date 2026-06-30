@@ -7,6 +7,7 @@ import { runAnswerGate, type AnswerGateResult } from './answer-gate'
 import { collectAllowedSlugsFromToolResults } from './catalog-grounding'
 import { actionToOpenRouterTool } from './action-to-tool-spec'
 import { buildToolUseAgentSystemPrompt, buildToolUseAgentUserPrompt } from './answer-llm-prompts'
+import { filterProvidersForRequestedLocation } from './provider-location-filter'
 import { AnswerProseSchema, snapshotProseFromAnswer, type AnswerProse } from '../answer-prose'
 import {
   buildAgentJsonUrl,
@@ -156,28 +157,57 @@ function buildAgentResult(
   const priorAllowed = new Set(input.priorAllowedSlugs ?? [])
   const allowedSlugs = new Set<string>([...toolAllowedSlugs, ...priorAllowed])
 
+  const agentQueryFromTools = resolveAgentQuery(toolCalls, input.query)
+  const locationFiltered =
+    providers.length > 0
+      ? filterProvidersForRequestedLocation({
+          providers,
+          userQuery: input.query,
+          toolQuery: agentQueryFromTools,
+        })
+      : undefined
+
   // For non-search intents the providers come from frozen prior evidence.
   const finalProviders: readonly AnswerSource[] =
-    providers.length > 0 ? providers : (input.priorProviders ?? [])
+    providers.length > 0 ? (locationFiltered?.providers ?? providers) : (input.priorProviders ?? [])
 
   const mapped = snapshotProseFromAnswer(prose)
+  const snapshotProse =
+    locationFiltered?.filtered === true
+      ? buildLocationScopedProse({
+          query: input.query,
+          location: locationFiltered.location,
+          providers: finalProviders,
+        })
+      : mapped
   // The agent JSON URL points at the search that actually grounded the answer.
   // When the model chose a corrected `registry.search` argument (e.g.
   // "parramatta" for a misspelled "paramata"), the URL reflects that chosen
   // query while the frozen snapshot query stays honest to what the person typed.
-  const agentQuery = resolveAgentQuery(toolCalls, input.query)
+  const agentQuery =
+    locationFiltered?.filtered === true && locationFiltered.locationSource === 'user'
+      ? input.query
+      : agentQueryFromTools
   const snapshot: AnswerSnapshot = {
     query: input.query,
-    oneLine: mapped.oneLine,
+    oneLine: snapshotProse.oneLine,
     providers: finalProviders,
-    summary: mapped.summary,
-    nextStep: mapped.nextStep,
+    summary: snapshotProse.summary,
+    nextStep: snapshotProse.nextStep,
     agentJsonUrl: buildAgentJsonUrl(agentQuery, DEFAULT_LIMIT),
   }
 
   const gate = runAnswerGate({ snapshot, allowedSlugs })
+  const effectiveProse: AnswerProse =
+    snapshotProse === mapped
+      ? prose
+      : {
+          oneLine: snapshotProse.oneLine,
+          summary: snapshotProse.summary,
+          whatToDoNow: snapshotProse.nextStep,
+        }
   return {
-    prose,
+    prose: effectiveProse,
     providers: finalProviders,
     allowedSlugs,
     toolCalls: [...toolCalls],
@@ -278,6 +308,33 @@ async function runRealToolUseAgent(
     throw new AnswerToolUseAgentError('prose_failed')
   }
   return buildAgentResult(input, prose, toolCalls, providers)
+}
+
+function buildLocationScopedProse(input: {
+  query: string
+  location: string | undefined
+  providers: readonly AnswerSource[]
+}): { oneLine: string; summary: string; nextStep: string } {
+  const location = input.location?.trim()
+  const place = location === undefined || location.length === 0 ? 'that place' : location
+  const count = input.providers.length
+
+  if (count === 0) {
+    return {
+      oneLine: `No listed businesses match "${input.query}" yet.`,
+      summary: `No listed providers publish coverage for ${place} yet.`,
+      nextStep: 'Try a nearby suburb, browse the registry, or list a business that should appear here.',
+    }
+  }
+
+  return {
+    oneLine: count === 1 ? `1 listed business matches ${place}.` : `${count} listed businesses match ${place}.`,
+    summary:
+      count === 1
+        ? `This listing publishes service coverage for ${place}. Agentic Economy does not book or take payment on this page.`
+        : `These listings publish service coverage for ${place}. Agentic Economy does not book or take payment on this page.`,
+    nextStep: 'Open a listed provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
+  }
 }
 
 function listAnswerModelToolActions(): AnyAction[] {

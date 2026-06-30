@@ -9,18 +9,33 @@ import { cn } from "@/lib/utils";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
 
-export type SuggestionsProps = ComponentProps<typeof ScrollArea>;
+export type SuggestionsProps = ComponentProps<typeof ScrollArea> & {
+  wrap?: boolean;
+};
 
 export const Suggestions = ({
   className,
   children,
+  wrap = false,
   ...props
 }: SuggestionsProps) => (
-  <ScrollArea className="w-full overflow-x-auto whitespace-nowrap" {...props}>
-    <div className={cn("flex w-max flex-nowrap items-center gap-2", className)}>
+  <ScrollArea
+    className={cn(
+      "w-full",
+      wrap ? "overflow-visible whitespace-normal" : "overflow-x-auto whitespace-nowrap",
+    )}
+    {...props}
+  >
+    <div
+      className={cn(
+        "flex items-center gap-2",
+        wrap ? "w-full flex-wrap" : "w-max flex-nowrap",
+        className,
+      )}
+    >
       {children}
     </div>
-    <ScrollBar className="hidden" orientation="horizontal" />
+    {wrap ? null : <ScrollBar className="hidden" orientation="horizontal" />}
   </ScrollArea>
 );
 

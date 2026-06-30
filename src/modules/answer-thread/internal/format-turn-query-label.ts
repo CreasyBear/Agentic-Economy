@@ -23,15 +23,15 @@ export function formatTurnQueryLabel(input: {
   }
 
   if (/^show only businesses that accept inquiries$/i.test(input.query.trim())) {
-    return { text: '→ Inquiries only', role: 'follow-up' }
+    return { text: '→ Inquiry-ready listings', role: 'follow-up' }
   }
 
   if (/^compare the top two$/i.test(input.query.trim())) {
-    return { text: '→ Compare top two', role: 'follow-up' }
+    return { text: '→ Compare the top two', role: 'follow-up' }
   }
 
   if (/^what can agentic economy do here\??$/i.test(input.query.trim())) {
-    return { text: '→ What AE can do', role: 'follow-up' }
+    return { text: '→ What AE can safely do', role: 'follow-up' }
   }
 
   if (input.intent === 'explain_boundary' || input.intent === 'unsupported') {

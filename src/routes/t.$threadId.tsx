@@ -1,27 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { z } from 'zod'
 
 import { AeChat } from '@/components/ae/chat/AeChat'
 import { getPublicThreadProjection } from '@/modules/answer-thread/public'
 import { buildPublicThreadSeo } from '@/modules/seo/public'
 
-export const Route = createFileRoute('/t/$threadId')({
-  loader: async ({ params }) => {
-    const projection = await getPublicThreadProjection(params.threadId)
-    if (projection === null) {
-      return { projection, seo: undefined }
-    }
+type ThreadRouteReadback = {
+  projection: Awaited<ReturnType<typeof getPublicThreadProjection>>
+  seo: ReturnType<typeof buildPublicThreadSeo> | undefined
+}
 
-    const firstTurn = projection.turns.at(0)
-    return {
-      projection,
-      seo: buildPublicThreadSeo({
-        threadId: projection.threadId,
-        title: projection.title,
-        ...(firstTurn === undefined ? {} : { firstTurnOneLine: firstTurn.oneLine }),
-        options: { canonicalBaseUrl: 'https://ae.example' },
-      }),
-    }
-  },
+const threadRouteParamsSchema = z.object({
+  threadId: z.string().min(1).max(160),
+})
+
+export const readThreadRouteServer = createServerFn()
+  .validator((data) => threadRouteParamsSchema.parse(data))
+  .handler(({ data }) => loadThreadRouteReadback(data.threadId))
+
+export const Route = createFileRoute('/t/$threadId')({
+  loader: ({ params }) =>
+    readThreadRouteServer({ data: { threadId: params.threadId } }).catch(() => unavailableThreadRouteReadback()),
   head: ({ loaderData }) => {
     if (loaderData?.seo === undefined) {
       return {
@@ -54,5 +54,32 @@ export const Route = createFileRoute('/t/$threadId')({
 
 function ThreadPage() {
   const { threadId } = Route.useParams()
-  return <AeChat threadId={threadId} />
+  const { projection } = Route.useLoaderData()
+  return <AeChat threadId={threadId} initialProjection={projection} />
+}
+
+export async function loadThreadRouteReadback(threadId: string): Promise<ThreadRouteReadback> {
+  try {
+    const projection = await getPublicThreadProjection(threadId)
+    if (projection === null) {
+      return unavailableThreadRouteReadback()
+    }
+
+    const firstTurn = projection.turns.at(0)
+    return {
+      projection,
+      seo: buildPublicThreadSeo({
+        threadId: projection.threadId,
+        title: projection.title,
+        ...(firstTurn === undefined ? {} : { firstTurnOneLine: firstTurn.oneLine }),
+        options: { canonicalBaseUrl: 'https://ae.example' },
+      }),
+    }
+  } catch {
+    return unavailableThreadRouteReadback()
+  }
+}
+
+function unavailableThreadRouteReadback(): ThreadRouteReadback {
+  return { projection: null, seo: undefined }
 }

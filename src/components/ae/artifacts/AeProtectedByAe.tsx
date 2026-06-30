@@ -5,7 +5,7 @@ export function AeProtectedByAe() {
         AE
       </span>
       <span>
-        Protected by Agentic Economy — published details only. No booking or payment on this page.
+        Protected by Agentic Economy. Published details only. No booking or payment on this page.
       </span>
     </p>
   )

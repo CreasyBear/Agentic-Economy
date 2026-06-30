@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import type { AnswerThreadRecord, PublicThreadProjection } from '@/modules/answer-thread/public'
@@ -18,6 +19,7 @@ import { AeThreadStreamingIndicator } from './AeStreamingLabel'
 export type AeChatProps = {
   threadId?: string | null
   initialQuery?: string | null
+  initialProjection?: PublicThreadProjection | null
 }
 
 type LiveTurn = {
@@ -25,9 +27,10 @@ type LiveTurn = {
   generation: number
 }
 
-export function AeChat({ threadId = null, initialQuery = null }: AeChatProps) {
+export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
   const navigate = useNavigate()
-  const [projection, setProjection] = useState<PublicThreadProjection | null>(null)
+  const [projection, setProjection] = useState<PublicThreadProjection | null>(initialProjection ?? null)
+  const [projectionUnavailable, setProjectionUnavailable] = useState(false)
   const [threads, setThreads] = useState<readonly AnswerThreadRecord[]>([])
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null)
   const [generation, setGeneration] = useState(0)
@@ -39,6 +42,7 @@ export function AeChat({ threadId = null, initialQuery = null }: AeChatProps) {
   const routeThreadId = threadId
   const streamingThreadId = routeThreadId ?? sessionThreadId
   const showWelcome = routeThreadId === null && liveTurn === null && (projection?.turns.length ?? 0) === 0
+  const showThreadUnavailable = routeThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
   const completedTurnCount = projection?.turns.filter((turn) => turn.status === 'complete').length ?? 0
 
   const refreshThreads = useCallback(async () => {
@@ -58,12 +62,15 @@ export function AeChat({ threadId = null, initialQuery = null }: AeChatProps) {
     try {
       const response = await fetch(`/api/answer/threads/${encodeURIComponent(id)}`)
       if (!response.ok) {
+        setProjection(null)
+        setProjectionUnavailable(true)
         return
       }
       const body = (await response.json()) as PublicThreadProjection
       setProjection(body)
+      setProjectionUnavailable(false)
     } catch {
-      setProjection(null)
+      setProjectionUnavailable(true)
     }
   }, [])
 
@@ -74,10 +81,21 @@ export function AeChat({ threadId = null, initialQuery = null }: AeChatProps) {
   useEffect(() => {
     if (routeThreadId === null) {
       setProjection(null)
+      setProjectionUnavailable(false)
+      return
+    }
+    if (initialProjection?.threadId === routeThreadId) {
+      setProjection(initialProjection)
+      setProjectionUnavailable(false)
+      return
+    }
+    if (initialProjection === null) {
+      setProjection(null)
+      setProjectionUnavailable(true)
       return
     }
     void refreshProjection(routeThreadId)
-  }, [routeThreadId, refreshProjection])
+  }, [routeThreadId, initialProjection, refreshProjection])
 
   useEffect(() => {
     if (initialQueryStarted.current) {
@@ -170,6 +188,15 @@ export function AeChat({ threadId = null, initialQuery = null }: AeChatProps) {
           defaultScrollPosition={defaultScrollPosition}
         >
           {showWelcome ? <AeChatWelcome /> : null}
+          {showThreadUnavailable ? (
+            <div className="ae-chat-empty">
+              <AeEmptyState
+                title="Thread unavailable"
+                description="This answer thread could not be found or loaded. Start a fresh search to keep going."
+                action={<a href="/">Start a new search</a>}
+              />
+            </div>
+          ) : null}
           <AeThreadTranscript
             threadId={routeThreadId}
             projection={projection}

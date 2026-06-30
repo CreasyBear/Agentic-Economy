@@ -12,11 +12,15 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
 
   return (
     <article className="ae-source-card" data-availability={slugify(source.availabilityLabel)} id={`source-${source.citationIndex}`}>
-      <Link to={source.detailUrl} className="ae-source-card__link" aria-label={`${source.name}, ${source.category}, source ${source.citationIndex}`}>
+      <div className="ae-source-card__main">
         <div className="ae-source-card__head">
           <span className="ae-source-card__index" aria-hidden="true">{source.citationIndex}</span>
           <div className="ae-source-card__title">
-            <h3 className="ae-source-card__name">{source.name}</h3>
+            <h3 className="ae-source-card__name">
+              <Link to={source.detailUrl} className="ae-source-card__name-link">
+                {source.name}
+              </Link>
+            </h3>
             <p className="ae-source-card__category">{source.category}</p>
             {source.trustCue.length > 0 ? <p className="ae-source-card__trust">{source.trustCue}</p> : null}
           </div>
@@ -46,12 +50,7 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
             ))}
           </ul>
         ) : null}
-
-        <div className="ae-source-card__cta">
-          <span aria-hidden="true">→</span>
-          <span>{source.inquiryUrl === undefined ? source.nextStepLabel : 'View business page'}</span>
-        </div>
-      </Link>
+      </div>
 
       <div className="ae-source-card__actions">
         {source.inquiryUrl !== undefined ? (
@@ -59,6 +58,9 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
             Send inquiry
           </Link>
         ) : null}
+        <Link to={source.detailUrl} className="ae-source-card__details">
+          {source.inquiryUrl === undefined ? source.nextStepLabel : 'View details'}
+        </Link>
         <AeAgentJsonAffordance agentJsonUrl={buildSourceAgentJsonUrl(source.slug)} query={source.name} />
       </div>
     </article>

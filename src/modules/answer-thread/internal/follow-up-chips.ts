@@ -35,7 +35,7 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
   if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
     chips.push({
-      label: 'Inquiries only',
+      label: 'Only inquiry-ready listings',
       submitQuery: 'Show only businesses that accept inquiries',
     })
   }
@@ -50,13 +50,13 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
   if (providers.length >= 2) {
     chips.push({
-      label: 'Compare top two',
+      label: 'Compare the top two listings',
       submitQuery: 'Compare the top two',
     })
   }
 
   chips.push({
-    label: 'What AE can do',
+    label: 'What can AE safely do here?',
     submitQuery: 'What can Agentic Economy do here?',
   })
 

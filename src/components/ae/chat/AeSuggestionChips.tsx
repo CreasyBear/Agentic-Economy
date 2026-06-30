@@ -47,6 +47,7 @@ export function AeAnswerSuggestions({
     <Suggestions
       className={variant === 'follow-up' ? 'ae-follow-up-chips' : 'ae-query-box__examples'}
       aria-label={ariaLabel}
+      wrap={variant === 'follow-up'}
     >
       {items.map((item) => (
         <Suggestion

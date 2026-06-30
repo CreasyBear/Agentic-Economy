@@ -69,7 +69,7 @@ describe('follow-up chips', () => {
     expect(chips.map((chip) => chip.submitQuery)).toContain('Compare the top two')
     expect(chips.map((chip) => chip.submitQuery)).toContain('What can Agentic Economy do here?')
     expect(chips.some((chip) => chip.submitQuery.startsWith('Narrow to '))).toBe(true)
-    expect(chips.some((chip) => chip.label === 'What AE can do')).toBe(true)
+    expect(chips.some((chip) => chip.label === 'What can AE safely do here?')).toBe(true)
   })
 
   it('appends validated LLM chips after deterministic chips', () => {
