@@ -280,6 +280,8 @@ export const billingTables = {
     sourceControlledReturnUrlKey: v.string(),
     sourceControlledCancelUrlKey: v.string(),
     providerRefs: v.array(providerRefValidator),
+    checkoutUrl: v.optional(v.string()),
+    portalUrl: v.optional(v.string()),
     receiptIds: v.array(v.string()),
     supportRecordIds: v.array(v.string()),
     evidenceRefs: v.array(v.string()),
@@ -333,6 +335,7 @@ export const billingTables = {
     issuedAt: v.number(),
     recordedAt: v.number(),
   })
+    .index('by_receiptId', ['receiptId'])
     .index('by_operation', ['operationId'])
     .index('by_business_recordedAt', ['businessId', 'recordedAt']),
 
@@ -352,6 +355,7 @@ export const billingTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index('by_reconciliationId', ['reconciliationId'])
     .index('by_business_status', ['businessId', 'status'])
     .index('by_operation', ['operationId']),
 

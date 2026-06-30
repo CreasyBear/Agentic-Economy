@@ -14,6 +14,19 @@ coverage/
 output/
 .codex/
 graphify-out/
+.tanstack/
+
+# Generated dependency graph artifacts
+.planning/graphs/.last-build-snapshot.json
+.planning/graphs/graph.json
+.planning/graphs/graph.html
+
+# Agent skill vendor trees (install via skills-lock.json)
+.cursor/skills/
+.agents/skills/
+!.agents/skills/submit-qualified-inquiry/
+.codex/skills/
+.claude/skills/
 
 # clerk configuration (can include secrets)
 /.clerk/

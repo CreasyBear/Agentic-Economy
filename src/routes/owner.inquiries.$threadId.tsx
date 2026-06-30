@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { CircleCheckIcon, SendIcon } from 'lucide-react'
+import { CircleCheckIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
+import { AeInquiryMessage } from '@/components/ae/inquiries/AeInquiryMessage'
+import { AeInquiryThreadScroll } from '@/components/ae/inquiries/AeInquiryThreadScroll'
+import { AeOwnerReplyComposer } from '@/components/ae/inquiries/AeOwnerReplyComposer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Marker, MarkerContent } from '@/components/ui/marker'
 import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
 import type { OwnerId } from '@/modules/common/ids'
 import {
   closeCurrentOwnerInquiryServer,
@@ -28,7 +31,6 @@ import {
   type InquiryPrivacyTombstoneRecord,
   type InquirySourceState,
   type InquiryThreadId,
-  type OwnerInboxMessageProjection,
   type OwnerInboxNotificationProjection,
   type OwnerInquiryDetailReadback,
 } from '@/modules/inquiries/public'
@@ -119,8 +121,7 @@ function OwnerInquiryThreadRoute() {
   const [hydrated, setHydrated] = useState(false)
   const [replyBody, setReplyBody] = useState('')
   const [pendingAction, setPendingAction] = useState<'read' | 'reply' | 'close' | undefined>()
-  const [actionMessage, setActionMessage] = useState<string | undefined>()
-  const [actionError, setActionError] = useState<string | undefined>()
+  const [replyAttempted, setReplyAttempted] = useState(false)
   const replyFieldRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -128,15 +129,12 @@ function OwnerInquiryThreadRoute() {
   }, [])
 
   async function handleMarkRead() {
-    setActionMessage(undefined)
-    setActionError(undefined)
-
     if (readback.kind !== 'available') {
       return
     }
 
     if (usesLocalE2eBrowser()) {
-      setActionMessage(`Read state recorded. Thread is now ${readback.detail.inquiry.status}.`)
+      toast.success('Read state recorded.')
       return
     }
 
@@ -149,11 +147,11 @@ function OwnerInquiryThreadRoute() {
         },
       })
       if (result.kind === 'ok') {
-        setActionMessage(`Read state recorded. Thread is now ${result.thread.status}.`)
+        toast.success(`Read state recorded. Thread is now ${result.thread.status}.`)
         return
       }
 
-      setActionError(result.reason)
+      toast.error(result.reason)
     } finally {
       setPendingAction(undefined)
     }
@@ -161,23 +159,23 @@ function OwnerInquiryThreadRoute() {
 
   async function handleReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setActionMessage(undefined)
-    setActionError(undefined)
 
     if (readback.kind !== 'available') {
       return
     }
 
     const body = replyBody.trim().replace(/\s+/g, ' ')
+    setReplyAttempted(true)
     if (body.length === 0) {
-      setActionError('Reply body is required.')
+      toast.error('Reply body is required.')
       requestAnimationFrame(() => replyFieldRef.current?.focus())
       return
     }
 
     if (usesLocalE2eBrowser()) {
-      setActionMessage('Reply recorded. Thread is now replied.')
+      toast.success('Reply recorded. Thread is now replied.')
       setReplyBody('')
+      setReplyAttempted(false)
       return
     }
 
@@ -191,28 +189,26 @@ function OwnerInquiryThreadRoute() {
         },
       })
       if (result.kind === 'ok') {
-        setActionMessage(`Reply recorded. Thread is now ${result.thread.status}.`)
+        toast.success(`Reply recorded. Thread is now ${result.thread.status}.`)
         setReplyBody('')
+        setReplyAttempted(false)
         return
       }
 
-      setActionError(result.reason)
+      toast.error(result.reason)
     } finally {
       setPendingAction(undefined)
     }
   }
 
-  async function handleClose() {
-    setActionMessage(undefined)
-    setActionError(undefined)
-
+  async function handleClose(): Promise<boolean> {
     if (readback.kind !== 'available') {
-      return
+      return false
     }
 
     if (usesLocalE2eBrowser()) {
-      setActionMessage('Close recorded. Thread is now closed.')
-      return
+      toast.success('Close recorded. Thread is now closed.')
+      return true
     }
 
     setPendingAction('close')
@@ -224,11 +220,12 @@ function OwnerInquiryThreadRoute() {
         },
       })
       if (result.kind === 'ok') {
-        setActionMessage(`Close recorded. Thread is now ${result.thread.status}.`)
-        return
+        toast.success(`Close recorded. Thread is now ${result.thread.status}.`)
+        return true
       }
 
-      setActionError(result.reason)
+      toast.error(result.reason)
+      return false
     } finally {
       setPendingAction(undefined)
     }
@@ -260,18 +257,6 @@ function OwnerInquiryThreadRoute() {
     >
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-6">
-          {actionMessage === undefined ? null : (
-            <Alert>
-              <AlertTitle>Owner action recorded</AlertTitle>
-              <AlertDescription>{actionMessage}</AlertDescription>
-            </Alert>
-          )}
-          {actionError === undefined ? null : (
-            <Alert variant="destructive">
-              <AlertTitle>Owner action needs attention</AlertTitle>
-              <AlertDescription>{actionError}</AlertDescription>
-            </Alert>
-          )}
           <ThreadMessages detail={readback.detail} />
           <OwnerReplyControls
             body={replyBody}
@@ -279,6 +264,7 @@ function OwnerInquiryThreadRoute() {
             canMarkRead={hydrated && readback.canMarkRead}
             canReply={hydrated && readback.canReply}
             pendingAction={pendingAction}
+            replyAttempted={replyAttempted}
             replyFieldRef={replyFieldRef}
             onBodyChange={setReplyBody}
             onClose={handleClose}
@@ -324,11 +310,16 @@ function ThreadMessages({ detail }: { detail: OwnerInquiryDetailReadback }) {
         <CardDescription>{detail.inquiry.preview}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div className="grid gap-3">
+        <AeInquiryThreadScroll>
           {detail.messages.map((message) => (
-            <MessageBlock key={message.messageId} message={message} />
+            <AeInquiryMessage key={message.messageId} message={message} />
           ))}
-        </div>
+        </AeInquiryThreadScroll>
+        {detail.inquiry.status === 'closed' ? (
+          <Marker variant="separator">
+            <MarkerContent>Thread closed</MarkerContent>
+          </Marker>
+        ) : null}
         <FactList
           facts={[
             { label: 'Status', value: detail.inquiry.status },
@@ -342,24 +333,13 @@ function ThreadMessages({ detail }: { detail: OwnerInquiryDetailReadback }) {
   )
 }
 
-function MessageBlock({ message }: { message: OwnerInboxMessageProjection }) {
-  return (
-    <div className="grid gap-2 rounded-lg border border-border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Badge variant={message.sender === 'owner' ? 'secondary' : 'outline'}>{message.sender}</Badge>
-        <span className="text-xs text-muted-foreground">{new Date(message.createdAt).toISOString()}</span>
-      </div>
-      <p className="break-words text-sm text-foreground">{message.body}</p>
-    </div>
-  )
-}
-
 function OwnerReplyControls({
   body,
   canClose,
   canMarkRead,
   canReply,
   pendingAction,
+  replyAttempted,
   replyFieldRef,
   onBodyChange,
   onClose,
@@ -371,50 +351,69 @@ function OwnerReplyControls({
   canMarkRead: boolean
   canReply: boolean
   pendingAction: 'read' | 'reply' | 'close' | undefined
+  replyAttempted: boolean
   replyFieldRef: RefObject<HTMLTextAreaElement | null>
   onBodyChange: (value: string) => void
-  onClose: () => void
+  onClose: () => Promise<boolean>
   onMarkRead: () => void
   onReply: (event: FormEvent<HTMLFormElement>) => void
 }) {
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  const replyInvalid = replyAttempted && body.trim().length === 0
+
+  async function handleCloseConfirm() {
+    const closed = await onClose()
+    if (closed) {
+      setCloseConfirmOpen(false)
+    }
+  }
+
+  function submitReply() {
+    replyFieldRef.current?.form?.requestSubmit()
+  }
+
   return (
-    <Card>
+    <Card className="ae-owner-reply-card">
       <CardHeader>
         <CardTitle>Owner controls</CardTitle>
         <CardDescription>Replies and close state write back to the inquiry source state.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onReply} className="grid gap-4" noValidate>
-          <FieldGroup>
-            <Field data-invalid={body.trim().length === 0 && pendingAction === 'reply' ? true : undefined}>
-              <FieldLabel htmlFor="ownerReply">Owner reply</FieldLabel>
-              <Textarea
-                id="ownerReply"
-                name="ownerReply"
-                ref={replyFieldRef}
-                value={body}
-                disabled={!canReply || pendingAction !== undefined}
-                onChange={(event) => onBodyChange(event.currentTarget.value)}
-              />
-              <FieldDescription>This message is private to the inquiry thread and the customer notification path.</FieldDescription>
-              {body.trim().length === 0 && pendingAction === 'reply' ? <FieldError>Reply body is required.</FieldError> : null}
-            </Field>
-          </FieldGroup>
+          <AeOwnerReplyComposer
+            value={body}
+            invalid={replyInvalid}
+            disabled={!canReply || pendingAction !== undefined}
+            pending={pendingAction === 'reply'}
+            textareaRef={replyFieldRef}
+            onChange={onBodyChange}
+            onSubmit={submitReply}
+          />
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="secondary" disabled={!canMarkRead || pendingAction !== undefined} onClick={onMarkRead}>
               {pendingAction === 'read' ? <Spinner data-icon="inline-start" /> : <CircleCheckIcon data-icon="inline-start" />}
               Mark read
             </Button>
             <Button type="submit" disabled={!canReply || pendingAction !== undefined}>
-              {pendingAction === 'reply' ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
+              {pendingAction === 'reply' ? <Spinner data-icon="inline-start" /> : null}
               Reply
             </Button>
-            <Button type="button" variant="outline" disabled={!canClose || pendingAction !== undefined} onClick={onClose}>
+            <Button type="button" variant="outline" disabled={!canClose || pendingAction !== undefined} onClick={() => setCloseConfirmOpen(true)}>
               {pendingAction === 'close' ? <Spinner data-icon="inline-start" /> : <CircleCheckIcon data-icon="inline-start" />}
               Close inquiry
             </Button>
           </div>
         </form>
+        <AeConfirmDialog
+          open={closeConfirmOpen}
+          onOpenChange={setCloseConfirmOpen}
+          title="Close this inquiry?"
+          description="The thread stays readable, but no further replies or read-state changes will apply."
+          confirmLabel="Close inquiry"
+          confirmVariant="destructive"
+          pending={pendingAction === 'close'}
+          onConfirm={handleCloseConfirm}
+        />
       </CardContent>
     </Card>
   )

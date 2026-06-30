@@ -3,8 +3,10 @@ import { readOwnerBillingProjection as readOwnerBillingProjectionImpl } from './
 import { readPublicPaidActivationProjection as readPublicPaidActivationProjectionImpl } from './internal/projections'
 import {
   disablePaidActivation as disablePaidActivationImpl,
+  createEmptyBillingSourceState as createEmptyBillingSourceStateImpl,
   ingestBillingProviderEvent as ingestBillingProviderEventImpl,
   markBillingNoRepair as markBillingNoRepairImpl,
+  recordBillingReturn as recordBillingReturnImpl,
   readBillingReconciliation as readBillingReconciliationImpl,
   readBillingStatus as readBillingStatusImpl,
   readReceipt as readReceiptImpl,
@@ -12,6 +14,7 @@ import {
   retryBillingReconciliation as retryBillingReconciliationImpl,
   startCustomerPortal as startCustomerPortalImpl,
   startPaidActivation as startPaidActivationImpl,
+  upsertBillingOffer as upsertBillingOfferImpl,
 } from './internal/operations'
 
 export type {
@@ -29,6 +32,7 @@ export type {
   OwnerBillingOperationProjection,
   OwnerBillingProjection,
   OwnerBillingReceiptProjection,
+  PublicPaidActivationDisplay,
   PublicPaidActivationOffer,
   PublicPaidActivationProjection,
 } from './internal/projections'
@@ -97,8 +101,10 @@ export {
 } from './internal/schema'
 
 export const disablePaidActivation = disablePaidActivationImpl
+export const createEmptyBillingSourceState = createEmptyBillingSourceStateImpl
 export const ingestBillingProviderEvent = ingestBillingProviderEventImpl
 export const markBillingNoRepair = markBillingNoRepairImpl
+export const recordBillingReturn = recordBillingReturnImpl
 export const readAdminBillingProjection = readAdminBillingProjectionImpl
 export const readBillingReconciliation = readBillingReconciliationImpl
 export const readBillingStatus = readBillingStatusImpl
@@ -109,3 +115,5 @@ export const recordBillingEvidence = recordBillingEvidenceImpl
 export const retryBillingReconciliation = retryBillingReconciliationImpl
 export const startCustomerPortal = startCustomerPortalImpl
 export const startPaidActivation = startPaidActivationImpl
+export const upsertBillingOffer = upsertBillingOfferImpl
+export { buildPublicPaidActivationDisplay } from './internal/projections'

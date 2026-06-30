@@ -920,7 +920,7 @@ function localE2eSupportRecord(): CapabilityLaunchSupportRecord {
       },
       {
         channel: 'email_notification',
-        trigger: 'Provider smoke or dispatch credentials fail.',
+        trigger: 'Provider verification or dispatch credentials fail.',
         action: 'Hold delivery in source state and do not claim provider delivery.',
       },
     ],

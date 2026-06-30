@@ -5,7 +5,7 @@ import { isPubliclyDiscoverable } from '@/modules/business/public'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
 import type { DiscoveryStatus } from '@/modules/discovery/public'
 import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
-import type { PublicStatus, TrustTier } from '@/modules/business/public'
+import type { PublicStatus, TrustTier, PublicBusinessPhoto } from '@/modules/business/public'
 import type { IndexStatus, RegistryProjectionAttemptContract } from '@/modules/registry/public'
 import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
 import type { CorrelationId, OperationKey } from '@/modules/common/ids'
@@ -37,6 +37,8 @@ import type {
 } from './internal/owner-public-flow'
 import { validateServiceCatalogInput as validateServiceCatalogInputImpl } from './internal/first-request'
 import { publishBusinessCatalog as publishBusinessCatalogImpl } from './internal/publish'
+
+export type { PublicBusinessPhoto } from '@/modules/business/public'
 
 export const FirstRequestModeValues = ['inquiry_available', 'quote_request_available', 'not_available_yet'] as const
 export type FirstRequestMode = (typeof FirstRequestModeValues)[number]
@@ -187,6 +189,8 @@ export type PublicCatalogContract = {
   trustTier: TrustTier
   indexStatus: IndexStatus
   discoveryStatus: DiscoveryStatus
+  photos: readonly PublicBusinessPhoto[]
+  responseTimeMinutes?: number
   services: readonly PublicServiceContract[]
   sourceHash: SourceHash
   schemaVersion: 'public-catalog:v1'
@@ -224,6 +228,10 @@ export type PublicOwnerClaimFlowRouteResult =
 export type PublicBusinessPageRouteReadbackResult =
   | { kind: 'available'; catalog: PublicRouteCatalogContract }
   | Exclude<PublicBusinessPageReadbackResult, { kind: 'available' }>
+
+export function readPublicCatalogActivationRef(catalog: PublicRouteCatalogContract): string {
+  return catalog.businessId
+}
 
 export type BuildPublicCatalogInput = {
   business: BusinessRecord

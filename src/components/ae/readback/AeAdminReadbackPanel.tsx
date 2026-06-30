@@ -1,6 +1,8 @@
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
-import { useId } from 'react'
+import { useId, useMemo } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 
+import { AeOperatorDataTable, AeOperatorSortableHeader } from '@/components/ae/operator/AeOperatorDataTable'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -31,12 +33,6 @@ const repairLabels = {
   source_auth_required: 'Source auth required',
   no_repair_available: 'No repair available',
 } satisfies Record<AdminReadbackRow['repairAction'], string>
-
-const repairResultLabels = {
-  not_run: 'Not run',
-  succeeded: 'Succeeded',
-  failed: 'Failed',
-} satisfies Record<NonNullable<AdminReadbackRow['repairResult']>, string>
 
 type AeAdminReadbackPanelProps = {
   title: string
@@ -89,6 +85,8 @@ function DeniedReadback({ readback }: { readback: Extract<AdminShellReadback, { 
 }
 
 function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, { kind: 'allowed' }> }) {
+  const columns = useAdminReadbackColumns(readback.surface)
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 md:grid-cols-4">
@@ -98,57 +96,76 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
         <ReadbackStat label="Suppressed" value={String(readback.summary.suppressed)} />
       </div>
       {readback.rows.length === 0 ? (
-        <div className="rounded-md border bg-muted/30 p-4">
+        <div className="ae-operator-stat-cell ae-operator-stat-cell--lg">
           <AeStatusBadge status="not_queued" />
           <p className="mt-3 text-sm text-muted-foreground">No source-owned operational rows exist for this surface yet.</p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-3" aria-label={`${surfaceLabels[readback.surface]} readback rows`}>
-          {readback.rows.map((row) => (
-            <li key={row.rowId} className="rounded-md border bg-card p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="flex min-w-0 flex-col gap-2">
-                  <span className="break-words text-sm font-medium text-foreground">{row.objectRef}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {row.rowType.replaceAll('_', ' ')} - {rowStateLabels[row.rowState]}
-                  </span>
-                </div>
-                <Badge variant="outline">{repairLabels[row.repairAction]}</Badge>
-              </div>
-              <dl className="mt-3 grid gap-2 text-sm md:grid-cols-3">
-                <ReadbackTerm label="Surface" value={surfaceLabels[row.surface]} />
-                <ReadbackTerm label="Source state" value={rowStateLabels[row.rowState]} />
-                <ReadbackTerm label="Readback" value={row.readbackState.replaceAll('_', ' ')} />
-                <ReadbackTerm label="Attempt" value={row.attemptRef ?? 'Unavailable'} />
-                <ReadbackTerm label="Correlation" value={row.correlationId ?? 'Unavailable'} />
-                <ReadbackTerm
-                  label="Repair result"
-                  value={row.repairResult === undefined ? 'Unavailable' : repairResultLabels[row.repairResult]}
-                />
-                <ReadbackTerm label="Public surfaces" value={row.affectedPublicSurfaces?.join(', ') ?? 'Unavailable'} />
-              </dl>
-            </li>
-          ))}
-        </ul>
+        <AeOperatorDataTable
+          columns={columns}
+          data={readback.rows}
+          filterPlaceholder="Filter by object, state, or correlation…"
+          emptyMessage="No rows match this filter."
+        />
       )}
     </div>
   )
 }
 
-function ReadbackStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border bg-muted/30 p-3">
-      <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</span>
-      <span className="mt-1 block break-words text-sm font-medium text-foreground" data-numeric>{value}</span>
-    </div>
+function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<AdminReadbackRow, unknown>[] {
+  return useMemo(
+    () => [
+      {
+        id: 'object',
+        accessorKey: 'objectRef',
+        header: ({ column }) => <AeOperatorSortableHeader label="Object" column={column} />,
+        cell: ({ row }) => (
+          <div className="grid max-w-[16rem] gap-1 whitespace-normal">
+            <span className="break-words font-medium text-foreground">{row.original.objectRef}</span>
+            <span className="text-xs text-muted-foreground">
+              {row.original.rowType.replaceAll('_', ' ')} · {surfaceLabels[surface]}
+            </span>
+          </div>
+        ),
+      },
+      {
+        id: 'state',
+        accessorFn: (row) => rowStateLabels[row.rowState],
+        header: ({ column }) => <AeOperatorSortableHeader label="State" column={column} />,
+        cell: ({ row }) => rowStateLabels[row.original.rowState],
+      },
+      {
+        id: 'repair',
+        accessorFn: (row) => repairLabels[row.repairAction],
+        header: 'Repair',
+        cell: ({ row }) => <Badge variant="outline">{repairLabels[row.original.repairAction]}</Badge>,
+      },
+      {
+        id: 'readback',
+        accessorKey: 'readbackState',
+        header: ({ column }) => <AeOperatorSortableHeader label="Readback" column={column} />,
+        cell: ({ row }) => <span className="whitespace-normal">{row.original.readbackState.replaceAll('_', ' ')}</span>,
+      },
+      {
+        id: 'correlation',
+        accessorFn: (row) => row.correlationId ?? 'Unavailable',
+        header: 'Correlation',
+        cell: ({ row }) => (
+          <span className="max-w-[12rem] whitespace-normal font-mono text-xs">
+            {row.original.correlationId ?? 'Unavailable'}
+          </span>
+        ),
+      },
+    ],
+    [surface],
   )
 }
 
-function ReadbackTerm({ label, value }: { label: string; value: string }) {
+function ReadbackStat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-foreground">{value}</dd>
+    <div className="ae-operator-stat-cell">
+      <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</span>
+      <span className="mt-1 block break-words text-sm font-medium text-foreground" data-numeric>{value}</span>
     </div>
   )
 }

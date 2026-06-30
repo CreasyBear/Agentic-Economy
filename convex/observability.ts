@@ -8,17 +8,21 @@ import {
   loadPhaseOneSourceState,
   persistPhaseOneSourceState,
   runtimeDb,
+  type RuntimeDb,
+  type RuntimeDocument,
 } from './source_state'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import {
+  parseOwnerActivationStateRow,
   readOperatorControls as readOperatorControlsModule,
+  recordFunnelEvent,
   setOperatorControl as setOperatorControlModule,
-} from '../src/modules/observability/public'
-import type {
-  AuditEventContract,
-  OperatorControlReadback,
-  OperatorControlRecord,
-  OperatorControlSourceState,
+  type RecordFunnelEventInput,
+  type AuditEventContract,
+  type OwnerActivationState,
+  type OperatorControlReadback,
+  type OperatorControlRecord,
+  type OperatorControlSourceState,
 } from '../src/modules/observability/public'
 import {
   recordAdminActionDenied,
@@ -132,6 +136,79 @@ const readOperatorControlsResult = v.union(
   })
 )
 
+const funnelEventType = v.union(
+  v.literal('visitor_attributed'),
+  v.literal('claim_cta_clicked'),
+  v.literal('claim_started'),
+  v.literal('auth_started'),
+  v.literal('auth_completed'),
+  v.literal('owner_interest_submitted'),
+  v.literal('claim_submitted'),
+  v.literal('slug_conflict'),
+  v.literal('duplicate_suspected'),
+  v.literal('publish_succeeded'),
+  v.literal('service_added'),
+  v.literal('capability_status_viewed'),
+  v.literal('publish_failed'),
+  v.literal('owner_status_viewed'),
+  v.literal('share_url_copied'),
+  v.literal('registry_search'),
+  v.literal('service_registry_result_clicked'),
+  v.literal('ucp_manifest_fetched'),
+  v.literal('dispute_opened'),
+  v.literal('suppression_applied'),
+  v.literal('inquiry_available_seen'),
+  v.literal('inquiry_started'),
+  v.literal('inquiry_submitted'),
+  v.literal('inquiry_rejected'),
+  v.literal('owner_inbox_viewed'),
+  v.literal('owner_inquiry_read'),
+  v.literal('owner_inquiry_replied'),
+  v.literal('inquiry_closed'),
+  v.literal('notification_queued'),
+  v.literal('notification_delivered'),
+  v.literal('notification_failed'),
+  v.literal('developer_docs_viewed'),
+  v.literal('schema_downloaded'),
+  v.literal('example_fixture_downloaded'),
+  v.literal('discovery_health_viewed'),
+  v.literal('protected_action_proposed'),
+  v.literal('protected_action_policy_denied'),
+  v.literal('protected_action_approved'),
+  v.literal('protected_action_rejected'),
+  v.literal('protected_action_attempted'),
+  v.literal('protected_action_receipt_viewed'),
+  v.literal('paid_activation_started'),
+  v.literal('checkout_returned'),
+  v.literal('checkout_cancelled'),
+  v.literal('billing_provider_event_ingested'),
+  v.literal('receipt_viewed'),
+  v.literal('refund_or_dispute_recorded'),
+  v.literal('billing_reconciliation_failed'),
+  v.literal('billing_reconciliation_repaired'),
+  v.literal('business_action_card_viewed'),
+  v.literal('business_action_request_started'),
+  v.literal('business_action_checkpoint_recorded'),
+  v.literal('business_action_guardrail_allowed'),
+  v.literal('business_action_guardrail_blocked'),
+  v.literal('business_action_evidence_ingested'),
+  v.literal('business_action_receipt_viewed'),
+  v.literal('business_action_proof_gap_recorded')
+)
+
+const activationStage = v.union(
+  v.literal('visitor'),
+  v.literal('claim_started'),
+  v.literal('published'),
+  v.literal('activated'),
+  v.literal('blocked')
+)
+
+const ownerActivationSummaryRow = v.object({
+  stage: v.string(),
+  count: v.number(),
+})
+
 type RuntimeCtx = {
   db: object
   auth: {
@@ -237,6 +314,122 @@ export const readOperatorControls = queryGeneric({
   },
 })
 
+export const recordOwnerActivationEvent = mutationGeneric({
+  args: {
+    eventType: funnelEventType,
+    source: v.string(),
+    stage: activationStage,
+    pseudonymousSessionId: v.string(),
+    correlationId: v.string(),
+    consentFlag: v.boolean(),
+    referrer: v.optional(v.string()),
+    utmSource: v.optional(v.string()),
+    utmCampaign: v.optional(v.string()),
+    actorRef: v.optional(v.string()),
+    businessId: v.optional(v.string()),
+    claimId: v.optional(v.string()),
+    payload: v.optional(v.record(v.string(), v.union(v.string(), v.number(), v.boolean(), v.null()))),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    if (args.businessId === undefined) {
+      return { ok: true as const }
+    }
+
+    const db = runtimeDb(ctx.db)
+    const source = await loadPhaseOneSourceState(db)
+    const now = Date.now()
+    const ownerActivationByBusiness = new Map<string, OwnerActivationState>(
+      source.observability.ownerActivationState.map((row) => [
+        String(row.businessId),
+        parseOwnerActivationStateRow(row),
+      ]),
+    )
+
+    const input: RecordFunnelEventInput = {
+      eventType: args.eventType,
+      source: args.source,
+      stage: args.stage,
+      pseudonymousSessionId: args.pseudonymousSessionId,
+      correlationId: args.correlationId,
+      consentFlag: args.consentFlag,
+      now,
+      ...(args.referrer === undefined ? {} : { referrer: args.referrer }),
+      ...(args.utmSource === undefined ? {} : { utmSource: args.utmSource }),
+      ...(args.utmCampaign === undefined ? {} : { utmCampaign: args.utmCampaign }),
+      ...(args.actorRef === undefined ? {} : { actorRef: args.actorRef }),
+      ...(args.claimId === undefined ? {} : { claimId: args.claimId }),
+      ...(args.payload === undefined ? {} : { redactedPayload: args.payload }),
+      businessId: brandNonEmpty(args.businessId, 'BusinessId'),
+    }
+
+    const result = recordFunnelEvent(input, ownerActivationByBusiness)
+    if (result.ownerActivation === undefined) {
+      return { ok: true as const }
+    }
+
+    source.observability.ownerActivationState = [
+      ...source.observability.ownerActivationState.filter(
+        (row) => String(row.businessId) !== String(result.ownerActivation?.businessId),
+      ),
+      result.ownerActivation,
+    ]
+
+    await persistPhaseOneSourceState(db, source)
+    return { ok: true as const }
+  },
+})
+
+/** @deprecated Use recordOwnerActivationEvent. Funnel events are stored in PostHog. */
+export const recordPublicFunnelEvent = recordOwnerActivationEvent
+
+export const readAdminOwnerActivationSummary = queryGeneric({
+  args: {},
+  returns: v.object({
+    byStage: v.array(ownerActivationSummaryRow),
+    totalTracked: v.number(),
+  }),
+  handler: async (ctx) => {
+    const db = runtimeDb(ctx.db)
+    const adminMembership = await readCurrentActiveMembership(ctx)
+    const authority = requireAdminAuthority(adminMembership, 'set_operator_control')
+    if (authority.kind === 'denied') {
+      return { byStage: [], totalTracked: 0 }
+    }
+
+    const rows = await collect(db, 'ownerActivationState')
+    const counts = new Map<string, number>()
+    for (const row of rows) {
+      const stage = String(row.stage)
+      counts.set(stage, (counts.get(stage) ?? 0) + 1)
+    }
+
+    const byStage = [...counts.entries()]
+      .map(([stage, count]) => ({ stage, count }))
+      .sort((left, right) => right.count - left.count)
+
+    return {
+      byStage,
+      totalTracked: rows.length,
+    }
+  },
+})
+
+/** @deprecated Funnel counts now live in PostHog. */
+export const readAdminFunnelSummary = queryGeneric({
+  args: {},
+  returns: v.object({
+    rows: v.array(v.object({
+      eventType: v.string(),
+      source: v.string(),
+      stage: v.string(),
+      count: v.number(),
+    })),
+    totalEvents: v.number(),
+  }),
+  handler: async () => ({ rows: [], totalEvents: 0 }),
+})
+
 function operatorControlState(source: Awaited<ReturnType<typeof loadPhaseOneSourceState>>): OperatorControlSourceState {
   return {
     operatorControls: source.observability.operatorControls as OperatorControlSourceState['operatorControls'],
@@ -320,6 +513,10 @@ function summarizeMembershipAudit(event: AdminDecisionAudit) {
     targetRef: event.targetRef,
     reasonCode: event.reasonCode,
   }
+}
+
+async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {
+  return db.query(tableName).collect()
 }
 
 

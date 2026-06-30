@@ -1,5 +1,13 @@
-import { claimBusiness, createEmptyBusinessSourceState, isPubliclyDiscoverable } from '@/modules/business/public'
-import { buildPublicCatalogDto, createEmptyCatalogSourceState, publishBusinessCatalog } from '@/modules/catalog/public'
+import {
+  claimBusiness,
+  createEmptyBusinessSourceState,
+  isPubliclyDiscoverable,
+} from '@/modules/business/public'
+import {
+  buildPublicCatalogDto,
+  createEmptyCatalogSourceState,
+  publishBusinessCatalog,
+} from '@/modules/catalog/public'
 import type {
   FirstRequestMode,
   PublicCatalogContract,
@@ -8,8 +16,16 @@ import type {
 } from '@/modules/catalog/public'
 import { publicOwnerDefaultClaimInput } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
-import type { BusinessId, CorrelationId, OperationKey, Slug } from '@/modules/common/ids'
-import type { IndexStatus, RegistrySourceState } from '@/modules/registry/public'
+import type {
+  BusinessId,
+  CorrelationId,
+  OperationKey,
+  Slug,
+} from '@/modules/common/ids'
+import type {
+  IndexStatus,
+  RegistrySourceState,
+} from '@/modules/registry/public'
 
 const apiSchemaVersion = 'public-business-catalog-api:v1' as const
 const defaultLimit = 20
@@ -20,9 +36,10 @@ export type PublicBusinessCatalogQueryInput = {
   limit?: number
 }
 
-export type PublicBusinessCatalogSearchInput = PublicBusinessCatalogQueryInput & {
-  query: string
-}
+export type PublicBusinessCatalogSearchInput =
+  PublicBusinessCatalogQueryInput & {
+    query: string
+  }
 
 export type PublicBusinessCatalogApiDto = {
   slug: string
@@ -38,6 +55,8 @@ export type PublicBusinessCatalogApiDto = {
   discoveryStatus: PublicCatalogContract['discoveryStatus']
   schemaVersion: typeof apiSchemaVersion
   updatedAt: number
+  photos: readonly { url: string; alt: string }[]
+  responseTimeMinutes?: number
   services: readonly {
     slug: string
     name: string
@@ -51,7 +70,10 @@ export type PublicBusinessCatalogApiDto = {
       publicChannel: PublicCatalogContract['services'][number]['firstRequest']['publicChannel']
       noContactReason?: string
     }
-    status: Extract<PublicCatalogContract['services'][number]['status'], 'published'>
+    status: Extract<
+      PublicCatalogContract['services'][number]['status'],
+      'published'
+    >
     capabilities: readonly {
       kind: PublicCatalogContract['services'][number]['capabilities'][number]['kind']
       status: PublicCatalogContract['services'][number]['capabilities'][number]['status']
@@ -87,14 +109,14 @@ export type PublicBusinessCatalogDetailResult =
 
 export function listPublicBusinessCatalog(
   state: RegistrySourceState,
-  input: PublicBusinessCatalogQueryInput = {}
+  input: PublicBusinessCatalogQueryInput = {},
 ): PublicBusinessCatalogApiPage {
   return paginateCatalogs(readPublicCatalogs(state).map(toPublicApiDto), input)
 }
 
 export function searchPublicBusinessCatalog(
   state: RegistrySourceState,
-  input: PublicBusinessCatalogSearchInput
+  input: PublicBusinessCatalogSearchInput,
 ): PublicBusinessCatalogApiPage {
   const query = normalizeSearchText(input.query)
   if (query.length === 0) {
@@ -113,19 +135,21 @@ export function searchPublicBusinessCatalog(
   }
 
   const queryTokens = query.split(' ').map(normalizeSearchToken)
-  const matches = readPublicCatalogs(state)
-    .filter((catalog) => matchesCatalog(catalog, queryTokens))
-    .map(toPublicApiDto)
+  const matches = readPublicCatalogs(state).filter((catalog) =>
+    matchesCatalog(catalog, queryTokens),
+  )
 
-  return paginateCatalogs(matches, input, query)
+  return paginateCatalogs(matches.map(toPublicApiDto), input, query)
 }
 
 export function getPublicBusinessCatalogBySlug(
   state: RegistrySourceState,
-  input: { slug: Slug | string }
+  input: { slug: Slug | string },
 ): PublicBusinessCatalogDetailResult {
   const slug = String(input.slug)
-  const catalog = readPublicCatalogs(state).find((candidate) => candidate.slug === slug)
+  const catalog = readPublicCatalogs(state).find(
+    (candidate) => candidate.slug === slug,
+  )
 
   if (catalog === undefined) {
     return {
@@ -156,7 +180,11 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
   }
 
   const claim = claimBusiness(state, {
-    actor: { kind: 'authenticated_owner', clerkUserId: 'source-owned-owner-session', displayName: 'Sam' },
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: 'source-owned-owner-session',
+      displayName: 'Sam',
+    },
     facts: {
       name: publicOwnerDefaultClaimInput.businessName,
       category: publicOwnerDefaultClaimInput.category,
@@ -168,7 +196,10 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
         {
           label: publicOwnerDefaultClaimInput.sourceLabel,
           evidenceRef: `private:evidence:${publicOwnerDefaultClaimInput.requestedSlug}`,
-          sourceHash: brandNonEmpty(`hash:source:${publicOwnerDefaultClaimInput.requestedSlug}`, 'SourceHash'),
+          sourceHash: brandNonEmpty(
+            `hash:source:${publicOwnerDefaultClaimInput.requestedSlug}`,
+            'SourceHash',
+          ),
         },
       ],
     },
@@ -182,8 +213,12 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
         windowMs: 60_000,
       },
     },
-    operationKey: operationKey(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
-    correlationId: correlationId(`claim:${publicOwnerDefaultClaimInput.requestedSlug}`),
+    operationKey: operationKey(
+      `claim:${publicOwnerDefaultClaimInput.requestedSlug}`,
+    ),
+    correlationId: correlationId(
+      `claim:${publicOwnerDefaultClaimInput.requestedSlug}`,
+    ),
     now: 1_000,
   })
 
@@ -192,12 +227,20 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
   }
 
   const published = publishBusinessCatalog(state, {
-    actor: { kind: 'authenticated_owner', clerkUserId: 'source-owned-owner-session', displayName: 'Sam' },
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: 'source-owned-owner-session',
+      displayName: 'Sam',
+    },
     claimId: claim.claim.claimId,
     services: [toServiceCatalogInput(publicOwnerDefaultClaimInput)],
     security: { csrf: matchingCsrf('publish') },
-    operationKey: operationKey(`publish:${publicOwnerDefaultClaimInput.requestedSlug}`),
-    correlationId: correlationId(`publish:${publicOwnerDefaultClaimInput.requestedSlug}`),
+    operationKey: operationKey(
+      `publish:${publicOwnerDefaultClaimInput.requestedSlug}`,
+    ),
+    correlationId: correlationId(
+      `publish:${publicOwnerDefaultClaimInput.requestedSlug}`,
+    ),
     now: 2_000,
   })
 
@@ -208,11 +251,17 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
   return state
 }
 
-function readPublicCatalogs(state: RegistrySourceState): readonly PublicCatalogContract[] {
+function readPublicCatalogs(
+  state: RegistrySourceState,
+): readonly PublicCatalogContract[] {
   return state.businesses
-    .filter((business) => isPubliclyDiscoverable(business, state.suppressionRules))
+    .filter((business) =>
+      isPubliclyDiscoverable(business, state.suppressionRules),
+    )
     .map((business) => {
-      const context = state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+      const context = state.businessContexts.find(
+        (candidate) => candidate.businessId === business.businessId,
+      )
       if (context === undefined) {
         return undefined
       }
@@ -220,19 +269,27 @@ function readPublicCatalogs(state: RegistrySourceState): readonly PublicCatalogC
       const catalog = buildPublicCatalogDto({
         business,
         context,
-        services: state.businessServices.filter((service) => service.businessId === business.businessId),
-        capabilities: state.serviceCapabilities.filter((capability) => capability.businessId === business.businessId),
+        services: state.businessServices.filter(
+          (service) => service.businessId === business.businessId,
+        ),
+        capabilities: state.serviceCapabilities.filter(
+          (capability) => capability.businessId === business.businessId,
+        ),
         indexStatus: indexStatusForBusiness(state, business.businessId),
         discoveryStatus: 'degraded',
       })
 
       return catalog.kind === 'available' ? catalog.catalog : undefined
     })
-    .filter((catalog): catalog is PublicCatalogContract => catalog !== undefined)
+    .filter(
+      (catalog): catalog is PublicCatalogContract => catalog !== undefined,
+    )
     .sort(compareCatalogs)
 }
 
-function toPublicApiDto(catalog: PublicCatalogContract): PublicBusinessCatalogApiDto {
+function toPublicApiDto(
+  catalog: PublicCatalogContract,
+): PublicBusinessCatalogApiDto {
   return {
     slug: catalog.slug,
     name: catalog.name,
@@ -247,6 +304,10 @@ function toPublicApiDto(catalog: PublicCatalogContract): PublicBusinessCatalogAp
     discoveryStatus: catalog.discoveryStatus,
     schemaVersion: apiSchemaVersion,
     updatedAt: catalog.updatedAt,
+    photos: catalog.photos.map((photo) => ({ url: photo.url, alt: photo.alt })),
+    ...(catalog.responseTimeMinutes === undefined
+      ? {}
+      : { responseTimeMinutes: catalog.responseTimeMinutes }),
     services: catalog.services.map((service) => ({
       slug: service.serviceSlug,
       name: service.name,
@@ -274,11 +335,16 @@ function toPublicApiDto(catalog: PublicCatalogContract): PublicBusinessCatalogAp
 function paginateCatalogs(
   items: readonly PublicBusinessCatalogApiDto[],
   input: PublicBusinessCatalogQueryInput,
-  query?: string
+  query?: string,
 ): PublicBusinessCatalogApiPage {
   const limit = normalizeLimit(input.limit)
   const startIndex =
-    input.cursor === undefined ? 0 : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
+    input.cursor === undefined
+      ? 0
+      : Math.max(
+          items.findIndex((item) => item.slug === input.cursor),
+          0,
+        )
   const pageItems = items.slice(startIndex, startIndex + limit)
   const next = items.at(startIndex + limit)
 
@@ -305,7 +371,10 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.min(Math.max(Math.trunc(limit), 1), maxLimit)
 }
 
-function matchesCatalog(catalog: PublicCatalogContract, queryTokens: readonly string[]): boolean {
+function matchesCatalog(
+  catalog: PublicCatalogContract,
+  queryTokens: readonly string[],
+): boolean {
   const haystack = normalizeSearchText(
     [
       catalog.name,
@@ -319,7 +388,7 @@ function matchesCatalog(catalog: PublicCatalogContract, queryTokens: readonly st
         service.summary,
         service.serviceArea,
       ]),
-    ].join(' ')
+    ].join(' '),
   )
 
   return queryTokens.every((token) => haystack.includes(token))
@@ -341,9 +410,13 @@ function normalizeSearchToken(token: string): string {
   return token
 }
 
-function indexStatusForBusiness(state: RegistrySourceState, businessId: BusinessId): IndexStatus {
+function indexStatusForBusiness(
+  state: RegistrySourceState,
+  businessId: BusinessId,
+): IndexStatus {
   const explicit = state.indexStatus.find(
-    (status) => status.targetType === 'business' && status.targetRef === businessId
+    (status) =>
+      status.targetType === 'business' && status.targetRef === businessId,
   )
   if (explicit !== undefined) {
     return explicit.status
@@ -351,7 +424,11 @@ function indexStatusForBusiness(state: RegistrySourceState, businessId: Business
 
   const latestAttempt = state.registryProjectionAttempts
     .filter((attempt) => attempt.businessId === businessId)
-    .sort((left, right) => (right.finishedAt ?? right.startedAt) - (left.finishedAt ?? left.startedAt))
+    .sort(
+      (left, right) =>
+        (right.finishedAt ?? right.startedAt) -
+        (left.finishedAt ?? left.startedAt),
+    )
     .at(0)
 
   if (latestAttempt?.status === 'succeeded') {
@@ -373,7 +450,10 @@ function indexStatusForBusiness(state: RegistrySourceState, businessId: Business
   return 'not_queued'
 }
 
-function compareCatalogs(left: PublicCatalogContract, right: PublicCatalogContract): number {
+function compareCatalogs(
+  left: PublicCatalogContract,
+  right: PublicCatalogContract,
+): number {
   const byName = left.name.localeCompare(right.name)
   return byName === 0 ? left.slug.localeCompare(right.slug) : byName
 }
@@ -410,11 +490,15 @@ function toServiceCatalogInput(input: {
   }
 }
 
-function publicChannelFor(mode: Exclude<FirstRequestMode, 'not_available_yet'>): Extract<
+function publicChannelFor(
+  mode: Exclude<FirstRequestMode, 'not_available_yet'>,
+): Extract<
   PublicFirstRequestChannel,
   'public_business_contact' | 'ae_status_only'
 > {
-  return mode === 'quote_request_available' ? 'ae_status_only' : 'public_business_contact'
+  return mode === 'quote_request_available'
+    ? 'ae_status_only'
+    : 'public_business_contact'
 }
 
 function matchingCsrf(key: string) {

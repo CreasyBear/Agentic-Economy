@@ -1,0 +1,214 @@
+import { afterEach, describe, expect, it } from 'vitest'
+
+import type { AnswerEvent } from '@/modules/answer/public'
+import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
+import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
+import { createDefaultRegistrySourceState } from '@/modules/registry/public'
+import {
+  createAnswerThreadTestStore,
+  installAnswerThreadTestPort,
+  sessionCookieHeader,
+} from '../helpers/answer-thread-test-port'
+import { withRegistrySourcePortForTest } from '../helpers/source-ports'
+
+type StreamFrame = { seq: number; event: AnswerEvent }
+
+function parseStream(text: string): StreamFrame[] {
+  return text
+    .split('\n\n')
+    .map((frame) => frame.trim())
+    .filter((frame) => frame.startsWith('data:'))
+    .map((frame) => JSON.parse(frame.slice('data:'.length).trim()) as StreamFrame)
+}
+
+const SESSION_COOKIE = sessionCookieHeader('session-boundary')
+
+// Phase 7G: the deterministic synthesizer is gone. Search turns flow through
+// the tool-use agent, so tests that need a completed search turn install the
+// agent seam with a key. Boundary turns still answer from boundary-prose.ts
+// without a key.
+function installSearchAgentSeam(): void {
+  process.env.OPENROUTER_API_KEY = 'test-key'
+  setAnswerToolUseAgentForTests(async () => ({
+    toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+    prose: {
+      oneLine: 'One listed business is listed in Parramatta.',
+      summary:
+        'The listing publishes emergency pipe repair around Parramatta. Agentic Economy does not book or take payment on this page.',
+      whatToDoNow: 'Open the provider page and send an inquiry when published.',
+    },
+  }))
+}
+
+describe('POST /api/answer/turn boundary follow-up', () => {
+  afterEach(() => {
+    delete process.env.OPENROUTER_API_KEY
+    setAnswerThreadPortForTests(undefined)
+    setAnswerToolUseAgentForTests(undefined)
+  })
+
+  it('returns boundary copy for the AE chip even when prior turns fail to load', async () => {
+    setAnswerThreadPortForTests({
+      createThread: async (args) => ({ threadId: args.threadId }),
+      appendTurn: async (args) => ({ turnId: args.turnId }),
+      listSessionThreads: async () => ({ threads: [] }),
+      getPublicThreadProjection: async () => null,
+      getAnswerThread: async (threadId) => ({
+        threadId,
+        pseudonymousSessionId: 'session-boundary',
+        title: 'Boundary',
+        sharePolicy: 'public',
+        createdAt: 1,
+        updatedAt: 1,
+        turnCount: 1,
+      }),
+      getThreadTurns: async () => {
+        throw new Error('convex unavailable')
+      },
+    })
+
+    const state = createDefaultRegistrySourceState()
+
+    await withRegistrySourcePortForTest(state, async () => {
+      const response = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+          },
+          body: JSON.stringify({
+            threadId: 'thread-boundary-test',
+            query: 'What can Agentic Economy do here?',
+          }),
+        }),
+      )
+
+      expect(response.ok).toBe(true)
+      const frames = parseStream(await response.text())
+      const complete = frames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+      expect(complete.answer.oneLine).toContain('does not book')
+      expect(complete.answer.oneLine).not.toContain('No listed businesses match')
+      expect(complete.answer.summary).toContain('No booking or payment happens on this page')
+    })
+  })
+
+  it('returns boundary copy after an empty first turn in the same thread', async () => {
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
+
+    const state = createDefaultRegistrySourceState()
+    let threadId = ''
+
+    await withRegistrySourcePortForTest(state, async () => {
+      installSearchAgentSeam()
+
+      const first = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+          },
+          body: JSON.stringify({ query: 'Emergency plumber Brunswick' }),
+        }),
+      )
+      const firstFrames = parseStream(await first.text())
+      const threadEvent = firstFrames.find((frame) => frame.event.type === 'thread')?.event
+      if (threadEvent?.type !== 'thread') {
+        throw new Error('expected thread event')
+      }
+      threadId = threadEvent.threadId
+
+      const followUp = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+          },
+          body: JSON.stringify({
+            threadId,
+            query: 'What can Agentic Economy do here?',
+          }),
+        }),
+      )
+
+      expect(followUp.ok).toBe(true)
+      const frames = parseStream(await followUp.text())
+      const complete = frames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+      expect(complete.answer.oneLine).toContain('does not book')
+      expect(complete.answer.summary).not.toContain('No providers are listed for that yet')
+    })
+  })
+
+  it('narrows to Parramatta from frozen providers instead of searching the chip label', async () => {
+    const store = createAnswerThreadTestStore()
+    installAnswerThreadTestPort(store)
+
+    const state = createDefaultRegistrySourceState()
+    let threadId = ''
+
+    await withRegistrySourcePortForTest(state, async () => {
+      installSearchAgentSeam()
+
+      const first = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+          },
+          body: JSON.stringify({ query: 'plumber' }),
+        }),
+      )
+      const firstFrames = parseStream(await first.text())
+      const firstComplete = firstFrames.at(-1)?.event
+      if (firstComplete?.type !== 'complete') {
+        throw new Error('expected first complete event')
+      }
+      expect(firstComplete.answer.providers.length).toBeGreaterThan(0)
+
+      const threadEvent = firstFrames.find((frame) => frame.event.type === 'thread')?.event
+      if (threadEvent?.type !== 'thread') {
+        throw new Error('expected thread event')
+      }
+      threadId = threadEvent.threadId
+
+      const followUp = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: SESSION_COOKIE,
+          },
+          body: JSON.stringify({
+            threadId,
+            query: 'Narrow to Parramatta',
+          }),
+        }),
+      )
+
+      expect(followUp.ok).toBe(true)
+      const frames = parseStream(await followUp.text())
+      const complete = frames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+      expect(complete.answer.providers.length).toBeGreaterThan(0)
+      expect(complete.answer.oneLine).toContain('listed in Parramatta')
+      expect(complete.answer.oneLine).not.toContain('No listed businesses match "Narrow to Parramatta"')
+      expect(complete.answer.compactLayout).toBe(true)
+    })
+  })
+})

@@ -107,6 +107,8 @@ describe('billing rail contract', () => {
       .sort()
 
     expect(exportedFunctions).toEqual([
+      'buildPublicPaidActivationDisplay',
+      'createEmptyBillingSourceState',
       'disablePaidActivation',
       'ingestBillingProviderEvent',
       'markBillingNoRepair',
@@ -117,9 +119,11 @@ describe('billing rail contract', () => {
       'readPublicPaidActivationProjection',
       'readReceipt',
       'recordBillingEvidence',
+      'recordBillingReturn',
       'retryBillingReconciliation',
       'startCustomerPortal',
       'startPaidActivation',
+      'upsertBillingOffer',
     ].sort())
   })
 
@@ -314,12 +318,180 @@ describe('billing rail contract', () => {
       kind: 'ok',
       code: 'billing_receipt_read',
       receipt: {
+        provider: 'stripe_psp',
         status: 'paid',
         providerEvidenceRefs: [`provider:evt_paid`, `hash:${payloadHash}`],
         paidStateTransition: 'pending_provider_redirect->paid_active',
         refundReversalDisputeRefs: [],
         correlationId,
       },
+    })
+  })
+
+  it('binds customer-only provider events to the latest checkout operation', async () => {
+    const deterministicProvider = provider()
+    const first = await billing.startPaidActivation(state(), {
+      authority: ownerAuthority,
+      businessId,
+      ownerId,
+      offerId,
+      operationKey: brandNonEmpty('billing:checkout:customer-only:first', 'OperationKey'),
+      correlationId,
+      appBaseUrl: 'https://agentic.example',
+      now,
+    }, deterministicProvider)
+    expect(first.kind).toBe('ok')
+    if (first.kind !== 'ok') throw new Error(first.code)
+
+    const second = await billing.startPaidActivation(first.state, {
+      authority: ownerAuthority,
+      businessId,
+      ownerId,
+      offerId,
+      operationKey: brandNonEmpty('billing:checkout:customer-only:second', 'OperationKey'),
+      correlationId,
+      appBaseUrl: 'https://agentic.example',
+      now: now + 1,
+    }, deterministicProvider)
+    expect(second.kind).toBe('ok')
+    if (second.kind !== 'ok') throw new Error(second.code)
+
+    const eventResult = billing.ingestBillingProviderEvent(second.state, {
+      operationKey: brandNonEmpty('billing:webhook:customer-only', 'OperationKey'),
+      correlationId,
+      provider: 'autumn_cloud',
+      providerEventId: 'evt_customer_only',
+      eventType: 'billing.updated',
+      payloadHash: stableHash({ event: 'customer-only' }),
+      signatureVerified: true,
+      receivedAt: now + 20,
+      providerCustomerId: second.operation.providerCustomerId,
+      providerStatus: 'active',
+      receipt: {
+        providerReceiptId: 'in_customer_only',
+        invoiceUrl: 'https://billing.example/invoices/in_customer_only',
+        amountSummary: 'AUD 99',
+        issuedAt: now + 20,
+        status: 'paid',
+      },
+    })
+
+    expect(eventResult.kind).toBe('ok')
+    if (eventResult.kind !== 'ok') throw new Error(eventResult.code)
+    expect(eventResult.operation?.id).toBe(second.operation.id)
+    expect(eventResult.state.operations.find((operation) => operation.id === first.operation.id)?.status).toBe('pending_provider_redirect')
+    expect(eventResult.state.operations.find((operation) => operation.id === second.operation.id)?.status).toBe('paid_active')
+    expect(eventResult.state.receipts[0]).toMatchObject({
+      operationId: second.operation.id,
+      provider: 'stripe_psp',
+      providerReceiptId: 'in_customer_only',
+    })
+  })
+
+  it('records paid state and Stripe receipt from Autumn customer reconciliation readback', async () => {
+    const { result, deterministicProvider } = await startedOperation()
+    deterministicProvider.getCustomer = async (customerId) => ({
+      customerId,
+      subscriptions: [{ planId: 'autumn-plan-basic', status: 'active' }],
+      purchases: [],
+      invoices: [{
+        stripeId: 'in_reconciled',
+        status: 'paid',
+        hostedInvoiceUrl: 'https://billing.example/invoices/in_reconciled',
+        total: 99,
+        currency: 'aud',
+      }],
+      payloadHash: stableHash({ kind: 'customer-reconciled', customerId }),
+    })
+
+    const reconciliation = await billing.retryBillingReconciliation(result.state, {
+      authority: adminAuthority,
+      businessId,
+      operationId: result.operation.id,
+      operationKey: brandNonEmpty('billing:reconcile:paid-customer', 'OperationKey'),
+      correlationId,
+      now: now + 30,
+    }, deterministicProvider)
+
+    expect(reconciliation.kind).toBe('ok')
+    expect(reconciliation.code).toBe('billing_reconciliation_matched')
+    if (reconciliation.kind !== 'ok') throw new Error(reconciliation.code)
+    expect(reconciliation.reconciliation.status).toBe('matched')
+    expect(reconciliation.state.operations[0]).toMatchObject({
+      status: 'paid_active',
+      receiptIds: [expect.stringContaining('in_reconciled')],
+    })
+    expect(reconciliation.state.receipts[0]).toMatchObject({
+      provider: 'stripe_psp',
+      providerReceiptId: 'in_reconciled',
+      status: 'paid',
+      amountSummary: '99 aud',
+      paidStateTransition: 'pending_provider_redirect->paid_active',
+    })
+  })
+
+  it('allows public paid activation only with customer-level provider event plus operation-bound receipt and reconciliation', async () => {
+    const { result, deterministicProvider } = await startedOperation()
+    deterministicProvider.getCustomer = async (customerId) => ({
+      customerId,
+      subscriptions: [{ planId: 'autumn-plan-basic', status: 'active' }],
+      purchases: [],
+      invoices: [{
+        stripeId: 'in_customer_level_gate',
+        status: 'paid',
+        hostedInvoiceUrl: 'https://billing.example/invoices/in_customer_level_gate',
+        total: 99,
+        currency: 'aud',
+      }],
+      payloadHash: stableHash({ kind: 'customer-level-gate', customerId }),
+    })
+    const reconciled = await billing.retryBillingReconciliation(result.state, {
+      authority: adminAuthority,
+      businessId,
+      operationId: result.operation.id,
+      operationKey: brandNonEmpty('billing:reconcile:customer-level-gate', 'OperationKey'),
+      correlationId,
+      now: now + 40,
+    }, deterministicProvider)
+    expect(reconciled.kind).toBe('ok')
+    if (reconciled.kind !== 'ok') throw new Error(reconciled.code)
+
+    const sourceState = {
+      ...reconciled.state,
+      providerEvents: [{
+        id: 'billing_provider_event:autumn_cloud:evt_customer_level_gate' as billing.BillingProviderEvent['id'],
+        provider: 'autumn_cloud' as const,
+        providerEventId: 'evt_customer_level_gate',
+        logicalProviderObjectKey: result.operation.providerCustomerId,
+        status: 'accepted' as const,
+        eventType: 'billing.updated',
+        providerCustomerId: result.operation.providerCustomerId,
+        businessId,
+        payloadHash: stableHash({ event: 'customer-level-gate' }),
+        redactedPayloadJson: '{}',
+        normalizedFieldsJson: '{}',
+        retrievalStatus: 'not_required' as const,
+        signatureVerified: true,
+        correlationId,
+        receivedAt: now + 41,
+      }],
+      supportRecords: [{
+        id: 'billing_support:customer-level-gate' as billing.BillingSupportRecord['id'],
+        businessId,
+        capability: 'paid_activation_money_rails' as const,
+        status: 'resolved' as const,
+        reason: 'provider_ready:customer-level event',
+        evidenceRefs: ['provider:evt_customer_level_gate'],
+        operatorNextAction: 'keep receipt and reconciliation reconstructable',
+        correlationId,
+        createdAt: now + 42,
+        updatedAt: now + 42,
+      }],
+    }
+
+    expect(billing.readPublicPaidActivationProjection(sourceState, businessId)).toMatchObject({
+      available: true,
+      offers: [{ id: offerId }],
     })
   })
 
@@ -333,7 +505,7 @@ describe('billing rail contract', () => {
       providerObjectId: 'autumn-customer:ready',
       routeEvidenceRef: 'owner-billing-readback:ready',
       payloadHash: stableHash({ provider: 'autumn_cloud', ready: true }),
-      operatorNextAction: 'provider smoke captured',
+      operatorNextAction: 'provider verification captured',
       operationKey: brandNonEmpty('billing:evidence:support-capability', 'OperationKey'),
       correlationId,
       now,
@@ -342,7 +514,7 @@ describe('billing rail contract', () => {
       kind: 'ok',
       supportRecord: {
         capability: 'paid_activation_money_rails',
-        operatorNextAction: 'provider smoke captured',
+        operatorNextAction: 'provider verification captured',
         correlationId,
       },
     })

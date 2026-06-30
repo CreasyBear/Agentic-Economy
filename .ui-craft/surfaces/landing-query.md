@@ -1,6 +1,8 @@
 # Surface Spec — Landing Query → Generative Answer
 
-The `/` surface. Governed by this file. Source of truth for visuals: `DESIGN.md` (Daylight Register, §10–§17). When this spec and `DESIGN.md` disagree, `DESIGN.md` wins.
+> **IA superseded by [chat.md](./chat.md)** (2026-06-30). This file retains streaming/answer-panel detail until merged. Journey and artifact rules live in `chat.md`.
+
+The `/` surface. Governed by this file for answer-stream mechanics; IA governed by `chat.md`. Source of truth for visuals: `DESIGN.md` (Daylight Register, §10–§17). When this spec and `DESIGN.md` disagree on visuals, `DESIGN.md` wins.
 
 ## Intent
 
@@ -20,12 +22,12 @@ A person types a real-world local need and gets a tailored, grounded answer with
 |        what they do, where they work, and the next step.           |
 |                                                                    |
 |  +--------------------------------------------------------------+  |
-|  |  AeQueryBox  [ What do you need done? .............. ] [Ask]  |  |
+|  |  AeQueryPanel  [ What do you need done? .............. ] [Ask]  |  |
 |  +--------------------------------------------------------------+  |
 |  |  examples (mono, muted): "no hot water in Preston 3072" · …  |  |
 |  +--------------------------------------------------------------+  |
 +--------------------------------------------------------------------+
-|  AeAnswerStream (appears on submit)                                |
+|  AeThreadTurnStreamSection (appears on submit, via AeChat)       |
 |  +--------------------------------------------------------------+  |
 |  |  one-line answer (Fraunces)                                  |  |
 |  |  provider source-cards (AeProviderSourceCard) [1] [2] [3]    |  |
@@ -45,8 +47,8 @@ A person types a real-world local need and gets a tailored, grounded answer with
 | Region | Required | Component | Notes |
 | --- | --- | --- | --- |
 | Header | Required | `AePublicShell` | Identity, Explore, "List your business" (`/claim`). |
-| Hero | Required | `AeHandDrawnHero` + `AeQueryBox` | Hand-drawn hero asset, kicker, H1, lede, query box, example queries. |
-| Answer | Required (post-submit) | `AeAnswerStream` | The generative answer panel. |
+| Hero | Required | `AeChatWelcome` + `AeQueryPanel` | Welcome copy, boundary note, query composer, example queries. |
+| Answer | Required (post-submit) | `AeThreadTurnStreamSection` via `AeChat` | Turn-based generative answer (artifact stream). |
 | Source cards | Required when providers exist | `AeProviderSourceCard` | One per provider. Google-Maps-clean: name, category, service area, hours, status pill, one link to `/$slug`. |
 | Next step | Required | inline | One plain "What to do now" line. |
 | Agent affordance | Required | `AeAgentJsonAffordance` | Quiet mono link → `/api/businesses/search?q=…`. |

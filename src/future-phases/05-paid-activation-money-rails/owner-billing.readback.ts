@@ -25,6 +25,7 @@ export type OwnerBillingSummaryKind =
 export type OwnerBillingRouteReadback = {
   publicActivation: PublicPaidActivationProjection
   owner: OwnerBillingProjection
+  ownerOffers: PublicPaidActivationOffer[]
   latestOperation?: OwnerBillingOperationProjection
 }
 
@@ -82,13 +83,24 @@ export function readOwnerBillingRouteReadback(input: OwnerBillingRouteInput = {}
     paidActivationEnabled: input.paidActivationEnabled ?? true,
   })
   const owner = readOwnerBillingProjection(state, businessId, ownerId)
+  const ownerOffers = state.offers
+    .filter((offer) => offer.businessId === businessId && offer.status === 'active')
+    .map((offer) => ({
+      id: offer.id,
+      name: offer.publicName,
+      description: offer.publicDescription,
+      ctaLabel: offer.publicCtaLabel,
+      priceSummary: offer.priceSummary,
+      termsSummary: offer.termsSummary,
+      updatedAt: offer.updatedAt,
+    }))
   const latestOperation = latestOwnerOperation(owner.operations)
 
   if (latestOperation === undefined) {
-    return { publicActivation, owner }
+    return { publicActivation, owner, ownerOffers }
   }
 
-  return { publicActivation, owner, latestOperation }
+  return { publicActivation, owner, ownerOffers, latestOperation }
 }
 
 export function summarizeOwnerBillingRoute(
@@ -101,12 +113,14 @@ export function summarizeOwnerBillingRoute(
     return summarizeOwnerBillingOperation(readback, operation, context)
   }
 
-  const offer = readback.publicActivation.offers[0]
-  if (readback.publicActivation.available && offer !== undefined) {
+  const offer = readback.ownerOffers[0] ?? readback.publicActivation.offers[0]
+  if (offer !== undefined) {
     return {
       kind: 'offer_available',
       title: context === 'activate' ? 'Activation offer is available' : 'Billing offer is available',
-      description: 'The current offer is published from billing source state. Starting it still requires the owner server action.',
+      description: readback.publicActivation.available
+        ? 'The current offer is published from billing source state and public paid-activation evidence is complete.'
+        : 'The owner offer is published from billing source state. Public paid-activation claims remain unavailable until provider, receipt, reconciliation, and support evidence are recorded.',
       offer,
       facts: offerFacts(offer),
       primaryAction: internalAction('Review activation route', '/owner/billing/activate'),

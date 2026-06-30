@@ -302,6 +302,8 @@ export const claimBusiness = mutationGeneric({
       suburb: normalized.suburb,
       stateTerritory: normalized.stateTerritory,
       ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
+      ...(normalized.photos === undefined || normalized.photos.length === 0 ? {} : { photos: normalized.photos }),
+      ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
       sourceRefs: normalized.sourceRefs,
       sourceHash,
       approvedAt: now,
@@ -361,6 +363,8 @@ export const claimBusiness = mutationGeneric({
         suburb: normalized.suburb,
         stateTerritory: normalized.stateTerritory,
         ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
+        ...(normalized.photos === undefined || normalized.photos.length === 0 ? {} : { photos: normalized.photos }),
+        ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
         sourceRefs: normalized.sourceRefs,
         sourceHash,
         approvedAt: now,
@@ -582,6 +586,8 @@ type ClaimBusinessArgs = {
   stateTerritory: string
   requestedSlug: string
   ownerMessage?: string
+  photos?: readonly { url: string; alt: string }[]
+  responseTimeMinutes?: number
   sourceRefs: readonly { label: string; evidenceRef: string; sourceHash?: string }[]
 }
 
@@ -594,6 +600,8 @@ type NormalizedClaimFacts =
       stateTerritory: string
       slug: string
       ownerMessage?: string
+      photos?: readonly { url: string; alt: string }[]
+      responseTimeMinutes?: number
       sourceRefs: { label: string; evidenceRef: string; sourceHash: string }[]
     }
   | { kind: 'invalid'; reason: string }
@@ -660,6 +668,8 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
     stateTerritory,
     slug,
     sourceRefs,
+    ...(args.photos === undefined || args.photos.length === 0 ? {} : { photos: args.photos }),
+    ...(args.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: args.responseTimeMinutes }),
   }
   return ownerMessage === undefined ? base : { ...base, ownerMessage }
 }

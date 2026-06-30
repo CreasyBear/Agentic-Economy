@@ -66,9 +66,16 @@ export type BusinessContextRecord = {
   stateTerritory: string
   postcode?: string
   ownerMessage?: string
+  photos?: readonly PublicBusinessPhoto[]
+  responseTimeMinutes?: number
   sourceRefs: readonly BusinessSourceRef[]
   sourceHash: SourceHash
   approvedAt: number
+}
+
+export type PublicBusinessPhoto = {
+  url: string
+  alt: string
 }
 
 export type BusinessRecord = {
@@ -145,6 +152,8 @@ export type ClaimBusinessFacts = {
   stateTerritory: string
   requestedSlug: string
   ownerMessage?: string
+  photos?: readonly PublicBusinessPhoto[]
+  responseTimeMinutes?: number
   sourceRefs: readonly BusinessSourceRef[]
 }
 

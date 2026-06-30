@@ -153,7 +153,13 @@ export type CsrfDecision =
   | { kind: 'rejected'; reason: 'missing_csrf' | 'foreign_origin' }
 
 export type RateLimitClaimInput = {
-  scope: 'claim_submit' | 'dispute_open' | 'inquiry_submit'
+  scope:
+    | 'claim_submit'
+    | 'dispute_open'
+    | 'inquiry_submit'
+    | 'answer_turn_submit'
+    | 'answer_follow_up_chips'
+    | 'answer_stream'
   key: string
   now: number
   limit: number

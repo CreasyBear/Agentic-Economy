@@ -7,56 +7,122 @@ function readSource(path: string): string {
   return readFileSync(join(process.cwd(), path), 'utf8')
 }
 
-function exportedFunctionSource(source: string, name: string): string {
-  const start = source.indexOf(`export function ${name}`)
-  expect(start).toBeGreaterThanOrEqual(0)
-
-  const nextExport = source.indexOf('\nexport function ', start + 1)
-  return nextExport === -1 ? source.slice(start) : source.slice(start, nextExport)
+function readAnswerStyles(): string {
+  return [
+    readSource('src/styles/answer.css'),
+    readSource('src/styles/answer/index.css'),
+    readSource('src/styles/answer/shell.css'),
+    readSource('src/styles/answer/query.css'),
+    readSource('src/styles/answer/ai-elements.css'),
+    readSource('src/styles/answer/panel.css'),
+    readSource('src/styles/answer/source-card.css'),
+    readSource('src/styles/answer/affordances.css'),
+    readSource('src/styles/answer/chat-shell.css'),
+    readSource('src/styles/answer/model-selector.css'),
+    readSource('src/styles/answer/thread.css'),
+    readSource('src/styles/answer/map.css'),
+    readSource('src/styles/answer/listing.css'),
+    readSource('src/styles/answer/motion.css'),
+  ].join('\n')
 }
 
-describe('public landing layout contract', () => {
-  it('keeps answer-part visual roles data-driven instead of order-coupled', () => {
-    const globalStyles = readSource('src/styles/globals.css')
-
-    expect(globalStyles).not.toMatch(/\.ae-public-answer-part[^{}]*:nth-child\s*\(/)
-  })
-
-  it('emits stable emphasis attributes from AeSignalGrid', () => {
-    const landingSource = readSource('src/components/ae/landing/AePublicLanding.tsx')
-    const signalGrid = exportedFunctionSource(landingSource, 'AeSignalGrid')
-
-    expect(signalGrid).toMatch(/items\.map\(\(\{[^}]*\bemphasis\b[^}]*\}\)\s*=>/)
-    expect(signalGrid).toContain('className="ae-public-answer-part"')
-    expect(signalGrid).toContain('data-emphasis={emphasis}')
-  })
-
-  it('keeps repeated list items out of reveal animation classes', () => {
-    const landingSource = readSource('src/components/ae/landing/AePublicLanding.tsx')
-    const listItemTags = landingSource.match(/<(?:article|div|li)\b[^>]*\brole="listitem"[^>]*>/g) ?? []
-
-    expect(listItemTags.length).toBeGreaterThan(0)
-    expect(listItemTags.filter((tag) => tag.includes('ae-public-reveal'))).toEqual([])
-  })
-
-  it('mounts the public landing page as a query to generative answer surface', () => {
+describe('public chat layout contract', () => {
+  it('mounts the home page through the chat shell', () => {
     const homeRoute = readSource('src/routes/index.tsx')
 
-    // Home does one job: prompt the ask. The cited answer lives on /q/$answerId.
-    expect(homeRoute).toMatch(/<AeQueryBox\s/)
-    expect(homeRoute).toMatch(/<AeHandDrawnHero\s/)
-    expect(homeRoute).toMatch(/to: '\/q\/\$answerId'/)
-    expect(homeRoute).not.toMatch(/<AeAnswerStream\s/)
-    expect(homeRoute).not.toMatch(/ae-hero-warm/)
-    expect(homeRoute).not.toMatch(/<AeNoScrollLanding/)
+    expect(homeRoute).toMatch(/<AeChat\s/)
+    expect(homeRoute).not.toMatch(/AePublicLanding/)
+    expect(homeRoute).not.toMatch(/ae-public-detail-hero/)
   })
 
-  it('mounts the shareable answer page with the streaming answer surface', () => {
+  it('redirects legacy share links into the primary chat shell', () => {
     const answerRoute = readSource('src/routes/q.$answerId.tsx')
 
     expect(answerRoute).toMatch(/createFileRoute\('\/q\/\$answerId'\)/)
-    expect(answerRoute).toMatch(/<AeAnswerStream\s/)
     expect(answerRoute).toMatch(/decodeAnswerId/)
+    expect(answerRoute).toMatch(/redirect\(\{ to: '\/', search: \{ q: query \} \}\)/)
+    expect(answerRoute).not.toMatch(/<AeChat\s/)
+    expect(answerRoute).not.toMatch(/<AeAnswerStream\s/)
+  })
+
+  it('keeps welcome copy plain and conversion-honest', () => {
+    const welcome = readSource('src/components/ae/chat/AeChatWelcome.tsx')
+
+    expect(welcome).toMatch(/Ask for a local service/)
+    expect(welcome).not.toMatch(/source-owned|readback|KNOWN|UNKNOWN/i)
+    expect(welcome).toMatch(/No booking, no payment/)
+  })
+
+  it('scopes streaming status without flooding the whole answer region', () => {
+    const streamSection = readSource('src/components/ae/chat/AeThreadTurnStreamSection.tsx')
+
+    expect(streamSection).not.toMatch(/aria-live="polite"/)
+    expect(streamSection).toMatch(/AeGenerativeAnswer/)
+  })
+
+  it('defaults scroll follow off and reopens threads at last anchor', () => {
+    const scroller = readSource('src/components/ae/chat/AeThreadScroller.tsx')
+    const chat = readSource('src/components/ae/chat/AeChat.tsx')
+    const transcript = readSource('src/components/ae/chat/AeThreadTranscript.tsx')
+
+    expect(scroller).toMatch(/autoScroll = false/)
+    expect(scroller).toMatch(/defaultScrollPosition = 'end'/)
+    expect(scroller).toMatch(/scrollPreviousItemPeek=\{AE_THREAD_SCROLL_PREVIOUS_PEEK_PX\}/)
+    expect(scroller).toMatch(/Jump to latest/)
+    expect(chat).toMatch(/autoScroll=\{liveTurn !== null\}/)
+    expect(chat).toMatch(/defaultScrollPosition=\{defaultScrollPosition\}/)
+    expect(chat).toMatch(/last-anchor/)
+    expect(transcript).toMatch(/scrollAnchor=\{anchorThisTurn\}/)
+  })
+
+  it('uses daylight register button radius on public CTAs', () => {
+    const button = readSource('src/components/ui/button.tsx')
+    const globals = readSource('src/styles/globals.css')
+    const answerStyles = readAnswerStyles()
+
+    expect(button).toMatch(/rounded-\[var\(--ae-radius-md\)\]/)
+    expect(button).not.toMatch(/rounded-full/)
+    expect(globals).toMatch(/\.ae-button-landing-primary/)
+    expect(globals).toMatch(/var\(--ae-public-radius-button\)/)
+    expect(answerStyles).toMatch(/\.ae-thread-header\b[\s\S]*background: var\(--ae-public-field\)/)
+    expect(answerStyles).not.toMatch(/backdrop-filter: blur\(8px\)/)
+  })
+
+  it('hides model selector from production public query panel', () => {
+    const queryPanel = readSource('src/components/ae/chat/AeQueryPanel.tsx')
+
+    expect(queryPanel).toMatch(/import\.meta\.env\.DEV/)
+  })
+})
+
+describe('public listing layout contract', () => {
+  it('mounts business citation pages through the daylight listing component', () => {
+    const listingRoute = readSource('src/routes/$slug.tsx')
+
+    expect(listingRoute).toMatch(/<AeProviderListingPage\b/)
+    expect(listingRoute).not.toMatch(/AePublicLanding/)
+    expect(listingRoute).not.toMatch(/AeAnswerRecordCard/)
+    expect(listingRoute).not.toMatch(/AePublicRecordHero/)
+  })
+
+  it('keeps listing citation layout in answer.css primitives', () => {
+    const listingSource = readSource('src/components/ae/listing/AeProviderListingPage.tsx')
+    const answerStyles = readAnswerStyles()
+
+    expect(listingSource).toMatch(/ae-listing-page/)
+    expect(listingSource).toMatch(/ae-public-page/)
+    expect(listingSource).toMatch(/ae-listing-sticky-rail/)
+    expect(listingSource).not.toMatch(/AeStatusBadge/)
+    expect(listingSource).not.toMatch(/ae-public-detail-hero/)
+    expect(answerStyles).toMatch(/\.ae-listing-page\b/)
+    expect(answerStyles).toMatch(/\.ae-listing-sticky-rail\b/)
+  })
+
+  it('surfaces trust on provider source cards', () => {
+    const sourceCard = readSource('src/components/ae/landing/AeProviderSourceCard.tsx')
+
+    expect(sourceCard).toMatch(/source\.trustCue/)
+    expect(sourceCard).toMatch(/AeAgentJsonAffordance/)
   })
 })
 
@@ -88,5 +154,13 @@ describe('operator shell contract', () => {
     expect(source).toMatch(/<AeOperatorShell\b/)
     expect(source).not.toMatch(/<AePublicShell\b/)
     expect(source).not.toMatch(/<AeAdminShell\b/)
+  })
+
+  it('uses the sidebar command layout in AeOperatorShell', () => {
+    const shell = readSource('src/components/ae/layout/AeOperatorShell.tsx')
+
+    expect(shell).toMatch(/SidebarProvider/)
+    expect(shell).toMatch(/AeOperatorSidebar/)
+    expect(shell).toMatch(/AeOperatorSectionNav/)
   })
 })

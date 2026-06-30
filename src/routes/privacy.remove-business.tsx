@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
+import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
@@ -8,8 +9,8 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { AeSelectField } from '@/components/ae/forms/AeSelectField'
 import { Input } from '@/components/ui/input'
-import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
@@ -37,6 +38,13 @@ export const Route = createFileRoute('/privacy/remove-business')({
   }),
   component: RemoveBusinessRoute,
 })
+
+const removalReasonOptions = [
+  { value: 'privacy_removal_requested', label: 'Remove this public page' },
+  { value: 'ownership_contested', label: 'Ownership is contested' },
+  { value: 'duplicate_or_impersonation', label: 'Duplicate or impersonation concern' },
+  { value: 'unsafe_or_inaccurate', label: 'Unsafe or inaccurate public facts' },
+] as const
 
 function RemoveBusinessRoute() {
   const openRemoval = useServerFn(openRemovalServer)
@@ -76,11 +84,14 @@ function RemoveBusinessRoute() {
     try {
       const result = await openRemoval({ data: value })
       if (result.kind === 'ok') {
-        setReceipt(`Request ${result.receipt.status}. Reference ${result.receipt.disputeId}.`)
+        const message = `Request ${result.receipt.status}. Reference ${result.receipt.disputeId}.`
+        setReceipt(message)
+        toast.success('Request recorded', { description: message })
         return
       }
 
       setError(result.reason)
+      toast.error(result.reason)
     } finally {
       setPending(false)
     }
@@ -140,21 +151,16 @@ function RemoveBusinessRoute() {
           </Field>
           <Field>
             <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
-            <NativeSelect
+            <AeSelectField
               id="reasonCode"
               name="reasonCode"
               value={value.reasonCode}
+              options={removalReasonOptions}
               disabled={!hydrated || pending}
-              onChange={(event) => {
-                const nextValue = toRemovalReason(event.currentTarget.value)
-                setValue((current) => ({ ...current, reasonCode: nextValue }))
+              onValueChange={(nextValue) => {
+                setValue((current) => ({ ...current, reasonCode: toRemovalReason(nextValue) }))
               }}
-            >
-              <option value="privacy_removal_requested">Remove this public page</option>
-              <option value="ownership_contested">Ownership is contested</option>
-              <option value="duplicate_or_impersonation">Duplicate or impersonation concern</option>
-              <option value="unsafe_or_inaccurate">Unsafe or inaccurate public facts</option>
-            </NativeSelect>
+            />
           </Field>
           <Field data-invalid={error?.includes('Evidence') ? true : undefined}>
             <FieldLabel htmlFor="evidenceSummary">Evidence summary</FieldLabel>

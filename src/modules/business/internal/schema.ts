@@ -45,6 +45,15 @@ export const businessTables = {
     stateTerritory: v.string(),
     postcode: v.optional(v.string()),
     ownerMessage: v.optional(v.string()),
+    photos: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          alt: v.string(),
+        }),
+      ),
+    ),
+    responseTimeMinutes: v.optional(v.number()),
     sourceRefs: v.array(sourceRef),
     sourceHash: v.string(),
     approvedAt: v.number(),

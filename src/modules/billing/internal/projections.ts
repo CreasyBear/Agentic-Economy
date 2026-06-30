@@ -26,6 +26,12 @@ export type PublicPaidActivationOffer = {
   updatedAt: number
 }
 
+export type PublicPaidActivationDisplay = {
+  heading: string
+  label: string
+  description: string
+}
+
 export type OwnerBillingProjection = {
   businessId: BusinessId
   ownerId: OwnerId
@@ -92,7 +98,26 @@ export function readPublicPaidActivationProjection(
     return { businessId, available: false, offers: [], reason: 'no_active_offer' }
   }
 
+  if (!hasPublicPaidActivationEvidence(state, businessId)) {
+    return { businessId, available: false, offers: [], reason: 'degraded' }
+  }
+
   return { businessId, available: true, offers }
+}
+
+export function buildPublicPaidActivationDisplay(
+  projection: PublicPaidActivationProjection
+): PublicPaidActivationDisplay | undefined {
+  const offer = projection.offers[0]
+  if (!projection.available || offer === undefined) {
+    return undefined
+  }
+
+  return {
+    heading: 'Profile status',
+    label: 'Active on Agentic Economy.',
+    description: 'This business keeps its public profile current here.',
+  }
 }
 
 export function readOwnerBillingProjection(
@@ -212,4 +237,36 @@ function nextAction(status: BillingOperationStatus): string {
     case 'paid_activation_disabled':
       return 'Paid activation is disabled'
   }
+}
+
+function hasPublicPaidActivationEvidence(state: BillingSourceState, businessId: BusinessId): boolean {
+  const paidOperations = state.operations.filter((operation) => operation.businessId === businessId && operation.status === 'paid_active')
+  if (paidOperations.length === 0) {
+    return false
+  }
+
+  return paidOperations.some((operation) => {
+    const hasAcceptedProviderEvent = state.providerEvents.some(
+      (event) =>
+        event.businessId === businessId &&
+        event.status === 'accepted' &&
+        event.signatureVerified &&
+        (event.operationId === operation.id || event.providerCustomerId === operation.providerCustomerId)
+    )
+    const hasPaidReceipt = state.receipts.some(
+      (receipt) => receipt.operationId === operation.id && receipt.businessId === businessId && receipt.status === 'paid'
+    )
+    const hasMatchedReconciliation = state.reconciliations.some(
+      (reconciliation) => reconciliation.operationId === operation.id && reconciliation.businessId === businessId && reconciliation.status === 'matched'
+    )
+    const hasResolvedSupportEvidence = state.supportRecords.some(
+      (support) =>
+        support.businessId === businessId &&
+        support.capability === 'paid_activation_money_rails' &&
+        support.status === 'resolved' &&
+        support.evidenceRefs.length > 0
+    )
+
+    return hasAcceptedProviderEvent && hasPaidReceipt && hasMatchedReconciliation && hasResolvedSupportEvidence
+  })
 }

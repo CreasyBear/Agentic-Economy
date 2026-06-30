@@ -76,18 +76,43 @@ function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
   }
 
   if (usesLocalE2eBypass()) {
-    return {
-      list: (input) => Promise.resolve(legacyPublicRegistryList(input)),
-      search: (input) => Promise.resolve(legacyPublicRegistrySearch(input)),
-      detail: (input) => Promise.resolve(legacyPublicRegistryDetail(input)),
-    }
+    return createLegacyRegistrySourcePort()
   }
 
   return {
-    list: (input) => callPublicSourceQuery(listPublicBusinessCatalogQuery, input),
-    search: (input) => callPublicSourceQuery(searchPublicBusinessCatalogQuery, input),
-    detail: (input) => callPublicSourceQuery(getPublicBusinessCatalogBySlugQuery, input),
+    list: (input) => queryRegistryWithLegacyFallback(() => callPublicSourceQuery(listPublicBusinessCatalogQuery, input), () => legacyPublicRegistryList(input)),
+    search: (input) =>
+      queryRegistryWithLegacyFallback(() => callPublicSourceQuery(searchPublicBusinessCatalogQuery, input), () =>
+        legacyPublicRegistrySearch(input),
+      ),
+    detail: (input) =>
+      queryRegistryWithLegacyFallback(() => callPublicSourceQuery(getPublicBusinessCatalogBySlugQuery, input), () =>
+        legacyPublicRegistryDetail(input),
+      ),
   }
+}
+
+function createLegacyRegistrySourcePort(): PublicRegistrySourcePort {
+  return {
+    list: (input) => Promise.resolve(legacyPublicRegistryList(input)),
+    search: (input) => Promise.resolve(legacyPublicRegistrySearch(input)),
+    detail: (input) => Promise.resolve(legacyPublicRegistryDetail(input)),
+  }
+}
+
+async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallback: () => T): Promise<T> {
+  try {
+    return await query()
+  } catch {
+    if (shouldFallbackToLegacyRegistry()) {
+      return fallback()
+    }
+    throw new Error('registry_query_failed')
+  }
+}
+
+function shouldFallbackToLegacyRegistry(): boolean {
+  return usesLocalE2eBypass() || process.env.NODE_ENV !== 'production'
 }
 
 function usesLocalE2eBypass(): boolean {

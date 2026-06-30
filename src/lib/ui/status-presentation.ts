@@ -748,3 +748,51 @@ export function plainNextStepLabel(firstRequestMode: FirstRequestMode): string {
     }
   }
 }
+
+/** Plain response-time label for cards and listings. Empty when unknown. */
+export function plainResponseTimeLabel(minutes: number | undefined): string {
+  if (minutes === undefined || !Number.isFinite(minutes) || minutes <= 0) {
+    return ''
+  }
+
+  if (minutes < 60) {
+    return `Responds ~${Math.round(minutes)}m`
+  }
+
+  const hours = Math.round(minutes / 60)
+  return `Responds ~${hours}h`
+}
+
+/** Combines response time and trust into one card cue (DESIGN §9.2). */
+export function formatProviderTrustCue(input: {
+  responseTimeMinutes?: number
+  trustLabel: string
+}): string {
+  return [plainResponseTimeLabel(input.responseTimeMinutes), input.trustLabel].filter((part) => part.length > 0).join(' · ')
+}
+
+/** Hand-drawn category mark when no business photo is published. */
+export function categoryIllustrationPath(category: string): string {
+  const normalized = category.trim().toLowerCase()
+
+  const rules: readonly [RegExp, string][] = [
+    [/plumb/, '/images/illustration/cat-plumbing.png'],
+    [/electr/, '/images/illustration/cat-electrical.png'],
+    [/hvac|heat|cool|air.?con/, '/images/illustration/cat-hvac.png'],
+    [/lock/, '/images/illustration/cat-locksmith.png'],
+    [/roof/, '/images/illustration/cat-roofing.png'],
+    [/pest/, '/images/illustration/cat-pest.png'],
+    [/garden|landscap/, '/images/illustration/cat-gardening.png'],
+    [/glaz|window/, '/images/illustration/cat-glazing.png'],
+    [/appliance/, '/images/illustration/cat-appliance.png'],
+    [/clean/, '/images/illustration/cat-cleaning.png'],
+  ]
+
+  for (const [pattern, path] of rules) {
+    if (pattern.test(normalized)) {
+      return path
+    }
+  }
+
+  return '/images/illustration/map-pin.png'
+}

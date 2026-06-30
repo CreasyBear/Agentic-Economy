@@ -1,0 +1,100 @@
+/* ---------- Query box ---------- */
+
+.ae-query-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-public-space-sm);
+  width: 100%;
+  max-width: 40rem;
+}
+
+.ae-query-box__label {
+  font-family: var(--ae-public-font-body);
+  font-size: var(--ae-public-text-sm);
+  font-weight: var(--ae-public-weight-semibold);
+  color: var(--ae-public-muted-strong);
+  letter-spacing: var(--ae-public-tracking);
+}
+
+.ae-query-box__row {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-public-space-xs);
+  padding: var(--ae-public-space-2xs) var(--ae-public-space-2xs) var(--ae-public-space-2xs) var(--ae-public-space-sm);
+  background: var(--ae-public-surface);
+  border: 1px solid var(--ae-public-line-strong);
+  border-radius: var(--ae-public-radius-control);
+  box-shadow: var(--ae-public-control-shadow);
+  transition: box-shadow var(--ae-public-duration-hover) var(--ae-public-ease),
+              border-color var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-query-box__row:focus-within {
+  border-color: var(--ae-public-amber);
+  box-shadow: var(--ae-focus-ring);
+}
+
+.ae-query-box__icon {
+  color: var(--ae-public-muted);
+  flex-shrink: 0;
+}
+
+.ae-query-box__input {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--ae-public-ink);
+  font-family: var(--ae-public-font-body);
+  font-size: var(--ae-public-text-md);
+  line-height: var(--ae-public-leading-snug);
+  outline: none;
+}
+
+.ae-query-box__input::placeholder {
+  color: var(--ae-public-muted);
+}
+
+.ae-query-box__submit {
+  flex-shrink: 0;
+}
+
+.ae-query-box__hint {
+  margin: 0;
+  font-size: var(--ae-public-text-sm);
+  color: var(--ae-public-muted);
+  line-height: var(--ae-public-leading-snug);
+}
+
+.ae-query-box__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ae-public-space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ae-query-box__example {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--ae-public-space-2xs) var(--ae-public-space-sm);
+  border: 1px solid var(--ae-public-line-strong);
+  border-radius: var(--ae-public-radius-pill) !important;
+  background: var(--ae-public-field);
+  color: var(--ae-public-muted-strong);
+  font-size: var(--ae-public-text-xs);
+  font-family: var(--ae-public-font-body);
+  cursor: pointer;
+  transition: border-color var(--ae-public-duration-hover) var(--ae-public-ease),
+              color var(--ae-public-duration-hover) var(--ae-public-ease),
+              background-color var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-query-box__example:hover {
+  border-color: var(--ae-public-amber);
+  color: var(--ae-public-ink);
+  background: color-mix(in oklch, var(--ae-public-amber) 8%, var(--ae-public-field));
+}
+

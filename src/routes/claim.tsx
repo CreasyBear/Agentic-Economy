@@ -3,7 +3,10 @@ import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/rea
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
 
+import { emitFunnelEvent, emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
+import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
+import { AeSelectField } from '@/components/ae/forms/AeSelectField'
 import { AeReviewBlock } from '@/components/ae/forms/AeReviewBlock'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -11,7 +14,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
@@ -42,6 +44,8 @@ const emptyPublicOwnerClaimInput = {
   serviceSummary: '',
   serviceArea: '',
   hoursOrUnknown: '',
+  photoUrl: '',
+  responseTimeMinutes: '',
   firstRequestMode: 'not_available_yet',
   publicDisclosure: '',
   noContactReason: '',
@@ -115,11 +119,29 @@ const serviceFields = [
   },
   {
     field: 'hoursOrUnknown',
-    label: 'Hours or unknown',
-    description: 'Use owner-supplied hours or say hours are unknown.',
+    label: 'Hours (or say if not sure)',
+    description: 'Use owner-supplied hours or say if you are not sure.',
+    control: 'input',
+  },
+  {
+    field: 'photoUrl',
+    label: 'Photo URL (optional)',
+    description: 'Link to one real work, vehicle, or team photo you can publish.',
+    control: 'input',
+  },
+  {
+    field: 'responseTimeMinutes',
+    label: 'Typical response time in minutes (optional)',
+    description: 'Example: 22 for “Responds ~22m”. Leave blank if not sure.',
     control: 'input',
   },
 ] as const satisfies readonly FieldConfig[]
+
+const firstRequestModeOptions = [
+  { value: 'not_available_yet', label: 'First request not available yet' },
+  { value: 'inquiry_available', label: 'Public first-request instructions supplied' },
+  { value: 'quote_request_available', label: 'Public quote request instructions supplied' },
+] as const
 
 export const Route = createFileRoute('/claim')({
   beforeLoad: async () => await requireClaimOwnerSession(),
@@ -142,6 +164,7 @@ function ClaimRoute() {
   const [errors, setErrors] = useState<readonly PublicOwnerClaimValidationError[]>([])
   const [message, setMessage] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
+  const [factsConfirmed, setFactsConfirmed] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
 
   useEffect(() => {
@@ -190,7 +213,7 @@ function ClaimRoute() {
         title="Tell us what your service page should say"
         description="Add business identity, service details, first-request status, and a public note. ABN is not required for this first page."
       />
-      <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+      <form onSubmit={handleSubmit} noValidate className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         {message === undefined ? null : (
           <Alert variant="destructive">
             <AlertTitle>Publish did not complete</AlertTitle>
@@ -207,21 +230,20 @@ function ClaimRoute() {
           <FieldGroup>
             <Field data-invalid={errorByField.has('firstRequestMode') ? true : undefined}>
               <FieldLabel htmlFor="firstRequestMode">First request</FieldLabel>
-              <NativeSelect
+              <AeSelectField
                 id="firstRequestMode"
                 name="firstRequestMode"
                 value={value.firstRequestMode}
-                aria-invalid={errorByField.has('firstRequestMode') || undefined}
+                options={firstRequestModeOptions}
+                invalid={errorByField.has('firstRequestMode')}
                 disabled={!hydrated || pending}
-                onChange={(event) => {
-                  const firstRequestMode = toFirstRequestMode(event.currentTarget.value)
-                  setValue((current) => ({ ...current, firstRequestMode }))
+                onValueChange={(nextValue) => {
+                  setValue((current) => ({
+                    ...current,
+                    firstRequestMode: toFirstRequestMode(nextValue),
+                  }))
                 }}
-              >
-                <option value="not_available_yet">First request not available yet</option>
-                <option value="inquiry_available">Public first-request instructions supplied</option>
-                <option value="quote_request_available">Public quote request instructions supplied</option>
-              </NativeSelect>
+              />
               <FieldDescription>Choose unavailable if you do not want a contact path on the page yet.</FieldDescription>
               {fieldError('firstRequestMode', errorByField)}
             </Field>
@@ -264,8 +286,16 @@ function ClaimRoute() {
           </FieldGroup>
         </AeClaimFormSection>
         <AeReviewBlock value={value} />
+        <AeCheckboxField
+          id="claimFactsConfirmed"
+          label="I confirm these public facts are supplied by the business and ready to publish."
+          description="Agentic Economy publishes what you submit. Review the summary above before continuing."
+          checked={factsConfirmed}
+          disabled={!hydrated || pending}
+          onCheckedChange={setFactsConfirmed}
+        />
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending || !hydrated}>
+          <Button type="submit" variant="landingPrimary" disabled={pending || !hydrated || !factsConfirmed}>
             {pending ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}
             Publish service page
           </Button>

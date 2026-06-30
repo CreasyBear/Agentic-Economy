@@ -1,11 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { deterministicSynthesizer } from '@/modules/answer/public'
-import type {
-  AnswerEvent,
-  AnswerSnapshot,
-  AnswerSource,
-} from '@/modules/answer/public'
+import { buildArtifactsFromSnapshot, type AnswerEvent, type AnswerSnapshot, type AnswerSource } from '@/modules/answer/public'
+import { resolveOrCreateSessionId, checkAnswerStreamRateLimit } from '@/modules/answer-thread/public'
 import { jsonResponse, optionalLimit } from './api.businesses'
 
 export const Route = createFileRoute('/api/answer')({
@@ -32,7 +28,18 @@ export async function handleAnswerRequest(request: Request): Promise<Response> {
   const after = parseAfterParam(url.searchParams.get('after'))
 
   if (stream) {
+    const { sessionId } = resolveOrCreateSessionId(request)
+    const rateLimit = checkAnswerStreamRateLimit(sessionId)
+    if (rateLimit.kind === 'limited') {
+      return jsonResponse({ error: 'rate_limited' }, { status: 429 })
+    }
     return streamAnswer(request, { query, limit, after })
+  }
+
+  const { sessionId } = resolveOrCreateSessionId(request)
+  const rateLimit = checkAnswerStreamRateLimit(sessionId)
+  if (rateLimit.kind === 'limited') {
+    return jsonResponse({ error: 'rate_limited' }, { status: 429 })
   }
 
   return jsonAnswer({ query, limit })
@@ -50,19 +57,14 @@ async function jsonAnswer(input: { query: string; limit: number }): Promise<Resp
     return jsonResponse(cached)
   }
 
-  const snapshot = await collectSnapshot(input)
-  if (snapshot !== undefined) {
-    writeCache(input, snapshot)
-  }
-
-  if (snapshot === undefined) {
-    return jsonResponse(
-      { kind: 'error', code: 'answer_search_failed', copyId: makeCopyId() },
-      { status: 502 }
-    )
-  }
-
-  return jsonResponse(snapshot)
+  // Phase 7 collapsed the answer path onto the thread tool-use agent
+  // (`POST /api/answer/turn`). This legacy stateless endpoint no longer has a
+  // deterministic synthesizer to fall back on, so it returns a safe error
+  // rather than fabricated prose. The UI does not consume this endpoint.
+  return jsonResponse(
+    { kind: 'error', code: 'answer_unavailable', copyId: makeCopyId() },
+    { status: 503 }
+  )
 }
 
 async function streamAnswer(
@@ -74,12 +76,6 @@ async function streamAnswer(
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      // Each event is assigned a monotonically increasing seq. On reconnect,
-      // the client sends ?after=<lastSeq> and we replay only events with
-      // seq > after. Because the Phase-1 synthesizer is deterministic, a cache
-      // miss re-synthesizes the same events with the same seqs, so resumption
-      // is exact without a run-id or persistence (a seq-based reconnect ported
-      // from a home-to-thread streaming model, adapted to AE's stateless register).
       let seq = -1
       const send = (event: AnswerEvent) => {
         seq += 1
@@ -104,28 +100,10 @@ async function streamAnswer(
         return
       }
 
-      try {
-        let captured: AnswerSnapshot | undefined
-        for await (const event of deterministicSynthesizer.synthesize({ query, limit })) {
-          if (request.signal.aborted) {
-            break
-          }
-          send(event)
-          if (event.type === 'complete') {
-            captured = event.answer
-          }
-          if (event.type === 'error') {
-            break
-          }
-        }
-        if (captured !== undefined) {
-          writeCache(input, captured)
-        }
-      } catch {
-        send({ type: 'error', code: 'answer_stream_failed', copyId: makeCopyId() })
-      } finally {
-        controller.close()
-      }
+      // No deterministic synthesizer remains (Phase 7G); the live answer surface
+      // is `POST /api/answer/turn`. Emit a single safe error and close.
+      send({ type: 'error', code: 'answer_unavailable', copyId: makeCopyId() })
+      controller.close()
     },
     cancel() {
       // Client disconnected (Stop button / navigation). Nothing to clean up here;
@@ -143,27 +121,18 @@ async function streamAnswer(
   })
 }
 
-async function collectSnapshot(input: { query: string; limit: number }): Promise<AnswerSnapshot | undefined> {
-  for await (const event of deterministicSynthesizer.synthesize(input)) {
-    if (event.type === 'complete') {
-      return event.answer
-    }
-    if (event.type === 'error') {
-      return undefined
-    }
-  }
-  return undefined
-}
-
 function snapshotToEvents(snapshot: AnswerSnapshot): AnswerEvent[] {
   const events: AnswerEvent[] = []
-  events.push({ type: 'thinking' })
+  events.push({ type: 'thinking', step: 'search', label: 'Searching listed businesses…' })
   events.push({ type: 'one-line', oneLine: snapshot.oneLine })
   events.push({ type: 'sources', providers: snapshot.providers })
   for (const delta of splitSentences(snapshot.summary)) {
     events.push({ type: 'summary-delta', delta })
   }
   events.push({ type: 'next-step', nextStep: snapshot.nextStep })
+  for (const artifact of buildArtifactsFromSnapshot(snapshot)) {
+    events.push({ type: 'artifact', artifact })
+  }
   events.push({ type: 'complete', answer: snapshot })
   return events
 }
@@ -190,10 +159,6 @@ function readCache(input: { query: string; limit: number }): AnswerSnapshot | un
     return undefined
   }
   return entry.snapshot
-}
-
-function writeCache(input: { query: string; limit: number }, snapshot: AnswerSnapshot): void {
-  answerCache.set(cacheKey(input), { ts: Date.now(), snapshot })
 }
 
 function makeCopyId(): string {

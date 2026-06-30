@@ -200,6 +200,7 @@ function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot 
     discoveryStatus: 'available',
     schemaVersion: 'public-business-catalog-api:v1',
     updatedAt: 6_000,
+    photos: [],
     services: [
       {
         slug: 'inverter-diagnostics',

@@ -79,6 +79,7 @@ describe('public catalog DTO', () => {
         slug: 'parramatta-emergency-plumbing',
         stateTerritory: 'NSW',
         publicStatus: 'published',
+        photos: [],
         services: [
           {
             firstRequest: { mode: 'not_available_yet', rawContactExcluded: true },

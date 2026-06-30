@@ -10,6 +10,7 @@ import type {
   ClaimBusinessResult,
   ClaimRecord,
   BusinessOwnerRecord,
+  PublicBusinessPhoto,
 } from '@/modules/business/public'
 
 export function createEmptyBusinessSourceState(): BusinessSourceState {
@@ -160,27 +161,26 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     updatedAt: command.now,
   }
 
-  const context: BusinessContextRecord =
-    normalizedFacts.ownerMessage === undefined
-      ? {
-          businessId,
-          category: normalizedFacts.category,
-          suburb: normalizedFacts.suburb,
-          stateTerritory: normalizedFacts.stateTerritory,
-          sourceRefs: normalizedFacts.sourceRefs,
-          sourceHash,
-          approvedAt: command.now,
-        }
-      : {
-          businessId,
-          category: normalizedFacts.category,
-          suburb: normalizedFacts.suburb,
-          stateTerritory: normalizedFacts.stateTerritory,
-          ownerMessage: normalizedFacts.ownerMessage,
-          sourceRefs: normalizedFacts.sourceRefs,
-          sourceHash,
-          approvedAt: command.now,
-        }
+  const contextBase = {
+    businessId,
+    category: normalizedFacts.category,
+    suburb: normalizedFacts.suburb,
+    stateTerritory: normalizedFacts.stateTerritory,
+    sourceRefs: normalizedFacts.sourceRefs,
+    sourceHash,
+    approvedAt: command.now,
+  }
+
+  const context: BusinessContextRecord = {
+    ...contextBase,
+    ...(normalizedFacts.ownerMessage === undefined ? {} : { ownerMessage: normalizedFacts.ownerMessage }),
+    ...(normalizedFacts.photos === undefined || normalizedFacts.photos.length === 0
+      ? {}
+      : { photos: normalizedFacts.photos }),
+    ...(normalizedFacts.responseTimeMinutes === undefined
+      ? {}
+      : { responseTimeMinutes: normalizedFacts.responseTimeMinutes }),
+  }
 
   const claim: ClaimRecord = {
     claimId,
@@ -225,6 +225,8 @@ type NormalizedClaimFacts =
       stateTerritory: string
       slug: ReturnType<typeof brandNonEmpty<string, 'Slug'>>
       ownerMessage?: string
+      photos?: readonly PublicBusinessPhoto[]
+      responseTimeMinutes?: number
       sourceRefs: ClaimBusinessCommand['facts']['sourceRefs']
     }
   | { kind: 'invalid'; reason: string }
@@ -257,6 +259,8 @@ function normalizeClaimFacts(facts: ClaimBusinessCommand['facts']): NormalizedCl
     stateTerritory,
     slug: brandNonEmpty(slugText, 'Slug'),
     sourceRefs: facts.sourceRefs,
+    ...(facts.photos === undefined || facts.photos.length === 0 ? {} : { photos: facts.photos }),
+    ...(facts.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: facts.responseTimeMinutes }),
   }
 
   return ownerMessage === undefined ? base : { ...base, ownerMessage }

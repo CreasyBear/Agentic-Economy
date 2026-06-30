@@ -18,6 +18,7 @@
   --ae-bg: oklch(0.935 0.005 95);            /* paper #ECEAE1 */
   --ae-fg: oklch(0.21 0.012 250);            /* ink #14161A, cool near-black */
   --ae-muted-fg: oklch(0.50 0.012 130);      /* muted #6B6E63, sage grey */
+  --ae-muted: var(--ae-muted-fg);
   --ae-surface: oklch(0.96 0.006 95);        /* surface-raised #F4F3EC */
   --ae-surface-sunken: oklch(0.905 0.006 95);/* surface-sunken #E2E1D8 */
   --ae-surface-raised: oklch(0.96 0.006 95);
@@ -47,6 +48,8 @@
   --ae-shadow-border-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
   --ae-shadow-border-focus-visible: var(--ae-shadow-border-hover);
   --ae-focus-ring: 0 0 0 3px oklch(0.74 0.15 70 / 0.32);
+  --ae-command-fg: var(--ae-public-command-text);
+  --ae-shadow-command: var(--ae-public-command-shadow);
 
   /* Public surface token contract */
   --ae-public-field: var(--ae-bg);
@@ -107,6 +110,9 @@
   --ae-public-content-max: 80rem;
   --ae-public-measure: 36rem;
   --ae-public-grid-size: 4.5rem;
+  --ae-public-grid-size-wide: 4.5rem;
+  --ae-public-grid-size-command: 1.75rem;
+  --ae-public-grid-size-path: 2.25rem;
 
   /* Type roles — display serif, body grotesk, mono data */
   --ae-public-font-display: var(--ae-font-display);
@@ -147,7 +153,9 @@
   --ae-public-radius-lg: var(--ae-radius-lg);
   --ae-public-radius-xl: var(--ae-radius-sm);
   --ae-public-radius-control: var(--ae-radius-md);
+  --ae-public-radius-button: var(--ae-radius-md);
   --ae-public-radius-panel: var(--ae-radius-sm);
+  --ae-public-radius-button: var(--ae-radius-md);
   --ae-public-radius-card: var(--ae-radius-sm);
   --ae-public-radius-object: var(--ae-radius-lg);
   --ae-public-radius-pill: var(--ae-radius-pill);
@@ -208,7 +216,7 @@
   --radius: var(--ae-radius-md);
 }
 
-.dark {
+.ae-operator-shell.dark {
   color-scheme: dark;
 
   --ae-bg: oklch(0.21 0.012 250);
@@ -288,4 +296,34 @@
   --ae-public-card-shadow: var(--ae-public-soft-shadow);
   --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
   --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
+
+  /* shadcn bridge — operator dark shell */
+  --background: var(--ae-bg);
+  --foreground: var(--ae-fg);
+  --card: var(--ae-surface);
+  --card-foreground: var(--ae-fg);
+  --popover: var(--ae-surface);
+  --popover-foreground: var(--ae-fg);
+  --primary: var(--ae-primary);
+  --primary-foreground: var(--ae-primary-fg);
+  --secondary: var(--ae-surface-sunken);
+  --secondary-foreground: var(--ae-fg);
+  --muted: var(--ae-surface-sunken);
+  --muted-foreground: var(--ae-muted-fg);
+  --accent: color-mix(in oklch, var(--ae-primary) 14%, var(--ae-surface));
+  --accent-foreground: var(--ae-primary);
+  --destructive: var(--ae-danger);
+  --destructive-foreground: oklch(0.98 0.005 95);
+  --border: var(--ae-border);
+  --input: var(--ae-border);
+  --ring: var(--ae-ring);
+
+  --sidebar: var(--ae-surface-sunken);
+  --sidebar-foreground: var(--ae-fg);
+  --sidebar-primary: var(--ae-primary);
+  --sidebar-primary-foreground: var(--ae-primary-fg);
+  --sidebar-accent: color-mix(in oklch, var(--ae-primary) 14%, var(--ae-surface));
+  --sidebar-accent-foreground: var(--ae-primary);
+  --sidebar-border: var(--ae-border);
+  --sidebar-ring: var(--ae-ring);
 }

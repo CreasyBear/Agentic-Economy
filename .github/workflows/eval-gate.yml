@@ -1,0 +1,59 @@
+name: Answer eval gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  eval-gate:
+    name: Promptfoo answer eval + unit + integration
+    runs-on: ubuntu-latest
+    env:
+      # Set by this job once `npm run test:eval` is green. Downstream release
+      # jobs read it to flip the answer synthesizer default to `tool-use`.
+      AE_ANSWER_EVAL_PASSED: '0'
+      PROMPTFOO_HOME: ${{ github.workspace }}/.promptfoo-home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Convex schema codegen check
+        run: npm run check:convex-codegen
+
+      - name: Unit + integration tests
+        run: npm run test:unit && npm run test:integration
+
+      - name: Copy + UI contract + import boundary scans
+        env:
+          AE_SCAN_MODE: clean
+        run: |
+          npm run test:copy
+          npm run test:ui-contract
+          npm run test:imports
+
+      - name: Answer eval gate (promptfoo + tests/eval)
+        run: npm run test:eval
+
+      - name: Mark eval green
+        if: success()
+        run: echo "AE_ANSWER_EVAL_PASSED=1" >> "$GITHUB_ENV"
+
+      - name: Confirm eval flag
+        if: success()
+        run: |
+          echo "AE_ANSWER_EVAL_PASSED=$AE_ANSWER_EVAL_PASSED"
+          test "$AE_ANSWER_EVAL_PASSED" = "1"
+
+      - name: Build (release-valve reads AE_ANSWER_EVAL_PASSED)
+        run: npm run build

@@ -1,16 +1,22 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "lib": ["ES2021", "DOM"],
+    "lib": ["ES2022"],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "ignoreDeprecations": "6.0",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "baseUrl": "..",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "types": ["node"]
   },
   "include": ["./**/*"],
   "exclude": ["./_generated"]

@@ -18,9 +18,39 @@ describe('action registry', () => {
     expect(ids).toContain('inquiry.close')
   })
 
-  it('exposes only the public inquiry submit action to agents', () => {
+  it('registers the registry read actions', () => {
+    const ids = listActions().map((action) => action.id)
+    expect(ids).toContain('registry.search')
+    expect(ids).toContain('registry.detail')
+  })
+
+  it('exposes the public inquiry submit action and read-only registry actions to agents', () => {
     const exposed = listAgentToolActions().map((action) => action.id)
-    expect(exposed).toEqual(['inquiry.submit'])
+    expect(exposed).toContain('inquiry.submit')
+    expect(exposed).toContain('registry.search')
+    expect(exposed).toContain('registry.detail')
+  })
+
+  it('marks the registry actions as read-only with honest boundaries', () => {
+    const search = findAction('registry.search')
+    expect(search).toBeDefined()
+    expect(search?.readOnly).toBe(true)
+    expect(search?.surfaces).toContain('agentTools')
+    expect(search?.boundaries.join(' ')).toMatch(/book|charge|dispatch|inquiry/i)
+    expect(search?.parameters.map((p) => p.name)).toContain('query')
+
+    const detail = findAction('registry.detail')
+    expect(detail).toBeDefined()
+    expect(detail?.readOnly).toBe(true)
+    expect(detail?.surfaces).toContain('agentTools')
+    expect(detail?.parameters.map((p) => p.name)).toContain('slug')
+  })
+
+  it('keeps the registry action descriptors free of internal architecture vocabulary', () => {
+    const search = describeActionForAgent(findAction('registry.search')!)
+    const detail = describeActionForAgent(findAction('registry.detail')!)
+    const joined = JSON.stringify([search, detail])
+    expect(joined).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
   })
 
   it('marks inquiry.submit as a non-read-only, admission-gated write', () => {

@@ -1,0 +1,52 @@
+[
+  {
+    "event_name": "query_submitted",
+    "event_description": "User submits a question to the AI answer flow from the main chat panel.",
+    "file": "src/components/ae/chat/AeChat.tsx"
+  },
+  {
+    "event_name": "answer_completed",
+    "event_description": "AI answer stream finishes and the turn result is ready for the user.",
+    "file": "src/components/ae/chat/AeChat.tsx"
+  },
+  {
+    "event_name": "claim_started",
+    "event_description": "Owner lands on the claim form page, indicating intent to list or claim a business page.",
+    "file": "src/routes/claim.tsx"
+  },
+  {
+    "event_name": "claim_submitted",
+    "event_description": "Owner successfully submits the claim form and the service page is published.",
+    "file": "src/routes/claim.tsx"
+  },
+  {
+    "event_name": "inquiry_started",
+    "event_description": "Visitor navigates to the inquiry form for a specific business listing.",
+    "file": "src/routes/$slug.inquiry.tsx"
+  },
+  {
+    "event_name": "inquiry_submitted",
+    "event_description": "Visitor successfully submits a first-contact inquiry to a business owner.",
+    "file": "src/routes/$slug.inquiry.tsx"
+  },
+  {
+    "event_name": "inquiry_available_seen",
+    "event_description": "Visitor views a business listing page that has an active inquiry contact path.",
+    "file": "src/routes/$slug.tsx"
+  },
+  {
+    "event_name": "service_registry_result_clicked",
+    "event_description": "Visitor clicks 'View details' on a business result in the service registry.",
+    "file": "src/routes/registry.tsx"
+  },
+  {
+    "event_name": "paid_activation_started",
+    "event_description": "Owner initiates the paid activation checkout flow from the billing activation page.",
+    "file": "src/routes/owner.billing.activate.tsx"
+  },
+  {
+    "event_name": "billing_provider_event_ingested",
+    "event_description": "Billing webhook successfully processed a provider event (server-side).",
+    "file": "src/routes/api.billing.webhook.ts"
+  }
+]

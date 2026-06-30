@@ -3,10 +3,8 @@
  *
  * The Phase-1 answer is a deterministic function of the query, so the shareable
  * id is the query itself, base64url-encoded - no persistence needed. The answer
- * page (`/q/$answerId`) decodes the id back to the query and re-synthesizes, so a
- * link is stable, citeable, and works without a database row. Mirrors a home to
- * thread handoff pattern, adapted to AE's deterministic, read-only,
- * Convex-backed stack.
+ * Shareable answer links use `/?q=` on the primary chat shell (`/`). The
+ * base64url codec remains for legacy `/q/$answerId` redirects only.
  *
  * Unicode-safe via TextEncoder/TextDecoder (atob/btoa are not UTF-8 safe).
  */

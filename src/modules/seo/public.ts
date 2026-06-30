@@ -37,4 +37,26 @@ export type BuildPublicBusinessSeoInput = {
 
 export const buildPublicBusinessSeo = buildPublicBusinessSeoImpl
 
+export type PublicThreadSeoContract = {
+  threadId: string
+  title: string
+  description: string
+  canonicalUrl: string
+  indexDirective: SeoIndexDirective
+  ogType: 'article' | 'website'
+}
+
+export type BuildPublicThreadSeoOptions = {
+  canonicalBaseUrl?: string
+}
+
+export type BuildPublicThreadSeoInput = {
+  threadId: string
+  title: string
+  firstTurnOneLine?: string
+  options?: BuildPublicThreadSeoOptions
+}
+
+export { buildPublicThreadSeo } from './internal/public-thread-seo'
+
 export type { JsonLdObject }

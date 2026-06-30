@@ -19,6 +19,7 @@ import { requireBillingOperator, requireBillingOwner } from './authority'
 import type {
   AutumnAttachReadback,
   AutumnCustomerReadback,
+  AutumnInvoiceSnapshot,
   AutumnProvider,
 } from './provider-readback'
 import type {
@@ -195,7 +196,7 @@ export type BillingNoRepairResult = BillingStateResult<
   { state: BillingSourceState; supportRecord: BillingSupportRecord; auditEvent: AuditEventContract }
 >
 
-export type BillingEvidenceSource = 'provider_readback' | 'route_smoke' | 'env'
+export type BillingEvidenceSource = 'provider_readback' | 'route_verification' | 'env'
 
 export type RecordBillingEvidenceCommand = {
   authority: BillingAdminAuthority | undefined
@@ -265,7 +266,7 @@ export type DisablePaidActivationResult = BillingStateResult<
   { state: BillingSourceState; supportRecord: BillingSupportRecord; auditEvent: AuditEventContract }
 >
 
-export function createEmptyBillingSourceState(): BillingSourceState {
+export function createEmptyBillingSourceState(input: Partial<BillingSourceState> = {}): BillingSourceState {
   return {
     offers: [],
     operations: [],
@@ -273,6 +274,7 @@ export function createEmptyBillingSourceState(): BillingSourceState {
     receipts: [],
     reconciliations: [],
     supportRecords: [],
+    ...input,
   }
 }
 
@@ -729,16 +731,38 @@ export async function reconcileBillingOperation(
   const providerHasPlan = [...readback.subscriptions, ...readback.purchases].some(
     (snapshot) => snapshot.planId === state.offers.find((offer) => offer.id === operation.offerId)?.planId && snapshot.status === 'active'
   )
-  const expectedPaid = operation.status === 'paid_active'
-  const reconciliationStatus = providerHasPlan === expectedPaid ? 'matched' : providerHasPlan ? 'mismatched' : 'missing'
+  const receipt = providerHasPlan ? createReceiptFromCustomerReadback(operation, command, readback) : undefined
+  const reconciliationStatus: BillingReconciliation['status'] = providerHasPlan && receipt !== undefined
+    ? 'matched'
+    : providerHasPlan
+      ? 'mismatched'
+      : 'missing'
   const reconciliation = createReconciliation(
     command,
     reconciliationStatus,
     operation,
     providerRefs,
-    reconciliationStatus === 'matched' ? undefined : 'provider_state_differs_from_source'
+    reconciliationStatus === 'matched'
+      ? undefined
+      : providerHasPlan
+        ? 'stripe_receipt_missing'
+        : 'provider_state_differs_from_source'
   )
-  const nextState = { ...state, reconciliations: [...state.reconciliations, reconciliation] }
+  const nextOperation: BillingOperation = reconciliationStatus === 'matched'
+    ? {
+        ...operation,
+        status: 'paid_active',
+        providerRefs: [...operation.providerRefs, ...providerRefs],
+        receiptIds: receipt === undefined ? operation.receiptIds : unique([...operation.receiptIds, receipt.id]),
+        updatedAt: command.now,
+      }
+    : operation
+  const receiptExists = receipt !== undefined && state.receipts.some((candidate) => candidate.id === receipt.id)
+  const nextState = {
+    ...replaceOperation(state, nextOperation),
+    reconciliations: [...state.reconciliations, reconciliation],
+    receipts: receipt === undefined || receiptExists ? state.receipts : [...state.receipts, receipt],
+  }
   const auditType: AuditEventType = reconciliationStatus === 'matched' ? 'billing.reconciliation_started' : 'billing.reconciliation_mismatch'
 
   return ok(
@@ -1058,15 +1082,35 @@ function findOperationForProviderEvent(
     return state.operations.find((operation) => operation.id === command.operationId)
   }
 
-  return state.operations.find((operation) => {
-    if (command.providerSessionId !== undefined && operation.providerSessionId === command.providerSessionId) {
-      return true
+  if (command.providerSessionId !== undefined) {
+    const sessionMatch = latestBillingOperation(
+      state.operations.filter((operation) => operation.providerSessionId === command.providerSessionId)
+    )
+    if (sessionMatch !== undefined) {
+      return sessionMatch
     }
-    if (command.providerSubscriptionId !== undefined && operation.providerSubscriptionId === command.providerSubscriptionId) {
-      return true
+  }
+
+  if (command.providerSubscriptionId !== undefined) {
+    const subscriptionMatch = latestBillingOperation(
+      state.operations.filter((operation) => operation.providerSubscriptionId === command.providerSubscriptionId)
+    )
+    if (subscriptionMatch !== undefined) {
+      return subscriptionMatch
     }
-    return command.providerCustomerId !== undefined && operation.providerCustomerId === command.providerCustomerId
-  })
+  }
+
+  if (command.providerCustomerId !== undefined) {
+    return latestBillingOperation(
+      state.operations.filter((operation) => operation.providerCustomerId === command.providerCustomerId)
+    )
+  }
+
+  return undefined
+}
+
+function latestBillingOperation(operations: readonly BillingOperation[]): BillingOperation | undefined {
+  return [...operations].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt)[0]
 }
 
 function billingStatusForProviderEvent(command: BillingProviderEventCommand, operation: BillingOperation): BillingOperationStatus {
@@ -1107,7 +1151,7 @@ function createReceipt(operation: BillingOperation, command: BillingProviderEven
     id: billingReceiptId(operation.id, command.receipt.providerReceiptId),
     operationId: operation.id,
     businessId: operation.businessId,
-    provider: command.provider,
+    provider: 'stripe_psp',
     providerReceiptId: command.receipt.providerReceiptId,
     status: command.receipt.status,
     payloadHash: command.payloadHash,
@@ -1120,6 +1164,39 @@ function createReceipt(operation: BillingOperation, command: BillingProviderEven
     ...(command.receipt.invoiceUrl === undefined ? {} : { invoiceUrl: command.receipt.invoiceUrl }),
     ...(command.receipt.amountSummary === undefined ? {} : { amountSummary: command.receipt.amountSummary }),
   }
+}
+
+function createReceiptFromCustomerReadback(
+  operation: BillingOperation,
+  command: BillingReconciliationCommand,
+  readback: AutumnCustomerReadback
+): BillingReceipt | undefined {
+  const invoice = latestPaidInvoice(readback.invoices)
+  if (invoice === undefined) {
+    return undefined
+  }
+
+  return {
+    id: billingReceiptId(operation.id, invoice.stripeId),
+    operationId: operation.id,
+    businessId: operation.businessId,
+    provider: 'stripe_psp',
+    providerReceiptId: invoice.stripeId,
+    status: 'paid',
+    payloadHash: readback.payloadHash,
+    providerEvidenceRefs: [`autumn:${readback.customerId}`, `stripe:${invoice.stripeId}`, `hash:${readback.payloadHash}`],
+    paidStateTransition: `${operation.status}->paid_active`,
+    refundReversalDisputeRefs: [],
+    correlationId: command.correlationId,
+    issuedAt: command.now,
+    recordedAt: command.now,
+    ...(invoice.hostedInvoiceUrl === null ? {} : { invoiceUrl: invoice.hostedInvoiceUrl }),
+    amountSummary: `${invoice.total} ${invoice.currency}`,
+  }
+}
+
+function latestPaidInvoice(invoices: readonly AutumnInvoiceSnapshot[]): AutumnInvoiceSnapshot | undefined {
+  return [...invoices].reverse().find((invoice) => invoice.status === 'paid')
 }
 
 function eventTypeForStatus(status: BillingOperationStatus): AuditEventType {

@@ -20,6 +20,8 @@ test.describe('public owner accessibility', () => {
     await expect(page.getByLabel('First request')).toBeVisible()
 
     const publishButton = page.getByRole('button', { name: /publish service page/i })
+    await expect(publishButton).toBeDisabled()
+    await page.getByLabel(/I confirm these public facts/i).check()
     await expect(publishButton).toBeEnabled()
     await publishButton.focus()
     await page.keyboard.press('Enter')

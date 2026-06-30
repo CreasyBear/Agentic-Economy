@@ -344,6 +344,7 @@ function routeCatalogFromBusiness(
     trustTier: business.trustTier,
     indexStatus: 'queued',
     discoveryStatus: 'degraded',
+    photos: [],
     services,
     schemaVersion: 'public-catalog:v1',
     updatedAt: business.updatedAt,

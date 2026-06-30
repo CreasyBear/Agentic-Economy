@@ -75,6 +75,9 @@ const durableTables = [
   'businessActionPrivateEvidenceRefs',
   'businessActionSupportRecords',
   'businessActionNoRepairRecords',
+  'answerThreads',
+  'answerTurns',
+  'answerToolCalls',
 ] as const
 
 const requiredIndexes = {
@@ -151,6 +154,9 @@ const requiredIndexes = {
   businessActionPrivateEvidenceRefs: ['by_privateEvidenceRefId', 'by_request', 'by_ttlExpiresAt'],
   businessActionSupportRecords: ['by_supportRecordId', 'by_business_status', 'by_action_status'],
   businessActionNoRepairRecords: ['by_noRepairId', 'by_request', 'by_idempotencyKey'],
+  answerThreads: ['by_threadId', 'by_session_updatedAt'],
+  answerTurns: ['by_turnId', 'by_thread_createdAt'],
+  answerToolCalls: ['by_toolCallId', 'by_turn_seq'],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {

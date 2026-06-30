@@ -1335,6 +1335,8 @@ function toPublicBusinessCatalogApiDto(catalog: PublicCatalogContract): PublicBu
     discoveryStatus: catalog.discoveryStatus,
     schemaVersion: 'public-business-catalog-api:v1',
     updatedAt: catalog.updatedAt,
+    photos: catalog.photos.map((photo) => ({ url: photo.url, alt: photo.alt })),
+    ...(catalog.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: catalog.responseTimeMinutes }),
     services: catalog.services.map((service) => ({
       slug: service.serviceSlug,
       name: service.name,

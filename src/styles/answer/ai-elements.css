@@ -1,0 +1,72 @@
+/* ---------- AI Elements (Daylight Register pass) ---------- */
+
+.ae-streaming-label {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--ae-public-muted);
+  --color-background: var(--ae-public-field);
+  --color-muted-foreground: var(--ae-public-muted-strong);
+}
+
+.ae-answer-prompt-input__form [data-slot='input-group'],
+.ae-answer-prompt-input__group {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-public-space-xs);
+  min-height: 2.75rem;
+  padding: var(--ae-public-space-2xs) var(--ae-public-space-2xs) var(--ae-public-space-2xs) var(--ae-public-space-sm);
+  background: var(--ae-public-surface);
+  border: 1px solid var(--ae-public-line-strong);
+  border-radius: var(--ae-public-radius-control);
+  box-shadow: var(--ae-public-control-shadow);
+  transition: box-shadow var(--ae-public-duration-hover) var(--ae-public-ease),
+              border-color var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-answer-prompt-input__form [data-slot='input-group']:has(:focus-visible),
+.ae-answer-prompt-input__group:focus-within {
+  border-color: var(--ae-public-amber);
+  box-shadow: var(--ae-focus-ring);
+}
+
+.ae-answer-reasoning {
+  margin: 0 0 var(--ae-public-space-sm);
+}
+
+.ae-answer-reasoning__trigger {
+  font-family: var(--ae-public-font-mono);
+  font-size: var(--ae-public-text-xs);
+  color: var(--ae-public-muted);
+}
+
+.ae-answer-reasoning__trigger:hover {
+  color: var(--ae-public-ink);
+}
+
+.ae-answer-reasoning__trigger svg {
+  color: var(--ae-public-muted);
+}
+
+.ae-answer-reasoning__done {
+  color: var(--ae-public-muted-strong);
+}
+
+.ae-answer-reasoning__content {
+  font-family: var(--ae-public-font-body);
+  font-size: var(--ae-public-text-sm);
+  color: var(--ae-public-muted-strong);
+  line-height: var(--ae-public-leading-snug);
+}
+
+.ae-follow-up-chips [data-slot='scroll-area-viewport'] > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ae-public-space-xs);
+}
+
+.ae-query-box__examples [data-slot='scroll-area-viewport'] > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ae-public-space-xs);
+}
+

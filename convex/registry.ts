@@ -5,9 +5,17 @@ import { runtimeReader } from './source_state'
 import type { RuntimeDocument, RuntimeReader } from './source_state'
 
 const firstRequestDto = v.object({
-  mode: v.union(v.literal('inquiry_available'), v.literal('quote_request_available'), v.literal('not_available_yet')),
+  mode: v.union(
+    v.literal('inquiry_available'),
+    v.literal('quote_request_available'),
+    v.literal('not_available_yet'),
+  ),
   publicDisclosure: v.string(),
-  publicChannel: v.union(v.literal('public_business_contact'), v.literal('ae_status_only'), v.literal('not_available')),
+  publicChannel: v.union(
+    v.literal('public_business_contact'),
+    v.literal('ae_status_only'),
+    v.literal('not_available'),
+  ),
   noContactReason: v.optional(v.string()),
 })
 
@@ -19,12 +27,30 @@ const catalogItemDto = v.object({
   stateTerritory: v.string(),
   postcode: v.optional(v.string()),
   publicUrl: v.string(),
-  trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
+  trustTier: v.union(
+    v.literal('claimed'),
+    v.literal('contact_confirmed'),
+    v.literal('listed'),
+    v.literal('registry_verified'),
+  ),
   publicStatus: v.literal('published'),
-  indexStatus: v.union(v.literal('not_queued'), v.literal('queued'), v.literal('indexed'), v.literal('failed'), v.literal('stale')),
-  discoveryStatus: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
+  indexStatus: v.union(
+    v.literal('not_queued'),
+    v.literal('queued'),
+    v.literal('indexed'),
+    v.literal('failed'),
+    v.literal('stale'),
+  ),
+  discoveryStatus: v.union(
+    v.literal('unavailable'),
+    v.literal('degraded'),
+    v.literal('available'),
+    v.literal('stale'),
+  ),
   schemaVersion: v.literal('public-business-catalog-api:v1'),
   updatedAt: v.number(),
+  photos: v.array(v.object({ url: v.string(), alt: v.string() })),
+  responseTimeMinutes: v.optional(v.number()),
   services: v.array(
     v.object({
       slug: v.string(),
@@ -42,12 +68,17 @@ const catalogItemDto = v.object({
             v.literal('quote_request'),
             v.literal('booking_interest'),
             v.literal('emergency_callout_interest'),
-            v.literal('ae_hosted_discovery')
+            v.literal('ae_hosted_discovery'),
           ),
-          status: v.union(v.literal('unavailable'), v.literal('degraded'), v.literal('available'), v.literal('stale')),
-        })
+          status: v.union(
+            v.literal('unavailable'),
+            v.literal('degraded'),
+            v.literal('available'),
+            v.literal('stale'),
+          ),
+        }),
       ),
-    })
+    }),
   ),
 })
 
@@ -75,17 +106,25 @@ const detailResult = v.union(
     kind: v.literal('not_found'),
     code: v.literal('business_not_found'),
     reason: v.string(),
-  })
+  }),
 )
 
 const registryAttemptResult = v.object({
   businessId: v.string(),
   serviceId: v.optional(v.string()),
   logicalKey: v.string(),
-  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  projectionKind: v.union(
+    v.literal('business_catalog'),
+    v.literal('service_catalog'),
+  ),
   sourceHash: v.string(),
   sourceVersion: v.literal('public-catalog:v1'),
-  status: v.union(v.literal('queued'), v.literal('succeeded'), v.literal('failed'), v.literal('stale')),
+  status: v.union(
+    v.literal('queued'),
+    v.literal('succeeded'),
+    v.literal('failed'),
+    v.literal('stale'),
+  ),
   retryCount: v.number(),
   retryAfter: v.optional(v.number()),
   lastErrorCode: v.optional(v.string()),
@@ -93,15 +132,26 @@ const registryAttemptResult = v.object({
   startedAt: v.number(),
   finishedAt: v.optional(v.number()),
   staleThresholdAt: v.optional(v.number()),
-  repairAction: v.union(v.literal('retry_projection'), v.literal('rebuild_projection'), v.literal('no_repair')),
-  repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
+  repairAction: v.union(
+    v.literal('retry_projection'),
+    v.literal('rebuild_projection'),
+    v.literal('no_repair'),
+  ),
+  repairResult: v.union(
+    v.literal('not_run'),
+    v.literal('succeeded'),
+    v.literal('failed'),
+  ),
 })
 
 const projectionItemResult = v.object({
   businessId: v.string(),
   serviceId: v.optional(v.string()),
   logicalKey: v.string(),
-  projectionKind: v.union(v.literal('business_catalog'), v.literal('service_catalog')),
+  projectionKind: v.union(
+    v.literal('business_catalog'),
+    v.literal('service_catalog'),
+  ),
   publicStatus: v.literal('published'),
   sourceHash: v.string(),
   sourceVersion: v.literal('public-catalog:v1'),
@@ -115,11 +165,25 @@ const healthResult = v.object({
   businessId: v.string(),
   sourceState: v.union(v.literal('published'), v.literal('not_public')),
   latestAttempt: v.optional(registryAttemptResult),
-  indexStatus: v.union(v.literal('not_queued'), v.literal('queued'), v.literal('indexed'), v.literal('failed'), v.literal('stale')),
+  indexStatus: v.union(
+    v.literal('not_queued'),
+    v.literal('queued'),
+    v.literal('indexed'),
+    v.literal('failed'),
+    v.literal('stale'),
+  ),
   projectionItems: v.array(projectionItemResult),
   affectedPublicSurfaces: v.array(v.string()),
-  repairAction: v.union(v.literal('retry_projection'), v.literal('rebuild_projection'), v.literal('no_repair')),
-  repairResult: v.union(v.literal('not_run'), v.literal('succeeded'), v.literal('failed')),
+  repairAction: v.union(
+    v.literal('retry_projection'),
+    v.literal('rebuild_projection'),
+    v.literal('no_repair'),
+  ),
+  repairResult: v.union(
+    v.literal('not_run'),
+    v.literal('succeeded'),
+    v.literal('failed'),
+  ),
 })
 
 export const listPublicBusinessCatalog = queryGeneric({
@@ -149,7 +213,9 @@ export const searchPublicBusinessCatalog = queryGeneric({
     }
 
     const tokens = query.split(' ').map(normalizeSearchToken)
-    const matches = (await readPublicCatalogs(db)).filter((catalog) => matchesCatalog(catalog, tokens))
+    const matches = (await readPublicCatalogs(db)).filter((catalog) =>
+      matchesCatalog(catalog, tokens),
+    )
     return paginateCatalogs(matches, queryInput(args), query)
   },
 })
@@ -162,7 +228,9 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
     const catalogs = await readPublicCatalogs(db)
-    const catalog = catalogs.find((candidate) => candidate.slug === normalizeSlug(args.slug))
+    const catalog = catalogs.find(
+      (candidate) => candidate.slug === normalizeSlug(args.slug),
+    )
     if (catalog === undefined) {
       return {
         kind: 'not_found' as const,
@@ -206,6 +274,8 @@ type CatalogDto = {
   discoveryStatus: 'unavailable' | 'degraded' | 'available' | 'stale'
   schemaVersion: 'public-business-catalog-api:v1'
   updatedAt: number
+  photos: { url: string; alt: string }[]
+  responseTimeMinutes?: number
   services: ServiceDto[]
 }
 
@@ -233,8 +303,14 @@ type CapabilityDto = {
   status: CatalogDiscoveryStatus
 }
 
-type CatalogTrustTier = 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'
-type CatalogCapabilityKind = 'phone_inquiry' | 'quote_request' | 'booking_interest' | 'emergency_callout_interest' | 'ae_hosted_discovery'
+type CatalogTrustTier =
+  'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified'
+type CatalogCapabilityKind =
+  | 'phone_inquiry'
+  | 'quote_request'
+  | 'booking_interest'
+  | 'emergency_callout_interest'
+  | 'ae_hosted_discovery'
 type CatalogDiscoveryStatus = 'unavailable' | 'degraded' | 'available' | 'stale'
 
 type QueryInput = {
@@ -271,7 +347,9 @@ type RegistryAttempt = {
 async function readPublicCatalogs(db: RuntimeDb): Promise<CatalogDto[]> {
   const businesses = await db
     .query('businesses')
-    .withIndex('by_publicStatus_slug', (query) => query.eq('publicStatus', 'published'))
+    .withIndex('by_publicStatus_slug', (query) =>
+      query.eq('publicStatus', 'published'),
+    )
     .collect()
   const catalogs: CatalogDto[] = []
   for (const business of businesses) {
@@ -287,7 +365,10 @@ async function readPublicCatalogs(db: RuntimeDb): Promise<CatalogDto[]> {
   return catalogs.sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
-async function catalogForBusiness(db: RuntimeDb, business: RuntimeDocument): Promise<CatalogDto | undefined> {
+async function catalogForBusiness(
+  db: RuntimeDb,
+  business: RuntimeDocument,
+): Promise<CatalogDto | undefined> {
   const context = await db
     .query('businessContexts')
     .withIndex('by_business', (query) => query.eq('businessId', business._id))
@@ -298,7 +379,9 @@ async function catalogForBusiness(db: RuntimeDb, business: RuntimeDocument): Pro
 
   const services = await db
     .query('businessServices')
-    .withIndex('by_business_status', (query) => query.eq('businessId', business._id).eq('status', 'published'))
+    .withIndex('by_business_status', (query) =>
+      query.eq('businessId', business._id).eq('status', 'published'),
+    )
     .collect()
   if (services.length === 0) {
     return undefined
@@ -306,7 +389,9 @@ async function catalogForBusiness(db: RuntimeDb, business: RuntimeDocument): Pro
 
   const capabilities = await db
     .query('serviceCapabilities')
-    .withIndex('by_business_service_status', (query) => query.eq('businessId', business._id))
+    .withIndex('by_business_service_status', (query) =>
+      query.eq('businessId', business._id),
+    )
     .collect()
   return {
     slug: stringField(business, 'slug'),
@@ -314,22 +399,40 @@ async function catalogForBusiness(db: RuntimeDb, business: RuntimeDocument): Pro
     category: stringField(context, 'category'),
     suburb: stringField(context, 'suburb'),
     stateTerritory: stringField(context, 'stateTerritory'),
-    ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
+    ...(optionalStringField(context, 'postcode') === undefined
+      ? {}
+      : { postcode: stringField(context, 'postcode') }),
     publicUrl: `/${stringField(business, 'slug')}`,
     trustTier: trustTier(business),
     publicStatus: 'published',
     indexStatus: await indexStatusForBusiness(db, business._id),
-    discoveryStatus: await discoveryStatusForBusiness(db, business._id, stringField(business, 'sourceHash')),
+    discoveryStatus: await discoveryStatusForBusiness(
+      db,
+      business._id,
+      stringField(business, 'sourceHash'),
+    ),
     schemaVersion: 'public-business-catalog-api:v1',
     updatedAt: numberField(business, 'updatedAt'),
+    photos: photosField(context, 'photos'),
+    ...(optionalNumberField(context, 'responseTimeMinutes') === undefined
+      ? {}
+      : { responseTimeMinutes: numberField(context, 'responseTimeMinutes') }),
     services: services
-      .sort((left, right) => numberField(left, 'sortOrder') - numberField(right, 'sortOrder'))
+      .sort(
+        (left, right) =>
+          numberField(left, 'sortOrder') - numberField(right, 'sortOrder'),
+      )
       .map((service) => toServiceDto(service, capabilities)),
   }
 }
 
-function toServiceDto(service: RuntimeDocument, capabilities: readonly RuntimeDocument[]): ServiceDto {
-  const serviceCapabilities = capabilities.filter((capability) => stringField(capability, 'serviceId') === service._id)
+function toServiceDto(
+  service: RuntimeDocument,
+  capabilities: readonly RuntimeDocument[],
+): ServiceDto {
+  const serviceCapabilities = capabilities.filter(
+    (capability) => stringField(capability, 'serviceId') === service._id,
+  )
   const firstCapability = serviceCapabilities.at(0)
   return {
     slug: stringField(service, 'serviceSlug'),
@@ -338,7 +441,10 @@ function toServiceDto(service: RuntimeDocument, capabilities: readonly RuntimeDo
     summary: stringField(service, 'summary'),
     serviceArea: stringField(service, 'serviceArea'),
     hoursOrUnknown: stringField(service, 'hoursOrUnknown'),
-    firstRequest: firstCapability === undefined ? unavailableFirstRequest() : toFirstRequestDto(firstCapability),
+    firstRequest:
+      firstCapability === undefined
+        ? unavailableFirstRequest()
+        : toFirstRequestDto(firstCapability),
     status: 'published',
     capabilities: serviceCapabilities.map((capability) => ({
       kind: capabilityKind(capability),
@@ -352,7 +458,9 @@ function toFirstRequestDto(capability: RuntimeDocument): FirstRequestDto {
     mode: firstRequestMode(capability),
     publicDisclosure: stringField(capability, 'publicDisclosure'),
     publicChannel: publicChannel(capability),
-    ...(optionalStringField(capability, 'noContactReason') === undefined ? {} : { noContactReason: stringField(capability, 'noContactReason') }),
+    ...(optionalStringField(capability, 'noContactReason') === undefined
+      ? {}
+      : { noContactReason: stringField(capability, 'noContactReason') }),
   }
 }
 
@@ -365,9 +473,19 @@ function unavailableFirstRequest(): FirstRequestDto {
   }
 }
 
-function paginateCatalogs(items: readonly CatalogDto[], input: QueryInput, query?: string) {
+function paginateCatalogs(
+  items: readonly CatalogDto[],
+  input: QueryInput,
+  query?: string,
+) {
   const limit = normalizeLimit(input.limit)
-  const startIndex = input.cursor === undefined ? 0 : Math.max(items.findIndex((item) => item.slug === input.cursor), 0)
+  const startIndex =
+    input.cursor === undefined
+      ? 0
+      : Math.max(
+          items.findIndex((item) => item.slug === input.cursor),
+          0,
+        )
   const pageItems = items.slice(startIndex, startIndex + limit)
   const next = items.at(startIndex + limit)
   return {
@@ -388,7 +506,9 @@ function paginateCatalogs(items: readonly CatalogDto[], input: QueryInput, query
 async function readCatalogHealthFromDb(db: RuntimeDb, businessId: string) {
   const business = await db.get(businessId)
   const sourceState: 'published' | 'not_public' =
-    business !== null && stringField(business, 'publicStatus') === 'published' && (await publishedServiceCount(db, businessId)) > 0
+    business !== null &&
+    stringField(business, 'publicStatus') === 'published' &&
+    (await publishedServiceCount(db, businessId)) > 0
       ? 'published'
       : 'not_public'
   const latestAttempt = await latestRegistryAttempt(db, businessId)
@@ -398,37 +518,69 @@ async function readCatalogHealthFromDb(db: RuntimeDb, businessId: string) {
     ...(latestAttempt === undefined ? {} : { latestAttempt }),
     indexStatus: await indexStatusForBusiness(db, businessId),
     projectionItems: await projectionItemsForBusiness(db, businessId),
-    affectedPublicSurfaces: ['/registry', '/api/businesses', '/api/businesses/search', '/api/businesses/{slug}'],
-    repairAction: latestAttempt?.repairAction ?? (sourceState === 'published' ? 'rebuild_projection' : 'no_repair'),
+    affectedPublicSurfaces: [
+      '/registry',
+      '/api/businesses',
+      '/api/businesses/search',
+      '/api/businesses/{slug}',
+    ],
+    repairAction:
+      latestAttempt?.repairAction ??
+      (sourceState === 'published' ? 'rebuild_projection' : 'no_repair'),
     repairResult: latestAttempt?.repairResult ?? 'not_run',
   }
 }
 
-async function latestRegistryAttempt(db: RuntimeDb, businessId: string): Promise<RegistryAttempt | undefined> {
+async function latestRegistryAttempt(
+  db: RuntimeDb,
+  businessId: string,
+): Promise<RegistryAttempt | undefined> {
   const attempts = await db
     .query('registryProjectionAttempts')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
+    .withIndex('by_business_status', (query) =>
+      query.eq('businessId', businessId),
+    )
     .collect()
-  const latest = attempts.sort((left, right) => numberField(right, 'startedAt') - numberField(left, 'startedAt')).at(0)
+  const latest = attempts
+    .sort(
+      (left, right) =>
+        numberField(right, 'startedAt') - numberField(left, 'startedAt'),
+    )
+    .at(0)
   return latest === undefined ? undefined : toRegistryAttempt(latest)
 }
 
 function toRegistryAttempt(attempt: RuntimeDocument): RegistryAttempt {
   return {
     businessId: stringField(attempt, 'businessId'),
-    ...(optionalStringField(attempt, 'serviceId') === undefined ? {} : { serviceId: stringField(attempt, 'serviceId') }),
+    ...(optionalStringField(attempt, 'serviceId') === undefined
+      ? {}
+      : { serviceId: stringField(attempt, 'serviceId') }),
     logicalKey: stringField(attempt, 'logicalKey'),
-    projectionKind: stringField(attempt, 'projectionKind') === 'service_catalog' ? 'service_catalog' : 'business_catalog',
+    projectionKind:
+      stringField(attempt, 'projectionKind') === 'service_catalog'
+        ? 'service_catalog'
+        : 'business_catalog',
     sourceHash: stringField(attempt, 'sourceHash'),
     sourceVersion: 'public-catalog:v1',
     status: registryStatus(attempt),
     retryCount: numberField(attempt, 'retryCount'),
-    ...(optionalNumberField(attempt, 'retryAfter') === undefined ? {} : { retryAfter: numberField(attempt, 'retryAfter') }),
-    ...(optionalStringField(attempt, 'lastErrorCode') === undefined ? {} : { lastErrorCode: stringField(attempt, 'lastErrorCode') }),
-    ...(optionalStringField(attempt, 'lastErrorRedacted') === undefined ? {} : { lastErrorRedacted: stringField(attempt, 'lastErrorRedacted') }),
+    ...(optionalNumberField(attempt, 'retryAfter') === undefined
+      ? {}
+      : { retryAfter: numberField(attempt, 'retryAfter') }),
+    ...(optionalStringField(attempt, 'lastErrorCode') === undefined
+      ? {}
+      : { lastErrorCode: stringField(attempt, 'lastErrorCode') }),
+    ...(optionalStringField(attempt, 'lastErrorRedacted') === undefined
+      ? {}
+      : { lastErrorRedacted: stringField(attempt, 'lastErrorRedacted') }),
     startedAt: numberField(attempt, 'startedAt'),
-    ...(optionalNumberField(attempt, 'finishedAt') === undefined ? {} : { finishedAt: numberField(attempt, 'finishedAt') }),
-    ...(optionalNumberField(attempt, 'staleThresholdAt') === undefined ? {} : { staleThresholdAt: numberField(attempt, 'staleThresholdAt') }),
+    ...(optionalNumberField(attempt, 'finishedAt') === undefined
+      ? {}
+      : { finishedAt: numberField(attempt, 'finishedAt') }),
+    ...(optionalNumberField(attempt, 'staleThresholdAt') === undefined
+      ? {}
+      : { staleThresholdAt: numberField(attempt, 'staleThresholdAt') }),
     repairAction: registryRepairAction(attempt),
     repairResult: repairResult(attempt),
   }
@@ -441,9 +593,14 @@ async function projectionItemsForBusiness(db: RuntimeDb, businessId: string) {
     .collect()
   return items.map((item) => ({
     businessId: stringField(item, 'businessId'),
-    ...(optionalStringField(item, 'serviceId') === undefined ? {} : { serviceId: stringField(item, 'serviceId') }),
+    ...(optionalStringField(item, 'serviceId') === undefined
+      ? {}
+      : { serviceId: stringField(item, 'serviceId') }),
     logicalKey: stringField(item, 'logicalKey'),
-    projectionKind: stringField(item, 'projectionKind') === 'service_catalog' ? 'service_catalog' as const : 'business_catalog' as const,
+    projectionKind:
+      stringField(item, 'projectionKind') === 'service_catalog'
+        ? ('service_catalog' as const)
+        : ('business_catalog' as const),
     publicStatus: 'published' as const,
     sourceHash: stringField(item, 'sourceHash'),
     sourceVersion: 'public-catalog:v1' as const,
@@ -454,47 +611,89 @@ async function projectionItemsForBusiness(db: RuntimeDb, businessId: string) {
   }))
 }
 
-async function hasActiveBusinessSuppression(db: RuntimeDb, businessId: string): Promise<boolean> {
+async function hasActiveBusinessSuppression(
+  db: RuntimeDb,
+  businessId: string,
+): Promise<boolean> {
   const suppression = await db
     .query('suppressionRules')
-    .withIndex('by_target_status', (query) => query.eq('targetType', 'business').eq('targetRef', businessId).eq('status', 'active'))
+    .withIndex('by_target_status', (query) =>
+      query
+        .eq('targetType', 'business')
+        .eq('targetRef', businessId)
+        .eq('status', 'active'),
+    )
     .unique()
   return suppression !== null
 }
 
-async function publishedServiceCount(db: RuntimeDb, businessId: string): Promise<number> {
+async function publishedServiceCount(
+  db: RuntimeDb,
+  businessId: string,
+): Promise<number> {
   const services = await db
     .query('businessServices')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
+    .withIndex('by_business_status', (query) =>
+      query.eq('businessId', businessId).eq('status', 'published'),
+    )
     .collect()
   return services.length
 }
 
-async function indexStatusForBusiness(db: RuntimeDb, businessId: string): Promise<CatalogDto['indexStatus']> {
+async function indexStatusForBusiness(
+  db: RuntimeDb,
+  businessId: string,
+): Promise<CatalogDto['indexStatus']> {
   const statuses = await db.query('indexStatus').collect()
   const status = statuses.find(
-    (candidate) => stringField(candidate, 'targetType') === 'business' && stringField(candidate, 'targetRef') === businessId
+    (candidate) =>
+      stringField(candidate, 'targetType') === 'business' &&
+      stringField(candidate, 'targetRef') === businessId,
   )
   const value = status === undefined ? undefined : stringField(status, 'status')
-  return value === 'queued' || value === 'indexed' || value === 'failed' || value === 'stale' ? value : 'not_queued'
+  return value === 'queued' ||
+    value === 'indexed' ||
+    value === 'failed' ||
+    value === 'stale'
+    ? value
+    : 'not_queued'
 }
 
-async function discoveryStatusForBusiness(db: RuntimeDb, businessId: string, sourceHash: string): Promise<CatalogDto['discoveryStatus']> {
+async function discoveryStatusForBusiness(
+  db: RuntimeDb,
+  businessId: string,
+  sourceHash: string,
+): Promise<CatalogDto['discoveryStatus']> {
   const attempts = await db
     .query('discoveryManifestAttempts')
-    .withIndex('by_business_status', (query) => query.eq('businessId', businessId))
+    .withIndex('by_business_status', (query) =>
+      query.eq('businessId', businessId),
+    )
     .collect()
-  const latest = attempts.sort((left, right) => numberField(right, 'startedAt') - numberField(left, 'startedAt')).at(0)
+  const latest = attempts
+    .sort(
+      (left, right) =>
+        numberField(right, 'startedAt') - numberField(left, 'startedAt'),
+    )
+    .at(0)
   if (latest === undefined) {
     return 'degraded'
   }
-  if (stringField(latest, 'sourceHash') !== sourceHash || stringField(latest, 'status') === 'stale') {
+  if (
+    stringField(latest, 'sourceHash') !== sourceHash ||
+    stringField(latest, 'status') === 'stale'
+  ) {
     return 'stale'
   }
-  return stringField(latest, 'status') === 'succeeded' ? 'available' : 'degraded'
+  return stringField(latest, 'status') === 'succeeded'
+    ? 'available'
+    : 'degraded'
 }
 
-function matchesCatalog(catalog: CatalogDto, queryTokens: readonly string[]): boolean {
+function matchesCatalog(
+  catalog: CatalogDto,
+  queryTokens: readonly string[],
+): boolean {
   const haystack = normalizeSearchText(
     [
       catalog.name,
@@ -502,8 +701,13 @@ function matchesCatalog(catalog: CatalogDto, queryTokens: readonly string[]): bo
       catalog.suburb,
       catalog.stateTerritory,
       catalog.postcode ?? '',
-      ...catalog.services.flatMap((service) => [service.name, service.category, service.summary, service.serviceArea]),
-    ].join(' ')
+      ...catalog.services.flatMap((service) => [
+        service.name,
+        service.category,
+        service.summary,
+        service.serviceArea,
+      ]),
+    ].join(' '),
   )
   return queryTokens.every((token) => haystack.includes(token))
 }
@@ -540,7 +744,10 @@ function stringField(document: RuntimeDocument, field: string): string {
   return typeof value === 'string' ? value : ''
 }
 
-function optionalStringField(document: RuntimeDocument, field: string): string | undefined {
+function optionalStringField(
+  document: RuntimeDocument,
+  field: string,
+): string | undefined {
   const value = document[field]
   return typeof value === 'string' ? value : undefined
 }
@@ -550,22 +757,59 @@ function numberField(document: RuntimeDocument, field: string): number {
   return typeof value === 'number' ? value : 0
 }
 
-function optionalNumberField(document: RuntimeDocument, field: string): number | undefined {
+function optionalNumberField(
+  document: RuntimeDocument,
+  field: string,
+): number | undefined {
   const value = document[field]
   return typeof value === 'number' ? value : undefined
 }
 
+function photosField(
+  document: RuntimeDocument,
+  field: string,
+): { url: string; alt: string }[] {
+  const value = document[field]
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((photo) => {
+      if (photo === null || typeof photo !== 'object') {
+        return undefined
+      }
+      const record = photo as Record<string, unknown>
+      return typeof record.url === 'string' && typeof record.alt === 'string'
+        ? { url: record.url, alt: record.alt }
+        : undefined
+    })
+    .filter(
+      (photo): photo is { url: string; alt: string } => photo !== undefined,
+    )
+}
+
 function firstRequestMode(document: RuntimeDocument): FirstRequestDto['mode'] {
   const value = stringField(document, 'firstRequestMode')
-  if (value === 'inquiry_available' || value === 'quote_request_available' || value === 'not_available_yet') {
+  if (
+    value === 'inquiry_available' ||
+    value === 'quote_request_available' ||
+    value === 'not_available_yet'
+  ) {
     return value
   }
   return 'not_available_yet'
 }
 
-function publicChannel(document: RuntimeDocument): FirstRequestDto['publicChannel'] {
+function publicChannel(
+  document: RuntimeDocument,
+): FirstRequestDto['publicChannel'] {
   const value = stringField(document, 'publicChannel')
-  if (value === 'public_business_contact' || value === 'ae_status_only' || value === 'not_available') {
+  if (
+    value === 'public_business_contact' ||
+    value === 'ae_status_only' ||
+    value === 'not_available'
+  ) {
     return value
   }
   return 'not_available'
@@ -573,7 +817,11 @@ function publicChannel(document: RuntimeDocument): FirstRequestDto['publicChanne
 
 function trustTier(document: RuntimeDocument): CatalogTrustTier {
   const value = stringField(document, 'trustTier')
-  return value === 'contact_confirmed' || value === 'listed' || value === 'registry_verified' ? value : 'claimed'
+  return value === 'contact_confirmed' ||
+    value === 'listed' ||
+    value === 'registry_verified'
+    ? value
+    : 'claimed'
 }
 
 function capabilityKind(document: RuntimeDocument): CatalogCapabilityKind {
@@ -600,21 +848,34 @@ function capabilityStatus(document: RuntimeDocument): CatalogDiscoveryStatus {
 
 function registryStatus(document: RuntimeDocument): RegistryAttempt['status'] {
   const value = stringField(document, 'status')
-  if (value === 'queued' || value === 'succeeded' || value === 'failed' || value === 'stale') {
+  if (
+    value === 'queued' ||
+    value === 'succeeded' ||
+    value === 'failed' ||
+    value === 'stale'
+  ) {
     return value
   }
   return 'queued'
 }
 
-function registryRepairAction(document: RuntimeDocument): RegistryAttempt['repairAction'] {
+function registryRepairAction(
+  document: RuntimeDocument,
+): RegistryAttempt['repairAction'] {
   const value = stringField(document, 'repairAction')
-  if (value === 'retry_projection' || value === 'rebuild_projection' || value === 'no_repair') {
+  if (
+    value === 'retry_projection' ||
+    value === 'rebuild_projection' ||
+    value === 'no_repair'
+  ) {
     return value
   }
   return 'no_repair'
 }
 
-function repairResult(document: RuntimeDocument): RegistryAttempt['repairResult'] {
+function repairResult(
+  document: RuntimeDocument,
+): RegistryAttempt['repairResult'] {
   const value = stringField(document, 'repairResult')
   if (value === 'not_run' || value === 'succeeded' || value === 'failed') {
     return value
@@ -622,4 +883,7 @@ function repairResult(document: RuntimeDocument): RegistryAttempt['repairResult'
   return 'not_run'
 }
 
-export type { IndexStatus, RegistryProjectionAttemptContract } from '../src/modules/registry/public'
+export type {
+  IndexStatus,
+  RegistryProjectionAttemptContract,
+} from '../src/modules/registry/public'

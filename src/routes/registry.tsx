@@ -1,20 +1,24 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import type { ReactNode } from 'react'
-import { SearchIcon } from 'lucide-react'
 import { z } from 'zod'
 
+import { AeRegistrySearchPanel } from '@/components/ae/forms/AeRegistrySearchPanel'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeRegistryFunnelBoot } from '@/components/ae/layout/AeRegistryFunnelBoot'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   plainAvailabilityLabel,
+  plainHoursLabel,
+  plainResponseTimeLabel,
   type PlainAvailabilityInput,
 } from '@/lib/ui/status-presentation'
 import type { FirstRequestMode } from '@/modules/catalog/public'
@@ -104,9 +108,10 @@ function RegistryRoute() {
 
   return (
     <AePublicShell>
+      <AeRegistryFunnelBoot query={query} />
       <AePageHeader
         title="Find business details companies can stand behind."
-        description="Search by name, service, or place. See what is published, what is still missing, and the right way to contact the business."
+        description="Secondary browse when you prefer scanning. For a cited answer, start from Ask on the home page."
       />
       <section className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         <RegistrySearchForm query={query} limit={limit} />
@@ -146,8 +151,10 @@ function RegistryRoute() {
                 <span data-numeric>{result.pagination.total}</span> {resultSummary(result.pagination.total, query)}
               </p>
               <RegistryClaimPrompt />
-              <RegistryResultList items={result.items} />
             </div>
+            <ScrollArea className="ae-registry-results ae-registry-results-scroll max-h-none">
+              <RegistryResultList items={result.items} />
+            </ScrollArea>
             <RegistryPagination
               query={query}
               limit={limit}
@@ -170,17 +177,7 @@ function RegistrySearchForm({ query, limit }: { query: string; limit: number }) 
         <CardDescription>Use a business name, service, suburb, postcode, or service area.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form action="/registry" method="get" className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">Business, service, or place</span>
-            <Input name="q" defaultValue={query} placeholder="emergency plumber parramatta" />
-          </label>
-          <input type="hidden" name="limit" value={String(limit)} />
-          <Button type="submit" className="self-end">
-            <SearchIcon data-icon="inline-start" />
-            Search businesses
-          </Button>
-        </form>
+        <AeRegistrySearchPanel query={query} limit={limit} />
       </CardContent>
     </Card>
   )
@@ -213,6 +210,11 @@ function RegistryResultList({ items }: { items: readonly PublicBusinessCatalogAp
                   {item.category}, {item.suburb}, {item.stateTerritory}
                   {item.postcode === undefined ? '' : ` ${item.postcode}`}
                 </p>
+                {plainResponseTimeLabel(item.responseTimeMinutes).length > 0 ? (
+                  <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
+                    {plainResponseTimeLabel(item.responseTimeMinutes)}
+                  </p>
+                ) : null}
               </div>
               <div className="grid content-start gap-2 lg:items-start lg:justify-end">
                 <p className="text-xs font-medium leading-5 text-muted-foreground">Published details</p>
@@ -222,6 +224,7 @@ function RegistryResultList({ items }: { items: readonly PublicBusinessCatalogAp
                     View details
                   </Link>
                 </Button>
+                <AeAgentJsonAffordance agentJsonUrl={`/api/businesses/${item.slug}`} query={item.name} />
               </div>
             </div>
             <div className="border-t border-[var(--ae-public-line)]/80" aria-label={`${item.name} service facts`}>
@@ -242,8 +245,8 @@ function RegistryResultList({ items }: { items: readonly PublicBusinessCatalogAp
                     </div>
                     <dl className="grid gap-3 sm:grid-cols-3">
                       <RegistryFact label="Service area">{service.serviceArea}</RegistryFact>
-                      <RegistryFact label="Hours">{service.hoursOrUnknown}</RegistryFact>
-                      <RegistryFact label="Contact option">{contactOptionLabel(service.firstRequest.mode)}</RegistryFact>
+                      <RegistryFact label="Hours">{plainHoursLabel(service.hoursOrUnknown)}</RegistryFact>
+                      <RegistryFact label="Response">{contactOptionLabel(service.firstRequest.mode)}</RegistryFact>
                     </dl>
                     <div className="grid content-start gap-1">
                       <p className="text-sm font-medium leading-6 text-foreground">Best next step:</p>
@@ -304,7 +307,7 @@ function availabilityTone(discoveryStatus: PublicBusinessCatalogApiDto['discover
 function RegistryFact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid gap-1">
-      <dt className="text-sm font-medium leading-6 text-foreground">{label}</dt>
+      <dt className="font-mono text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="text-pretty text-sm leading-6 text-muted-foreground">{children}</dd>
     </div>
   )
@@ -346,9 +349,17 @@ function RegistryPagination({
 }) {
   return (
     <nav aria-label="Business results pagination" className="flex flex-wrap items-center justify-between gap-3">
-      <Button type="button" variant="outline" disabled={cursor === undefined}>
-        Previous
-      </Button>
+      <div className="min-h-10 flex items-center">
+        {cursor !== undefined ? (
+          <Button asChild variant="outline">
+            <Link to="/registry" search={{ q: query, limit }}>
+              Back to start
+            </Link>
+          </Button>
+        ) : (
+          <span className="text-sm text-muted-foreground">First page</span>
+        )}
+      </div>
       {hasMore && nextCursor !== undefined ? (
         <Button asChild variant="outline">
           <Link to="/registry" search={{ q: query, limit, cursor: nextCursor }}>

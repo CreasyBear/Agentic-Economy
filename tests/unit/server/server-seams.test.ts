@@ -334,13 +334,54 @@ describe('server billing provider seam', () => {
     })
   })
 
-  it('refuses Autumn callbacks until source has a real verifier', async () => {
-    await expect(
-      verifyAutumnWebhook({ rawBody: '{"id":"evt_1"}', headers: new Headers(), secret: 'whsec' })
-    ).rejects.toMatchObject({ code: 'unverified_webhook', status: 401 })
+  it('verifies and redacts signed Autumn callbacks', () => {
+    const now = 1_777_000_000_000
+    const svixTimestamp = String(Math.floor(now / 1000))
+    const svixId = 'msg_autumn_evt_123'
+    const secret = `whsec_${Buffer.from('autumn-test-secret').toString('base64')}`
+    const rawBody = JSON.stringify({
+      type: 'checkout.completed',
+      data: {
+        customer_id: 'cust_123',
+        subscription_id: 'sub_123',
+        status: 'active',
+        plan_id: 'plan_basic',
+        metadata: {
+          ae_operation_id: 'billing_operation:demo',
+        },
+        invoice: {
+          stripe_id: 'in_123',
+          hosted_invoice_url: 'https://billing.example/in_123',
+          total: 9900,
+          currency: 'AUD',
+          status: 'paid',
+        },
+      },
+    })
+
+    expect(
+      verifyAutumnWebhook({
+        rawBody,
+        headers: signedResendHeaders(secret, rawBody, svixId, svixTimestamp),
+        secret,
+        now,
+      })
+    ).toMatchObject({
+      provider: 'autumn_cloud',
+      providerEventId: svixId,
+      eventType: 'checkout.completed',
+      providerCustomerId: 'cust_123',
+      providerSubscriptionId: 'sub_123',
+      operationId: 'billing_operation:demo',
+      providerStatus: 'active',
+      receipt: {
+        providerReceiptId: 'in_123',
+        status: 'paid',
+      },
+    })
   })
 
-  it('returns a typed refusal from the webhook route for unverified raw-body callbacks', async () => {
+  it('returns a typed refusal from the webhook route without a configured secret', async () => {
     const response = await handleBillingWebhookRequest(
       new Request('https://agentic.test/api/billing/webhook', {
         method: 'POST',
@@ -351,10 +392,29 @@ describe('server billing provider seam', () => {
 
     await expect(response.json()).resolves.toMatchObject({
       kind: 'error',
-      code: 'unverified_webhook',
+      code: 'missing_autumn_webhook_secret',
       retryable: false,
     })
-    expect(response.status).toBe(401)
+    expect(response.status).toBe(500)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('returns a typed refusal from the webhook route for unsigned raw-body callbacks', async () => {
+    const response = await handleBillingWebhookRequest(
+      new Request('https://agentic.test/api/billing/webhook', {
+        method: 'POST',
+        body: '{"id":"evt_1"}',
+        headers: { 'content-type': 'application/json' },
+      }),
+      { env: { AUTUMN_WEBHOOK_SECRET: `whsec_${Buffer.from('autumn-test-secret').toString('base64')}` } }
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'missing_autumn_signature_headers',
+      retryable: false,
+    })
+    expect(response.status).toBe(400)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 })

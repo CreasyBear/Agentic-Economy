@@ -29,8 +29,7 @@ test.describe('public owner routes', () => {
     await expect(page.getByRole('heading', { name: /find business details companies can stand behind/i })).toBeVisible()
     await expect(page.getByLabel('Business, service, or place')).toBeVisible()
     await expect(page.getByText('Parramatta Emergency Plumbing')).toBeVisible()
-    await expect(page.getByText('Claimed business', { exact: true })).toBeVisible()
-    await expect(page.getByText('Business proof', { exact: true })).toBeVisible()
+    await expect(page.getByText('Listed business', { exact: true })).toBeVisible()
     await expect(page.getByText('Published details', { exact: true })).toBeVisible()
     await expect(page.getByText('Service area', { exact: true })).toBeVisible()
     await expect(page.getByText('Contact option', { exact: true })).toBeVisible()
@@ -69,6 +68,7 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Public page slug').fill('northside-solar')
     await page.getByLabel('Fact note').fill('Owner supplied')
     await page.getByLabel('Service name').fill('Solar inverter repair')
+    await page.getByLabel(/I confirm these public facts/i).check()
     const publishButton = page.getByRole('button', { name: /publish service page/i })
     await expect(publishButton).toBeEnabled()
     await publishButton.click()
@@ -82,9 +82,11 @@ test.describe('public owner routes', () => {
     await page.goto('/claim')
     await assertPublicLanguage(page)
 
-    await page.getByLabel('First request').selectOption('inquiry_available')
+    await page.getByRole('combobox', { name: 'First request' }).click()
+    await page.getByRole('option', { name: 'Public first-request instructions supplied' }).click()
 
-    await expect(page.getByLabel('First request')).toHaveValue('inquiry_available')
+    await expect(page.getByRole('combobox', { name: 'First request' })).toContainText('Public first-request instructions supplied')
+    await page.getByLabel(/I confirm these public facts/i).check()
     await expect(page.getByRole('button', { name: /publish service page/i })).toBeEnabled()
     await expect(page.getByText(/something went wrong/i)).toHaveCount(0)
   })
@@ -111,6 +113,7 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Hours or unknown').fill('After-hours availability supplied by owner')
     await page.getByLabel('Unavailable reason').fill('Owner has not supplied a public contact path yet.')
     await page.getByLabel('Owner message').fill('Owner supplied switchboard repair facts for the public service page.')
+    await page.getByLabel(/I confirm these public facts/i).check()
 
     const publishButton = page.getByRole('button', { name: /publish service page/i })
     await expect(publishButton).toBeEnabled()
@@ -150,17 +153,21 @@ test.describe('public owner routes', () => {
     await expect(page.getByText(/search, assistant-readiness, trust, and feature states stay separate/i)).toBeVisible()
   })
 
-  test('public business page exposes service facts without private authority fields', async ({ page }) => {
+  test('public business page exposes daylight citation facts without private authority fields', async ({ page }) => {
     await page.goto('/parramatta-emergency-plumbing')
 
     await expect(page.getByRole('heading', { name: 'Parramatta Emergency Plumbing' })).toBeVisible()
-    await expect(page.getByRole('definition').filter({ hasText: 'Parramatta, NSW' })).toBeVisible()
-    await expect(page.getByText('Public service facts')).toBeVisible()
-    await expect(page.getByText('No contact option published yet')).toBeVisible()
+    await expect(page.getByText('Emergency plumbing', { exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: /ask another/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Service area' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'What to do now' })).toBeVisible()
+    await expect(page.getByText('No contact option yet')).toBeVisible()
     await expect(page.getByRole('link', { name: /correct or remove this page/i })).toBeVisible()
+    await expect(page.getByText('Get as agent JSON')).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/ownerId|adminId|clerk|actor|trust tier|public status/i)
+    expect(bodyText).not.toMatch(/Public service facts|KNOWN|UNKNOWN|NEXT_STEP/i)
     await assertPublicLanguage(page)
   })
 

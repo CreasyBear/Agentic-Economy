@@ -148,6 +148,7 @@ describe('human inquiry owner inbox slice', () => {
       discoveryStatus: 'degraded',
       schemaVersion: 'public-catalog:v1',
       updatedAt: now,
+      photos: [],
       services: [
         {
           serviceId,

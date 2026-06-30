@@ -80,6 +80,10 @@ export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPubl
     trustTier: input.business.trustTier,
     indexStatus: input.indexStatus,
     discoveryStatus: input.discoveryStatus,
+    photos: input.context.photos ?? [],
+    ...(input.context.responseTimeMinutes === undefined
+      ? {}
+      : { responseTimeMinutes: input.context.responseTimeMinutes }),
     services,
     sourceHash: input.business.sourceHash,
     schemaVersion: 'public-catalog:v1',

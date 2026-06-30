@@ -1,10 +1,9 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   createEmptyBusinessActionSourceState,
   verifyActionReceipt,
@@ -251,65 +250,46 @@ function OwnerBusinessActionsRoute() {
 }
 
 function OwnerBusinessActionQueue({ queue }: { queue: readonly OwnerBusinessActionRouteQueueItem[] }) {
-  if (queue.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No business action requests</CardTitle>
-          <CardDescription>Source-owned capability requests appear here after a mandate and card produce a local request row.</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
   return (
-    <div className="grid gap-4">
-      {queue.map((item) => (
-        <Card key={item.requestId}>
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>{item.requestStatus.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{item.checkpointDecision.replaceAll('_', ' ')}</Badge>
-            </div>
-            <CardTitle className="break-words text-lg">{item.requestId}</CardTitle>
-            <CardDescription>{item.actionSlug}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5">
-            <FactGrid
-              facts={[
-                { label: 'Requested by', value: item.requestedBy },
-                { label: 'Business', value: item.businessId },
-                { label: 'Receipt', value: item.receiptOutcome.replaceAll('_', ' ') },
-                { label: 'Reconstruction', value: item.reconstructionStatus.replaceAll('_', ' ') },
-                { label: 'Expires', value: new Date(item.expiresAt).toISOString() },
-              ]}
-            />
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="outline" size="sm">
-                <a href={`/owner/business-actions/${encodeURIComponent(item.requestId)}`}>Review checkpoint</a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href={`/owner/business-actions/${encodeURIComponent(item.requestId)}/receipt`}>Open receipt</a>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <AeOperatorQueueList
+      scroll
+      rows={queue.map((item) => ({
+        id: item.requestId,
+        href: `/owner/business-actions/${encodeURIComponent(item.requestId)}`,
+        badges: [
+          { label: item.requestStatus.replaceAll('_', ' ') },
+          { label: item.checkpointDecision.replaceAll('_', ' '), variant: 'outline' as const },
+        ],
+        title: item.requestId,
+        description: item.actionSlug,
+        facts: [
+          { label: 'Requested by', value: item.requestedBy },
+          { label: 'Business', value: item.businessId },
+          { label: 'Receipt', value: item.receiptOutcome.replaceAll('_', ' ') },
+          { label: 'Reconstruction', value: item.reconstructionStatus.replaceAll('_', ' ') },
+          { label: 'Expires', value: new Date(item.expiresAt).toISOString() },
+        ],
+        actions: [
+          {
+            label: 'Review checkpoint',
+            href: `/owner/business-actions/${encodeURIComponent(item.requestId)}`,
+            variant: 'outline',
+          },
+          {
+            label: 'Open receipt',
+            href: `/owner/business-actions/${encodeURIComponent(item.requestId)}/receipt`,
+            variant: 'outline',
+          },
+        ],
+      }))}
+      emptyTitle="No business action requests"
+      emptyDescription="Source-owned capability requests appear here after a mandate and card produce a local request row."
+    />
   )
 }
 
 export function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-md border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+  return <AeOperatorFactGrid facts={facts} columns={3} />
 }
 
 function ownerCanReadRequest(

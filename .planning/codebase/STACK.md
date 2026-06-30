@@ -62,7 +62,7 @@
 - `@clerk/tanstack-react-start` 1.4.9 - owns public auth provider, middleware, and server auth calls in `src/start.ts` and `src/lib/server/convex-source.ts`.
 - `zod` 4.4.3 - request/action validators in `src/modules/common/action.ts`, `src/modules/**/*.functions.ts`, and route handlers such as `src/routes/api.answer.follow-up-chips.ts`.
 - `@tanstack/ai` 0.38.0 - tool definition helper used by `src/modules/answer/tools/registry-search.tool.ts`.
-- `ai` 7.0.8 - chat UI type support used by `src/components/ae/chat/AeAnswerPromptInput.tsx` and `src/components/ai-elements/prompt-input.tsx`.
+- `motion` 12.42.0 - animation helper used by `src/components/ai-elements/shimmer.tsx`.
 - `atmn` 1.1.10 - Autumn plan/feature config in `autumn.config.ts`.
 
 **Infrastructure:**
@@ -72,9 +72,6 @@
 - `sonner` 2.0.7 - toast notifications in `src/components/ui/sonner.tsx` and owner/inquiry routes.
 - `class-variance-authority`, `clsx`, and `tailwind-merge` - component styling utilities in `src/lib/utils.ts` and `src/components/ui/`.
 - `@fontsource-variable/fraunces`, `@fontsource-variable/hanken-grotesk`, and `@fontsource/ibm-plex-mono` - self-hosted font packages referenced by `src/styles/tokens.css`.
-- `streamdown`, `@streamdown/cjk`, `@streamdown/code`, `@streamdown/math`, and `@streamdown/mermaid` - reasoning/markdown rendering in `src/components/ai-elements/reasoning.tsx`.
-- `motion` 12.42.0 - animation helper used by `src/components/ai-elements/shimmer.tsx`.
-- `nanoid` 5.1.16 - local UI id generation in `src/components/ai-elements/prompt-input.tsx`.
 
 ## Configuration
 

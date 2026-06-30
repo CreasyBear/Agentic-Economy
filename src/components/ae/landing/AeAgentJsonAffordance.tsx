@@ -23,6 +23,9 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
 
   return (
     <div className="ae-agent-json">
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? 'Agent JSON copied to clipboard' : ''}
+      </span>
       <button
         type="button"
         className="ae-agent-json__button"
@@ -30,7 +33,7 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
         aria-label={`Get the agent JSON answer for ${query}`}
       >
         <span className="ae-agent-json__label">{copied ? 'Copied to clipboard' : 'Get as agent JSON'}</span>
-        <code className="ae-agent-json__url" aria-hidden="true">{agentJsonUrl}</code>
+        <code className="ae-agent-json__url sr-only">{agentJsonUrl}</code>
       </button>
     </div>
   )

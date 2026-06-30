@@ -67,8 +67,12 @@ agentic-economy/
 
 **`src/components/ai-elements/`:**
 - Purpose: Local AI Elements components used by chat/answer surfaces.
-- Contains: `src/components/ai-elements/prompt-input.tsx`, `src/components/ai-elements/reasoning.tsx`, `src/components/ai-elements/shimmer.tsx`, `src/components/ai-elements/suggestion.tsx`.
-- Key files: Use these only for AI/chat surfaces and keep imports local to relevant components/routes.
+- Contains: `src/components/ai-elements/shimmer.tsx`, `src/components/ai-elements/suggestion.tsx`.
+- Key files: Wrapped by AE chat components (`AeStreamingLabel`, `AeSuggestionChips`); do not import directly from routes.
+
+**`src/components/ae/chat/`:**
+- Purpose: Primary chat shell, thread streaming, query panel, and SSE client.
+- Key files: `AeChat.tsx`, `AeThreadTurnStreamSection.tsx`, `AeQueryPanel.tsx`, `answer-stream.ts` (SSE + turn request).
 
 **`src/lib/`:**
 - Purpose: Cross-cutting infrastructure helpers that are not domain modules.
@@ -78,7 +82,7 @@ agentic-economy/
 
 **`src/styles/`:**
 - Purpose: Global styling and AE token implementation.
-- Contains: `src/styles/globals.css`, `src/styles/tokens.css`, `src/styles/answer.css`.
+- Contains: `src/styles/globals.css`, `src/styles/tokens.css`, `src/styles/answer.css` (imports `src/styles/answer/*.css` modules).
 - Key files: `src/styles/tokens.css` implements `DESIGN.md`; `src/styles/globals.css` is loaded by `src/routes/__root.tsx`.
 
 **`src/hooks/`:**

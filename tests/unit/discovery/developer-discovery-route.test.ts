@@ -363,6 +363,7 @@ function routeSnapshotWithBusiness(input: {
     discoveryStatus: input.discoveryStatus,
     schemaVersion: 'public-business-catalog-api:v1',
     updatedAt: 8_000,
+    photos: [],
     services: [
       {
         slug: 'burst-pipe-repair',

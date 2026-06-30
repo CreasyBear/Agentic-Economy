@@ -1,0 +1,55 @@
+/* ---------- Agent JSON affordance ---------- */
+
+.ae-agent-json {
+  margin-top: var(--ae-public-space-2xs);
+}
+
+.ae-agent-json__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ae-public-space-xs);
+  min-height: 2.75rem;
+  padding: var(--ae-public-space-2xs) var(--ae-public-space-sm);
+  border: 1px solid var(--ae-public-line);
+  border-radius: var(--ae-public-radius-panel);
+  background: var(--ae-public-field);
+  color: var(--ae-public-muted-strong);
+  font-family: var(--ae-public-font-mono);
+  font-size: var(--ae-public-text-xs);
+  cursor: pointer;
+  transition: border-color var(--ae-public-duration-hover) var(--ae-public-ease),
+              color var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-agent-json__button:hover {
+  border-color: var(--ae-public-amber);
+  color: var(--ae-public-ink);
+}
+
+.ae-agent-json__url {
+  font-size: var(--ae-public-text-xs);
+  color: var(--ae-public-muted);
+  word-break: break-all;
+}
+
+/* ---------- Hero figure ---------- */
+
+.ae-hero-figure {
+  margin: 0;
+  width: 100%;
+}
+
+.ae-hero-figure__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--ae-public-radius-object);
+}
+
+.ae-hero-figure__caption {
+  margin-top: var(--ae-public-space-xs);
+  font-family: var(--ae-public-font-mono);
+  font-size: var(--ae-public-text-xs);
+  color: var(--ae-public-muted);
+}
+

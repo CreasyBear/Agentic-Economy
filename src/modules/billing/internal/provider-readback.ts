@@ -107,6 +107,11 @@ export function createAutumnHttpProvider(config: AutumnClientConfig): AutumnProv
 
   return {
     async attach(input) {
+      await request('/v1/customers', {
+        id: input.customerId,
+        name: input.customerId,
+        metadata: input.metadata,
+      })
       const raw = await request('/v1/billing.attach', {
         customer_id: input.customerId,
         plan_id: input.planId,

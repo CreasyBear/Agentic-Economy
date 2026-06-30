@@ -1,10 +1,9 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { BusinessId, OwnerId } from '@/modules/common/ids'
 import {
   createEmptyContactFollowUpSourceState,
@@ -114,77 +113,35 @@ export function ownerContactFollowUpQueueServerToRouteReadback(
 }
 
 function OwnerContactFollowUpQueue({ queue }: { queue: readonly ContactFollowUpProposalQueueItem[] }) {
-  if (queue.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No contact follow-up requests</CardTitle>
-          <CardDescription>
-            New proposals appear here only after the contact follow-up contract is source-owned and policy-checked.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
   return (
-    <div className="grid gap-4">
-      {queue.map((item) => (
-        <OwnerContactFollowUpCard key={item.proposal.id} item={item} />
-      ))}
-    </div>
-  )
-}
-
-function OwnerContactFollowUpCard({ item }: { item: ContactFollowUpProposalQueueItem }) {
-  const policy = item.policy?.kind ?? 'not_checked'
-  const decision = item.ownerDecision?.decision ?? 'waiting'
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge>{item.proposal.status.replaceAll('_', ' ')}</Badge>
-          <Badge variant="outline">{policy.replaceAll('_', ' ')}</Badge>
-        </div>
-        <CardTitle>{item.proposal.parameters.contactName}</CardTitle>
-        <CardDescription>{item.proposal.parameters.messageSummary}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        <FactGrid
-          facts={[
-            { label: 'Selected action', value: 'Contact follow-up' },
-            { label: 'Target message', value: item.proposal.parameters.sourceMessageRef },
-            { label: 'Channel', value: item.proposal.parameters.contactChannel },
-            { label: 'Owner decision', value: decision.replaceAll('_', ' ') },
-            { label: 'Deadline', value: new Date(item.proposal.deadlineAt).toISOString() },
-            { label: 'Correlation', value: item.proposal.correlationId },
-          ]}
-        />
-        <Alert>
-          <AlertTitle>Consequence</AlertTitle>
-          <AlertDescription>
+    <AeOperatorQueueList
+      scroll
+      rows={queue.map((item) => ({
+        id: item.proposal.id,
+        href: `/owner/actions/${encodeURIComponent(item.proposal.id)}`,
+        badges: [
+          { label: item.proposal.status.replaceAll('_', ' ') },
+          { label: (item.policy?.kind ?? 'not_checked').replaceAll('_', ' '), variant: 'outline' as const },
+        ],
+        title: item.proposal.parameters.contactName,
+        description: item.proposal.parameters.messageSummary,
+        facts: [
+          { label: 'Selected action', value: 'Contact follow-up' },
+          { label: 'Target message', value: item.proposal.parameters.sourceMessageRef },
+          { label: 'Channel', value: item.proposal.parameters.contactChannel },
+          { label: 'Owner decision', value: (item.ownerDecision?.decision ?? 'waiting').replaceAll('_', ' ') },
+          { label: 'Deadline', value: new Date(item.proposal.deadlineAt).toISOString() },
+          { label: 'Correlation', value: item.proposal.correlationId },
+        ],
+        actions: [{ label: 'Review detail', href: `/owner/actions/${encodeURIComponent(item.proposal.id)}`, variant: 'outline' }],
+        footer: (
+          <p className="mt-2 text-xs text-muted-foreground">
             Approving records one contact follow-up attempt through the source-owned follow-up outbox. It does not approve future actions, bookings, payments, or autonomous execution.
-          </AlertDescription>
-        </Alert>
-        <div className="flex flex-wrap gap-3">
-          <Button asChild variant="outline" size="sm">
-            <a href={`/owner/actions/${encodeURIComponent(item.proposal.id)}`}>Review detail</a>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-lg border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
+          </p>
+        ),
+      }))}
+      emptyTitle="No contact follow-up requests"
+      emptyDescription="New proposals appear here only after the contact follow-up contract is source-owned and policy-checked."
+    />
   )
 }

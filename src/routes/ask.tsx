@@ -1,7 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
-import { encodeAnswerId } from '@/modules/answer/public'
-
 export const Route = createFileRoute('/ask')({
   validateSearch: (search: Record<string, unknown>) => ({
     q: typeof search.q === 'string' ? search.q : '',
@@ -9,10 +7,10 @@ export const Route = createFileRoute('/ask')({
   beforeLoad: ({ search }) => {
     const query = search.q.trim()
     if (query.length === 0) {
-      throw redirect({ to: '/' })
+      throw redirect({ to: '/', search: { q: '' } })
     }
 
-    throw redirect({ to: '/q/$answerId', params: { answerId: encodeAnswerId(query) } })
+    throw redirect({ to: '/', search: { q: query } })
   },
   component: AskRedirect,
 })

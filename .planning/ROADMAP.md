@@ -1,4 +1,4 @@
-# Roadmap — Fresh Agentic Economy
+# Roadmap - Fresh Agentic Economy
 
 **Status:** technical phase map.
 
@@ -20,7 +20,24 @@ A phase does not exist for narrative, protocol completeness, marketplace surface
 | Admin authority source-owned | One-way | 1 | No env-only admin authority. |
 | Search adapter | Two-way | 1 | Convex first; external search only after evidence. |
 | Money rails | One-way later | 5 | Requires decision record before code. |
+| Handshake Protocol Kernel posture | One-way for public positioning | 4/6 | Future protected-action clearance should be HSK-shaped internally; do not expose HSK as a public AE surface or dependency until a phase gate needs it. |
 | Agentic business action receipts | One-way for Phase 6 spike | 6 | One source-owned receipt-backed business operation; no runtime/wallet/marketplace/provider authority. |
+
+## Product capability ladder
+
+The product ladder keeps the full ambition visible without letting later phases rewrite current claims.
+
+| Step | Product capability | User-facing proof | Source-owned unlock |
+| --- | --- | --- | --- |
+| P1 | Truthful storefront and discovery | A provider can publish a useful page, appear in registry/search/API/discovery, and see visibility health. | Claim, publish, suppression, projection, discovery, and operator readback state. |
+| P2 | Qualified inquiry and owner response | A customer sends a human first-contact request and the owner can see, reply, or correct. | Durable inquiry, owner inbox, notification readback, abuse controls, and delivery failure states. |
+| P3 | Shared human/assistant read layer | Assistants and people can read the same public facts without unsupported actions. | Route-tested public DTOs, discovery files, unsupported/degraded states, and schema parity. |
+| P7 | Answer/search demand routing | A natural-language answer routes demand into trusted listings instead of becoming a separate chat product. | Thread evidence, AE action/tool calls for catalog reads, source-bounded artifacts, and share/readback state. |
+| P4 | Owner-approved protected action clearance | A consequential next step starts as an exact owner-pending proposal and ends as approval, refusal, receipt, or proof gap. | Policy, owner decision, one-use clearance posture, attempt state, receipt, and reconstruction. |
+| P5 | Paid activation | Money enters only through one provider-backed rail with receipt, reversal, dispute, and reconciliation posture. | Billing operation state, provider readback, idempotent receipt, support controls, and operator reconstruction. |
+| P6 | Receipt-backed business action proof | One software-scoped business operation can be reconstructed from request through checkpoint, evidence, result, and receipt/proof gap. | Action card, mandate, checkpoint, external evidence binding, artifact, receipt verifier, and no-repair path. |
+
+The ladder is not a public promise. Current public claims stop at the phase that has deployed proof and support posture.
 
 ## Phase graph
 
@@ -35,22 +52,27 @@ P1 Spine Foundation
       |      read-only public business API, business-origin UCP strategy later,
       |      maybe MCP/OpenAPI read projections only after route-tested demand
       |
+      +--> P7 Answer Thread AI
+      |      AE agent calls registry/search actions as a demand router into trusted listings,
+      |      not a separate open-ended chat product
+      |
       +--> P4 Owner-Pending Protected Actions
-      |      propose -> policy -> owner approve/reject -> receipt/audit
+      |      exact proposal -> policy -> owner approve/reject -> one-use clearance posture
+      |      -> attempt/readback -> receipt/proof gap/replay refusal
       |
       +--> P5 Paid Activation
              One Autumn Cloud + Stripe PSP paid-activation rail; Connect/x402/wallet/credits/custody stay out of P5
              |
              +--> P6 Agentic Business Action Receipts
-                    one Hermes-run paid-intake endpoint proof with AE checkpoint,
-                    Stripe/NVIDIA/Hermes evidence, and reconstructable receipts
+                    one software-scoped business-operation proof with AE checkpoint,
+                    external evidence binding, result artifact, and reconstructable receipts
 ```
 
-P2-P5 are planned as one production system and executed in order by default. P2 creates human demand and owner communication, P3 exposes only read-only public/discovery projections, P4 admits exactly one owner-approved non-money action, and P5 adds one paid activation rail after authority/receipt posture exists.
+P2-P5 are planned as one production system and executed in order by default. P2 proves the human trust loop, P3 exposes only read-only public/discovery projections, P4 admits exactly one owner-approved non-money action under a reconstructable clearance-before-consequence model, and P5 adds one paid activation rail after authority/receipt posture exists. P7 is the answer/search layer that routes demand into trusted listings; it must not become a second product center.
 
 P6 is admitted as a planning/hackathon-spike branch after the P4/P5 authority spine exists in source. P6 must keep hackathon proof separate from production acceptance, and direct Stripe/Link test-mode evidence requires a Phase 6 money-evidence decision before implementation. P6 cannot turn AE into an agent runtime, wallet, marketplace, settlement layer, sandbox, product catalog, generic API marketplace, or provider.
 
-## Phase 1 — Ten-Star Spine Foundation
+## Phase 1 - Ten-Star Spine Foundation
 
 **Objective:** a launch-ICP owner can claim, publish, see visibility/discovery health, and expose truthful AE-hosted discovery without future-surface claims.
 
@@ -87,7 +109,7 @@ Manifest/llms/sitemap checks are engineering readbacks, not owner-facing success
 
 **Exit proof:** all Phase 1 plan checks green, GTM internal-alpha proof green, deployment/readback smoke green.
 
-## Phase 2 — Human Inquiry + Owner Inbox
+## Phase 2 - Human Inquiry + Owner Inbox
 
 **Objective:** one conservative customer inquiry path.
 
@@ -107,7 +129,7 @@ durable message/audit state
 
 **Exit proof:** customer message persists, owner sees it, owner can reply, notification failure is visible and does not lose the message.
 
-## Phase 3 — Standard Agent/Builder Discovery
+## Phase 3 - Standard Agent/Builder Discovery
 
 **Objective:** extend readonly discovery only after P1 truth exists and public list/search/detail APIs have shipped.
 
@@ -126,18 +148,40 @@ schema fixtures/evals
 
 **Exit proof:** builder can discover public facts and unsupported/degraded capabilities through documented, valid, cached outputs; no P3 surface duplicates the P1 public catalog without adding source-owned capability.
 
-## Phase 4 — Owner-Pending Protected Actions
+## Phase 7 - Answer Thread AI
 
-**Objective:** consequential actions start as proposals and end in owner-approved receipts.
+**Objective:** make answer/search the trusted demand front door without letting it become a separate chat product.
 
-**Engineering proof:** protected actions may be advertised only as owner-pending; every action requires policy check, owner approval/rejection, provider attempt state, receipt, audit, and dispute/reversal posture.
+**Engineering proof:** every answer turn must be grounded in public registry/listing facts retrieved through AE actions/tools, preserve the safe assistant contract, show provider cards before synthesis, and store enough source-owned evidence to reconstruct which tool inputs/results were used and why a next step was suggested.
 
 **Ship:**
 
 ```text
-proposeAction
+AE agent tool loop with registry.search as an action
+registry-grounded answer thread
+session-scoped thread history
+follow-up routing
+provider cards and source-bounded artifacts
+public share/readback projection
+```
+
+**Cut:** hidden typo-correction/search-rewrite preprocessors, open-web search claims, booking, payment, dispatch, generic assistant behavior, owner/private data, ungrounded provider slugs, and write/action execution from the human answer loop.
+
+**Exit proof:** a user can ask, compare providers, follow up, share the answer, and route into a listing or qualified inquiry while the transcript remains reconstructable from source-bounded evidence and tool-call records. Misspellings or vague suburb/service wording are handled by the answer agent choosing better `registry.search` arguments, not by the registry silently correcting queries.
+
+## Phase 4 - Owner-Pending Protected Actions
+
+**Objective:** consequential next steps start as exact proposals and end in owner-approved receipt, refusal, replay refusal, or proof gap.
+
+**Engineering proof:** protected actions may be advertised only as owner-pending; every action requires an exact action contract, policy check, owner approval/rejection, one-use clearance posture, provider/internal attempt state, receipt or proof gap, audit, and dispute/reversal posture. Handshake Protocol Kernel is the internal clearance model to converge on when a phase needs package-level support; it is not a public AE surface in this phase.
+
+**Ship:**
+
+```text
+exact action proposal
 policy check
 owner approve/reject
+one-use clearance posture
 provider attempt/proof gap
 receipt/audit reconstruction
 ```
@@ -146,7 +190,7 @@ receipt/audit reconstruction
 
 **Exit proof:** every action reconstructs actor, policy, approval, provider attempt, outcome, receipt, and dispute/reversal posture.
 
-## Phase 5 — Paid Activation + Money Rails
+## Phase 5 - Paid Activation + Money Rails
 
 **Objective:** add money only after authority and receipt posture.
 
@@ -158,9 +202,9 @@ receipt/audit reconstruction
 
 **Exit proof:** provider readback, idempotent ledger/receipt, reversal/dispute, reconciliation, operator reconstruction.
 
-## Phase 6 — Agentic Business Action Receipts
+## Phase 6 - Agentic Business Action Receipts
 
-**Objective:** prove one Hermes-run, software-scoped autonomous business operation stayed inside mandate through source-owned action facts, buyer mandate, owner approval, checkpoint admission, external evidence, concrete result artifact, and reconstructable Action Receipt.
+**Objective:** prove one software-scoped, receipt-backed business operation stayed inside mandate through source-owned action facts, buyer mandate, owner approval, checkpoint admission, external evidence, concrete result artifact, and reconstructable Action Receipt.
 
 **Engineering proof:** Business Action Cards may be advertised only as proposal-only, owner-approved, receipt-required capabilities. The single action slug is `provision-paid-intake-endpoint`. External Stripe/Link/Hermes/NVIDIA evidence is admitted only as bound evidence after the AE checkpoint, while pre-checkpoint guardrail allow/block decisions are recorded as decision evidence and never as downstream consequence.
 
@@ -177,7 +221,7 @@ endpoint descriptor + JSON schema + private provisioning/payment-gate ref
 Action Receipt verifier
 ```
 
-**Cut:** generic `executeAction`, arbitrary action slugs, provider `other`, broad action marketplace, hosted agent runtime, SDK/MCP/CLI/plugin platform, wallet, credits, balances, custody, Connect, x402, settlement, product marketplace, production autonomous/payment claims, and OS/process sandboxing claims from NeMo/Nemotron alone.
+**Cut:** generic `executeAction`, arbitrary action slugs, provider `other`, broad action marketplace, hosted agent runtime, SDK/MCP/CLI/plugin platform, wallet, credits, balances, custody, Connect, x402, settlement, product marketplace, production execution/payment claims, and OS/process sandboxing claims from NeMo/Nemotron alone.
 
 **Exit proof:** receipt verifier reconstructs success, refusal, proof gap, evidence mismatch, tampered hash, stale card, expired mandate, unbound provider event, and private/public redaction. Direct Stripe test-mode evidence has `06-MONEY-EVIDENCE-DECISION.md`; live mode waits for a later production decision record.
 

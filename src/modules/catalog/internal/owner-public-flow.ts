@@ -25,6 +25,8 @@ export const PublicOwnerClaimFieldValues = [
   'serviceSummary',
   'serviceArea',
   'hoursOrUnknown',
+  'photoUrl',
+  'responseTimeMinutes',
   'firstRequestMode',
   'publicDisclosure',
   'noContactReason',
@@ -45,6 +47,8 @@ export type PublicOwnerClaimFlowInput = {
   serviceSummary: string
   serviceArea: string
   hoursOrUnknown: string
+  photoUrl: string
+  responseTimeMinutes: string
   firstRequestMode: FirstRequestMode
   publicDisclosure: string
   noContactReason: string
@@ -104,6 +108,8 @@ export const publicOwnerDefaultClaimInput = {
   serviceSummary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
   serviceArea: 'Parramatta and nearby suburbs',
   hoursOrUnknown: 'Hours supplied by owner',
+  photoUrl: '',
+  responseTimeMinutes: '',
   firstRequestMode: 'not_available_yet',
   publicDisclosure: 'First request instructions are not available yet.',
   noContactReason: 'Owner has not supplied public contact instructions.',
@@ -128,7 +134,10 @@ const requiredFieldLabels = {
   serviceArea: 'Service area',
   hoursOrUnknown: 'Hours or unknown',
 } satisfies Record<
-  Exclude<PublicOwnerClaimField, 'ownerMessage' | 'firstRequestMode' | 'publicDisclosure' | 'noContactReason'>,
+  Exclude<
+    PublicOwnerClaimField,
+    'ownerMessage' | 'firstRequestMode' | 'publicDisclosure' | 'noContactReason' | 'photoUrl' | 'responseTimeMinutes'
+  >,
   string
 >
 
@@ -209,6 +218,8 @@ function submitPublicOwnerClaimFlowWithState(
   }
 
   const slug = brandNonEmpty(validation.input.requestedSlug, 'Slug')
+  const photos = parseClaimPhotos(validation.input.photoUrl, validation.input.businessName)
+  const responseTimeMinutes = parseResponseTimeMinutes(validation.input.responseTimeMinutes)
   const claim = claimBusiness(state, {
     actor: sourceOwnedActor,
     facts: {
@@ -218,6 +229,8 @@ function submitPublicOwnerClaimFlowWithState(
       stateTerritory: validation.input.stateTerritory,
       requestedSlug: validation.input.requestedSlug,
       ...(validation.input.ownerMessage.length === 0 ? {} : { ownerMessage: validation.input.ownerMessage }),
+      ...(photos.length === 0 ? {} : { photos }),
+      ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
       sourceRefs: [
         {
           label: validation.input.sourceLabel,
@@ -416,6 +429,8 @@ function normalizeInput(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowI
     serviceSummary: cleanText(input.serviceSummary),
     serviceArea: cleanText(input.serviceArea),
     hoursOrUnknown: cleanText(input.hoursOrUnknown),
+    photoUrl: cleanText(input.photoUrl),
+    responseTimeMinutes: cleanText(input.responseTimeMinutes),
     firstRequestMode: input.firstRequestMode,
     publicDisclosure: cleanText(input.publicDisclosure),
     noContactReason: cleanText(input.noContactReason),
@@ -452,4 +467,27 @@ function matchingCsrf(key: string) {
     origin: 'https://ae.example',
     allowedOrigins: ['https://ae.example'],
   }
+}
+
+function parseClaimPhotos(photoUrl: string, businessName: string) {
+  const url = photoUrl.trim()
+  if (url.length === 0 || (!/^https?:\/\//i.test(url) && !url.startsWith('/'))) {
+    return [] as const
+  }
+
+  return [{ url, alt: `${businessName} photo` }] as const
+}
+
+function parseResponseTimeMinutes(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return undefined
+  }
+
+  const minutes = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 24 * 60) {
+    return undefined
+  }
+
+  return minutes
 }

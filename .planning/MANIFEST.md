@@ -10,6 +10,7 @@
 - `SOURCE-MINING.md` — contract for mining `Agentic-Economy-Backup` without copying coupling.
 - `SECURITY-SPEC.md` — threat model, admin authority, audit union, redaction, abuse controls, P2-P6 private/provider/payment/business-action security.
 - `AI-SPEC.md` — UCP/llms/agent discovery support matrix and eval controls.
+- `ANSWER-AI-CONTRACT.md` — cited answer synthesis: `/` chat shell, retrieval/prose/gate pipeline, SSE contract, LLM posture.
 - `SEO-AEO-SPEC.md` — public business service catalog page SEO, sitemap, robots, llms, schema, and AI visibility proof.
 - `GTM-READINESS.md` — 90-day launch proof, ORB channels, activation, claims register, and P2-P6 support/commercial readiness.
 - `FRONTEND-DESIGN-FRAMEWORK.md` — frontend design architecture: tokens, shadcn posture, AE component seams, route class policy, `/taste` + `/impeccable` proof.
@@ -44,6 +45,9 @@
 - `phases/06-agentic-business-action-receipts/06-01-business-action-domain-verifier-PLAN.md` through `06-06-copy-source-smoke-gates-PLAN.md` — split Phase 6 execution plans.
 - `phases/06-agentic-business-action-receipts/06-ENGINEERING-REQUIREMENTS.md` — Phase 6 engineering synthesis and source-grounded implementation constraints.
 - `phases/06-agentic-business-action-receipts/06-SOURCE-DOC-GROUNDING.md` — Phase 6 Stripe/Link/NVIDIA/Hermes/source-doc grounding and prohibited rails.
+- `phases/07-answer-thread-ai/07-DECISIONS.md` — Phase 7 locked decisions: thread IA, sidebar v1, session cookie, follow-up router, LLM posture.
+- `phases/07-answer-thread-ai/07-CONTEXT.md` — Phase 7 boundary, dependencies, risks, success picture.
+- `phases/07-answer-thread-ai/07-ENGINEERING-PLAN.md` — Phase 7 architecture, data model, API, slices, test matrix, GSTACK review report.
 
 ## Supporting context
 
@@ -59,6 +63,6 @@
 
 ## Current phase
 
-Phase 6 planning/spike — Agentic Business Action Receipts.
+Phase 7 planning — Answer Thread AI (thread-native `/`, sidebar v1, follow-up router).
 
-Phase 6 is admitted only as planning plus hackathon-spike preparation. It may not claim production launch, live money movement, wallet/custody/settlement, generic marketplace, generic action runtime, or provider authority until a verified `06-*-PLAN.md` names passed preflight gates, spike exceptions, commands, files, and stop conditions.
+Phase 6 planning/spike artifacts remain authority for business-action receipts; Phase 7 does not couple to Phase 6 runtime.

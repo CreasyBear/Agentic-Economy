@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
+import { AeOwnerStatusEmptyState } from '@/components/ae/status/AeOwnerStatusEmptyState'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
+import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
+import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
+import { recordServerFunnelEventServer } from '@/modules/observability/funnel.functions'
 
 type OwnerStatusSearch = {
   slug?: string
@@ -16,7 +18,38 @@ export const Route = createFileRoute('/owner/status')({
     return slug === undefined ? {} : { slug }
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => readOwnerStatusServer({ data: deps }),
+  loader: async ({ deps }) => {
+    const result = await readOwnerStatusServer({ data: deps })
+    if (result.kind === 'available') {
+      const businessId = readPublicCatalogActivationRef(result.readback.catalog)
+      const payload = { slug: result.readback.catalog.slug }
+      await recordServerFunnelEventServer({
+        data: {
+          eventType: 'owner_status_viewed',
+          source: 'owner-status-route',
+          stage: 'published',
+          pseudonymousSessionId: 'server-owner-status',
+          correlationId: `owner-status:${businessId}`,
+          consentFlag: false,
+          businessId,
+          payload,
+        },
+      }).catch(() => undefined)
+      await recordServerFunnelEventServer({
+        data: {
+          eventType: 'capability_status_viewed',
+          source: 'owner-status-route',
+          stage: 'published',
+          pseudonymousSessionId: 'server-owner-status',
+          correlationId: `capability-status:${businessId}`,
+          consentFlag: false,
+          businessId,
+          payload,
+        },
+      }).catch(() => undefined)
+    }
+    return result
+  },
   head: () => ({
     meta: [
       { title: 'Service page status | Agentic Economy' },
@@ -33,21 +66,13 @@ function OwnerStatusRoute() {
   return (
     <AeOperatorShell
       role="owner"
-      eyebrow="Owner status"
       title="Service page status"
-      description="Page, search, assistant-readiness, trust, and feature states stay separate so unavailable work is visible."
+      description="See whether your page is published, searchable, and ready for inquiries. Copy the public URL to share with customers."
       currentPath="/owner/status"
     >
       <div className="grid gap-6">
         {readback === undefined ? (
-          <AeEmptyState
-            title={result.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}
-            description={
-              result.kind === 'not_found'
-                ? 'No public service page matched that slug.'
-                : 'Status is unavailable right now. Try again in a moment.'
-            }
-          />
+          <AeOwnerStatusEmptyState kind={result.kind === 'not_found' ? 'not_found' : 'unavailable'} />
         ) : (
           <>
             <AeStatusCard readback={readback} />

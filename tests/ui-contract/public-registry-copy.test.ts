@@ -5,14 +5,15 @@ import { describe, expect, it } from 'vitest'
 describe('public registry copy contract', () => {
   it('keeps registry copy in customer-facing business-detail language', () => {
     const route = readFileSync('src/routes/registry.tsx', 'utf8')
+    const searchPanel = readFileSync('src/components/ae/forms/AeRegistrySearchPanel.tsx', 'utf8')
 
     expect(route).toContain('Find business details companies can stand behind.')
-    expect(route).toContain('Business, service, or place')
+    expect(searchPanel).toContain('Business, service, or place')
     expect(route).toContain('No matching business yet')
     expect(route).toContain('Claim your business page')
     expect(route).toContain('Published details')
     expect(route).toContain('Service area')
-    expect(route).toContain('Contact option')
+    expect(route).toContain('Response')
     expect(route).toContain('Best next step:')
 
     expect(route).not.toContain('Read source-owned answer records.')

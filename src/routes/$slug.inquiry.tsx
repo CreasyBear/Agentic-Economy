@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { SendIcon } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { AeActionResultCard } from '@/components/ae/feedback/AeActionResultCard'
+import { AeInquiryComposer } from '@/components/ae/inquiries/AeInquiryComposer'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -12,7 +14,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import {
   submitPublicInquiryServer,
@@ -110,11 +111,16 @@ function PublicInquiryRoute() {
       setResult(submitted)
       if (submitted.kind === 'ok') {
         setValue(emptyInquiryFormInput)
+        toast.success('Inquiry sent for owner review.')
+      } else {
+        toast.error('reason' in submitted ? submitted.reason : 'Inquiry could not be sent.')
       }
     } finally {
       setPending(false)
     }
   }
+
+  const bodyError = errorByField.get('body')
 
   return (
     <AePublicShell>
@@ -182,21 +188,17 @@ function PublicInquiryRoute() {
                 {fieldError('phone', errorByField)}
               </Field>
               <Field data-invalid={errorByField.has('body') ? true : undefined}>
-                <FieldLabel htmlFor="body">What do you need help with?</FieldLabel>
-                <Textarea
-                  id="body"
-                  name="body"
+                <AeInquiryComposer
+                  label="What do you need help with?"
+                  description={`${value.body.length}/${readback.maxBodyLength} characters.`}
                   value={value.body}
                   maxLength={readback.maxBodyLength}
-                  aria-invalid={errorByField.has('body') || undefined}
+                  invalid={bodyError !== undefined}
+                  {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
                   disabled={!hydrated || pending}
-                  onChange={(event) => {
-                    const nextBody = event.currentTarget.value
-                    setValue((current) => ({ ...current, body: nextBody }))
-                  }}
+                  pending={pending}
+                  onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
                 />
-                <FieldDescription>{value.body.length}/{readback.maxBodyLength} characters.</FieldDescription>
-                {fieldError('body', errorByField)}
               </Field>
             </FieldGroup>
           </CardContent>

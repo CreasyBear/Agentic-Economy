@@ -1,5 +1,8 @@
 import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
 
+import type { AnswerArtifact } from './answer-schema'
+import type { AnswerLayoutProfile } from './internal/answer-layout-profile'
+
 /**
  * Provider-agnostic answer synthesizer.
  *
@@ -15,10 +18,33 @@ import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
  * non-suppressed catalog.
  */
 
+export type AnswerSynthesizerFollowUpIntent =
+  | 'refine_search'
+  | 'filter_known'
+  | 'compare_known'
+  | 'explain_boundary'
+  | 'unsupported'
+
 export type AnswerSynthesizerInput = {
   query: string
   limit?: number
   cursor?: string
+  /** When set, skip the registry search and use these providers (follow-up filter/compare). */
+  prefetchedProviders?: readonly AnswerSource[]
+  /** Optional model-normalized query used only for registry retrieval. */
+  retrievalQuery?: string
+  /** Registry query for agent JSON URL when the turn query is not a search (e.g. boundary chip). */
+  registryQuery?: string
+  /** Thread follow-up intent from the turn orchestrator. */
+  followUpIntent?: AnswerSynthesizerFollowUpIntent
+  /** Chip or panel label shown in the transcript (may differ from registry query). */
+  displayQuery?: string
+  /** When true, follow-up turns use a quieter cards-first layout. */
+  compactFollowUp?: boolean
+  /** When false, the synthesizer should not emit its own thinking event (orchestrator owns steps). */
+  emitThinking?: boolean
+  /** OpenRouter model override for gated LLM prose (dev / structured chat path). */
+  model?: string
 }
 
 /**
@@ -37,8 +63,12 @@ export type AnswerSource = {
   hoursLabel: string
   availabilityLabel: string
   trustLabel: string
+  responseTimeLabel: string
+  trustCue: string
+  photoUrl?: string
   nextStepLabel: string
   detailUrl: string
+  inquiryUrl?: string
   services: readonly {
     name: string
     category: string
@@ -54,15 +84,21 @@ export type AnswerSnapshot = {
   summary: string
   nextStep: string
   agentJsonUrl: string
+  /** Quieter artifact layout for in-thread follow-ups. */
+  compactLayout?: boolean
+  /** Generative panel shape for this turn. */
+  layoutProfile?: AnswerLayoutProfile
 }
 
-/** SSE event stream shape. Order: thinking -> one-line -> sources -> summary-delta* -> next-step -> complete | error. */
+/** SSE event stream shape. Order: thread? -> thinking* -> one-line -> sources -> summary-delta* -> next-step -> artifact* -> complete | error. */
 export type AnswerEvent =
-  | { type: 'thinking' }
+  | { type: 'thread'; threadId: string; turnId: string; turnSeq: number }
+  | { type: 'thinking'; step?: 'search' | 'read' | 'write'; label?: string }
   | { type: 'one-line'; oneLine: string }
   | { type: 'sources'; providers: readonly AnswerSource[] }
   | { type: 'summary-delta'; delta: string }
   | { type: 'next-step'; nextStep: string }
+  | { type: 'artifact'; artifact: AnswerArtifact }
   | { type: 'complete'; answer: AnswerSnapshot }
   | { type: 'error'; code: string; copyId: string }
 

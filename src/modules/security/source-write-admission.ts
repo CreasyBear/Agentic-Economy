@@ -7,6 +7,7 @@ export const SourceWriteAdmissionScopeValues = [
   'public_inquiry',
   'owner_inquiry',
   'protected_action',
+  'billing',
   'admin_operator',
   'discovery_repair',
   'notification_repair',

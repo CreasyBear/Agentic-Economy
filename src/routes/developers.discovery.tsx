@@ -1,6 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { AeOperatorStatusList } from '@/components/ae/operator/AeOperatorStatusList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemHeader,
+  ItemTitle,
+} from '@/components/ui/item'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/developer-discovery'
@@ -95,26 +105,32 @@ function DevelopersDiscoveryRoute() {
               {readback.publicFacts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No source-owned public catalog facts are published.</p>
               ) : (
-                <div className="grid gap-4">
-                  {readback.publicFacts.map((fact) => (
-                    <article key={fact.slug} className="rounded-lg border bg-muted/20 p-4">
-                      <h2 className="font-heading text-lg font-semibold">{fact.name}</h2>
-                      <p className="text-sm text-muted-foreground">
-                        {fact.category} in {fact.suburb}, {fact.stateTerritory}
-                      </p>
-                      <dl className="mt-3 grid gap-2 text-sm md:grid-cols-2">
-                        <div>
-                          <dt className="font-medium">Discovery</dt>
-                          <dd className="text-muted-foreground">{fact.discoveryStatus}</dd>
-                        </div>
-                        <div>
-                          <dt className="font-medium">Services</dt>
-                          <dd className="text-muted-foreground">{fact.serviceCount}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                  ))}
-                </div>
+                <ScrollArea className="ae-operator-scroll-panel ae-operator-scroll-panel--medium border">
+                  <ItemGroup className="gap-3 p-3">
+                    {readback.publicFacts.map((fact) => (
+                      <Item key={fact.slug} variant="outline" size="sm">
+                        <ItemContent>
+                          <ItemHeader>
+                            <ItemTitle className="font-heading text-base">{fact.name}</ItemTitle>
+                          </ItemHeader>
+                          <ItemDescription>
+                            {fact.category} in {fact.suburb}, {fact.stateTerritory}
+                          </ItemDescription>
+                          <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                            <div>
+                              <dt className="font-medium text-muted-foreground">Discovery</dt>
+                              <dd>{fact.discoveryStatus}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-medium text-muted-foreground">Services</dt>
+                              <dd data-numeric>{fact.serviceCount}</dd>
+                            </div>
+                          </dl>
+                        </ItemContent>
+                      </Item>
+                    ))}
+                  </ItemGroup>
+                </ScrollArea>
               )}
             </CardContent>
           </Card>
@@ -153,24 +169,22 @@ function DevelopersDiscoveryRoute() {
               <CardDescription>Public read paths only.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3">
-                {readback.routeHealth.map((health) => (
-                  <div key={health.route} className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{health.label}</span>
-                      <span className="text-muted-foreground">{health.status}</span>
-                    </div>
-                    <p className="mt-1 break-all text-xs text-muted-foreground">{health.route}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+              <AeOperatorStatusList
+                scroll
+                rows={readback.routeHealth.map((health) => ({
+                  id: health.route,
+                  label: health.label,
+                  state: health.status,
+                  description: health.route,
+                  meta: (
+                    <p className="text-xs text-muted-foreground">
                       HTTP {health.httpStatus ?? 'n/a'} · checked {health.checkedAt} · schema {health.schemaVersion ?? 'n/a'} · cache{' '}
                       {health.cacheControl ?? 'n/a'}
+                      {health.errorCode === undefined ? '' : ` · code ${health.errorCode}`}
                     </p>
-                    {health.errorCode === undefined ? null : (
-                      <p className="mt-1 text-xs text-muted-foreground">Code: {health.errorCode}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ),
+                }))}
+              />
             </CardContent>
           </Card>
 
@@ -180,18 +194,14 @@ function DevelopersDiscoveryRoute() {
               <CardDescription>Shipped rows are limited to route-tested public readbacks.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3">
-                {readback.supportMatrix.map((row) => (
-                  <div key={row.surface} className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{row.label}</span>
-                      <span className="text-muted-foreground">{row.state}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">Route readback: {row.routeReadbackStatus}</p>
-                    <p className="mt-1 text-muted-foreground">{row.nextAction}</p>
-                  </div>
-                ))}
-              </div>
+              <AeOperatorStatusList
+                rows={readback.supportMatrix.map((row) => ({
+                  id: row.surface,
+                  label: row.label,
+                  state: row.state,
+                  description: `Route readback: ${row.routeReadbackStatus}. ${row.nextAction}`,
+                }))}
+              />
             </CardContent>
           </Card>
 
@@ -201,17 +211,14 @@ function DevelopersDiscoveryRoute() {
               <CardDescription>Unavailable capabilities are explicit so builders do not infer authority.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3">
-                {readback.unsupportedCapabilities.map((capability) => (
-                  <div key={capability.label} className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{capability.label}</span>
-                      <span className="text-muted-foreground">{capability.state}</span>
-                    </div>
-                    <p className="mt-1 text-muted-foreground">{capability.reason}</p>
-                  </div>
-                ))}
-              </div>
+              <AeOperatorStatusList
+                rows={readback.unsupportedCapabilities.map((capability) => ({
+                  id: capability.label,
+                  label: capability.label,
+                  state: capability.state,
+                  description: capability.reason,
+                }))}
+              />
             </CardContent>
           </Card>
 
@@ -240,17 +247,14 @@ function DevelopersDiscoveryRoute() {
               <CardDescription>Deferred surfaces are not part of the shipped read-only product.</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3">
-                {readback.gatedExclusions.map((exclusion) => (
-                  <div key={exclusion.surface} className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{exclusion.label}</span>
-                      <span className="text-muted-foreground">{exclusion.state}</span>
-                    </div>
-                    <p className="mt-1 text-muted-foreground">{exclusion.reason}</p>
-                  </div>
-                ))}
-              </div>
+              <AeOperatorStatusList
+                rows={readback.gatedExclusions.map((exclusion) => ({
+                  id: exclusion.surface,
+                  label: exclusion.label,
+                  state: exclusion.state,
+                  description: exclusion.reason,
+                }))}
+              />
             </CardContent>
           </Card>
         </aside>

@@ -1,12 +1,10 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
-import { SearchIcon } from 'lucide-react'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
+import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   createEmptyContactFollowUpSourceState,
   readContactFollowUpReconstruction,
@@ -82,7 +80,11 @@ function AdminProtectedActionsRoute() {
       description="Reconstruct selected protected-action proposals, owner decisions, gateways, attempts, receipts, proof gaps, and no-repair state."
       currentPath="/admin/protected-actions"
     >
-      {search.proposalId === undefined ? <FilterPanel /> : <FilterPanel proposalId={search.proposalId} />}
+      {search.proposalId === undefined ? (
+        <FilterPanel />
+      ) : (
+        <FilterPanel proposalId={search.proposalId} />
+      )}
       {readback.deniedReason === undefined ? null : (
         <Card>
           <CardHeader>
@@ -111,81 +113,56 @@ export function adminProtectedActionsServerToRouteReadback(
 
 function FilterPanel({ proposalId }: { proposalId?: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Find a contact follow-up path</CardTitle>
-        <CardDescription>Filter by one source-owned proposal identifier.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action="/admin/protected-actions" method="get" className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="proposalId">Proposal ID</FieldLabel>
-              <Input id="proposalId" name="proposalId" defaultValue={proposalId ?? ''} autoComplete="off" />
-              <FieldDescription>Contact follow-up proposal source ref.</FieldDescription>
-            </Field>
-          </FieldGroup>
-          <Button type="submit">
-            <SearchIcon data-icon="inline-start" aria-hidden="true" />
-            Filter
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <AeOperatorFilterCard
+      action="/admin/protected-actions"
+      title="Find a contact follow-up path"
+      description="Filter by one source-owned proposal identifier."
+      fields={[
+        {
+          id: 'proposalId',
+          name: 'proposalId',
+          label: 'Proposal ID',
+          description: 'Contact follow-up proposal source ref.',
+          defaultValue: proposalId ?? '',
+        },
+      ]}
+    />
   )
 }
 
 function EmptyState() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>No protected action rows</CardTitle>
-        <CardDescription>No source-owned contact follow-up proposal matches the current filters.</CardDescription>
-      </CardHeader>
-    </Card>
+    <AeOperatorQueueList
+      rows={[]}
+      emptyTitle="No protected action rows"
+      emptyDescription="No source-owned contact follow-up proposal matches the current filters."
+    />
   )
 }
 
 function ReconstructionRows({ rows }: { rows: readonly ContactFollowUpReconstruction[] }) {
   return (
-    <div className="grid gap-4">
-      {rows.map((row) => (
-        <Card key={row.proposal.id}>
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>{row.readbackStatus.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{row.repairAction.replaceAll('_', ' ')}</Badge>
-            </div>
-            <CardTitle className="break-words text-lg">{row.proposal.id}</CardTitle>
-            <CardDescription>{row.proposal.parameters.messageSummary}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FactGrid
-              facts={[
-                { label: 'Policy', value: row.policy?.kind ?? 'missing' },
-                { label: 'Owner decision', value: row.ownerDecision?.decision ?? 'waiting' },
-                { label: 'Gateway', value: row.gatewayAdmission?.status ?? 'missing' },
-                { label: 'Attempt', value: row.attempt?.outcome ?? 'not attempted' },
-                { label: 'Receipt', value: row.receipt?.kind ?? 'none' },
-                { label: 'No repair', value: row.noRepair?.reason ?? 'none' },
-              ]}
-            />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  )
-}
-
-function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return (
-    <dl className="grid gap-3 md:grid-cols-3">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-md border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
+    <AeOperatorQueueList
+      scroll
+      rows={rows.map((row) => ({
+        id: row.proposal.id,
+        badges: [
+          { label: row.readbackStatus.replaceAll('_', ' ') },
+          { label: row.repairAction.replaceAll('_', ' '), variant: 'outline' as const },
+        ],
+        title: row.proposal.id,
+        description: row.proposal.parameters.messageSummary,
+        facts: [
+          { label: 'Policy', value: row.policy?.kind ?? 'missing' },
+          { label: 'Owner decision', value: row.ownerDecision?.decision ?? 'waiting' },
+          { label: 'Gateway', value: row.gatewayAdmission?.status ?? 'missing' },
+          { label: 'Attempt', value: row.attempt?.outcome ?? 'not attempted' },
+          { label: 'Receipt', value: row.receipt?.kind ?? 'none' },
+          { label: 'No repair', value: row.noRepair?.reason ?? 'none' },
+        ],
+      }))}
+      emptyTitle="No protected action rows"
+      emptyDescription="No source-owned contact follow-up proposal matches the current filters."
+    />
   )
 }

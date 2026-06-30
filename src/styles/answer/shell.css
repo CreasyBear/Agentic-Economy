@@ -1,0 +1,13 @@
+/*
+ * Agentic Economy — Landing query → generative answer.
+ * Scoped to the landing discovery surface. Daylight Register (DESIGN.md §10–§17).
+ * One warm accent (amber). Hairline rules carry hierarchy. No internal status
+ * vocabulary in copy; availability pills use plain labels only.
+ *
+ * Scope: .ae-query-box, .ae-answer, .ae-source-card, .ae-agent-json, .ae-hero-figure
+ */
+
+.ae-public-shell {
+  color-scheme: light;
+}
+

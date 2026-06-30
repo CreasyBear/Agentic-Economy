@@ -1,13 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { SearchIcon, ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react'
+import { ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   readInquiryOperatorReconstructionServer,
   type InquiryOperatorReconstructionServerResult,
@@ -80,37 +83,34 @@ function OperatorAccess({ readback }: { readback: InquiryOperatorReconstructionS
 
 function FilterPanel({ search }: { search: AdminInquirySearch }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Find a source path</CardTitle>
-        <CardDescription>Filter by one source-owned thread, correlation, or dispatch identifier.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action="/admin/inquiries" method="get" className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
-          <FieldGroup className="contents">
-            <Field>
-              <FieldLabel htmlFor="threadId">Thread ID</FieldLabel>
-              <Input id="threadId" name="threadId" defaultValue={search.threadId ?? ''} autoComplete="off" />
-              <FieldDescription>Inquiry thread source ref.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="correlationId">Correlation ID</FieldLabel>
-              <Input id="correlationId" name="correlationId" defaultValue={search.correlationId ?? ''} autoComplete="off" />
-              <FieldDescription>Operation or funnel correlation ref.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="dispatchId">Dispatch ID</FieldLabel>
-              <Input id="dispatchId" name="dispatchId" defaultValue={search.dispatchId ?? ''} autoComplete="off" />
-              <FieldDescription>Notification dispatch binding ref.</FieldDescription>
-            </Field>
-          </FieldGroup>
-          <Button type="submit">
-            <SearchIcon data-icon="inline-start" aria-hidden="true" />
-            Filter
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <AeOperatorFilterCard
+      action="/admin/inquiries"
+      title="Find a source path"
+      description="Filter by one source-owned thread, correlation, or dispatch identifier."
+      fields={[
+        {
+          id: 'threadId',
+          name: 'threadId',
+          label: 'Thread ID',
+          description: 'Inquiry thread source ref.',
+          defaultValue: search.threadId ?? '',
+        },
+        {
+          id: 'correlationId',
+          name: 'correlationId',
+          label: 'Correlation ID',
+          description: 'Operation or funnel correlation ref.',
+          defaultValue: search.correlationId ?? '',
+        },
+        {
+          id: 'dispatchId',
+          name: 'dispatchId',
+          label: 'Dispatch ID',
+          description: 'Notification dispatch binding ref.',
+          defaultValue: search.dispatchId ?? '',
+        },
+      ]}
+    />
   )
 }
 
@@ -122,7 +122,7 @@ function DeniedReadback({ readback }: { readback: Extract<InquiryOperatorReconst
         <CardDescription>Denied inquiry reconstruction reads return no source rows.</CardDescription>
       </CardHeader>
       <CardContent>
-        <FactGrid
+        <AeOperatorFactGrid
           facts={[
             { label: 'Decision', value: readback.reason.replaceAll('_', ' ') },
             { label: 'Private rows returned', value: String(readback.rows.length) },
@@ -135,6 +135,21 @@ function DeniedReadback({ readback }: { readback: Extract<InquiryOperatorReconst
 }
 
 function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorReconstructionServerResult, { kind: 'allowed' }> }) {
+  const [filter, setFilter] = useState<'all' | 'attention' | 'terminal'>('all')
+  const filteredRows = useMemo(() => {
+    if (filter === 'all') {
+      return readback.rows
+    }
+    if (filter === 'terminal') {
+      return readback.rows.filter(
+        (row) => row.operatorNextAction === 'none' || row.operatorNextAction === 'terminal'
+      )
+    }
+    return readback.rows.filter(
+      (row) => row.operatorNextAction !== 'none' && row.operatorNextAction !== 'terminal'
+    )
+  }, [filter, readback.rows])
+
   return (
     <>
       <Card>
@@ -143,14 +158,14 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
           <CardDescription>Counts are derived from inquiry, notification, audit, funnel, and operation refs.</CardDescription>
         </CardHeader>
         <CardContent>
-          <FactGrid
+          <AeOperatorFactGrid
             facts={[
-              { label: 'Threads', value: String(readback.summary.threads) },
-              { label: 'Messages', value: String(readback.summary.messages) },
-              { label: 'Notifications', value: String(readback.summary.notifications) },
-              { label: 'Dispatches', value: String(readback.summary.dispatches) },
-              { label: 'Needs repair', value: String(readback.summary.needsRepair) },
-              { label: 'Terminal', value: String(readback.summary.terminal) },
+              { label: 'Threads', value: readback.summary.threads },
+              { label: 'Messages', value: readback.summary.messages },
+              { label: 'Notifications', value: readback.summary.notifications },
+              { label: 'Dispatches', value: readback.summary.dispatches },
+              { label: 'Needs repair', value: readback.summary.needsRepair },
+              { label: 'Terminal', value: readback.summary.terminal },
             ]}
           />
         </CardContent>
@@ -164,9 +179,27 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
         </Card>
       ) : (
         <div className="grid gap-4">
-          {readback.rows.map((row) => (
-            <TimelineRow key={row.rowId} row={row} />
-          ))}
+          <Tabs value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
+            <TabsList variant="line" aria-label="Filter inquiry reconstruction rows">
+              <TabsTrigger value="all">All ({readback.rows.length})</TabsTrigger>
+              <TabsTrigger value="attention">Needs attention ({readback.summary.needsRepair})</TabsTrigger>
+              <TabsTrigger value="terminal">Terminal ({readback.summary.terminal})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {filteredRows.length === 0 ? (
+            <AeEmptyState
+              title="Nothing in this bucket"
+              description="Try another filter to see inquiry reconstruction rows in a different state."
+            />
+          ) : (
+            <ScrollArea className="ae-operator-scroll-panel ae-operator-scroll-panel--tall border">
+              <div className="grid gap-4 p-4">
+                {filteredRows.map((row) => (
+                  <TimelineRow key={row.rowId} row={row} />
+                ))}
+              </div>
+            </ScrollArea>
+          )}
         </div>
       )}
     </>
@@ -187,7 +220,7 @@ function TimelineRow({ row }: { row: InquiryOperatorReconstructionRow }) {
         <CardDescription>Source hash {row.sourceHash}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-5">
-        <FactGrid
+        <AeOperatorFactGrid
           facts={[
             { label: 'Business', value: row.businessId },
             { label: 'Service', value: row.serviceId },
@@ -222,19 +255,6 @@ function RefSection<T>({ title, refs, renderRef }: { title: string; refs: readon
         </ul>
       )}
     </section>
-  )
-}
-
-function FactGrid({ facts }: { facts: readonly { label: string; value: string | number }[] }) {
-  return (
-    <dl className="grid gap-3 md:grid-cols-3">
-      {facts.map((fact) => (
-        <div key={fact.label} className="rounded-md border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm font-medium text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
   )
 }
 

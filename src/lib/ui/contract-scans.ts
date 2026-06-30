@@ -137,14 +137,14 @@ export function scanSourceMining(targets: readonly ScanTarget[]): readonly ScanV
       },
       {
         rule: 'future-active-route-registration',
-        message: 'Future Phase 4/5 route registrations must stay parked outside src/routes until their owning phase.',
+        message: 'Future route registrations must stay parked outside src/routes until their owning phase.',
         pattern:
-          /createFileRoute\s*\(\s*['"]\/(?:owner\/actions|owner\/billing(?:\/(?:activate|cancel|redirecting|return|receipts\/\$receiptId))?|api\/billing\/webhook)['"]/,
+          /createFileRoute\s*\(\s*['"]\/(?:owner\/actions)['"]/,
       },
       {
         rule: 'future-route-tree-entry',
-        message: 'The active route tree cannot expose future Phase 4/5 owner action or billing routes during Phase 2.',
-        pattern: /['"]\/(?:owner\/actions|owner\/billing(?:\/[^'"]*)?|api\/billing\/webhook)['"]|OwnerActions|OwnerBilling|ApiBilling/,
+        message: 'The active route tree cannot expose future owner action routes before their owning phase.',
+        pattern: /['"]\/(?:owner\/actions)['"]|OwnerActions/,
       },
     ],
     [scannerUtilityPath]
@@ -177,6 +177,9 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
     return (
       normalized.includes('src/future-phases/') ||
       normalized.includes('src/routes/owner.actions') ||
+      normalized.includes('src/routes/owner.billing') ||
+      normalized.includes('src/routes/admin.monetization') ||
+      normalized.includes('src/routes/api.billing') ||
       normalized.includes('src/routes/owner.business-actions') ||
       normalized.includes('src/routes/admin.business-actions') ||
       normalized.includes('src/routes/api.business-actions')
@@ -188,6 +191,9 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
       (normalized.includes('src/routeTree.gen.ts') && isAllowedGeneratedRouteFutureSurface(violation.excerpt)) ||
       normalized.includes('src/routes/owner.actions') ||
       normalized.includes('src/routes/admin.protected-actions') ||
+      normalized.includes('src/routes/owner.billing') ||
+      normalized.includes('src/routes/admin.monetization') ||
+      normalized.includes('src/routes/api.billing') ||
       normalized.includes('src/routes/owner.business-actions') ||
       normalized.includes('src/routes/admin.business-actions') ||
       normalized.includes('src/routes/api.business-actions') ||
@@ -198,6 +204,7 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
       !normalized.includes('src/routes/admin.business-actions') &&
       !normalized.includes('src/routes/api.business-actions') &&
       !normalized.includes('src/routes/owner.billing') &&
+      !normalized.includes('src/routes/admin.monetization') &&
       !normalized.includes('src/routes/api.billing'))
     )
   }
@@ -205,6 +212,11 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
   if (normalized.includes('src/routeTree.gen.ts')) {
     return isAllowedGeneratedRouteFutureSurface(violation.excerpt)
   }
+
+  if (normalized.includes('convex/_generated/')) {
+    return isAllowedGeneratedConvexFutureSurface(violation.excerpt)
+  }
+
   return [
     'src/modules/inquiries/',
     'src/modules/discovery/',
@@ -216,20 +228,42 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
     'src/future-phases/05-paid-activation-money-rails/',
     'src/lib/server/billing-provider.ts',
     'src/lib/server/notification-provider.ts',
+    'src/lib/operator/',
     'src/lib/ui/status-presentation.ts',
+    'src/components/ae/listing/',
+    'src/routes/$slug.tsx',
     'src/routes/owner.inquiries',
     'src/routes/developers.discovery',
     'src/routes/api.discovery',
     'src/routes/api.notification',
     'src/routes/owner.actions',
     'src/routes/admin.protected-actions',
+    'src/routes/owner.billing',
+    'src/routes/admin.monetization',
+    'src/routes/api.billing',
     'src/routes/owner.business-actions',
     'src/routes/admin.business-actions',
     'src/routes/api.business-actions',
+    'src/modules/security/source-write-admission.ts',
+    'convex/protectedActions.ts',
+    'convex/protectedActionStore.ts',
+    'convex/billing.ts',
+    'convex/billingStore.ts',
     'convex/businessActions.ts',
     'convex/businessActionStore.ts',
     'convex/schema.ts',
   ].some((path) => normalized.includes(path))
+}
+
+function isAllowedGeneratedConvexFutureSurface(excerpt: string): boolean {
+  return [
+    'import type * as protectedActions',
+    'protectedActions: typeof protectedActions',
+    'import type * as billing',
+    'billing: typeof billing',
+    'import type * as businessActions',
+    'businessActions: typeof businessActions',
+  ].some((needle) => excerpt.includes(needle))
 }
 
 function isAllowedGeneratedRouteFutureSurface(excerpt: string): boolean {
@@ -252,6 +286,15 @@ function isAllowedGeneratedRouteFutureSurface(excerpt: string): boolean {
     'ApiBusinessActions',
     "'/api/business-actions",
     '| \'/api/business-actions',
+    'OwnerBilling',
+    "'/owner/billing",
+    '| \'/owner/billing',
+    'AdminMonetization',
+    "'/admin/monetization",
+    '| \'/admin/monetization',
+    'ApiBilling',
+    "'/api/billing",
+    '| \'/api/billing',
   ].some((needle) => excerpt.includes(needle))
 }
 
@@ -343,6 +386,11 @@ export function scanPublicLanguage(targets: readonly ScanTarget[]): readonly Sca
         rule: 'generic-registry-language',
         message: 'The public registry must use customer-facing business-detail language, not generic search/result/page wording.',
         pattern: /\b(?:Find public service pages|Public business pages|Registry search|No registry results|Open page)\b/,
+      },
+      {
+        rule: 'public-next-step-label',
+        message: 'Public human surfaces must use "What to do now", not "Next step" or "Next".',
+        pattern: /\b(?:Next step|>\s*Next\s*<|"Next step"|'Next step')\b/,
       },
       {
         rule: 'generic-money-language',
@@ -515,6 +563,10 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
     return [5]
   }
 
+  if (isPhase5PaidActivationRuntimeContext(normalized)) {
+    return [5]
+  }
+
   if (isCopyTestContext(file)) {
     return [2, 3, 4, 5, 6]
   }
@@ -532,6 +584,7 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
 
 function isPhase2InquiryRuntimeContext(normalizedPath: string): boolean {
   return [
+    'src/components/ae/inquiries/',
     'src/modules/inquiries/',
     'src/modules/notification-outbox/',
     'src/lib/server/notification-provider.ts',
@@ -554,6 +607,18 @@ function isPhase4ProtectedActionRuntimeContext(normalizedPath: string): boolean 
     'src/routes/owner.actions',
     'src/routes/admin.protected-actions',
     'convex/protectedActions.ts',
+  ].some((path) => normalizedPath.includes(path))
+}
+
+function isPhase5PaidActivationRuntimeContext(normalizedPath: string): boolean {
+  return [
+    'src/modules/billing/',
+    'src/lib/server/billing-provider.ts',
+    'src/routes/owner.billing',
+    'src/routes/admin.monetization',
+    'src/routes/api.billing',
+    'convex/billing.ts',
+    'convex/billingStore.ts',
   ].some((path) => normalizedPath.includes(path))
 }
 

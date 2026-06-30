@@ -1,9 +1,8 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
+import { AeInquiryInboxPanel } from '@/components/ae/inquiries/AeInquiryInboxPanel'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   readCurrentOwnerInboxServer,
@@ -13,7 +12,6 @@ import {
   createEmptyInquirySourceState,
   listOwnerInbox,
   type InquirySourceState,
-  type OwnerInboxInquiryProjection,
   type OwnerInboxReadback,
 } from '@/modules/inquiries/public'
 
@@ -79,9 +77,8 @@ function OwnerInquiriesRoute() {
   return (
     <AeOperatorShell
       role="owner"
-      eyebrow="Owner messages"
-      title="Human messages stay source-owned."
-      description="Owners see submitted messages, read state, responses, close state, and dispatch status without relying on external success as truth."
+      title="Inquiries"
+      description="Read submitted messages, reply state, and delivery status from source-owned inbox readback."
       currentPath="/owner/inquiries"
     >
       <div className="grid gap-6">
@@ -118,52 +115,7 @@ export function OwnerInquiryInboxSummary({ inbox }: { inbox: OwnerInboxReadback 
 }
 
 export function OwnerInquiryList({ inbox }: { inbox: OwnerInboxReadback }) {
-  if (inbox.empty) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No messages yet</CardTitle>
-          <CardDescription>Published services with contact handling will appear here after a customer submits a message.</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
-  return (
-    <div className="grid gap-4">
-      {inbox.inquiries.map((inquiry) => (
-        <OwnerInquiryCard key={inquiry.threadId} inquiry={inquiry} />
-      ))}
-    </div>
-  )
-}
-
-function OwnerInquiryCard({ inquiry }: { inquiry: OwnerInboxInquiryProjection }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={inquiry.bucket === 'resolved' ? 'secondary' : 'default'}>{inquiry.bucket.replace('_', ' ')}</Badge>
-          <Badge variant={inquiry.notificationStatus === 'failed' || inquiry.notificationStatus === 'held' ? 'destructive' : 'outline'}>
-            {inquiry.notificationLabel}
-          </Badge>
-        </div>
-        <CardTitle>{inquiry.serviceName}</CardTitle>
-        <CardDescription>{inquiry.businessName}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
-        <p className="text-sm text-foreground">{inquiry.preview}</p>
-        <dl className="grid gap-3 text-sm md:grid-cols-3">
-          <ReadbackFact label="Messages" value={String(inquiry.messageCount)} />
-          <ReadbackFact label="Status" value={inquiry.status} />
-          <ReadbackFact label="Updated" value={new Date(inquiry.updatedAt).toISOString()} />
-        </dl>
-        <Button asChild variant="outline" size="sm">
-          <a href={`/owner/inquiries/${encodeURIComponent(inquiry.threadId)}`}>Open inquiry</a>
-        </Button>
-      </CardContent>
-    </Card>
-  )
+  return <AeInquiryInboxPanel inbox={inbox} />
 }
 
 function ReadbackFact({ label, value }: { label: string; value: string }) {

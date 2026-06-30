@@ -79,15 +79,9 @@ export type AnyAction = ActionDefinition<unknown, ActionResult>
 export type Action<Input = unknown, Result extends ActionResult = ActionResult> =
   ActionDefinition<Input, Result>
 
-const knownIds = new Set<string>()
-
 export function defineAction<Input, Result extends ActionResult>(
   def: ActionDefinition<Input, Result>,
 ): Action<Input, Result> {
-  if (knownIds.has(def.id)) {
-    throw new Error(`Action already registered: ${def.id}`)
-  }
-  knownIds.add(def.id)
   return def
 }
 

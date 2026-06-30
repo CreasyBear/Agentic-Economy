@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 
+import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import type { AnswerSource } from '@/modules/answer/public'
 
 export type AeProviderSourceCardProps = {
@@ -17,7 +18,11 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
           <div className="ae-source-card__title">
             <h3 className="ae-source-card__name">{source.name}</h3>
             <p className="ae-source-card__category">{source.category}</p>
+            {source.trustCue.length > 0 ? <p className="ae-source-card__trust">{source.trustCue}</p> : null}
           </div>
+          {source.photoUrl !== undefined ? (
+            <img className="ae-source-card__photo" src={source.photoUrl} alt="" loading="lazy" />
+          ) : null}
           <span className="ae-source-card__pill" data-availability={slugify(source.availabilityLabel)}>
             {source.availabilityLabel}
           </span>
@@ -44,11 +49,24 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
 
         <div className="ae-source-card__cta">
           <span aria-hidden="true">→</span>
-          <span>{source.nextStepLabel}</span>
+          <span>{source.inquiryUrl === undefined ? source.nextStepLabel : 'View business page'}</span>
         </div>
       </Link>
+
+      <div className="ae-source-card__actions">
+        {source.inquiryUrl !== undefined ? (
+          <Link to={source.inquiryUrl} className="ae-source-card__inquiry">
+            Send inquiry
+          </Link>
+        ) : null}
+        <AeAgentJsonAffordance agentJsonUrl={buildSourceAgentJsonUrl(source.slug)} query={source.name} />
+      </div>
     </article>
   )
+}
+
+function buildSourceAgentJsonUrl(slug: string): string {
+  return `/api/businesses/${slug}`
 }
 
 function slugify(value: string): string {

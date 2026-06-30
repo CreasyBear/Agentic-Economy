@@ -3,6 +3,10 @@ import { ClerkProvider } from '@clerk/tanstack-react-start'
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
+import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
+import { AeToaster } from '@/components/ae/feedback/AeToaster'
+import { AeObservabilityBoot } from '@/components/ae/layout/AeObservabilityBoot'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import appCss from '../styles/globals.css?url'
 
 export const Route = createRootRoute({
@@ -13,10 +17,13 @@ export const Route = createRootRoute({
       { title: 'Agentic Economy' },
       {
         name: 'description',
-        content: 'Source-owned service catalog foundation for local urgent-service businesses.',
+        content: 'Ask for a local service. Compare published business details, then contact the business when inquiry is available.',
       },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+    ],
   }),
   component: RootComponent,
 })
@@ -31,10 +38,7 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
-  const content =
-    import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true' || !requiresClerkProvider(pathname)
-      ? children
-      : <ClerkProvider>{children}</ClerkProvider>
+  const content = usesClerkBypass() || !requiresClerkProvider(pathname) ? children : <ClerkProvider>{children}</ClerkProvider>
 
   return (
     <html lang="en">
@@ -42,7 +46,11 @@ function RootDocument({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {content}
+        <TooltipProvider delayDuration={250}>
+          <AeObservabilityBoot />
+          <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
+          <AeToaster />
+        </TooltipProvider>
         <Scripts />
       </body>
     </html>
@@ -52,3 +60,16 @@ function RootDocument({ children }: { children: ReactNode }) {
 function requiresClerkProvider(pathname: string): boolean {
   return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }
+
+function usesClerkBypass(): boolean {
+  if (import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {
+    return false
+  }
+
+  if (import.meta.env.PROD) {
+    throw new Error('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E cannot be enabled in production builds.')
+  }
+
+  return true
+}
+

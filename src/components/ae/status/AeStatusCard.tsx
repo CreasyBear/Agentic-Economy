@@ -1,5 +1,7 @@
 import { ExternalLinkIcon } from 'lucide-react'
 
+import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
+import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Button } from '@/components/ui/button'
@@ -26,7 +28,12 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         <CardDescription>
           {readback.catalog.category} in {readback.catalog.suburb}, {readback.catalog.stateTerritory}
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex flex-wrap gap-2">
+          <AeCopyPublicUrlButton
+            slug={readback.catalog.slug}
+            businessId={readPublicCatalogActivationRef(readback.catalog)}
+            size="sm"
+          />
           <Button asChild variant="outline" size="sm">
             <a href={readback.publicUrl}>
               <ExternalLinkIcon data-icon="inline-start" />

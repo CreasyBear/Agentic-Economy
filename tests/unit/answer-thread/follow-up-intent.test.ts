@@ -1,0 +1,35 @@
+import { describe, expect, it } from 'vitest'
+
+import { classifyFollowUpIntent, buildThreadTitle } from '@/modules/answer-thread/public'
+
+describe('follow-up intent router', () => {
+  it('uses refine_search for the first turn', () => {
+    expect(classifyFollowUpIntent('after hours plumber Preston', 0)).toBe('refine_search')
+  })
+
+  it('detects unsupported booking requests', () => {
+    expect(classifyFollowUpIntent('book the first one for me', 1)).toBe('unsupported')
+  })
+
+  it('detects boundary questions', () => {
+    expect(classifyFollowUpIntent('can I book here?', 1)).toBe('explain_boundary')
+  })
+
+  it('detects boundary chip text even when prior turns failed to load', () => {
+    expect(classifyFollowUpIntent('What can Agentic Economy do here?', 0)).toBe('explain_boundary')
+  })
+
+  it('detects compare follow-ups', () => {
+    expect(classifyFollowUpIntent('compare the first two', 1)).toBe('compare_known')
+  })
+
+  it('detects filter follow-ups', () => {
+    expect(classifyFollowUpIntent('which take inquiries?', 1)).toBe('filter_known')
+  })
+
+  it('truncates thread titles to 80 characters', () => {
+    const title = buildThreadTitle(`${'a'.repeat(100)}`)
+    expect(title.length).toBeLessThanOrEqual(80)
+    expect(title.endsWith('…')).toBe(true)
+  })
+})

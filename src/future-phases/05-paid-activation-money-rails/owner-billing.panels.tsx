@@ -1,3 +1,5 @@
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,34 +47,26 @@ export function OwnerBillingStatePanel({ summary }: { summary: OwnerBillingRoute
 }
 
 export function OwnerBillingReceiptList({ receipts }: { receipts: readonly OwnerBillingReceiptProjection[] }) {
-  if (receipts.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No receipts recorded</CardTitle>
-          <CardDescription>Receipts appear only after provider readback is stored in source-owned billing state.</CardDescription>
-        </CardHeader>
-      </Card>
-    )
-  }
-
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {receipts.map((receipt) => (
-        <Card key={receipt.id}>
-          <CardHeader>
-            <CardTitle>{receiptTitle(receipt.status)}</CardTitle>
-            <CardDescription>{receipt.amountSummary ?? 'Amount summary unavailable'}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <FactList facts={receiptFacts(receipt)} />
-            <Button asChild variant="outline" size="sm">
-              <a href={`/owner/billing/receipts/${receipt.id}`}>View receipt readback</a>
-            </Button>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <AeOperatorQueueList
+      rows={receipts.map((receipt) => ({
+        id: receipt.id,
+        href: `/owner/billing/receipts/${receipt.id}`,
+        badges: [{ label: receiptTitle(receipt.status), variant: 'outline' as const }],
+        title: receiptTitle(receipt.status),
+        description: receipt.amountSummary ?? 'Amount summary unavailable',
+        facts: receiptFacts(receipt).map((fact) => ({ label: fact.label, value: fact.value })),
+        actions: [
+          {
+            label: 'View receipt readback',
+            href: `/owner/billing/receipts/${receipt.id}`,
+            variant: 'outline',
+          },
+        ],
+      }))}
+      emptyTitle="No receipts recorded"
+      emptyDescription="Receipts appear only after provider readback is stored in source-owned billing state."
+    />
   )
 }
 
@@ -104,18 +98,7 @@ function OwnerBillingReceiptDetails({ receipt }: { receipt: OwnerBillingReceiptP
 }
 
 function FactList({ facts }: { facts: readonly OwnerBillingFact[] }) {
-  return (
-    <dl className="grid gap-3 text-sm md:grid-cols-2">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-md bg-muted/40 p-3">
-          <dt className="text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">
-            {fact.label}
-          </dt>
-          <dd className="mt-1 break-words text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+  return <AeOperatorFactGrid facts={facts} columns={2} />
 }
 
 function OwnerBillingActionButton({ action }: { action: OwnerBillingAction }) {

@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowRightIcon, ExternalLinkIcon } from 'lucide-react'
 
+import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
@@ -97,6 +98,7 @@ function ClaimSuccessRoute() {
               </div>
             </dl>
             <div className="flex flex-wrap items-center gap-3">
+              <AeCopyPublicUrlButton slug={catalog.slug} />
               <Button asChild variant="outline">
                 <a href={`/${catalog.slug}`}>
                   <ExternalLinkIcon data-icon="inline-start" />

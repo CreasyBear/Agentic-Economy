@@ -1,12 +1,9 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
-import { SearchIcon } from 'lucide-react'
 
+import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
+import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type {
   BusinessActionPrivateEvidenceRef,
   BusinessActionSourceState,
@@ -20,7 +17,6 @@ import {
 } from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
-  FactGrid,
   buildOwnerBusinessActionRouteReconstruction,
   type OwnerBusinessActionRouteReconstruction,
 } from '@/routes/owner.business-actions'
@@ -275,68 +271,64 @@ function compactAdminSearch(search: AdminBusinessActionSearch): { requestId?: st
 
 function FilterPanel({ requestId }: { requestId?: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Find a business action request</CardTitle>
-        <CardDescription>Filter by one source-owned request identifier.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form action="/admin/business-actions" method="get" className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="requestId">Request ID</FieldLabel>
-              <Input id="requestId" name="requestId" defaultValue={requestId ?? ''} autoComplete="off" />
-              <FieldDescription>Business action capability request source ref.</FieldDescription>
-            </Field>
-          </FieldGroup>
-          <Button type="submit">
-            <SearchIcon data-icon="inline-start" aria-hidden="true" />
-            Filter
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <AeOperatorFilterCard
+      action="/admin/business-actions"
+      title="Find a business action request"
+      description="Filter by one source-owned request identifier."
+      fields={[
+        {
+          id: 'requestId',
+          name: 'requestId',
+          label: 'Request ID',
+          description: 'Business action capability request source ref.',
+          defaultValue: requestId ?? '',
+        },
+      ]}
+    />
   )
 }
 
 function EmptyState() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>No business action rows</CardTitle>
-        <CardDescription>No source-owned business action request matches the current filters.</CardDescription>
-      </CardHeader>
-    </Card>
+    <AeOperatorQueueList
+      rows={[]}
+      emptyTitle="No business action rows"
+      emptyDescription="No source-owned business action request matches the current filters."
+    />
   )
 }
 
 function AdminBusinessActionRows({ rows }: { rows: readonly AdminBusinessActionRouteReconstruction[] }) {
   return (
-    <div className="grid gap-4">
-      {rows.map((row) => (
-        <Card key={row.request.id}>
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>{row.receipt?.outcome.replaceAll('_', ' ') ?? 'no receipt'}</Badge>
-              <Badge variant="outline">{row.resultArtifactState.status.replaceAll('_', ' ')}</Badge>
-            </div>
-            <CardTitle className="break-words text-lg">{row.request.id}</CardTitle>
-            <CardDescription>No raw prompts, traces, provider payloads, Stripe payloads, endpoint refs, keys, or webhook secrets are exposed.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5">
-            <FactGrid
-              facts={[
-                { label: 'Checkpoint', value: row.checkpoint?.decision ?? 'missing' },
-                { label: 'Guardrail decisions', value: String(row.guardrailDecisions.length) },
-                { label: 'External evidence', value: String(row.externalEvidenceEvents.length) },
-                { label: 'Private evidence refs', value: String(row.privateEvidenceMetadata.count) },
-                { label: 'Support', value: row.supportRecords[0]?.status ?? 'none' },
-                { label: 'No repair', value: row.noRepair?.reason ?? 'none' },
-              ]}
-            />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <AeOperatorQueueList
+      scroll
+      rows={rows.map((row) => ({
+        id: row.request.id,
+        href: `/admin/business-actions/${encodeURIComponent(row.request.id)}`,
+        badges: [
+          { label: row.receipt?.outcome.replaceAll('_', ' ') ?? 'no receipt' },
+          { label: row.resultArtifactState.status.replaceAll('_', ' '), variant: 'outline' as const },
+        ],
+        title: row.request.id,
+        description: 'No raw prompts, traces, provider payloads, Stripe payloads, endpoint refs, keys, or webhook secrets are exposed.',
+        facts: [
+          { label: 'Checkpoint', value: row.checkpoint?.decision ?? 'missing' },
+          { label: 'Guardrail decisions', value: String(row.guardrailDecisions.length) },
+          { label: 'External evidence', value: String(row.externalEvidenceEvents.length) },
+          { label: 'Private evidence refs', value: String(row.privateEvidenceMetadata.count) },
+          { label: 'Support', value: row.supportRecords[0]?.status ?? 'none' },
+          { label: 'No repair', value: row.noRepair?.reason ?? 'none' },
+        ],
+        actions: [
+          {
+            label: 'Open operation',
+            href: `/admin/business-actions/${encodeURIComponent(row.request.id)}`,
+            variant: 'outline',
+          },
+        ],
+      }))}
+      emptyTitle="No business action rows"
+      emptyDescription="No source-owned business action request matches the current filters."
+    />
   )
 }
