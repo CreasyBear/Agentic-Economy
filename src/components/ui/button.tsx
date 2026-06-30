@@ -12,6 +12,8 @@ const buttonVariants = cva(
         default: "ae-button-default bg-primary text-primary-foreground hover:bg-primary/80",
         publicPrimary:
           "ae-button-public-primary bg-primary text-primary-foreground hover:bg-primary/80 dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/85",
+        publicSecondary:
+          "ae-button-public-secondary border-border bg-background text-foreground hover:bg-muted hover:text-foreground",
         landingPrimary:
           "ae-button-landing-primary bg-[var(--ae-public-amber)] text-[var(--ae-public-amber-fg)] hover:bg-[var(--ae-public-amber-deep)] dark:bg-[var(--ae-public-amber)] dark:text-[var(--ae-public-amber-fg)] dark:hover:bg-[var(--ae-public-amber-deep)]",
         outline:

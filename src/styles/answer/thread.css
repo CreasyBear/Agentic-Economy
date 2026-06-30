@@ -105,14 +105,6 @@
   margin: var(--ae-public-space-xl) auto;
 }
 
-.ae-chat-empty a {
-  color: var(--ae-public-ink);
-  font-weight: var(--ae-public-weight-semibold);
-  text-decoration: underline;
-  text-decoration-color: var(--ae-public-amber);
-  text-underline-offset: 0.2em;
-}
-
 .ae-thread-transcript__turn {
   display: flex;
   flex-direction: column;

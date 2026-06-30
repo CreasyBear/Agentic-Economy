@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { Button } from '@/components/ui/button'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import type { AnswerThreadRecord, PublicThreadProjection } from '@/modules/answer-thread/public'
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
@@ -193,7 +194,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               <AeEmptyState
                 title="Thread unavailable"
                 description="This answer thread could not be found or loaded. Start a fresh search to keep going."
-                action={<a href="/">Start a new search</a>}
+                action={
+                  <Button asChild variant="publicSecondary" size="sm">
+                    <a href="/">Start a new search</a>
+                  </Button>
+                }
               />
             </div>
           ) : null}

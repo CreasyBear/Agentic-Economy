@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
+import { Button } from '@/components/ui/button'
 import type { AnswerSource } from '@/modules/answer/public'
 
 export type AeProviderSourceCardProps = {
@@ -54,13 +55,15 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
 
       <div className="ae-source-card__actions">
         {source.inquiryUrl !== undefined ? (
-          <Link to={source.inquiryUrl} className="ae-source-card__inquiry">
-            Send inquiry
-          </Link>
+          <Button asChild variant="landingPrimary" size="sm">
+            <Link to={source.inquiryUrl}>Send inquiry</Link>
+          </Button>
         ) : null}
-        <Link to={source.detailUrl} className="ae-source-card__details">
-          {source.inquiryUrl === undefined ? source.nextStepLabel : 'View details'}
-        </Link>
+        <Button asChild variant="publicSecondary" size="sm">
+          <Link to={source.detailUrl}>
+            {source.inquiryUrl === undefined ? source.nextStepLabel : 'View details'}
+          </Link>
+        </Button>
         <AeAgentJsonAffordance agentJsonUrl={buildSourceAgentJsonUrl(source.slug)} query={source.name} />
       </div>
     </article>

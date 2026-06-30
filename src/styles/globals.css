@@ -393,6 +393,24 @@ img {
     box-shadow: none;
   }
 
+  .ae-button-public-secondary {
+    min-height: 2.75rem;
+    border-color: var(--ae-public-line-strong);
+    border-radius: var(--ae-public-radius-button);
+    background-color: var(--ae-public-field);
+    color: var(--ae-public-ink);
+    box-shadow: none;
+    transition-property: background-color, border-color, color;
+    transition-duration: var(--ae-public-duration-hover);
+    transition-timing-function: var(--ae-public-ease);
+  }
+
+  .ae-button-public-secondary:hover {
+    border-color: var(--ae-public-amber);
+    background-color: color-mix(in oklch, var(--ae-public-amber) 8%, var(--ae-public-field));
+    color: var(--ae-public-ink);
+  }
+
   .ae-control-field {
     min-height: 2.75rem;
     width: 100%;
