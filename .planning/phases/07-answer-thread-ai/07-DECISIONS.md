@@ -181,8 +181,10 @@ No public model picker on `/` without eval sign-off.
   - the Phase 7 answer orchestrator,
   - future agent JSON action descriptors where appropriate.
 - `registry.search` is read-only, public-fact-only, and returns the same safe catalog DTO subset as `/api/businesses/search`.
-- The turn record persists tool evidence: tool id, validated input, result summary/slugs, result hash, and refusal/error state.
+- The turn record persists reconstructable tool evidence: tool id, validated input, safe public result JSON or refusal/error envelope, result summary/slugs, result hash, and refusal/error state.
 - The registry itself remains literal. Misspellings such as "paramata" recover only when the answer agent chooses a better tool input such as "Parramatta emergency plumber"; no registry-side typo correction or hidden query-rewrite step.
+- The public answer agent toolset is exactly `registry.search` and `registry.detail`; it must not inherit every read-only action listed by `/api/agent/tools`.
+- The LLM path is a real tool loop: actual `registry.search` / `registry.detail` result JSON is fed back to the model before final prose is accepted.
 
 ## D-17 Human answer loop uses read tools in v1
 
@@ -191,6 +193,19 @@ No public model picker on `/` without eval sign-off.
 - It must not call write actions from the human answer loop in v1.
 - `inquiry.submit` remains available through the quiet agent door and explicit qualified-inquiry surfaces, but chat prose must route the person to the listing or qualified inquiry path rather than silently sending one.
 - Any later write tool in an answer thread requires a separate decision with approval UI, admission checks, persistence, and copy scans.
+
+## D-18 Provider-bearing answers fail closed on persisted evidence
+
+- A provider-bearing answer turn is not complete until the `answerTurns` row and all matching `answerToolCalls` rows are persisted.
+- A shareable public projection must be reconstructable from persisted turn evidence and tool-call evidence. It must not depend on transient stream buffers, LLM memory, or local-only provider arrays.
+- If persistence of either the turn or the tool calls fails, the server must emit an error/refusal or mark the turn non-shareable; it must not emit a provider-bearing `complete` event.
+- Turns with no provider artifacts may complete without tool-call rows only when the empty/no-provider state is explicit and source-bounded.
+
+## D-19 Rewrite guardrails
+
+- `registry-query-rewrite` and `AE_LLM_QUERY_REWRITE` are forbidden production paths in Phase 7.
+- Production use of `retrievalQuery` before catalog search is forbidden. Query repair belongs in model-chosen `registry.search` arguments and the chosen input is persisted as tool evidence.
+- Static validation must scan production source for these rewrite paths and fail the implementation if they reappear.
 
 ---
 
@@ -205,6 +220,8 @@ No public model picker on `/` without eval sign-off.
 | D-11 | No DSPy runtime | 2026-06-30 | Eng review |
 | D-16 | AE action/tool loop over hidden rewrite | 2026-06-30 | Architecture correction after tool-use review |
 | D-17 | Read tools only in public answer loop v1 | 2026-06-30 | Keeps qualified inquiry explicit |
+| D-18 | Provider-bearing answers fail closed on persisted evidence | 2026-06-30 | Validation repair |
+| D-19 | Rewrite guardrails | 2026-06-30 | Validation repair |
 
 ---
 

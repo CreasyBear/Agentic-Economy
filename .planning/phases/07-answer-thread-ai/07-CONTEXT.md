@@ -74,6 +74,9 @@ convex/schema.ts            no answerThreads / answerTurns yet
 - Copy: "What to do now" not "Next step" on human surfaces.
 - Registry/search stays literal; typo and intent recovery happen when the answer agent selects tool arguments.
 - The human answer loop uses read tools only in v1. Write actions such as qualified inquiry stay on explicit listing/agent-tool paths and must not auto-fire from chat prose.
+- The public answer loop read-tool set is exactly `registry.search` and `registry.detail`; it does not inherit every read-only external assistant tool.
+- Provider-bearing complete turns are fail-closed on persisted evidence: `answerTurns` plus matching `answerToolCalls` must exist before a shareable complete answer is accepted.
+- LLM prose is written only after actual registry action result JSON is fed back to the model; no hidden rewrite or pre-search retrieval path may stand in for a tool call.
 
 ---
 
@@ -109,6 +112,7 @@ convex/schema.ts            no answerThreads / answerTurns yet
 | Dual SSE paths (`/api/answer` vs `/api/chat`) | Unify orchestrator; deprecate chat as product API |
 | Sidebar without auth = session loss on cookie clear | Accept v1; document; Clerk attach later |
 | LLM slug hallucination | Prose-only schema + gate + deterministic default |
-| Hidden search rewrite becomes untestable product behavior | Replace with typed tool calls; persist tool input/result evidence per turn |
+| Hidden search rewrite becomes untestable product behavior | Replace with typed tool calls; persist reconstructable tool input/result evidence per turn |
+| Provider-bearing answer bypasses evidence storage | Block `complete` unless turn + tool-call rows are persisted, or resolve as error/non-shareable/no-provider |
 | Scope creep (rename, delete, search) | Explicit D-03 / D-15 non-goals |
 | Stale `.ui-craft` stateless decision | New decision entry + contract update |

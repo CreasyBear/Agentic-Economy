@@ -91,11 +91,14 @@ POST /api/answer/turn
        - filter_known / compare_known → frozen prior-turn evidence
        - explain_boundary / unsupported → boundary template
   5. validate and run read tool through action registry
-  6. assemble → AnswerSource[], allowedSlugs, persisted tool evidence
+       - public answer toolset is exactly registry.search / registry.detail
+       - actual tool result JSON is returned to the model before final prose
+  6. assemble → AnswerSource[], allowedSlugs, persisted reconstructable tool evidence
   7. synthesize → AsyncIterable<AnswerEvent>  (deterministic | gated LLM)
-  8. for each event: yield SSE
-  9. on complete → persist answerTurns row, answerToolCalls rows, bump thread.updatedAt
-  10. return threadId in first SSE meta event (or X-Thread-Id header)
+  8. stream thinking/sources/prose events but buffer provider-bearing complete
+  9. before complete → persist answerTurns row, answerToolCalls rows, bump thread.updatedAt
+  10. emit complete only after persistence succeeds; on persistence failure emit error or mark non-shareable with no provider-bearing complete
+  11. return threadId in first SSE meta event (or X-Thread-Id header)
 ```
 
 ### Follow-up router decision tree
@@ -130,6 +133,17 @@ New thread (/)
   → sidebar still visible if session has prior threads
   → active route / vs /t/id controls highlight
 ```
+
+### Validation repair gates
+
+These gates are required for Phase 7 to pass validation:
+
+1. Catalog search is an explicit AE action/tool call. `registry.search` must be registered through `src/modules/actions/index.ts` and invoked by the answer loop through the same action contract, not through hidden local retrieval.
+2. Registry search remains literal. Direct catalog/API search for misspelled suburbs returns literal results only; typo recovery exists only when the model chooses corrected `registry.search` arguments.
+3. Public answer synthesis exposes exactly `registry.search` and `registry.detail`, not every read-only action exposed by `/api/agent/tools`.
+4. The LLM path feeds the actual `registry.search` / `registry.detail` result JSON back to the model before accepting final prose.
+5. Provider-bearing complete answers fail closed: `answerTurns` and matching `answerToolCalls` must persist before `complete`; otherwise the result is error/non-shareable/no-provider.
+6. Static validation fails production source if `registry-query-rewrite`, `AE_LLM_QUERY_REWRITE`, or pre-search `retrievalQuery` usage appears.
 
 ---
 
@@ -170,6 +184,7 @@ New module: `src/modules/answer-thread/internal/convex-schema.ts`
   seq: number,
   toolId: 'registry.search' | 'registry.detail',
   inputJson: string,          // validated input only
+  resultJson: string,         // safe public action result or refusal/error envelope
   resultSummaryJson: string,  // slugs/count/status, not raw prompts
   resultHash: string,
   status: 'complete' | 'error' | 'refused',
@@ -271,12 +286,12 @@ Keep synthesis in `src/modules/answer/` — orchestrator imports `getAnswerSynth
 
 | Slice | Deliverable | Files (approx) | Stop condition |
 | --- | --- | --- | --- |
-| **7A — AE read tools** | `registry.search` / detail actions, `/api/agent/tools` parity, tool evidence types | 5–7 | Agent tools API invokes search and detail; registry stays literal |
-| **7B — Schema + session** | Tables, cookie, createThread, answerToolCalls | 7–9 | Unit test insert/query/tool evidence |
+| **7A — AE read tools** | `registry.search` / detail actions, `/api/agent/tools` parity, answer tool whitelist, tool evidence types | 5–7 | Agent tools API invokes search and detail; answer toolset is exactly registry search/detail; registry stays literal |
+| **7B — Schema + session** | Tables, cookie, createThread, reconstructable answerToolCalls | 7–9 | Unit test insert/query/tool evidence; provider-bearing complete fails if turn/tool-call persistence fails |
 | **7C — Turn API + `/t`** | SSE turn, redirect `/?q=`, transcript over tool results | 10–12 | E2E first query lands on `/t/id` |
 | **7D — Sidebar v1** | listBySession UI after first turn | 4–6 | E2E two threads in sidebar |
 | **7E — Follow-up router** | Intent + search/filter/compare paths | 6–8 | Unit tests all intents and no new slugs without tool/frozen evidence |
-| **7F — Gate + unify LLM** | tool-call prompt loop, `runAnswerGate`, prose-only LLM | 6–8 | Integration gate failures fall back |
+| **7F — Gate + unify LLM** | real tool-call prompt loop, `runAnswerGate`, prose-only LLM | 6–8 | Integration proves actual registry result JSON is returned to the model before final prose; gate failures fall back |
 | **7G — Eval + LLM chips** | Promptfoo, hybrid chips | 4–6 | CI gate green |
 | **7H — Share polish** | Public projection route, OG tags | 3–4 | Share URL loads without auth |
 
@@ -298,6 +313,8 @@ Keep synthesis in `src/modules/answer/` — orchestrator imports `getAnswerSynth
 | A8 | Rate limit absent on turn API | Apply public inquiry rate pattern | Medium |
 | A9 | Registry search is an answer helper, not an AE action | Promote to `registry.actions.ts`; route orchestrator and `/api/agent/tools` through one declaration | High |
 | A10 | Hidden LLM query rewrite masks agent behavior | Remove/supersede hidden rewrite; typo recovery only through explicit `registry.search` arguments | High |
+| A11 | Provider-bearing complete can bypass durable tool evidence | Persist `answerTurns` and `answerToolCalls` before emitting provider-bearing `complete`; failure resolves as error/non-shareable/no-provider | Blocker |
+| A12 | Answer loop could inherit unrelated read actions | Whitelist public answer synthesis to exactly `registry.search` and `registry.detail` | High |
 
 **Recommendation:** Land 7A→7B→7C→7D before router complexity. Read tools and thread evidence are not optional plumbing — they validate the trust contract before follow-up behavior gets clever.
 
@@ -321,9 +338,10 @@ Keep synthesis in `src/modules/answer/` — orchestrator imports `getAnswerSynth
 | Layer | Coverage |
 | --- | --- |
 | Unit | `classifyFollowUpIntent`, `filterKnownSlugs`, `buildPublicProjection`, session cookie parse, registry action schema |
-| Integration | `/api/agent/tools` exposes/invokes registry search; turn API persists tool evidence; projection omits forbidden fields; gate fallback |
+| Integration | `/api/agent/tools` exposes/invokes registry search; turn API persists tool evidence before provider-bearing complete; projection omits forbidden fields; gate fallback |
 | E2E | `landing-answer.spec.ts` → thread flow; sidebar 2 threads; share link |
 | Copy | extend forbidden patterns to thread summaries |
+| Static | production source has no hidden rewrite env/path and no pre-search `retrievalQuery` path |
 | Eval | Promptfoo: tool input quality, grounding, overclaim, chip→intent (7F) |
 
 **Test diagram:**
@@ -378,8 +396,11 @@ e2e/thread-first.spec.ts
 
 - [ ] `/` starts new thread on first submit → `/t/$threadId`
 - [ ] `registry.search` and detail are AE actions exposed through `/api/agent/tools`
+- [ ] Public answer synthesis whitelists exactly `registry.search` / `registry.detail`
 - [ ] Registry stays literal; misspelling recovery exists only through model/tool arguments
-- [ ] Provider-bearing turns persist tool input/result evidence
+- [ ] Real tool loop feeds actual registry action result JSON back to the model before final prose
+- [ ] Provider-bearing turns persist reconstructable tool input/result evidence in `answerTurns` + `answerToolCalls` before `complete`
+- [ ] Static guard blocks hidden rewrite paths and pre-search `retrievalQuery`
 - [ ] Sidebar lists session threads after first completed turn
 - [ ] Follow-up appends turn on same thread
 - [ ] Share `/t/$threadId` loads public projection
