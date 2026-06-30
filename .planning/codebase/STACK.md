@@ -1,133 +1,116 @@
 # Technology Stack
 
-**Analysis Date:** 2026-06-29
+**Analysis Date:** 2026-06-30
 
 ## Languages
 
 **Primary:**
-- TypeScript 6.0.3 - Application routes, TanStack Start server functions, Convex functions, billing modules, provider seams, and tests live in `src/**/*.ts`, `src/**/*.tsx`, `convex/**/*.ts`, `tests/**/*.ts`, and `tests/**/*.tsx`.
-- TSX / React JSX - Route and component UI lives in `src/routes/*.tsx`, `src/components/**/*.tsx`, and parked Phase 5 route surfaces under `src/future-phases/05-paid-activation-money-rails/routes/*.tsx`.
+- TypeScript 6.0.3 - application routes, server functions, domain modules, Convex functions, tests, and config in `src/`, `convex/`, `tests/`, `vite.config.ts`, `vitest.config.ts`, and `playwright.config.ts`.
+- TSX / React 19.2.7 - route components and UI components in `src/routes/`, `src/components/`, and `src/future-phases/`.
 
 **Secondary:**
-- CSS - Global styles and token imports live in `src/styles/globals.css`; Tailwind runs through the Vite plugin configured in `vite.config.ts`.
-- JSON - Project and compiler configuration lives in `package.json`, `package-lock.json`, `tsconfig.json`, and `convex/tsconfig.json`.
-- Markdown - Phase and codebase planning docs live under `.planning/`; Phase 5 paid-activation contracts live under `.planning/phases/05-paid-activation-money-rails/`.
+- CSS / Tailwind CSS 4.3.1 - global styles, theme tokens, shadcn styles, and public landing styles in `src/styles/globals.css`, `src/styles/tokens.css`, `src/styles/landing-v2.css`, and `tailwind.config.ts`.
+- JSON - package, TypeScript, component, lockfile, planning, and generated graph/config files in `package.json`, `package-lock.json`, `tsconfig.json`, `components.json`, and `.planning/`.
+- Markdown - product, design, security, phase, and codebase planning documents in `DESIGN.md`, `PRODUCT.md`, and `.planning/`.
 
 ## Runtime
 
 **Environment:**
-- Node.js - Local command output is `v26.4.0`; the repo does not declare a Node `engines` field in `package.json`.
-- TanStack Start on Vite/Nitro - Runtime entry is created in `src/start.ts`, Vite/Nitro plugins are configured in `vite.config.ts`, and generated Nitro metadata in `.output/nitro.json` reports preset `node-server` with server entry `server/index.mjs`.
-- Browser runtime - React/TanStack Router route surfaces live under `src/routes/`; parked future route helpers live under `src/future-phases/route-helpers.ts`.
+- Node.js runtime - local shell reports `v26.4.0`; the repo has no committed `.nvmrc` or `engines` field in `package.json`.
+- Package constraints in `package-lock.json` include tools that require Node `^20.19.0 || >=22.12.0`, so use Node 20.19+ or 22.12+/24+ for reproducible installs.
+- ESM modules are enabled through `"type": "module"` in `package.json`.
+- TanStack Start runs through Vite and Nitro via `vite.config.ts`; the dev server is configured for port `3000`.
 
 **Package Manager:**
-- npm 11.5.1 - Declared by `"packageManager": "npm@11.5.1"` in `package.json`.
-- npm 11.17.0 - Local `npm --version` output in this checkout.
-- Lockfile: present - `package-lock.json` is committed and pins the dependency graph.
+- npm declared as `npm@11.5.1` in `package.json`.
+- Local shell npm reports `11.17.0`; prefer the declared `packageManager` value for reproducible automation.
+- Lockfile: present as `package-lock.json` with `lockfileVersion: 3`.
 
 ## Frameworks
 
 **Core:**
-- React 19.2.7 and React DOM 19.2.7 - UI runtime declared in `package.json`.
-- TanStack React Start 1.168.26 - Full-stack app framework configured by `vite.config.ts` and request middleware in `src/start.ts`.
-- TanStack React Router 1.170.16 - File-route routing used by route files under `src/routes/` and generated route types in `src/routeTree.gen.ts`.
-- Vite 8.1.0 - Dev/build tool invoked by `npm run dev` and `npm run build` in `package.json`; configured in `vite.config.ts`.
-- Nitro 3.0.1 nightly - Server build plugin imported in `vite.config.ts`; generated output metadata is in `.output/nitro.json`.
-- Convex 1.42.0 - Backend database/functions under `convex/`; schema composition imports `billingTables` and other domain tables in `convex/schema.ts`.
-- Clerk TanStack React Start 1.4.9 - Auth middleware and server auth in `src/start.ts` and `src/lib/server/convex-source.ts`; Convex JWT issuer config in `convex/auth.config.ts`.
+- React 19.2.7 - UI rendering for route and component trees in `src/routes/` and `src/components/`.
+- @tanstack/react-start 1.168.26 - full-stack server functions, middleware, SSR, and API routes through `src/start.ts`, `src/routes/*.ts`, and `src/routes/*.tsx`.
+- @tanstack/react-router 1.170.16 - file route definitions in `src/routes/`, router setup in `src/router.tsx`, and generated tree in `src/routeTree.gen.ts`.
+- Vite 8.1.0 - dev/build entry in `vite.config.ts` and scripts in `package.json`.
+- Nitro nightly `3.0.1-20260628-090458-3df69609` - server runtime plugin configured in `vite.config.ts`.
+- Convex 1.42.0 - source-owned database schema, queries, and mutations in `convex/` and Convex HTTP client access in `src/lib/server/convex-source.ts`.
+- Clerk TanStack React Start 1.4.9 - auth provider, middleware, root provider, and sign-in/sign-up routes in `src/start.ts`, `src/routes/__root.tsx`, `src/routes/sign-in.$.tsx`, and `src/routes/sign-up.$.tsx`.
 
-**UI:**
-- Tailwind CSS 4.3.1 - Vite plugin configured in `vite.config.ts`.
-- shadcn 4.12.0 and Radix UI 1.6.0 - UI component tooling/dependencies declared in `package.json`; components live under `src/components/ui/` and `src/components/ae/`.
-- lucide-react 1.21.0 - Icon dependency declared in `package.json`.
-- `class-variance-authority` 0.7.1, `clsx` 2.1.1, and `tailwind-merge` 3.6.0 - Component styling utilities declared in `package.json`.
-- `@fontsource-variable/geist` 5.2.9 - Font asset dependency declared in `package.json`.
+**UI & Styling:**
+- Tailwind CSS 4.3.1 with `@tailwindcss/vite` 4.3.1 - configured in `tailwind.config.ts`, `vite.config.ts`, and `src/styles/globals.css`.
+- shadcn 4.12.0 with Radix Nova style - configured in `components.json`; generated UI primitives live in `src/components/ui/`.
+- radix-ui 1.6.0 - low-level UI primitives used by `src/components/ui/button.tsx`, `src/components/ui/separator.tsx`, and related UI files.
+- lucide-react 1.21.0 - icon set used across routes and AE components in `src/routes/` and `src/components/ae/`.
+- `@fontsource-variable/geist` 5.2.9 - imported in `src/styles/globals.css`.
+- `class-variance-authority`, `clsx`, `tailwind-merge`, and `tw-animate-css` - styling utilities used by `src/components/ui/`, `src/lib/utils.ts`, and `src/styles/globals.css`.
+
+**Validation & Domain Contracts:**
+- Zod 4.4.3 - server function validators and contract tests in files such as `src/modules/business-action/business-action.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, and `tests/types/domain-contracts.test.ts`.
+- Convex validators from `convex/values` - schema and function validators in `convex/schema.ts`, `convex/businessActions.ts`, and module schemas under `src/modules/*/internal/schema.ts`.
 
 **Testing:**
-- Vitest 4.1.9 - Test runner configured in `vitest.config.ts`; package scripts in `package.json` cover unit, integration, type, imports, copy, SEO, and UI-contract tests.
-- Playwright 1.61.1 - Local E2E/a11y config in `playwright.config.ts`; deployed smoke config in `playwright.deploy-smoke.config.ts`.
-- Testing Library React 16.3.2, jest-dom 6.9.1, and jsdom 29.1.1 - Test helpers declared in `package.json`; `vitest.config.ts` uses Node as the default test environment.
+- Vitest 4.1.9 - unit, integration, type, import, SEO, copy, and UI contract suites configured by `vitest.config.ts` and scripts in `package.json`.
+- Playwright 1.61.1 - browser E2E, a11y, and deployed smoke tests configured by `playwright.config.ts` and `playwright.deploy-smoke.config.ts`.
+- Testing Library React 16.3.2, jest-dom 6.9.1, and jsdom 29.1.1 - component and DOM-oriented testing dependencies in `package.json`.
 
 **Build/Dev:**
-- TypeScript compiler - `npm run typecheck` runs `tsc --noEmit` from `package.json`; strict options are enabled in `tsconfig.json` and `convex/tsconfig.json`.
-- Convex codegen check - `npm run check:convex-codegen` runs `convex codegen --dry-run --typecheck=disable` from `package.json`.
-- Vite dev server - `npm run dev` runs `vite dev --host 127.0.0.1`; `vite.config.ts` sets dev server port `3000`.
-- TanStack/Vite plugins - `tanstackStart()`, `nitro()`, `viteReact()`, and `tailwindcss()` are registered in `vite.config.ts`.
+- TypeScript strict mode is configured in `tsconfig.json` with `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, and `noImplicitOverride`.
+- Path aliases `@/*` and `~/*` map to `src/*` in `tsconfig.json`; Vite enables `tsconfigPaths` in `vite.config.ts`.
+- Convex code generation is run by `npm run check:convex-codegen`, which executes `convex codegen --dry-run --typecheck=disable` from `package.json`.
+- No committed ESLint, Prettier, or Biome config was detected in the repo root; formatting/linting enforcement is mostly encoded in tests under `tests/imports/`, `tests/ui-contract/`, and `tests/copy/`.
 
 ## Key Dependencies
 
 **Critical:**
-- `@tanstack/react-start` 1.168.26 - Owns request middleware in `src/start.ts` and server function patterns in `src/modules/**/*.functions.ts`.
-- `convex` 1.42.0 - Owns source state and typed functions in `convex/*.ts`, schema fragments under `src/modules/*/internal/schema.ts`, and HTTP clients in `src/lib/server/convex-source.ts`.
-- `@clerk/tanstack-react-start` 1.4.9 - Owns Clerk middleware, provider integration, hosted sign-in/sign-up routes, and server auth calls in `src/start.ts`, `src/routes/__root.tsx`, `src/routes/sign-in.$.tsx`, `src/routes/sign-up.$.tsx`, and `src/lib/server/convex-source.ts`.
-- `zod` 4.4.3 - Runtime validation dependency for route/server-function modules under `src/modules/` and `src/routes/`.
-- `src/modules/billing/public.ts` - Route-facing Phase 5 billing seam exporting paid activation, customer portal, provider event ingest, receipts, reconciliation, no-repair, disable, and projection functions.
+- `@tanstack/react-start` and `@tanstack/react-router` - define the app, API routes, server functions, middleware, and routing surface in `src/start.ts`, `src/router.tsx`, and `src/routes/`.
+- `convex` - stores source-owned business, registry, discovery, inquiry, notification, protected-action, billing, and observability state through `convex/schema.ts`.
+- `@clerk/tanstack-react-start` - supplies request auth middleware, `<ClerkProvider>`, auth tokens for Convex, and sign-in/sign-up UI in `src/start.ts`, `src/routes/__root.tsx`, and `src/lib/server/convex-source.ts`.
+- `zod` - validates TanStack server function inputs before source writes in modules such as `src/modules/business-action/business-action.functions.ts`.
+- `react` / `react-dom` - render the client and SSR route tree.
 
 **Infrastructure:**
-- `src/modules/billing/internal/provider-readback.ts` - Raw `fetch` Autumn HTTP provider for `/v1/billing.attach`, `/v1/billing.open_customer_portal`, and `/v1/customers.get`; no Autumn npm SDK is declared in `package.json`.
-- Stripe package: Not detected - `package.json` has no `stripe` dependency; Stripe PSP evidence appears as provider value `stripe_psp` in `src/modules/billing/internal/schema.ts` and invoice snapshots normalized from Autumn responses in `src/modules/billing/internal/provider-readback.ts`.
-- `src/lib/server/billing-provider.ts` - Server-only Autumn config reader and webhook seam; `verifyAutumnWebhook` currently rejects callbacks with `unverified_webhook`.
-- `src/lib/server/notification-provider.ts` - Raw `fetch` integrations for Clerk owner lookup, Resend email send/webhook normalization, and Novu workflow trigger/readback.
-- `@playwright/test` 1.61.1 - Browser automation for `tests/e2e/`, `tests/e2e/a11y/`, and `tests/deploy-smoke/`.
+- Provider integrations for Resend, Novu, Autumn, Stripe, and Clerk REST use `fetch`, `node:crypto`, HMAC checks, and route handlers rather than official provider SDK packages; see `src/lib/server/notification-provider.ts`, `src/lib/server/billing-provider.ts`, `src/modules/billing/internal/provider-readback.ts`, `src/modules/business-action/internal/stripe-checkout.ts`, and `src/routes/api.business-actions.stripe-webhook.ts`.
+- `@playwright/test` provides local browser, a11y, and deployed smoke gates in `tests/e2e/` and `tests/deploy-smoke/`.
+- `@vitejs/plugin-react`, `@tailwindcss/vite`, `nitro/vite`, and `@tanstack/react-start/plugin/vite` are composed in `vite.config.ts`.
 
 ## Configuration
 
 **Environment:**
-- Environment files are present as `.env.local` and `.env.example`; contents were not read.
-- Convex server calls require `CONVEX_URL` or `VITE_CONVEX_URL`, read by `src/lib/server/convex-source.ts`.
-- Convex auth requires `CLERK_JWT_ISSUER_DOMAIN`, read by `convex/auth.config.ts`.
-- Clerk owner lookup requires `CLERK_SECRET_KEY`, read by `src/lib/server/notification-provider.ts`.
-- Clerk local E2E bypass uses `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`, read by `src/start.ts`, `src/routes/__root.tsx`, and multiple server-function helpers under `src/modules/`.
-- Source-write admission requires `AE_SOURCE_WRITE_SECRET` and explicitly rejects `VITE_AE_SOURCE_WRITE_SECRET` in `src/lib/server/source-write-admission.ts`.
-- Notification dispatch requires `AE_NOTIFICATION_OUTBOX_SECRET`, read by `src/lib/server/notification-provider.ts` and `convex/notificationOutbox.ts`.
-- Resend requires `RESEND_API_KEY`, `RESEND_FROM`, and `RESEND_WEBHOOK_SECRET`, with optional `RESEND_API_BASE_URL`, read by `src/lib/server/notification-provider.ts`.
-- Novu requires `NOVU_SECRET_KEY` and `NOVU_WORKFLOW_INQUIRY_OWNER`, with optional `NOVU_WORKFLOW_INQUIRY_CUSTOMER` and `NOVU_API_BASE_URL`, read by `src/lib/server/notification-provider.ts`.
-- Autumn currently requires `AUTUMN_SECRET_KEY`, with optional `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, and `AUTUMN_WEBHOOK_SECRET`, read by `src/lib/server/billing-provider.ts`.
-- Phase 5 plan also reserves `AUTUMN_ENVIRONMENT`, `AUTUMN_PROJECT_ID`, `AUTUMN_PORTAL_RETURN_BASE_URL`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` for the first implementation PR that reads them; see `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`.
+- `.env.local` is present and `.env.example` is present; contents were not read. `.gitignore` ignores `.env` and `.env.*` while allowing `.env.example`.
+- Ignored local artifacts that can contain environment or session material include `.clerk/`, `.vercel/`, `.convex/`, `.output/`, `.vinxi/`, `playwright-report/`, and `test-results/` in `.gitignore`; Playwright storage-state artifacts under `.auth/` were detected separately and should be treated as local secrets.
+- Core runtime env names referenced by source include `CONVEX_URL`, `VITE_CONVEX_URL`, `CLERK_JWT_ISSUER_DOMAIN`, `CLERK_SECRET_KEY`, `AE_SOURCE_WRITE_SECRET`, `ADMIN_BOOTSTRAP_PRINCIPAL_IDS`, `AE_NOTIFICATION_OUTBOX_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_API_BASE_URL`, `RESEND_WEBHOOK_SECRET`, `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, `NOVU_API_BASE_URL`, `AUTUMN_SECRET_KEY`, `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, `AUTUMN_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_SECRET`, `SITE_URL`, `VITE_SITE_URL`, `AE_CANONICAL_BASE_URL`, and `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`.
+- Deploy smoke tests require additional command-side env names such as `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, and `SMOKE_*` identifiers in `tests/deploy-smoke/`.
 
 **Build:**
-- `vite.config.ts` configures port `3000`, TypeScript path resolution, TanStack Start, Nitro, React, and Tailwind.
-- `tsconfig.json` enables strict TypeScript, `moduleResolution: "Bundler"`, `jsx: "react-jsx"`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, and aliases `@/*` and `~/*` to `src/*`.
-- `convex/tsconfig.json` applies strict TypeScript to Convex source and excludes `convex/_generated`.
-- `vitest.config.ts` configures `tsconfigPaths`, Node environment, non-global tests, and `tests/**/*.test.ts(x)` includes.
-- `playwright.config.ts` starts `npm run dev` and tests compact and wide Chromium projects against `PLAYWRIGHT_BASE_URL` or `http://127.0.0.1:3000`.
-- `playwright.deploy-smoke.config.ts` configures deployed smoke tests without a local web server.
-- No root `vercel.json`, `.github/`, Dockerfile, Netlify, Fly, or Railway config is detected.
-
-**Phase 5 Autumn+Stripe readiness:**
-- Implemented local seam: `src/modules/billing/public.ts`, `src/modules/billing/internal/operations.ts`, `src/modules/billing/internal/provider-readback.ts`, `src/modules/billing/internal/schema.ts`, and `convex/schema.ts`.
-- Implemented source tables: `billingOffers`, `billingOperations`, `billingProviderEvents`, `billingReceipts`, `billingReconciliations`, and `capabilityLaunchSupportRecords` in `src/modules/billing/internal/schema.ts`, included by `convex/schema.ts`.
-- Parked route surfaces: `src/future-phases/05-paid-activation-money-rails/routes/owner.billing*.tsx` and `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`.
-- Current webhook posture: `src/lib/server/billing-provider.ts` refuses Autumn callbacks until a real signature verifier is configured.
-- Current Stripe posture: direct Stripe SDK/client is not installed; Stripe appears only as PSP evidence under Autumn in `src/modules/billing/internal/schema.ts` and `src/modules/billing/internal/provider-readback.ts`.
-- Phase 5 execution status is ready for execution prep after `.planning/phases/05-paid-activation-money-rails/05-MONEY-RAIL-DECISION.md`; live/provider claims remain blocked on durable billing runtime, signature verification, provider smoke/readback, receipts, reconciliation, and rollback evidence.
-
-**Verification commands:**
-- `npm run check:convex-codegen` - Convex codegen/type surface check from `package.json`.
-- `npm run typecheck` - TypeScript strict check from `package.json`.
-- `npm run test`, `npm run test:unit`, and `npm run test:integration` - Vitest suites from `package.json`.
-- `npm run test:e2e` and `npm run test:e2e:a11y` - Playwright local browser suites from `package.json`.
-- `npm run test:types`, `npm run test:imports`, `npm run test:source-mining`, `npm run test:copy`, `npm run test:seo`, and `npm run test:ui-contract` - contract gates from `package.json`.
-- `npm run test:deploy-smoke`, `npm run test:provider-smoke:resend`, and `npm run test:provider-smoke:novu` - deployed smoke scripts from `package.json`; Phase 5 provider smoke commands are specified in `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`.
-- `npm run build` and `npm run test:all` - build and aggregate local verification from `package.json`.
+- `vite.config.ts` composes `tanstackStart()`, `nitro()`, `viteReact()`, and `tailwindcss()`.
+- `tsconfig.json` includes `src/**/*.ts`, `src/**/*.tsx`, `convex/**/*.ts`, `tests/**/*.ts`, config files, and excludes `node_modules`, `dist`, and `convex/_generated`.
+- `convex/tsconfig.json` applies strict ESNext settings to Convex source and excludes `convex/_generated`.
+- `components.json` configures shadcn aliases for `@/components`, `@/components/ui`, `@/lib`, `@/hooks`, and `@/lib/utils`.
+- `playwright.config.ts` starts `npm run dev` for local browser tests; `playwright.deploy-smoke.config.ts` intentionally does not start a local server for deployed smoke tests.
 
 ## Platform Requirements
 
 **Development:**
-- Install dependencies with npm using `package.json` and `package-lock.json`.
-- Run the app with `npm run dev`; `vite.config.ts` serves port `3000` and `package.json` binds Vite to `127.0.0.1`.
-- Configure `.env.local` with Convex, Clerk, source-write, notification, and Autumn env vars read by `src/lib/server/convex-source.ts`, `convex/auth.config.ts`, `src/lib/server/source-write-admission.ts`, `src/lib/server/notification-provider.ts`, and `src/lib/server/billing-provider.ts`.
-- Use Convex validator/index/idempotency patterns from `.codex/skills/convex-best-practices/SKILL.md` and HTTP action webhook patterns from `.codex/skills/convex-http-actions/SKILL.md` when adding Convex functions or webhooks.
-- Use Clerk TanStack/React auth patterns from `.codex/skills/clerk/SKILL.md`, `.codex/skills/clerk-react-patterns/SKILL.md`, and current `src/start.ts`/`src/routes/__root.tsx` placement.
-- Use Stripe skill guardrails from `.codex/skills/stripe/SKILL.md`: default to test mode, prefer read-only inspection first, and never expose secret keys or webhook signing secrets.
+- Install with npm using `package-lock.json`; use Node 20.19+ or a newer compatible Node runtime.
+- Run `npm run dev` for the local TanStack Start/Vite app at `http://127.0.0.1:3000`.
+- Run `npm run typecheck`, `npm run check:convex-codegen`, `npm run test`, `npm run test:e2e`, and `npm run test:all` from `package.json` for progressively broader verification.
+- Convex codegen and production-like source calls require a configured Convex deployment and environment; source modules fail closed when `CONVEX_URL`/`VITE_CONVEX_URL` or Clerk auth tokens are absent.
+- Local E2E bypasses are gated by command-scoped `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true` checks in `src/start.ts`, `src/routes/__root.tsx`, and route/server-function helper modules.
 
 **Production:**
-- Build with `npm run build`, which runs `vite build` from `package.json`.
-- Runtime output is Nitro `node-server` per `.output/nitro.json`.
-- Vercel posture: `.vercel/README.txt` indicates the directory is linked to Vercel, but root deployment config is not committed and `.vercel/` should not be shared.
-- Convex production posture requires deployed Convex URL env (`CONVEX_URL` or `VITE_CONVEX_URL`) and Clerk issuer env (`CLERK_JWT_ISSUER_DOMAIN`) matching `src/lib/server/convex-source.ts` and `convex/auth.config.ts`.
-- Phase 5 production posture requires real Autumn+Stripe provider keys, signed webhook/readback verification, receipts, reconciliation, rollback/disable evidence, and deploy/readback smoke as specified in `.planning/phases/05-paid-activation-money-rails/05-CONTEXT.md` and `.planning/phases/05-paid-activation-money-rails/05-01-autumn-stripe-paid-activation-PLAN.md`.
+- Deployment target is TanStack Start/Nitro output from Vite; `.vercel/README.txt` indicates a local Vercel project link, but `.vercel/` is ignored and no committed `vercel.json` was detected.
+- Production operation requires configured Convex, Clerk, source-write, notification, and provider env vars; deploy-smoke scripts in `package.json` require deployed URLs and source-owned smoke IDs before external provider proof is claimed.
+- Provider secrets must stay server-side; source code explicitly rejects client-exposed source-write secrets in `src/lib/server/source-write-admission.ts`.
+
+## Local Skill Guidance
+
+**Applicable project skills:**
+- Convex guidance from `.codex/skills/convex-best-practices/SKILL.md` and `.codex/skills/convex-functions/SKILL.md`: keep Convex functions domain-organized, define `args` and `returns` validators, prefer indexes over filters, make mutations idempotent, use internal functions for sensitive operations, and do not run `npx convex deploy` unless explicitly instructed.
+- Clerk/TanStack guidance from `.codex/skills/clerk-tanstack-patterns/SKILL.md`: keep `clerkMiddleware()` in `src/start.ts`, wrap the app with `<ClerkProvider>` in `src/routes/__root.tsx`, and use server-side `auth()` for server functions and loaders.
+- TanStack Start guidance from `.codex/skills/tanstack-start/SKILL.md`: use `createServerFn` for server-side mutations, validate inputs, keep secrets server-side, use CSRF protection, and route API endpoints through file routes.
+- Stripe guidance from `.codex/skills/stripe/SKILL.md`: default to test mode, prefer read-only inspection before mutations, never expose keys or webhook signing secrets, and require explicit confirmation for live charges, refunds, cancellations, or other destructive billing changes.
 
 ---
 
-*Stack analysis: 2026-06-29*
+*Stack analysis: 2026-06-30*
