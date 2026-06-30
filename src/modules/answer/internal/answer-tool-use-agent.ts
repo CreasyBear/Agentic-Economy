@@ -225,6 +225,9 @@ async function runRealToolUseAgent(
     }
 
     const assistantToolCalls = assistantMessage.tool_calls ?? []
+    if (input.disableTools === true && assistantToolCalls.length > 0) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
     if (assistantToolCalls.length === 0) {
       const prose = parseProse(assistantMessage.content)
       if (prose === undefined) {

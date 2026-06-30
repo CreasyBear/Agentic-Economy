@@ -130,6 +130,49 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     )
   })
 
+  it('fails closed if the model emits a tool call when tools are disabled', async () => {
+    const requests: { tools?: unknown[] }[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const body = JSON.parse(String(init?.body ?? '{}')) as (typeof requests)[number]
+        requests.push(body)
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: '',
+                  tool_calls: [
+                    {
+                      id: 'call-search-disabled',
+                      type: 'function',
+                      function: {
+                        name: 'registry.search',
+                        arguments: JSON.stringify({ query: 'parramatta' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        )
+      },
+    )
+
+    await expect(
+      runAnswerToolUseAgent({
+        query: 'compare the first two',
+        disableTools: true,
+        config: { apiKey: 'test-key', model: 'test-model' },
+      }),
+    ).rejects.toMatchObject({ code: 'tool_unavailable' })
+
+    expect(requests[0]?.tools).toBeUndefined()
+  })
+
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
     const state = createDefaultRegistrySourceState()
     await withRegistrySourcePortForTest(state, async () => {
