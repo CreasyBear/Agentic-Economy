@@ -137,7 +137,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
     setAnswerToolUseAgentForTests(undefined)
   })
 
-  it('still streams a complete answer when Convex persistence is unavailable', async () => {
+  it('does not emit a provider-bearing complete when Convex persistence is unavailable', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
 
     setAnswerToolUseAgentForTests(async () => ({
@@ -174,8 +174,17 @@ describe('POST /api/answer/turn persistence resilience', () => {
 
       expect(response.ok).toBe(true)
       const frames = parseStream(await response.text())
-      expect(frames.at(-1)?.event.type).toBe('complete')
-      expect(frames.some((frame) => frame.event.type === 'error')).toBe(false)
+      expect(
+        frames.some(
+          (frame) =>
+            frame.event.type === 'complete' &&
+            frame.event.answer.providers.length > 0,
+        ),
+      ).toBe(false)
+      expect(frames.at(-1)?.event).toMatchObject({
+        type: 'error',
+        code: 'answer_turn_persist_failed',
+      })
     })
   })
 })

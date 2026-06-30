@@ -37,6 +37,8 @@ export type RunAnswerToolCallResult = {
   record: AnswerToolCallRecord
   providers: AnswerSource[]
   allowedSlugs: ReadonlySet<string>
+  /** Public action result JSON fed back to the model as tool-role content. */
+  resultJson: string
 }
 
 const KNOWN_TOOL_IDS: ReadonlySet<AnswerToolId> = new Set([
@@ -65,11 +67,13 @@ export async function runAnswerToolCall(
 
   const parsed = action.schema.safeParse(input.input)
   if (!parsed.success) {
+    const errorCode = 'invalid_input'
     return recordResult(input, toolCallId, {
       status: 'error',
-      summary: { slugs: [], count: 0, errorCode: 'invalid_input' },
+      summary: { slugs: [], count: 0, errorCode },
       inputJson: safeStringify(input.input),
       providers: [],
+      resultJson: safeStringify({ kind: 'error', code: errorCode }),
     })
   }
 
@@ -85,13 +89,16 @@ export async function runAnswerToolCall(
       summary,
       inputJson: safeStringify(parsed.data),
       providers: extracted.providers,
+      resultJson: safeStringify(result),
     })
   } catch {
+    const errorCode = 'tool_run_failed'
     return recordResult(input, toolCallId, {
       status: 'error',
-      summary: { slugs: [], count: 0, errorCode: 'tool_run_failed' },
+      summary: { slugs: [], count: 0, errorCode },
       inputJson: safeStringify(parsed.data),
       providers: [],
+      resultJson: safeStringify({ kind: 'error', code: errorCode }),
     })
   }
 }
@@ -106,6 +113,7 @@ function refuse(
     summary: { slugs: [], count: 0, errorCode },
     inputJson: safeStringify(input.input),
     providers: [],
+    resultJson: safeStringify({ kind: 'refused', code: errorCode }),
   })
 }
 
@@ -117,6 +125,7 @@ function recordResult(
     summary: AnswerToolCallResultSummary
     inputJson: string
     providers: AnswerSource[]
+    resultJson: string
   },
 ): RunAnswerToolCallResult {
   const resultSummaryJson = safeStringify(outcome.summary)
@@ -143,6 +152,7 @@ function recordResult(
     record,
     providers: outcome.providers,
     allowedSlugs: new Set(outcome.providers.map((provider) => provider.slug)),
+    resultJson: outcome.resultJson,
   }
 }
 

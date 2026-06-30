@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
-  appendAnswerToolCalls,
+  appendAnswerTurnWithToolCalls,
   buildPublicThreadProjection,
   readTurnToolCalls,
   setAnswerThreadPortForTests,
@@ -42,6 +42,18 @@ describe('answerToolCalls persistence', () => {
         turns.set(args.turnId, { ...args, createdAt: Date.now() })
         return { turnId: args.turnId }
       },
+      appendTurnWithToolCalls: async (args) => {
+        const { toolCalls: inputToolCalls, ...turnArgs } = args
+        turns.set(args.turnId, { ...turnArgs, createdAt: Date.now() })
+        for (const call of inputToolCalls) {
+          toolCalls.set(call.toolCallId, {
+            ...call,
+            turnId: args.turnId,
+            createdAt: Date.now(),
+          })
+        }
+        return { turnId: args.turnId, insertedToolCalls: inputToolCalls.length }
+      },
       listSessionThreads: async () => ({ threads: [] }),
       getPublicThreadProjection: async (threadId) => {
         const thread = threads.get(threadId)
@@ -79,15 +91,29 @@ describe('answerToolCalls persistence', () => {
     const threadId = 'thread-tool-1'
     const turnId = 'turn-tool-1'
 
-    // Orchestrator pattern: create thread, append turn, then flush buffered tool calls.
+    // Orchestrator pattern: create thread, then atomically append the turn and
+    // its buffered tool calls before emitting a terminal complete event.
     await createThread(threadId, 'session-1', 'after hours plumber Preston')
-    await appendTurn(turnId, threadId, 'session-1')
     const buffered: AnswerToolCallRecord[] = [
       buildToolCall('tc-1', turnId, 1, 'registry.search', ['parramatta-emergency-plumbing'], 1),
       buildToolCall('tc-2', turnId, 2, 'registry.detail', ['parramatta-emergency-plumbing'], 1),
     ]
-    await appendAnswerToolCalls({
+    await appendAnswerTurnWithToolCalls({
       turnId,
+      threadId,
+      pseudonymousSessionId: 'session-1',
+      seq: 1,
+      query: 'after hours plumber Preston',
+      intent: 'refine_search',
+      evidenceJson: JSON.stringify({
+        providers: [],
+        allowedSlugs: [],
+        agentJsonUrl: '/api/businesses/search?q=plumber',
+      }),
+      snapshotHash: 'hash-1',
+      proseJson: JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' }),
+      artifactKindsJson: '[]',
+      status: 'complete',
       toolCalls: buffered.map((record) => ({
         toolCallId: record.toolCallId,
         seq: record.seq,
@@ -145,27 +171,6 @@ describe('answerToolCalls persistence', () => {
 async function createThread(threadId: string, sessionId: string, title: string): Promise<void> {
   const { createAnswerThread } = await import('@/modules/answer-thread/answer-thread.functions')
   await createAnswerThread({ threadId, pseudonymousSessionId: sessionId, title })
-}
-
-async function appendTurn(turnId: string, threadId: string, sessionId: string): Promise<void> {
-  const { appendAnswerTurn } = await import('@/modules/answer-thread/answer-thread.functions')
-  await appendAnswerTurn({
-    turnId,
-    threadId,
-    pseudonymousSessionId: sessionId,
-    seq: 1,
-    query: 'after hours plumber Preston',
-    intent: 'refine_search',
-    evidenceJson: JSON.stringify({
-      providers: [],
-      allowedSlugs: [],
-      agentJsonUrl: '/api/businesses/search?q=plumber',
-    }),
-    snapshotHash: 'hash-1',
-    proseJson: JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' }),
-    artifactKindsJson: '[]',
-    status: 'complete',
-  })
 }
 
 function buildToolCall(

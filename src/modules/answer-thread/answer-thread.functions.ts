@@ -12,6 +12,7 @@ import type {
   FollowUpIntent,
   PublicThreadProjection,
 } from './answer-thread.schema'
+import type { AnswerToolCallInputRow } from './internal/commands'
 
 export type CreateAnswerThreadArgs = {
   threadId: string
@@ -34,6 +35,10 @@ export type AppendAnswerTurnArgs = {
   errorCopyId?: string
 }
 
+export type AppendAnswerTurnWithToolCallsArgs = AppendAnswerTurnArgs & {
+  toolCalls: readonly AnswerToolCallInputRow[]
+}
+
 export type AnswerThreadWithTurnCount = AnswerThreadRecord & {
   turnCount: number
 }
@@ -49,6 +54,11 @@ export const createAnswerThreadMutation = sourceMutation<CreateAnswerThreadArgs,
 export const appendAnswerTurnMutation = sourceMutation<AppendAnswerTurnArgs, { turnId: string }>(
   'answerThreads:appendAnswerTurn',
 )
+
+export const appendAnswerTurnWithToolCallsMutation = sourceMutation<
+  AppendAnswerTurnWithToolCallsArgs,
+  { turnId: string; insertedToolCalls: number }
+>('answerThreads:appendAnswerTurnWithToolCalls')
 
 export const listSessionThreadsQuery = sourceQuery<
   { pseudonymousSessionId: string; limit?: number },
@@ -71,6 +81,9 @@ export const getThreadTurnsQuery = sourceQuery<{ threadId: string }, { turns: re
 type AnswerThreadPort = {
   createThread(args: CreateAnswerThreadArgs): Promise<{ threadId: string }>
   appendTurn(args: AppendAnswerTurnArgs): Promise<{ turnId: string }>
+  appendTurnWithToolCalls?(
+    args: AppendAnswerTurnWithToolCallsArgs,
+  ): Promise<{ turnId: string; insertedToolCalls: number }>
   listSessionThreads(pseudonymousSessionId: string, limit?: number): Promise<ListSessionThreadsResult>
   getPublicThreadProjection(threadId: string): Promise<PublicThreadProjection | null>
   getThreadTurns(threadId: string): Promise<{ turns: readonly AnswerTurnRecord[] }>
@@ -99,6 +112,19 @@ export async function appendAnswerTurn(args: AppendAnswerTurnArgs): Promise<{ tu
     return testPort.appendTurn(args)
   }
   return callPublicSourceMutation(appendAnswerTurnMutation, args)
+}
+
+export async function appendAnswerTurnWithToolCalls(
+  args: AppendAnswerTurnWithToolCallsArgs,
+): Promise<{ turnId: string; insertedToolCalls: number }> {
+  if (testPort !== undefined) {
+    if (testPort.appendTurnWithToolCalls !== undefined) {
+      return testPort.appendTurnWithToolCalls(args)
+    }
+    const { turnId } = await testPort.appendTurn(args)
+    return { turnId, insertedToolCalls: args.toolCalls.length }
+  }
+  return callPublicSourceMutation(appendAnswerTurnWithToolCallsMutation, args)
 }
 
 export async function listSessionThreads(

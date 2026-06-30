@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   runAnswerToolUseAgent,
@@ -12,6 +14,7 @@ import { withRegistrySourcePortForTest } from '../../helpers/source-ports'
 afterEach(() => {
   setAnswerToolUseAgentForTests(undefined)
   delete process.env.OPENROUTER_API_KEY
+  vi.restoreAllMocks()
 })
 
 describe('actionToOpenRouterTool', () => {
@@ -35,6 +38,98 @@ describe('actionToOpenRouterTool', () => {
 })
 
 describe('runAnswerToolUseAgent — tool-choice recovery', () => {
+  it('feeds actual tool result JSON back to the model before final prose', async () => {
+    const requests: {
+      messages: { role: string; content: string; tool_call_id?: string }[]
+      tools?: { function: { name: string } }[]
+    }[] = []
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const body = JSON.parse(String(init?.body ?? '{}')) as (typeof requests)[number]
+        requests.push(body)
+
+        if (requests.length === 1) {
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: '',
+                    tool_calls: [
+                      {
+                        id: 'call-search-1',
+                        type: 'function',
+                        function: {
+                          name: 'registry.search',
+                          arguments: JSON.stringify({ query: 'parramatta' }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            { status: 200 },
+          )
+        }
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    oneLine: 'One listed business matches this need.',
+                    summary:
+                      'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
+                    whatToDoNow: 'Open the provider page and send an inquiry when published.',
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        )
+      },
+    )
+
+    const state = createDefaultRegistrySourceState()
+    await withRegistrySourcePortForTest(state, async () => {
+      const result = await runAnswerToolUseAgent({
+        query: 'paramata',
+        config: { apiKey: 'test-key', model: 'test-model' },
+      })
+
+      expect(result.gate.ok).toBe(true)
+      expect(result.providers.map((provider) => provider.slug)).toEqual([
+        'parramatta-emergency-plumbing',
+      ])
+    })
+
+    expect(requests).toHaveLength(2)
+    expect(requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
+      'registry.search',
+      'registry.detail',
+    ])
+    expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
+      'inquiry.submit',
+    )
+
+    const toolMessage = requests[1]?.messages.find((message) => message.role === 'tool')
+    expect(toolMessage?.tool_call_id).toBe('call-search-1')
+    expect(toolMessage?.content).not.toContain('Accepted')
+
+    const toolResult = JSON.parse(toolMessage!.content) as {
+      kind: string
+      items: readonly { slug: string }[]
+    }
+    expect(toolResult.kind).toBe('ok')
+    expect(toolResult.items.map((item) => item.slug)).toContain(
+      'parramatta-emergency-plumbing',
+    )
+  })
+
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
     const state = createDefaultRegistrySourceState()
     await withRegistrySourcePortForTest(state, async () => {
@@ -193,5 +288,23 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         reset()
       }
     })
+  })
+})
+
+describe('hidden rewrite guard', () => {
+  it('keeps production answer code free of retrievalQuery or query-rewrite env seams', () => {
+    const productionSources = [
+      'src/modules/answer/answer-synthesizer.ts',
+      'src/modules/answer/internal/evidence-assembler.ts',
+      'src/modules/answer/internal/llm-config.ts',
+      'src/modules/answer-thread/internal/turn-orchestrator.ts',
+    ]
+      .map((path) => readFileSync(path, 'utf8'))
+      .join('\n')
+
+    expect(productionSources).not.toContain('retrievalQuery')
+    expect(productionSources).not.toMatch(
+      /\b(AE_[A-Z0-9_]*(QUERY|RETRIEVAL)[A-Z0-9_]*REWRITE|QUERY_REWRITE|REWRITE_QUERY)\b/,
+    )
   })
 })

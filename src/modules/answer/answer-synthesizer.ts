@@ -31,8 +31,6 @@ export type AnswerSynthesizerInput = {
   cursor?: string
   /** When set, skip the registry search and use these providers (follow-up filter/compare). */
   prefetchedProviders?: readonly AnswerSource[]
-  /** Optional model-normalized query used only for registry retrieval. */
-  retrievalQuery?: string
   /** Registry query for agent JSON URL when the turn query is not a search (e.g. boundary chip). */
   registryQuery?: string
   /** Thread follow-up intent from the turn orchestrator. */

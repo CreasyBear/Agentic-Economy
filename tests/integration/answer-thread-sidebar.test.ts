@@ -47,7 +47,7 @@ describe('session sidebar after the first turn', () => {
         )
 
         expect(turnResponse.ok).toBe(true)
-        // Drain the SSE stream so the turn-orchestrator's best-effort persist runs.
+        // Drain the SSE stream so the turn persists before the sidebar query.
         await turnResponse.text()
         const sessionCookie = readSessionCookieFromResponse(turnResponse)
         expect(sessionCookie.length).toBeGreaterThan(0)

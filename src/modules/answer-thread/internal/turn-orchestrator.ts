@@ -19,7 +19,6 @@ import {
   emitSnapshotEvents,
   runAnswerToolUseAgent,
 } from '@/modules/answer/public'
-import { appendAnswerToolCalls } from './commands'
 import { resolveIntentRoute } from './intent-router'
 
 import type {
@@ -30,7 +29,7 @@ import type {
   FrozenTurnProse,
 } from '../answer-thread.schema'
 import {
-  appendAnswerTurn,
+  appendAnswerTurnWithToolCalls,
   createAnswerThread,
   getThreadTurns,
 } from '../answer-thread.functions'
@@ -118,7 +117,7 @@ export async function streamAnswerTurn(
     return { threadId, turnId, turnSeq }
   }
 
-  await persistTurnBestEffort({
+  const persisted = await persistTurn({
     sessionId: input.sessionId,
     threadId,
     isNewThread: input.threadId === undefined,
@@ -131,6 +130,14 @@ export async function streamAnswerTurn(
     errorCopyId,
     toolCalls: bufferedToolCalls,
   })
+
+  if (captured !== undefined) {
+    if (!persisted) {
+      send({ type: 'error', code: 'answer_turn_persist_failed', copyId: makeCopyId() })
+      return { threadId, turnId, turnSeq }
+    }
+    send({ type: 'complete', answer: captured })
+  }
 
   return { threadId, turnId, turnSeq }
 }
@@ -203,7 +210,10 @@ async function streamAgentTurn(
     }
 
     const snapshot = withFollowUpLayout(result.snapshot, input.priorTurnsCount, input.intent)
-    for await (const event of emitSnapshotEvents(snapshot, { emitThinking: true })) {
+    for await (const event of emitSnapshotEvents(snapshot, {
+      emitThinking: true,
+      emitComplete: false,
+    })) {
       if (input.signal?.aborted === true) {
         break
       }
@@ -252,7 +262,10 @@ async function streamBoundaryTurn(
     input.intent,
   )
 
-  for await (const event of emitSnapshotEvents(snapshot, { emitThinking: true })) {
+  for await (const event of emitSnapshotEvents(snapshot, {
+    emitThinking: true,
+    emitComplete: false,
+  })) {
     if (input.signal?.aborted === true) {
       break
     }
@@ -293,7 +306,7 @@ async function readPriorCompleteTurns(threadId: string | undefined) {
 
 type AnswerTurnRecordLite = Pick<AnswerTurnRecord, 'evidenceJson' | 'query' | 'status'>
 
-async function persistTurnBestEffort(input: {
+async function persistTurn(input: {
   sessionId: string
   threadId: string
   isNewThread: boolean
@@ -305,7 +318,7 @@ async function persistTurnBestEffort(input: {
   captured: AnswerSnapshot | undefined
   errorCopyId: string | undefined
   toolCalls: readonly AnswerToolCallRecord[]
-}) {
+}): Promise<boolean> {
   const status = input.captured !== undefined ? 'complete' : 'error'
   const evidence = input.captured !== undefined ? buildFrozenEvidence(input.captured, input.toolCalls) : emptyEvidence()
   const prose = input.captured !== undefined ? buildFrozenProse(input.captured) : emptyProse()
@@ -326,7 +339,7 @@ async function persistTurnBestEffort(input: {
       })
     }
 
-    await appendAnswerTurn({
+    await appendAnswerTurnWithToolCalls({
       turnId: input.turnId,
       threadId: input.threadId,
       pseudonymousSessionId: input.sessionId,
@@ -341,27 +354,19 @@ async function persistTurnBestEffort(input: {
       ),
       status,
       ...(input.errorCopyId === undefined ? {} : { errorCopyId: input.errorCopyId }),
+      toolCalls: input.toolCalls.map((call) => ({
+        toolCallId: call.toolCallId,
+        seq: call.seq,
+        toolId: call.toolId,
+        inputJson: call.inputJson,
+        resultSummaryJson: call.resultSummaryJson,
+        resultHash: call.resultHash,
+        status: call.status,
+      })),
     })
-
-    // Flush buffered tool-call evidence with the turn - never mid-stream - so a
-    // turn row always lands before its tool-call rows, avoiding orphan records
-    // when the SSE stream aborts or final persist fails.
-    if (input.toolCalls.length > 0) {
-      await appendAnswerToolCalls({
-        turnId: input.turnId,
-        toolCalls: input.toolCalls.map((call) => ({
-          toolCallId: call.toolCallId,
-          seq: call.seq,
-          toolId: call.toolId,
-          inputJson: call.inputJson,
-          resultSummaryJson: call.resultSummaryJson,
-          resultHash: call.resultHash,
-          status: call.status,
-        })),
-      })
-    }
+    return true
   } catch {
-    // Persistence is best-effort: the streamed answer is the primary UX contract.
+    return false
   }
 }
 

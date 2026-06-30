@@ -6,9 +6,10 @@ import type { AnswerEvent, AnswerSnapshot, AnswerSynthesizerFollowUpIntent } fro
 
 export async function* emitSnapshotEvents(
   snapshot: AnswerSnapshot,
-  options: { emitThinking?: boolean } = {},
+  options: { emitThinking?: boolean; emitComplete?: boolean } = {},
 ): AsyncIterable<AnswerEvent> {
   const emitThinking = options.emitThinking !== false
+  const emitComplete = options.emitComplete !== false
 
   if (emitThinking) {
     yield { type: 'thinking', step: 'write', label: 'Writing answer…' }
@@ -27,7 +28,9 @@ export async function* emitSnapshotEvents(
     yield { type: 'artifact', artifact }
   }
 
-  yield { type: 'complete', answer: snapshot }
+  if (emitComplete) {
+    yield { type: 'complete', answer: snapshot }
+  }
 }
 
 export function mergeProseIntoSnapshot(input: {

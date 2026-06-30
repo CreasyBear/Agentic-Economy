@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { listAgentToolActions } from '@/modules/actions'
+import { findAction, type AnyAction } from '@/modules/actions'
 import type { AnswerLlmConfig } from './llm-config'
 import { readAnswerLlmConfig } from './llm-config'
 import { runAnswerGate, type AnswerGateResult } from './answer-gate'
@@ -40,6 +40,7 @@ import type { FollowUpIntent } from '@/modules/answer-thread/answer-thread.schem
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ROUNDS = 4
 const DEFAULT_LIMIT = 10
+const ANSWER_MODEL_TOOL_IDS = ['registry.search', 'registry.detail'] as const
 
 export type AnswerToolUseAgentInput = {
   query: string
@@ -116,14 +117,14 @@ export async function runAnswerToolUseAgent(
     throw new AnswerToolUseAgentError('unavailable')
   }
 
-  const plan = await fetchAgentPlanFromOpenRouter(input, config)
-  return runPlannedAgent(input, plan)
+  return runRealToolUseAgent(input, config)
 }
 
 async function runPlannedAgent(
   input: AnswerToolUseAgentInput,
   plan: AnswerToolUseAgentPlan,
-): Promise<AnswerToolUseAgentResult> {  const toolCalls: AnswerToolCallRecord[] = []
+): Promise<AnswerToolUseAgentResult> {
+  const toolCalls: AnswerToolCallRecord[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
   let seq = 0
@@ -137,14 +138,18 @@ async function runPlannedAgent(
     })
     toolCalls.push(result.record)
     seq += 1
-    for (const provider of result.providers) {
-      if (!slugSeen.has(provider.slug)) {
-        slugSeen.add(provider.slug)
-        providers.push({ ...provider, citationIndex: providers.length + 1 })
-      }
-    }
+    appendProvidersFromToolResult(providers, slugSeen, result.providers)
   }
 
+  return buildAgentResult(input, plan.prose, toolCalls, providers)
+}
+
+function buildAgentResult(
+  input: AnswerToolUseAgentInput,
+  prose: AnswerProse,
+  toolCalls: readonly AnswerToolCallRecord[],
+  providers: readonly AnswerSource[],
+): AnswerToolUseAgentResult {
   const toolAllowedSlugs = collectAllowedSlugsFromToolResults(
     toolCallRecordsToGateInput(toolCalls),
   )
@@ -155,7 +160,7 @@ async function runPlannedAgent(
   const finalProviders: readonly AnswerSource[] =
     providers.length > 0 ? providers : (input.priorProviders ?? [])
 
-  const mapped = snapshotProseFromAnswer(plan.prose)
+  const mapped = snapshotProseFromAnswer(prose)
   // The agent JSON URL points at the search that actually grounded the answer.
   // When the model chose a corrected `registry.search` argument (e.g.
   // "parramatta" for a misspelled "paramata"), the URL reflects that chosen
@@ -172,22 +177,20 @@ async function runPlannedAgent(
 
   const gate = runAnswerGate({ snapshot, allowedSlugs })
   return {
-    prose: plan.prose,
+    prose,
     providers: finalProviders,
     allowedSlugs,
-    toolCalls,
+    toolCalls: [...toolCalls],
     snapshot,
     gate,
   }
 }
 
-async function fetchAgentPlanFromOpenRouter(
+async function runRealToolUseAgent(
   input: AnswerToolUseAgentInput,
   config: AnswerLlmConfig,
-): Promise<AnswerToolUseAgentPlan> {
-  const readTools = input.disableTools
-    ? []
-    : listAgentToolActions().filter((action) => action.readOnly)
+): Promise<AnswerToolUseAgentResult> {
+  const readTools = input.disableTools ? [] : listAnswerModelToolActions()
   const tools = readTools.map(actionToOpenRouterTool)
 
   const messages: OpenRouterMessage[] = [
@@ -202,7 +205,10 @@ async function fetchAgentPlanFromOpenRouter(
     },
   ]
 
-  const plannedToolCalls: AgentPlannedToolCall[] = []
+  const toolCalls: AnswerToolCallRecord[] = []
+  const providers: AnswerSource[] = []
+  const slugSeen = new Set<string>()
+  let seq = 0
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const payload = await postChatCompletion({
@@ -218,25 +224,33 @@ async function fetchAgentPlanFromOpenRouter(
       throw new AnswerToolUseAgentError('no_response')
     }
 
-    const toolCalls = assistantMessage.tool_calls ?? []
-    if (toolCalls.length === 0) {
+    const assistantToolCalls = assistantMessage.tool_calls ?? []
+    if (assistantToolCalls.length === 0) {
       const prose = parseProse(assistantMessage.content)
       if (prose === undefined) {
         throw new AnswerToolUseAgentError('prose_failed')
       }
-      return { toolCalls: plannedToolCalls, prose }
+      return buildAgentResult(input, prose, toolCalls, providers)
     }
 
-    messages.push({ role: 'assistant', content: assistantMessage.content ?? '', tool_calls: toolCalls })
+    messages.push({ role: 'assistant', content: assistantMessage.content ?? '', tool_calls: assistantToolCalls })
 
-    for (const call of toolCalls) {
+    for (const call of assistantToolCalls) {
       const toolId = call.function?.name ?? ''
       const parsedInput = parseToolInput(call.function?.arguments)
-      plannedToolCalls.push({ toolId, input: parsedInput })
+      const result = await runAnswerToolCall({
+        toolId,
+        input: parsedInput,
+        turnId: 'pending',
+        seq,
+      })
+      toolCalls.push(result.record)
+      appendProvidersFromToolResult(providers, slugSeen, result.providers)
+      seq += 1
       messages.push({
         role: 'tool',
-        tool_call_id: call.id ?? '',
-        content: `Accepted. The server will run ${toolId} with validated input.`,
+        tool_call_id: call.id ?? result.record.toolCallId,
+        content: result.resultJson,
       })
     }
   }
@@ -260,7 +274,30 @@ async function fetchAgentPlanFromOpenRouter(
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
-  return { toolCalls: plannedToolCalls, prose }
+  return buildAgentResult(input, prose, toolCalls, providers)
+}
+
+function listAnswerModelToolActions(): AnyAction[] {
+  return ANSWER_MODEL_TOOL_IDS.map((toolId) => {
+    const action = findAction(toolId)
+    if (action === undefined || !action.readOnly) {
+      throw new AnswerToolUseAgentError('tool_unavailable')
+    }
+    return action
+  })
+}
+
+function appendProvidersFromToolResult(
+  providers: AnswerSource[],
+  slugSeen: Set<string>,
+  toolProviders: readonly AnswerSource[],
+): void {
+  for (const provider of toolProviders) {
+    if (!slugSeen.has(provider.slug)) {
+      slugSeen.add(provider.slug)
+      providers.push({ ...provider, citationIndex: providers.length + 1 })
+    }
+  }
 }
 
 type OpenRouterMessage = {

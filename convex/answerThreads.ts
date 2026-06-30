@@ -96,6 +96,90 @@ export const appendAnswerTurn = mutationGeneric({
   },
 })
 
+export const appendAnswerTurnWithToolCalls = mutationGeneric({
+  args: {
+    turnId: v.string(),
+    threadId: v.string(),
+    pseudonymousSessionId: v.string(),
+    seq: v.number(),
+    query: v.string(),
+    intent: literalUnion(FollowUpIntentValues),
+    evidenceJson: v.string(),
+    snapshotHash: v.string(),
+    proseJson: v.string(),
+    artifactKindsJson: v.string(),
+    status: literalUnion(AnswerTurnStatusValues),
+    errorCopyId: v.optional(v.string()),
+    toolCalls: v.array(
+      v.object({
+        toolCallId: v.string(),
+        seq: v.number(),
+        toolId: literalUnion(AnswerToolIdValues),
+        inputJson: v.string(),
+        resultSummaryJson: v.string(),
+        resultHash: v.string(),
+        status: literalUnion(AnswerToolCallStatusValues),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
+      .unique()
+
+    if (thread === null) {
+      throw new Error('thread_not_found')
+    }
+
+    if (thread.pseudonymousSessionId !== args.pseudonymousSessionId) {
+      throw new Error('thread_forbidden')
+    }
+
+    const existingTurns = await ctx.db
+      .query('answerTurns')
+      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+      .collect()
+
+    if (existingTurns.length >= 25) {
+      throw new Error('thread_turn_limit')
+    }
+
+    const timestamp = now()
+    await ctx.db.insert('answerTurns', {
+      turnId: args.turnId,
+      threadId: args.threadId,
+      seq: args.seq,
+      query: args.query,
+      intent: args.intent,
+      evidenceJson: args.evidenceJson,
+      snapshotHash: args.snapshotHash,
+      proseJson: args.proseJson,
+      artifactKindsJson: args.artifactKindsJson,
+      status: args.status,
+      createdAt: timestamp,
+      ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
+    })
+
+    for (const call of args.toolCalls) {
+      await ctx.db.insert('answerToolCalls', {
+        toolCallId: call.toolCallId,
+        turnId: args.turnId,
+        seq: call.seq,
+        toolId: call.toolId,
+        inputJson: call.inputJson,
+        resultSummaryJson: call.resultSummaryJson,
+        resultHash: call.resultHash,
+        status: call.status,
+        createdAt: timestamp,
+      })
+    }
+
+    await ctx.db.patch(thread._id, { updatedAt: now() })
+    return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
+  },
+})
+
 export const appendAnswerToolCalls = mutationGeneric({
   args: {
     turnId: v.string(),

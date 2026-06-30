@@ -46,6 +46,25 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
       })
       return { turnId: args.turnId }
     },
+    appendTurnWithToolCalls: async (args) => {
+      const { toolCalls, ...turnArgs } = args
+      const thread = store.threads.get(args.threadId)
+      if (thread === undefined) {
+        throw new Error('thread_not_found')
+      }
+      if (thread.pseudonymousSessionId !== args.pseudonymousSessionId) {
+        throw new Error('thread_forbidden')
+      }
+      const turnCount = [...store.turns.values()].filter((turn) => turn.threadId === args.threadId).length
+      if (turnCount >= 25) {
+        throw new Error('thread_turn_limit')
+      }
+      store.turns.set(args.turnId, {
+        ...turnArgs,
+        createdAt: Date.now(),
+      })
+      return { turnId: args.turnId, insertedToolCalls: toolCalls.length }
+    },
     listSessionThreads: async (sessionId) => ({
       threads: [...store.threads.values()]
         .filter((thread) => thread.pseudonymousSessionId === sessionId)

@@ -19,7 +19,6 @@ export async function assembleAnswerEvidence(
   input: AnswerSynthesizerInput,
 ): Promise<AssembledAnswerEvidence | undefined> {
   const query = sanitizeQuery(input.query)
-  const retrievalQuery = sanitizeQuery(input.retrievalQuery ?? input.query)
   const limit = input.limit ?? DEFAULT_LIMIT
 
   let providers: readonly AnswerSource[]
@@ -28,7 +27,7 @@ export async function assembleAnswerEvidence(
   } else {
     try {
       const page = await readPublicRegistrySearchPage({
-        query: retrievalQuery,
+        query,
         limit,
         ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       })
@@ -39,7 +38,7 @@ export async function assembleAnswerEvidence(
   }
 
   const allowedSlugs = new Set(providers.map((provider) => provider.slug))
-  const agentQuery = input.registryQuery ?? input.retrievalQuery ?? query
+  const agentQuery = input.registryQuery ?? query
   return {
     providers,
     allowedSlugs,

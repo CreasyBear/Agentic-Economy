@@ -15,11 +15,10 @@ import type {
  * Tool-call persistence for answer turns.
  *
  * `answerToolCalls` rows are persisted alongside the owning `answerTurns` row
- * in the turn orchestrator's best-effort `persistTurnBestEffort` step - never
- * mid-stream. This avoids orphaned tool-call rows referencing a `turnId` whose
- * parent turn never landed (e.g. when the SSE stream aborts or final persist
- * fails). The orchestrator buffers `AnswerToolCallRecord[]` in memory during
- * the agent loop and flushes them here together with the turn.
+ * before the turn orchestrator emits a terminal `complete` event - never
+ * mid-stream. The orchestrator buffers `AnswerToolCallRecord[]` in memory
+ * during the agent loop and fails closed if complete-turn evidence cannot be
+ * persisted.
  */
 
 export type AnswerToolCallInputRow = {
