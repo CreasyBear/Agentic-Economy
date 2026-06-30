@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { SearchIcon, ShieldAlertIcon, ShieldCheckIcon } from 'lucide-react'
 
-import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,7 +47,8 @@ function AdminInquiriesRoute() {
   const search = Route.useSearch() as AdminInquirySearch
 
   return (
-    <AeAdminShell
+    <AeOperatorShell
+      role="admin"
       title="Inquiry reconstruction"
       description="Reconstruct customer inquiry, owner action, delivery, audit, funnel, and operation refs without exposing private content."
       currentPath="/admin/inquiries"
@@ -55,7 +56,7 @@ function AdminInquiriesRoute() {
       <OperatorAccess readback={readback} />
       <FilterPanel search={search} />
       {readback.kind === 'denied' ? <DeniedReadback readback={readback} /> : <AllowedReadback readback={readback} />}
-    </AeAdminShell>
+    </AeOperatorShell>
   )
 }
 

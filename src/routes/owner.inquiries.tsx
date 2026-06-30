@@ -1,7 +1,6 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -78,13 +77,14 @@ function OwnerInquiriesRoute() {
   }
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Owner messages"
-        title="Human messages stay source-owned."
-        description="Owners see submitted messages, read state, responses, close state, and dispatch status without relying on external success as truth."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Owner messages"
+      title="Human messages stay source-owned."
+      description="Owners see submitted messages, read state, responses, close state, and dispatch status without relying on external success as truth."
+      currentPath="/owner/inquiries"
+    >
+      <div className="grid gap-6">
         {readback.error === undefined ? null : (
           <Alert variant="destructive">
             <AlertTitle>Owner inbox needs sign-in</AlertTitle>
@@ -93,8 +93,8 @@ function OwnerInquiriesRoute() {
         )}
         <OwnerInquiryInboxSummary inbox={readback.inbox} />
         <OwnerInquiryList inbox={readback.inbox} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }
 
@@ -169,7 +169,7 @@ function OwnerInquiryCard({ inquiry }: { inquiry: OwnerInboxInquiryProjection })
 function ReadbackFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-muted/40 p-3">
-      <dt className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">{label}</dt>
       <dd className="mt-1 break-words text-foreground">{value}</dd>
     </div>
   )

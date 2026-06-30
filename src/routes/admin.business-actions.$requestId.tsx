@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { readAdminBusinessActionReconstructionServer } from '@/modules/business-action/business-action.functions'
@@ -38,7 +38,8 @@ function AdminBusinessActionDetailRoute() {
 
   if (readback.kind !== 'ok') {
     return (
-      <AeAdminShell
+      <AeOperatorShell
+        role="admin"
         title="Business action detail"
         description="source/local proof only. production proof not claimed."
         currentPath="/admin/business-actions"
@@ -49,14 +50,15 @@ function AdminBusinessActionDetailRoute() {
             <CardDescription>{readback.reason}</CardDescription>
           </CardHeader>
         </Card>
-      </AeAdminShell>
+      </AeOperatorShell>
     )
   }
 
   const reconstruction = readback.reconstruction
 
   return (
-    <AeAdminShell
+    <AeOperatorShell
+      role="admin"
       title="Business action detail"
       description="source/local proof only. production proof not claimed."
       currentPath="/admin/business-actions"
@@ -83,6 +85,6 @@ function AdminBusinessActionDetailRoute() {
           />
         </CardContent>
       </Card>
-    </AeAdminShell>
+    </AeOperatorShell>
   )
 }

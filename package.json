@@ -14,6 +14,9 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test tests/e2e",
+    "ui-craft:install": "node .agents/skills/ui-craft/scripts/install.mjs",
+    "ui-craft:context": "node .agents/skills/ui-craft/scripts/context.mjs",
+    "ui-craft:finalize": "node .agents/skills/ui-craft/scripts/finalize.mjs",
     "test:deploy-smoke": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase1-deploy-smoke.spec.ts",
     "test:phase2-support-smoke": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase2-support-record-smoke.spec.ts",
     "test:provider-smoke:resend": "playwright test --config=playwright.deploy-smoke.config.ts tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts",
@@ -38,7 +41,9 @@
   },
   "dependencies": {
     "@clerk/tanstack-react-start": "1.4.9",
-    "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/fraunces": "^5.2.9",
+    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "@tanstack/react-router": "1.170.16",
     "@tanstack/react-start": "1.168.26",
     "class-variance-authority": "0.7.1",
@@ -54,6 +59,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.2.0",
     "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "4.3.1",
     "@testing-library/jest-dom": "6.9.1",

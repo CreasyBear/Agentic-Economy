@@ -1,7 +1,6 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -225,17 +224,18 @@ function OwnerBusinessActionsRoute() {
   }
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Owner checkpoint"
-        title="Business action requests need source-owned authorization."
-        description="Every request stays proposal-only until the owner checkpoint records accepted, refused, clarification, proof-gap, or expired source state."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Owner checkpoint"
+      title="Business action requests need source-owned authorization."
+      description="Every request stays proposal-only until the owner checkpoint records accepted, refused, clarification, proof-gap, or expired source state."
+      currentPath="/owner/business-actions"
+    >
+      <div className="grid gap-6">
         <Alert>
           <AlertTitle>source/local proof only</AlertTitle>
           <AlertDescription>
-            production proof not claimed. This queue is for local receipt inspection and does not publish a callable, payment, wallet, marketplace, or autonomous execution claim.
+            Production proof is not claimed. This queue is for local receipt inspection and owner review only.
           </AlertDescription>
         </Alert>
         {readback.unavailableReason === undefined ? null : (
@@ -245,8 +245,8 @@ function OwnerBusinessActionsRoute() {
           </Alert>
         )}
         <OwnerBusinessActionQueue queue={readback.queue} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }
 

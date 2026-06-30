@@ -10,7 +10,8 @@ describe('protected-action UI contract', () => {
       expect.arrayContaining(['protected_action_gateway_admitted', 'protected_action_receipt_recorded'])
     )
     expect(aeStatusPresentation.protected_action_gateway_admitted.description).toContain('contact follow-up')
-    expect(aeStatusPresentation.protected_action_receipt_recorded.description).toMatch(/source-owned/i)
+    expect(aeStatusPresentation.protected_action_receipt_recorded.description).toMatch(/contact follow-up receipt/i)
+    expect(aeStatusPresentation.protected_action_receipt_recorded.description).toMatch(/without raw provider payloads/i)
   })
 
   it('registers active owner/admin protected-action routes in the generated route tree', () => {

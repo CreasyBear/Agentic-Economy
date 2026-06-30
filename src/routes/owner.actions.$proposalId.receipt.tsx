@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -54,57 +53,55 @@ function OwnerContactFollowUpReceiptRoute() {
 
   if (readback.kind === 'error') {
     return (
-      <AePublicShell>
-        <AePageHeader
-          eyebrow="Receipt readback"
-          title="Contact follow-up reconstruction"
-          description="The owner readback separates source-owned proposal, decision, gateway, attempt, and receipt state."
-        />
-        <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Receipt unavailable</CardTitle>
-              <CardDescription>{readback.reason}</CardDescription>
-            </CardHeader>
-          </Card>
-        </section>
-      </AePublicShell>
+      <AeOperatorShell
+        role="owner"
+        eyebrow="Receipt readback"
+        title="Contact follow-up reconstruction"
+        description="The owner readback separates source-owned proposal, decision, gateway, attempt, and receipt state."
+        currentPath="/owner/actions"
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Receipt unavailable</CardTitle>
+            <CardDescription>{readback.reason}</CardDescription>
+          </CardHeader>
+        </Card>
+      </AeOperatorShell>
     )
   }
   const reconstruction = readback.reconstruction
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Receipt readback"
-        title="Contact follow-up reconstruction"
-        description="The owner readback separates proposal, policy, owner decision, gateway, attempt, receipt, proof gap, audit, and no-repair state."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{reconstruction.repairAction.replaceAll('_', ' ')}</Badge>
-            </div>
-            <CardTitle>{reconstruction.proposal.parameters.contactName}</CardTitle>
-            <CardDescription>Source-owned receipt or proof-gap readback only. No raw provider payload is shown.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FactGrid
-              facts={[
-                { label: 'Proposal', value: reconstruction.proposal.id },
-                { label: 'Gateway', value: reconstruction.gatewayAdmission?.status ?? 'missing' },
-                { label: 'Attempt', value: reconstruction.attempt?.outcome ?? 'not attempted' },
-                { label: 'Receipt', value: reconstruction.receipt?.kind ?? 'none' },
-                { label: 'Private evidence refs', value: String(reconstruction.privateEvidenceRefs.length) },
-                { label: 'Audit events', value: String(reconstruction.auditEvents.length) },
-              ]}
-            />
-          </CardContent>
-        </Card>
-      </section>
-    </AePublicShell>
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Receipt readback"
+      title="Contact follow-up reconstruction"
+      description="The owner readback separates proposal, policy, owner decision, gateway, attempt, receipt, proof gap, audit, and no-repair state."
+      currentPath="/owner/actions"
+    >
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
+            <Badge variant="outline">{reconstruction.repairAction.replaceAll('_', ' ')}</Badge>
+          </div>
+          <CardTitle>{reconstruction.proposal.parameters.contactName}</CardTitle>
+          <CardDescription>Source-owned receipt or proof-gap readback only. No raw provider payload is shown.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FactGrid
+            facts={[
+              { label: 'Proposal', value: reconstruction.proposal.id },
+              { label: 'Gateway', value: reconstruction.gatewayAdmission?.status ?? 'missing' },
+              { label: 'Attempt', value: reconstruction.attempt?.outcome ?? 'not attempted' },
+              { label: 'Receipt', value: reconstruction.receipt?.kind ?? 'none' },
+              { label: 'Private evidence refs', value: String(reconstruction.privateEvidenceRefs.length) },
+              { label: 'Audit events', value: String(reconstruction.auditEvents.length) },
+            ]}
+          />
+        </CardContent>
+      </Card>
+    </AeOperatorShell>
   )
 }
 

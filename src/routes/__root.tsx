@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { ClerkProvider } from '@clerk/tanstack-react-start'
-import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
+import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import appCss from '../styles/globals.css?url'
@@ -30,7 +30,11 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: ReactNode }) {
-  const content = import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true' ? children : <ClerkProvider>{children}</ClerkProvider>
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const content =
+    import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true' || !requiresClerkProvider(pathname)
+      ? children
+      : <ClerkProvider>{children}</ClerkProvider>
 
   return (
     <html lang="en">
@@ -43,4 +47,8 @@ function RootDocument({ children }: { children: ReactNode }) {
       </body>
     </html>
   )
+}
+
+function requiresClerkProvider(pathname: string): boolean {
+  return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }

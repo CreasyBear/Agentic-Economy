@@ -1,5 +1,6 @@
 import { expect, request, test } from '@playwright/test'
 import { existsSync } from 'node:fs'
+import { newVercelBypassedRequestContext } from './vercel-bypass'
 
 type SmokeConfig = {
   baseUrl: URL
@@ -32,21 +33,21 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/',
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Claim and publish a truthful service page'],
+    mustContain: ['Ask for a local service. Get a cited answer.', 'No booking, no payment'],
     mustNotMatch: privateSurfacePattern,
   },
   {
     path: '/claim',
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Business name', 'Publish service page'],
+    mustContain: ['Sign in'],
     mustNotMatch: privateSurfacePattern,
   },
   {
     path: `/claim/success?slug=${config.businessSlug}`,
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Your service page is published', `/${config.businessSlug}`],
+    mustContain: ['Sign in'],
     mustNotMatch: privateDataPattern,
   },
   {
@@ -60,7 +61,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/registry',
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Search published service catalog facts', config.businessSlug],
+    mustContain: ['Find business details companies can stand behind.', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
   },
   {
@@ -91,7 +92,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: `/${config.businessSlug}`,
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Public service facts', 'First request not available yet'],
+    mustContain: ['Business-supplied details people can check', 'Booking and payment are not promised'],
     mustNotMatch: privateSurfacePattern,
   },
   {
@@ -133,51 +134,63 @@ const publicRoutes: readonly RouteExpectation[] = [
 ]
 
 test.describe('Phase 1 deployed readback smoke', () => {
-  test('public routes, APIs, discovery files, and headers match Phase 1 contracts', async ({ request: api }) => {
-    for (const route of publicRoutes) {
-      const response = await api.get(resolvePath(route.path))
-      const body = await response.text()
+  test('public routes, APIs, discovery files, and headers match Phase 1 contracts', async () => {
+    const api = await newVercelBypassedRequestContext(request, config.baseUrl)
+    try {
+      for (const route of publicRoutes) {
+        const response = await api.get(resolvePath(route.path))
+        const body = await response.text()
 
-      expect(response.status(), route.path).toBe(route.status)
-      expect(response.headers()['content-type'] ?? '', route.path).toMatch(route.contentType)
+        expect(response.status(), route.path).toBe(route.status)
+        expect(response.headers()['content-type'] ?? '', route.path).toMatch(route.contentType)
 
-      if (route.cache === 'no-store') {
-        expect(response.headers()['cache-control'] ?? '', route.path).toContain('no-store')
+        if (route.cache === 'no-store') {
+          expect(response.headers()['cache-control'] ?? '', route.path).toContain('no-store')
+        }
+
+        if (route.cors !== undefined) {
+          expect(response.headers()['access-control-allow-origin'], route.path).toBe(route.cors)
+        }
+
+        for (const expected of route.mustContain ?? []) {
+          expect(body, route.path).toContain(expected)
+        }
+
+        if (route.mustNotMatch !== undefined) {
+          expect(body, route.path).not.toMatch(route.mustNotMatch)
+        }
       }
-
-      if (route.cors !== undefined) {
-        expect(response.headers()['access-control-allow-origin'], route.path).toBe(route.cors)
-      }
-
-      for (const expected of route.mustContain ?? []) {
-        expect(body, route.path).toContain(expected)
-      }
-
-      if (route.mustNotMatch !== undefined) {
-        expect(body, route.path).not.toMatch(route.mustNotMatch)
-      }
+    } finally {
+      await api.dispose()
     }
   })
 
-  test('published public page is indexable and private/admin pages are not discoverable', async ({ request: api }) => {
-    const publicPage = await api.get(resolvePath(`/${config.businessSlug}`))
-    const publicBody = await publicPage.text()
-    expect(publicPage.status()).toBe(200)
-    expect(publicBody).toMatch(/<meta[^>]+name=["']robots["'][^>]+content=["']index["']/i)
-    expect(publicBody).toMatch(new RegExp(`rel=["']canonical["'][^>]+/${escapeRegExp(config.businessSlug)}`, 'i'))
+  test('published public page is indexable and private/admin pages are not discoverable', async () => {
+    const api = await newVercelBypassedRequestContext(request, config.baseUrl)
+    try {
+      const publicPage = await api.get(resolvePath(`/${config.businessSlug}`))
+      const publicBody = await publicPage.text()
+      expect(publicPage.status()).toBe(200)
+      expect(publicBody).toMatch(/<meta[^>]+name=["']robots["'][^>]+content=["']index["']/i)
+      expect(publicBody).toMatch(new RegExp(`rel=["']canonical["'][^>]+/${escapeRegExp(config.businessSlug)}`, 'i'))
 
-    const missingPage = await api.get(resolvePath('/missing-business-smoke-slug'))
-    const missingBody = await missingPage.text()
-    expect(missingPage.status()).toBe(200)
-    expect(missingBody).toMatch(/<meta[^>]+name=["']robots["'][^>]+content=["']noindex["']/i)
+      const missingPage = await api.get(resolvePath('/missing-business-smoke-slug'))
+      const missingBody = await missingPage.text()
+      expect(missingPage.status()).toBe(200)
+      expect(missingBody).toMatch(/<meta[^>]+name=["']robots["'][^>]+content=["']noindex["']/i)
 
-    const sitemap = await api.get(resolvePath('/sitemap.xml'))
-    const sitemapBody = await sitemap.text()
-    expect(sitemapBody).not.toMatch(/\/admin\/|\/claim\/success|\/owner\/status|missing-business-smoke-slug/i)
+      const sitemap = await api.get(resolvePath('/sitemap.xml'))
+      const sitemapBody = await sitemap.text()
+      expect(sitemapBody).not.toMatch(/\/admin\/|\/claim\/success|\/owner\/status|missing-business-smoke-slug/i)
+    } finally {
+      await api.dispose()
+    }
   })
 
   test('owner session is denied from admin readback routes', async () => {
-    const ownerContext = await request.newContext({ storageState: config.ownerStorageState })
+    const ownerContext = await newVercelBypassedRequestContext(request, config.baseUrl, {
+      storageState: config.ownerStorageState,
+    })
 
     try {
       for (const route of ['/admin/claims', '/admin/audit-events', '/admin/index-health']) {
@@ -196,7 +209,9 @@ test.describe('Phase 1 deployed readback smoke', () => {
   })
 
   test('admin session exposes operator readback and kill-switch/suppression control surfaces', async () => {
-    const adminContext = await request.newContext({ storageState: config.adminStorageState })
+    const adminContext = await newVercelBypassedRequestContext(request, config.baseUrl, {
+      storageState: config.adminStorageState,
+    })
 
     try {
       const indexHealth = await adminContext.get(resolvePath('/admin/index-health'))

@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { DeveloperDiscoveryRouteReadback } from '@/modules/discovery/developer-discovery'
@@ -15,6 +14,7 @@ export const Route = createFileRoute('/developers/discovery')({
         name: 'description',
         content: 'Read-only public catalog facts, schema shape, examples, freshness, and unavailable states.',
       },
+      { name: 'robots', content: 'noindex' },
     ],
   }),
   component: DevelopersDiscoveryRoute,
@@ -44,23 +44,23 @@ function DevelopersDiscoveryRoute() {
   const readback = Route.useLoaderData()
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow={readback.copy.eyebrow}
-        title={readback.copy.title}
-        description={readback.copy.description}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {readback.artifacts.map((artifact) => (
-              <Button key={artifact.kind} asChild variant="outline" size="sm">
-                <a href={artifact.route}>{artifact.downloadLabel}</a>
-              </Button>
-            ))}
-          </div>
-        }
-      />
-
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:grid-cols-[minmax(0,1fr)_320px] md:px-6">
+    <AeOperatorShell
+      role="developer"
+      eyebrow={readback.copy.eyebrow}
+      title={readback.copy.title}
+      description={readback.copy.description}
+      currentPath="/developers/discovery"
+      actions={
+        <div className="flex flex-wrap gap-2">
+          {readback.artifacts.map((artifact) => (
+            <Button key={artifact.kind} asChild variant="outline" size="sm">
+              <a href={artifact.route}>{artifact.downloadLabel}</a>
+            </Button>
+          ))}
+        </div>
+      }
+    >
+      <section className="grid w-full gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-6">
           <Card>
             <CardHeader>
@@ -255,6 +255,6 @@ function DevelopersDiscoveryRoute() {
           </Card>
         </aside>
       </section>
-    </AePublicShell>
+    </AeOperatorShell>
   )
 }

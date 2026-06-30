@@ -5,7 +5,7 @@ import {
   selectOwnerBillingReceiptState,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteContext,
-} from '@/future-phases/05-paid-activation-money-rails/routes/owner.billing'
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 import {
   type BillingOperation,
   type BillingOperationStatus,

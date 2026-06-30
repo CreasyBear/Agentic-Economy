@@ -64,6 +64,17 @@ const durableTables = [
   'billingReceipts',
   'billingReconciliations',
   'capabilityLaunchSupportRecords',
+  'businessActionCards',
+  'businessActionBuyerMandates',
+  'businessActionCapabilityRequests',
+  'businessActionAuthorizationCheckpoints',
+  'businessActionGuardrailDecisionEvidence',
+  'businessActionExternalEvidenceEvents',
+  'businessActionResultArtifacts',
+  'businessActionReceipts',
+  'businessActionPrivateEvidenceRefs',
+  'businessActionSupportRecords',
+  'businessActionNoRepairRecords',
 ] as const
 
 const requiredIndexes = {
@@ -111,6 +122,35 @@ const requiredIndexes = {
   billingReceipts: ['by_operation', 'by_business_recordedAt'],
   billingReconciliations: ['by_business_status', 'by_operation'],
   capabilityLaunchSupportRecords: ['by_business_status', 'by_operation'],
+  businessActionCards: ['by_cardId', 'by_owner_status', 'by_service_status'],
+  businessActionBuyerMandates: ['by_mandateId', 'by_business_status', 'by_idempotencyKey'],
+  businessActionCapabilityRequests: [
+    'by_requestId',
+    'by_card',
+    'by_status',
+    'by_business_status',
+    'by_owner_status',
+    'by_idempotencyKey',
+  ],
+  businessActionAuthorizationCheckpoints: [
+    'by_checkpointId',
+    'by_request',
+    'by_request_decision',
+    'by_idempotencyKey',
+  ],
+  businessActionGuardrailDecisionEvidence: ['by_evidenceId', 'by_request', 'by_decisionHash', 'by_idempotencyKey'],
+  businessActionExternalEvidenceEvents: [
+    'by_evidenceId',
+    'by_request',
+    'by_checkpoint',
+    'by_provider_ref',
+    'by_idempotencyKey',
+  ],
+  businessActionResultArtifacts: ['by_artifactId', 'by_request', 'by_checkpoint', 'by_idempotencyKey'],
+  businessActionReceipts: ['by_receiptId', 'by_request', 'by_idempotencyKey'],
+  businessActionPrivateEvidenceRefs: ['by_privateEvidenceRefId', 'by_request', 'by_ttlExpiresAt'],
+  businessActionSupportRecords: ['by_supportRecordId', 'by_business_status', 'by_action_status'],
+  businessActionNoRepairRecords: ['by_noRepairId', 'by_request', 'by_idempotencyKey'],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {

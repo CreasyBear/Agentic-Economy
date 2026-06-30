@@ -1,7 +1,6 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -71,13 +70,14 @@ function OwnerActionsRoute() {
   }
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Owner review"
-        title="Contact follow-up requests need approval."
-        description="Every contact follow-up proposal waits for owner approval, one-use gateway admission, and source-owned receipt or proof-gap readback."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Owner review"
+      title="Contact follow-up requests need approval."
+      description="Every contact follow-up proposal waits for owner approval, one-use gateway admission, and source-owned receipt or proof-gap readback."
+      currentPath="/owner/actions"
+    >
+      <div className="grid gap-6">
         <Alert>
           <AlertTitle>Approval required</AlertTitle>
           <AlertDescription>
@@ -91,8 +91,8 @@ function OwnerActionsRoute() {
           </Alert>
         )}
         <OwnerContactFollowUpQueue queue={readback.queue} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }
 

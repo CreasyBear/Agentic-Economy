@@ -16,10 +16,13 @@ type AeStatusCardProps = {
 }
 
 export function AeStatusCard({ readback }: AeStatusCardProps) {
+  const titleId = `ae-status-card-${readback.catalog.slug}`
+  const hasUnavailableCapabilities = readback.unavailableCapabilities.length > 0
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{readback.catalog.name}</CardTitle>
+    <Card className="ae-status-readback-card" aria-labelledby={titleId}>
+      <CardHeader className="border-b">
+        <CardTitle id={titleId}>{readback.catalog.name}</CardTitle>
         <CardDescription>
           {readback.catalog.category} in {readback.catalog.suburb}, {readback.catalog.stateTerritory}
         </CardDescription>
@@ -33,20 +36,30 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         </CardAction>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-2">
-          <AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} />
-          <AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} />
-          <AeStatusBadge status={indexStatusToAeStatus(readback.catalog.indexStatus)} />
-          <AeStatusBadge status={discoveryStatusToAeStatus(readback.catalog.discoveryStatus)} />
+        <div className="grid gap-4 md:grid-cols-2" role="list">
+          <div role="listitem">
+            <AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} />
+          </div>
+          <div role="listitem">
+            <AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} />
+          </div>
+          <div role="listitem">
+            <AeStatusBadge status={indexStatusToAeStatus(readback.catalog.indexStatus)} />
+          </div>
+          <div role="listitem">
+            <AeStatusBadge status={discoveryStatusToAeStatus(readback.catalog.discoveryStatus)} />
+          </div>
         </div>
-        <div className="mt-6 grid gap-3">
-          {readback.unavailableCapabilities.map((capability) => (
-            <div key={capability.label} className="rounded-lg border bg-muted/40 p-3">
-              <p className="font-medium">{capability.label}</p>
-              <p className="text-sm text-muted-foreground">{capability.explanation}</p>
-            </div>
-          ))}
-        </div>
+        {hasUnavailableCapabilities ? (
+          <div className="mt-6 grid gap-3" role="list">
+            {readback.unavailableCapabilities.map((capability) => (
+              <div key={capability.label} className="rounded-lg border bg-muted/40 p-3" role="listitem">
+                <p className="font-medium">{capability.label}</p>
+                <p className="text-sm text-muted-foreground">{capability.explanation}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </CardContent>
       <CardFooter>
         <p className="text-sm text-muted-foreground">{readback.nextAction}</p>

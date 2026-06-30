@@ -1,7 +1,7 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { SearchIcon } from 'lucide-react'
 
-import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -76,7 +76,8 @@ function AdminProtectedActionsRoute() {
   }
 
   return (
-    <AeAdminShell
+    <AeOperatorShell
+      role="admin"
       title="Contact follow-up reconstruction"
       description="Reconstruct selected protected-action proposals, owner decisions, gateways, attempts, receipts, proof gaps, and no-repair state."
       currentPath="/admin/protected-actions"
@@ -91,7 +92,7 @@ function AdminProtectedActionsRoute() {
         </Card>
       )}
       {readback.rows.length === 0 ? <EmptyState /> : <ReconstructionRows rows={readback.rows} />}
-    </AeAdminShell>
+    </AeOperatorShell>
   )
 }
 

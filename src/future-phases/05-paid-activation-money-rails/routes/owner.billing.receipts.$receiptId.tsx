@@ -1,13 +1,13 @@
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { createParkedFileRoute } from '@/future-phases/route-helpers'
 
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
 import {
-  OwnerBillingStatePanel,
   readOwnerBillingRouteReadback,
   selectOwnerBillingReceiptState,
+  type OwnerBillingRouteReadback,
   type OwnerBillingRouteSummary,
-} from './owner.billing'
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 
 export const Route = createParkedFileRoute<OwnerBillingRouteSummary, { receiptId: string }>('/owner/billing/receipts/$receiptId')({
   loader: ({ params }) => {
@@ -28,15 +28,16 @@ function OwnerBillingReceiptRoute() {
   const summary = Route.useLoaderData()
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Billing receipt"
-        title="Receipt readback"
-        description="Receipts are shown only when they exist in source-owned billing state for this owner operation."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Billing receipt"
+      title="Receipt readback"
+      description="Receipts are shown only when they exist in source-owned billing state for this owner operation."
+      currentPath="/owner/billing/receipts"
+    >
+      <div className="grid gap-6">
         <OwnerBillingStatePanel summary={summary} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }

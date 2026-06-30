@@ -14,10 +14,12 @@ import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as ClaimRouteImport } from './routes/claim'
+import { Route as AskRouteImport } from './routes/ask'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
+import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as OwnerStatusRouteImport } from './routes/owner.status'
 import { Route as OwnerInquiriesRouteImport } from './routes/owner.inquiries'
@@ -26,6 +28,7 @@ import { Route as OwnerActionsRouteImport } from './routes/owner.actions'
 import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
+import { Route as ApiAnswerRouteImport } from './routes/api.answer'
 import { Route as AdminProtectedActionsRouteImport } from './routes/admin.protected-actions'
 import { Route as AdminInquiriesRouteImport } from './routes/admin.inquiries'
 import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
@@ -46,6 +49,7 @@ import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiBusinessActionsStripeWebhookRouteImport } from './routes/api.business-actions.stripe-webhook'
+import { Route as ApiAgentToolsRouteImport } from './routes/api.agent.tools'
 import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
 import { Route as AdminBusinessActionsRequestIdRouteImport } from './routes/admin.business-actions.$requestId'
 import { Route as OwnerBusinessActionsRequestIdReceiptRouteImport } from './routes/owner.business-actions.$requestId.receipt'
@@ -76,6 +80,11 @@ const ClaimRoute = ClaimRouteImport.update({
   path: '/claim',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AskRoute = AskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SlugRoute = SlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -94,6 +103,11 @@ const SignUpSplatRoute = SignUpSplatRouteImport.update({
 const SignInSplatRoute = SignInSplatRouteImport.update({
   id: '/sign-in/$',
   path: '/sign-in/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QAnswerIdRoute = QAnswerIdRouteImport.update({
+  id: '/q/$answerId',
+  path: '/q/$answerId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
@@ -134,6 +148,11 @@ const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
 const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
   id: '/api/businesses',
   path: '/api/businesses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAnswerRoute = ApiAnswerRouteImport.update({
+  id: '/api/answer',
+  path: '/api/answer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminProtectedActionsRoute = AdminProtectedActionsRouteImport.update({
@@ -241,6 +260,11 @@ const ApiBusinessActionsStripeWebhookRoute =
     path: '/api/business-actions/stripe-webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentToolsRoute = ApiAgentToolsRouteImport.update({
+  id: '/api/agent/tools',
+  path: '/api/agent/tools',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminProtectedActionsProposalIdRoute =
   AdminProtectedActionsProposalIdRouteImport.update({
     id: '/$proposalId',
@@ -269,6 +293,7 @@ const OwnerActionsProposalIdReceiptRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
   '/llms.txt': typeof LlmsDottxtRoute
   '/registry': typeof RegistryRoute
@@ -282,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/admin/inquiries': typeof AdminInquiriesRoute
   '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
+  '/api/answer': typeof ApiAnswerRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
@@ -290,10 +316,12 @@ export interface FileRoutesByFullPath {
   '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -312,6 +340,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
   '/llms.txt': typeof LlmsDottxtRoute
   '/registry': typeof RegistryRoute
@@ -325,6 +354,7 @@ export interface FileRoutesByTo {
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/admin/inquiries': typeof AdminInquiriesRoute
   '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
+  '/api/answer': typeof ApiAnswerRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
@@ -333,10 +363,12 @@ export interface FileRoutesByTo {
   '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -356,6 +388,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
   '/llms.txt': typeof LlmsDottxtRoute
   '/registry': typeof RegistryRoute
@@ -369,6 +402,7 @@ export interface FileRoutesById {
   '/admin/index-health': typeof AdminIndexHealthRoute
   '/admin/inquiries': typeof AdminInquiriesRoute
   '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
+  '/api/answer': typeof ApiAnswerRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/developers/discovery': typeof DevelopersDiscoveryRoute
@@ -377,10 +411,12 @@ export interface FileRoutesById {
   '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
   '/owner/status': typeof OwnerStatusRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
+  '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/business-actions/stripe-webhook': typeof ApiBusinessActionsStripeWebhookRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
@@ -401,6 +437,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$slug'
+    | '/ask'
     | '/claim'
     | '/llms.txt'
     | '/registry'
@@ -414,6 +451,7 @@ export interface FileRouteTypes {
     | '/admin/index-health'
     | '/admin/inquiries'
     | '/admin/protected-actions'
+    | '/api/answer'
     | '/api/businesses'
     | '/claim/success'
     | '/developers/discovery'
@@ -422,10 +460,12 @@ export interface FileRouteTypes {
     | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/admin/business-actions/$requestId'
     | '/admin/protected-actions/$proposalId'
+    | '/api/agent/tools'
     | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -444,6 +484,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$slug'
+    | '/ask'
     | '/claim'
     | '/llms.txt'
     | '/registry'
@@ -457,6 +498,7 @@ export interface FileRouteTypes {
     | '/admin/index-health'
     | '/admin/inquiries'
     | '/admin/protected-actions'
+    | '/api/answer'
     | '/api/businesses'
     | '/claim/success'
     | '/developers/discovery'
@@ -465,10 +507,12 @@ export interface FileRouteTypes {
     | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/admin/business-actions/$requestId'
     | '/admin/protected-actions/$proposalId'
+    | '/api/agent/tools'
     | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -487,6 +531,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$slug'
+    | '/ask'
     | '/claim'
     | '/llms.txt'
     | '/registry'
@@ -500,6 +545,7 @@ export interface FileRouteTypes {
     | '/admin/index-health'
     | '/admin/inquiries'
     | '/admin/protected-actions'
+    | '/api/answer'
     | '/api/businesses'
     | '/claim/success'
     | '/developers/discovery'
@@ -508,10 +554,12 @@ export interface FileRouteTypes {
     | '/owner/inquiries'
     | '/owner/status'
     | '/privacy/remove-business'
+    | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/admin/business-actions/$requestId'
     | '/admin/protected-actions/$proposalId'
+    | '/api/agent/tools'
     | '/api/business-actions/stripe-webhook'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
@@ -531,6 +579,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRouteWithChildren
+  AskRoute: typeof AskRoute
   ClaimRoute: typeof ClaimRouteWithChildren
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   RegistryRoute: typeof RegistryRoute
@@ -542,6 +591,7 @@ export interface RootRouteChildren {
   AdminIndexHealthRoute: typeof AdminIndexHealthRoute
   AdminInquiriesRoute: typeof AdminInquiriesRoute
   AdminProtectedActionsRoute: typeof AdminProtectedActionsRouteWithChildren
+  ApiAnswerRoute: typeof ApiAnswerRoute
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
   OwnerActionsRoute: typeof OwnerActionsRouteWithChildren
@@ -549,8 +599,10 @@ export interface RootRouteChildren {
   OwnerInquiriesRoute: typeof OwnerInquiriesRouteWithChildren
   OwnerStatusRoute: typeof OwnerStatusRoute
   PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
+  QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
+  ApiAgentToolsRoute: typeof ApiAgentToolsRoute
   ApiBusinessActionsStripeWebhookRoute: typeof ApiBusinessActionsStripeWebhookRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoveryFixturesRoute: typeof ApiDiscoveryFixturesRoute
@@ -597,6 +649,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ask': {
+      id: '/ask'
+      path: '/ask'
+      fullPath: '/ask'
+      preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$slug': {
       id: '/$slug'
       path: '/$slug'
@@ -623,6 +682,13 @@ declare module '@tanstack/react-router' {
       path: '/sign-in/$'
       fullPath: '/sign-in/$'
       preLoaderRoute: typeof SignInSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/q/$answerId': {
+      id: '/q/$answerId'
+      path: '/q/$answerId'
+      fullPath: '/q/$answerId'
+      preLoaderRoute: typeof QAnswerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy/remove-business': {
@@ -679,6 +745,13 @@ declare module '@tanstack/react-router' {
       path: '/api/businesses'
       fullPath: '/api/businesses'
       preLoaderRoute: typeof ApiBusinessesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/answer': {
+      id: '/api/answer'
+      path: '/api/answer'
+      fullPath: '/api/answer'
+      preLoaderRoute: typeof ApiAnswerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/protected-actions': {
@@ -819,6 +892,13 @@ declare module '@tanstack/react-router' {
       path: '/api/business-actions/stripe-webhook'
       fullPath: '/api/business-actions/stripe-webhook'
       preLoaderRoute: typeof ApiBusinessActionsStripeWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/tools': {
+      id: '/api/agent/tools'
+      path: '/api/agent/tools'
+      fullPath: '/api/agent/tools'
+      preLoaderRoute: typeof ApiAgentToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/protected-actions/$proposalId': {
@@ -980,6 +1060,7 @@ const OwnerInquiriesRouteWithChildren = OwnerInquiriesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
+  AskRoute: AskRoute,
   ClaimRoute: ClaimRouteWithChildren,
   LlmsDottxtRoute: LlmsDottxtRoute,
   RegistryRoute: RegistryRoute,
@@ -991,6 +1072,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminIndexHealthRoute: AdminIndexHealthRoute,
   AdminInquiriesRoute: AdminInquiriesRoute,
   AdminProtectedActionsRoute: AdminProtectedActionsRouteWithChildren,
+  ApiAnswerRoute: ApiAnswerRoute,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
   OwnerActionsRoute: OwnerActionsRouteWithChildren,
@@ -998,8 +1080,10 @@ const rootRouteChildren: RootRouteChildren = {
   OwnerInquiriesRoute: OwnerInquiriesRouteWithChildren,
   OwnerStatusRoute: OwnerStatusRoute,
   PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
+  QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
+  ApiAgentToolsRoute: ApiAgentToolsRoute,
   ApiBusinessActionsStripeWebhookRoute: ApiBusinessActionsStripeWebhookRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoveryFixturesRoute: ApiDiscoveryFixturesRoute,

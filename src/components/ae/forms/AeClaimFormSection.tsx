@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -9,13 +9,18 @@ type AeClaimFormSectionProps = {
 }
 
 export function AeClaimFormSection({ title, description, children }: AeClaimFormSectionProps) {
+  const titleId = useId()
+  const descriptionId = useId()
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+    <section>
+      <Card className="ae-form-section-card">
+        <CardHeader>
+          <CardTitle id={titleId}>{title}</CardTitle>
+          <CardDescription id={descriptionId}>{description}</CardDescription>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
+    </section>
   )
 }

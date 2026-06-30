@@ -1,7 +1,7 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { SearchIcon } from 'lucide-react'
 
-import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -249,7 +249,8 @@ function AdminBusinessActionsRoute() {
   }
 
   return (
-    <AeAdminShell
+    <AeOperatorShell
+      role="admin"
       title="Business action reconstruction"
       description="source/local proof only. production proof not claimed."
       currentPath="/admin/business-actions"
@@ -264,7 +265,7 @@ function AdminBusinessActionsRoute() {
         </Card>
       )}
       {readback.rows.length === 0 ? <EmptyState /> : <AdminBusinessActionRows rows={readback.rows} />}
-    </AeAdminShell>
+    </AeOperatorShell>
   )
 }
 

@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -161,19 +160,18 @@ function OwnerContactFollowUpDetailRoute() {
 
   if (readback.kind === 'error') {
     return (
-      <AePublicShell>
-        <AePageHeader
-          eyebrow="Owner decision"
-          title="Review contact follow-up"
-          description="Approve or reject one contact follow-up request after reviewing source-owned consequence details."
-        />
-        <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-          <Alert>
-            <AlertTitle>Contact follow-up unavailable</AlertTitle>
-            <AlertDescription>{readback.reason}</AlertDescription>
-          </Alert>
-        </section>
-      </AePublicShell>
+      <AeOperatorShell
+        role="owner"
+        eyebrow="Owner decision"
+        title="Review contact follow-up"
+        description="Approve or reject one contact follow-up request after reviewing source-owned consequence details."
+        currentPath="/owner/actions"
+      >
+        <Alert>
+          <AlertTitle>Contact follow-up unavailable</AlertTitle>
+          <AlertDescription>{readback.reason}</AlertDescription>
+        </Alert>
+      </AeOperatorShell>
     )
   }
   const reconstruction = readback.reconstruction
@@ -181,14 +179,14 @@ function OwnerContactFollowUpDetailRoute() {
   const canDecide = decisionDisabledReason === undefined
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Owner decision"
-        title="Review contact follow-up"
-        description="Approve or reject one contact follow-up request after reviewing target, deadline, consequence, reversibility, and proof requirement."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        <Card>
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Owner decision"
+      title="Review contact follow-up"
+      description="Approve or reject one contact follow-up request after reviewing target, deadline, consequence, reversibility, and proof requirement."
+      currentPath="/owner/actions"
+    >
+      <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
               <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
@@ -287,8 +285,7 @@ function OwnerContactFollowUpDetailRoute() {
             </Button>
           </CardContent>
         </Card>
-      </section>
-    </AePublicShell>
+    </AeOperatorShell>
   )
 }
 

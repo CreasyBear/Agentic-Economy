@@ -15,6 +15,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
+import { requireClaimOwnerSession } from '@/lib/server/claim-owner-session'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
 
@@ -81,7 +82,7 @@ const identityFields = [
   },
   {
     field: 'sourceLabel',
-    label: 'Source label',
+    label: 'Fact note',
     description: 'Describe where these public facts came from.',
     control: 'input',
   },
@@ -103,7 +104,7 @@ const serviceFields = [
   {
     field: 'serviceSummary',
     label: 'Service summary',
-    description: 'One safe, public sentence about the service.',
+    description: 'One clear public sentence about the service.',
     control: 'textarea',
   },
   {
@@ -121,6 +122,7 @@ const serviceFields = [
 ] as const satisfies readonly FieldConfig[]
 
 export const Route = createFileRoute('/claim')({
+  beforeLoad: async () => await requireClaimOwnerSession(),
   head: () => ({
     meta: [
       { title: 'Claim your service page | Agentic Economy' },
@@ -185,8 +187,8 @@ function ClaimRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow="Owner claim"
-        title="Tell us what your service can safely publish"
-        description="Add business identity, service facts, first-request posture, and a review summary. ABN is not required for this first service page."
+        title="Tell us what your service page should say"
+        description="Add business identity, service details, first-request status, and a public note. ABN is not required for this first page."
       />
       <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         {message === undefined ? null : (
@@ -195,16 +197,16 @@ function ClaimRoute() {
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
-        <AeClaimFormSection title="Business identity" description="These fields become the public object identity.">
+        <AeClaimFormSection title="Business identity" description="This is how customers recognize the business.">
           <FieldGroup>{identityFields.map((field) => renderField(field, value, errorByField, updateTextField, !hydrated || pending))}</FieldGroup>
         </AeClaimFormSection>
-        <AeClaimFormSection title="Service facts" description="Publish at least one service with source-owned public facts.">
+        <AeClaimFormSection title="Service details" description="Add one service people can understand quickly.">
           <FieldGroup>{serviceFields.map((field) => renderField(field, value, errorByField, updateTextField, !hydrated || pending))}</FieldGroup>
         </AeClaimFormSection>
-        <AeClaimFormSection title="First request posture" description="Say what the public page can safely show now.">
+        <AeClaimFormSection title="First request" description="Say what this page can show today.">
           <FieldGroup>
             <Field data-invalid={errorByField.has('firstRequestMode') ? true : undefined}>
-              <FieldLabel htmlFor="firstRequestMode">First request state</FieldLabel>
+              <FieldLabel htmlFor="firstRequestMode">First request</FieldLabel>
               <NativeSelect
                 id="firstRequestMode"
                 name="firstRequestMode"
@@ -220,7 +222,7 @@ function ClaimRoute() {
                 <option value="inquiry_available">Public first-request instructions supplied</option>
                 <option value="quote_request_available">Public quote request instructions supplied</option>
               </NativeSelect>
-              <FieldDescription>Unavailable states are valid when a public contact path is not supplied.</FieldDescription>
+              <FieldDescription>Choose unavailable if you do not want a contact path on the page yet.</FieldDescription>
               {fieldError('firstRequestMode', errorByField)}
             </Field>
             {renderField(
@@ -251,7 +253,7 @@ function ClaimRoute() {
               {
                 field: 'ownerMessage',
                 label: 'Owner message',
-                description: 'Optional public-safe context. Raw contact details are not needed here.',
+                description: 'Optional context. Avoid private contact details here.',
                 control: 'textarea',
               },
               value,
@@ -267,9 +269,7 @@ function ClaimRoute() {
             {pending ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}
             Publish service page
           </Button>
-          <Button asChild variant="outline">
-            <a href="/parramatta-emergency-plumbing">Preview public page</a>
-          </Button>
+          {previewButton(value.requestedSlug)}
         </div>
       </form>
     </AePublicShell>
@@ -337,4 +337,21 @@ function toFirstRequestMode(value: string): PublicOwnerClaimFlowInput['firstRequ
   }
 
   return 'not_available_yet'
+}
+
+function previewButton(requestedSlug: string) {
+  const slug = requestedSlug.trim()
+  if (slug.length === 0) {
+    return (
+      <Button type="button" variant="outline" disabled>
+        Preview public page
+      </Button>
+    )
+  }
+
+  return (
+    <Button asChild variant="outline">
+      <a href={`/${slug}`}>Preview public page</a>
+    </Button>
+  )
 }

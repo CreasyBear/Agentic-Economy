@@ -1,0 +1,113 @@
+import { z } from 'zod'
+
+/**
+ * Agent-native action contract for AE.
+ *
+ * One declaration fans out to every surface: the React UI, the HTTP API, the
+ * agent JSON payload, and the quiet assistant tools door that stays out of
+ * public human copy.
+ *
+ * Each action carries a boundary-honest `summary` and an explicit `boundaries`
+ * list so an external assistant knows both *when* to call it and *what it must
+ * refuse to assume*. `readOnly` is the AE trust axis: read actions are safe to
+ * call without approval and are cacheable; writes are admission-gated through
+ * `SourceWriteAdmission` (the AE analogue of agent-native's approval gate).
+ *
+ * The `run` body references the same `*ThroughSource` function the existing
+ * TanStack server fns use, so UI, HTTP, and agent surfaces execute one
+ * implementation. Define once, call from anywhere.
+ *
+ * Registration is explicit: `src/modules/actions/index.ts` imports every action
+ * const into a single array and exports `listActions` / `findAction` over it.
+ * Do not rely on module-eval side-effects for registration — the production
+ * bundler tree-shakes bare side-effect imports.
+ */
+
+export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'agentTools'
+
+export type ActionSourceWriteRequest = {
+  method: string
+  origin: string
+  pathname: string
+}
+
+export type ActionContext = {
+  /** Admission context for writes; built from the calling surface's request. */
+  sourceWriteRequest?: ActionSourceWriteRequest
+  /** The raw incoming request, when available (HTTP / agent-tools surfaces). */
+  request?: Request
+}
+
+export type ActionRunArgs<Input> = {
+  data: Input
+  context: ActionContext
+}
+
+export type ActionParameterType = 'string' | 'number' | 'boolean' | 'enum'
+
+export type ActionParameter = {
+  name: string
+  type: ActionParameterType
+  description: string
+  required: boolean
+  enum?: readonly string[]
+}
+
+type ActionRunner<Input, Result extends ActionResult> = {
+  run(args: ActionRunArgs<Input>): Promise<Result>
+}['run']
+
+export type ActionResult = Readonly<{ kind: string } & Record<string, unknown>>
+
+export type ActionDefinition<
+  Input,
+  Result extends ActionResult,
+> = {
+  readonly id: string
+  readonly name: string
+  readonly summary: string
+  readonly boundaries: readonly string[]
+  readonly schema: z.ZodType<Input>
+  readonly parameters: readonly ActionParameter[]
+  readonly readOnly: boolean
+  readonly surfaces: readonly ActionSurface[]
+  readonly run: ActionRunner<Input, Result>
+}
+
+export type AnyAction = ActionDefinition<unknown, ActionResult>
+
+export type Action<Input = unknown, Result extends ActionResult = ActionResult> =
+  ActionDefinition<Input, Result>
+
+const knownIds = new Set<string>()
+
+export function defineAction<Input, Result extends ActionResult>(
+  def: ActionDefinition<Input, Result>,
+): Action<Input, Result> {
+  if (knownIds.has(def.id)) {
+    throw new Error(`Action already registered: ${def.id}`)
+  }
+  knownIds.add(def.id)
+  return def
+}
+
+/** Agent-facing description of an action, used by the agent-tools list surface. */
+export type AgentToolDescriptor = {
+  id: string
+  name: string
+  summary: string
+  boundaries: readonly string[]
+  readOnly: boolean
+  parameters: readonly ActionParameter[]
+}
+
+export function describeActionForAgent(action: AnyAction): AgentToolDescriptor {
+  return {
+    id: action.id,
+    name: action.name,
+    summary: action.summary,
+    boundaries: action.boundaries,
+    readOnly: action.readOnly,
+    parameters: action.parameters,
+  }
+}

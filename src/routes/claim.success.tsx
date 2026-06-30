@@ -1,12 +1,11 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowRightIcon } from 'lucide-react'
+import { ArrowRightIcon, ExternalLinkIcon } from 'lucide-react'
 
-import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
-import { AeCapabilityList } from '@/components/ae/status/AeCapabilityList'
+import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
 
 type ClaimSuccessSearch = {
@@ -33,45 +32,85 @@ function ClaimSuccessRoute() {
   const result = Route.useLoaderData()
   const readback = result.kind === 'available' ? result.readback : undefined
 
+  if (readback === undefined) {
+    return (
+      <AePublicShell>
+        <AePageHeader
+          eyebrow="Status needed"
+          title="Service page status unavailable"
+          description="We could not find a public service page for this request."
+        />
+        <section className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+          <AeEmptyState
+            title={result.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}
+            description={
+              result.kind === 'not_found'
+                ? 'No public service page matched that slug.'
+                : 'Status is unavailable right now. Try again in a moment.'
+            }
+          />
+        </section>
+      </AePublicShell>
+    )
+  }
+
+  const catalog = readback.catalog
+
   return (
     <AePublicShell>
       <AePageHeader
-        eyebrow={readback === undefined ? 'Readback needed' : 'Published'}
-        title={readback === undefined ? 'Service page readback unavailable' : 'Your service page is published'}
-        description={
-          readback === undefined
-            ? 'The source readback did not return a public service page for this request.'
-            : 'The public page is available. Index and discovery readbacks remain separate so you can see what is queued or degraded.'
-        }
+        eyebrow="Published"
+        title="Your service page is published"
+        description="The public page is live. Manage it from your owner status page."
         actions={
-          readback === undefined ? undefined : (
-            <Button asChild>
-              <Link to="/owner/status" search={{ slug: readback.catalog.slug }}>
-                <ArrowRightIcon data-icon="inline-start" />
-                View owner status
-              </Link>
-            </Button>
-          )
+          <Button asChild>
+            <Link to="/owner/status" search={{ slug: catalog.slug }}>
+              <ArrowRightIcon data-icon="inline-start" />
+              Manage your page
+            </Link>
+          </Button>
         }
       />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        {readback === undefined ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>{result.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}</CardTitle>
-              <CardDescription>
-                {result.kind === 'not_found'
-                  ? 'No public service page matched that slug.'
-                  : 'Source readback is unavailable right now. Try again once source access is restored.'}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ) : (
-          <>
-            <AeStatusCard readback={readback} />
-            <AeCapabilityList catalog={readback.catalog} />
-          </>
-        )}
+      <section className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+        <Card className="ae-public-route-card">
+          <CardHeader>
+            <CardTitle>What was published</CardTitle>
+            <CardDescription>Customers can now read this on the public register.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="font-medium text-foreground">Business</dt>
+                <dd className="text-muted-foreground">{catalog.name}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground">Category</dt>
+                <dd className="text-muted-foreground">{catalog.category}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground">Location</dt>
+                <dd className="text-muted-foreground">{catalog.suburb}, {catalog.stateTerritory}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-foreground">Public page</dt>
+                <dd className="text-muted-foreground">/{catalog.slug}</dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button asChild variant="outline">
+                <a href={`/${catalog.slug}`}>
+                  <ExternalLinkIcon data-icon="inline-start" />
+                  View public page
+                </a>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/owner/status" search={{ slug: catalog.slug }}>
+                  Manage your page
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
     </AePublicShell>
   )

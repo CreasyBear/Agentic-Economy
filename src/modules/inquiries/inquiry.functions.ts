@@ -40,7 +40,7 @@ import {
   type PublicInquiryContactInput,
 } from '@/modules/inquiries/public'
 
-const publicInquirySubmitSchema = z.object({
+export const publicInquirySubmitSchema = z.object({
   target: z.object({
     businessId: z.string(),
     serviceId: z.string(),
@@ -54,7 +54,7 @@ const publicInquirySubmitSchema = z.object({
   }),
 })
 
-const ownerThreadSchema = z.object({
+export const ownerThreadSchema = z.object({
   threadId: z.string(),
 })
 
@@ -67,12 +67,12 @@ const operatorReconstructionSchema = z
   .optional()
   .transform((value): InquiryOperatorReconstructionFilter => compactOperatorFilter(value ?? {}))
 
-const ownerReplySchema = ownerThreadSchema.extend({
+export const ownerReplySchema = ownerThreadSchema.extend({
   expectedVersion: z.number(),
   body: z.string(),
 })
 
-const ownerVersionedSchema = ownerThreadSchema.extend({
+export const ownerVersionedSchema = ownerThreadSchema.extend({
   expectedVersion: z.number(),
 })
 
@@ -878,7 +878,7 @@ function localE2eCapability(): ServiceCapabilityRecord {
     firstRequest: {
       mode: 'inquiry_available',
       publicChannel: 'public_business_contact',
-      publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
+      publicDisclosure: 'Use the inquiry form for a first contact.',
       rawContactExcluded: true,
     },
     callable: false,

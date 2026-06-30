@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
 import {
   readAdminIndexHealthThroughSource,
@@ -11,6 +11,16 @@ export const readAdminIndexHealthServer = createServerFn().handler(() => readAdm
 
 export const Route = createFileRoute('/admin/index-health')({
   loader: () => readAdminIndexHealthServer(),
+  head: () => ({
+    meta: [
+      { title: 'Index health | Agentic Economy' },
+      {
+        name: 'description',
+        content: 'Check catalog and projection readbacks before public discovery files ship.',
+      },
+      { name: 'robots', content: 'noindex' },
+    ],
+  }),
   component: AdminIndexHealthRoute,
 })
 
@@ -18,7 +28,8 @@ function AdminIndexHealthRoute() {
   const readback = Route.useLoaderData()
 
   return (
-    <AeAdminShell
+    <AeOperatorShell
+      role="admin"
       title="Index health"
       description="Check catalog and projection readbacks before public discovery files are allowed to ship."
       currentPath="/admin/index-health"
@@ -28,6 +39,6 @@ function AdminIndexHealthRoute() {
         description="Denied reads return no private rows; authorized reads show source, attempt, repair, and affected public surfaces."
         readback={readback}
       />
-    </AeAdminShell>
+    </AeOperatorShell>
   )
 }

@@ -79,7 +79,7 @@ export const aeStatusPresentation = {
     label: 'Available',
     compactLabel: 'Available',
     tone: 'success',
-    description: 'This status is available from source-owned state.',
+    description: 'This is currently available.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -88,7 +88,7 @@ export const aeStatusPresentation = {
     label: 'Claimed',
     compactLabel: 'Claimed',
     tone: 'success',
-    description: 'An owner binding exists for this object.',
+    description: 'The business owner has claimed this page.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -97,7 +97,7 @@ export const aeStatusPresentation = {
     label: 'Contact confirmed',
     compactLabel: 'Confirmed',
     tone: 'success',
-    description: 'Source evidence supports public contact confidence.',
+    description: 'Public contact details have supporting evidence.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -106,8 +106,8 @@ export const aeStatusPresentation = {
     label: 'Degraded',
     compactLabel: 'Degraded',
     tone: 'warning',
-    description: 'The object remains visible, but a repair path is needed.',
-    nextAction: 'Review the readback and repair action.',
+    description: 'The page remains visible, but something needs review.',
+    nextAction: 'Review the page details and repair action.',
     priority: 'high',
     audience: 'public',
     publicness: 'public',
@@ -117,7 +117,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Failed',
     tone: 'danger',
     description: 'The latest operation did not complete.',
-    nextAction: 'Use the source-owned repair path.',
+    nextAction: 'Use the repair path.',
     priority: 'high',
     audience: 'operator',
     publicness: 'private',
@@ -126,7 +126,7 @@ export const aeStatusPresentation = {
     label: 'Guarded',
     compactLabel: 'Guarded',
     tone: 'info',
-    description: 'The foundation guardrails are running before product behavior ships.',
+    description: 'Some features are guarded until they are ready for customers.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -135,7 +135,7 @@ export const aeStatusPresentation = {
     label: 'Indexed',
     compactLabel: 'Indexed',
     tone: 'success',
-    description: 'The public projection has index readback.',
+    description: 'Search indexing is active for this page.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -153,7 +153,7 @@ export const aeStatusPresentation = {
     label: 'Not live',
     compactLabel: 'Not live',
     tone: 'neutral',
-    description: 'This capability is explicitly unavailable in the current phase.',
+    description: 'This feature is not available yet.',
     priority: 'low',
     audience: 'public',
     publicness: 'public',
@@ -163,7 +163,7 @@ export const aeStatusPresentation = {
     label: 'Not queued',
     compactLabel: 'Not queued',
     tone: 'neutral',
-    description: 'No projection attempt has been queued yet.',
+    description: 'No update has been queued yet.',
     priority: 'low',
     audience: 'operator',
     publicness: 'private',
@@ -172,7 +172,7 @@ export const aeStatusPresentation = {
     label: 'Published',
     compactLabel: 'Published',
     tone: 'success',
-    description: 'The source-owned page state is published.',
+    description: 'This page is published.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -181,7 +181,7 @@ export const aeStatusPresentation = {
     label: 'Queued',
     compactLabel: 'Queued',
     tone: 'info',
-    description: 'A source-owned operation is waiting to run.',
+    description: 'An update is waiting to run.',
     priority: 'medium',
     audience: 'operator',
     publicness: 'private',
@@ -190,7 +190,7 @@ export const aeStatusPresentation = {
     label: 'Registry verified',
     compactLabel: 'Verified',
     tone: 'success',
-    description: 'Source evidence supports registry verification.',
+    description: 'Public details have been checked.',
     priority: 'medium',
     audience: 'public',
     publicness: 'public',
@@ -199,8 +199,8 @@ export const aeStatusPresentation = {
     label: 'Stale',
     compactLabel: 'Stale',
     tone: 'warning',
-    description: 'Readback is older than the current source state.',
-    nextAction: 'Regenerate from source state.',
+    description: 'This page may be out of date.',
+    nextAction: 'Refresh the public details.',
     priority: 'high',
     audience: 'public',
     publicness: 'public',
@@ -218,11 +218,11 @@ export const aeStatusPresentation = {
     label: 'Unavailable',
     compactLabel: 'Unavailable',
     tone: 'neutral',
-    description: 'This capability is not available from source-owned state.',
+    description: 'This feature is not available yet.',
     priority: 'low',
     audience: 'public',
     publicness: 'public',
-    disabledReason: 'Source-owned availability has not been established.',
+    disabledReason: 'Availability has not been established.',
   },
   notification_bounced: {
     label: 'Notification bounced',
@@ -238,7 +238,7 @@ export const aeStatusPresentation = {
     label: 'Notification complaint recorded',
     compactLabel: 'Complaint',
     tone: 'danger',
-    description: 'A provider complaint was admitted into notification readback.',
+    description: 'A delivery complaint was recorded.',
     nextAction: 'Stop delivery to the complained recipient and investigate consent.',
     priority: 'high',
     audience: 'operator',
@@ -248,8 +248,8 @@ export const aeStatusPresentation = {
     label: 'Notification delivery delayed',
     compactLabel: 'Delayed',
     tone: 'warning',
-    description: 'The notification remains in source-owned readback, but delivery is delayed.',
-    nextAction: 'Wait for provider readback or schedule a bounded retry.',
+    description: 'The notification is recorded, but delivery is delayed.',
+    nextAction: 'Wait for delivery confirmation or schedule a bounded retry.',
     priority: 'medium',
     audience: 'owner',
     publicness: 'private',
@@ -269,7 +269,7 @@ export const aeStatusPresentation = {
     compactLabel: 'No repair',
     tone: 'danger',
     description: 'An operator marked the notification terminal without further repair.',
-    nextAction: 'Show preserved readback and support instructions.',
+    nextAction: 'Show preserved status and support instructions.',
     priority: 'high',
     audience: 'operator',
     publicness: 'private',
@@ -284,38 +284,38 @@ export const aeStatusPresentation = {
     priority: 'high',
     audience: 'operator',
     publicness: 'private',
-    disabledReason: 'Provider configuration has not been source-readbacked.',
+    disabledReason: 'Provider configuration has not been verified.',
   },
   discovery_stale: {
-    label: 'Discovery artifact stale',
+    label: 'Details may be stale',
     compactLabel: 'Stale',
     tone: 'warning',
-    description: 'The agent-readable discovery artifact is older than source state.',
-    nextAction: 'Regenerate the public projection from source-owned state.',
+    description: 'Published business details may be out of date.',
+    nextAction: 'Refresh the public details.',
     priority: 'high',
     audience: 'public',
     publicness: 'public',
   },
   discovery_degraded: {
-    label: 'Discovery degraded',
-    compactLabel: 'Degraded',
+    label: 'Details need review',
+    compactLabel: 'Needs review',
     tone: 'warning',
-    description: 'Discovery remains readable, but source-owned health is degraded.',
-    nextAction: 'Review discovery health and repair before claiming full readiness.',
+    description: 'Published business details are available, but need review.',
+    nextAction: 'Review the public details before making stronger claims.',
     priority: 'high',
     audience: 'public',
     publicness: 'public',
   },
   discovery_unavailable: {
-    label: 'Discovery unavailable',
+    label: 'Details unavailable',
     compactLabel: 'Unavailable',
     tone: 'neutral',
-    description: 'Agent-readable discovery is withheld from public projection.',
-    nextAction: 'Use source-owned readback to restore or keep the unavailable state explicit.',
+    description: 'Published business details are not available yet.',
+    nextAction: 'Restore the details or keep the unavailable state clear.',
     priority: 'high',
     audience: 'public',
     publicness: 'public',
-    disabledReason: 'Discovery projection is not currently publishable.',
+    disabledReason: 'Published business details are not currently available.',
   },
   discovery_parity_failed: {
     label: 'Discovery parity failed',
@@ -364,7 +364,7 @@ export const aeStatusPresentation = {
     label: 'Protected action proof gap',
     compactLabel: 'Proof gap',
     tone: 'warning',
-    description: 'The action readback has insufficient proof to claim success.',
+    description: 'The action does not have enough proof to claim success.',
     nextAction: 'Collect evidence or mark no-repair without overclaiming success.',
     priority: 'high',
     audience: 'operator',
@@ -385,7 +385,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Consumed',
     tone: 'info',
     description: 'The one-use gateway admission has been consumed for an attempt.',
-    nextAction: 'Show attempt readback and reject any replay.',
+    nextAction: 'Show attempt status and reject any replay.',
     priority: 'medium',
     audience: 'operator',
     publicness: 'private',
@@ -394,7 +394,7 @@ export const aeStatusPresentation = {
     label: 'Contact follow-up receipt recorded',
     compactLabel: 'Receipt',
     tone: 'success',
-    description: 'Source-owned readback recorded a contact follow-up receipt without raw provider payloads.',
+    description: 'A contact follow-up receipt was recorded without raw provider payloads.',
     nextAction: 'Keep the proposal, policy, owner decision, gateway, attempt, and receipt reconstructable.',
     priority: 'medium',
     audience: 'owner',
@@ -404,7 +404,7 @@ export const aeStatusPresentation = {
     label: 'Protected action attempt failed',
     compactLabel: 'Attempt failed',
     tone: 'danger',
-    description: 'The protected action attempt failed without success readback.',
+    description: 'The protected action attempt failed without success proof.',
     nextAction: 'Use bounded retry rules or mark no-repair.',
     priority: 'high',
     audience: 'operator',
@@ -425,7 +425,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Reversed',
     tone: 'warning',
     description: 'The protected action outcome was reversed or unwound.',
-    nextAction: 'Show reversal readback and stop success claims.',
+    nextAction: 'Show reversal status and stop success claims.',
     priority: 'high',
     audience: 'operator',
     publicness: 'private',
@@ -445,8 +445,8 @@ export const aeStatusPresentation = {
     label: 'Billing pending',
     compactLabel: 'Pending',
     tone: 'info',
-    description: 'A source-owned billing operation is pending provider readback.',
-    nextAction: 'Wait for hosted-flow or webhook readback.',
+    description: 'A billing operation is waiting for provider confirmation.',
+    nextAction: 'Wait for hosted-flow or webhook confirmation.',
     priority: 'medium',
     audience: 'owner',
     publicness: 'private',
@@ -455,7 +455,7 @@ export const aeStatusPresentation = {
     label: 'Billing started',
     compactLabel: 'Started',
     tone: 'info',
-    description: 'The paid activation flow has started from source-owned state.',
+    description: 'The paid activation flow has started.',
     nextAction: 'Continue through the hosted provider flow.',
     priority: 'medium',
     audience: 'owner',
@@ -466,7 +466,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Returned',
     tone: 'info',
     description: 'The owner returned from the hosted billing flow.',
-    nextAction: 'Confirm provider readback before changing paid state.',
+    nextAction: 'Confirm provider status before changing paid state.',
     priority: 'medium',
     audience: 'owner',
     publicness: 'private',
@@ -495,8 +495,8 @@ export const aeStatusPresentation = {
     label: 'Billing paid',
     compactLabel: 'Paid',
     tone: 'success',
-    description: 'Paid activation is backed by source-owned receipt and reconciliation readback.',
-    nextAction: 'Show the approved paid-state readback, not raw provider fields.',
+    description: 'Paid activation is backed by receipt and reconciliation status.',
+    nextAction: 'Show the approved paid state, not raw provider fields.',
     priority: 'medium',
     audience: 'owner',
     publicness: 'private',
@@ -505,7 +505,7 @@ export const aeStatusPresentation = {
     label: 'Billing past due',
     compactLabel: 'Past due',
     tone: 'warning',
-    description: 'Billing readback shows a past-due state requiring owner action.',
+    description: 'Billing status shows a past-due state requiring owner action.',
     nextAction: 'Send the owner to the approved hosted billing recovery path.',
     priority: 'high',
     audience: 'owner',
@@ -516,7 +516,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Action',
     tone: 'warning',
     description: 'Paid activation requires an owner or provider action before completion.',
-    nextAction: 'Use the hosted action path and preserve source-owned readback.',
+    nextAction: 'Use the hosted action path and preserve status.',
     priority: 'high',
     audience: 'owner',
     publicness: 'private',
@@ -526,7 +526,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Refund',
     tone: 'warning',
     description: 'A refund was recorded against the paid activation rail.',
-    nextAction: 'Reconcile entitlement and receipt state from source-owned records.',
+    nextAction: 'Reconcile entitlement and receipt state from verified records.',
     priority: 'high',
     audience: 'operator',
     publicness: 'private',
@@ -536,7 +536,7 @@ export const aeStatusPresentation = {
     compactLabel: 'Dispute',
     tone: 'danger',
     description: 'A billing dispute was recorded and needs support handling.',
-    nextAction: 'Preserve receipts, evidence refs, and reconciliation readback.',
+    nextAction: 'Preserve receipts, evidence refs, and reconciliation status.',
     priority: 'high',
     audience: 'operator',
     publicness: 'private',
@@ -555,7 +555,7 @@ export const aeStatusPresentation = {
     label: 'Billing provider event held',
     compactLabel: 'Held',
     tone: 'warning',
-    description: 'A provider event was held because it could not be safely admitted.',
+    description: 'A provider event was held because it could not be safely accepted.',
     nextAction: 'Bind or reject the event through reconciliation without granting entitlement.',
     priority: 'high',
     audience: 'operator',
@@ -565,7 +565,7 @@ export const aeStatusPresentation = {
     label: 'Billing reconciliation mismatch',
     compactLabel: 'Mismatch',
     tone: 'danger',
-    description: 'Source-owned billing state and provider evidence do not match.',
+    description: 'Billing state and provider evidence do not match.',
     nextAction: 'Run the approved reconciliation path or mark no-repair.',
     priority: 'high',
     audience: 'operator',
@@ -644,12 +644,107 @@ export function capabilityStatusToAeStatus(status: ServiceCapabilityStatus): AeS
 
 export function firstRequestModeLabel(mode: FirstRequestMode): string {
   if (mode === 'quote_request_available') {
-    return 'Quote request instructions supplied'
+    return 'Quote details supplied'
   }
 
   if (mode === 'inquiry_available') {
-    return 'First request instructions supplied'
+    return 'Contact instructions supplied'
   }
 
-  return 'First request not available yet'
+  return 'No contact option published yet'
+}
+
+/**
+ * Plain, human-surface availability pill label for a provider. Derived ONLY from
+ * real catalog fields. Never invents freshness, "available today", or a response
+ * time. Google-Maps-clean: one short label, one meaning.
+ */
+export type PlainAvailabilityInput = {
+  discoveryStatus: DiscoveryStatus
+  firstRequestMode: FirstRequestMode
+}
+
+export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
+  const { discoveryStatus, firstRequestMode } = input
+
+  if (discoveryStatus === 'unavailable') {
+    return 'Details unavailable'
+  }
+
+  if (discoveryStatus === 'degraded' || discoveryStatus === 'stale') {
+    return 'Needs confirmation'
+  }
+
+  switch (firstRequestMode) {
+    case 'inquiry_available':
+      return 'Contact supplied'
+    case 'quote_request_available':
+      return 'Quote on request'
+    case 'not_available_yet':
+      return 'No contact option yet'
+    default: {
+      const _exhaustive: never = firstRequestMode
+      void _exhaustive
+      return 'Listed'
+    }
+  }
+}
+
+/**
+ * Plain hours line. Echoes the real hours string when present; otherwise a plain
+ * "Check hours" — never `null`, `N/A`, or invented certainty.
+ */
+export function plainHoursLabel(hoursOrUnknown: string | undefined): string {
+  const trimmed = (hoursOrUnknown ?? '').trim()
+  if (trimmed.length === 0) {
+    return 'Check hours'
+  }
+
+  if (trimmed.toLowerCase() === 'unknown') {
+    return 'Check hours'
+  }
+
+  return trimmed
+}
+
+/**
+ * Plain trust label. Only names a trust standard when one was actually met.
+ * Empty string means "no trust label to show" — the caller renders nothing.
+ */
+export function plainTrustLabel(trustTier: TrustTier): string {
+  switch (trustTier) {
+    case 'registry_verified':
+      return 'Checked'
+    case 'contact_confirmed':
+      return 'Contact confirmed'
+    case 'listed':
+    case 'claimed':
+      return ''
+    default: {
+      const _exhaustive: never = trustTier
+      void _exhaustive
+      return ''
+    }
+  }
+}
+
+/**
+ * Plain next-step action label for a provider card / answer next step. Maps the
+ * published first-request mode to one safe action. Never implies booking,
+ * payment, or dispatch.
+ */
+export function plainNextStepLabel(firstRequestMode: FirstRequestMode): string {
+  switch (firstRequestMode) {
+    case 'inquiry_available':
+      return 'View contact instructions'
+    case 'quote_request_available':
+      return 'View quote details'
+    case 'not_available_yet':
+      return 'View details'
+    default: {
+      const _exhaustive: never = firstRequestMode
+      void _exhaustive
+      return 'View details'
+    }
+  }
 }

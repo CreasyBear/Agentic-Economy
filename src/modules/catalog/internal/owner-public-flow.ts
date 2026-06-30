@@ -121,7 +121,7 @@ const requiredFieldLabels = {
   suburb: 'Suburb',
   stateTerritory: 'State or territory',
   requestedSlug: 'Public page slug',
-  sourceLabel: 'Source label',
+  sourceLabel: 'Fact note',
   serviceName: 'Service name',
   serviceCategory: 'Service category',
   serviceSummary: 'Service summary',
@@ -392,11 +392,11 @@ function publicChannelFor(mode: Exclude<FirstRequestMode, 'not_available_yet'>):
 
 function ownerNextAction(catalog: PublicCatalogContract): string {
   if (catalog.indexStatus === 'failed' || catalog.indexStatus === 'stale') {
-    return 'Review the index readback before sharing widely.'
+    return 'Review search status before sharing widely.'
   }
 
   if (catalog.discoveryStatus === 'degraded' || catalog.discoveryStatus === 'stale') {
-    return 'Share the public page while discovery readback catches up.'
+    return 'Share the public page while assistant-ready data catches up.'
   }
 
   return 'Share the public page and keep service facts current.'

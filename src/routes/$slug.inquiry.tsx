@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { CheckCircle2Icon, SendIcon } from 'lucide-react'
+import { SendIcon } from 'lucide-react'
 
+import { AeActionResultCard } from '@/components/ae/feedback/AeActionResultCard'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -14,7 +14,10 @@ import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
-import { submitPublicInquiryServer } from '@/modules/inquiries/inquiry.functions'
+import {
+  submitPublicInquiryServer,
+  type PublicInquirySubmitServerResult,
+} from '@/modules/inquiries/inquiry.functions'
 import {
   readPublicInquiryRouteReadback,
   validatePublicInquiryFormInput,
@@ -44,7 +47,7 @@ export const Route = createFileRoute('/$slug/inquiry')({
   head: () => ({
     meta: [
       { title: 'Send inquiry | Agentic Economy' },
-      { name: 'description', content: 'Send a source-owned human inquiry for a published service.' },
+      { name: 'description', content: 'Send a human inquiry for a published service.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -55,13 +58,14 @@ export { readPublicInquiryRouteReadback, validatePublicInquiryFormInput }
 
 function PublicInquiryRoute() {
   const readback = Route.useLoaderData()
-  const initialReceipt = readback.kind === 'available' ? readback.submitted : undefined
+  const initialResult = readback.kind === 'available' && readback.submitted
+    ? submittedReceiptToResult(readback.submitted)
+    : undefined
   const submitInquiry = useServerFn(submitInquiryServer)
   const [hydrated, setHydrated] = useState(false)
   const [value, setValue] = useState<PublicInquiryFormInput>(emptyInquiryFormInput)
   const [errors, setErrors] = useState<readonly PublicInquiryValidationError[]>([])
-  const [message, setMessage] = useState<string | undefined>()
-  const [receipt, setReceipt] = useState<PublicInquirySubmittedReceipt | undefined>(initialReceipt)
+  const [result, setResult] = useState<PublicInquirySubmitServerResult | undefined>(initialResult)
   const [pending, setPending] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
 
@@ -79,8 +83,7 @@ function PublicInquiryRoute() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setMessage(undefined)
-    setReceipt(undefined)
+    setResult(undefined)
 
     if (readback.kind !== 'available') {
       return
@@ -96,7 +99,7 @@ function PublicInquiryRoute() {
     setErrors([])
     setPending(true)
     try {
-      const result = await submitInquiry({
+      const submitted = await submitInquiry({
         data: {
           target: readback.target,
           body: validation.input.body,
@@ -104,20 +107,10 @@ function PublicInquiryRoute() {
         },
       })
 
-      if (result.kind === 'ok') {
-        setReceipt({
-          threadId: result.receipt.threadId,
-          businessName: readback.businessName,
-          serviceName: readback.serviceName,
-          status: result.receipt.status,
-          notificationStatus: result.receipt.notificationStatus,
-          deliveryLabel: deliveryLabel(result.receipt.notificationStatus),
-        })
+      setResult(submitted)
+      if (submitted.kind === 'ok') {
         setValue(emptyInquiryFormInput)
-        return
       }
-
-      setMessage(result.reason)
     } finally {
       setPending(false)
     }
@@ -128,16 +121,16 @@ function PublicInquiryRoute() {
       <AePageHeader
         eyebrow={readback.businessName}
         title="Send a human inquiry to the owner"
-        description="This records a first-contact message for owner review. It does not create a booking, payment, or automated action."
+        description="This sends a first-contact message for owner review. It does not create a booking, payment, or automated action."
       />
-      <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
-        {message === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Inquiry needs attention</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
+      <form onSubmit={handleSubmit} noValidate className="ae-public-page mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
+        {result === undefined ? null : (
+          <AeActionResultCard
+            result={result}
+            businessName={readback.businessName}
+            serviceName={readback.serviceName}
+          />
         )}
-        {receipt === undefined ? null : <SubmittedReceipt receipt={receipt} />}
 
         <Card>
           <CardHeader>
@@ -170,7 +163,7 @@ function PublicInquiryRoute() {
                   disabled={!hydrated || pending}
                   onChange={(event) => updateContact('email', event.currentTarget.value)}
                 />
-                <FieldDescription>Email is stored as private source state and is not published.</FieldDescription>
+                <FieldDescription>Email is kept private and is not shown on public pages.</FieldDescription>
                 {fieldError('email', errorByField)}
               </Field>
               <Field data-invalid={errorByField.has('phone') ? true : undefined}>
@@ -240,18 +233,6 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
   )
 }
 
-function SubmittedReceipt({ receipt }: { receipt: PublicInquirySubmittedReceipt }) {
-  return (
-    <Alert>
-      <CheckCircle2Icon />
-      <AlertTitle>Inquiry recorded</AlertTitle>
-      <AlertDescription>
-        Message saved for {receipt.businessName}. Delivery state: {receipt.deliveryLabel}.
-      </AlertDescription>
-    </Alert>
-  )
-}
-
 function fieldError(field: PublicInquiryFormField, errorByField: ReadonlyMap<PublicInquiryFormField, string>) {
   const error = errorByField.get(field)
   return error === undefined ? null : <FieldError>{error}</FieldError>
@@ -268,15 +249,18 @@ function focusFirstError(errors: readonly PublicInquiryValidationError[]) {
   })
 }
 
-function deliveryLabel(status: PublicInquirySubmittedReceipt['notificationStatus']): string {
-  switch (status) {
-    case 'queued':
-      return 'queued for owner delivery'
-    case 'sent':
-      return 'delivery recorded'
-    case 'failed':
-      return 'delivery needs review'
-    case 'held':
-      return 'delivery held in source state'
+function submittedReceiptToResult(receipt: PublicInquirySubmittedReceipt): PublicInquirySubmitServerResult {
+  return {
+    kind: 'ok',
+    code: 'inquiry_submitted',
+    receipt: {
+      threadId: receipt.threadId,
+      businessId: '',
+      serviceId: '',
+      status: receipt.status,
+      version: 0,
+      notificationId: '',
+      notificationStatus: receipt.notificationStatus,
+    },
   }
 }

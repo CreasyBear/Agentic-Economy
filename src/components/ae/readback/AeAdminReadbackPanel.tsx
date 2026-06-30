@@ -1,4 +1,5 @@
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
+import { useId } from 'react'
 
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -45,10 +46,12 @@ type AeAdminReadbackPanelProps = {
 
 export function AeAdminReadbackPanel({ title, description, readback }: AeAdminReadbackPanelProps) {
   const accessLabel = readback.kind === 'denied' ? `HTTP ${readback.httpStatus}` : `HTTP ${readback.httpStatus}`
+  const titleId = useId()
+  const descriptionId = useId()
 
   return (
     <>
-      <Alert variant={readback.kind === 'denied' ? 'destructive' : 'default'}>
+      <Alert data-readback-kind={readback.kind} variant={readback.kind === 'denied' ? 'destructive' : 'default'}>
         {readback.kind === 'denied' ? (
           <ShieldAlert aria-hidden="true" className="size-4" />
         ) : (
@@ -62,10 +65,10 @@ export function AeAdminReadbackPanel({ title, description, readback }: AeAdminRe
         </AlertDescription>
       </Alert>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+      <Card className="ae-admin-readback-panel" aria-labelledby={titleId} aria-describedby={descriptionId}>
+        <CardHeader className="border-b">
+          <CardTitle id={titleId}>{title}</CardTitle>
+          <CardDescription id={descriptionId}>{description}</CardDescription>
         </CardHeader>
         <CardContent>
           {readback.kind === 'denied' ? <DeniedReadback readback={readback} /> : <AllowedReadback readback={readback} />}
@@ -102,10 +105,10 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
       ) : (
         <ul className="flex flex-col gap-3" aria-label={`${surfaceLabels[readback.surface]} readback rows`}>
           {readback.rows.map((row) => (
-            <li key={row.rowId} className="rounded-md border p-4">
+            <li key={row.rowId} className="rounded-md border bg-card p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="flex min-w-0 flex-col gap-2">
-                  <span className="text-sm font-medium text-foreground">{row.objectRef}</span>
+                  <span className="break-words text-sm font-medium text-foreground">{row.objectRef}</span>
                   <span className="text-sm text-muted-foreground">
                     {row.rowType.replaceAll('_', ' ')} - {rowStateLabels[row.rowState]}
                   </span>
@@ -136,7 +139,7 @@ function ReadbackStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border bg-muted/30 p-3">
       <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</span>
-      <span className="mt-1 block text-sm font-medium text-foreground">{value}</span>
+      <span className="mt-1 block break-words text-sm font-medium text-foreground" data-numeric>{value}</span>
     </div>
   )
 }
@@ -145,7 +148,7 @@ function ReadbackTerm({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-foreground">{value}</dd>
+      <dd className="mt-1 break-words text-foreground">{value}</dd>
     </div>
   )
 }

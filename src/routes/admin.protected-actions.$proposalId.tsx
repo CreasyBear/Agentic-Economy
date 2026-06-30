@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { AeAdminShell } from '@/components/ae/layout/AeAdminShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -57,7 +57,8 @@ function AdminProtectedActionDetailRoute() {
 
   if (readback.kind !== 'ok') {
     return (
-      <AeAdminShell
+      <AeOperatorShell
+        role="admin"
         title="Protected action detail"
         description="Operator reconstruction for one contact follow-up proposal, gateway, attempt, receipt, and no-repair path."
         currentPath="/admin/protected-actions"
@@ -68,13 +69,14 @@ function AdminProtectedActionDetailRoute() {
             <CardDescription>{readback.reason}</CardDescription>
           </CardHeader>
         </Card>
-      </AeAdminShell>
+      </AeOperatorShell>
     )
   }
   const reconstruction = readback.reconstruction
 
   return (
-    <AeAdminShell
+    <AeOperatorShell
+      role="admin"
       title="Protected action detail"
       description="Operator reconstruction for one contact follow-up proposal, gateway, attempt, receipt, and no-repair path."
       currentPath="/admin/protected-actions"
@@ -104,7 +106,7 @@ function AdminProtectedActionDetailRoute() {
           />
         </CardContent>
       </Card>
-    </AeAdminShell>
+    </AeOperatorShell>
   )
 }
 

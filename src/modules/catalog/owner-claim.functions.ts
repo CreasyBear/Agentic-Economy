@@ -327,7 +327,7 @@ function getLocalE2ePublicBusinessPageReadback(slug: string): PublicBusinessPage
     serviceArea: 'Parramatta',
     hoursOrUnknown: 'Hours supplied by owner',
     firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Use the source-owned inquiry form for a first contact.',
+    publicDisclosure: 'Use the inquiry form for a first contact.',
     noContactReason: '',
   })
 

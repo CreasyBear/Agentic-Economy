@@ -3,9 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { CircleCheckIcon, SendIcon } from 'lucide-react'
 
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -238,30 +236,29 @@ function OwnerInquiryThreadRoute() {
 
   if (readback.kind === 'not_found') {
     return (
-      <AePublicShell>
-        <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
-          <AeEmptyState
-            title="Inquiry unavailable"
-            description={readback.reason}
-            action={
-              <Button asChild>
-                <a href="/owner/inquiries">Back to inbox</a>
-              </Button>
-            }
-          />
-        </section>
-      </AePublicShell>
+      <AeOperatorShell
+        role="owner"
+        eyebrow="Owner messages"
+        title="Inquiry unavailable"
+        description={readback.reason}
+        currentPath="/owner/inquiries"
+      >
+        <Button asChild>
+          <a href="/owner/inquiries">Back to inbox</a>
+        </Button>
+      </AeOperatorShell>
     )
   }
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow={readback.detail.inquiry.businessName}
-        title={readback.detail.inquiry.serviceName}
-        description="Owner inquiry detail is reconstructed from source-owned messages, delivery state, and privacy tombstones."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:grid-cols-[minmax(0,1fr)_340px] md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow={readback.detail.inquiry.businessName}
+      title={readback.detail.inquiry.serviceName}
+      description="Owner inquiry detail is reconstructed from source-owned messages, delivery state, and privacy tombstones."
+      currentPath="/owner/inquiries"
+    >
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_340px]">
         <div className="grid gap-6">
           {actionMessage === undefined ? null : (
             <Alert>
@@ -293,8 +290,8 @@ function OwnerInquiryThreadRoute() {
           <DeliveryReadback notifications={readback.notifications} />
           <PrivacyReadback tombstones={readback.tombstones} />
         </aside>
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }
 
@@ -483,7 +480,7 @@ function FactList({ facts }: { facts: readonly { label: string; value: string }[
     <dl className="grid gap-3 sm:grid-cols-2">
       {facts.map((fact) => (
         <div key={`${fact.label}:${fact.value}`} className="rounded-lg bg-muted/40 p-3">
-          <dt className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{fact.label}</dt>
+          <dt className="text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">{fact.label}</dt>
           <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
         </div>
       ))}

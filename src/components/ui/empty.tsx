@@ -6,7 +6,7 @@ function Empty({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="empty"
-      className={cn('grid gap-4 rounded-lg bg-card p-6 text-card-foreground shadow-[var(--ae-shadow-border)]', className)}
+      className={cn('ae-empty grid gap-4 rounded-lg bg-card p-6 text-card-foreground', className)}
       {...props}
     />
   )

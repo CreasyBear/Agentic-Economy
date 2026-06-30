@@ -1,42 +1,191 @@
+/*
+ * Agentic Economy — Daylight Register tokens.
+ * Source of truth: DESIGN.md §17. Coral/linen/Geist retired 2026-06-30.
+ * One warm accent (amber). Sunlit drafting paper (not cream). Hairline rules
+ * carry hierarchy, not shadows. KNOWN/UNKNOWN/UNAVAILABLE are agent-layer only.
+ */
 :root {
   color-scheme: light;
-  --ae-font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
-  --ae-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --ae-bg: oklch(0.985 0.004 252);
-  --ae-fg: oklch(0.20 0.026 255);
-  --ae-muted-fg: oklch(0.45 0.026 255);
-  --ae-surface: oklch(1 0 0);
-  --ae-surface-raised: oklch(0.975 0.007 252);
-  --ae-surface-command: oklch(0.22 0.04 255);
-  --ae-command-fg: oklch(0.96 0.006 255);
-  --ae-border: oklch(0.87 0.014 252);
-  --ae-ring: oklch(0.56 0.18 252);
+  /* Fonts — self-hosted via @fontsource-variable (no render-blocking Google
+   * Fonts request). Fraunces (display), Hanken Grotesk (body/UI), IBM Plex Mono (data). */
+  --ae-font-display: "Fraunces Variable", ui-serif, Georgia, "Times New Roman", serif;
+  --ae-font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ae-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ae-font-body: var(--ae-font-sans);
 
-  --ae-primary: oklch(0.50 0.18 252);
-  --ae-primary-strong: oklch(0.42 0.17 252);
-  --ae-primary-fg: oklch(0.985 0.004 252);
-  --ae-info: oklch(0.55 0.15 235);
-  --ae-success: oklch(0.49 0.12 155);
-  --ae-warning: oklch(0.70 0.15 78);
-  --ae-danger: oklch(0.56 0.17 28);
+  /* Core palette — Daylight Register */
+  --ae-bg: oklch(0.935 0.005 95);            /* paper #ECEAE1 */
+  --ae-fg: oklch(0.21 0.012 250);            /* ink #14161A, cool near-black */
+  --ae-muted-fg: oklch(0.50 0.012 130);      /* muted #6B6E63, sage grey */
+  --ae-surface: oklch(0.96 0.006 95);        /* surface-raised #F4F3EC */
+  --ae-surface-sunken: oklch(0.905 0.006 95);/* surface-sunken #E2E1D8 */
+  --ae-surface-raised: oklch(0.96 0.006 95);
+  --ae-surface-command: oklch(0.21 0.012 250);
 
-  --ae-radius-sm: 8px;
-  --ae-radius-md: 12px;
-  --ae-radius-lg: 16px;
+  --ae-border: oklch(0.83 0.008 110);        /* hairline #C9C8BE */
+  --ae-ring: oklch(0.74 0.15 70);            /* amber ring */
+
+  --ae-primary: oklch(0.74 0.15 70);         /* amber #E89B3C */
+  --ae-primary-strong: oklch(0.64 0.14 65);  /* amber-deep #C9822A */
+  --ae-primary-fg: oklch(0.21 0.012 250);    /* ink on amber (high contrast) */
+
+  --ae-success: oklch(0.40 0.045 150);       /* eucalyptus #3F5947 */
+  --ae-warning: oklch(0.74 0.15 70);         /* amber (shared) */
+  --ae-danger: oklch(0.45 0.16 32);          /* oxide brick #A8322A */
+  --ae-info: oklch(0.42 0.07 250);           /* slate #345A7A */
+
+  /* Radii — 4px panels/cards/objects, 6px buttons, 999px status pills only (DESIGN.md §17) */
+  --ae-radius-sm: 4px;
+  --ae-radius-md: 6px;
+  --ae-radius-lg: 4px;
   --ae-radius-pill: 999px;
-  --ae-shadow-raised: 0 1px 2px oklch(0.2 0.02 255 / 0.08), 0 12px 36px oklch(0.2 0.02 255 / 0.08);
-  --ae-shadow-command: 0 24px 80px oklch(0.2 0.04 255 / 0.18);
-  --ae-shadow-border: 0 0 0 1px oklch(0.2 0.02 255 / 0.08), 0 1px 2px -1px oklch(0.2 0.02 255 / 0.08), 0 2px 4px oklch(0.2 0.02 255 / 0.04);
-  --ae-shadow-border-hover: 0 0 0 1px oklch(0.2 0.02 255 / 0.12), 0 1px 2px -1px oklch(0.2 0.02 255 / 0.10), 0 4px 10px oklch(0.2 0.02 255 / 0.06);
-  --ae-focus-ring: 0 0 0 3px oklch(0.56 0.18 252 / 0.30);
 
-  --ae-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ae-ease-state: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Shadows — rare and soft; hairline rules carry hierarchy */
+  --ae-shadow-raised: 0 1px 2px oklch(0.21 0.012 250 / 0.04);
+  --ae-shadow-border: 0 0 0 1px oklch(0.21 0.012 250 / 0.06);
+  --ae-shadow-border-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
+  --ae-shadow-border-focus-visible: var(--ae-shadow-border-hover);
+  --ae-focus-ring: 0 0 0 3px oklch(0.74 0.15 70 / 0.32);
+
+  /* Public surface token contract */
+  --ae-public-field: var(--ae-bg);
+  --ae-public-field-alt: var(--ae-surface-sunken);
+  --ae-public-surface: var(--ae-surface);
+  --ae-public-raised: var(--ae-surface-raised);
+  --ae-public-overlay: oklch(0.975 0.005 95);
+  --ae-public-ink: var(--ae-fg);
+  --ae-public-muted: var(--ae-muted-fg);
+  --ae-public-muted-strong: oklch(0.40 0.014 130);
+  --ae-public-command: var(--ae-surface-command);
+  --ae-public-command-soft: oklch(0.27 0.014 250);
+  --ae-public-command-text: oklch(0.96 0.006 95);
+  --ae-public-command-muted: oklch(0.74 0.012 130);
+
+  /* Accent family — amber is the single warm accent. */
+  --ae-public-amber: var(--ae-primary);
+  --ae-public-amber-deep: var(--ae-primary-strong);
+  --ae-public-amber-fg: var(--ae-primary-fg);
+  --ae-public-sage: var(--ae-success);
+  --ae-public-gold: var(--ae-warning);
+  --ae-public-blue: var(--ae-info);
+  /* Aliases for legacy component CSS (globals.css) that referenced these names. */
+  --ae-public-lime: var(--ae-success);       /* was a bright success accent → eucalyptus */
+  --ae-public-cobalt: var(--ae-info);        /* was a neutral info accent → slate */
+  --ae-public-cobalt-deep: oklch(0.36 0.08 250);
+
+  --ae-public-line: oklch(0.21 0.012 250 / 0.10);
+  --ae-public-line-strong: oklch(0.21 0.012 250 / 0.18);
+  --ae-public-grid-line: oklch(0.21 0.012 250 / 0.045);
+  --ae-public-command-line: oklch(0.96 0.006 95 / 0.12);
+  --ae-public-link-line: oklch(0.74 0.15 70 / 0.50);
+
+  --ae-public-button-primary-bg: var(--ae-public-amber);
+  --ae-public-button-primary-bg-hover: var(--ae-public-amber-deep);
+  --ae-public-button-primary-border: color-mix(in oklch, var(--ae-public-amber-deep) 72%, var(--ae-public-ink));
+  --ae-public-button-primary-text: var(--ae-public-amber-fg);
+  --ae-public-control-bg: var(--ae-public-surface);
+  --ae-public-control-border: var(--ae-public-line-strong);
+  --ae-public-control-text: var(--ae-public-ink);
+  --ae-public-control-placeholder: var(--ae-public-muted);
+  --ae-public-nav-bg-active: color-mix(in oklch, var(--ae-public-amber) 12%, var(--ae-public-surface));
+  --ae-public-nav-text-active: var(--ae-public-amber-deep);
+
+  /* Spacing — 8px base */
+  --ae-public-space-2xs: 0.25rem;
+  --ae-public-space-xs: 0.5rem;
+  --ae-public-space-sm: 0.75rem;
+  --ae-public-space-md: 1rem;
+  --ae-public-space-lg: 1.5rem;
+  --ae-public-space-xl: 2rem;
+  --ae-public-space-2xl: 3rem;
+  --ae-public-space-3xl: 4rem;
+  --ae-public-space-4xl: 5rem;
+  --ae-public-space-5xl: 6rem;
+  --ae-public-space-6xl: 7rem;
+  --ae-public-gutter: clamp(1.25rem, 4vw, 3rem);
+  --ae-public-content-max: 80rem;
+  --ae-public-measure: 36rem;
+  --ae-public-grid-size: 4.5rem;
+
+  /* Type roles — display serif, body grotesk, mono data */
+  --ae-public-font-display: var(--ae-font-display);
+  --ae-public-font-body: var(--ae-font-body);
+  --ae-public-font-mono: var(--ae-font-mono);
+  --ae-public-text-xs: 0.78rem;
+  --ae-public-text-sm: 0.875rem;
+  --ae-public-text-base: 1rem;
+  --ae-public-text-md: 1.125rem;
+  --ae-public-text-lg: 1.25rem;
+  --ae-public-text-xl: 1.45rem;
+  --ae-public-text-2xl: 1.55rem;
+  --ae-public-text-3xl: 2rem;
+  --ae-public-text-lede-mobile: 1.55rem;
+  --ae-public-text-record: 3rem;
+  --ae-public-text-display-small: 2.9rem;
+  --ae-public-text-display-mobile: 3.6rem;
+  --ae-public-text-display-tablet: 4.75rem;
+  --ae-public-text-section-small: 2.35rem;
+  --ae-public-text-section-mobile: 2.9rem;
+  --ae-public-text-section: 5.2rem;
+  --ae-public-text-display: clamp(3rem, 7vw, 5.8rem);
+  --ae-public-leading-display: 1.02;
+  --ae-public-leading-tight: 1.08;
+  --ae-public-leading-snug: 1.35;
+  --ae-public-leading-body: 1.6;
+  --ae-public-weight-medium: 530;
+  --ae-public-weight-semibold: 620;
+  --ae-public-weight-bold: 680;
+  --ae-public-weight-display: 560;
+  --ae-public-tracking: 0;
+  --ae-public-tracking-display: -0.01em;
+  --ae-public-tracking-mono-label: 0.06em;
+
+  /* Radii — panels 4px, buttons 6px, status pills 999px */
+  --ae-public-radius-sm: var(--ae-radius-sm);
+  --ae-public-radius-md: var(--ae-radius-md);
+  --ae-public-radius-lg: var(--ae-radius-lg);
+  --ae-public-radius-xl: var(--ae-radius-sm);
+  --ae-public-radius-control: var(--ae-radius-md);
+  --ae-public-radius-panel: var(--ae-radius-sm);
+  --ae-public-radius-card: var(--ae-radius-sm);
+  --ae-public-radius-object: var(--ae-radius-lg);
+  --ae-public-radius-pill: var(--ae-radius-pill);
+
+  /* Shadows — soft, rare */
+  --ae-public-soft-shadow: 0 1px 2px oklch(0.21 0.012 250 / 0.04), 0 8px 24px oklch(0.21 0.012 250 / 0.05);
+  --ae-public-float-shadow: 0 8px 28px oklch(0.21 0.012 250 / 0.08), 0 2px 6px oklch(0.21 0.012 250 / 0.04);
+  --ae-public-control-shadow: 0 0 0 1px oklch(0.21 0.012 250 / 0.06);
+  --ae-public-control-shadow-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
+  --ae-public-command-shadow: 0 20px 60px oklch(0.21 0.012 250 / 0.18);
+  --ae-public-hard-shadow: 6px 6px 0 oklch(0.21 0.012 250 / 0.06);
+  --ae-public-button-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), 0 6px 16px oklch(0.74 0.15 70 / 0.18);
+  --ae-public-button-shadow-hover: inset 0 1px 0 oklch(1 0 0 / 0.14), 0 8px 20px oklch(0.74 0.15 70 / 0.22);
+  --ae-public-card-shadow: var(--ae-public-soft-shadow);
+  --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
+  --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
+
+  /* Motion — minimal-functional, leaning intentional */
+  --ae-public-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ae-public-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ae-public-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ae-public-duration-hover: 160ms;
+  --ae-public-duration-entrance: 260ms;
+  --ae-public-hover-lift: -1px;
+  --ae-public-hover-shift: 2px;
+  --ae-public-reveal-distance: 0.75rem;
+  --ae-public-z-underlay: -1;
+  --ae-public-z-base: 0;
+  --ae-public-z-content: 1;
+  --ae-public-z-sticky: 20;
+
+  --ae-ease-out: var(--ae-public-ease-enter);
+  --ae-ease-state: var(--ae-public-ease);
   --ae-duration-fast: 120ms;
-  --ae-duration-state: 180ms;
-  --ae-duration-route: 260ms;
+  --ae-duration-state: 160ms;
+  --ae-duration-route: 240ms;
 
+  /* shadcn bridge */
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
   --card: var(--ae-surface);
@@ -45,14 +194,14 @@
   --popover-foreground: var(--ae-fg);
   --primary: var(--ae-primary);
   --primary-foreground: var(--ae-primary-fg);
-  --secondary: var(--ae-surface-raised);
+  --secondary: var(--ae-surface-sunken);
   --secondary-foreground: var(--ae-fg);
-  --muted: var(--ae-surface-raised);
+  --muted: var(--ae-surface-sunken);
   --muted-foreground: var(--ae-muted-fg);
-  --accent: var(--ae-surface-raised);
+  --accent: var(--ae-surface-sunken);
   --accent-foreground: var(--ae-fg);
   --destructive: var(--ae-danger);
-  --destructive-foreground: var(--ae-primary-fg);
+  --destructive-foreground: oklch(0.98 0.005 95);
   --border: var(--ae-border);
   --input: var(--ae-border);
   --ring: var(--ae-ring);
@@ -61,21 +210,82 @@
 
 .dark {
   color-scheme: dark;
-  --ae-bg: oklch(0.16 0.006 252);
-  --ae-fg: oklch(0.95 0.006 255);
-  --ae-muted-fg: oklch(0.72 0.014 255);
-  --ae-surface: oklch(0.21 0.012 252);
-  --ae-surface-raised: oklch(0.25 0.014 252);
-  --ae-surface-command: oklch(0.15 0.026 255);
-  --ae-border: oklch(0.36 0.018 252);
-  --ae-ring: oklch(0.68 0.15 252);
-  --ae-primary: oklch(0.68 0.15 252);
-  --ae-primary-strong: oklch(0.74 0.14 252);
-  --ae-primary-fg: oklch(0.15 0.026 255);
-  --ae-info: oklch(0.74 0.12 235);
-  --ae-success: oklch(0.74 0.12 155);
-  --ae-warning: oklch(0.82 0.13 78);
-  --ae-danger: oklch(0.74 0.14 28);
-  --ae-shadow-border: 0 0 0 1px oklch(1 0 0 / 0.09);
-  --ae-shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.15);
+
+  --ae-bg: oklch(0.21 0.012 250);
+  --ae-fg: oklch(0.94 0.006 95);
+  --ae-muted-fg: oklch(0.72 0.014 130);
+  --ae-surface: oklch(0.26 0.014 250);
+  --ae-surface-sunken: oklch(0.23 0.012 250);
+  --ae-surface-raised: oklch(0.28 0.014 250);
+  --ae-surface-command: oklch(0.18 0.014 250);
+
+  --ae-border: oklch(0.36 0.014 130);
+  --ae-ring: oklch(0.78 0.15 70);
+
+  --ae-primary: oklch(0.78 0.15 70);
+  --ae-primary-strong: oklch(0.84 0.13 65);
+  --ae-primary-fg: oklch(0.20 0.012 250);
+
+  --ae-success: oklch(0.66 0.06 150);
+  --ae-warning: oklch(0.78 0.15 70);
+  --ae-danger: oklch(0.62 0.17 32);
+  --ae-info: oklch(0.66 0.08 250);
+
+  --ae-shadow-raised: 0 1px 2px oklch(0 0 0 / 0.20), 0 12px 36px oklch(0 0 0 / 0.22);
+  --ae-shadow-border: 0 0 0 1px oklch(1 0 0 / 0.10);
+  --ae-shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.16);
+  --ae-shadow-border-focus-visible: var(--ae-shadow-border-hover);
+  --ae-focus-ring: 0 0 0 3px oklch(0.78 0.15 70 / 0.36);
+
+  --ae-public-field: var(--ae-bg);
+  --ae-public-field-alt: var(--ae-surface-sunken);
+  --ae-public-surface: var(--ae-surface);
+  --ae-public-raised: var(--ae-surface-raised);
+  --ae-public-overlay: oklch(0.30 0.014 250);
+  --ae-public-ink: var(--ae-fg);
+  --ae-public-muted: var(--ae-muted-fg);
+  --ae-public-muted-strong: oklch(0.84 0.012 130);
+  --ae-public-command: var(--ae-surface-command);
+  --ae-public-command-soft: oklch(0.24 0.014 250);
+  --ae-public-command-text: oklch(0.94 0.006 95);
+  --ae-public-command-muted: oklch(0.72 0.012 130);
+
+  --ae-public-amber: var(--ae-primary);
+  --ae-public-amber-deep: var(--ae-primary-strong);
+  --ae-public-amber-fg: var(--ae-primary-fg);
+  --ae-public-sage: var(--ae-success);
+  --ae-public-gold: var(--ae-warning);
+  --ae-public-blue: var(--ae-info);
+  --ae-public-lime: var(--ae-success);
+  --ae-public-cobalt: var(--ae-info);
+  --ae-public-cobalt-deep: oklch(0.78 0.10 250);
+
+  --ae-public-line: oklch(1 0 0 / 0.12);
+  --ae-public-line-strong: oklch(1 0 0 / 0.22);
+  --ae-public-grid-line: oklch(1 0 0 / 0.05);
+  --ae-public-command-line: oklch(1 0 0 / 0.12);
+  --ae-public-link-line: oklch(0.78 0.15 70 / 0.6);
+
+  --ae-public-button-primary-bg: var(--ae-public-amber);
+  --ae-public-button-primary-bg-hover: var(--ae-public-amber-deep);
+  --ae-public-button-primary-border: color-mix(in oklch, var(--ae-public-amber-deep) 72%, var(--ae-public-ink));
+  --ae-public-button-primary-text: var(--ae-public-amber-fg);
+  --ae-public-control-bg: var(--ae-public-surface);
+  --ae-public-control-border: var(--ae-public-line-strong);
+  --ae-public-control-text: var(--ae-public-ink);
+  --ae-public-control-placeholder: var(--ae-public-muted);
+  --ae-public-nav-bg-active: color-mix(in oklch, var(--ae-public-amber) 14%, var(--ae-public-surface));
+  --ae-public-nav-text-active: var(--ae-public-amber);
+
+  --ae-public-soft-shadow: 0 1px 2px oklch(0 0 0 / 0.18), 0 12px 32px oklch(0 0 0 / 0.20);
+  --ae-public-float-shadow: 0 16px 40px oklch(0 0 0 / 0.26), 0 3px 8px oklch(0 0 0 / 0.14);
+  --ae-public-control-shadow: 0 0 0 1px oklch(1 0 0 / 0.10);
+  --ae-public-control-shadow-hover: 0 0 0 1px oklch(1 0 0 / 0.16);
+  --ae-public-command-shadow: 0 24px 64px oklch(0 0 0 / 0.30);
+  --ae-public-hard-shadow: 6px 6px 0 oklch(0 0 0 / 0.20);
+  --ae-public-button-shadow: inset 0 1px 0 oklch(1 0 0 / 0.10), 0 10px 24px oklch(0.78 0.15 70 / 0.24);
+  --ae-public-button-shadow-hover: inset 0 1px 0 oklch(1 0 0 / 0.08), 0 12px 30px oklch(0.78 0.15 70 / 0.28);
+  --ae-public-card-shadow: var(--ae-public-soft-shadow);
+  --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
+  --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
 }

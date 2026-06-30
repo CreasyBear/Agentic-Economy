@@ -164,7 +164,7 @@ export function buildPublicInquiryAffordance(catalog: PublicRouteCatalogContract
     return {
       kind: 'unavailable',
       label: 'Inquiry unavailable',
-      reason: 'This service has not published a source-owned human inquiry path yet.',
+      reason: 'This service has not published a human inquiry path yet.',
       businessName: catalog.name,
       ...(serviceName === undefined ? {} : { serviceName }),
     }
@@ -389,7 +389,7 @@ function firstRequestForService(
       mode: 'not_available_yet',
       publicDisclosure: 'First request instructions are not available yet.',
       publicChannel: 'not_available',
-      noContactReason: 'No source-owned first request path has been published.',
+      noContactReason: 'No first request path has been published.',
       rawContactExcluded: true,
     }
   )

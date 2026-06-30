@@ -314,6 +314,46 @@ export function scanCopyClaims(targets: readonly ScanTarget[]): readonly ScanVio
   })
 }
 
+export function scanPublicLanguage(targets: readonly ScanTarget[]): readonly ScanViolation[] {
+  return scanPatterns(
+    targets,
+    [
+      {
+        rule: 'banned-em-dash',
+        message: 'Public-facing copy must not use em dashes or en dashes as separators.',
+        pattern: /[—–]/,
+      },
+      {
+        rule: 'public-internal-identifier',
+        message: 'Public-facing copy cannot expose source/private implementation identifiers.',
+        pattern: /\b(?:ownerId|businessId|serviceId|sourceHash|rawContact|clerk|admin)\b/i,
+      },
+      {
+        rule: 'public-product-register',
+        message: 'Public-facing copy should lead with customer outcomes, not product/internal framing.',
+        pattern: /\b(?:the answer record is the product|internal language|internal product|runtime state)\b/i,
+      },
+      {
+        rule: 'public-mechanism-language',
+        message: 'Public-facing copy should not expose implementation or mechanism vocabulary.',
+        pattern:
+          /\b(?:source-owned answer records?|source-owned service pages?|source truth|answer-record language|answer record assistants|public answer record|source-owned catalog state|source record|public data readback|source readback|route readback|registry search|registry results)\b/i,
+      },
+      {
+        rule: 'generic-registry-language',
+        message: 'The public registry must use customer-facing business-detail language, not generic search/result/page wording.',
+        pattern: /\b(?:Find public service pages|Public business pages|Registry search|No registry results|Open page)\b/,
+      },
+      {
+        rule: 'generic-money-language',
+        message: 'Public-facing copy cannot imply wallet, custody, checkout, or marketplace behavior.',
+        pattern: /\b(?:wallet|custody|checkout|marketplace)\b/i,
+      },
+    ],
+    [scannerUtilityPath]
+  )
+}
+
 const copyClaimRules: readonly CopyClaimRule[] = [
   {
     rule: 'payment-or-booking-overclaim',

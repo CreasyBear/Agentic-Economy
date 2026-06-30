@@ -1,13 +1,12 @@
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { createParkedFileRoute } from '@/future-phases/route-helpers'
 
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
 import {
-  OwnerBillingStatePanel,
   readOwnerBillingRouteReadback,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteReadback,
-} from './owner.billing'
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 
 export const Route = createParkedFileRoute<OwnerBillingRouteReadback>('/owner/billing/cancel')({
   loader: () => readOwnerBillingRouteReadback(),
@@ -25,15 +24,16 @@ function OwnerBillingCancelRoute() {
   const summary = summarizeOwnerBillingRoute(readback, 'cancel')
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Canceled return"
-        title="No active billing state was granted."
-        description="A canceled return is displayed only from source-owned owner billing operation state."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Canceled return"
+      title="No active billing state was granted."
+      description="A canceled return is displayed only from source-owned owner billing operation state."
+      currentPath="/owner/billing/cancel"
+    >
+      <div className="grid gap-6">
         <OwnerBillingStatePanel summary={summary} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }

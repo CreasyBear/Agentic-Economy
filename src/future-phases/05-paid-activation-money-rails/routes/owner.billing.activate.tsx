@@ -1,14 +1,15 @@
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { createParkedFileRoute } from '@/future-phases/route-helpers'
 
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import {
   OwnerBillingReceiptList,
   OwnerBillingStatePanel,
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
+import {
   readOwnerBillingRouteReadback,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteReadback,
-} from './owner.billing'
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 
 export const Route = createParkedFileRoute<OwnerBillingRouteReadback>('/owner/billing/activate')({
   loader: () => readOwnerBillingRouteReadback(),
@@ -26,16 +27,17 @@ function OwnerBillingActivateRoute() {
   const summary = summarizeOwnerBillingRoute(readback, 'activate')
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Owner billing"
-        title="Review the activation readback."
-        description="This route shows the published offer or current owner operation. Provider calls stay in the authenticated server seam."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Owner billing"
+      title="Review the activation readback."
+      description="This route shows the published offer or current owner operation. Provider calls stay in the authenticated server seam."
+      currentPath="/owner/billing/activate"
+    >
+      <div className="grid gap-6">
         <OwnerBillingStatePanel summary={summary} />
         <OwnerBillingReceiptList receipts={readback.owner.receipts} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }

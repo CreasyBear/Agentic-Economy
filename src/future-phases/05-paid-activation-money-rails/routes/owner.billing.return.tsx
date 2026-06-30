@@ -1,14 +1,15 @@
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { createParkedFileRoute } from '@/future-phases/route-helpers'
 
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import {
   OwnerBillingReceiptList,
   OwnerBillingStatePanel,
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
+import {
   readOwnerBillingRouteReadback,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteReadback,
-} from './owner.billing'
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 
 export const Route = createParkedFileRoute<OwnerBillingRouteReadback>('/owner/billing/return')({
   loader: () => readOwnerBillingRouteReadback(),
@@ -26,16 +27,17 @@ function OwnerBillingReturnRoute() {
   const summary = summarizeOwnerBillingRoute(readback, 'return')
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Provider return"
-        title="Wait for recorded provider readback."
-        description="Returning to Agentic Economy does not mark billing active unless the source-owned readback already proves it."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Provider return"
+      title="Wait for recorded provider readback."
+      description="Returning to Agentic Economy does not mark billing active unless the source-owned readback already proves it."
+      currentPath="/owner/billing/return"
+    >
+      <div className="grid gap-6">
         <OwnerBillingStatePanel summary={summary} />
         <OwnerBillingReceiptList receipts={readback.owner.receipts} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }

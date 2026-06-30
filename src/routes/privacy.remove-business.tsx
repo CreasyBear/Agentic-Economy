@@ -42,7 +42,7 @@ function RemoveBusinessRoute() {
   const openRemoval = useServerFn(openRemovalServer)
   const [hydrated, setHydrated] = useState(false)
   const [value, setValue] = useState<RemovalInput>({
-    slug: 'parramatta-emergency-plumbing',
+    slug: '',
     contactEmail: '',
     reasonCode: 'privacy_removal_requested',
     evidenceSummary: '',
@@ -93,7 +93,7 @@ function RemoveBusinessRoute() {
         title="Request removal or correction"
         description="Use this safety valve when a public service page should be removed, corrected, or reviewed for ownership."
       />
-      <form onSubmit={handleSubmit} className="mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6" noValidate>
+      <form onSubmit={handleSubmit} className="ae-public-page mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6" noValidate>
         {error === undefined ? null : (
           <Alert variant="destructive">
             <AlertTitle>Request needs attention</AlertTitle>

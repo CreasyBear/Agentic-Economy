@@ -1,13 +1,12 @@
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { createParkedFileRoute } from '@/future-phases/route-helpers'
 
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
 import {
-  OwnerBillingStatePanel,
   readOwnerBillingRouteReadback,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteReadback,
-} from './owner.billing'
+} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 
 export const Route = createParkedFileRoute<OwnerBillingRouteReadback>('/owner/billing/redirecting')({
   loader: () => readOwnerBillingRouteReadback(),
@@ -25,15 +24,16 @@ function OwnerBillingRedirectingRoute() {
   const summary = summarizeOwnerBillingRoute(readback, 'redirecting')
 
   return (
-    <AePublicShell>
-      <AePageHeader
-        eyebrow="Provider redirect"
-        title="Continue only from a recorded operation."
-        description="A redirect link appears only when source-owned owner billing state contains one for the current operation."
-      />
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+    <AeOperatorShell
+      role="owner"
+      eyebrow="Provider redirect"
+      title="Continue only from a recorded operation."
+      description="A redirect link appears only when source-owned owner billing state contains one for the current operation."
+      currentPath="/owner/billing/redirecting"
+    >
+      <div className="grid gap-6">
         <OwnerBillingStatePanel summary={summary} />
-      </section>
-    </AePublicShell>
+      </div>
+    </AeOperatorShell>
   )
 }

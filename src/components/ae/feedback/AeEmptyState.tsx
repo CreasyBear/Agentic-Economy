@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
@@ -9,11 +9,14 @@ type AeEmptyStateProps = {
 }
 
 export function AeEmptyState({ title, description, action }: AeEmptyStateProps) {
+  const titleId = useId()
+  const descriptionId = useId()
+
   return (
-    <Empty>
+    <Empty aria-labelledby={titleId} aria-describedby={descriptionId}>
       <EmptyHeader>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
+        <EmptyTitle id={titleId}>{title}</EmptyTitle>
+        <EmptyDescription id={descriptionId}>{description}</EmptyDescription>
       </EmptyHeader>
       {action === undefined ? null : <EmptyContent>{action}</EmptyContent>}
     </Empty>
