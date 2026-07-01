@@ -5,10 +5,16 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
+import {
+  DEFAULT_AE_SEARCH_CONTEXT,
+  aeSearchContextLocationLabel,
+  type AeSearchContext,
+} from '@/modules/answer/search-context'
 import type { AnswerThreadRecord, PublicThreadProjection } from '@/modules/answer-thread/public'
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
 import { AeChatWelcome } from './AeChatWelcome'
 import { AeQueryPanel } from './AeQueryPanel'
+import { AeSearchContextBar } from './AeSearchContextBar'
 import { AeThreadFooter } from './AeThreadFooter'
 import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
@@ -26,6 +32,7 @@ export type AeChatProps = {
 type LiveTurn = {
   query: string
   generation: number
+  searchContext: AeSearchContext
 }
 
 export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
@@ -37,6 +44,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const [generation, setGeneration] = useState(0)
   const [streamingBusy, setStreamingBusy] = useState(false)
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
+  const [searchContext, setSearchContext] = useState<AeSearchContext>(DEFAULT_AE_SEARCH_CONTEXT)
   const initialQueryStarted = useRef(false)
   const pendingThreadIdRef = useRef<string | null>(null)
 
@@ -110,23 +118,27 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setStreamingBusy(true)
     setGeneration((current) => {
       const next = current + 1
-      setLiveTurn({ query: trimmed, generation: next })
+      setLiveTurn({ query: trimmed, generation: next, searchContext })
       return next
     })
-  }, [initialQuery])
+  }, [initialQuery, searchContext])
 
-  function startTurn(query: string) {
+  function startTurn(query: string, context: AeSearchContext = searchContext) {
     setStreamingBusy(true)
     setGeneration((current) => {
       const next = current + 1
-      setLiveTurn({ query, generation: next })
+      setLiveTurn({ query, generation: next, searchContext: context })
       return next
     })
   }
 
   function handleSubmit(query: string) {
-    captureClientProductEventOnClient('query_submitted', { query_length: query.length })
-    startTurn(query)
+    captureClientProductEventOnClient('query_submitted', {
+      query_length: query.length,
+      search_mode: searchContext.mode,
+      search_location: aeSearchContextLocationLabel(searchContext) ?? 'none',
+    })
+    startTurn(query, searchContext)
   }
 
   function handleThreadCreated(id: string) {
@@ -217,14 +229,24 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           <AeThreadStreamingIndicator streaming={streamingBusy} />
         </AeThreadScroller>
         <div className="ae-chat-panel-wrap">
-          <AeQueryPanel onSubmit={handleSubmit} busy={streamingBusy} />
+          <AeSearchContextBar
+            context={searchContext}
+            busy={streamingBusy}
+            onChange={setSearchContext}
+          />
+          <AeQueryPanel
+            onSubmit={handleSubmit}
+            busy={streamingBusy}
+            searchContext={searchContext}
+            showExamples={showWelcome}
+          />
         </div>
       </div>
     </div>
   )
 
   return (
-    <AePublicShell>
+    <AePublicShell immersive>
       {isStructuredAnswerModeEnabled() ? <AeAnswerModelProvider>{shell}</AeAnswerModelProvider> : shell}
     </AePublicShell>
   )

@@ -72,6 +72,7 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
             sessionId,
             query: parsed.data.query,
             ...(threadId === undefined ? {} : { threadId }),
+            ...(parsed.data.searchContext === undefined ? {} : { searchContext: parsed.data.searchContext }),
             signal: request.signal,
           },
           send,

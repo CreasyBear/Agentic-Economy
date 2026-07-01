@@ -12,8 +12,8 @@ export function AeChatWelcome() {
         <p className="ae-chat-welcome__kicker">Agentic Economy</p>
         <h1 className="ae-chat-welcome__title">Ask for a local service. Get a cited answer.</h1>
         <p className="ae-chat-welcome__lede">
-          Type a real need and a place. The answer names listed local businesses, what they handle, and where they work.
-          No booking, no payment.
+          Type a real need, or name a different place. The answer names listed local businesses, what they handle, and
+          where they work. No booking, no payment.
         </p>
         <p className="ae-chat-welcome__assistants">
           Assistants: <a href="/llms.txt">/llms.txt</a>

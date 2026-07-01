@@ -18,7 +18,18 @@
   font-size: var(--ae-public-text-xs);
   cursor: pointer;
   transition: border-color var(--ae-public-duration-hover) var(--ae-public-ease),
-              color var(--ae-public-duration-hover) var(--ae-public-ease);
+              color var(--ae-public-duration-hover) var(--ae-public-ease),
+              transform var(--ae-public-duration-hover) var(--ae-public-ease),
+              box-shadow var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-agent-json__button:active {
+  transform: scale(0.96);
+}
+
+.ae-agent-json__button:focus-visible {
+  outline: 0;
+  box-shadow: var(--ae-focus-ring);
 }
 
 .ae-agent-json__button:hover {
@@ -37,19 +48,28 @@
 .ae-hero-figure {
   margin: 0;
   width: 100%;
+  border-radius: var(--ae-public-radius-object);
+  overflow: hidden;
+  box-shadow: var(--ae-shadow-border);
 }
 
 .ae-hero-figure__img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: var(--ae-public-radius-object);
+  border-radius: 0;
+  outline: 0;
 }
 
 .ae-hero-figure__caption {
-  margin-top: var(--ae-public-space-xs);
+  margin: 0;
+  padding: var(--ae-public-space-sm) var(--ae-public-space-md);
   font-family: var(--ae-public-font-mono);
   font-size: var(--ae-public-text-xs);
+  line-height: var(--ae-public-leading-snug);
   color: var(--ae-public-muted);
+  text-align: center;
+  background: var(--ae-public-field);
+  border-top: 1px solid var(--ae-public-line);
 }
 

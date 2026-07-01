@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useReducer, useRef } from 'react'
 import { Link } from '@tanstack/react-router'
 
 import type { AnswerEvent } from '@/modules/answer/public'
+import {
+  stableAeSearchContextKey,
+  type AeSearchContext,
+} from '@/modules/answer/search-context'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
@@ -21,6 +25,7 @@ export type TurnStreamOutcome = 'complete' | 'error' | 'stopped' | 'rate_limited
 
 export type AeThreadTurnStreamSectionProps = {
   query: string
+  searchContext?: AeSearchContext
   intent?: FollowUpIntent
   seq?: number
   threadId?: string
@@ -32,6 +37,7 @@ export type AeThreadTurnStreamSectionProps = {
 
 export function AeThreadTurnStreamSection({
   query,
+  searchContext,
   intent = 'refine_search',
   seq = 1,
   threadId,
@@ -49,6 +55,7 @@ export function AeThreadTurnStreamSection({
   const onStreamEndRef = useRef(onStreamEnd)
   const onThreadCreatedRef = useRef(onThreadCreated)
   const requestThreadIdRef = useRef<string | undefined>(threadId)
+  const streamKey = `${generation}:${query}:${stableAeSearchContextKey(searchContext)}`
 
   generationRef.current = generation
   onStreamEndRef.current = onStreamEnd
@@ -72,13 +79,13 @@ export function AeThreadTurnStreamSection({
     completeRef.current = false
     userStopRef.current = false
 
-    const streamKey = `${generation}:${query}`
     const activeGeneration = generation
     const threadIdAtStart = requestThreadIdRef.current
 
     const detach = attachAnswerTurnStream({
       key: streamKey,
       query,
+      ...(searchContext === undefined ? {} : { searchContext }),
       ...(threadIdAtStart === undefined ? {} : { threadId: threadIdAtStart }),
       subscriber: {
         onThread: (meta) => {
@@ -99,7 +106,7 @@ export function AeThreadTurnStreamSection({
         abortAnswerTurnStream(streamKey)
       }
     }
-  }, [query, generation])
+  }, [query, searchContext, generation, streamKey])
 
   function applyEvent(event: AnswerEvent, activeGeneration: number) {
     if (!mountedRef.current || generationRef.current !== activeGeneration) {
@@ -149,7 +156,7 @@ export function AeThreadTurnStreamSection({
 
   function stop() {
     userStopRef.current = true
-    abortAnswerTurnStream(`${generation}:${query}`)
+    abortAnswerTurnStream(streamKey)
   }
 
   const busy = state.phase === 'streaming'

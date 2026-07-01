@@ -1,28 +1,17 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import type { ReactNode } from 'react'
 import { z } from 'zod'
 
 import { AeRegistrySearchPanel } from '@/components/ae/forms/AeRegistrySearchPanel'
+import { AeRegistryCard } from '@/components/ae/registry/AeRegistryCard'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeRegistryFunnelBoot } from '@/components/ae/layout/AeRegistryFunnelBoot'
-import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  plainAvailabilityLabel,
-  plainHoursLabel,
-  plainResponseTimeLabel,
-  type PlainAvailabilityInput,
-} from '@/lib/ui/status-presentation'
 import type { FirstRequestMode } from '@/modules/catalog/public'
-import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
+import type { PublicBusinessCatalogApiPage } from '@/modules/registry/public'
 import {
   readPublicRegistryCatalogPage,
   readPublicRegistrySearchPage,
@@ -53,7 +42,7 @@ export const readRegistryRouteServer = createServerFn()
       q: data.q,
       limit: data.limit,
       ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
-    })
+    }),
   )
 
 export const Route = createFileRoute('/registry')({
@@ -109,12 +98,17 @@ function RegistryRoute() {
   return (
     <AePublicShell>
       <AeRegistryFunnelBoot query={query} />
-      <AePageHeader
-        title="Find business details companies can stand behind."
-        description="Secondary browse when you prefer scanning. For a cited answer, start from Ask on the home page."
-      />
-      <section className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        <RegistrySearchForm query={query} limit={limit} />
+      <section className="ae-public-page ae-registry-page mx-auto w-full max-w-6xl">
+        <div className="ae-registry-search-hero">
+          <h1 className="ae-registry-search-hero__title">
+            {hasQuery ? `Results for “${query}”` : 'Find business details companies can stand behind.'}
+          </h1>
+          <p className="ae-registry-search-hero__lede">
+            Browse claimed service pages. For a cited answer to a specific need, start from Ask on the home page.
+          </p>
+          <AeRegistrySearchPanel query={query} limit={limit} />
+        </div>
+
         {isEmpty && !hasQuery ? (
           <AeEmptyState
             title="No businesses published yet"
@@ -146,15 +140,19 @@ function RegistryRoute() {
         ) : null}
         {!isEmpty ? (
           <>
-            <div className="flex flex-col gap-2">
+            <div className="ae-registry-results-meta">
               <p className="text-sm text-muted-foreground">
                 <span data-numeric>{result.pagination.total}</span> {resultSummary(result.pagination.total, query)}
               </p>
               <RegistryClaimPrompt />
             </div>
-            <ScrollArea className="ae-registry-results ae-registry-results-scroll max-h-none">
-              <RegistryResultList items={result.items} />
-            </ScrollArea>
+            <ul className="ae-registry-grid" aria-label="Business results">
+              {result.items.map((item) => (
+                <li key={item.slug}>
+                  <AeRegistryCard item={item} />
+                </li>
+              ))}
+            </ul>
             <RegistryPagination
               query={query}
               limit={limit}
@@ -169,23 +167,9 @@ function RegistryRoute() {
   )
 }
 
-function RegistrySearchForm({ query, limit }: { query: string; limit: number }) {
-  return (
-    <Card className="ae-public-route-card ae-public-route-search-card">
-      <CardHeader>
-        <CardTitle>Find a local business</CardTitle>
-        <CardDescription>Use a business name, service, suburb, postcode, or service area.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <AeRegistrySearchPanel query={query} limit={limit} />
-      </CardContent>
-    </Card>
-  )
-}
-
 function RegistryClaimPrompt() {
   return (
-    <div className="ae-public-route-card ae-public-claim-strip flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+    <div className="ae-registry-claim-strip">
       <p className="max-w-2xl text-pretty text-sm leading-6 text-muted-foreground">
         Own one of these businesses? Claim your page so customers see the details you approve.
       </p>
@@ -194,135 +178,6 @@ function RegistryClaimPrompt() {
       </Button>
     </div>
   )
-}
-
-function RegistryResultList({ items }: { items: readonly PublicBusinessCatalogApiDto[] }) {
-  return (
-    <ul className="grid gap-3" aria-label="Business results">
-      {items.map((item) => (
-        <li key={item.slug}>
-          <article className="ae-public-route-card ae-public-result-card overflow-hidden">
-            <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-              <div className="grid content-start gap-2">
-                <p className="text-sm font-medium leading-6 text-muted-foreground">Listed business</p>
-                <h2 className="font-heading text-xl font-semibold leading-tight text-foreground">{item.name}</h2>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {item.category}, {item.suburb}, {item.stateTerritory}
-                  {item.postcode === undefined ? '' : ` ${item.postcode}`}
-                </p>
-                {plainResponseTimeLabel(item.responseTimeMinutes).length > 0 ? (
-                  <p className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
-                    {plainResponseTimeLabel(item.responseTimeMinutes)}
-                  </p>
-                ) : null}
-              </div>
-              <div className="grid content-start gap-2 lg:items-start lg:justify-end">
-                <p className="text-xs font-medium leading-5 text-muted-foreground">Published details</p>
-                <RegistryAvailabilityPill item={item} />
-                <Button asChild variant="outline" size="sm" className="w-full lg:w-auto">
-                  <Link to="/$slug" params={{ slug: item.slug }}>
-                    View details
-                  </Link>
-                </Button>
-                <AeAgentJsonAffordance agentJsonUrl={`/api/businesses/${item.slug}`} query={item.name} />
-              </div>
-            </div>
-            <div className="border-t border-[var(--ae-public-line)]/80" aria-label={`${item.name} service facts`}>
-              <ul className="divide-y divide-[var(--ae-public-line)]/80">
-                {item.services.map((service) => (
-                  <li
-                    key={service.slug}
-                    className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,1.1fr)_minmax(14rem,0.8fr)]"
-                  >
-                    <div className="grid content-start gap-2">
-                      <div className="grid gap-1">
-                        <h3 className="text-balance font-heading text-base font-medium leading-snug text-foreground">
-                          {service.name}
-                        </h3>
-                        <p className="text-sm leading-6 text-muted-foreground">{service.category}</p>
-                      </div>
-                      <p className="text-pretty text-sm leading-6 text-muted-foreground">{service.summary}</p>
-                    </div>
-                    <dl className="grid gap-3 sm:grid-cols-3">
-                      <RegistryFact label="Service area">{service.serviceArea}</RegistryFact>
-                      <RegistryFact label="Hours">{plainHoursLabel(service.hoursOrUnknown)}</RegistryFact>
-                      <RegistryFact label="Response">{contactOptionLabel(service.firstRequest.mode)}</RegistryFact>
-                    </dl>
-                    <div className="grid content-start gap-1">
-                      <p className="text-sm font-medium leading-6 text-foreground">Best next step:</p>
-                      <p className="text-pretty text-sm leading-6 text-muted-foreground">
-                        {service.firstRequest.noContactReason ?? service.firstRequest.publicDisclosure}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </article>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function RegistryAvailabilityPill({ item }: { item: PublicBusinessCatalogApiDto }) {
-  const input: PlainAvailabilityInput = {
-    discoveryStatus: item.discoveryStatus,
-    firstRequestMode: businessFirstRequestMode(item),
-  }
-  const label = plainAvailabilityLabel(input)
-  const tone = availabilityTone(item.discoveryStatus)
-
-  return (
-    <Badge className="ae-status-badge" data-tone={tone} variant="secondary">
-      {label}
-    </Badge>
-  )
-}
-
-function businessFirstRequestMode(item: PublicBusinessCatalogApiDto): FirstRequestMode {
-  if (item.services.length === 0) {
-    return 'not_available_yet'
-  }
-  const modes = item.services.map((service) => service.firstRequest.mode)
-  if (modes.includes('inquiry_available')) {
-    return 'inquiry_available'
-  }
-  if (modes.includes('quote_request_available')) {
-    return 'quote_request_available'
-  }
-  return 'not_available_yet'
-}
-
-function availabilityTone(discoveryStatus: PublicBusinessCatalogApiDto['discoveryStatus']): 'neutral' | 'warning' | 'success' {
-  if (discoveryStatus === 'unavailable') {
-    return 'neutral'
-  }
-  if (discoveryStatus === 'degraded' || discoveryStatus === 'stale') {
-    return 'warning'
-  }
-  return 'success'
-}
-
-function RegistryFact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1">
-      <dt className="font-mono text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="text-pretty text-sm leading-6 text-muted-foreground">{children}</dd>
-    </div>
-  )
-}
-
-function contactOptionLabel(mode: PublicBusinessCatalogApiDto['services'][number]['firstRequest']['mode']): string {
-  if (mode === 'quote_request_available') {
-    return 'Quote details supplied'
-  }
-
-  if (mode === 'inquiry_available') {
-    return 'Contact instructions supplied'
-  }
-
-  return 'No contact option published yet'
 }
 
 function resultSummary(total: number, query: string): string {
@@ -378,11 +233,14 @@ function RegistryPagination({
 function RegistryLoading() {
   return (
     <AePublicShell>
-      <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-16 md:px-6">
+      <section className="ae-public-page ae-registry-page mx-auto w-full max-w-6xl">
         <p className="text-sm leading-6 text-muted-foreground">Loading business listings.</p>
         <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-48 w-full" />
+        <div className="ae-registry-grid">
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+        </div>
       </section>
     </AePublicShell>
   )
@@ -391,7 +249,7 @@ function RegistryLoading() {
 function RegistryError() {
   return (
     <AePublicShell>
-      <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-16 md:px-6">
+      <section className="ae-public-page ae-registry-page mx-auto w-full max-w-6xl">
         <Alert variant="destructive">
           <AlertTitle>Business listings could not load</AlertTitle>
           <AlertDescription>

@@ -105,11 +105,21 @@ export type AnswerSynthesizer = {
   synthesize(input: AnswerSynthesizerInput): AsyncIterable<AnswerEvent>
 }
 
-export function buildAgentJsonUrl(query: string, limit?: number): string {
+export function buildAgentJsonUrl(
+  query: string,
+  limit?: number,
+  scope?: { mode?: 'near_me' | 'whole_catalogue'; location?: string },
+): string {
   const params = new URLSearchParams()
   params.set('q', query)
   if (limit !== undefined) {
     params.set('limit', String(limit))
+  }
+  if (scope?.mode !== undefined) {
+    params.set('mode', scope.mode)
+  }
+  if (scope?.location !== undefined && scope.location.trim().length > 0) {
+    params.set('location', scope.location.trim())
   }
   return `/api/businesses/search?${params.toString()}`
 }

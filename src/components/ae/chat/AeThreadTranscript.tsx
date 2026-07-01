@@ -1,4 +1,5 @@
 import { MessageScrollerItem } from '@/components/ui/message-scroller'
+import type { AeSearchContext } from '@/modules/answer/search-context'
 import type { PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import { AeThreadTurnCollapsed } from './AeThreadTurnCollapsed'
 import { AeThreadTurnReplaySection } from './AeThreadTurnReplaySection'
@@ -12,6 +13,7 @@ export type AeThreadTranscriptProps = {
   liveTurn?: {
     query: string
     generation: number
+    searchContext: AeSearchContext
   } | null
   onThreadCreated?: (threadId: string) => void
   onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
@@ -68,6 +70,7 @@ export function AeThreadTranscript({
           <div className="ae-thread-transcript__turn">
             <AeThreadTurnStreamSection
               query={liveTurn.query}
+              searchContext={liveTurn.searchContext}
               generation={liveTurn.generation}
               seq={completedTurns.length + 1}
               intent="refine_search"

@@ -19,6 +19,10 @@ import {
   emitSnapshotEvents,
   runAnswerToolUseAgent,
 } from '@/modules/answer/public'
+import {
+  stableAeSearchContextKey,
+  type AeSearchContext,
+} from '@/modules/answer/search-context'
 import { resolveIntentRoute } from './intent-router'
 
 import type {
@@ -44,6 +48,7 @@ export type StreamAnswerTurnInput = {
   sessionId: string
   threadId?: string
   query: string
+  searchContext?: AeSearchContext
   signal?: AbortSignal
 }
 
@@ -102,6 +107,7 @@ export async function streamAnswerTurn(
     priorTurnsCount: priorTurns.length,
     priorProviders: priorFrozen,
     priorAllowedSlugs,
+    searchContext: input.searchContext,
     signal: input.signal,
     send,
   })
@@ -130,6 +136,7 @@ export async function streamAnswerTurn(
     captured,
     errorCopyId,
     toolCalls: bufferedToolCalls,
+    searchContext: input.searchContext,
   })
 
   if (captured !== undefined) {
@@ -149,6 +156,7 @@ async function streamToolLedTurn(input: {
   priorTurnsCount: number
   priorProviders: AnswerSource[]
   priorAllowedSlugs: readonly string[]
+  searchContext: AeSearchContext | undefined
   signal: AbortSignal | undefined
   send: (event: AnswerEvent) => void
 }): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined } | undefined> {
@@ -171,6 +179,7 @@ async function streamToolLedTurn(input: {
         priorProviders: frozen,
         priorAllowedSlugs: input.priorAllowedSlugs,
         followUpIntent: input.intent,
+        searchContext: input.searchContext,
         disableTools: true,
       })
     }
@@ -183,12 +192,14 @@ async function streamToolLedTurn(input: {
           priorProviders: reindexProviders(filterProvidersBySuburb(input.priorProviders, narrowSuburb)),
           priorAllowedSlugs: input.priorAllowedSlugs,
           followUpIntent: input.intent,
+          searchContext: input.searchContext,
           disableTools: true,
         })
       }
       return streamAgentTurn(input, {
         query: input.query,
         followUpIntent: input.intent,
+        searchContext: input.searchContext,
       })
     }
   }
@@ -372,13 +383,17 @@ async function persistTurn(input: {
   captured: AnswerSnapshot | undefined
   errorCopyId: string | undefined
   toolCalls: readonly AnswerToolCallRecord[]
+  searchContext: AeSearchContext | undefined
 }): Promise<boolean> {
   const status = input.captured !== undefined ? 'complete' : 'error'
-  const evidence = input.captured !== undefined ? buildFrozenEvidence(input.captured, input.toolCalls) : emptyEvidence()
+  const evidence = input.captured !== undefined
+    ? buildFrozenEvidence(input.captured, input.toolCalls, input.searchContext)
+    : emptyEvidence(input.searchContext)
   const prose = input.captured !== undefined ? buildFrozenProse(input.captured) : emptyProse()
   const snapshotHash = stableHash({
     query: input.query,
     intent: input.intent,
+    ...(input.searchContext === undefined ? {} : { searchContext: stableAeSearchContextKey(input.searchContext) }),
     providers: evidence.providers.map((provider) => provider.slug),
     prose,
     ...(input.toolCalls.length === 0 ? {} : { toolCalls: input.toolCalls.map((call) => call.resultHash) }),
@@ -454,11 +469,13 @@ function reindexProviders(providers: readonly AnswerSource[]): AnswerSource[] {
 function buildFrozenEvidence(
   snapshot: AnswerSnapshot,
   toolCalls: readonly AnswerToolCallRecord[],
+  searchContext: AeSearchContext | undefined,
 ): FrozenTurnEvidence {
   return {
     providers: snapshot.providers,
     allowedSlugs: snapshot.providers.map((provider) => provider.slug),
     agentJsonUrl: snapshot.agentJsonUrl,
+    ...(searchContext === undefined ? {} : { searchContext }),
     ...(toolCalls.length === 0 ? {} : { toolCalls }),
   }
 }
@@ -473,8 +490,13 @@ function buildFrozenProse(snapshot: AnswerSnapshot): FrozenTurnProse {
   }
 }
 
-function emptyEvidence(): FrozenTurnEvidence {
-  return { providers: [], allowedSlugs: [], agentJsonUrl: '' }
+function emptyEvidence(searchContext?: AeSearchContext): FrozenTurnEvidence {
+  return {
+    providers: [],
+    allowedSlugs: [],
+    agentJsonUrl: '',
+    ...(searchContext === undefined ? {} : { searchContext }),
+  }
 }
 
 function emptyProse(): FrozenTurnProse {

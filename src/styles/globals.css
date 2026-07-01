@@ -383,14 +383,27 @@ img {
     color: var(--ae-public-button-primary-text);
     font-size: var(--ae-public-text-base);
     box-shadow: none;
-    transition-property: background-color;
+    transition-property: background-color, transform;
     transition-duration: var(--ae-public-duration-hover);
     transition-timing-function: var(--ae-public-ease);
+  }
+
+  .ae-button-public-primary:active,
+  [data-slot="button"].ae-public-primary-button:active,
+  .ae-public-primary-button:active {
+    transform: scale(0.96);
   }
 
   .ae-button-landing-primary {
     border-radius: var(--ae-public-radius-button);
     box-shadow: none;
+    transition-property: background-color, transform;
+    transition-duration: var(--ae-public-duration-hover);
+    transition-timing-function: var(--ae-public-ease);
+  }
+
+  .ae-button-landing-primary:active {
+    transform: scale(0.96);
   }
 
   .ae-button-public-secondary {
@@ -400,9 +413,23 @@ img {
     background-color: var(--ae-public-field);
     color: var(--ae-public-ink);
     box-shadow: none;
-    transition-property: background-color, border-color, color;
+    transition-property: background-color, border-color, color, transform;
     transition-duration: var(--ae-public-duration-hover);
     transition-timing-function: var(--ae-public-ease);
+  }
+
+  .ae-button-public-secondary:active {
+    transform: scale(0.96);
+  }
+
+  /* Concentric radius: buttons inside 4px cards/rails should match the card radius. */
+  .ae-public-route-card .ae-button-public-primary,
+  .ae-public-route-card .ae-button-landing-primary,
+  .ae-public-route-card .ae-button-public-secondary,
+  .ae-listing-sticky-rail .ae-button-public-primary,
+  .ae-listing-sticky-rail .ae-button-landing-primary,
+  .ae-listing-sticky-rail .ae-button-public-secondary {
+    border-radius: var(--ae-public-radius-panel);
   }
 
   .ae-button-public-secondary:hover {
@@ -437,9 +464,13 @@ img {
     min-height: 2.75rem;
     border-radius: var(--ae-public-radius-button);
     color: var(--ae-public-muted-strong);
-    transition-property: background-color, color, box-shadow;
+    transition-property: background-color, color, box-shadow, transform;
     transition-duration: var(--ae-public-duration-hover);
     transition-timing-function: var(--ae-public-ease);
+  }
+
+  .ae-public-nav-button:active {
+    transform: scale(0.96);
   }
 
   .ae-public-nav-button[aria-current="page"],
@@ -459,13 +490,38 @@ img {
     padding-inline: var(--ae-public-space-md);
     font-size: var(--ae-public-text-sm);
     box-shadow: none;
+    transition-property: background-color, color, transform;
+    transition-duration: var(--ae-public-duration-hover);
+    transition-timing-function: var(--ae-public-ease);
+  }
+
+  .ae-public-nav-button-primary:active {
+    transform: scale(0.96);
+  }
+
+  .ae-public-footer-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.5rem;
+    padding-block: 0.25rem;
+    color: var(--ae-public-muted-strong);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklch, var(--ae-public-line) 50%, transparent);
+    text-underline-offset: 0.2em;
+    transition: color var(--ae-public-duration-hover) var(--ae-public-ease), text-decoration-color var(--ae-public-duration-hover) var(--ae-public-ease);
   }
 
   @media (hover: hover) and (pointer: fine) {
-    [data-slot="button"].ae-public-nav-button-primary:hover,
-    .ae-public-nav-button-primary:hover {
-      background: var(--ae-public-amber-deep);
+    .ae-public-footer-link:hover {
+      color: var(--ae-public-ink);
+      text-decoration-color: var(--ae-public-amber);
     }
+  }
+
+  .ae-public-footer-link:focus-visible {
+    border-radius: var(--ae-public-radius-button);
+    outline: 0;
+    box-shadow: var(--ae-focus-ring);
   }
 
   .ae-toast {
@@ -554,7 +610,9 @@ img {
   }
 
   .ae-thread-sidebar__scroll {
-    max-height: calc(100dvh - 10rem);
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
   }
 
   .ae-thread-sidebar__row {

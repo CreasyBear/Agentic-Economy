@@ -6,15 +6,16 @@ describe('public registry copy contract', () => {
   it('keeps registry copy in customer-facing business-detail language', () => {
     const route = readFileSync('src/routes/registry.tsx', 'utf8')
     const searchPanel = readFileSync('src/components/ae/forms/AeRegistrySearchPanel.tsx', 'utf8')
+    const card = readFileSync('src/components/ae/registry/AeRegistryCard.tsx', 'utf8')
 
     expect(route).toContain('Find business details companies can stand behind.')
     expect(searchPanel).toContain('Business, service, or place')
     expect(route).toContain('No matching business yet')
     expect(route).toContain('Claim your business page')
-    expect(route).toContain('Published details')
-    expect(route).toContain('Service area')
-    expect(route).toContain('Response')
-    expect(route).toContain('Best next step:')
+    expect(card).toContain('Published details')
+    expect(card).toContain('Service area')
+    expect(card).toContain('Response')
+    expect(card).toContain('Best next step:')
 
     expect(route).not.toContain('Read source-owned answer records.')
     expect(route).not.toContain('Claim your answer record')

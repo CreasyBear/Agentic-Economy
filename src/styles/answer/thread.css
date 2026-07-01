@@ -1,21 +1,24 @@
 .ae-chat-layout {
   display: flex;
   width: 100%;
-  min-height: calc(100dvh - var(--ae-public-header-height, 4rem));
+  height: 100%;
+  min-height: 0;
+  background: var(--ae-public-field);
 }
 
 .ae-chat-layout--with-sidebar {
-  max-width: 72rem;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
 }
 
 .ae-thread-sidebar {
   display: none;
-  flex: 0 0 14rem;
+  flex: 0 0 clamp(14rem, 17vw, 17rem);
   min-height: 0;
+  height: 100%;
   border-right: 1px solid var(--ae-public-line);
-  background: var(--ae-public-field);
-  padding: var(--ae-public-space-md) var(--ae-public-space-sm);
+  background: var(--ae-public-field-alt);
+  padding: var(--ae-public-space-md) var(--ae-public-space-sm) var(--ae-public-space-lg);
 }
 
 @media (min-width: 60rem) {
@@ -27,12 +30,14 @@
 }
 
 .ae-thread-sidebar__header {
-  padding: 0 var(--ae-public-space-xs);
+  padding: 0 var(--ae-public-space-xs) var(--ae-public-space-xs);
 }
 
 .ae-thread-sidebar__new {
   display: inline-flex;
   align-items: center;
+  width: 100%;
+  justify-content: center;
   min-height: 2.25rem;
   font-family: var(--ae-public-font-body);
   font-size: var(--ae-public-text-sm);
@@ -58,9 +63,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--ae-public-space-2xs);
-  padding: var(--ae-public-space-xs) var(--ae-public-space-sm);
+  min-height: 3.25rem;
+  padding: var(--ae-public-space-sm);
   border: 1px solid transparent;
-  border-radius: var(--ae-public-radius-button);
+  border-radius: var(--ae-public-radius-panel);
   text-decoration: none;
   color: inherit;
   transition: background-color var(--ae-public-duration-hover) var(--ae-public-ease),
@@ -91,6 +97,7 @@
   font-family: var(--ae-public-font-mono);
   font-size: var(--ae-public-text-xs);
   color: var(--ae-public-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .ae-thread-transcript {
@@ -98,6 +105,8 @@
   flex-direction: column;
   gap: var(--ae-public-space-xl);
   width: 100%;
+  max-width: min(100%, 56rem);
+  margin-inline: auto;
 }
 
 .ae-chat-empty {
@@ -200,6 +209,21 @@
 .ae-chat-welcome__assistants a {
   color: var(--ae-public-ink);
   font-weight: var(--ae-public-weight-semibold);
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in oklch, var(--ae-public-line) 50%, transparent);
+  transition: color var(--ae-public-duration-hover) var(--ae-public-ease),
+              text-decoration-color var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-chat-welcome__assistants a:hover {
+  color: var(--ae-public-amber-deep);
+  text-decoration-color: var(--ae-public-amber);
+}
+
+.ae-chat-welcome__assistants a:focus-visible {
+  border-radius: var(--ae-public-radius-button);
+  outline: 0;
+  box-shadow: var(--ae-focus-ring);
 }
 
 .ae-chat-section {

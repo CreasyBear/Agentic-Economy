@@ -201,6 +201,8 @@ export const listPublicBusinessCatalog = queryGeneric({
 export const searchPublicBusinessCatalog = queryGeneric({
   args: {
     query: v.string(),
+    mode: v.optional(v.union(v.literal('near_me'), v.literal('whole_catalogue'))),
+    location: v.optional(v.string()),
     cursor: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
@@ -212,9 +214,13 @@ export const searchPublicBusinessCatalog = queryGeneric({
       return paginateCatalogs([], queryInput(args), '')
     }
 
-    const tokens = query.split(' ').map(normalizeSearchToken)
+    const tokens = query
+      .split(' ')
+      .filter((token) => !SEARCH_STOP_WORDS.has(token))
+      .map(normalizeSearchToken)
+    const locationKey = resolveSearchLocationKey(args)
     const matches = (await readPublicCatalogs(db)).filter((catalog) =>
-      matchesCatalog(catalog, tokens),
+      matchesCatalog(catalog, tokens, locationKey),
     )
     return paginateCatalogs(matches, queryInput(args), query)
   },
@@ -690,10 +696,80 @@ async function discoveryStatusForBusiness(
     : 'degraded'
 }
 
+const SEARCH_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'around',
+  'at',
+  'business',
+  'businesses',
+  'find',
+  'for',
+  'in',
+  'near',
+  'need',
+  'now',
+  'open',
+  'provider',
+  'providers',
+  'service',
+  'services',
+  'the',
+  'to',
+])
+
+const SERVICE_WORDS = new Set([
+  ...SEARCH_STOP_WORDS,
+  'appointment',
+  'callout',
+  'cleaner',
+  'cleaners',
+  'day',
+  'dentist',
+  'dentists',
+  'diagnostic',
+  'diagnostics',
+  'electrician',
+  'electricians',
+  'emergency',
+  'heat',
+  'help',
+  'hot',
+  'locksmith',
+  'locksmiths',
+  'mechanic',
+  'mechanics',
+  'metro',
+  'plumber',
+  'plumbers',
+  'plumbing',
+  'pump',
+  'repair',
+  'repairs',
+  'same',
+  'suburb',
+  'suburbs',
+  'today',
+  'tomorrow',
+  'trade',
+  'trades',
+  'urgent',
+  'water',
+])
+
+const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'])
+const LOCATION_PREPOSITION = /\b(?:in|near|around|at)\s+([a-z][a-z\s'-]{1,80})(?:\?|$)/i
+
 function matchesCatalog(
   catalog: CatalogDto,
   queryTokens: readonly string[],
+  locationKey: string | undefined,
 ): boolean {
+  if (locationKey !== undefined && !catalogPlaceKeys(catalog).includes(locationKey)) {
+    return false
+  }
+
   const haystack = normalizeSearchText(
     [
       catalog.name,
@@ -710,6 +786,109 @@ function matchesCatalog(
     ].join(' '),
   )
   return queryTokens.every((token) => haystack.includes(token))
+}
+
+function resolveSearchLocationKey(input: { query: string; mode?: string; location?: string }): string | undefined {
+  if (input.mode === 'whole_catalogue') {
+    return undefined
+  }
+  const explicit = normalizeLocationLabel(input.location)
+  if (explicit !== undefined) {
+    return normalizeSearchText(explicit)
+  }
+  const fromQuery = extractLocationFromQuery(input.query)
+  return fromQuery === undefined ? undefined : normalizeSearchText(fromQuery)
+}
+
+function catalogPlaceKeys(catalog: CatalogDto): readonly string[] {
+  const keys = new Set<string>()
+  addPlaceKey(keys, catalog.suburb)
+  addPlaceKey(keys, `${catalog.suburb} ${catalog.stateTerritory}`)
+  addPlaceKey(keys, catalog.stateTerritory)
+  if (catalog.postcode !== undefined) {
+    addPlaceKey(keys, catalog.postcode)
+  }
+  for (const service of catalog.services) {
+    for (const candidate of extractPlaceCandidates(service.serviceArea)) {
+      addPlaceKey(keys, candidate)
+    }
+  }
+  return [...keys].sort()
+}
+
+function extractLocationFromQuery(query: string): string | undefined {
+  const normalized = normalizeLocationLabel(query)
+  if (normalized === undefined) {
+    return undefined
+  }
+  const prepositionMatch = normalized.match(LOCATION_PREPOSITION)
+  if (prepositionMatch?.[1] !== undefined) {
+    return normalizeLocationLabel(prepositionMatch[1])
+  }
+  const tokens = normalized.split(/\s+/).filter(Boolean)
+  const withoutState = dropTrailingState(tokens)
+  const candidate = trimServiceWords(withoutState).join(' ')
+  return normalizeLocationLabel(candidate)
+}
+
+function extractPlaceCandidates(value: string): readonly string[] {
+  const normalized = normalizeSearchText(value)
+  if (normalized.length === 0) {
+    return []
+  }
+  return normalized
+    .replace(/\band nearby suburbs\b/g, '|')
+    .replace(/\bnearby suburbs\b/g, '|')
+    .replace(/\bmetro\b/g, ' metro|')
+    .split(/[|,;/]+/g)
+    .map((candidate) => trimServiceWords(candidate.split(/\s+/).filter(Boolean)).join(' '))
+    .map((candidate) => candidate.replace(/\bmetro\b/g, '').trim())
+    .filter((candidate) => candidate.length >= 3)
+}
+
+function normalizeLocationLabel(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  const words = value
+    .trim()
+    .replace(/[^a-z0-9\s'-]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((word) => !STATE_WORDS.has(word.toLowerCase()))
+  while (words.length > 0 && SERVICE_WORDS.has(words[0]!.toLowerCase())) {
+    words.shift()
+  }
+  while (words.length > 0 && SERVICE_WORDS.has(words.at(-1)!.toLowerCase())) {
+    words.pop()
+  }
+  const label = words.join(' ').trim()
+  return label.length >= 3 ? label : undefined
+}
+
+function dropTrailingState(tokens: readonly string[]): readonly string[] {
+  const last = tokens.at(-1)?.toLowerCase()
+  return last !== undefined && STATE_WORDS.has(last) ? tokens.slice(0, -1) : tokens
+}
+
+function trimServiceWords(tokens: readonly string[]): readonly string[] {
+  let start = 0
+  let end = tokens.length
+  while (start < end && SERVICE_WORDS.has(tokens[start]!.toLowerCase())) {
+    start += 1
+  }
+  while (end > start && SERVICE_WORDS.has(tokens[end - 1]!.toLowerCase())) {
+    end -= 1
+  }
+  return tokens.slice(start, end)
+}
+
+function addPlaceKey(keys: Set<string>, value: string): void {
+  const key = normalizeSearchText(value)
+  if (key.length > 0) {
+    keys.add(key)
+  }
 }
 
 function normalizeSearchText(value: string): string {

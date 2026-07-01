@@ -80,6 +80,8 @@ type PhaseOneCatalogState = {
 type PhaseOneRegistryState = {
   registryProjectionItems: Record<string, unknown>[]
   registryProjectionAttempts: Record<string, unknown>[]
+  registrySearchDocuments?: Record<string, unknown>[]
+  registrySearchSyncAttempts?: Record<string, unknown>[]
   indexStatus: Record<string, unknown>[]
 }
 
@@ -131,6 +133,8 @@ export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Pro
     serviceCapabilities,
     registryProjectionItems,
     registryProjectionAttempts,
+    registrySearchDocuments,
+    registrySearchSyncAttempts,
     indexStatusRows,
     discoveryManifests,
     discoveryManifestAttempts,
@@ -154,6 +158,8 @@ export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Pro
     collect(db, 'serviceCapabilities'),
     collect(db, 'registryProjectionItems'),
     collect(db, 'registryProjectionAttempts'),
+    collect(db, 'registrySearchDocuments'),
+    collect(db, 'registrySearchSyncAttempts'),
     collect(db, 'indexStatus'),
     collect(db, 'discoveryManifests'),
     collect(db, 'discoveryManifestAttempts'),
@@ -184,6 +190,8 @@ export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Pro
     registry: {
       registryProjectionItems: registryProjectionItems.map(stripConvexFields),
       registryProjectionAttempts: registryProjectionAttempts.map(stripConvexFields),
+      registrySearchDocuments: registrySearchDocuments.map(stripConvexFields),
+      registrySearchSyncAttempts: registrySearchSyncAttempts.map(stripConvexFields),
       indexStatus: indexStatusRows.map(stripConvexFields),
     },
     discovery: {
@@ -218,6 +226,8 @@ export async function persistPhaseOneSourceState(db: RuntimeWriter, state: Phase
     byFields('serviceCapabilities', state.catalog.serviceCapabilities, ['businessId', 'serviceId', 'kind']),
     byFields('registryProjectionItems', state.registry.registryProjectionItems, ['logicalKey']),
     byFields('registryProjectionAttempts', state.registry.registryProjectionAttempts, ['logicalKey']),
+    byFields('registrySearchDocuments', state.registry.registrySearchDocuments ?? [], ['documentId']),
+    byFields('registrySearchSyncAttempts', state.registry.registrySearchSyncAttempts ?? [], ['attemptId']),
     byFields('indexStatus', state.registry.indexStatus, ['targetType', 'targetRef']),
     byFields('discoveryManifests', state.discovery.discoveryManifests, ['businessId', 'ucpVersion']),
     byFields('discoveryManifestAttempts', state.discovery.discoveryManifestAttempts, ['attemptId']),

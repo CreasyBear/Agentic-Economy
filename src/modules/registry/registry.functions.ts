@@ -6,11 +6,20 @@ import {
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
 import type {
+  PublicBusinessCatalogApiDto,
   PublicBusinessCatalogApiPage,
   PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
 } from '@/modules/registry/public'
+import {
+  createConfiguredMeiliCatalogSearchPort,
+  readCatalogSearchBackend,
+  type CatalogSearchBackend,
+  type CatalogSearchPort,
+  type CatalogSearchResult,
+} from './internal/catalog-search-port'
+import { normalizeRegistrySearchText } from './internal/search-documents'
 
 export type PublicRegistrySourcePort = {
   list: (input: PublicBusinessCatalogQueryInput) => Promise<PublicBusinessCatalogApiPage>
@@ -29,12 +38,30 @@ const getPublicBusinessCatalogBySlugQuery = sourceQuery<{ slug: string }, Public
 )
 
 let publicRegistrySourcePortForTests: PublicRegistrySourcePort | undefined
+let catalogSearchPortForTests: CatalogSearchPort | undefined
+let catalogSearchBackendForTests: CatalogSearchBackend | undefined
 
 export function setPublicRegistrySourcePortForTests(port: PublicRegistrySourcePort): () => void {
   const previous = publicRegistrySourcePortForTests
   publicRegistrySourcePortForTests = port
   return () => {
     publicRegistrySourcePortForTests = previous
+  }
+}
+
+export function setCatalogSearchPortForTests(port: CatalogSearchPort | undefined): () => void {
+  const previous = catalogSearchPortForTests
+  catalogSearchPortForTests = port
+  return () => {
+    catalogSearchPortForTests = previous
+  }
+}
+
+export function setCatalogSearchBackendForTests(backend: CatalogSearchBackend | undefined): () => void {
+  const previous = catalogSearchBackendForTests
+  catalogSearchBackendForTests = backend
+  return () => {
+    catalogSearchBackendForTests = previous
   }
 }
 
@@ -47,7 +74,29 @@ export async function readPublicRegistryCatalogPage(
 export async function readPublicRegistrySearchPage(
   input: PublicBusinessCatalogSearchInput
 ): Promise<PublicBusinessCatalogApiPage> {
-  return getPublicRegistrySourcePort().search(input)
+  const sourcePort = getPublicRegistrySourcePort()
+  const backend = catalogSearchBackendForTests ?? readCatalogSearchBackend()
+
+  if (backend === 'convex') {
+    return sourcePort.search(input)
+  }
+
+  const searchPort = catalogSearchPortForTests ?? createConfiguredMeiliCatalogSearchPort()
+  if (searchPort === undefined) {
+    return sourcePort.search(input)
+  }
+
+  if (backend === 'dual') {
+    void searchPort.search(input).catch(() => undefined)
+    return sourcePort.search(input)
+  }
+
+  try {
+    const result = await searchPort.search(input)
+    return hydrateCatalogSearchResult(input, result, sourcePort)
+  } catch {
+    return sourcePort.search(input)
+  }
 }
 
 export async function readPublicRegistryBusinessDetail(input: {
@@ -98,6 +147,68 @@ function createLegacyRegistrySourcePort(): PublicRegistrySourcePort {
     search: (input) => Promise.resolve(legacyPublicRegistrySearch(input)),
     detail: (input) => Promise.resolve(legacyPublicRegistryDetail(input)),
   }
+}
+
+async function hydrateCatalogSearchResult(
+  input: PublicBusinessCatalogSearchInput,
+  result: CatalogSearchResult,
+  sourcePort: PublicRegistrySourcePort,
+): Promise<PublicBusinessCatalogApiPage> {
+  const seenSlugs = new Set<string>()
+  const hydrated: PublicBusinessCatalogApiDto[] = []
+
+  for (const hit of result.hits) {
+    if (seenSlugs.has(hit.businessSlug)) {
+      continue
+    }
+    seenSlugs.add(hit.businessSlug)
+
+    const detail = await sourcePort.detail({ slug: hit.businessSlug })
+    if (detail.kind === 'found') {
+      hydrated.push(detail.business)
+    }
+  }
+
+  return paginateHydratedSearchResults(input, hydrated, result)
+}
+
+function paginateHydratedSearchResults(
+  input: PublicBusinessCatalogSearchInput,
+  items: PublicBusinessCatalogApiPage['items'],
+  result: CatalogSearchResult,
+): PublicBusinessCatalogApiPage {
+  const limit = normalizePublicLimit(input.limit)
+  const startIndex =
+    input.cursor === undefined
+      ? 0
+      : Math.max(
+          items.findIndex((item) => item.slug === input.cursor),
+          0,
+        )
+  const pageItems = items.slice(startIndex, startIndex + limit)
+  const next = items.at(startIndex + limit)
+
+  return {
+    kind: 'ok',
+    schemaVersion: 'public-business-catalog-api:v1',
+    query: normalizeRegistrySearchText(input.query),
+    items: pageItems,
+    pagination: {
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(next === undefined ? {} : { nextCursor: next.slug }),
+      limit,
+      total: Math.max(items.length, result.estimatedTotalHits ?? items.length),
+      hasMore: next !== undefined,
+    },
+  }
+}
+
+function normalizePublicLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 20
+  }
+
+  return Math.min(Math.max(Math.trunc(limit), 1), 50)
 }
 
 async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallback: () => T): Promise<T> {

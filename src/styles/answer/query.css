@@ -26,12 +26,19 @@
   border-radius: var(--ae-public-radius-control);
   box-shadow: var(--ae-public-control-shadow);
   transition: box-shadow var(--ae-public-duration-hover) var(--ae-public-ease),
-              border-color var(--ae-public-duration-hover) var(--ae-public-ease);
+              border-color var(--ae-public-duration-hover) var(--ae-public-ease),
+              background-color var(--ae-public-duration-hover) var(--ae-public-ease);
+}
+
+.ae-query-box__row:hover {
+  border-color: color-mix(in oklch, var(--ae-public-amber) 50%, var(--ae-public-line-strong));
+  background: var(--ae-public-surface-raised);
 }
 
 .ae-query-box__row:focus-within {
   border-color: var(--ae-public-amber);
   box-shadow: var(--ae-focus-ring);
+  background: var(--ae-public-surface);
 }
 
 .ae-query-box__icon {
@@ -89,12 +96,22 @@
   cursor: pointer;
   transition: border-color var(--ae-public-duration-hover) var(--ae-public-ease),
               color var(--ae-public-duration-hover) var(--ae-public-ease),
-              background-color var(--ae-public-duration-hover) var(--ae-public-ease);
+              background-color var(--ae-public-duration-hover) var(--ae-public-ease),
+              transform var(--ae-public-duration-hover) var(--ae-public-ease);
 }
 
 .ae-query-box__example:hover {
   border-color: var(--ae-public-amber);
   color: var(--ae-public-ink);
   background: color-mix(in oklch, var(--ae-public-amber) 8%, var(--ae-public-field));
+}
+
+.ae-query-box__example:active {
+  transform: scale(0.96);
+}
+
+.ae-query-box__example:focus-visible {
+  outline: 0;
+  box-shadow: var(--ae-focus-ring);
 }
 

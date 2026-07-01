@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
+import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
@@ -87,7 +88,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('No listed businesses match')
-      expect(complete.answer.summary).toContain('No providers are listed')
+      expect(complete.answer.summary).toContain('Brunswick')
     })
   })
 
@@ -191,6 +192,58 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(prose.oneLine).not.toContain('Parramatta')
       expect(prose.summary).not.toContain('Parramatta')
       expect(prose.nextStep).not.toContain('Parramatta')
+    })
+  })
+
+  it('scopes a placeless query to the active search context', async () => {
+    process.env.OPENROUTER_API_KEY = 'test-key'
+
+    setAnswerToolUseAgentForTests(async () => ({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
+      prose: {
+        oneLine: 'Parramatta Emergency Plumbing matches this need.',
+        summary:
+          'Parramatta Emergency Plumbing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow:
+          'Open Parramatta Emergency Plumbing and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+
+    const turns: unknown[] = []
+    stubThreadPort(turns)
+
+    const state = createDefaultRegistrySourceState()
+    await withRegistrySourcePortForTest(state, async () => {
+      const response = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie: '' },
+          body: JSON.stringify({
+            query: 'Emergency plumber',
+            searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+          }),
+        }),
+      )
+
+      expect(response.ok).toBe(true)
+      const frames = parseStream(await response.text())
+      const complete = frames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+      expect(complete.answer.providers).toEqual([])
+      expect(complete.answer.summary).toContain('Perth')
+      expect(complete.answer.summary).not.toContain('Parramatta')
+      expect(complete.answer.agentJsonUrl).toContain('q=Emergency+plumber+near+Perth')
+
+      const persisted = turns.at(0) as { evidenceJson: string; proseJson: string } | undefined
+      const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
+        providers?: unknown[]
+        searchContext?: { location?: { label?: string } }
+      }
+      expect(evidence.providers).toEqual([])
+      expect(evidence.searchContext?.location?.label).toBe('Perth, WA')
     })
   })
 

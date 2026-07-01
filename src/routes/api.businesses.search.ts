@@ -22,6 +22,8 @@ export async function handleDurableSearchBusinessesRequest(request: Request): Pr
   const url = new URL(request.url)
   const result = await readPublicRegistrySearchPage({
     query: url.searchParams.get('q') ?? '',
+    ...optionalSearchMode(url.searchParams.get('mode')),
+    ...optionalSearchLocation(url.searchParams.get('location')),
     ...optionalCursor(url.searchParams.get('cursor')),
     ...optionalLimit(url.searchParams.get('limit')),
   })
@@ -33,9 +35,30 @@ export function handleSearchBusinessesRequest(request: Request): Response {
   const url = new URL(request.url)
   const result = legacyPublicRegistrySearch({
     query: url.searchParams.get('q') ?? '',
+    ...optionalSearchMode(url.searchParams.get('mode')),
+    ...optionalSearchLocation(url.searchParams.get('location')),
     ...optionalCursor(url.searchParams.get('cursor')),
     ...optionalLimit(url.searchParams.get('limit')),
   })
 
   return jsonResponse(result)
+}
+
+function optionalSearchMode(
+  value: string | null,
+): { mode?: 'near_me' | 'whole_catalogue' } {
+  if (value === 'near_me' || value === 'near') {
+    return { mode: 'near_me' }
+  }
+  if (value === 'whole_catalogue' || value === 'catalogue' || value === 'catalog') {
+    return { mode: 'whole_catalogue' }
+  }
+  return {}
+}
+
+function optionalSearchLocation(value: string | null): { location?: string } {
+  const normalized = value?.trim().replace(/\s+/g, ' ').slice(0, 80)
+  return normalized === undefined || normalized.length === 0
+    ? {}
+    : { location: normalized }
 }

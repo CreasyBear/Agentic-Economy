@@ -34,6 +34,16 @@ const registrySearchInputSchema = z.object({
     .max(20)
     .optional()
     .describe('Maximum providers to return'),
+  mode: z
+    .enum(['near_me', 'whole_catalogue'])
+    .optional()
+    .describe('Search scope: near a supplied place or across the whole catalog'),
+  location: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .describe('Place to search around when mode is near_me'),
 })
 
 const registryDetailInputSchema = z.object({
@@ -51,6 +61,19 @@ const searchParameters: readonly ActionParameter[] = [
     name: 'limit',
     type: 'number',
     description: 'Maximum providers to return (1-20). Defaults to 10.',
+    required: false,
+  },
+  {
+    name: 'mode',
+    type: 'enum',
+    enum: ['near_me', 'whole_catalogue'],
+    description: 'Search scope. Use near_me with location for the active place, or whole_catalogue for all listings.',
+    required: false,
+  },
+  {
+    name: 'location',
+    type: 'string',
+    description: 'Place to search around when mode is near_me, for example "Perth" or "Brunswick".',
     required: false,
   },
 ]
@@ -85,6 +108,8 @@ export const registrySearchAction = defineAction({
     const page = await readPublicRegistrySearchPage({
       query: data.query.trim(),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
+      ...(data.mode === undefined ? {} : { mode: data.mode }),
+      ...(data.location === undefined ? {} : { location: data.location.trim() }),
     })
     return page as PublicBusinessCatalogApiPage
   },

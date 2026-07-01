@@ -26,6 +26,11 @@ import type {
   IndexStatus,
   RegistrySourceState,
 } from '@/modules/registry/public'
+import {
+  buildRegistrySearchDocumentsForCatalog,
+  documentMatchesRegistryQuery,
+  normalizeRegistrySearchText,
+} from './search-documents'
 
 const apiSchemaVersion = 'public-business-catalog-api:v1' as const
 const defaultLimit = 20
@@ -39,6 +44,8 @@ export type PublicBusinessCatalogQueryInput = {
 export type PublicBusinessCatalogSearchInput =
   PublicBusinessCatalogQueryInput & {
     query: string
+    mode?: 'near_me' | 'whole_catalogue'
+    location?: string
   }
 
 export type PublicBusinessCatalogApiDto = {
@@ -118,7 +125,7 @@ export function searchPublicBusinessCatalog(
   state: RegistrySourceState,
   input: PublicBusinessCatalogSearchInput,
 ): PublicBusinessCatalogApiPage {
-  const query = normalizeSearchText(input.query)
+  const query = normalizeRegistrySearchText(input.query)
   if (query.length === 0) {
     return {
       kind: 'ok',
@@ -134,10 +141,10 @@ export function searchPublicBusinessCatalog(
     }
   }
 
-  const queryTokens = query.split(' ').map(normalizeSearchToken)
-  const matches = readPublicCatalogs(state).filter((catalog) =>
-    matchesCatalog(catalog, queryTokens),
-  )
+  const matches = readPublicCatalogs(state).filter((catalog) => {
+    const documents = buildRegistrySearchDocumentsForCatalog(toPublicApiDto(catalog))
+    return documents.some((document) => documentMatchesRegistryQuery(document, input))
+  })
 
   return paginateCatalogs(matches.map(toPublicApiDto), input, query)
 }
@@ -174,6 +181,8 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     auditEvents: [],
     registryProjectionItems: [],
     registryProjectionAttempts: [],
+    registrySearchDocuments: [],
+    registrySearchSyncAttempts: [],
     discoveryManifestAttempts: [],
     indexStatus: [],
     suppressionRules: [],
@@ -369,45 +378,6 @@ function normalizeLimit(limit: number | undefined): number {
   }
 
   return Math.min(Math.max(Math.trunc(limit), 1), maxLimit)
-}
-
-function matchesCatalog(
-  catalog: PublicCatalogContract,
-  queryTokens: readonly string[],
-): boolean {
-  const haystack = normalizeSearchText(
-    [
-      catalog.name,
-      catalog.category,
-      catalog.suburb,
-      catalog.stateTerritory,
-      catalog.postcode ?? '',
-      ...catalog.services.flatMap((service) => [
-        service.name,
-        service.category,
-        service.summary,
-        service.serviceArea,
-      ]),
-    ].join(' '),
-  )
-
-  return queryTokens.every((token) => haystack.includes(token))
-}
-
-function normalizeSearchText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ')
-}
-
-function normalizeSearchToken(token: string): string {
-  if (token === 'plumber' || token === 'plumbers') {
-    return 'plumbing'
-  }
-
-  return token
 }
 
 function indexStatusForBusiness(

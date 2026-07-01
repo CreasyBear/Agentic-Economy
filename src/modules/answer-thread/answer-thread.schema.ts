@@ -3,6 +3,10 @@ import { z } from 'zod'
 import type { AnswerArtifact } from '@/modules/answer/answer-schema'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
 import type { AnswerLayoutProfile } from '@/modules/answer/layout-profile'
+import {
+  AeSearchContextSchema,
+  type AeSearchContext,
+} from '@/modules/answer/search-context'
 
 export const FollowUpIntentValues = [
   'refine_search',
@@ -92,17 +96,20 @@ export type PublicThreadProjection = {
 export type AnswerTurnRequest = {
   threadId?: string
   query: string
+  searchContext?: AeSearchContext
 }
 
 export const answerTurnRequestSchema = z.object({
   threadId: z.string().trim().min(1).optional(),
   query: z.string().trim().min(1).max(200),
+  searchContext: AeSearchContextSchema.optional(),
 })
 
 export type FrozenTurnEvidence = {
   providers: readonly AnswerSource[]
   allowedSlugs: readonly string[]
   agentJsonUrl: string
+  searchContext?: AeSearchContext
   /** Tool-call evidence persisted per turn; absent on legacy frozen turns. */
   toolCalls?: readonly AnswerToolCallRecord[]
 }

@@ -14,6 +14,16 @@ const registrySearchInputSchema = z.object({
     .max(20)
     .optional()
     .describe('Maximum providers to return'),
+  mode: z
+    .enum(['near_me', 'whole_catalogue'])
+    .optional()
+    .describe('Search scope'),
+  location: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .describe('Place to search around when mode is near_me'),
 })
 
 const registrySearchOutputSchema = z.object({
@@ -43,6 +53,8 @@ export const registrySearchTool = registrySearchToolDef.server(
       data: registrySearchAction.schema.parse({
         query: input.query,
         ...(input.limit === undefined ? {} : { limit: input.limit }),
+        ...(input.mode === undefined ? {} : { mode: input.mode }),
+        ...(input.location === undefined ? {} : { location: input.location }),
       }),
       context: {},
     })

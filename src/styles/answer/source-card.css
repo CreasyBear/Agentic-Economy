@@ -12,6 +12,13 @@
 
 .ae-source-card:hover {
   border-color: var(--ae-public-line-strong);
+  box-shadow: var(--ae-shadow-border-hover);
+}
+
+.ae-source-card:focus-within {
+  border-color: var(--ae-public-amber);
+  box-shadow: var(--ae-focus-ring), var(--ae-shadow-border-hover);
+  outline: 0;
 }
 
 .ae-source-card__main {
@@ -183,8 +190,10 @@
   align-items: center;
   gap: var(--ae-public-space-sm);
   padding: var(--ae-public-space-sm) var(--ae-public-space-md) var(--ae-public-space-md);
+  border-top: 1px solid var(--ae-public-line);
 }
 
 .ae-source-card__actions .ae-agent-json {
   margin-top: 0;
+  margin-left: auto;
 }

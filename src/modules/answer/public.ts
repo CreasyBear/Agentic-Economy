@@ -114,9 +114,11 @@ export {
 
 export {
   AnswerArtifactSchema,
+  AnswerCompareFieldSchema,
   AnswerSourceSchema,
   AeAnswerArtifactsSchema,
   type AnswerArtifact,
+  type AnswerCompareField,
   type AeAnswerArtifacts,
 } from './answer-schema'
 

@@ -93,6 +93,19 @@ describe('public chat layout contract', () => {
 
     expect(queryPanel).toMatch(/import\.meta\.env\.DEV/)
   })
+
+  it('keeps a visible search-area control in the public chat panel', () => {
+    const chat = readSource('src/components/ae/chat/AeChat.tsx')
+    const contextBar = readSource('src/components/ae/chat/AeSearchContextBar.tsx')
+    const answerStyles = readAnswerStyles()
+
+    expect(chat).toMatch(/DEFAULT_AE_SEARCH_CONTEXT/)
+    expect(chat).toMatch(/<AeSearchContextBar\b/)
+    expect(contextBar).toMatch(/Searching around/)
+    expect(contextBar).toMatch(/Near me/)
+    expect(contextBar).toMatch(/Whole catalogue/)
+    expect(answerStyles).toMatch(/\.ae-search-context-bar\b/)
+  })
 })
 
 describe('public listing layout contract', () => {

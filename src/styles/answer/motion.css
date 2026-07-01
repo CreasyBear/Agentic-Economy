@@ -28,10 +28,14 @@
   .ae-query-box__row,
   .ae-query-box__example,
   .ae-answer__stop,
-  .ae-agent-json__button {
+  .ae-agent-json__button,
+  .ae-registry-card__image,
+  .ae-listing-page__gallery-hero img,
+  .ae-listing-page__gallery-figure img {
     transition: none;
   }
-  .ae-source-card:hover {
+  .ae-source-card:hover,
+  .ae-registry-card:hover .ae-registry-card__inner {
     transform: none;
   }
   .ae-answer__one-line,

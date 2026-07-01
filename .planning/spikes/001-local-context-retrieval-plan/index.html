@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AE Local Context Retrieval Plan Spike</title>
+    <style>
+      :root {
+        --paper: #eceae1;
+        --ink: #1f2521;
+        --muted: #59615b;
+        --line: #b8b4a6;
+        --amber: #e89b3c;
+        --white: #f8f7f0;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+      h1 {
+        font-family: Georgia, serif;
+        font-size: clamp(32px, 5vw, 56px);
+        margin: 0 0 10px;
+        letter-spacing: 0;
+      }
+      p { color: var(--muted); line-height: 1.5; }
+      .toolbar, .output, .log {
+        border: 1px solid var(--line);
+        background: rgba(248, 247, 240, 0.76);
+        border-radius: 8px;
+      }
+      .toolbar {
+        display: grid;
+        gap: 16px;
+        padding: 16px;
+        margin: 24px 0;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      input, select {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: var(--white);
+        color: var(--ink);
+        padding: 10px 12px;
+        border-radius: 6px;
+        font: inherit;
+      }
+      button {
+        width: fit-content;
+        border: 1px solid #7d5a21;
+        background: var(--amber);
+        color: #22180a;
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+        gap: 18px;
+      }
+      .output, .log { padding: 16px; }
+      .plan-row {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(184, 180, 166, 0.65);
+      }
+      .plan-row:last-child { border-bottom: 0; }
+      .key {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .value {
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        overflow-wrap: anywhere;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 7px 10px;
+        background: var(--white);
+        font-size: 13px;
+        margin-right: 8px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--amber);
+      }
+      pre {
+        white-space: pre-wrap;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      @media (max-width: 760px) {
+        .grid { grid-template-columns: 1fr; }
+        .plan-row { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Local Retrieval Plan</h1>
+      <p>Prototype of what AE should know before the answer begins: user words, service search, active place, and why no hidden rewrite happened.</p>
+
+      <section class="toolbar">
+        <label>
+          Query
+          <input id="query" value="Emergency plumber" />
+        </label>
+        <label>
+          Search area
+          <input id="location" value="Perth, WA" />
+        </label>
+        <label>
+          Mode
+          <select id="mode">
+            <option value="near_me">Near selected area</option>
+            <option value="whole_catalogue">Whole catalogue</option>
+          </select>
+        </label>
+        <button id="run">Resolve plan</button>
+      </section>
+
+      <div class="grid">
+        <section class="output" aria-live="polite">
+          <span class="pill"><span class="dot"></span><span id="scopeLabel"></span></span>
+          <span class="pill" id="reasonLabel"></span>
+          <div id="plan"></div>
+        </section>
+        <section class="log">
+          <strong>Forensic event</strong>
+          <pre id="log"></pre>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      import { resolveRetrievalPlan } from './spike-runner.mjs'
+
+      const query = document.querySelector('#query')
+      const location = document.querySelector('#location')
+      const mode = document.querySelector('#mode')
+      const run = document.querySelector('#run')
+      const plan = document.querySelector('#plan')
+      const log = document.querySelector('#log')
+      const scopeLabel = document.querySelector('#scopeLabel')
+      const reasonLabel = document.querySelector('#reasonLabel')
+
+      function render() {
+        const context = {
+          mode: mode.value,
+          allowOutsideArea: mode.value === 'whole_catalogue',
+          location: {
+            label: location.value,
+            countryCode: 'AU',
+          },
+        }
+        const result = resolveRetrievalPlan(query.value, context)
+        scopeLabel.textContent = result.scope === 'whole_catalogue'
+          ? 'Searching the whole catalogue'
+          : `Searching around ${result.locationConstraint ?? location.value || 'selected area'}`
+        reasonLabel.textContent = result.reason
+        plan.innerHTML = [
+          ['User wording', result.displayQuery],
+          ['Service search', result.serviceQuery],
+          ['Location constraint', result.locationConstraint ?? 'None'],
+          ['Location source', result.locationSource],
+          ['Context applied', result.wasContextInjected ? 'Yes' : 'No'],
+        ].map(([key, value]) => `
+          <div class="plan-row">
+            <div class="key">${key}</div>
+            <div class="value">${value}</div>
+          </div>
+        `).join('')
+        log.textContent = JSON.stringify(result, null, 2)
+      }
+
+      run.addEventListener('click', render)
+      query.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') render()
+      })
+      render()
+    </script>
+  </body>
+</html>

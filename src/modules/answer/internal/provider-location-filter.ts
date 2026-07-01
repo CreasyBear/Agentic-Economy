@@ -1,4 +1,8 @@
 import type { AnswerSource } from '../answer-synthesizer'
+import {
+  aeSearchContextLocationQuery,
+  type AeSearchContext,
+} from '../search-context'
 
 const SERVICE_WORDS = new Set([
   'a',
@@ -60,7 +64,7 @@ export type ProviderLocationFilterResult = {
   providers: AnswerSource[]
   rejectedProviders: AnswerSource[]
   location: string | undefined
-  locationSource: 'tool' | 'user' | undefined
+  locationSource: 'context' | 'tool' | 'user' | undefined
   filtered: boolean
 }
 
@@ -68,10 +72,12 @@ export function filterProvidersForRequestedLocation(input: {
   providers: readonly AnswerSource[]
   userQuery: string
   toolQuery?: string
+  searchContext?: AeSearchContext | undefined
 }): ProviderLocationFilterResult {
   const toolLocation = input.toolQuery === undefined ? undefined : extractRequestedLocation(input.toolQuery)
   const userLocation = extractRequestedLocation(input.userQuery)
-  const resolved = resolveRequestedLocation({ userLocation, toolLocation })
+  const contextLocation = aeSearchContextLocationQuery(input.searchContext)
+  const resolved = resolveRequestedLocation({ userLocation, contextLocation, toolLocation })
   const { location, locationSource } = resolved
 
   if (location === undefined) {
@@ -128,13 +134,19 @@ export function extractRequestedLocation(query: string): string | undefined {
 
 function resolveRequestedLocation(input: {
   userLocation: string | undefined
+  contextLocation: string | undefined
   toolLocation: string | undefined
 }): Pick<ProviderLocationFilterResult, 'location' | 'locationSource'> {
-  const { userLocation, toolLocation } = input
+  const { userLocation, contextLocation, toolLocation } = input
 
-  if (userLocation === undefined && toolLocation === undefined) {
+  if (userLocation === undefined && contextLocation === undefined && toolLocation === undefined) {
     return { location: undefined, locationSource: undefined }
   }
+
+  if (userLocation === undefined && contextLocation !== undefined) {
+    return { location: contextLocation, locationSource: 'context' }
+  }
+
   if (userLocation === undefined) {
     return { location: toolLocation, locationSource: 'tool' }
   }

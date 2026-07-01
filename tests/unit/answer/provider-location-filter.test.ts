@@ -4,6 +4,7 @@ import {
   extractRequestedLocation,
   filterProvidersForRequestedLocation,
 } from '@/modules/answer/internal/provider-location-filter'
+import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import type { AnswerSource } from '@/modules/answer/public'
 
 const provider = (overrides: Partial<AnswerSource> = {}): AnswerSource => ({
@@ -73,6 +74,40 @@ describe('provider location filtering', () => {
       filtered: true,
       providers: [],
     })
+  })
+
+  it('uses the active search context when the user query names no place', () => {
+    const result = filterProvidersForRequestedLocation({
+      userQuery: 'Emergency plumber',
+      toolQuery: 'emergency plumber parramatta',
+      searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+      providers: [provider()],
+    })
+
+    expect(result).toMatchObject({
+      location: 'Perth',
+      locationSource: 'context',
+      filtered: true,
+      providers: [],
+    })
+  })
+
+  it('lets an explicit user place override the active search context', () => {
+    const result = filterProvidersForRequestedLocation({
+      userQuery: 'Emergency plumber Parramatta',
+      toolQuery: 'emergency plumber parramatta',
+      searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+      providers: [provider()],
+    })
+
+    expect(result).toMatchObject({
+      location: 'parramatta',
+      locationSource: 'tool',
+      filtered: false,
+    })
+    expect(result.providers.map((candidate) => candidate.slug)).toEqual([
+      'parramatta-emergency-plumbing',
+    ])
   })
 
   it('does not treat service summaries as location coverage', () => {

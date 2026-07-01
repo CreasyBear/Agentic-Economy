@@ -33,10 +33,23 @@ If a feature does not strengthen one of these steps, it is not core right now.
 | --- | --- | --- |
 | Provider listing remains the core object. | Keep | Listing detail, registry cards, answers, and agent JSON must all point to the same safe next step. |
 | Qualified inquiry is the first owned conversion. | Keep | No booking, payment, dispatch, or autonomous fulfilment copy. |
-| Answer/chat is demand routing, not the product center. | Quarantine as beta until proven | It must retrieve public catalog facts, show provider cards, and route into listing or inquiry. |
+| Answer/chat is demand routing, not the product center. | Beta demand router | It must retrieve public catalog facts, show provider cards first, persist tool evidence, and route into listing or inquiry. `/ask` is core only as listing-first routing, not generic chat. |
 | Billing, protected actions, and business-action receipts are consequence rails. | Subordinate | They must not set public product expectations before loop proof. |
 | Discovery and agent tools are quiet infrastructure. | Keep bounded | They support safer assistant routing; no protocol theater on human surfaces. |
 | Generated graph JSON is not source. | Cut from Git | Keep `GRAPH_REPORT.md`; ignore bulky generated graph files. |
+
+## Multi-Sided Dependency
+
+AE has four load-bearing sides:
+
+| Side | Table stakes before the loop works |
+| --- | --- |
+| Customer | Enough comparable providers in one category and metro, clear service area, clear limits, visible uncertainty, and a safe inquiry path under 3 minutes. |
+| Owner | Accurate representation, easy claim/correction, real inquiry delivery, ability to reply or decline, and no implied booking or payment obligation. |
+| Assistant | Public structured facts, provenance, freshness, refusal boundaries, read-only search/detail tools, and only one write path: qualified inquiry when allowed. |
+| Operator | One place to track surface status, trust decay, failed delivery, stale/disputed details, inquiry outcomes, and whether freshness changes ranking or discovery. |
+
+The hard side is **owners who will review/correct listings and act on inquiries**. Customers and assistants have no reason to choose AE over Google/Maps unless owner-reviewed supply is materially clearer, fresher, and safer.
 
 ## Surface Status Seed
 
@@ -50,7 +63,7 @@ dedicated `.planning/SURFACE-STATUS.md` register with one row per mounted route.
 | Quiet agent tools | `/api/agent/tools`, `registry.search`, `registry.detail`, `inquiry.submit` | Core support | Are write actions still limited to qualified inquiry, with read-only registry tools? |
 | Developer discovery | `/developers/discovery`, `/api/discovery/schema`, `/api/discovery/examples`, `/api/discovery/fixtures` | Support / internal-beta | Does this help builders read public facts without implying a platform? |
 | Answer thread | `/q/$answerId`, `/t/$threadId`, `/api/answer*`, `/api/chat*` | Beta demand router | Does answer shorten time-to-safe-first-inquiry against registry/listing? |
-| Owner inquiry | `/owner/inquiries`, `/owner/inquiries/$threadId`, `/owner/status` | Core after deployed proof | Can an owner see, reply, or correct from a real inquiry? |
+| Owner inquiry | `/owner/inquiries`, `/owner/inquiries/$threadId`, `/owner/status` | Core proof path | Can an owner see, reply, or correct from a real inquiry? |
 | Owner protected actions | `/owner/actions*` | Future / beta | Is every action owner-approved and receipt-bound before consequence? |
 | Owner billing | `/owner/billing*` | Future commercial rail | Is money hidden until demand and support proof justify it? |
 | Owner business actions | `/owner/business-actions*` | Future / proof rail | Is this source/local evidence only unless provider smoke passes? |
@@ -58,21 +71,50 @@ dedicated `.planning/SURFACE-STATUS.md` register with one row per mounted route.
 | Provider/webhook APIs | `/api/notification/*`, `/api/billing/webhook`, `/api/business-actions/stripe-webhook`, `/api/observability/funnel` | Internal/provider | Are failures visible without creating false public proof? |
 | Auth support | `/sign-in/*`, `/sign-up/*` | Support | Does auth serve owner/admin authority without becoming product copy? |
 
+### Surface Status Implementation
+
+Create `.planning/SURFACE-STATUS.md` as a single Markdown table:
+
+```text
+| kind | id | file | status | visibility | user | product_job | proof_gate | owner |
+```
+
+Use exact status values:
+
+```text
+core
+core_support
+support_internal_beta
+beta_demand_router
+core_proof_path
+future_beta
+future_commercial_rail
+future_proof_rail
+internal
+internal_provider
+support
+```
+
+Add `tests/imports/surface-status.test.ts`. It should parse `createFileRoute('...')` literals from `src/routes`, read action IDs through `listActions()`, parse the surface register, and fail on missing rows, orphan rows, duplicate `kind:id`, unknown statuses, or empty required cells. Do not scrape `src/routeTree.gen.ts`; it is generated and creates false noise.
+
 ## Next Work Order
 
 1. Create `.planning/SURFACE-STATUS.md`.
    - One mounted route or action per row.
    - Columns: status, public visibility, user, product job, proof gate, owner.
-   - Add a scanner or test that fails when a new route lacks a status row.
+   - Add `tests/imports/surface-status.test.ts` so every mounted route/action has a row.
 
 2. Create `.planning/LOOP-PROOF.md`.
    - Track the first deployed proof of `listing -> inquiry -> owner delivery -> owner response/correction -> listing freshness`.
    - Separate local/source proof from deployed/provider proof.
    - Include evidence refs, commands, screenshots, owner notes, and failure states.
+   - Treat this as release-blocking for public expansion. Partial evidence does not move the gate.
 
 3. Clean trust language drift.
    - Replace example "verified" language in `DESIGN.md` unless tied to a named standard.
    - Update `AGENTS.md` to acknowledge read-only `registry.search` and `registry.detail` alongside `inquiry.submit`.
+   - Remove latent public "Verified" labels from shared status presentation unless they are private/provider signature states.
+   - Review public listing paid-activation copy and remove or soften public commercial maturity claims until loop proof passes.
    - Keep public human copy free of internal architecture words.
 
 4. Decide answer posture explicitly.
@@ -88,6 +130,7 @@ dedicated `.planning/SURFACE-STATUS.md` register with one row per mounted route.
    - No new public billing, payment, protected-action, or business-action claims.
    - No broad marketplace language.
    - No new answer features unless they reduce time-to-safe-first-inquiry.
+   - No visible rail should imply production maturity unless its own support, receipt, reconstruction, and no-overclaim gates pass.
 
 ## Proof Gate
 
@@ -118,4 +161,3 @@ The next phase should be judged by this gate, not by route count:
 - New answer capabilities.
 - Billing, payment, protected-action, or business-action expansion.
 - Public copy that implies booking, dispatch, payment, or autonomous fulfilment.
-

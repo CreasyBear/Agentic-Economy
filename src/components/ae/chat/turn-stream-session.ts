@@ -4,6 +4,7 @@ import {
   type TurnStreamFrame,
   type TurnThreadMeta,
 } from './answer-stream'
+import type { AeSearchContext } from '@/modules/answer/search-context'
 
 type Subscriber = {
   onFrame: (frame: TurnStreamFrame) => void
@@ -26,6 +27,7 @@ export function attachAnswerTurnStream(input: {
   key: string
   query: string
   threadId?: string
+  searchContext?: AeSearchContext
   subscriber: Subscriber
 }): () => void {
   let session = sessions.get(input.key)
@@ -45,6 +47,7 @@ export function attachAnswerTurnStream(input: {
     void streamAnswerTurnRequest({
       query: input.query,
       ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+      ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
       clientTurnKey: input.key,
       signal: abortController.signal,
       onThread: (meta) => {

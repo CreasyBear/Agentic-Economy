@@ -7,8 +7,15 @@ import { runAnswerGate, type AnswerGateResult } from './answer-gate'
 import { collectAllowedSlugsFromToolResults } from './catalog-grounding'
 import { actionToOpenRouterTool } from './action-to-tool-spec'
 import { buildToolUseAgentSystemPrompt, buildToolUseAgentUserPrompt } from './answer-llm-prompts'
-import { filterProvidersForRequestedLocation } from './provider-location-filter'
+import {
+  extractRequestedLocation,
+  filterProvidersForRequestedLocation,
+} from './provider-location-filter'
 import { AnswerProseSchema, snapshotProseFromAnswer, type AnswerProse } from '../answer-prose'
+import {
+  aeSearchContextLocationQuery,
+  type AeSearchContext,
+} from '../search-context'
 import {
   buildAgentJsonUrl,
   type AnswerSource,
@@ -54,6 +61,7 @@ export type AnswerToolUseAgentInput = {
   /** Frozen prior-turn slugs, used as the gate allow-list for non-search intents. */
   priorAllowedSlugs?: readonly string[]
   followUpIntent?: FollowUpIntent
+  searchContext?: AeSearchContext | undefined
   /**
    * When true, the agent requests prose directly without exposing registry
    * tools. Used for filter_known / compare_known intents, which must reuse
@@ -83,6 +91,7 @@ export type AnswerToolUseAgentGenerator = (input: {
   query: string
   priorProviders?: readonly AnswerSource[]
   followUpIntent?: FollowUpIntent
+  searchContext?: AeSearchContext | undefined
 }) => Promise<AnswerToolUseAgentPlan>
 
 export type AnswerToolUseAgentResult = {
@@ -131,9 +140,14 @@ async function runPlannedAgent(
   let seq = 0
 
   for (const planned of plan.toolCalls) {
+    const toolInput = applySearchContextToRegistrySearchInput(
+      input,
+      planned.toolId,
+      planned.input,
+    )
     const result = await runAnswerToolCall({
       toolId: planned.toolId,
-      input: planned.input,
+      input: toolInput,
       turnId: 'pending',
       seq,
     })
@@ -158,14 +172,12 @@ function buildAgentResult(
   const allowedSlugs = new Set<string>([...toolAllowedSlugs, ...priorAllowed])
 
   const agentQueryFromTools = resolveAgentQuery(toolCalls, input.query)
-  const locationFiltered =
-    providers.length > 0
-      ? filterProvidersForRequestedLocation({
-          providers,
-          userQuery: input.query,
-          toolQuery: agentQueryFromTools,
-        })
-      : undefined
+  const locationFiltered = filterProvidersForRequestedLocation({
+    providers,
+    userQuery: input.query,
+    toolQuery: agentQueryFromTools,
+    searchContext: input.searchContext,
+  })
 
   // For non-search intents the providers come from frozen prior evidence.
   const finalProviders: readonly AnswerSource[] =
@@ -173,7 +185,7 @@ function buildAgentResult(
 
   const mapped = snapshotProseFromAnswer(prose)
   const snapshotProse =
-    locationFiltered?.filtered === true
+    locationFiltered.filtered === true || (locationFiltered.location !== undefined && finalProviders.length === 0)
       ? buildLocationScopedProse({
           query: input.query,
           location: locationFiltered.location,
@@ -185,7 +197,9 @@ function buildAgentResult(
   // "parramatta" for a misspelled "paramata"), the URL reflects that chosen
   // query while the frozen snapshot query stays honest to what the person typed.
   const agentQuery =
-    locationFiltered?.filtered === true && locationFiltered.locationSource === 'user'
+    locationFiltered.locationSource === 'context'
+      ? buildAgentJsonQueryForSearchContext(input.query, input.searchContext)
+      : locationFiltered.filtered === true && locationFiltered.locationSource === 'user'
       ? input.query
       : agentQueryFromTools
   const snapshot: AnswerSnapshot = {
@@ -194,7 +208,11 @@ function buildAgentResult(
     providers: finalProviders,
     summary: snapshotProse.summary,
     nextStep: snapshotProse.nextStep,
-    agentJsonUrl: buildAgentJsonUrl(agentQuery, DEFAULT_LIMIT),
+    agentJsonUrl: buildAgentJsonUrl(
+      agentQuery,
+      DEFAULT_LIMIT,
+      resolveAgentJsonScope(toolCalls, input.searchContext),
+    ),
   }
 
   const gate = runAnswerGate({ snapshot, allowedSlugs })
@@ -231,6 +249,7 @@ async function runRealToolUseAgent(
         query: input.query,
         ...(input.priorProviders === undefined ? {} : { priorProviders: input.priorProviders }),
         ...(input.followUpIntent === undefined ? {} : { followUpIntent: input.followUpIntent }),
+        ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
       }),
     },
   ]
@@ -270,7 +289,11 @@ async function runRealToolUseAgent(
 
     for (const call of assistantToolCalls) {
       const toolId = call.function?.name ?? ''
-      const parsedInput = parseToolInput(call.function?.arguments)
+      const parsedInput = applySearchContextToRegistrySearchInput(
+        input,
+        toolId,
+        parseToolInput(call.function?.arguments),
+      )
       const result = await runAnswerToolCall({
         toolId,
         input: parsedInput,
@@ -464,6 +487,96 @@ function resolveAgentQuery(
     }
   }
   return fallback
+}
+
+function resolveAgentJsonScope(
+  toolCalls: readonly AnswerToolCallRecord[],
+  searchContext: AeSearchContext | undefined,
+): { mode?: 'near_me' | 'whole_catalogue'; location?: string } | undefined {
+  for (const call of toolCalls) {
+    if (call.toolId !== 'registry.search') {
+      continue
+    }
+    try {
+      const input = JSON.parse(call.inputJson) as {
+        mode?: unknown
+        location?: unknown
+      }
+      const mode =
+        input.mode === 'near_me' || input.mode === 'whole_catalogue'
+          ? input.mode
+          : undefined
+      const location =
+        typeof input.location === 'string' && input.location.trim().length > 0
+          ? input.location.trim()
+          : undefined
+      if (mode !== undefined || location !== undefined) {
+        return {
+          ...(mode === undefined ? {} : { mode }),
+          ...(location === undefined ? {} : { location }),
+        }
+      }
+    } catch {
+      // Fall through to the active search context.
+    }
+  }
+
+  if (searchContext?.mode === 'whole_catalogue') {
+    return { mode: 'whole_catalogue' }
+  }
+
+  const location = aeSearchContextLocationQuery(searchContext)
+  return location === undefined ? undefined : { mode: 'near_me', location }
+}
+
+function applySearchContextToRegistrySearchInput(
+  input: AnswerToolUseAgentInput,
+  toolId: string,
+  raw: unknown,
+): unknown {
+  if (toolId !== 'registry.search' || typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return raw
+  }
+
+  const record = { ...(raw as Record<string, unknown>) }
+  const query = typeof record.query === 'string' ? record.query : input.query
+  const userNamedLocation = extractRequestedLocation(input.query)
+  const toolNamedLocation = extractRequestedLocation(query)
+
+  if (record.mode === undefined && input.searchContext?.mode === 'whole_catalogue') {
+    record.mode = 'whole_catalogue'
+    return record
+  }
+
+  const contextLocation = aeSearchContextLocationQuery(input.searchContext)
+  if (
+    contextLocation !== undefined &&
+    userNamedLocation === undefined &&
+    toolNamedLocation === undefined
+  ) {
+    record.mode = record.mode ?? 'near_me'
+    record.location = typeof record.location === 'string' && record.location.trim().length > 0
+      ? record.location
+      : contextLocation
+  }
+
+  return record
+}
+
+function buildAgentJsonQueryForSearchContext(
+  query: string,
+  searchContext: AeSearchContext | undefined,
+): string {
+  if (extractRequestedLocation(query) !== undefined) {
+    return query
+  }
+
+  const location = aeSearchContextLocationQuery(searchContext)
+  if (location === undefined) {
+    return query
+  }
+
+  return `${query} near ${location}`
 }
 
 export class AnswerToolUseAgentError extends Error {

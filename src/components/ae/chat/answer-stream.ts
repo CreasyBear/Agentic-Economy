@@ -1,4 +1,5 @@
 import type { AnswerEvent } from '@/modules/answer/public'
+import type { AeSearchContext } from '@/modules/answer/search-context'
 
 export type AnswerStreamFrame = { seq: number; event: AnswerEvent }
 
@@ -96,6 +97,7 @@ export type TurnThreadMeta = {
 export async function streamAnswerTurnRequest(input: {
   query: string
   threadId?: string
+  searchContext?: AeSearchContext
   clientTurnKey?: string
   signal?: AbortSignal
   onFrame: (frame: TurnStreamFrame) => void
@@ -107,6 +109,7 @@ export async function streamAnswerTurnRequest(input: {
     body: JSON.stringify({
       query: input.query,
       ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+      ...(input.searchContext === undefined ? {} : { searchContext: input.searchContext }),
     }),
     ...(input.clientTurnKey === undefined
       ? {}

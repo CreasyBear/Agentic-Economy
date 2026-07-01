@@ -27,9 +27,51 @@ export const AnswerSourceSchema = z.object({
   ),
 })
 
+export const AnswerCompareFieldSchema = z.enum(['area', 'response', 'availability', 'hours', 'trust', 'nextStep'])
+
 export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('one-line'), text: z.string() }),
   z.object({ kind: z.literal('provider-cards'), providers: z.array(AnswerSourceSchema) }),
+  z.object({
+    kind: z.literal('provider-compare-table'),
+    providers: z.array(AnswerSourceSchema),
+    fields: z.array(AnswerCompareFieldSchema).optional(),
+  }),
+  z.object({
+    kind: z.literal('service-area-fit'),
+    providers: z.array(AnswerSourceSchema),
+    locationLabel: z.string().optional(),
+  }),
+  z.object({ kind: z.literal('next-step-menu'), providers: z.array(AnswerSourceSchema) }),
+  z.object({
+    kind: z.literal('confirmation-checklist'),
+    title: z.string().optional(),
+    items: z.array(z.string()).min(1).max(5),
+  }),
+  z.object({
+    kind: z.literal('recovery-prompts'),
+    title: z.string().optional(),
+    prompts: z.array(z.object({ label: z.string(), query: z.string() })).min(1).max(4),
+  }),
+  z.object({
+    kind: z.literal('route-perspective'),
+    providers: z.array(AnswerSourceSchema),
+    query: z.string().optional(),
+  }),
+  z.object({ kind: z.literal('published-details-rail'), providers: z.array(AnswerSourceSchema) }),
+  z.object({ kind: z.literal('provider-tradeoff-list'), providers: z.array(AnswerSourceSchema) }),
+  z.object({
+    kind: z.literal('message-starter'),
+    provider: AnswerSourceSchema,
+    need: z.string(),
+    location: z.string().optional(),
+    timing: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal('safe-route-rail'),
+    providers: z.array(AnswerSourceSchema).optional(),
+    query: z.string().optional(),
+  }),
   z.object({
     kind: z.literal('location-map'),
     label: z.string(),
@@ -63,11 +105,33 @@ export const AeAnswerArtifactsSchema = z.object({
 export type AnswerArtifact =
   | { kind: 'one-line'; text: string }
   | { kind: 'provider-cards'; providers: readonly AnswerSource[] }
+  | {
+      kind: 'provider-compare-table'
+      providers: readonly AnswerSource[]
+      fields?: readonly AnswerCompareField[]
+    }
+  | { kind: 'service-area-fit'; providers: readonly AnswerSource[]; locationLabel?: string }
+  | { kind: 'next-step-menu'; providers: readonly AnswerSource[] }
+  | { kind: 'confirmation-checklist'; title?: string; items: readonly string[] }
+  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[] }
+  | { kind: 'route-perspective'; providers: readonly AnswerSource[]; query?: string }
+  | { kind: 'published-details-rail'; providers: readonly AnswerSource[] }
+  | { kind: 'provider-tradeoff-list'; providers: readonly AnswerSource[] }
+  | {
+      kind: 'message-starter'
+      provider: AnswerSource
+      need: string
+      location?: string
+      timing?: string
+    }
+  | { kind: 'safe-route-rail'; providers?: readonly AnswerSource[]; query?: string }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string }
   | { kind: 'agent-json'; url: string }
   | { kind: 'protected-by-ae' }
+
+export type AnswerCompareField = z.infer<typeof AnswerCompareFieldSchema>
 
 export type AeAnswerArtifacts = {
   query: string

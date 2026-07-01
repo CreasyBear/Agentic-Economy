@@ -7,6 +7,7 @@ import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 
 type AePublicShellProps = {
   children: ReactNode
+  immersive?: boolean
 }
 
 const defaultRegistrySearch = { q: '', limit: 10 }
@@ -19,9 +20,13 @@ function emitClaimCtaClicked() {
   void emitFunnelEvent({ eventType: 'claim_cta_clicked', stage: 'visitor', correlationPrefix: 'claim-cta' })
 }
 
-export function AePublicShell({ children }: AePublicShellProps) {
+export function AePublicShell({ children, immersive = false }: AePublicShellProps) {
   return (
-    <div className="ae-public-shell flex min-h-dvh flex-col">
+    <div
+      className={`ae-public-shell flex flex-col ${
+        immersive ? 'ae-public-shell--immersive h-dvh overflow-hidden' : 'min-h-dvh'
+      }`}
+    >
       <AeFunnelAttributionBoot />
       <a
         href="#main-content"
@@ -67,21 +72,23 @@ export function AePublicShell({ children }: AePublicShellProps) {
           </nav>
         </div>
       </header>
-      <main id="main-content" tabIndex={-1} className="flex-1">
+      <main id="main-content" tabIndex={-1} className={immersive ? 'min-h-0 flex-1' : 'flex-1'}>
         {children}
       </main>
-      <footer className="border-t border-[var(--ae-public-line)]/80 bg-[var(--ae-public-field)]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-3 text-xs leading-5 text-[var(--ae-public-muted)] md:flex-row md:items-center md:justify-between md:gap-3 md:px-6 md:py-4 md:text-sm">
-          <span>A register of who handles what, where. Not a booking or payment tool.</span>
-          <nav aria-label="Footer" className="flex flex-wrap gap-x-3 gap-y-1 md:gap-x-4">
-            <Link to="/" search={defaultHomeSearch}>Ask</Link>
-            <Link to="/registry" search={defaultRegistrySearch}>Browse services</Link>
-            <a href="/llms.txt">Assistants</a>
-            <Link to="/privacy/remove-business">Corrections</Link>
-            <Link to="/claim">List/claim your business</Link>
-          </nav>
-        </div>
-      </footer>
+      {immersive ? null : (
+        <footer className="border-t border-[var(--ae-public-line)]/80 bg-[var(--ae-public-field)]">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-3 text-xs leading-5 text-[var(--ae-public-muted)] md:flex-row md:items-center md:justify-between md:gap-3 md:px-6 md:py-4 md:text-sm">
+            <span>A register of who handles what, where. Not a booking or payment tool.</span>
+            <nav aria-label="Footer" className="flex flex-wrap gap-x-3 gap-y-1 md:gap-x-4">
+              <Link to="/" search={defaultHomeSearch} className="ae-public-footer-link">Ask</Link>
+              <Link to="/registry" search={defaultRegistrySearch} className="ae-public-footer-link">Browse services</Link>
+              <a href="/llms.txt" className="ae-public-footer-link">Assistants</a>
+              <Link to="/privacy/remove-business" className="ae-public-footer-link">Corrections</Link>
+              <Link to="/claim" className="ae-public-footer-link">List/claim your business</Link>
+            </nav>
+          </div>
+        </footer>
+      )}
     </div>
   )
 }

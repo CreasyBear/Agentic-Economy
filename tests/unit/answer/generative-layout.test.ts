@@ -142,3 +142,72 @@ describe('buildMessagePartsFromSnapshot', () => {
     ).toBe('refinement_compact')
   })
 })
+
+describe('buildArtifactsFromSnapshot generated instruments', () => {
+  it('adds comparison instruments for compare turns', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'compare these plumbers',
+      oneLine: '2 listed businesses can be compared.',
+      providers: [provider(), provider({ citationIndex: 2, slug: 'other', name: 'Other Plumbing' })],
+      summary: 'No booking or payment happens on this page.',
+      nextStep: 'Open a listed provider page.',
+      agentJsonUrl: '/api/businesses/search?q=plumber',
+      layoutProfile: 'compare_pair',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toEqual([
+      'one-line',
+      'provider-compare-table',
+      'provider-tradeoff-list',
+      'provider-cards',
+      'prose',
+      'next-step-menu',
+      'confirmation-checklist',
+      'what-to-do-now',
+    ])
+  })
+
+  it('adds location fit instruments for place-shaped discovery turns', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'urgent plumber near Parramatta 2150',
+      oneLine: '2 listed businesses near Parramatta.',
+      providers: [provider(), provider({ citationIndex: 2, slug: 'other', name: 'Other Plumbing' })],
+      summary: 'No booking or payment happens on this page.',
+      nextStep: 'Open a listed provider page.',
+      agentJsonUrl: '/api/businesses/search?q=plumber',
+      layoutProfile: 'discovery_full',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toContain('location-map')
+    expect(artifacts.map((artifact) => artifact.kind)).toContain('service-area-fit')
+    expect(artifacts.map((artifact) => artifact.kind)).toContain('published-details-rail')
+  })
+
+  it('adds an editable inquiry starter for a single high-intent inquiry path', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'need urgent plumbing help today',
+      oneLine: '1 listed business accepts inquiries.',
+      providers: [provider()],
+      summary: 'No booking or payment happens on this page.',
+      nextStep: 'Send a qualified inquiry if the listing fits.',
+      agentJsonUrl: '/api/businesses/search?q=plumber',
+      layoutProfile: 'discovery_full',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toContain('message-starter')
+  })
+
+  it('adds recovery prompts for empty states', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'emergency roofer nowhere',
+      oneLine: 'No listed businesses match yet.',
+      providers: [],
+      summary: 'No listed businesses match that search yet.',
+      nextStep: 'Try a nearby suburb or browse the registry.',
+      agentJsonUrl: '/api/businesses/search?q=roofer',
+      layoutProfile: 'empty_state',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toContain('recovery-prompts')
+  })
+})

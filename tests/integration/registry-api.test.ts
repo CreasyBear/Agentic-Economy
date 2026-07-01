@@ -274,6 +274,34 @@ describe('registry public API routes', () => {
     })
   })
 
+  it('keeps direct search scoped to the supplied local context', async () => {
+    const perthResponse = handleSearchBusinessesRequest(
+      new Request(
+        'https://ae.example/api/businesses/search?q=emergency+plumber&mode=near_me&location=Perth',
+      ),
+    )
+    const perthBody = await perthResponse.json()
+    const parramattaResponse = handleSearchBusinessesRequest(
+      new Request(
+        'https://ae.example/api/businesses/search?q=emergency+plumber&mode=near_me&location=Parramatta',
+      ),
+    )
+    const parramattaBody = await parramattaResponse.json()
+
+    expect(perthBody).toMatchObject({
+      kind: 'ok',
+      query: 'emergency plumber',
+      items: [],
+      pagination: { total: 0, hasMore: false },
+    })
+    expect(parramattaBody).toMatchObject({
+      kind: 'ok',
+      query: 'emergency plumber',
+      items: [{ slug: 'parramatta-emergency-plumbing' }],
+      pagination: { total: 1, hasMore: false },
+    })
+  })
+
   it.each(['paramata', 'parammata'])(
     'does not correct close suburb misspelling "%s" in registry search',
     async (query) => {

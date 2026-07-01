@@ -6,6 +6,7 @@ import {
   runAnswerToolUseAgent,
   setAnswerToolUseAgentForTests,
 } from '@/modules/answer/internal/answer-tool-use-agent'
+import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { actionToOpenRouterTool } from '@/modules/answer/internal/action-to-tool-spec'
 import { findAction } from '@/modules/actions'
 import { createDefaultRegistrySourceState } from '@/modules/registry/public'
@@ -25,6 +26,11 @@ describe('actionToOpenRouterTool', () => {
     expect(spec.function.parameters.type).toBe('object')
     expect(spec.function.parameters.properties.query?.type).toBe('string')
     expect(spec.function.parameters.properties.limit?.type).toBe('number')
+    expect(spec.function.parameters.properties.mode?.enum).toEqual([
+      'near_me',
+      'whole_catalogue',
+    ])
+    expect(spec.function.parameters.properties.location?.type).toBe('string')
     expect(spec.function.parameters.required).toContain('query')
     expect(spec.function.description).toMatch(/boundaries/i)
   })
@@ -223,6 +229,37 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         expect(input.query).toBe('parramatta')
         // The frozen snapshot query stays honest to what the person typed.
         expect(result.snapshot.query).toBe('paramata')
+      } finally {
+        reset()
+      }
+    })
+  })
+
+  it('persists active near-me context on location-free registry searches', async () => {
+    const state = createDefaultRegistrySourceState()
+    await withRegistrySourcePortForTest(state, async () => {
+      const reset = setAnswerToolUseAgentForTests(async () => ({
+        toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber' } }],
+        prose: {
+          oneLine: 'No listed businesses match this need yet.',
+          summary: 'No listed providers publish coverage for that place yet.',
+          whatToDoNow: 'Try a nearby suburb or browse the registry.',
+        },
+      }))
+
+      try {
+        const result = await runAnswerToolUseAgent({
+          query: 'emergency plumber',
+          searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+        })
+        const input = JSON.parse(result.toolCalls[0]!.inputJson)
+        expect(input).toMatchObject({
+          query: 'emergency plumber',
+          mode: 'near_me',
+          location: 'Perth',
+        })
+        expect(result.snapshot.agentJsonUrl).toContain('mode=near_me')
+        expect(result.snapshot.agentJsonUrl).toContain('location=Perth')
       } finally {
         reset()
       }

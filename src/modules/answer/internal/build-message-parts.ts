@@ -1,11 +1,31 @@
-import type { AnswerArtifact } from '../answer-schema'
-import type { AnswerSnapshot } from '../answer-synthesizer'
+import type { AnswerArtifact, AnswerCompareField } from '../answer-schema'
+import type { AnswerSnapshot, AnswerSource } from '../answer-synthesizer'
 import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
 import { buildArtifactsFromSnapshot } from './snapshot-artifacts'
 
 export type AnswerMessagePart =
   | { kind: 'one-line'; text: string }
   | { kind: 'provider-cards'; providers: AnswerSnapshot['providers']; scroll?: boolean }
+  | {
+      kind: 'provider-compare-table'
+      providers: readonly AnswerSource[]
+      fields?: readonly AnswerCompareField[]
+    }
+  | { kind: 'service-area-fit'; providers: readonly AnswerSource[]; locationLabel?: string }
+  | { kind: 'next-step-menu'; providers: readonly AnswerSource[] }
+  | { kind: 'confirmation-checklist'; title?: string; items: readonly string[] }
+  | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[] }
+  | { kind: 'route-perspective'; providers: readonly AnswerSource[]; query?: string }
+  | { kind: 'published-details-rail'; providers: readonly AnswerSource[] }
+  | { kind: 'provider-tradeoff-list'; providers: readonly AnswerSource[] }
+  | {
+      kind: 'message-starter'
+      provider: AnswerSource
+      need: string
+      location?: string
+      timing?: string
+    }
+  | { kind: 'safe-route-rail'; providers?: readonly AnswerSource[]; query?: string }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string; compact?: boolean }
@@ -49,6 +69,66 @@ export function artifactsToMessageParts(
           kind: 'provider-cards',
           providers: artifact.providers,
           ...(scrollCards ? { scroll: true } : {}),
+        })
+        break
+      case 'provider-compare-table':
+        parts.push({
+          kind: 'provider-compare-table',
+          providers: artifact.providers,
+          ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
+        })
+        break
+      case 'service-area-fit':
+        parts.push({
+          kind: 'service-area-fit',
+          providers: artifact.providers,
+          ...(artifact.locationLabel === undefined ? {} : { locationLabel: artifact.locationLabel }),
+        })
+        break
+      case 'next-step-menu':
+        parts.push({ kind: 'next-step-menu', providers: artifact.providers })
+        break
+      case 'confirmation-checklist':
+        parts.push({
+          kind: 'confirmation-checklist',
+          items: artifact.items,
+          ...(artifact.title === undefined ? {} : { title: artifact.title }),
+        })
+        break
+      case 'recovery-prompts':
+        parts.push({
+          kind: 'recovery-prompts',
+          prompts: artifact.prompts,
+          ...(artifact.title === undefined ? {} : { title: artifact.title }),
+        })
+        break
+      case 'route-perspective':
+        parts.push({
+          kind: 'route-perspective',
+          providers: artifact.providers,
+          ...(artifact.query === undefined ? {} : { query: artifact.query }),
+        })
+        break
+      case 'published-details-rail':
+        parts.push({ kind: 'published-details-rail', providers: artifact.providers })
+        break
+      case 'provider-tradeoff-list':
+        parts.push({ kind: 'provider-tradeoff-list', providers: artifact.providers })
+        break
+      case 'message-starter':
+        parts.push({
+          kind: 'message-starter',
+          provider: artifact.provider,
+          need: artifact.need,
+          ...(artifact.location === undefined ? {} : { location: artifact.location }),
+          ...(artifact.timing === undefined ? {} : { timing: artifact.timing }),
+        })
+        break
+      case 'safe-route-rail':
+        parts.push({
+          kind: 'safe-route-rail',
+          ...(artifact.providers === undefined ? {} : { providers: artifact.providers }),
+          ...(artifact.query === undefined ? {} : { query: artifact.query }),
         })
         break
       case 'location-map':

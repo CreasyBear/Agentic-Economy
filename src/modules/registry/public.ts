@@ -1,5 +1,6 @@
 import type { BusinessId, CorrelationId, OperationKey, ServiceId, Slug, SourceHash } from '@/modules/common/ids'
-import type { PublicStatus } from '@/modules/business/public'
+import type { PublicStatus, TrustTier } from '@/modules/business/public'
+import type { FirstRequestMode } from '@/modules/catalog/public'
 import type { PublicCatalogContract, PublicCatalogReadState } from '@/modules/catalog/public'
 import type { DiscoveryManifestAttemptContract } from '@/modules/discovery/public'
 import type { AuditEventContract, OperationKeyRecord } from '@/modules/observability/public'
@@ -43,6 +44,15 @@ export type RegistryRepairAction = (typeof RegistryRepairActionValues)[number]
 
 export const RegistryRepairResultValues = ['not_run', 'succeeded', 'failed'] as const
 export type RegistryRepairResult = (typeof RegistryRepairResultValues)[number]
+
+export const RegistrySearchDocumentSourceVersion = 'registry-search-document:v1' as const
+export type RegistrySearchDocumentSourceVersion = typeof RegistrySearchDocumentSourceVersion
+
+export const RegistrySearchSyncStatusValues = ['queued', 'succeeded', 'failed', 'stale'] as const
+export type RegistrySearchSyncStatus = (typeof RegistrySearchSyncStatusValues)[number]
+
+export const RegistrySearchSyncOperationValues = ['upsert', 'delete', 'suppress'] as const
+export type RegistrySearchSyncOperation = (typeof RegistrySearchSyncOperationValues)[number]
 
 export type RegistryProjectionReadback = {
   businessId: BusinessId
@@ -107,10 +117,55 @@ export type IndexStatusContract = {
   staleReason?: string
 }
 
+export type RegistrySearchDocumentContract = {
+  documentId: string
+  schemaVersion: RegistrySearchDocumentSourceVersion
+  businessSlug: string
+  serviceSlug: string
+  businessName: string
+  serviceName: string
+  serviceCategory: string
+  serviceCategoryKey: string
+  suburb: string
+  stateTerritory: string
+  postcode?: string
+  publicStatus: Extract<PublicStatus, 'published'>
+  trustTier: TrustTier
+  firstRequestMode: FirstRequestMode
+  placeKeys: readonly string[]
+  serviceKeywords: readonly string[]
+  searchText: string
+  serviceArea: string
+  sourceHash?: SourceHash
+  generatedHash: SourceHash
+  updatedAt: number
+}
+
+export type RegistrySearchSyncAttemptContract = {
+  attemptId: string
+  documentId: string
+  businessSlug: string
+  serviceSlug: string
+  operation: RegistrySearchSyncOperation
+  status: RegistrySearchSyncStatus
+  meiliTaskUid?: string
+  sourceHash?: SourceHash
+  generatedHash?: SourceHash
+  retryCount: number
+  retryAfter?: number
+  lastErrorCode?: string
+  lastErrorRedacted?: string
+  staleReason?: string
+  startedAt: number
+  finishedAt?: number
+}
+
 export type RegistrySourceState = PublicCatalogReadState & {
   operationKeys: OperationKeyRecord[]
   registryProjectionItems: RegistryProjectionItemContract[]
   registryProjectionAttempts: RegistryProjectionAttemptContract[]
+  registrySearchDocuments?: RegistrySearchDocumentContract[]
+  registrySearchSyncAttempts?: RegistrySearchSyncAttemptContract[]
   discoveryManifestAttempts: DiscoveryManifestAttemptContract[]
   indexStatus: IndexStatusContract[]
   auditEvents: AuditEventContract[]

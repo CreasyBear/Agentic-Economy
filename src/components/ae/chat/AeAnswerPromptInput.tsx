@@ -121,7 +121,7 @@ export function AeAnswerPromptInput({
       </form>
 
       <p id={`${inputId}-hint`} className="ae-query-box__hint">
-        Type a real need and a place. The answer cites listed local businesses.
+        Type a real need. Name another place only when you want to search there.
         {showCharacterLimit ? ` ${charactersRemaining} characters left.` : null}
       </p>
     </div>
