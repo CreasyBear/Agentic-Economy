@@ -1,321 +1,338 @@
-<!-- refreshed: 2026-06-30 -->
+<!-- refreshed: 2026-07-01 -->
 # Architecture
 
-**Analysis Date:** 2026-06-30
+**Analysis Date:** 2026-07-01
 
 ## System Overview
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│              TanStack React Start Application                │
-│              `src/start.ts`, `src/router.tsx`                │
-├──────────────────┬──────────────────┬───────────────────────┤
-│ Public surfaces  │ Operator surfaces│ JSON / SSE APIs        │
-│ `src/routes/*`   │ `src/routes/*`   │ `src/routes/api.*`     │
-└────────┬─────────┴────────┬─────────┴──────────┬────────────┘
-         │                  │                     │
-         ▼                  ▼                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│             Domain Modules and Public Seams                  │
-│ `src/modules/*/public.ts`, `src/modules/*/*.functions.ts`   │
-│ `src/modules/actions/index.ts`                               │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│             Source Adapters and Write Admission              │
-│ `src/lib/server/convex-source.ts`                            │
-│ `src/lib/server/source-write-admission.ts`                   │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│               Convex Source State and Functions              │
-│ `convex/schema.ts`, `convex/*.ts`, `convex/source_state.ts`  │
-└─────────────────────────────────────────────────────────────┘
++--------------------------------------------------------------------------------+
+|                         TanStack Start application                              |
+| `src/start.ts` + `src/router.tsx` + `src/routes/__root.tsx`                      |
++--------------------------+--------------------------+--------------------------+
+| Human UI routes          | JSON / SSE API routes    | Quiet agent tools        |
+| `src/routes/*.tsx`       | `src/routes/api.*.ts`    | `src/routes/api.agent.tools.ts` |
++------------+-------------+-------------+------------+-------------+------------+
+             |                           |                          |
+             v                           v                          v
++--------------------------------------------------------------------------------+
+|                      Domain modules and action registry                         |
+| `src/modules/*/public.ts`, `src/modules/*/*.functions.ts`,                     |
+| `src/modules/*/*.actions.ts`, `src/modules/actions/index.ts`                    |
++--------------------------+--------------------------+--------------------------+
+| Source ports             | Domain contracts         | Guardrails/readbacks     |
+| `src/lib/server/*`       | `src/modules/*/internal` | `src/modules/security/*` |
++------------+-------------+-------------+------------+-------------+------------+
+             |                           |                          |
+             v                           v                          v
++--------------------------------------------------------------------------------+
+|                           Convex source of record                               |
+| `convex/*.ts`, `convex/schema.ts`, module table schemas in `src/modules/*`      |
++--------------------------+--------------------------+--------------------------+
+| Public catalog/search    | Owner/admin workflows    | Answer thread evidence   |
+| `convex/registry.ts`     | `convex/inquiries.ts`    | `convex/answerThreads.ts` |
++--------------------------+--------------------------+--------------------------+
+             |
+             v
++--------------------------------------------------------------------------------+
+| External services and observability                                             |
+| Clerk auth, OpenRouter answer agent, Meilisearch optional search, provider      |
+| webhooks, Sentry/PostHog, Autumn/Stripe, Resend/Novu                            |
++--------------------------------------------------------------------------------+
 ```
 
 ## Component Responsibilities
 
 | Component | Responsibility | File |
 |-----------|----------------|------|
-| TanStack Start bootstrap | Installs CSRF, source-write admission, and Clerk request middleware. | `src/start.ts` |
-| Router factory | Creates the file-route router from the generated route tree. | `src/router.tsx` |
-| Root route | Adds global metadata, CSS, Clerk provider wrapping, tooltip provider, and toaster. | `src/routes/__root.tsx` |
-| Route adapters | Own loaders, server handlers, page shells, and HTTP response shaping. | `src/routes/*.ts`, `src/routes/*.tsx` |
-| Domain public seams | Export domain contracts and supported operations; callers should cross modules here. | `src/modules/*/public.ts` |
-| Server-function seams | Define TanStack `createServerFn` validators, Convex function references, source ports, and local/E2E fallbacks. | `src/modules/*/*.functions.ts` |
-| Action registry | Centralizes assistant/UI/API action declarations and exposes agent-tool descriptions. | `src/modules/actions/index.ts`, `src/modules/common/action.ts` |
-| Convex transport | Builds authenticated and public Convex HTTP transports and typed function references. | `src/lib/server/convex-source.ts` |
-| Source-write admission | Signs browser/API writes before they reach Convex and rejects client-exposed secrets. | `src/lib/server/source-write-admission.ts`, `src/modules/security/source-write-admission.ts`, `convex/sourceWriteAdmission.ts` |
-| Convex schema composition | Combines module-owned table schemas into the runtime database schema. | `convex/schema.ts` |
-| Operator shell | Provides owner/admin/developer navigation and section rails for protected readbacks. | `src/components/ae/layout/AeOperatorShell.tsx`, `src/lib/operator/navigation.ts` |
-| Public listing shell | Renders marketplace-style public pages from route readbacks and module DTOs. | `src/components/ae/listing/AeProviderListingPage.tsx`, `src/components/ae/layout/AePublicShell.tsx` |
+| TanStack Start bootstrap | Installs request middleware for observability, CSRF, source-write admission, and Clerk. | `src/start.ts` |
+| Router factory | Creates the generated route tree router, default not-found behavior, preloading, and scroll restoration. | `src/router.tsx` |
+| Root route | Provides document shell, global CSS, Clerk provider gating, tooltip provider, error boundary, toaster, and observability boot. | `src/routes/__root.tsx` |
+| Route files | Adapt HTTP requests or React route loaders/components to module seams. | `src/routes/` |
+| Product components | Render AE-specific public, owner, admin, chat, registry, inquiry, and listing surfaces. | `src/components/ae/` |
+| UI primitives | Hold shadcn/Radix-style reusable primitives consumed by AE components. | `src/components/ui/` |
+| Domain modules | Own contracts, pure domain commands, route server functions, action definitions, validators, and schema fragments. | `src/modules/` |
+| Action registry | Registers cross-surface actions once and exposes list/find helpers for UI, HTTP, agent JSON, and agent tools. | `src/modules/actions/index.ts` |
+| Action contract | Defines action schema, parameters, boundaries, surfaces, read/write classification, and agent descriptors. | `src/modules/common/action.ts` |
+| Convex transport | Creates public/authenticated Convex HTTP clients and typed function references for source queries/mutations/actions. | `src/lib/server/convex-source.ts` |
+| Source-write admission | Adds signed write-admission context to server functions and request-based action calls. | `src/lib/server/source-write-admission.ts` |
+| Admission verifier | Creates and verifies HMAC source-write admission records. | `src/modules/security/source-write-admission.ts` |
+| Convex schema composition | Composes table definitions from module-owned schema fragments plus business-action store tables. | `convex/schema.ts` |
+| Convex auth | Configures Clerk-issued Convex JWT provider. | `convex/auth.config.ts` |
+| Convex authz | Resolves owners/admins from Convex auth identity and admin membership rows. | `convex/authz.ts` |
+| Registry source | Reads public business catalog pages, searches, details, Meilisearch fallback/primary, and legacy local fallback. | `src/modules/registry/registry.functions.ts` |
+| Answer turn orchestrator | Streams answer events, routes follow-up intent, runs registry tools, gates prose, and persists turn evidence. | `src/modules/answer-thread/internal/turn-orchestrator.ts` |
+| Tool runner | Validates read action tool inputs, executes registered read-only actions, extracts provider evidence, and hashes tool results. | `src/modules/answer-thread/internal/tool-runner.ts` |
+| Inquiry source | Owns public inquiry and owner inbox/thread server functions over Convex source mutations/queries. | `src/modules/inquiries/inquiry.functions.ts` |
+| Guardrail scanner | Enforces import boundaries, route boundaries, TypeScript standards, source-mining limits, and public-language rules. | `src/lib/ui/contract-scans.ts` |
 
 ## Pattern Overview
 
-**Overall:** Full-stack modular monolith with file-based TanStack routes, Convex-backed source state, module public seams, and explicit action registration.
+**Overall:** Modular monolith with route adapters, domain public seams, source ports, and Convex-backed persistence.
 
 **Key Characteristics:**
-- File routes in `src/routes/` are thin adapters over domain modules in `src/modules/`.
-- Domain code is organized by bounded context: `business`, `catalog`, `registry`, `discovery`, `inquiries`, `answer`, `answer-thread`, `billing`, `business-action`, `protected-action`, `notification-outbox`, `observability`, `security`, `seo`, and `dev`.
-- Source persistence is centralized in Convex files under `convex/`, with schemas imported from module-owned internal schema files into `convex/schema.ts`.
-- Writes use operation keys, correlation IDs, stable request hashes, and source-write admission rather than trusting client-provided authority fields.
-- Public human surfaces and assistant-readable JSON share data contracts but expose different vocabulary and boundaries.
+- Route files in `src/routes/` stay thin: use `createFileRoute`, loaders/server handlers, local UI state, and module public/server functions such as `readRegistryRouteServer` in `src/routes/registry.tsx`.
+- Domain code is split by module: `public.ts` exports contracts and approved functions, `internal/` contains private commands/schema/helpers, `*.functions.ts` exposes TanStack server functions and source ports, and `*.actions.ts` declares cross-surface actions.
+- Convex table definitions live with modules and are composed in `convex/schema.ts`; Convex runtime functions in `convex/*.ts` import module contracts/commands to avoid duplicating business rules.
+- Assistant-callable operations are action declarations, not ad hoc route handlers. `src/modules/actions/index.ts` is the registration point and `src/routes/api.agent.tools.ts` is the quiet invocation door.
+- Writes use signed source-write admission from `src/lib/server/source-write-admission.ts`; Convex mutations verify the admission through `convex/sourceWriteAdmission.ts`.
+- Tests encode architecture rules in `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and `tests/imports/ts-standards.test.ts`.
 
 ## Layers
 
 **Application Bootstrap:**
-- Purpose: Configure request middleware and client routing.
-- Location: `src/start.ts`, `src/router.tsx`, `src/routes/__root.tsx`, `src/routeTree.gen.ts`
-- Contains: TanStack Start middleware, route tree wiring, root document, global providers.
-- Depends on: TanStack React Start, Clerk, global CSS in `src/styles/globals.css`.
-- Used by: Every route in `src/routes/`.
+- Purpose: Configure the full-stack runtime, middleware chain, router, document shell, and global providers.
+- Location: `src/start.ts`, `src/router.tsx`, `src/routes/__root.tsx`, `vite.config.ts`
+- Contains: TanStack Start middleware, route tree wiring, CSS entry, Clerk provider gating, observability boot.
+- Depends on: `@tanstack/react-start`, `@tanstack/react-router`, `@clerk/tanstack-react-start`, `@sentry/*`, `src/lib/server/source-write-admission.ts`
+- Used by: The Vite/Vinxi server and every route in `src/routes/`.
 
 **Route Adapter Layer:**
-- Purpose: Translate HTTP requests, route params, forms, loaders, and page states into module calls.
+- Purpose: Map URLs to loaders, server handlers, UI components, search-param validation, and response formats.
 - Location: `src/routes/`
-- Contains: Public pages like `src/routes/index.tsx`, `src/routes/registry.tsx`, `src/routes/$slug.tsx`; owner/admin/developer pages like `src/routes/owner.inquiries.tsx`, `src/routes/admin.audit-events.tsx`, `src/routes/developers.discovery.tsx`; API endpoints like `src/routes/api.businesses.ts`, `src/routes/api.agent.tools.ts`, `src/routes/api.answer.turn.ts`.
-- Depends on: Module public seams and `*.functions.ts` server seams; shared UI components in `src/components/`.
-- Used by: Browser navigation, assistant/API clients, tests that import route handlers directly.
+- Contains: Human pages (`src/routes/registry.tsx`, `src/routes/$slug.tsx`), owner/admin pages (`src/routes/owner.inquiries.tsx`, `src/routes/admin.claims.tsx`), API routes (`src/routes/api.businesses.search.ts`, `src/routes/api.answer.turn.ts`), discovery files (`src/routes/llms[.]txt.ts`, `src/routes/sitemap[.]xml.ts`).
+- Depends on: Module public seams and server functions in `src/modules/`, AE components in `src/components/ae/`, primitives in `src/components/ui/`.
+- Used by: Browsers, assistants reading public APIs, Playwright tests, and answer/chat clients.
 
-**UI Component Layer:**
-- Purpose: Render reusable public, operator, feedback, forms, chat, listing, and primitive components.
-- Location: `src/components/ae/`, `src/components/ui/`, `src/components/ai-elements/`
-- Contains: AE-specific components such as `src/components/ae/chat/AeChat.tsx`, `src/components/ae/inquiries/AeInquiryInboxPanel.tsx`, `src/components/ae/operator/AeOperatorDataTable.tsx`, plus shadcn-style primitives in `src/components/ui/`.
-- Depends on: React, local design tokens in `src/styles/tokens.css`, module DTO/readback types where needed.
-- Used by: Route components under `src/routes/`.
+**Component Layer:**
+- Purpose: Render reusable AE product surfaces and shared UI primitives.
+- Location: `src/components/ae/`, `src/components/ui/`, `src/components/ai-elements/`, `src/components/animate/`
+- Contains: Chat surfaces (`src/components/ae/chat/AeChat.tsx`), listing pages (`src/components/ae/listing/AeProviderListingPage.tsx`), registry cards (`src/components/ae/registry/AeRegistryCard.tsx`), inquiry UI (`src/components/ae/inquiries/`), operator shells (`src/components/ae/layout/AeOperatorShell.tsx`), shadcn/Radix primitives.
+- Depends on: Route loader data, module contracts, `src/styles/globals.css`, `src/styles/tokens.css`, and component utilities in `src/lib/utils.ts`.
+- Used by: Route components only; domain modules do not depend on components.
 
 **Domain Module Layer:**
-- Purpose: Own business rules, contracts, schemas, source-state command functions, and route-safe exports.
+- Purpose: Own product/domain contracts, pure commands, schemas, validation, and module-level source adapters.
 - Location: `src/modules/`
-- Contains: `public.ts` seams, `internal/` implementation files, `*.functions.ts` TanStack server functions, `*.actions.ts` action declarations, and module-local schemas.
-- Depends on: `src/modules/common/*`, selected sibling public seams, and source adapters in `src/lib/server/`.
-- Used by: Routes, Convex functions, tests, and the central action registry.
+- Contains: Business/catalog/registry/inquiries/answer/billing/protected-action/business-action/security/observability modules.
+- Depends on: Other modules through public seams only, common IDs/results/hash helpers in `src/modules/common/`, Zod, and server transport helpers when in `*.functions.ts`.
+- Used by: Routes, Convex runtime functions, tests, and actions.
 
 **Action Layer:**
-- Purpose: Define once and expose the same operation to UI, HTTP, agent JSON, and quiet agent tools surfaces.
-- Location: `src/modules/common/action.ts`, `src/modules/actions/index.ts`, `src/modules/inquiries/inquiry.actions.ts`
-- Contains: `defineAction`, action metadata, Zod schema, boundary summaries, `surfaces`, and action `run` handlers.
-- Depends on: Module server functions such as `src/modules/inquiries/inquiry.functions.ts`.
-- Used by: `src/routes/api.agent.tools.ts` and future route/UI action renderers.
+- Purpose: Declare operations once for UI, HTTP, agent JSON, and agent-tools surfaces with explicit boundaries.
+- Location: `src/modules/*/*.actions.ts`, `src/modules/actions/index.ts`, `src/modules/common/action.ts`
+- Contains: `inquiry.submit`, `registry.search`, `registry.detail`, owner inquiry actions.
+- Depends on: Module server/source functions and Zod schemas.
+- Used by: `src/routes/api.agent.tools.ts`, the answer tool runner in `src/modules/answer-thread/internal/tool-runner.ts`, and future UI/HTTP surfaces.
 
-**Source Adapter Layer:**
-- Purpose: Hide Convex transport and source-write signing from routes and pure domain commands.
-- Location: `src/lib/server/convex-source.ts`, `src/lib/server/source-write-admission.ts`
-- Contains: `sourceQuery`, `sourceMutation`, authenticated/public transport factories, admission middleware, admission builders.
-- Depends on: Clerk server auth, Convex HTTP client, source-write domain signing code.
-- Used by: `src/modules/*/*.functions.ts` files that call Convex.
+**Source Transport Layer:**
+- Purpose: Hide Convex HTTP transport, auth token handling, public vs authenticated source calls, and source-write admission.
+- Location: `src/lib/server/convex-source.ts`, `src/lib/server/source-write-admission.ts`, `src/lib/server/billing-provider.ts`, `src/lib/server/notification-provider.ts`
+- Contains: `sourceQuery`, `sourceMutation`, `createPublicConvexClient`, `createAuthenticatedConvexClient`, admission middleware/helpers, provider boundary ports.
+- Depends on: Clerk server auth, Convex HTTP client, security module admission helpers.
+- Used by: Module `*.functions.ts` files such as `src/modules/catalog/owner-claim.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, and `src/modules/answer-thread/answer-thread.functions.ts`.
 
-**Convex Persistence Layer:**
-- Purpose: Store durable source state and expose public/authenticated queries and mutations.
-- Location: `convex/`
-- Contains: Domain runtime files such as `convex/registry.ts`, `convex/inquiries.ts`, `convex/billing.ts`, `convex/businessActions.ts`; schema assembly in `convex/schema.ts`; runtime adapter helpers in `convex/source_state.ts`.
-- Depends on: Convex validators and module public/internal pure functions.
-- Used by: Source adapter calls from `src/modules/*/*.functions.ts`.
+**Persistence Layer:**
+- Purpose: Persist public catalog, owner/admin state, inquiry threads, answer evidence, provider events, audit/readback data, and support records.
+- Location: `convex/`, module table schemas under `src/modules/*/internal/schema.ts`, `src/modules/inquiries/internal/convex-schema.ts`, `src/modules/answer-thread/internal/convex-schema.ts`, `convex/businessActionStore.ts`
+- Contains: Convex queries/mutations/actions, table definitions, authz, source state adapters.
+- Depends on: Convex validators/server APIs, module public contracts, module pure commands.
+- Used by: Source transport calls from server functions and public API routes.
 
-**Testing and Guardrail Layer:**
-- Purpose: Enforce import boundaries, copy contracts, route parity, UI contracts, and domain behavior.
-- Location: `tests/`, `eval/answer/`
-- Contains: Boundary scans in `tests/imports/`, copy scans in `tests/copy/`, unit tests in `tests/unit/`, integration routes in `tests/integration/`, Playwright flows in `tests/e2e/`, answer evaluations in `eval/answer/`.
-- Depends on: Runtime source files and fixture directories under `tests/fixtures/`.
-- Used by: `package.json` scripts such as `test:imports`, `test:copy`, `test:integration`, and `test:eval`.
+**Evaluation and Guardrail Layer:**
+- Purpose: Protect product contract, import boundaries, answer quality, public copy, UI contracts, and e2e flows.
+- Location: `tests/`, `eval/answer/`, `src/lib/ui/contract-scans.ts`, `.github/workflows/eval-gate.yml`
+- Contains: Unit/integration/e2e/a11y/copy/import/type/SEO tests plus promptfoo answer evaluations.
+- Depends on: Vitest, Playwright, promptfoo, scanner helpers.
+- Used by: Release scripts in `package.json`.
 
 ## Data Flow
 
-### Public Business Page
+### Primary Request Path
 
-1. TanStack route loader receives `/$slug` in `src/routes/$slug.tsx:13`.
-2. Loader calls `readPublicBusinessPageServer` in `src/routes/$slug.tsx:15`.
-3. Server function validates input and calls `readPublicBusinessPageThroughSource` in `src/modules/catalog/owner-claim.functions.ts:155`.
-4. Source port calls the public Convex query reference in `src/modules/catalog/owner-claim.functions.ts:381`.
-5. Convex/public registry logic reads published catalog rows and suppression state in `convex/registry.ts:157` and `convex/registry.ts:271`.
-6. Route redacts source hashes, builds SEO with `src/modules/seo/public.ts`, reads paid activation state with `src/modules/billing/billing.functions.ts`, and renders `src/components/ae/listing/AeProviderListingPage.tsx`.
+1. A browser posts an answer turn to `POST /api/answer/turn`; the route parses JSON, resolves the session cookie, checks rate limits, checks thread access, and opens an SSE response (`src/routes/api.answer.turn.ts:14`, `src/routes/api.answer.turn.ts:22`).
+2. The route delegates to `streamAnswerTurn`, which trims the query, classifies follow-up intent, emits visible work-log events, and routes unsupported/boundary/frozen/search flows (`src/modules/answer-thread/internal/turn-orchestrator.ts:87`, `src/modules/answer-thread/internal/turn-orchestrator.ts:233`).
+3. Search turns call `runAnswerToolCall` with `registry.search`; the tool runner verifies the tool id, finds the registered action, enforces read-only status, validates the action schema, and records a hashed evidence record (`src/modules/answer-thread/internal/tool-runner.ts:52`, `src/modules/registry/registry.actions.ts:90`).
+4. `registry.search` calls `readPublicRegistrySearchPage`, which chooses Convex, dual Meilisearch shadowing, or Meilisearch primary with Convex fallback/hydration (`src/modules/registry/registry.functions.ts:79`).
+5. Registry source reads use Convex public queries such as `registry:searchPublicBusinessCatalog` through `sourceQuery` and `callPublicSourceQuery`; Convex resolves public catalog DTOs from indexed tables (`src/lib/server/convex-source.ts:63`, `convex/registry.ts:201`).
+6. The answer agent assembles grounded prose and artifacts from tool results, gates prose against allowed slugs, emits SSE events, and persists frozen evidence/tool calls through `answerThreads:appendAnswerTurnWithThreadAndToolCalls` (`src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `convex/answerThreads.ts`).
+7. The client receives `thread`, `work`, `one-line`, source/artifact, and `complete` events and renders them through chat components in `src/components/ae/chat/`.
 
-### Public Registry JSON
+### Public Registry and Listing Flow
 
-1. `GET /api/businesses` enters `src/routes/api.businesses.ts:8`.
-2. Route handler parses `cursor` and `limit` in `src/routes/api.businesses.ts:16`.
-3. Handler calls `readPublicRegistryCatalogPage` in `src/modules/registry/registry.functions.ts:41`.
-4. Source port uses public Convex query references from `src/modules/registry/registry.functions.ts:21`.
-5. Convex builds `public-business-catalog-api:v1` DTOs in `convex/registry.ts:125`.
-6. Route returns `jsonResponse` with `Cache-Control: no-store` from `src/routes/api.businesses.ts:36`.
+1. `/registry` validates search params, runs `readRegistryRouteServer`, and calls `loadRegistryRouteReadback` (`src/routes/registry.tsx:38`, `src/routes/registry.tsx:77`).
+2. Empty queries call `readPublicRegistryCatalogPage`; non-empty queries call `readPublicRegistrySearchPage` (`src/routes/registry.tsx`).
+3. API counterparts `GET /api/businesses`, `GET /api/businesses/search`, and `GET /api/businesses/$slug` call the same registry module functions and return no-store JSON (`src/routes/api.businesses.ts`, `src/routes/api.businesses.search.ts`, `src/routes/api.businesses.$slug.ts`).
+4. A public business page reads route-safe catalog data through `readPublicBusinessPageServer`, builds SEO, and renders `AeProviderListingPage` (`src/routes/$slug.tsx:11`, `src/modules/catalog/owner-claim.functions.ts`).
 
-### Qualified Inquiry
+### Qualified Inquiry Flow
 
-1. Public form route loads the target and validates form state in `src/routes/$slug.inquiry.tsx:43`.
-2. Browser submit calls `submitPublicInquiryServer` in `src/routes/$slug.inquiry.tsx:103`.
-3. Agent tools can invoke the same write through `POST /api/agent/tools` in `src/routes/api.agent.tools.ts:19`.
-4. `src/routes/api.agent.tools.ts:29` validates input against the action schema and calls the registered action from `src/modules/actions/index.ts:13`.
-5. `submitInquiryAction` calls `submitPublicInquiryThroughSource` in `src/modules/inquiries/inquiry.actions.ts:80`.
-6. `submitPublicInquiryThroughSource` creates an operation key, correlation ID, pseudonymous session ID, abuse key, and source-write admission in `src/modules/inquiries/inquiry.functions.ts:275`.
-7. Convex verifies admission and calls the pure inquiry command in `convex/inquiries.ts:548`.
-8. Pure command logic validates target, rate limit, idempotency, and notification state in `src/modules/inquiries/internal/commands.ts:280`.
-9. Convex persists source state and notification outbox links in `convex/inquiries.ts:590`, then the caller receives a receipt.
+1. `/$slug/inquiry` loads a public business page and builds an inquiry route readback (`src/routes/$slug.inquiry.tsx:43`, `src/modules/inquiries/route-readbacks.ts`).
+2. The client submits through `submitPublicInquiryServer`, a TanStack server function with Zod validation (`src/modules/inquiries/inquiry.functions.ts:249`).
+3. `submitPublicInquiryThroughSource` creates operation/correlation ids, obtains source-write admission, and calls public Convex mutation `inquiries:submitPublicInquiry` (`src/modules/inquiries/inquiry.functions.ts:275`, `convex/inquiries.ts:548`).
+4. Convex mutation logic validates target availability, CSRF/admission/rate limits, creates inquiry thread/message/notification rows, and returns a receipt using module inquiry commands (`convex/inquiries.ts`, `src/modules/inquiries/internal/commands.ts`).
+5. Owner inbox and thread routes read the owner-scoped inbox/thread source and execute owner mutations through the same inquiry server functions (`src/routes/owner.inquiries.tsx:34`, `src/routes/owner.inquiries.$threadId.tsx:66`).
 
-### Answer Thread Turn
+### Agent Tool Flow
 
-1. `POST /api/answer/turn` enters `src/routes/api.answer.turn.ts:19`.
-2. Route resolves or creates the answer session cookie in `src/routes/api.answer.turn.ts:20`.
-3. Request JSON is parsed with `answerTurnRequestSchema` from `src/modules/answer-thread/answer-thread.schema.ts:71`.
-4. The route starts an SSE `ReadableStream` and calls `streamAnswerTurn` in `src/routes/api.answer.turn.ts:50`.
-5. Turn orchestration classifies follow-up intent, creates IDs, streams events, and captures the final snapshot in `src/modules/answer-thread/internal/turn-orchestrator.ts:39`.
-6. Synthesis uses gated LLM when enabled and falls back to deterministic synthesis in `src/modules/answer/internal/synthesize-with-fallback.ts:13`.
-7. Turn persistence writes an answer thread and turn best-effort through `src/modules/answer-thread/answer-thread.functions.ts:80`.
-8. Convex stores `answerThreads` and `answerTurns` through `convex/answerThreads.ts:15` and `convex/answerThreads.ts:35`.
-
-### Discovery Artifacts
-
-1. `GET /api/discovery/schema` enters `src/routes/api.discovery.schema.ts:29`.
-2. Runtime options build a route snapshot in `src/routes/api.discovery.schema.ts:78`.
-3. Snapshot execution directly calls durable route handlers for `/api/businesses`, `/api/businesses/search`, `/{slug}/ucp`, `/llms.txt`, `/sitemap.xml`, and `/robots.txt` in `src/routes/api.discovery.schema.ts:94`.
-4. The discovery module generates schema/example/fixture artifacts from `src/modules/discovery/developer-discovery.ts`.
-5. Responses include discovery telemetry headers in `src/routes/api.discovery.schema.ts:49`.
+1. `GET /api/agent/tools` maps `listAgentToolActions()` through `describeActionForAgent` and returns assistant-visible descriptors (`src/routes/api.agent.tools.ts:17`, `src/routes/api.agent.tools.ts:26`).
+2. `POST /api/agent/tools` checks JSON content type, finds the action, enforces `agentTools` exposure, validates with the action schema, builds request/admission context, and calls `action.run` (`src/routes/api.agent.tools.ts:36`).
+3. `inquiry.submit` is the only assistant-exposed write action; it uses the same inquiry source function as the public form and carries explicit booking/payment/dispatch refusal boundaries (`src/modules/inquiries/inquiry.actions.ts:79`).
+4. `registry.search` and `registry.detail` are read-only agent tool actions and are also the tools used by the answer agent (`src/modules/registry/registry.actions.ts`).
 
 **State Management:**
-- Durable state is Convex-backed through `convex/schema.ts` and domain files in `convex/`.
-- React state stays local to client components and route components such as `src/routes/$slug.inquiry.tsx`.
-- Route loaders and TanStack server functions are request-scoped except for explicit module-level caches and test ports.
-- `/api/answer` has a short-lived in-memory `answerCache` in `src/routes/api.answer.ts:25`; answer threads persist best-effort in Convex through `src/modules/answer-thread/answer-thread.functions.ts`.
-- Answer sessions use a pseudonymous session cookie via `src/modules/answer-thread/internal/session-cookie.ts`.
+- Durable state lives in Convex tables composed by `convex/schema.ts`; module schema fragments define table ownership and indexes.
+- Route loaders and server functions return readback DTOs instead of exposing Convex documents directly; examples are `PublicBusinessCatalogApiDto` in `src/modules/registry/public.ts` and owner inquiry readbacks in `src/modules/inquiries/public.ts`.
+- Public answer sessions use a pseudonymous cookie managed in `src/modules/answer-thread/internal/session-cookie.ts`; answer turns and tool calls persist in `answerThreads`, `answerTurns`, and `answerToolCalls`.
+- Short-lived in-memory state exists for API answer cache (`src/routes/api.answer.ts`), answer rate-limit buckets/idempotency (`src/modules/answer-thread/internal/turn-guard.ts`), once-only client funnel events (`src/lib/observability/funnel-client.ts`), and test ports such as `setPublicRegistrySourcePortForTests` in `src/modules/registry/registry.functions.ts`.
+- React component state is local to route/component interactions; durable mutations go through server functions and source ports.
 
 ## Key Abstractions
 
+**Action:**
+- Purpose: A single operation declaration shared by UI, HTTP, agent JSON, and agent-tools surfaces.
+- Examples: `src/modules/common/action.ts`, `src/modules/actions/index.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/registry/registry.actions.ts`
+- Pattern: `defineAction({ id, schema, parameters, readOnly, surfaces, boundaries, run })`, then explicit registration in `src/modules/actions/index.ts`.
+
 **Module Public Seam:**
-- Purpose: Stable cross-module API for each bounded context.
-- Examples: `src/modules/catalog/public.ts`, `src/modules/registry/public.ts`, `src/modules/discovery/public.ts`, `src/modules/inquiries/public.ts`, `src/modules/billing/public.ts`.
-- Pattern: Re-export types, literal unions, and domain functions from `internal/`; keep routes and sibling modules on public seams.
+- Purpose: Export domain contracts and approved operations while keeping implementation details in `internal/`.
+- Examples: `src/modules/catalog/public.ts`, `src/modules/registry/public.ts`, `src/modules/inquiries/public.ts`, `src/modules/answer/public.ts`
+- Pattern: Routes and sibling modules import from `public.ts` or `*.functions.ts`, not `internal/`; guardrails enforce this in `src/lib/ui/contract-scans.ts`.
 
-**Source State Command:**
-- Purpose: Pure domain operation over an explicit source-state object.
-- Examples: `src/modules/inquiries/internal/commands.ts`, `src/modules/catalog/internal/publish.ts`, `src/modules/billing/internal/operations.ts`, `src/modules/business-action/internal/business-action.ts`.
-- Pattern: Accept state plus command, return `{ kind: 'ok' | 'error', code, ... }` result and updated state.
-
-**Source Port / Server Function:**
-- Purpose: Bridge route-safe calls to Convex and provide local/E2E test fallbacks.
-- Examples: `src/modules/registry/registry.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/billing/billing.functions.ts`.
-- Pattern: Zod validator plus `createServerFn`, `sourceQuery`/`sourceMutation`, and narrow error mapping.
-
-**Action Definition:**
-- Purpose: A declarative operation contract with schema, surfaces, summary, and boundaries.
-- Examples: `src/modules/common/action.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/actions/index.ts`.
-- Pattern: Explicit registration array and `surfaces` filtering for agent tools.
+**Source Port / Transport:**
+- Purpose: Make Convex, provider, and test transports swappable at module boundaries.
+- Examples: `PublicRegistrySourcePort` in `src/modules/registry/registry.functions.ts`, `OwnerCatalogSourcePort` in `src/modules/catalog/owner-claim.functions.ts`, `ConvexSourceTransport` in `src/lib/server/convex-source.ts`
+- Pattern: Module functions call a source port; test seams set a port; production uses Convex HTTP references.
 
 **Source-Write Admission:**
-- Purpose: Gate source writes with request origin, path, operation key, correlation ID, nonce, timestamp, and HMAC signature.
-- Examples: `src/modules/security/source-write-admission.ts`, `src/lib/server/source-write-admission.ts`, `convex/sourceWriteAdmission.ts`.
-- Pattern: Server signs admission, Convex verifies it, mutations map rejected signatures to CSRF-style errors.
+- Purpose: Bind writes to method/origin/pathname plus scope/operation/correlation id using a server-only secret.
+- Examples: `src/lib/server/source-write-admission.ts`, `src/modules/security/source-write-admission.ts`, `convex/sourceWriteAdmission.ts`
+- Pattern: TanStack server middleware injects request context; writes call `sourceWriteAdmissionFromContext` or `sourceWriteAdmissionFromRequest`; Convex mutations call `requireSourceWrite`.
+
+**Readback Contract:**
+- Purpose: Return route-safe, user/operator-safe projections with denial/error states instead of raw rows.
+- Examples: `OwnerInboxReadback` in `src/modules/inquiries/public.ts`, `AdminShellReadback` in `src/modules/security/public.ts`, `PublicOwnerStatusRouteReadback` in `src/modules/catalog/public.ts`
+- Pattern: Route components render readbacks and denial states directly; source hashes/private fields are redacted before public route return values.
 
 **Public Catalog Contract:**
-- Purpose: The central published listing shape for human pages, JSON APIs, discovery manifests, and answer grounding.
-- Examples: `src/modules/catalog/public.ts`, `src/modules/registry/internal/search.ts`, `convex/registry.ts`.
-- Pattern: Public DTOs redact private source hashes at route boundaries and retain schema versions.
+- Purpose: Canonical listing shape for public pages, registry API, discovery payloads, and assistant-readable data.
+- Examples: `PublicCatalogContract` in `src/modules/catalog/public.ts`, `PublicBusinessCatalogApiDto` in `src/modules/registry/public.ts`, discovery manifest types in `src/modules/discovery/public.ts`
+- Pattern: Business/catalog state becomes a public catalog; registry/discovery/SEO/answer flows consume the public shape.
 
-**Answer Snapshot and Thread Turn:**
-- Purpose: Represent generated answer output and persisted turn evidence.
-- Examples: `src/modules/answer/answer-synthesizer.ts`, `src/modules/answer-thread/answer-thread.schema.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`.
-- Pattern: SSE events stream first; frozen evidence/prose persists after capture when possible.
+**Answer Evidence:**
+- Purpose: Freeze search evidence, tool inputs/results, generated prose, work log, timing, and artifacts per answer turn.
+- Examples: `src/modules/answer-thread/answer-thread.schema.ts`, `src/modules/answer-thread/internal/tool-runner.ts`, `convex/answerThreads.ts`
+- Pattern: Run tools before prose gating; persist the selected tool arguments and result summaries, not model claims alone.
 
-**Operation Key / Stable Hash:**
-- Purpose: Idempotency, replay detection, source hashes, and audit joins.
-- Examples: `src/modules/common/ids.ts`, `src/modules/common/stable-hash.ts`, `src/modules/inquiries/internal/commands.ts`.
-- Pattern: Branded non-empty IDs plus deterministic FNV-style stable hash strings.
+**Convex Runtime State Adapter:**
+- Purpose: Let Convex functions reuse pure module commands by loading/persisting table rows into module source-state objects.
+- Examples: `convex/source_state.ts`, `convex/business.ts`, `convex/catalog.ts`, `convex/security.ts`
+- Pattern: Load rows, call pure command, persist changed state; direct Convex table access stays inside `convex/`.
 
 ## Entry Points
 
-**App Runtime:**
+**Runtime Bootstrap:**
 - Location: `src/start.ts`
-- Triggers: TanStack Start server runtime.
-- Responsibilities: Install CSRF middleware, source-write admission middleware, and Clerk middleware.
+- Triggers: Vite/TanStack Start server startup.
+- Responsibilities: Middleware order for observability, CSRF, source-write admission, and Clerk.
 
-**Client/Server Router:**
-- Location: `src/router.tsx`, `src/routeTree.gen.ts`
-- Triggers: TanStack Router initialization.
-- Responsibilities: Register generated file routes, preloading, not-found UI, and scroll restoration.
+**Router:**
+- Location: `src/router.tsx`
+- Triggers: Client/server rendering.
+- Responsibilities: Use generated route tree from `src/routeTree.gen.ts` and default not-found component.
 
 **Root Document:**
 - Location: `src/routes/__root.tsx`
 - Triggers: Every route render.
-- Responsibilities: Load global CSS, set metadata, wrap protected prefixes with Clerk, and render global providers.
+- Responsibilities: HTML shell, global CSS, Clerk provider gating, error boundary, toaster, and scripts.
 
 **Public Human Routes:**
-- Location: `src/routes/index.tsx`, `src/routes/ask.tsx`, `src/routes/registry.tsx`, `src/routes/$slug.tsx`, `src/routes/$slug.inquiry.tsx`
+- Location: `src/routes/index.tsx`, `src/routes/registry.tsx`, `src/routes/$slug.tsx`, `src/routes/$slug.inquiry.tsx`, `src/routes/claim.tsx`
 - Triggers: Browser navigation.
-- Responsibilities: Render discovery, registry, listing, and qualified inquiry flows.
+- Responsibilities: Chat, catalog discovery, public listing, qualified inquiry, and owner claim flows.
 
-**Operator Routes:**
-- Location: `src/routes/owner.*.tsx`, `src/routes/admin.*.tsx`, `src/routes/developers.discovery.tsx`
-- Triggers: Authenticated owner/admin/developer navigation.
-- Responsibilities: Render readbacks, queues, reconstruction panels, billing state, and developer artifacts.
+**Owner/Admin Routes:**
+- Location: `src/routes/owner.*.tsx`, `src/routes/admin.*.tsx`
+- Triggers: Authenticated owner/admin navigation.
+- Responsibilities: Inquiries, status, protected actions, billing, business actions, audit/readback surfaces.
 
-**API Routes:**
-- Location: `src/routes/api.*.ts`
-- Triggers: HTTP requests from browsers, tests, assistants, and webhooks.
-- Responsibilities: Return JSON, text discovery files, SSE streams, webhook admissions, and quiet agent-tool calls.
+**Public JSON/API Routes:**
+- Location: `src/routes/api.businesses*.ts`, `src/routes/api.answer*.ts`, `src/routes/api.discovery*.ts`, `src/routes/llms[.]txt.ts`, `src/routes/sitemap[.]xml.ts`
+- Triggers: Assistant/browser HTTP calls.
+- Responsibilities: Public registry JSON, answer SSE/threads, discovery payloads, canonical assistant text index.
 
-**Convex Runtime:**
-- Location: `convex/*.ts`, `convex/schema.ts`
-- Triggers: Convex queries, mutations, and generated API references.
-- Responsibilities: Validate args/returns, resolve auth, call pure module functions, persist tables, and serialize readbacks.
+**Agent Tool Door:**
+- Location: `src/routes/api.agent.tools.ts`
+- Triggers: Assistant tool discovery/invocation requests.
+- Responsibilities: List agent-exposed actions and invoke only actions whose `surfaces` include `agentTools`.
+
+**Convex Functions:**
+- Location: `convex/registry.ts`, `convex/catalog.ts`, `convex/business.ts`, `convex/inquiries.ts`, `convex/answerThreads.ts`, `convex/security.ts`
+- Triggers: Convex HTTP client calls from source ports.
+- Responsibilities: Public/authenticated source reads and writes over module-owned tables.
+
+**Evaluation Scripts:**
+- Location: `eval/answer/scripts/run-suite.ts`, `eval/answer/promptfooconfig.yaml`
+- Triggers: `npm run test:eval` and `.github/workflows/eval-gate.yml`.
+- Responsibilities: Answer pipeline quality and gate checks.
 
 ## Architectural Constraints
 
-- **Threading:** JavaScript request handlers and React rendering are single-threaded per runtime worker; streaming routes use Web `ReadableStream` in `src/routes/api.answer.ts` and `src/routes/api.answer.turn.ts`; Convex functions run per query/mutation in `convex/*.ts`.
-- **Global state:** `src/modules/common/action.ts` keeps a module-level `knownIds` set; `src/routes/api.answer.ts` keeps a module-level `answerCache`; `src/modules/registry/registry.functions.ts` and `src/modules/answer-thread/answer-thread.functions.ts` expose test ports; `src/routeTree.gen.ts` is generated static route state.
-- **Circular imports:** Not detected in this mapping pass; import-boundary tests in `tests/imports/private-imports.test.ts` and `tests/imports/route-boundary.test.ts` enforce the main boundary rules.
-- **Route boundaries:** Routes should not import Convex transports, Convex schemas, or sibling module internals; rules live in `src/lib/ui/contract-scans.ts`.
-- **Public contract language:** `AGENTS.md`, `PRODUCT.md`, and `DESIGN.md` require public copy to avoid booking, payment, dispatch, autonomous fulfillment, and unsupported "verified" claims.
-- **Generated files:** Do not edit `src/routeTree.gen.ts` or `convex/_generated/*` directly; source changes regenerate them.
-- **Secrets:** `.env.example` and `.env.local` exist, but secret contents are not part of this map and should not be read into planning docs.
+- **Threading:** Runtime code uses the JavaScript event loop. API streaming uses `ReadableStream`/SSE in `src/routes/api.answer.turn.ts` and `src/routes/api.chat.ts`. Convex queries/mutations run as Convex transactions; Convex actions are separate runtime functions when needed.
+- **Global state:** Keep module-level mutable state narrow and documented. Existing globals include `answerCache` in `src/routes/api.answer.ts`, rate-limit/idempotency buckets in `src/modules/answer-thread/internal/turn-guard.ts`, test seam ports in `src/modules/registry/registry.functions.ts` and `src/modules/answer-thread/answer-thread.functions.ts`, and once-only funnel emission state in `src/lib/observability/funnel-client.ts`.
+- **Circular imports:** Routes import module seams; module `internal/` files should not import routes/components. `convex/schema.ts` intentionally imports module schema fragments; `src/routeTree.gen.ts` is generated and imports route modules.
+- **Auth:** Browser owner/admin identity comes from Clerk via `@clerk/tanstack-react-start`; Convex auth uses `convex/auth.config.ts`; source auth tokens are requested in `src/lib/server/convex-source.ts`.
+- **Writes:** Source writes must carry source-write admission. Do not create write paths that bypass `src/lib/server/source-write-admission.ts` and `convex/sourceWriteAdmission.ts`.
+- **Public copy contract:** Human public surfaces must not imply booking, payment, dispatch, auto-fulfillment, unsupported verification, or internal architecture terms. The source of truth is `AGENTS.md`, `PRODUCT.md`, and `DESIGN.md`.
+- **Route boundaries:** Routes must not import `convex/browser`, `convex/server`, Convex schema, or module `internal/` files. `tests/imports/route-boundary.test.ts` and `src/lib/ui/contract-scans.ts` enforce this.
+- **Module boundaries:** Sibling modules and routes use public seams. `tests/imports/private-imports.test.ts` enforces no imports from `src/modules/*/internal/*` across boundaries.
+- **Convex code:** Read `convex/_generated/ai/guidelines.md` before modifying Convex functions. Convex functions require validators and should prefer indexed reads.
+- **Generated files:** Do not hand-edit `src/routeTree.gen.ts` or `convex/_generated/`; regenerate with the owning tools.
 
 ## Anti-Patterns
 
-### Route-Owned Source Transport
+### Route-Owned Source Access
 
-**What happens:** A route imports Convex transport or schema directly instead of calling a module seam.
-**Why it's wrong:** It bypasses source-port error handling, local/E2E fallback behavior, and route-boundary guardrails.
-**Do this instead:** Add or reuse a module server function in `src/modules/*/*.functions.ts`, then import it from the route, as in `src/routes/api.businesses.ts` calling `src/modules/registry/registry.functions.ts`.
+**What happens:** A route imports Convex transport, Convex schema, or a module `internal/` file.
+**Why it's wrong:** It bypasses module readbacks, validation, redaction, source ports, and architecture tests.
+**Do this instead:** Put source work in a module server/source function such as `src/modules/registry/registry.functions.ts` or `src/modules/inquiries/inquiry.functions.ts`, then call it from the route. The guardrail lives in `src/lib/ui/contract-scans.ts` and `tests/imports/route-boundary.test.ts`.
 
-### Cross-Module Internal Imports
+### Unregistered Assistant Operation
 
-**What happens:** A route or sibling module imports `src/modules/<module>/internal/*` directly.
-**Why it's wrong:** It makes internal implementation details part of the caller contract and defeats the public seam enforced by `tests/imports/private-imports.test.ts`.
-**Do this instead:** Promote the needed helper or type through `src/modules/<module>/public.ts` or a supported `*.functions.ts` seam; current answer route helpers should prefer `src/modules/answer/public.ts` and `src/modules/answer-thread/public.ts`.
+**What happens:** A new assistant-facing operation is implemented as a one-off API route or local tool wrapper.
+**Why it's wrong:** The operation will not have a shared schema, `readOnly` classification, surfaces, parameters, or boundary-honest summary.
+**Do this instead:** Define the operation in `src/modules/<module>/<module>.actions.ts`, register it in `src/modules/actions/index.ts`, and expose it through `src/routes/api.agent.tools.ts` only when `surfaces` includes `agentTools`.
 
-### Unregistered Actions
+### Source Write Without Admission
 
-**What happens:** A module defines an action but does not import it into `src/modules/actions/index.ts`.
-**Why it's wrong:** Production bundling can tree-shake side-effect-only registration, and `/api/agent/tools` will not list or find the action.
-**Do this instead:** Export action consts from `src/modules/<module>/<module>.actions.ts` and add them to the explicit `actions` array in `src/modules/actions/index.ts`.
+**What happens:** A write server function or API handler calls a Convex mutation without signed source-write context.
+**Why it's wrong:** The mutation loses its request-origin/path/scope proof and can bypass replay/correlation controls.
+**Do this instead:** Use `sourceWriteAdmissionFromContext` for TanStack server functions or `sourceWriteAdmissionFromRequest` for request handlers, then verify in Convex with `convex/sourceWriteAdmission.ts`.
 
-### Client-Asserted Write Authority
+### Public Surface Leaking Internal Contract Language
 
-**What happens:** A browser/API caller supplies authority fields such as operation result, provider state, payment state, or raw source-write secret.
-**Why it's wrong:** Convex mutations require source-write admission and domain-owned authority checks; client authority would undermine replay and trust guarantees.
-**Do this instead:** Generate operation keys and source-write admission server-side in `src/lib/server/source-write-admission.ts` and verify them in `convex/sourceWriteAdmission.ts`.
+**What happens:** Public route copy mentions internal terms such as `source-owned`, `readback`, `manifest`, `MCP`, `callable`, or `autonomous`.
+**Why it's wrong:** The product contract requires public human surfaces to express boundaries plainly without protocol or implementation vocabulary.
+**Do this instead:** Keep internal vocabulary in JSON, `llms.txt`, agent payloads, owner/admin surfaces, and tests. Public copy rules are documented in `AGENTS.md`, `PRODUCT.md`, and scanned through `src/lib/ui/contract-scans.ts`.
 
 ## Error Handling
 
-**Strategy:** Domain code returns structured result unions; route/server adapters translate validation, auth, admission, and source failures into route-safe readbacks or HTTP responses.
+**Strategy:** Return explicit typed results at module boundaries, translate source/validation failures into route-safe errors, and keep public answers inside known boundaries.
 
 **Patterns:**
-- Use `{ kind: 'ok' | 'error', code, retryable }` unions from `src/modules/common/result.ts` for pure domain operations.
-- Use Zod validators at TanStack server-function and API boundaries, as in `src/modules/inquiries/inquiry.functions.ts` and `src/modules/billing/billing.functions.ts`.
-- Use Convex `returns` validators for durable function contracts, as in `convex/registry.ts` and `convex/inquiries.ts`.
-- Map `ConvexSourceError` and `SourceWriteAdmissionError` to narrow user-safe codes in `src/modules/inquiries/inquiry.functions.ts` and `src/modules/billing/billing.functions.ts`.
-- Return `Response.json` or SSE frames from routes; shared `jsonResponse` is in `src/routes/api.businesses.ts`.
+- Domain commands return `kind: 'ok'` / `kind: 'error'` unions using helpers in `src/modules/common/result.ts`.
+- Actions validate input with Zod schemas before running module functions (`src/modules/common/action.ts`, `src/routes/api.agent.tools.ts`).
+- API routes return JSON error bodies or SSE error events without throwing internal details (`src/routes/api.answer.turn.ts`, `src/routes/api.agent.tools.ts`).
+- Source functions catch Convex/auth/admission errors and return module error results such as `ownerSourceError` and `inquirySourceError` in `src/modules/inquiries/inquiry.functions.ts`.
+- Registry search falls back from Meilisearch to Convex when configured and permitted (`src/modules/registry/registry.functions.ts`).
+- Observability middleware captures server exceptions and flushes PostHog/Sentry state (`src/start.ts`).
 
 ## Cross-Cutting Concerns
 
-**Logging:** Runtime logging is minimal; durable observability is modeled as audit events, funnel events, operation keys, dispatch attempts, and reconstruction readbacks in `src/modules/observability/`, `src/modules/notification-outbox/`, and corresponding `convex/*.ts` files.
-**Validation:** Zod validates route/server inputs in `src/modules/*/*.functions.ts`; Convex validators validate persisted API boundaries in `convex/*.ts`; literal unions live in module `public.ts` and schema files.
-**Authentication:** Clerk middleware is installed in `src/start.ts`; root route wraps sign-in, sign-up, owner, and admin prefixes with `ClerkProvider` in `src/routes/__root.tsx`; Convex resolves owner/admin identity in `convex/authz.ts`.
-**Authorization:** Owner reads resolve current business actor or owner IDs in Convex; admin actions use `AdminActionMatrix` in `src/modules/security/internal/admin-authority.ts`.
-**Admission and CSRF:** TanStack server functions get source-write context from `src/lib/server/source-write-admission.ts`; Convex verifies signed admission in `convex/sourceWriteAdmission.ts`.
-**Redaction:** Private source hashes, contact fields, and payloads are stripped or hashed before public route output in `src/modules/catalog/owner-claim.functions.ts`, `src/modules/inquiries/internal/commands.ts`, and `src/modules/observability/internal/redaction.ts`.
-**SEO and Discovery:** Public SEO JSON-LD is built in `src/modules/seo/public.ts`; assistant-readable routes are in `src/routes/api.businesses*.ts`, `src/routes/llms[.]txt.ts`, `src/routes/$slug.ucp.ts`, and `src/routes/api.discovery.schema.ts`.
-**Design Contract:** UI structure and tokens are anchored by `DESIGN.md`, `src/styles/tokens.css`, `src/styles/globals.css`, and AE components under `src/components/ae/`.
+**Logging:** Server errors go through Sentry/PostHog middleware in `src/start.ts` and observability helpers in `src/lib/observability/`; durable audit/funnel rows live in `src/modules/observability/internal/schema.ts` and `convex/observability.ts`.
+
+**Validation:** Routes use TanStack `validateSearch` and Zod server-function validators; actions use Zod schemas; Convex functions use Convex validators; TypeScript strictness is configured in `tsconfig.json`.
+
+**Authentication:** Clerk wraps protected route families in `src/routes/__root.tsx`, request middleware installs Clerk in `src/start.ts`, server functions use `auth()` or Convex tokens through `src/lib/server/convex-source.ts`, and Convex authz resolves authority in `convex/authz.ts`.
+
+**Authorization:** Owner/admin reads and writes are checked in Convex and domain commands (`convex/authz.ts`, `src/modules/security/public.ts`, `src/modules/inquiries/public.ts`); agent tools expose only actions whose surface includes `agentTools`.
+
+**Search:** Public search defaults to Convex and can use Meilisearch through `src/modules/registry/internal/catalog-search-port.ts`; tool-use answer search executes the registered `registry.search` action.
+
+**Source Integrity:** Operation keys, audit events, source hashes, readbacks, source-write admission, and projection attempts are first-class records across `src/modules/observability/`, `src/modules/security/`, `src/modules/registry/`, and Convex tables.
+
+**UI Contract:** Visual and copy constraints live in `DESIGN.md`, `PRODUCT.md`, `AGENTS.md`, `src/styles/tokens.css`, `tests/copy/`, and `tests/ui-contract/`.
 
 ---
 
-*Architecture analysis: 2026-06-30*
+*Architecture analysis: 2026-07-01*
