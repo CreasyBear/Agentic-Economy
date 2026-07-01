@@ -50,7 +50,7 @@ describe('registry convex fallback', () => {
         estimatedTotalHits: 1,
         hits: [
           {
-            documentId: 'parramatta-emergency-plumbing:emergency-pipe-repair',
+            documentId: 'parramatta-emergency-plumbing__emergency-pipe-repair',
             businessSlug: 'parramatta-emergency-plumbing',
             serviceSlug: 'emergency-pipe-repair',
             generatedHash: brandNonEmpty('hash:generated:parramatta', 'SourceHash'),

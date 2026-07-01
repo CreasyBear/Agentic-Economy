@@ -20,9 +20,10 @@ describe('registry search documents', () => {
 
     expect(docs).toHaveLength(2)
     expect(docs.map((doc) => doc.documentId)).toEqual([
-      'parramatta-emergency-plumbing:emergency-pipe-repair',
-      'parramatta-emergency-plumbing:blocked-drain',
+      'parramatta-emergency-plumbing__emergency-pipe-repair',
+      'parramatta-emergency-plumbing__blocked-drain',
     ])
+    expect(docs.every((doc) => /^[A-Za-z0-9_-]+$/.test(doc.documentId))).toBe(true)
   })
 
   it('keeps local location matching literal', () => {

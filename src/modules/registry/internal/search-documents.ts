@@ -152,13 +152,17 @@ export function buildRegistrySearchDocumentsForCatalog(
     }
 
     return {
-      documentId: `${catalog.slug}:${service.slug}`,
+      documentId: buildRegistrySearchDocumentId(catalog.slug, service.slug),
       schemaVersion: RegistrySearchDocumentSchemaVersion,
       ...documentCore,
       ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
       generatedHash: stableHash(documentCore),
     }
   })
+}
+
+export function buildRegistrySearchDocumentId(businessSlug: string, serviceSlug: string): string {
+  return `${businessSlug}__${serviceSlug}`
 }
 
 export function resolveRegistrySearchLocation(

@@ -22,7 +22,7 @@ describe('registry search sync attempts', () => {
 
     expect(attempt).toMatchObject({
       attemptId: 'attempt-1',
-      documentId: 'parramatta-emergency-plumbing:emergency-pipe-repair',
+      documentId: 'parramatta-emergency-plumbing__emergency-pipe-repair',
       operation: 'upsert',
       status: 'queued',
       meiliTaskUid: '42',
@@ -120,7 +120,7 @@ describe('registry search sync attempts', () => {
       queueRegistrySearchSyncAttempt({
         attemptId: 'delete-1',
         operation: 'delete',
-        documentId: 'parramatta-emergency-plumbing:emergency-pipe-repair',
+        documentId: 'parramatta-emergency-plumbing__emergency-pipe-repair',
         businessSlug: 'parramatta-emergency-plumbing',
         serviceSlug: 'emergency-pipe-repair',
         now: 1_000,
@@ -131,7 +131,7 @@ describe('registry search sync attempts', () => {
       queueRegistrySearchSyncAttempt({
         attemptId: 'suppress-1',
         operation: 'suppress',
-        documentId: 'parramatta-emergency-plumbing:emergency-pipe-repair',
+        documentId: 'parramatta-emergency-plumbing__emergency-pipe-repair',
         businessSlug: 'parramatta-emergency-plumbing',
         serviceSlug: 'emergency-pipe-repair',
         now: 1_000,
@@ -142,7 +142,7 @@ describe('registry search sync attempts', () => {
 
 function searchDocument(): RegistrySearchDocument & { sourceHash: SourceHash } {
   return {
-    documentId: 'parramatta-emergency-plumbing:emergency-pipe-repair',
+    documentId: 'parramatta-emergency-plumbing__emergency-pipe-repair',
     schemaVersion: 'registry-search-document:v1',
     businessSlug: 'parramatta-emergency-plumbing',
     serviceSlug: 'emergency-pipe-repair',

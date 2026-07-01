@@ -67,7 +67,7 @@ describe('Meilisearch catalog search port', () => {
     })
     expect(result.hits).toEqual([
       {
-        documentId: 'brunswick-emergency-plumbing:emergency-pipe-repair',
+        documentId: 'brunswick-emergency-plumbing__emergency-pipe-repair',
         businessSlug: 'brunswick-emergency-plumbing',
         serviceSlug: 'emergency-pipe-repair',
         generatedHash: doc.generatedHash,
