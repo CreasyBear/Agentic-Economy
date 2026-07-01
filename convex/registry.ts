@@ -2,7 +2,12 @@ import { queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { runtimeReader } from './source_state'
-import type { RuntimeDocument, RuntimeReader } from './source_state'
+import type {
+  RuntimeDocument,
+  RuntimeIndexBuilder,
+  RuntimeQuery,
+  RuntimeReader,
+} from './source_state'
 
 const firstRequestDto = v.object({
   mode: v.union(
@@ -194,7 +199,13 @@ export const listPublicBusinessCatalog = queryGeneric({
   returns: pageResult,
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
-    return paginateCatalogs(await readPublicCatalogs(db), queryInput(args))
+    const input = queryInput(args)
+    return paginateCatalogs(
+      await readPublicCatalogPage(db, input),
+      input,
+      undefined,
+      await readPublishedBusinessTotal(db),
+    )
   },
 })
 
@@ -219,8 +230,11 @@ export const searchPublicBusinessCatalog = queryGeneric({
       .filter((token) => !SEARCH_STOP_WORDS.has(token))
       .map(normalizeSearchToken)
     const locationKey = resolveSearchLocationKey(args)
-    const matches = (await readPublicCatalogs(db)).filter((catalog) =>
-      matchesCatalog(catalog, tokens, locationKey),
+    const matches = await readPublicSearchCatalogs(
+      db,
+      query,
+      tokens,
+      locationKey,
     )
     return paginateCatalogs(matches, queryInput(args), query)
   },
@@ -233,10 +247,7 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
   returns: detailResult,
   handler: async (ctx, args) => {
     const db = runtimeReader(ctx.db)
-    const catalogs = await readPublicCatalogs(db)
-    const catalog = catalogs.find(
-      (candidate) => candidate.slug === normalizeSlug(args.slug),
-    )
+    const catalog = await readPublicCatalogBySlug(db, normalizeSlug(args.slug))
     if (catalog === undefined) {
       return {
         kind: 'not_found' as const,
@@ -324,6 +335,11 @@ type QueryInput = {
   limit?: number
 }
 
+const CATALOG_TOTAL_COUNT_LIMIT = 1_000
+const SEARCH_DOCUMENT_CANDIDATE_LIMIT = 250
+const SEARCH_FALLBACK_BUSINESS_SCAN_LIMIT = 250
+const SEARCH_HYDRATION_BUSINESS_LIMIT = 100
+
 function queryInput(args: { cursor?: string; limit?: number }): QueryInput {
   return {
     ...(args.cursor === undefined ? {} : { cursor: args.cursor }),
@@ -350,20 +366,246 @@ type RegistryAttempt = {
   repairResult: 'not_run' | 'succeeded' | 'failed'
 }
 
-async function readPublicCatalogs(db: RuntimeDb): Promise<CatalogDto[]> {
-  const businesses = await db
+type PublicCatalogLookup = {
+  contextsByBusinessId: Map<string, RuntimeDocument>
+  servicesByBusinessId: Map<string, RuntimeDocument[]>
+  capabilitiesByBusinessId: Map<string, RuntimeDocument[]>
+  activeSuppressedBusinessIds: Set<string>
+  indexStatusByBusinessId: Map<string, CatalogDto['indexStatus']>
+  latestDiscoveryAttemptByBusinessId: Map<string, RuntimeDocument>
+}
+
+type RuntimeRangeIndexBuilder = RuntimeIndexBuilder & {
+  gte: (field: string, value: unknown) => RuntimeIndexBuilder
+}
+
+type RuntimeSearchIndexBuilder = {
+  search: (field: string, value: string) => RuntimeSearchIndexBuilder
+  eq: (field: string, value: unknown) => RuntimeSearchIndexBuilder
+}
+
+type RuntimeBoundedQuery = RuntimeQuery & {
+  take: (limit: number) => Promise<RuntimeDocument[]>
+  withSearchIndex: (
+    indexName: string,
+    callback: (query: RuntimeSearchIndexBuilder) => RuntimeSearchIndexBuilder,
+  ) => RuntimeQuery
+}
+
+function boundedQuery(query: RuntimeQuery): RuntimeBoundedQuery {
+  return query as RuntimeBoundedQuery
+}
+
+function rangeIndex(query: RuntimeIndexBuilder): RuntimeRangeIndexBuilder {
+  return query as RuntimeRangeIndexBuilder
+}
+
+async function takeDocuments(
+  query: RuntimeQuery,
+  limit: number,
+): Promise<RuntimeDocument[]> {
+  return boundedQuery(query).take(limit)
+}
+
+async function firstDocument(
+  query: RuntimeQuery,
+): Promise<RuntimeDocument | null> {
+  if (typeof query.first === 'function') {
+    return query.first()
+  }
+  return (await query.collect()).at(0) ?? null
+}
+
+async function readPublicCatalogPage(
+  db: RuntimeDb,
+  input: QueryInput,
+): Promise<CatalogDto[]> {
+  const limit = normalizeLimit(input.limit)
+  const businesses = await readPublishedBusinessRows(db, input.cursor, limit + 1)
+  const lookup = await readPublicCatalogLookup(
+    db,
+    businesses.map((business) => business._id),
+  )
+  const catalogs = catalogsFromBusinesses(lookup, businesses)
+  return catalogs.slice(0, limit + 1)
+}
+
+async function readPublicCatalogsFromPublishedBusinessScan(
+  db: RuntimeDb,
+  limit: number,
+): Promise<CatalogDto[]> {
+  const businesses = await readPublishedBusinessRows(db, undefined, limit)
+  const lookup = await readPublicCatalogLookup(
+    db,
+    businesses.map((business) => business._id),
+  )
+  return catalogsFromBusinesses(lookup, businesses)
+}
+
+async function readPublishedBusinessRows(
+  db: RuntimeDb,
+  cursor: string | undefined,
+  limit: number,
+): Promise<RuntimeDocument[]> {
+  const effectiveCursor =
+    cursor === undefined ? undefined : await publishedCursorSlug(db, cursor)
+  return takeDocuments(
+    db.query('businesses').withIndex('by_publicStatus_slug', (query) => {
+      const published = query.eq('publicStatus', 'published')
+      return effectiveCursor === undefined
+        ? published
+        : rangeIndex(published).gte('slug', effectiveCursor)
+    }),
+    limit,
+  )
+}
+
+async function publishedCursorSlug(
+  db: RuntimeDb,
+  cursor: string,
+): Promise<string | undefined> {
+  const business = await db
     .query('businesses')
-    .withIndex('by_publicStatus_slug', (query) =>
+    .withIndex('by_slug', (query) => query.eq('slug', cursor))
+    .unique()
+  return business !== null && stringField(business, 'publicStatus') === 'published'
+    ? cursor
+    : undefined
+}
+
+async function readPublishedBusinessTotal(db: RuntimeDb): Promise<number> {
+  const rows = await takeDocuments(
+    db.query('businesses').withIndex('by_publicStatus_slug', (query) =>
       query.eq('publicStatus', 'published'),
+    ),
+    CATALOG_TOTAL_COUNT_LIMIT + 1,
+  )
+  // Convex has no efficient count aggregate; this keeps the public numeric
+  // field bounded and exact for small catalogs, then acts as a safe lower bound.
+  return rows.length
+}
+
+async function readPublicCatalogBySlug(
+  db: RuntimeDb,
+  slug: string,
+): Promise<CatalogDto | undefined> {
+  const business = await db
+    .query('businesses')
+    .withIndex('by_slug', (query) => query.eq('slug', slug))
+    .unique()
+  if (
+    business === null ||
+    stringField(business, 'publicStatus') !== 'published'
+  ) {
+    return undefined
+  }
+
+  const lookup = await readPublicCatalogLookup(db, [business._id])
+  return catalogForBusinessFromLookup(lookup, business)
+}
+
+async function readPublicSearchCatalogs(
+  db: RuntimeDb,
+  query: string,
+  tokens: readonly string[],
+  locationKey: string | undefined,
+): Promise<CatalogDto[]> {
+  const indexedMatches = await readSearchDocumentCatalogs(
+    db,
+    query,
+    tokens,
+    locationKey,
+  )
+  if (indexedMatches.length > 0) {
+    return indexedMatches.filter((catalog) =>
+      matchesCatalog(catalog, tokens, locationKey),
     )
-    .collect()
+  }
+
+  const fallbackCatalogs = await readPublicCatalogsFromPublishedBusinessScan(
+    db,
+    SEARCH_FALLBACK_BUSINESS_SCAN_LIMIT,
+  )
+  return fallbackCatalogs.filter((catalog) =>
+    matchesCatalog(catalog, tokens, locationKey),
+  )
+}
+
+async function readSearchDocumentCatalogs(
+  db: RuntimeDb,
+  query: string,
+  tokens: readonly string[],
+  locationKey: string | undefined,
+): Promise<CatalogDto[]> {
+  const searchText = tokens.length === 0 ? query : tokens.join(' ')
+  if (searchText.length === 0) {
+    return []
+  }
+
+  const documents = await takeDocuments(
+    boundedQuery(db.query('registrySearchDocuments')).withSearchIndex(
+      'search_searchText_by_publicStatus',
+      (search) =>
+        search.search('searchText', searchText).eq('publicStatus', 'published'),
+    ),
+    SEARCH_DOCUMENT_CANDIDATE_LIMIT,
+  )
+  const businessSlugs = uniqueBusinessSlugs(
+    documents.filter((document) =>
+      matchesSearchDocument(document, tokens, locationKey),
+    ),
+  ).slice(0, SEARCH_HYDRATION_BUSINESS_LIMIT)
+  const catalogs = await Promise.all(
+    businessSlugs.map((slug) => readPublicCatalogBySlug(db, slug)),
+  )
+  return catalogs
+    .filter((catalog): catalog is CatalogDto => catalog !== undefined)
+    .sort((left, right) => left.slug.localeCompare(right.slug))
+}
+
+function matchesSearchDocument(
+  document: RuntimeDocument,
+  tokens: readonly string[],
+  locationKey: string | undefined,
+): boolean {
+  if (stringField(document, 'publicStatus') !== 'published') {
+    return false
+  }
+  if (
+    locationKey !== undefined &&
+    !stringArrayField(document, 'placeKeys').includes(locationKey)
+  ) {
+    return false
+  }
+
+  const searchText = stringField(document, 'searchText')
+  return tokens.every((token) => searchText.includes(token))
+}
+
+function uniqueBusinessSlugs(
+  documents: readonly RuntimeDocument[],
+): string[] {
+  const slugs = new Set<string>()
+  for (const document of documents) {
+    const slug = stringField(document, 'businessSlug')
+    if (slug.length > 0) {
+      slugs.add(slug)
+    }
+  }
+  return [...slugs]
+}
+
+function catalogsFromBusinesses(
+  lookup: PublicCatalogLookup,
+  businesses: readonly RuntimeDocument[],
+): CatalogDto[] {
   const catalogs: CatalogDto[] = []
   for (const business of businesses) {
-    if (await hasActiveBusinessSuppression(db, business._id)) {
+    if (lookup.activeSuppressedBusinessIds.has(business._id)) {
       continue
     }
 
-    const catalog = await catalogForBusiness(db, business)
+    const catalog = catalogForBusinessFromLookup(lookup, business)
     if (catalog !== undefined) {
       catalogs.push(catalog)
     }
@@ -371,34 +613,141 @@ async function readPublicCatalogs(db: RuntimeDb): Promise<CatalogDto[]> {
   return catalogs.sort((left, right) => left.slug.localeCompare(right.slug))
 }
 
-async function catalogForBusiness(
+async function readPublicCatalogLookup(
   db: RuntimeDb,
+  businessIds: readonly string[],
+): Promise<PublicCatalogLookup> {
+  const uniqueBusinessIds = [...new Set(businessIds)].filter(
+    (businessId) => businessId.length > 0,
+  )
+  const [
+    contextEntries,
+    serviceEntries,
+    capabilityEntries,
+    suppressedBusinessIds,
+    indexStatusEntries,
+    discoveryAttemptEntries,
+  ] = await Promise.all([
+    Promise.all(
+      uniqueBusinessIds.map(async (businessId) => [
+        businessId,
+        await firstDocument(
+          db
+            .query('businessContexts')
+            .withIndex('by_business', (query) =>
+              query.eq('businessId', businessId),
+            ),
+        ),
+      ] as const),
+    ),
+    Promise.all(
+      uniqueBusinessIds.map(async (businessId) => [
+        businessId,
+        await db
+          .query('businessServices')
+          .withIndex('by_business_status', (query) =>
+            query.eq('businessId', businessId).eq('status', 'published'),
+          )
+          .collect(),
+      ] as const),
+    ),
+    Promise.all(
+      uniqueBusinessIds.map(async (businessId) => [
+        businessId,
+        await db
+          .query('serviceCapabilities')
+          .withIndex('by_business_service_status', (query) =>
+            query.eq('businessId', businessId),
+          )
+          .collect(),
+      ] as const),
+    ),
+    Promise.all(
+      uniqueBusinessIds.map(async (businessId) => [
+        businessId,
+        await firstDocument(
+          db
+            .query('suppressionRules')
+            .withIndex('by_target_status', (query) =>
+              query
+                .eq('targetType', 'business')
+                .eq('targetRef', businessId)
+                .eq('status', 'active'),
+            ),
+        ),
+      ] as const),
+    ),
+    Promise.all(
+      uniqueBusinessIds.map(async (businessId) => [
+        businessId,
+        await db
+          .query('indexStatus')
+          .withIndex('by_target_status', (query) =>
+            query.eq('targetType', 'business').eq('targetRef', businessId),
+          )
+          .collect(),
+      ] as const),
+    ),
+    Promise.all(
+      uniqueBusinessIds.map(async (businessId) => [
+        businessId,
+        await db
+          .query('discoveryManifestAttempts')
+          .withIndex('by_business_status', (query) =>
+            query.eq('businessId', businessId),
+          )
+          .collect(),
+      ] as const),
+    ),
+  ])
+
+  return {
+    contextsByBusinessId: new Map(
+      contextEntries.flatMap(([businessId, context]) =>
+        context === null ? [] : [[businessId, context] as const],
+      )
+    ),
+    servicesByBusinessId: new Map(serviceEntries),
+    capabilitiesByBusinessId: new Map(capabilityEntries),
+    activeSuppressedBusinessIds: new Set(
+      suppressedBusinessIds.flatMap(([businessId, suppression]) =>
+        suppression === null ? [] : [businessId],
+      ),
+    ),
+    indexStatusByBusinessId: new Map(
+      indexStatusEntries.map(([businessId, statuses]) => [
+        businessId,
+        indexStatusesByBusinessId(statuses).get(businessId) ?? 'not_queued',
+      ]),
+    ),
+    latestDiscoveryAttemptByBusinessId: new Map(
+      discoveryAttemptEntries.flatMap(([businessId, attempts]) => {
+        const latest = latestByStringField(
+          attempts,
+          'businessId',
+          'startedAt',
+        ).get(businessId)
+        return latest === undefined ? [] : [[businessId, latest] as const]
+      }),
+    ),
+  }
+}
+
+function catalogForBusinessFromLookup(
+  lookup: PublicCatalogLookup,
   business: RuntimeDocument,
-): Promise<CatalogDto | undefined> {
-  const context = await db
-    .query('businessContexts')
-    .withIndex('by_business', (query) => query.eq('businessId', business._id))
-    .unique()
-  if (context === null) {
+): CatalogDto | undefined {
+  const context = lookup.contextsByBusinessId.get(business._id)
+  if (context === undefined) {
     return undefined
   }
 
-  const services = await db
-    .query('businessServices')
-    .withIndex('by_business_status', (query) =>
-      query.eq('businessId', business._id).eq('status', 'published'),
-    )
-    .collect()
+  const services = lookup.servicesByBusinessId.get(business._id) ?? []
   if (services.length === 0) {
     return undefined
   }
 
-  const capabilities = await db
-    .query('serviceCapabilities')
-    .withIndex('by_business_service_status', (query) =>
-      query.eq('businessId', business._id),
-    )
-    .collect()
+  const capabilities = lookup.capabilitiesByBusinessId.get(business._id) ?? []
   return {
     slug: stringField(business, 'slug'),
     name: stringField(business, 'name'),
@@ -411,10 +760,10 @@ async function catalogForBusiness(
     publicUrl: `/${stringField(business, 'slug')}`,
     trustTier: trustTier(business),
     publicStatus: 'published',
-    indexStatus: await indexStatusForBusiness(db, business._id),
-    discoveryStatus: await discoveryStatusForBusiness(
-      db,
-      business._id,
+    indexStatus:
+      lookup.indexStatusByBusinessId.get(business._id) ?? 'not_queued',
+    discoveryStatus: discoveryStatusForAttempt(
+      lookup.latestDiscoveryAttemptByBusinessId.get(business._id),
       stringField(business, 'sourceHash'),
     ),
     schemaVersion: 'public-business-catalog-api:v1',
@@ -423,13 +772,85 @@ async function catalogForBusiness(
     ...(optionalNumberField(context, 'responseTimeMinutes') === undefined
       ? {}
       : { responseTimeMinutes: numberField(context, 'responseTimeMinutes') }),
-    services: services
+    services: [...services]
       .sort(
         (left, right) =>
           numberField(left, 'sortOrder') - numberField(right, 'sortOrder'),
       )
       .map((service) => toServiceDto(service, capabilities)),
   }
+}
+
+function firstByStringField(
+  rows: readonly RuntimeDocument[],
+  field: string,
+): Map<string, RuntimeDocument> {
+  const grouped = new Map<string, RuntimeDocument>()
+  for (const row of rows) {
+    const key = stringField(row, field)
+    if (key.length > 0 && !grouped.has(key)) {
+      grouped.set(key, row)
+    }
+  }
+  return grouped
+}
+
+function groupByStringField(
+  rows: readonly RuntimeDocument[],
+  field: string,
+): Map<string, RuntimeDocument[]> {
+  const grouped = new Map<string, RuntimeDocument[]>()
+  for (const row of rows) {
+    const key = stringField(row, field)
+    if (key.length === 0) {
+      continue
+    }
+    const group = grouped.get(key)
+    if (group === undefined) {
+      grouped.set(key, [row])
+    } else {
+      group.push(row)
+    }
+  }
+  return grouped
+}
+
+function latestByStringField(
+  rows: readonly RuntimeDocument[],
+  groupField: string,
+  sortField: string,
+): Map<string, RuntimeDocument> {
+  const latestByGroup = new Map<string, RuntimeDocument>()
+  for (const row of rows) {
+    const key = stringField(row, groupField)
+    if (key.length === 0) {
+      continue
+    }
+    const current = latestByGroup.get(key)
+    if (
+      current === undefined ||
+      numberField(row, sortField) > numberField(current, sortField)
+    ) {
+      latestByGroup.set(key, row)
+    }
+  }
+  return latestByGroup
+}
+
+function indexStatusesByBusinessId(
+  statuses: readonly RuntimeDocument[],
+): Map<string, CatalogDto['indexStatus']> {
+  const byBusinessId = new Map<string, CatalogDto['indexStatus']>()
+  for (const status of statuses) {
+    if (stringField(status, 'targetType') !== 'business') {
+      continue
+    }
+    const businessId = stringField(status, 'targetRef')
+    if (businessId.length > 0 && !byBusinessId.has(businessId)) {
+      byBusinessId.set(businessId, indexStatusFromDocument(status))
+    }
+  }
+  return byBusinessId
 }
 
 function toServiceDto(
@@ -483,6 +904,7 @@ function paginateCatalogs(
   items: readonly CatalogDto[],
   input: QueryInput,
   query?: string,
+  total?: number,
 ) {
   const limit = normalizeLimit(input.limit)
   const startIndex =
@@ -503,7 +925,7 @@ function paginateCatalogs(
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(next === undefined ? {} : { nextCursor: next.slug }),
       limit,
-      total: items.length,
+      total: total ?? items.length,
       hasMore: next !== undefined,
     },
   }
@@ -617,32 +1039,18 @@ async function projectionItemsForBusiness(db: RuntimeDb, businessId: string) {
   }))
 }
 
-async function hasActiveBusinessSuppression(
-  db: RuntimeDb,
-  businessId: string,
-): Promise<boolean> {
-  const suppression = await db
-    .query('suppressionRules')
-    .withIndex('by_target_status', (query) =>
-      query
-        .eq('targetType', 'business')
-        .eq('targetRef', businessId)
-        .eq('status', 'active'),
-    )
-    .unique()
-  return suppression !== null
-}
-
 async function publishedServiceCount(
   db: RuntimeDb,
   businessId: string,
 ): Promise<number> {
-  const services = await db
-    .query('businessServices')
-    .withIndex('by_business_status', (query) =>
-      query.eq('businessId', businessId).eq('status', 'published'),
-    )
-    .collect()
+  const services = await takeDocuments(
+    db
+      .query('businessServices')
+      .withIndex('by_business_status', (query) =>
+        query.eq('businessId', businessId).eq('status', 'published'),
+      ),
+    1,
+  )
   return services.length
 }
 
@@ -650,12 +1058,23 @@ async function indexStatusForBusiness(
   db: RuntimeDb,
   businessId: string,
 ): Promise<CatalogDto['indexStatus']> {
-  const statuses = await db.query('indexStatus').collect()
+  const statuses = await db
+    .query('indexStatus')
+    .withIndex('by_target_status', (query) =>
+      query.eq('targetType', 'business').eq('targetRef', businessId),
+    )
+    .collect()
   const status = statuses.find(
     (candidate) =>
       stringField(candidate, 'targetType') === 'business' &&
       stringField(candidate, 'targetRef') === businessId,
   )
+  return indexStatusFromDocument(status)
+}
+
+function indexStatusFromDocument(
+  status: RuntimeDocument | undefined,
+): CatalogDto['indexStatus'] {
   const value = status === undefined ? undefined : stringField(status, 'status')
   return value === 'queued' ||
     value === 'indexed' ||
@@ -665,23 +1084,10 @@ async function indexStatusForBusiness(
     : 'not_queued'
 }
 
-async function discoveryStatusForBusiness(
-  db: RuntimeDb,
-  businessId: string,
+function discoveryStatusForAttempt(
+  latest: RuntimeDocument | undefined,
   sourceHash: string,
-): Promise<CatalogDto['discoveryStatus']> {
-  const attempts = await db
-    .query('discoveryManifestAttempts')
-    .withIndex('by_business_status', (query) =>
-      query.eq('businessId', businessId),
-    )
-    .collect()
-  const latest = attempts
-    .sort(
-      (left, right) =>
-        numberField(right, 'startedAt') - numberField(left, 'startedAt'),
-    )
-    .at(0)
+): CatalogDto['discoveryStatus'] {
   if (latest === undefined) {
     return 'degraded'
   }
@@ -929,6 +1335,16 @@ function optionalStringField(
 ): string | undefined {
   const value = document[field]
   return typeof value === 'string' ? value : undefined
+}
+
+function stringArrayField(
+  document: RuntimeDocument,
+  field: string,
+): string[] {
+  const value = document[field]
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : []
 }
 
 function numberField(document: RuntimeDocument, field: string): number {

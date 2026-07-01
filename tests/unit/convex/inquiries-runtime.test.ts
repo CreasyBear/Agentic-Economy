@@ -21,6 +21,7 @@ import type { SourceWriteAdmission } from '@/modules/security/source-write-admis
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
+type QueryRead = { tableName: string; indexName?: string; filters: EqFilter[] }
 
 type IndexBuilder = {
   eq: (field: string, value: unknown) => IndexBuilder
@@ -133,6 +134,16 @@ describe('Convex inquiry runtime bridge', () => {
     expect(db.dump('inquiryNotifications')).toHaveLength(1)
     expect(db.dump('notificationDispatches')).toHaveLength(2)
     expect(db.dump('operationKeys')).toHaveLength(3)
+    expect(db.reads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tableName: 'inquiryThreads', indexName: 'by_threadId' }),
+        expect.objectContaining({ tableName: 'inquiryMessages', indexName: 'by_messageId' }),
+        expect.objectContaining({ tableName: 'inquiryNotifications', indexName: 'by_notificationId' }),
+        expect.objectContaining({ tableName: 'notificationDispatches', indexName: 'by_dispatchId' }),
+        expect.objectContaining({ tableName: 'funnelEvents', indexName: 'by_business_createdAt' }),
+      ])
+    )
+    expect(bareReadsFor(db, ['funnelEvents'])).toEqual([])
 
     const unauthenticatedInbox = await listHandler(authCtx(db, null), {})
     expect(unauthenticatedInbox).toMatchObject({ kind: 'denied', reason: 'missing_auth' })
@@ -414,6 +425,11 @@ describe('Convex inquiry runtime bridge', () => {
     const replay = await deletePrivateHandler(authCtx(db, sam()), ownerPrivacyDeleteArgs(submitted.thread.threadId))
     expect(replay).toMatchObject({ kind: 'ok', code: 'inquiry_private_content_delete_replayed' })
     expect(db.dump('inquiryPrivacyTombstones')).toHaveLength(1)
+    expect(db.reads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tableName: 'inquiryPrivacyTombstones', indexName: 'by_thread_operationKey' }),
+      ])
+    )
 
     const conflict = await deletePrivateHandler(
       authCtx(db, sam()),
@@ -462,17 +478,25 @@ class FakeIndexBuilder implements IndexBuilder {
 
 class FakeQuery implements Query {
   constructor(
+    private readonly tableName: string,
     private readonly rows: readonly Row[],
-    private readonly filters: readonly EqFilter[] = []
+    private readonly reads: QueryRead[],
+    private readonly filters: readonly EqFilter[] = [],
+    private readonly indexName?: string
   ) {}
 
-  withIndex(_indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
+  withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
     const builder = new FakeIndexBuilder()
     callback(builder)
-    return new FakeQuery(this.rows, [...this.filters, ...builder.filters])
+    return new FakeQuery(this.tableName, this.rows, this.reads, [...this.filters, ...builder.filters], indexName)
   }
 
   async collect(): Promise<Row[]> {
+    this.reads.push({
+      tableName: this.tableName,
+      filters: this.filters.map((filter) => ({ ...filter })),
+      ...(this.indexName === undefined ? {} : { indexName: this.indexName }),
+    })
     return this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
   }
 
@@ -487,10 +511,11 @@ class FakeQuery implements Query {
 
 class FakeDb implements Db {
   private readonly tables: Record<string, Row[]> = {}
+  private readonly queryReads: QueryRead[] = []
   private sequence = 0
 
   query(tableName: string): Query {
-    return new FakeQuery(this.table(tableName))
+    return new FakeQuery(tableName, this.table(tableName), this.queryReads)
   }
 
   async get(id: string): Promise<Row | null> {
@@ -520,6 +545,10 @@ class FakeDb implements Db {
     return [...this.table(tableName)]
   }
 
+  reads(): QueryRead[] {
+    return this.queryReads.map((read) => ({ ...read, filters: read.filters.map((filter) => ({ ...filter })) }))
+  }
+
   private table(tableName: string): Row[] {
     this.tables[tableName] ??= []
     return this.tables[tableName]
@@ -528,6 +557,11 @@ class FakeDb implements Db {
   private allRows(): Row[] {
     return Object.values(this.tables).flat()
   }
+}
+
+function bareReadsFor(db: FakeDb, tableNames: readonly string[]): QueryRead[] {
+  const names = new Set(tableNames)
+  return db.reads().filter((read) => names.has(read.tableName) && read.indexName === undefined)
 }
 
 function seededInquiryDb(): FakeDb {

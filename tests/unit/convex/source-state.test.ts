@@ -4,6 +4,7 @@ import { loadPhaseOneSourceState, persistPhaseOneSourceState } from '../../../co
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
+type QueryRead = { tableName: string; indexName?: string; filters: EqFilter[] }
 
 type IndexBuilder = {
   eq: (field: string, value: unknown) => IndexBuilder
@@ -17,6 +18,7 @@ type Query = {
 
 type Db = {
   query: (tableName: string) => Query
+  get: (id: string) => Promise<Row | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
@@ -77,6 +79,7 @@ describe('Convex source-state adapters', () => {
     first(state.registry.registryProjectionAttempts).sourceHash = 'source:business:v2'
     first(state.discovery.discoveryManifestAttempts).sourceHash = 'source:business:v2'
 
+    db.clearReads()
     await persistPhaseOneSourceState(db, state)
     await persistPhaseOneSourceState(db, state)
 
@@ -96,6 +99,18 @@ describe('Convex source-state adapters', () => {
       redactedPayloadJson: '{"evidenceCount":1}',
     })
     expect(db.dump('auditEvents')[0]).not.toHaveProperty('redactedPayload')
+
+    expect(db.reads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tableName: 'businesses', indexName: 'documentId' }),
+        expect.objectContaining({ tableName: 'businessServices', indexName: 'documentId' }),
+        expect.objectContaining({ tableName: 'businessContexts', indexName: 'by_business' }),
+        expect.objectContaining({ tableName: 'registryProjectionAttempts', indexName: 'by_logicalKey' }),
+        expect.objectContaining({ tableName: 'operationKeys', indexName: 'by_actor_operation_key' }),
+        expect.objectContaining({ tableName: 'operatorControls', indexName: 'by_key' }),
+      ])
+    )
+    expect(bareReadsFor(db, ['businesses', 'businessServices', 'businessContexts', 'registryProjectionAttempts', 'operationKeys', 'operatorControls'])).toEqual([])
   })
 })
 
@@ -110,17 +125,25 @@ class FakeIndexBuilder implements IndexBuilder {
 
 class FakeQuery implements Query {
   constructor(
+    private readonly tableName: string,
     private readonly rows: readonly Row[],
-    private readonly filters: readonly EqFilter[] = []
+    private readonly reads: QueryRead[],
+    private readonly filters: readonly EqFilter[] = [],
+    private readonly indexName?: string
   ) {}
 
-  withIndex(_indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
+  withIndex(indexName: string, callback: (query: IndexBuilder) => IndexBuilder): Query {
     const builder = new FakeIndexBuilder()
     callback(builder)
-    return new FakeQuery(this.rows, [...this.filters, ...builder.filters])
+    return new FakeQuery(this.tableName, this.rows, this.reads, [...this.filters, ...builder.filters], indexName)
   }
 
   async collect(): Promise<Row[]> {
+    this.reads.push({
+      tableName: this.tableName,
+      filters: this.filters.map((filter) => ({ ...filter })),
+      ...(this.indexName === undefined ? {} : { indexName: this.indexName }),
+    })
     return this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
   }
 
@@ -131,10 +154,20 @@ class FakeQuery implements Query {
 
 class FakeDb implements Db {
   private readonly tables: Record<string, Row[]> = {}
+  private readonly queryReads: QueryRead[] = []
   private sequence = 0
 
   query(tableName: string): Query {
-    return new FakeQuery(this.table(tableName))
+    return new FakeQuery(tableName, this.table(tableName), this.queryReads)
+  }
+
+  async get(id: string): Promise<Row | null> {
+    this.queryReads.push({
+      tableName: id.split(':')[0] ?? '',
+      indexName: 'documentId',
+      filters: [{ field: '_id', value: id }],
+    })
+    return Object.values(this.tables).flat().find((candidate) => candidate._id === id) ?? null
   }
 
   async insert(tableName: string, value: Record<string, unknown>): Promise<string> {
@@ -160,10 +193,23 @@ class FakeDb implements Db {
     return [...this.table(tableName)]
   }
 
+  reads(): QueryRead[] {
+    return this.queryReads.map((read) => ({ ...read, filters: read.filters.map((filter) => ({ ...filter })) }))
+  }
+
+  clearReads(): void {
+    this.queryReads.length = 0
+  }
+
   private table(tableName: string): Row[] {
     this.tables[tableName] ??= []
     return this.tables[tableName]
   }
+}
+
+function bareReadsFor(db: FakeDb, tableNames: readonly string[]): QueryRead[] {
+  const names = new Set(tableNames)
+  return db.reads().filter((read) => names.has(read.tableName) && read.indexName === undefined)
 }
 
 function seedPhaseOneRows(db: FakeDb): void {

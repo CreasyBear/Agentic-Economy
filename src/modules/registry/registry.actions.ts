@@ -15,7 +15,7 @@ import type {
  *
  * `registry.search` and `registry.detail` are the machine counterparts to the
  * human `/api/businesses/search` and `/api/businesses/$slug` surfaces. They
- * return the same public DTO subset and stay literal: the registry does not
+ * return the same public catalog subset and stay literal: the registry does not
  * typo-correct suburbs or rewrite queries. Misspelling recovery is the caller's
  * job - it chooses better tool arguments, and the chosen input is persisted as
  * tool evidence by the answer-thread turn orchestrator.
@@ -104,13 +104,13 @@ export const registrySearchAction = defineAction({
   parameters: searchParameters,
   readOnly: true,
   surfaces: ['http', 'agentJson', 'agentTools'],
-  run: async ({ data }) => {
+  run: async ({ data, context }) => {
     const page = await readPublicRegistrySearchPage({
       query: data.query.trim(),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
       ...(data.mode === undefined ? {} : { mode: data.mode }),
       ...(data.location === undefined ? {} : { location: data.location.trim() }),
-    })
+    }, context.timing === undefined ? {} : { timing: context.timing })
     return page as PublicBusinessCatalogApiPage
   },
 })

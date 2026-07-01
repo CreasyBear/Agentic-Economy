@@ -43,5 +43,7 @@ export const catalogTables = {
     sourceHash: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_business_service_status', ['businessId', 'serviceId', 'status']),
+  })
+    .index('by_business_service_status', ['businessId', 'serviceId', 'status'])
+    .index('by_business_service_kind', ['businessId', 'serviceId', 'kind']),
 } as const

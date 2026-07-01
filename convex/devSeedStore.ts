@@ -13,6 +13,11 @@ export type DevSeedPersistResult = {
 }
 
 const DEV_SEED_SUPPORT_RECORD_ID = 'support:dev-seed:human-inquiry-owner-inbox'
+const RETIRED_DEV_SEED_SLUGS = [
+  'ae-sandbox-paid-activation',
+  'agentic-economy-r10-readback',
+  'agentic-economy-r10-smoke',
+] as const
 
 export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedCatalogBundle): Promise<DevSeedPersistResult> {
   const owner = bundle.state.owners.find((candidate) => candidate.clerkUserId === bundle.ownerClerkUserId)
@@ -63,6 +68,7 @@ export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedC
   }
 
   await upsertHumanInquirySupportRecord(db, primaryBusinessId, ownerId, bundle.supportRecord)
+  await suppressRetiredDevSeedBusinesses(db)
 
   return {
     seededSlugs: bundle.seededSlugs,
@@ -70,6 +76,25 @@ export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedC
     ownerId,
     supportRecordId: DEV_SEED_SUPPORT_RECORD_ID,
     businessIdsBySlug,
+  }
+}
+
+async function suppressRetiredDevSeedBusinesses(db: RuntimeDb): Promise<void> {
+  const now = Date.now()
+  for (const slug of RETIRED_DEV_SEED_SLUGS) {
+    const existing = await db
+      .query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', slug))
+      .unique()
+    if (existing === null) {
+      continue
+    }
+
+    await db.patch(existing._id, {
+      publicStatus: 'suppressed',
+      suppressedAt: now,
+      updatedAt: now,
+    })
   }
 }
 
@@ -157,9 +182,10 @@ async function upsertClaim(
   businessId: string,
   claim: DevSeedCatalogBundle['state']['claims'][number]
 ): Promise<string> {
-  const existing = (await db.query('claims').collect()).find(
-    (document) => stringField(document, 'slug') === claim.slug && stringField(document, 'ownerId') === ownerId
-  )
+  const existing = await db
+    .query('claims')
+    .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', claim.status))
+    .unique()
   const patch = {
     ownerId,
     businessId,
@@ -169,7 +195,7 @@ async function upsertClaim(
     updatedAt: claim.updatedAt,
   }
 
-  if (existing === undefined) {
+  if (existing === null) {
     return db.insert('claims', { ...patch, createdAt: claim.createdAt })
   }
 
@@ -184,10 +210,12 @@ async function upsertClaimFingerprint(
   claimId: string,
   fingerprint: DevSeedCatalogBundle['state']['claimFingerprints'][number]
 ): Promise<void> {
-  const existing = (await db.query('claimFingerprints').collect()).find(
-    (document) =>
-      stringField(document, 'fingerprint') === fingerprint.fingerprint && stringField(document, 'status') === fingerprint.status
-  )
+  const existing = await db
+    .query('claimFingerprints')
+    .withIndex('by_fingerprint_status', (query) =>
+      query.eq('fingerprint', fingerprint.fingerprint).eq('status', fingerprint.status),
+    )
+    .unique()
   const patch = {
     fingerprint: fingerprint.fingerprint,
     status: fingerprint.status,
@@ -197,7 +225,7 @@ async function upsertClaimFingerprint(
     updatedAt: fingerprint.updatedAt,
   }
 
-  if (existing === undefined) {
+  if (existing === null) {
     await db.insert('claimFingerprints', { ...patch, createdAt: fingerprint.createdAt })
     return
   }
@@ -206,9 +234,12 @@ async function upsertClaimFingerprint(
 }
 
 async function upsertBusinessService(db: RuntimeDb, businessId: string, service: BusinessServiceRecord): Promise<string> {
-  const existing = (await db.query('businessServices').collect()).find(
-    (document) => stringField(document, 'businessId') === businessId && stringField(document, 'serviceSlug') === service.serviceSlug
-  )
+  const existing = await db
+    .query('businessServices')
+    .withIndex('by_slug_serviceSlug', (query) =>
+      query.eq('serviceSlug', service.serviceSlug).eq('businessId', businessId),
+    )
+    .unique()
   const patch = {
     businessId,
     serviceSlug: service.serviceSlug,
@@ -223,7 +254,7 @@ async function upsertBusinessService(db: RuntimeDb, businessId: string, service:
     updatedAt: service.updatedAt,
   }
 
-  if (existing === undefined) {
+  if (existing === null) {
     return db.insert('businessServices', { ...patch, createdAt: service.createdAt })
   }
 
@@ -237,11 +268,15 @@ async function upsertServiceCapability(
   serviceId: string,
   capability: ServiceCapabilityRecord
 ): Promise<void> {
-  const existing = (await db.query('serviceCapabilities').collect()).find(
-    (document) =>
-      stringField(document, 'businessId') === businessId &&
-      stringField(document, 'serviceId') === serviceId &&
-      stringField(document, 'kind') === capability.kind
+  const existing = await firstByIndex(
+    db,
+    'serviceCapabilities',
+    'by_business_service_kind',
+    [
+      ['businessId', businessId],
+      ['serviceId', serviceId],
+      ['kind', capability.kind],
+    ],
   )
   const patch = {
     businessId,
@@ -260,12 +295,24 @@ async function upsertServiceCapability(
     updatedAt: capability.updatedAt,
   }
 
-  if (existing === undefined) {
+  if (existing === null) {
     await db.insert('serviceCapabilities', { ...patch, createdAt: capability.createdAt })
     return
   }
 
   await db.patch(existing._id, patch)
+}
+
+async function firstByIndex(
+  db: RuntimeDb,
+  tableName: string,
+  indexName: string,
+  fields: readonly (readonly [string, unknown])[]
+): Promise<RuntimeDocument | null> {
+  const indexed = db
+    .query(tableName)
+    .withIndex(indexName, (query) => fields.reduce((builder, [field, value]) => builder.eq(field, value), query))
+  return indexed.first === undefined ? indexed.unique() : indexed.first()
 }
 
 async function upsertHumanInquirySupportRecord(
@@ -274,8 +321,11 @@ async function upsertHumanInquirySupportRecord(
   ownerId: string,
   record: CapabilityLaunchSupportRecord
 ): Promise<void> {
-  const existing = (await db.query('capabilityLaunchSupportRecords').collect()).find(
-    (document) => stringField(document, 'supportRecordId') === DEV_SEED_SUPPORT_RECORD_ID
+  const existing = await firstByIndex(
+    db,
+    'capabilityLaunchSupportRecords',
+    'by_supportRecordId',
+    [['supportRecordId', DEV_SEED_SUPPORT_RECORD_ID]]
   )
   const now = record.lastReviewedAt
   const patch = {
@@ -304,15 +354,10 @@ async function upsertHumanInquirySupportRecord(
     updatedAt: now,
   }
 
-  if (existing === undefined) {
+  if (existing === null) {
     await db.insert('capabilityLaunchSupportRecords', { ...patch, createdAt: now })
     return
   }
 
   await db.patch(existing._id, patch)
-}
-
-function stringField(document: RuntimeDocument, field: string): string {
-  const value = document[field]
-  return typeof value === 'string' ? value : ''
 }

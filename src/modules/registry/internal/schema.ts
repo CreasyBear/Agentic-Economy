@@ -101,7 +101,11 @@ export const registryTables = {
     .index('by_documentId', ['documentId'])
     .index('by_business', ['businessSlug'])
     .index('by_service', ['businessSlug', 'serviceSlug'])
-    .index('by_publicStatus_updatedAt', ['publicStatus', 'updatedAt']),
+    .index('by_publicStatus_updatedAt', ['publicStatus', 'updatedAt'])
+    .searchIndex('search_searchText_by_publicStatus', {
+      searchField: 'searchText',
+      filterFields: ['publicStatus'],
+    }),
 
   registrySearchSyncAttempts: defineTable({
     attemptId: v.string(),

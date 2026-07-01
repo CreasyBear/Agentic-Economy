@@ -22,6 +22,7 @@ export type RuntimeReader = RuntimeQueryable & {
 }
 
 export type RuntimeWriter = RuntimeQueryable & {
+  get?: (id: string) => Promise<RuntimeDocument | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
@@ -119,7 +120,19 @@ type UpsertSpec = {
   rows: readonly Record<string, unknown>[]
   toPatch: (row: Record<string, unknown>) => Record<string, unknown>
   matches: (document: RuntimeDocument, row: Record<string, unknown>) => boolean
+  lookup?: UpsertLookup
 }
+
+type UpsertLookup =
+  | {
+      kind: 'documentId'
+      idField: string
+    }
+  | {
+      kind: 'index'
+      indexName: string
+      fields: readonly string[]
+    }
 
 export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Promise<PhaseOneSourceState> {
   const [
@@ -250,13 +263,43 @@ export async function persistPhaseOneSourceState(db: RuntimeWriter, state: Phase
 async function upsertRows(db: RuntimeWriter, spec: UpsertSpec): Promise<void> {
   for (const row of spec.rows) {
     const patch = spec.toPatch(row)
-    const existing = (await collect(db, spec.tableName)).find((document) => spec.matches(document, row))
-    if (existing === undefined) {
+    const indexedExisting = await findExistingUpsertRow(db, spec, row)
+    const existing = indexedExisting === undefined
+      ? (await collect(db, spec.tableName)).find((document) => spec.matches(document, row))
+      : indexedExisting
+    if (existing === undefined || existing === null) {
       await db.insert(spec.tableName, patch)
     } else {
       await db.patch(existing._id, patch)
     }
   }
+}
+
+async function findExistingUpsertRow(
+  db: RuntimeWriter,
+  spec: UpsertSpec,
+  row: Record<string, unknown>
+): Promise<RuntimeDocument | null | undefined> {
+  if (spec.lookup === undefined) {
+    return undefined
+  }
+
+  const lookup = spec.lookup
+  if (lookup.kind === 'documentId') {
+    if (db.get === undefined) {
+      return undefined
+    }
+    return await db.get(stringRecordField(row, lookup.idField))
+  }
+
+  if (!lookup.fields.every((field) => row[field] !== undefined)) {
+    return undefined
+  }
+
+  return await db
+    .query(spec.tableName)
+    .withIndex(lookup.indexName, (builder) => lookup.fields.reduce((next, field) => next.eq(field, row[field]), builder))
+    .unique()
 }
 
 function byDomainId(tableName: string, rows: readonly Record<string, unknown>[], idField: string): UpsertSpec {
@@ -265,15 +308,18 @@ function byDomainId(tableName: string, rows: readonly Record<string, unknown>[],
     rows,
     toPatch: (row) => omitKeys(row, [idField]),
     matches: (document, row) => document._id === stringRecordField(row, idField),
+    lookup: { kind: 'documentId', idField },
   }
 }
 
 function byFields(tableName: string, rows: readonly Record<string, unknown>[], fields: readonly string[]): UpsertSpec {
+  const lookup = indexedUpsertLookup(tableName, fields)
   return {
     tableName,
     rows,
     toPatch: (row) => ({ ...row }),
     matches: (document, row) => fields.every((field) => document[field] === row[field]),
+    ...(lookup === undefined ? {} : { lookup }),
   }
 }
 
@@ -283,11 +329,13 @@ function byFieldsWithPatch(
   fields: readonly string[],
   toPatch: (row: Record<string, unknown>) => Record<string, unknown>
 ): UpsertSpec {
+  const lookup = indexedUpsertLookup(tableName, fields)
   return {
     tableName,
     rows,
     toPatch,
     matches: (document, row) => fields.every((field) => document[field] === row[field]),
+    ...(lookup === undefined ? {} : { lookup }),
   }
 }
 
@@ -297,12 +345,38 @@ function byFieldsWithout(
   fields: readonly string[],
   omittedFields: readonly string[]
 ): UpsertSpec {
+  const lookup = indexedUpsertLookup(tableName, fields)
   return {
     tableName,
     rows,
     toPatch: (row) => omitKeys(row, omittedFields),
     matches: (document, row) => fields.every((field) => document[field] === row[field]),
+    ...(lookup === undefined ? {} : { lookup }),
   }
+}
+
+type IndexedUpsertLookup = Extract<UpsertLookup, { kind: 'index' }> & { tableName: string }
+
+const indexedUpsertLookups: readonly IndexedUpsertLookup[] = [
+  { kind: 'index', tableName: 'businessContexts', fields: ['businessId'], indexName: 'by_business' },
+  { kind: 'index', tableName: 'claimFingerprints', fields: ['fingerprint', 'status'], indexName: 'by_fingerprint_status' },
+  { kind: 'index', tableName: 'abuseRateLimitBuckets', fields: ['scope', 'key', 'window'], indexName: 'by_scope_key_window' },
+  { kind: 'index', tableName: 'registryProjectionAttempts', fields: ['logicalKey'], indexName: 'by_logicalKey' },
+  { kind: 'index', tableName: 'registrySearchDocuments', fields: ['documentId'], indexName: 'by_documentId' },
+  { kind: 'index', tableName: 'registrySearchSyncAttempts', fields: ['attemptId'], indexName: 'by_attemptId' },
+  { kind: 'index', tableName: 'discoveryManifests', fields: ['businessId', 'ucpVersion'], indexName: 'by_business_version' },
+  { kind: 'index', tableName: 'adminMemberships', fields: ['clerkUserId', 'state'], indexName: 'by_clerkUserId_state' },
+  { kind: 'index', tableName: 'suppressionRules', fields: ['targetType', 'targetRef', 'status'], indexName: 'by_target_status' },
+  { kind: 'index', tableName: 'operationKeys', fields: ['actorRef', 'operationName', 'key'], indexName: 'by_actor_operation_key' },
+  { kind: 'index', tableName: 'operatorControls', fields: ['key'], indexName: 'by_key' },
+]
+
+function indexedUpsertLookup(tableName: string, fields: readonly string[]): UpsertLookup | undefined {
+  return indexedUpsertLookups.find((lookup) => lookup.tableName === tableName && sameFields(lookup.fields, fields))
+}
+
+function sameFields(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((field, index) => field === right[index])
 }
 
 async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {

@@ -37,9 +37,16 @@ door. Each action carries a boundary-honest `summary` and an explicit
 
 Currently exposed to assistants (`surfaces` includes `agentTools`):
 
+- `registry.search` — search published business listings. Read-only. Returns
+  public catalog facts only; it does not book, charge, dispatch, or send
+  inquiries.
+- `registry.detail` — read one published business listing by slug. Read-only.
+  Returns public catalog facts or a not-found result; do not invent missing
+  provider details.
 - `inquiry.submit` — send a qualified inquiry. Write, admission-gated. Returns
-  a receipt and delivery state. Refuse if the person wants booking, payment,
-  dispatch, or autonomous fulfillment — AE does not do those.
+  a receipt and delivery state. This is the only assistant-exposed write.
+  Refuse if the person wants booking, payment, dispatch, or autonomous
+  fulfillment — AE does not do those.
 
 Owner-only actions (`inquiry.readOwnerInbox`, `inquiry.readOwnerThread`,
 `inquiry.reply`, `inquiry.markRead`, `inquiry.close`) are not exposed to

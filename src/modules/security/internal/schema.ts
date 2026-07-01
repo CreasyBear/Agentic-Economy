@@ -82,7 +82,9 @@ export const securityTables = {
     state: literalUnion(AbuseBucketStateValues),
     resetAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_scope_key_window', ['scope', 'key', 'window']),
+  })
+    .index('by_scope_key_window', ['scope', 'key', 'window'])
+    .index('by_state_resetAt', ['state', 'resetAt']),
 
   claimFingerprints: defineTable({
     fingerprint: v.string(),

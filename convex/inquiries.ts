@@ -2,6 +2,8 @@ import type { UserIdentity } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import { internal } from './_generated/api'
+import { internalMutation } from './_generated/server'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
@@ -531,6 +533,16 @@ const operatorInquiryReconstructionReadbackResult = v.union(
   })
 )
 
+const inquiryAbuseBucketCleanupResult = v.object({
+  deleted: v.number(),
+  cutoff: v.number(),
+  rescheduled: v.boolean(),
+})
+
+const INQUIRY_ABUSE_BUCKET_STATES = ['open', 'limited'] as const
+const ABUSE_BUCKET_CLEANUP_BATCH_SIZE = 100
+const ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE = 250
+
 type RuntimeCtx = {
   db: object
   auth: {
@@ -544,6 +556,45 @@ type RuntimeQueryCtx = {
     getUserIdentity: () => Promise<UserIdentity | null>
   }
 }
+
+export const cleanupExpiredInquiryAbuseBuckets = internalMutation({
+  args: {
+    now: v.optional(v.number()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: inquiryAbuseBucketCleanupResult,
+  handler: async (ctx, args) => {
+    const cutoff = cleanupCutoff(args.now)
+    const batchSize = cleanupBatchSize(args.batchSize)
+    let deleted = 0
+
+    for (const state of INQUIRY_ABUSE_BUCKET_STATES) {
+      if (deleted >= batchSize) {
+        break
+      }
+
+      const expiredBuckets = await ctx.db
+        .query('inquiryAbuseBuckets')
+        .withIndex('by_state_resetAt', (query) => query.eq('state', state).lte('resetAt', cutoff))
+        .take(batchSize - deleted)
+
+      for (const bucket of expiredBuckets) {
+        await ctx.db.delete(bucket._id)
+        deleted += 1
+      }
+    }
+
+    const rescheduled = deleted >= batchSize
+    if (rescheduled) {
+      await ctx.scheduler.runAfter(0, internal.inquiries.cleanupExpiredInquiryAbuseBuckets, {
+        now: cutoff,
+        batchSize,
+      })
+    }
+
+    return { deleted, cutoff, rescheduled }
+  },
+})
 
 export const submitPublicInquiry = mutationGeneric({
   args: {
@@ -1386,13 +1437,82 @@ async function upsertByFields(
   fields: readonly string[],
   patch: Record<string, unknown>
 ): Promise<void> {
-  const existing = (await collect(db, tableName)).find((row) => fields.every((field) => row[field] === patch[field]))
-  if (existing === undefined) {
+  const indexedExisting = await findIndexedUpsertRow(db, tableName, fields, patch)
+  const existing = indexedExisting === undefined
+    ? (await collect(db, tableName)).find((row) => fields.every((field) => row[field] === patch[field]))
+    : indexedExisting
+  if (existing === undefined || existing === null) {
     await db.insert(tableName, patch)
     return
   }
 
   await db.patch(existing._id, patch)
+}
+
+type ExactUpsertIndex = {
+  kind: 'exact'
+  tableName: string
+  fields: readonly string[]
+  indexName: string
+}
+
+type ScopedUpsertIndex = {
+  kind: 'scoped'
+  tableName: string
+  fields: readonly string[]
+  indexName: string
+  indexFields: readonly string[]
+}
+
+type UpsertIndex = ExactUpsertIndex | ScopedUpsertIndex
+
+const upsertIndexes: readonly UpsertIndex[] = [
+  { kind: 'exact', tableName: 'inquiryAbuseBuckets', fields: ['key', 'window'], indexName: 'by_key_window' },
+  { kind: 'exact', tableName: 'inquiryThreads', fields: ['threadId'], indexName: 'by_threadId' },
+  { kind: 'exact', tableName: 'inquiryMessages', fields: ['messageId'], indexName: 'by_messageId' },
+  { kind: 'exact', tableName: 'inquiryNotifications', fields: ['notificationId'], indexName: 'by_notificationId' },
+  { kind: 'exact', tableName: 'inquiryPrivacyTombstones', fields: ['threadId', 'operationKey'], indexName: 'by_thread_operationKey' },
+  { kind: 'exact', tableName: 'notificationDispatches', fields: ['dispatchId'], indexName: 'by_dispatchId' },
+  { kind: 'scoped', tableName: 'auditEvents', fields: ['eventId'], indexName: 'by_correlationId', indexFields: ['correlationId'] },
+  {
+    kind: 'scoped',
+    tableName: 'funnelEvents',
+    fields: ['eventType', 'businessId', 'correlationId', 'createdAt'],
+    indexName: 'by_business_createdAt',
+    indexFields: ['businessId', 'createdAt'],
+  },
+]
+
+async function findIndexedUpsertRow(
+  db: RuntimeDb,
+  tableName: string,
+  fields: readonly string[],
+  patch: Record<string, unknown>
+): Promise<RuntimeDocument | null | undefined> {
+  const index = upsertIndexes.find((candidate) => candidate.tableName === tableName && sameFields(candidate.fields, fields))
+  if (index === undefined || !indexFieldsPresent(index, patch)) {
+    return undefined
+  }
+
+  const indexFields = index.kind === 'exact' ? index.fields : index.indexFields
+  const query = db.query(tableName).withIndex(index.indexName, (builder) =>
+    indexFields.reduce((next, field) => next.eq(field, patch[field]), builder)
+  )
+
+  if (index.kind === 'exact') {
+    return await query.unique()
+  }
+
+  return (await query.collect()).find((row) => fields.every((field) => row[field] === patch[field])) ?? null
+}
+
+function sameFields(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((field, index) => field === right[index])
+}
+
+function indexFieldsPresent(index: UpsertIndex, patch: Record<string, unknown>): boolean {
+  const indexFields = index.kind === 'exact' ? index.fields : index.indexFields
+  return indexFields.every((field) => patch[field] !== undefined)
 }
 
 async function collect(db: Pick<RuntimeDb, 'query'>, tableName: string): Promise<RuntimeDocument[]> {
@@ -2222,6 +2342,18 @@ function compactOperatorFilter(input: {
     ...(input.correlationId === undefined || input.correlationId.trim().length === 0 ? {} : { correlationId: input.correlationId.trim() }),
     ...(input.dispatchId === undefined || input.dispatchId.trim().length === 0 ? {} : { dispatchId: input.dispatchId.trim() }),
   }
+}
+
+function cleanupCutoff(value: number | undefined): number {
+  return value === undefined || !Number.isFinite(value) ? Date.now() : value
+}
+
+function cleanupBatchSize(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return ABUSE_BUCKET_CLEANUP_BATCH_SIZE
+  }
+
+  return Math.min(Math.max(Math.floor(value), 1), ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE)
 }
 
 function effectValueFromRef(ref: string, kind: string): string | undefined {

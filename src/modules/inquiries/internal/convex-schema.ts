@@ -98,5 +98,6 @@ export const inquiryTables = {
     appliedAt: v.optional(v.number()),
   })
     .index('by_thread_status', ['threadId', 'status'])
+    .index('by_thread_operationKey', ['threadId', 'operationKey'])
     .index('by_business_createdAt', ['businessId', 'createdAt']),
 } as const

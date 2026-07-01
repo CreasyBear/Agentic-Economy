@@ -8,9 +8,16 @@ const IndexSchema = z.object({
   fields: z.array(z.string()),
 })
 
+const SearchIndexSchema = z.object({
+  indexDescriptor: z.string(),
+  searchField: z.string(),
+  filterFields: z.array(z.string()),
+})
+
 const TableSchema = z.object({
   tableName: z.string(),
   indexes: z.array(IndexSchema),
+  searchIndexes: z.array(SearchIndexSchema).optional(),
 })
 
 const SchemaExport = z.object({
@@ -86,7 +93,7 @@ const requiredIndexes = {
   owners: ['by_clerkUserId'],
   businesses: ['by_slug', 'by_publicStatus_slug'],
   businessServices: ['by_business_status', 'by_slug_serviceSlug'],
-  serviceCapabilities: ['by_business_service_status'],
+  serviceCapabilities: ['by_business_service_status', 'by_business_service_kind'],
   claims: ['by_owner_status', 'by_business_status'],
   operationKeys: ['by_actor_operation_key'],
   registryProjectionItems: ['by_business', 'by_service'],
@@ -116,7 +123,7 @@ const requiredIndexes = {
   inquiryNotifications: ['by_notificationId', 'by_thread_status', 'by_message_recipient'],
   inquiryReadStates: ['by_owner_thread'],
   inquiryAbuseBuckets: ['by_key_window', 'by_state_resetAt'],
-  inquiryPrivacyTombstones: ['by_thread_status', 'by_business_createdAt'],
+  inquiryPrivacyTombstones: ['by_thread_status', 'by_thread_operationKey', 'by_business_createdAt'],
   notificationDispatches: ['by_dispatchId', 'by_business_status', 'by_inquiry_thread', 'by_provider_status'],
   notificationDispatchAttempts: ['by_dispatch_startedAt', 'by_provider_status'],
   notificationWebhookEvents: ['by_provider_event', 'by_dispatch', 'by_status_receivedAt'],
@@ -134,7 +141,7 @@ const requiredIndexes = {
   billingProviderEvents: ['by_provider_event', 'by_operation'],
   billingReceipts: ['by_operation', 'by_business_recordedAt'],
   billingReconciliations: ['by_business_status', 'by_operation'],
-  capabilityLaunchSupportRecords: ['by_business_status', 'by_operation'],
+  capabilityLaunchSupportRecords: ['by_business_status', 'by_operation', 'by_supportRecordId'],
   businessActionCards: ['by_cardId', 'by_owner_status', 'by_service_status'],
   businessActionBuyerMandates: ['by_mandateId', 'by_business_status', 'by_idempotencyKey'],
   businessActionCapabilityRequests: [
@@ -188,5 +195,21 @@ describe('Convex schema', () => {
     for (const [tableName, indexes] of Object.entries(requiredIndexes)) {
       expect(tableIndexes[tableName]).toEqual(expect.arrayContaining(indexes))
     }
+  })
+
+  it('defines the public registry search-document index used by Convex search', () => {
+    const registrySearchDocuments = exported.tables.find(
+      (table) => table.tableName === 'registrySearchDocuments',
+    )
+
+    expect(registrySearchDocuments?.searchIndexes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          indexDescriptor: 'search_searchText_by_publicStatus',
+          searchField: 'searchText',
+          filterFields: ['publicStatus'],
+        }),
+      ]),
+    )
   })
 })

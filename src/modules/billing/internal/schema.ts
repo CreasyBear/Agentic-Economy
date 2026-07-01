@@ -387,5 +387,6 @@ export const billingTables = {
     updatedAt: v.number(),
   })
     .index('by_business_status', ['businessId', 'status'])
-    .index('by_operation', ['operationId']),
+    .index('by_operation', ['operationId'])
+    .index('by_supportRecordId', ['supportRecordId']),
 } as const

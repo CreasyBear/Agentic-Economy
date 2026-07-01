@@ -2,6 +2,8 @@ import type { UserIdentity } from 'convex/server'
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
+import { internal } from './_generated/api'
+import { internalMutation } from './_generated/server'
 import {
   loadPhaseOneSourceState,
   persistPhaseOneSourceState,
@@ -13,6 +15,7 @@ import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import { validateAuditEvent } from '../src/modules/observability/public'
 import {
+  AbuseBucketStateValues,
   bootstrapOwnerAdmin as bootstrapOwnerAdminModule,
   grantAdminMembership as grantAdminMembershipModule,
   openRemovalDispute as openRemovalDisputeModule,
@@ -245,12 +248,60 @@ const closeDisputeResult = v.union(
   })
 )
 
+const abuseBucketCleanupResult = v.object({
+  deleted: v.number(),
+  cutoff: v.number(),
+  rescheduled: v.boolean(),
+})
+
+const ABUSE_BUCKET_CLEANUP_BATCH_SIZE = 100
+const ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE = 250
+
 type RuntimeMutationCtx = {
   db: object
   auth: { getUserIdentity: () => Promise<UserIdentity | null> }
 }
 
 type RuntimeQueryCtx = RuntimeMutationCtx
+
+export const cleanupExpiredAbuseRateLimitBuckets = internalMutation({
+  args: {
+    now: v.optional(v.number()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: abuseBucketCleanupResult,
+  handler: async (ctx, args) => {
+    const cutoff = cleanupCutoff(args.now)
+    const batchSize = cleanupBatchSize(args.batchSize)
+    let deleted = 0
+
+    for (const state of AbuseBucketStateValues) {
+      if (deleted >= batchSize) {
+        break
+      }
+
+      const expiredBuckets = await ctx.db
+        .query('abuseRateLimitBuckets')
+        .withIndex('by_state_resetAt', (query) => query.eq('state', state).lte('resetAt', cutoff))
+        .take(batchSize - deleted)
+
+      for (const bucket of expiredBuckets) {
+        await ctx.db.delete(bucket._id)
+        deleted += 1
+      }
+    }
+
+    const rescheduled = deleted >= batchSize
+    if (rescheduled) {
+      await ctx.scheduler.runAfter(0, internal.security.cleanupExpiredAbuseRateLimitBuckets, {
+        now: cutoff,
+        batchSize,
+      })
+    }
+
+    return { deleted, cutoff, rescheduled }
+  },
+})
 
 export const bootstrapOwnerAdmin = mutationGeneric({
   args: {
@@ -857,6 +908,18 @@ function adminSourceWriteDenied(reason: 'missing_csrf' | 'foreign_origin') {
 function envList(name: string): string[] {
   const value = typeof process === 'undefined' ? undefined : process.env[name]
   return value === undefined ? [] : value.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function cleanupCutoff(value: number | undefined): number {
+  return value === undefined || !Number.isFinite(value) ? Date.now() : value
+}
+
+function cleanupBatchSize(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return ABUSE_BUCKET_CLEANUP_BATCH_SIZE
+  }
+
+  return Math.min(Math.max(Math.floor(value), 1), ABUSE_BUCKET_CLEANUP_MAX_BATCH_SIZE)
 }
 
 function disputeRateLimitKey(args: {
