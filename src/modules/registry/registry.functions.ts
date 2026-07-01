@@ -68,7 +68,7 @@ export function setCatalogSearchBackendForTests(backend: CatalogSearchBackend | 
 export async function readPublicRegistryCatalogPage(
   input: PublicBusinessCatalogQueryInput
 ): Promise<PublicBusinessCatalogApiPage> {
-  return getPublicRegistrySourcePort().list(input)
+  return filterPublicRegistryPage(getPublicRegistrySourcePort().list(input))
 }
 
 export async function readPublicRegistrySearchPage(
@@ -78,31 +78,31 @@ export async function readPublicRegistrySearchPage(
   const backend = catalogSearchBackendForTests ?? readCatalogSearchBackend()
 
   if (backend === 'convex') {
-    return sourcePort.search(input)
+    return filterPublicRegistryPage(sourcePort.search(input))
   }
 
   const searchPort = catalogSearchPortForTests ?? createConfiguredMeiliCatalogSearchPort()
   if (searchPort === undefined) {
-    return sourcePort.search(input)
+    return filterPublicRegistryPage(sourcePort.search(input))
   }
 
   if (backend === 'dual') {
     void searchPort.search(input).catch(() => undefined)
-    return sourcePort.search(input)
+    return filterPublicRegistryPage(sourcePort.search(input))
   }
 
   try {
     const result = await searchPort.search(input)
-    return hydrateCatalogSearchResult(input, result, sourcePort)
+    return filterPublicRegistryPage(hydrateCatalogSearchResult(input, result, sourcePort))
   } catch {
-    return sourcePort.search(input)
+    return filterPublicRegistryPage(sourcePort.search(input))
   }
 }
 
 export async function readPublicRegistryBusinessDetail(input: {
   slug: string
 }): Promise<PublicBusinessCatalogDetailResult> {
-  return getPublicRegistrySourcePort().detail(input)
+  return filterPublicRegistryDetail(getPublicRegistrySourcePort().detail(input))
 }
 
 export function legacyPublicRegistryList(
@@ -209,6 +209,71 @@ function normalizePublicLimit(limit: number | undefined): number {
   }
 
   return Math.min(Math.max(Math.trunc(limit), 1), 50)
+}
+
+async function filterPublicRegistryPage(
+  pagePromise: Promise<PublicBusinessCatalogApiPage>,
+): Promise<PublicBusinessCatalogApiPage> {
+  const page = await pagePromise
+  const items = page.items.filter(isPublicRegistryDtoAllowed)
+  const removed = page.items.length - items.length
+  if (removed === 0) {
+    return page
+  }
+
+  const total = Math.max(items.length, page.pagination.total - removed)
+  return {
+    ...page,
+    items,
+    pagination: {
+      ...page.pagination,
+      total,
+      hasMore: page.pagination.hasMore || total > items.length,
+    },
+  }
+}
+
+async function filterPublicRegistryDetail(
+  detailPromise: Promise<PublicBusinessCatalogDetailResult>,
+): Promise<PublicBusinessCatalogDetailResult> {
+  const detail = await detailPromise
+  if (detail.kind === 'not_found' || isPublicRegistryDtoAllowed(detail.business)) {
+    return detail
+  }
+
+  return {
+    kind: 'not_found',
+    code: 'business_not_found',
+    reason: 'No public business catalog exists for this slug.',
+  }
+}
+
+function isPublicRegistryDtoAllowed(item: PublicBusinessCatalogApiDto): boolean {
+  return !isAgenticEconomySmokeCatalog(item)
+}
+
+function isAgenticEconomySmokeCatalog(item: PublicBusinessCatalogApiDto): boolean {
+  const identity = normalizeRegistrySearchText(`${item.slug} ${item.name}`)
+  if (!identity.includes('agentic economy')) {
+    return false
+  }
+
+  const searchableText = normalizeRegistrySearchText(
+    [
+      item.slug,
+      item.name,
+      item.category,
+      ...item.services.flatMap((service) => [
+        service.slug,
+        service.name,
+        service.category,
+        service.summary,
+        service.serviceArea,
+      ]),
+    ].join(' '),
+  )
+
+  return /\b(?:smoke|r10|readback)\b/.test(searchableText)
 }
 
 async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallback: () => T): Promise<T> {
