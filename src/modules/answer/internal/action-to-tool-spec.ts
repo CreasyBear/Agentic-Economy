@@ -1,4 +1,8 @@
 import type { AnyAction } from '@/modules/common/action'
+import {
+  actionToHarnessTool,
+  findStrictToolSchemaViolation,
+} from '@/modules/harness/public'
 
 /**
  * OpenRouter (OpenAI-compatible) tool spec shape.
@@ -39,6 +43,33 @@ type OpenRouterSchemaProperty = {
  * enforced by the action schema at execution time.
  */
 export function actionToOpenRouterTool(action: AnyAction): OpenRouterToolSpec {
+  const tool = actionToHarnessTool(action)
+  const violation = findStrictToolSchemaViolation(tool.inputJsonSchema)
+  if (violation !== null) {
+    throw new Error(`Action ${action.id} has a non-strict tool schema at ${violation.path}: ${violation.reason}`)
+  }
+  const parameters = openRouterParametersFromJsonSchema(tool.inputJsonSchema) ??
+    openRouterParametersFromActionParameters(action)
+
+  const description = [
+    action.summary,
+    'Boundaries:',
+    ...action.boundaries.map((boundary) => `- ${boundary}`),
+  ].join('\n')
+
+  return {
+    type: 'function',
+    function: {
+      name: action.id,
+      description,
+      parameters,
+    },
+  }
+}
+
+function openRouterParametersFromActionParameters(
+  action: AnyAction,
+): OpenRouterToolSpec['function']['parameters'] {
   const properties: Record<string, OpenRouterSchemaProperty> = {}
   const required: string[] = []
 
@@ -53,22 +84,62 @@ export function actionToOpenRouterTool(action: AnyAction): OpenRouterToolSpec {
     }
   }
 
-  const description = [
-    action.summary,
-    'Boundaries:',
-    ...action.boundaries.map((boundary) => `- ${boundary}`),
-  ].join('\n')
+  return {
+    type: 'object',
+    properties,
+    required,
+  }
+}
+
+function openRouterParametersFromJsonSchema(
+  schema: unknown,
+): OpenRouterToolSpec['function']['parameters'] | undefined {
+  if (!isRecord(schema) || schema.type !== 'object' || !isRecord(schema.properties)) {
+    return undefined
+  }
+
+  const properties: Record<string, OpenRouterSchemaProperty> = {}
+  for (const [name, propertySchema] of Object.entries(schema.properties)) {
+    if (!isRecord(propertySchema)) {
+      return undefined
+    }
+    const type = openRouterType(propertySchema.type)
+    if (type === undefined) {
+      return undefined
+    }
+    const description = typeof propertySchema.description === 'string'
+      ? propertySchema.description
+      : name
+    const enumValues = Array.isArray(propertySchema.enum)
+      ? propertySchema.enum.filter((value): value is string => typeof value === 'string')
+      : undefined
+
+    properties[name] = {
+      type,
+      description,
+      ...(enumValues === undefined || enumValues.length === 0 ? {} : { enum: enumValues }),
+    }
+  }
 
   return {
-    type: 'function',
-    function: {
-      name: action.id,
-      description,
-      parameters: {
-        type: 'object',
-        properties,
-        required,
-      },
-    },
+    type: 'object',
+    properties,
+    required: Array.isArray(schema.required)
+      ? schema.required.filter((value): value is string => typeof value === 'string')
+      : [],
   }
+}
+
+function openRouterType(value: unknown): OpenRouterSchemaProperty['type'] | undefined {
+  if (value === 'integer') {
+    return 'number'
+  }
+  if (value === 'string' || value === 'number' || value === 'boolean') {
+    return value
+  }
+  return undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

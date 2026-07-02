@@ -189,6 +189,20 @@ describe('buildArtifactsFromSnapshot artifact budgets', () => {
     expect(kinds).not.toContain('published-details-rail')
   })
 
+  it('keeps the agent JSON affordance on full discovery answers', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'urgent plumber near Parramatta 2150',
+      oneLine: '1 listed business near Parramatta.',
+      providers: [provider()],
+      summary: 'The business handles timing, price, and availability.',
+      nextStep: 'Open a listed provider page.',
+      agentJsonUrl: '/api/businesses/search?q=plumber',
+      layoutProfile: 'discovery_full',
+    })
+
+    expect(artifacts.map((artifact) => artifact.kind)).toContain('agent-json')
+  })
+
   it('does not create an editable inquiry starter from answer shape alone', () => {
     const artifacts = buildArtifactsFromSnapshot({
       query: 'need urgent plumbing help today',

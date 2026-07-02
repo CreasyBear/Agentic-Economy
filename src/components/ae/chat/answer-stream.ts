@@ -41,6 +41,7 @@ export async function streamAnswerSse(input: {
     const method = input.method ?? (input.body === undefined ? 'GET' : 'POST')
     const response = await fetch(input.url, {
       method,
+      credentials: 'same-origin',
       headers: {
         ...(input.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...input.headers,

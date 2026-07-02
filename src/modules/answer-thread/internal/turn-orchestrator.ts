@@ -23,6 +23,7 @@ import {
   hasInjectionUpgrade,
   hasOverclaim,
   runAnswerToolUseAgent,
+  type AnswerGateResult,
 } from '@/modules/answer/public'
 import {
   aeSearchContextLocationQuery,
@@ -38,6 +39,7 @@ import {
 } from './answer-response-planner'
 
 import type {
+  AnswerRunGateSummary,
   AnswerToolCallRecord,
   AnswerTurnTimingEntry,
   AnswerTurnRecord,
@@ -53,6 +55,7 @@ import {
 import { assertAnswerTurnAccess } from './turn-guard'
 import type { AnswerTurnAccessDecision } from './turn-guard'
 import { runAnswerToolCall } from './tool-runner'
+import { buildAnswerRunReport, buildHarnessRunReportForAnswer } from './answer-run-summary'
 import { classifyFollowUpIntent, buildThreadTitle } from './follow-up-intent'
 import { filterProvidersBySuburb, parseNarrowToSuburb } from './follow-up-query'
 import { parseFrozenEvidence } from './public-projection'
@@ -87,6 +90,12 @@ type SnapshotPlanInput = Pick<StreamPlanEvent, 'mode' | 'providerBudget' | 'arti
 type SnapshotPlanMetadata = {
   plan?: SnapshotPlanInput
   planMode?: StreamPlanMode
+}
+type StreamToolLedTurnResult = {
+  snapshot: AnswerSnapshot | undefined
+  toolCalls: AnswerToolCallRecord[]
+  errorCopyId: string | undefined
+  gate: AnswerRunGateSummary | undefined
 }
 
 export type StreamAnswerTurnInput = {
@@ -227,6 +236,7 @@ export async function streamAnswerTurn(
     captured,
     errorCopyId,
     toolCalls: bufferedToolCalls,
+    gate: toolLed?.gate,
     searchContext: input.searchContext,
     timings: timings.entries(),
     workLog: workLog.entries(),
@@ -254,7 +264,7 @@ async function streamToolLedTurn(input: {
   send: (event: AnswerEvent) => void
   timings: TurnTimingCollector
   workLog: WorkStepEmitter
-}): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined } | undefined> {
+}): Promise<StreamToolLedTurnResult | undefined> {
   const route = resolveIntentRoute(input.intent)
 
   switch (route.kind) {
@@ -322,10 +332,10 @@ async function streamClarificationTurn(
     signal: AbortSignal | undefined
     send: (event: AnswerEvent) => void
     timings: TurnTimingCollector
-    workLog: WorkStepEmitter
+  workLog: WorkStepEmitter
   },
   plan: Extract<AnswerResponsePlan, { mode: 'clarify' }>,
-): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined }> {
+): Promise<StreamToolLedTurnResult> {
   const startedAt = Date.now()
   input.workLog.emit({
     id: 'route.clarify',
@@ -348,7 +358,7 @@ async function streamClarificationTurn(
   })
 
   await emitSnapshotWithAssembly(input, plan.snapshot, 'clarification', { plan })
-  return { snapshot: plan.snapshot, toolCalls: [], errorCopyId: undefined }
+  return { snapshot: plan.snapshot, toolCalls: [], errorCopyId: undefined, gate: undefined }
 }
 
 async function streamRetrievalFirstTurn(
@@ -363,7 +373,7 @@ async function streamRetrievalFirstTurn(
     workLog: WorkStepEmitter
   },
   plan: Extract<AnswerResponsePlan, { mode: 'answer' }>,
-): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined } | undefined> {
+): Promise<StreamToolLedTurnResult | undefined> {
   if (isSignalAborted(input.signal)) {
     return undefined
   }
@@ -416,18 +426,18 @@ async function streamRetrievalFirstTurn(
   })
 
   if (isSignalAborted(input.signal)) {
-    return { snapshot: undefined, toolCalls: [result.record], errorCopyId: undefined }
+    return { snapshot: undefined, toolCalls: [result.record], errorCopyId: undefined, gate: undefined }
   }
 
   if (result.record.status !== 'complete') {
-    return { snapshot: undefined, toolCalls: [result.record], errorCopyId: undefined }
+    return { snapshot: undefined, toolCalls: [result.record], errorCopyId: undefined, gate: undefined }
   }
 
   emitReadAndCompareSteps(input.workLog, result.providers)
 
   if (result.providers.length === 0) {
     if (!shouldReturnDeterministicEmptyState(input.query, searchInput)) {
-      return { snapshot: undefined, toolCalls: [result.record], errorCopyId: undefined }
+      return { snapshot: undefined, toolCalls: [result.record], errorCopyId: undefined, gate: undefined }
     }
 
     const snapshot = withFollowUpLayout(
@@ -441,7 +451,7 @@ async function streamRetrievalFirstTurn(
     )
 
     await emitSnapshotWithAssembly(input, snapshot, 'retrieval_empty', { planMode: 'empty' })
-    return { snapshot, toolCalls: [result.record], errorCopyId: undefined }
+    return { snapshot, toolCalls: [result.record], errorCopyId: undefined, gate: undefined }
   }
 
   const snapshot = withFollowUpLayout(
@@ -458,7 +468,7 @@ async function streamRetrievalFirstTurn(
 
   await emitSnapshotWithAssembly(input, snapshot, 'retrieval_first', { plan })
 
-  return { snapshot, toolCalls: [result.record], errorCopyId: undefined }
+  return { snapshot, toolCalls: [result.record], errorCopyId: undefined, gate: undefined }
 }
 
 function buildInitialRegistrySearchInput(
@@ -592,7 +602,7 @@ async function streamInsufficientFrozenContextTurn(
     workLog: WorkStepEmitter
   },
   routeKind: 'frozen_filter' | 'frozen_compare',
-): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined }> {
+): Promise<StreamToolLedTurnResult> {
   const isCompare = routeKind === 'frozen_compare'
   const snapshot = withFollowUpLayout(
     {
@@ -621,7 +631,7 @@ async function streamInsufficientFrozenContextTurn(
 
   await emitSnapshotWithAssembly(input, snapshot, routeKind, { planMode: routeKind === 'frozen_compare' ? 'compare' : 'filter' })
 
-  return { snapshot, toolCalls: [], errorCopyId: undefined }
+  return { snapshot, toolCalls: [], errorCopyId: undefined, gate: undefined }
 }
 
 function selectFrozenProviders(
@@ -647,7 +657,7 @@ async function streamAgentTurn(
   agentInput: Parameters<typeof runAnswerToolUseAgent>[0],
   seedToolCalls: readonly AnswerToolCallRecord[] = [],
   planMode?: StreamPlanMode,
-): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined } | undefined> {
+): Promise<StreamToolLedTurnResult | undefined> {
   const recoveryStartedAt = Date.now()
   if (agentInput.disableTools === true) {
     input.workLog.emit({
@@ -703,16 +713,17 @@ async function streamAgentTurn(
       ...seedToolCalls,
       ...resequenceToolCalls(result.toolCalls, seedToolCalls.length),
     ]
+    const gate = answerRunGateFromAnswerGate(result.gate)
     if (!result.gate.ok) {
       const copyId = result.gate.copyId
       input.send({ type: 'error', code: result.gate.code, copyId })
-      return { snapshot: undefined, toolCalls, errorCopyId: copyId }
+      return { snapshot: undefined, toolCalls, errorCopyId: copyId, gate }
     }
 
     emitReadAndCompareSteps(input.workLog, result.providers)
     const snapshot = withFollowUpLayout(result.snapshot, input.priorTurnsCount, input.intent)
     await emitSnapshotWithAssembly(input, snapshot, 'agent', planMode === undefined ? {} : { planMode })
-    return { snapshot, toolCalls, errorCopyId: undefined }
+    return { snapshot, toolCalls, errorCopyId: undefined, gate }
   } catch {
     stopModelTiming({ error: true })
     input.workLog.emit({
@@ -726,7 +737,7 @@ async function streamAgentTurn(
     })
     const copyId = makeCopyId()
     input.send({ type: 'error', code: 'answer_turn_failed', copyId })
-    return { snapshot: undefined, toolCalls: [...seedToolCalls], errorCopyId: copyId }
+    return { snapshot: undefined, toolCalls: [...seedToolCalls], errorCopyId: copyId, gate: undefined }
   }
 }
 
@@ -738,6 +749,21 @@ function resequenceToolCalls(
     ...record,
     seq: startSeq + index,
   }))
+}
+
+function answerRunGateFromAnswerGate(gate: AnswerGateResult): AnswerRunGateSummary {
+  if (gate.ok) {
+    return {
+      ok: true,
+      source: 'answer_gate',
+    }
+  }
+
+  return {
+    ok: false,
+    source: 'answer_gate',
+    code: gate.code,
+  }
 }
 
 async function streamBoundaryTurn(
@@ -752,7 +778,7 @@ async function streamBoundaryTurn(
     workLog: WorkStepEmitter
   },
   kind: 'boundary_explain' | 'unsupported',
-): Promise<{ snapshot: AnswerSnapshot | undefined; toolCalls: AnswerToolCallRecord[]; errorCopyId: string | undefined }> {
+): Promise<StreamToolLedTurnResult> {
   const providers = reindexProviders(input.priorProviders)
   const oneLine = kind === 'boundary_explain' ? buildBoundaryOneLine() : buildUnsupportedOneLine()
   const summary =
@@ -798,7 +824,7 @@ async function streamBoundaryTurn(
   )
 
   await emitSnapshotWithAssembly(input, snapshot, kind, { planMode: 'boundary' })
-  return { snapshot, toolCalls: [], errorCopyId: undefined }
+  return { snapshot, toolCalls: [], errorCopyId: undefined, gate: undefined }
 }
 
 function withFollowUpLayout(
@@ -1173,12 +1199,13 @@ async function persistTurn(input: {
   captured: AnswerSnapshot | undefined
   errorCopyId: string | undefined
   toolCalls: readonly AnswerToolCallRecord[]
+  gate: AnswerRunGateSummary | undefined
   searchContext: AeSearchContext | undefined
   timings: readonly AnswerTurnTimingEntry[]
   workLog: readonly AnswerWorkStep[]
 }): Promise<boolean> {
   const status = input.captured !== undefined ? 'complete' : 'error'
-  const evidence = input.captured !== undefined
+  const baseEvidence = input.captured !== undefined
     ? buildFrozenEvidence(input.captured, input.toolCalls, input.searchContext, input.timings, input.workLog)
     : emptyEvidence(input.searchContext, input.timings, input.workLog)
   const prose = input.captured !== undefined ? buildFrozenProse(input.captured) : emptyProse()
@@ -1186,10 +1213,34 @@ async function persistTurn(input: {
     query: input.query,
     intent: input.intent,
     ...(input.searchContext === undefined ? {} : { searchContext: stableAeSearchContextKey(input.searchContext) }),
-    providers: evidence.providers.map((provider) => provider.slug),
+    providers: baseEvidence.providers.map((provider) => provider.slug),
     prose,
     ...(input.toolCalls.length === 0 ? {} : { toolCalls: input.toolCalls.map((call) => call.resultHash) }),
   }).toString()
+  const evidenceForSummary: FrozenTurnEvidence =
+    baseEvidence.toolCalls !== undefined || input.toolCalls.length === 0
+      ? baseEvidence
+      : { ...baseEvidence, toolCalls: input.toolCalls }
+  const answerRun = buildAnswerRunReport({
+    intent: input.intent,
+    status,
+    snapshotHash,
+    evidence: evidenceForSummary,
+    ...(input.gate === undefined ? {} : { gate: input.gate }),
+  })
+  const harnessRun = buildHarnessRunReportForAnswer({
+    runId: input.turnId,
+    intent: input.intent,
+    status,
+    snapshotHash,
+    evidence: evidenceForSummary,
+    ...(input.gate === undefined ? {} : { gate: input.gate }),
+  })
+  const evidence: FrozenTurnEvidence = {
+    ...evidenceForSummary,
+    answerRun,
+    harnessRun,
+  }
 
   try {
     if (input.isNewThread) {

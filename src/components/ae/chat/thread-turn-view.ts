@@ -1,6 +1,6 @@
 import type { AnswerLayoutProfile, AnswerWorkStep } from '@/modules/answer/public'
 import type { AnswerArtifact } from '@/modules/answer/public'
-import type { FollowUpIntent, PublicThreadTurn } from '@/modules/answer-thread/public'
+import type { FollowUpIntent, PublicAnswerCheckSummary, PublicThreadTurn } from '@/modules/answer-thread/public'
 
 /** Shared replay/collapsed turn payload for generative answer panels. */
 export type ThreadTurnViewModel = {
@@ -11,6 +11,7 @@ export type ThreadTurnViewModel = {
   artifacts: readonly AnswerArtifact[]
   workLog: readonly AnswerWorkStep[]
   layoutProfile?: AnswerLayoutProfile
+  answerCheckSummary?: PublicAnswerCheckSummary
 }
 
 export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
@@ -22,5 +23,6 @@ export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
     artifacts: turn.artifacts,
     workLog: turn.workLog,
     ...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile }),
+    ...(turn.answerCheckSummary === undefined ? {} : { answerCheckSummary: turn.answerCheckSummary }),
   }
 }

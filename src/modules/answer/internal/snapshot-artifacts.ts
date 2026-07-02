@@ -20,9 +20,10 @@ const ANSWER_ARTIFACTS = [
   'location-map',
   'prose',
   'what-to-do-now',
+  'agent-json',
 ] as const
 const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
-const EMPTY_ARTIFACTS = ['one-line', 'prose', 'recovery-prompts', 'what-to-do-now'] as const
+const EMPTY_ARTIFACTS = ['one-line', 'prose', 'recovery-prompts', 'what-to-do-now', 'agent-json'] as const
 const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now'] as const
 
 export function buildArtifactsFromSnapshot(
@@ -86,6 +87,10 @@ export function buildArtifactsFromSnapshot(
     artifacts.push({ kind: 'what-to-do-now', text: snapshot.nextStep })
   }
 
+  if (!compact && snapshot.agentJsonUrl.length > 0) {
+    artifacts.push({ kind: 'agent-json', url: snapshot.agentJsonUrl })
+  }
+
   return filterArtifactsForBudget(artifacts, budget)
 }
 
@@ -109,7 +114,7 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
       return {
         layoutProfile: profile,
         allowedKinds: EMPTY_ARTIFACTS,
-        maxArtifactCount: 4,
+        maxArtifactCount: 5,
         maxProviderCards: 0,
       }
     case 'compare_pair':
@@ -130,7 +135,7 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
       return {
         layoutProfile: profile,
         allowedKinds: ANSWER_ARTIFACTS,
-        maxArtifactCount: 5,
+        maxArtifactCount: 6,
         maxProviderCards: ANSWER_PROVIDER_CARD_LIMIT,
       }
   }

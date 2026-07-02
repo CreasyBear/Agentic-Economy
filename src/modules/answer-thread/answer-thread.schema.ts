@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { AnswerArtifact } from '@/modules/answer/answer-schema'
 import type { AnswerSource, AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
 import type { AnswerLayoutProfile } from '@/modules/answer/layout-profile'
+import type { HarnessRunReport } from '@/modules/harness/public'
 import {
   AeSearchContextSchema,
   type AeSearchContext,
@@ -83,6 +84,87 @@ export type AnswerTurnTimingEntry = {
   metadata?: Record<string, string | number | boolean | null>
 }
 
+export type AnswerRunToolCounters = {
+  total: number
+  complete: number
+  error: number
+  refused: number
+  totalDurationMs: number
+}
+
+export type AnswerRunWorkLogCounters = {
+  total: number
+  complete: number
+  running: number
+  skipped: number
+  error: number
+  stopped: number
+}
+
+export type AnswerRunTimingCounters = {
+  count: number
+  totalDurationMs: number
+}
+
+export type AnswerRunGateSummary = {
+  ok: boolean
+  source: 'answer_gate' | 'turn_status'
+  code?: string
+}
+
+export type AnswerRunSummary = {
+  schemaVersion: 1
+  turn: {
+    intent: FollowUpIntent
+    status: AnswerTurnStatus
+  }
+  tools: {
+    total: number
+    complete: number
+    error: number
+    refused: number
+    totalDurationMs: number
+    byName: Partial<Record<AnswerToolId, AnswerRunToolCounters>>
+  }
+  evidence: {
+    providerCount: number
+    allowedSlugCount: number
+    resultHashes: readonly string[]
+    snapshotHash: string
+  }
+  workLog: AnswerRunWorkLogCounters
+  timings: {
+    totalEntries: number
+    totalDurationMs: number
+    byName: Record<string, AnswerRunTimingCounters>
+  }
+  gates: AnswerRunGateSummary
+}
+
+export type AnswerRunCoverage = {
+  toolsAvailable: readonly AnswerToolId[]
+  toolsInvoked: readonly AnswerToolId[]
+  toolsUnused: readonly AnswerToolId[]
+  workLogPhases: readonly string[]
+  hasProviders: boolean
+  hasAllowedSlugs: boolean
+  hasSnapshotHash: boolean
+}
+
+export type AnswerRunReport = {
+  summary: AnswerRunSummary
+  coverage: AnswerRunCoverage
+}
+
+export type PublicAnswerCheckSummary = {
+  catalogSearches: number
+  listingsRead: number
+  listedBusinesses: number
+  checksPassed: number
+  checksFailed: number
+  elapsedMs: number
+}
+
 export type PublicThreadTurn = {
   turnId: string
   seq: number
@@ -93,6 +175,7 @@ export type PublicThreadTurn = {
   artifacts: readonly AnswerArtifact[]
   oneLine: string
   layoutProfile?: AnswerLayoutProfile
+  answerCheckSummary?: PublicAnswerCheckSummary
 }
 
 export type PublicThreadProjection = {
@@ -124,6 +207,10 @@ export type FrozenTurnEvidence = {
   timings?: readonly AnswerTurnTimingEntry[]
   /** Public work log persisted so replay shows the same visible process as the live stream. */
   workLog?: readonly AnswerWorkStep[]
+  /** Private OMP-style rollup used for debugging/evals; public projection exposes only sanitized counts. */
+  answerRun?: AnswerRunReport
+  /** Internal reusable harness rollup; never exposed through public thread projection. */
+  harnessRun?: HarnessRunReport
 }
 
 export type FrozenTurnProse = {

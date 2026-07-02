@@ -74,6 +74,68 @@ Phase 7 follows the mainstream tool-use architecture used by current LLM APIs: t
 - Prose never names a provider unless that provider appears in the current tool result or a prior frozen turn allowed by the follow-up intent.
 - Tool traces are not shown with internal architecture vocabulary on human surfaces.
 
+## Harness runtime contract
+
+The answer path and quiet agent-tools route run through the internal harness
+kernel in `src/modules/harness/`. OMP is the architectural reference: AE keeps
+the run collector, schema-first tool contract, approval policy, and replay
+journal shape, but does not copy OMP's broad product tool surface.
+
+Core types:
+
+- `HarnessToolDefinition` adapts an AE `ActionDefinition` into a schema-backed
+  tool.
+- `HarnessToolResult` records the validated input, output summary, status,
+  duration, result hash, and optional error code.
+- `HarnessRunSummary` and `HarnessRunCoverage` aggregate tool/event counts,
+  richer statuses, timings, available tools, invoked tools, unused tools, and
+  phases.
+- `HarnessSessionEntry` supports deterministic session replay projections.
+
+Status taxonomy:
+
+```text
+ok | error | refused | blocked | timeout | aborted | skipped
+```
+
+Approval policy:
+
+- `read` tier: auto-allowed.
+- `write` tier: allowed only when source-write admission is present for the
+  calling surface.
+- `exec` tier: denied for AE product assistants.
+- Public answer synthesis still exposes only `registry.search` and
+  `registry.detail`.
+
+Schema policy:
+
+- `ActionDefinition.schema` and `ActionDefinition.outputSchema` are the final
+  runtime validators.
+- `actionToHarnessTool()` derives JSON schema from those Zod schemas.
+- Strict schema validation rejects enum/const values that do not match declared
+  JSON schema types before the tool is exposed to the model/runtime boundary.
+- `actionToOpenRouterTool()` uses the harness JSON schema path and falls back to
+  flat action parameters only when a schema shape cannot be represented in the
+  compact model-facing tool format.
+
+Persistence policy:
+
+- Newly persisted answer turns include the existing private `answerRun` rollup
+  and the reusable private `harnessRun` rollup.
+- Public `/t/$threadId` projection exposes only `PublicAnswerCheckSummary`.
+- Public projection must not serialize `harnessRun`, raw tool ids, raw inputs,
+  result summaries, result hashes, or internal trace names.
+- Error turns that create a new thread still navigate to `/t/$threadId`; the
+  thread exists even when the answer body resolves to a safe error state.
+
+Session continuity:
+
+- The server session list remains source of truth for persisted threads.
+- The client may keep a capped, sanitized `sessionStorage` projection of recent
+  thread records for instant sidebar continuity across home/thread remounts.
+- Stored client projection must not include `pseudonymousSessionId` or raw
+  harness evidence.
+
 ## Experience contract — what the AI path should feel like
 
 **CEO review decisions (2026-06-30):** Approach B (full thread product), hybrid follow-ups, Perplexity-adapted thinking steps with honest register copy.
@@ -167,8 +229,11 @@ answerTurns
 answerToolCalls
   turnId, seq, toolId, inputJson, resultJson, resultSummaryJson, resultHash, status, createdAt
 
+frozen turn evidence
+  providers, allowedSlugs, agentJsonUrl, toolCalls, timings, workLog, answerRun?, harnessRun?
+
 Public projection /t/$threadId
-  turns[] with AnswerArtifact render input only — no private fields
+  turns[] with AnswerArtifact render input and PublicAnswerCheckSummary only — no private fields
 ```
 
 Anonymous users: cookie-backed `pseudonymousSessionId` (same family as inquiry funnel). Signed-in users: optional Clerk attach later.

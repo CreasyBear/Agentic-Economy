@@ -19,6 +19,8 @@ case catalog.
 - Public answer copy is scanned for unsafe claims and internal architecture
   terms.
 - Timing traces and total timing budgets are present for every answer case.
+- Harness run reports can be derived from persisted turn evidence without
+  leaking raw tool evidence to the public projection.
 - A 100-business broad seed exercises multiple industries and Australian
   locales.
 - Every single-step, multi-step, and generated-answer case is ranked against a
@@ -43,6 +45,19 @@ writes `output/eval/answer-suite-report.json`.
 audit.
 
 `test:eval` runs coverage, report generation, promptfoo, and Vitest.
+
+For harness changes, pair the eval command with the focused harness/answer
+suite:
+
+```bash
+./node_modules/.bin/vitest run tests/unit/harness tests/unit/answer-thread/answer-run-summary.test.ts tests/unit/answer-thread/public-projection.test.ts tests/unit/answer-thread/tool-runner.test.ts tests/unit/answer/answer-tool-use-agent.test.ts tests/integration/answer-tool-calls.test.ts tests/integration/agent-tools-api.test.ts
+```
+
+Browser session continuity is covered by:
+
+```bash
+./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium
+```
 
 ## Case Catalog
 
@@ -73,6 +88,7 @@ The coverage auditor lives in `eval/answer/lib/coverage.ts`. It fails when:
 
 - A required reliability dimension has no case.
 - A case lacks timing, evidence, or copy-safety assertions.
+- Harness/private evidence is exposed through the public projection.
 - A broad-catalog case does not use the broad seed.
 - Promptfoo is missing a shared catalog case.
 - Promptfoo references an unknown or mismatched case.
@@ -110,6 +126,9 @@ the answer eval workflow. It includes:
 - Broad seed counts.
 - Per-case slugs, tool inputs, timings, streamed artifact kinds, and
   public-copy diagnostics.
+- Harness-facing run evidence should remain private. Reports may include
+  sanitized answer-check counts, but public artifacts must not include
+  `harnessRun`, raw tool ids, raw inputs, result summaries, or result hashes.
 - Per-case score breakdowns and user-outcome judgments.
 
 When a failure occurs, start with the JSON report. It is intentionally more

@@ -1,8 +1,43 @@
 # AI-SPEC — Phase 1 Agent Discovery Contract
 
-**Status:** authority for Phase 1 AI/agent-facing outputs.
-**Scope:** UCP fallback manifest, `llms.txt`, sitemap, robots, public registry/search, public read-only JSON catalog.
-**Non-scope:** chat agents, MCP tools, OpenAPI action services, API keys, protected actions, payments, callable endpoints.
+**Status:** authority for Phase 1 AI/agent-facing outputs, with current-runtime addenda below.
+**Phase 1 scope:** UCP fallback manifest, `llms.txt`, sitemap, robots, public registry/search, public read-only JSON catalog.
+**Phase 1 non-scope:** chat agents, MCP tools, OpenAPI action services, API keys, protected actions, payments, callable endpoints.
+
+## Current-runtime addendum: answer harness
+
+AE now has a bounded answer/action harness for the public answer path and the
+quiet agent-tools door. This does not expand the Phase 1 discovery contract and
+does not make public business pages executable.
+
+Current assistant-callable actions remain:
+
+- `registry.search` — read-only public catalog search.
+- `registry.detail` — read-only public listing detail.
+- `inquiry.submit` — source-write-admitted qualified inquiry only.
+
+The internal harness lives under `src/modules/harness/` and adapts
+`ActionDefinition` into `HarnessToolDefinition`. One Zod schema path feeds:
+
+- quiet agent-tool descriptors,
+- model-facing answer tool descriptions,
+- runtime input validation,
+- runtime output validation,
+- eval and test fixtures.
+
+Harness policy:
+
+- read tools are auto-allowed;
+- writes require AE source-write admission;
+- exec/shell/filesystem/browser/LSP-style tools are rejected for product
+  assistants;
+- unsupported booking/payment/dispatch/autofulfillment requests remain outside
+  AE and must be refused or routed back to a human-safe next step.
+
+Every newly persisted answer turn may carry private harness evidence
+(`harnessRun`) in frozen turn evidence. Public projections must expose only
+sanitized answer-check counts and must never expose raw tool inputs, hashes,
+tool ids, internal trace names, or harness reports.
 
 ## Purpose
 

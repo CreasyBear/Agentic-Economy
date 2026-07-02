@@ -33,18 +33,22 @@ type LiveTurn = {
   searchContext: AeSearchContext
 }
 
+const RECENT_THREADS_STORAGE_KEY = 'ae.recentThreads.v1'
+const RECENT_THREADS_LIMIT = 20
+
 export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
   const navigate = useNavigate()
   const [projection, setProjection] = useState<PublicThreadProjection | null>(initialProjection ?? null)
   const [projectionUnavailable, setProjectionUnavailable] = useState(false)
   const [threads, setThreads] = useState<readonly AnswerThreadRecord[]>([])
+  const [storedThreadsLoaded, setStoredThreadsLoaded] = useState(false)
   const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null)
   const [generation, setGeneration] = useState(0)
   const [streamingBusy, setStreamingBusy] = useState(false)
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
   const [searchContext] = useState<AeSearchContext>(DEFAULT_AE_SEARCH_CONTEXT)
   const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
-  const initialQueryStarted = useRef(false)
+  const startedInitialQueryRef = useRef<string | null>(null)
   const pendingThreadIdRef = useRef<string | null>(null)
 
   const routeThreadId = threadId
@@ -59,12 +63,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   const refreshThreads = useCallback(async () => {
     try {
-      const response = await fetch('/api/answer/threads')
+      const response = await fetch('/api/answer/threads', { credentials: 'same-origin' })
       if (!response.ok) {
         return
       }
       const body = (await response.json()) as { threads: readonly AnswerThreadRecord[] }
-      setThreads(body.threads)
+      setThreads((current) => mergeThreadRecords(body.threads, current))
     } catch {
       // Sidebar is optional when persistence is unavailable.
     }
@@ -72,7 +76,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   const refreshProjection = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/answer/threads/${encodeURIComponent(id)}`)
+      const response = await fetch(`/api/answer/threads/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
       if (!response.ok) {
         setProjection(null)
         setProjectionUnavailable(true)
@@ -85,6 +89,21 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       setProjectionUnavailable(true)
     }
   }, [])
+
+  useEffect(() => {
+    const stored = readStoredThreadRecords()
+    if (stored.length > 0) {
+      setThreads((current) => mergeThreadRecords(stored, current))
+    }
+    setStoredThreadsLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!storedThreadsLoaded) {
+      return
+    }
+    writeStoredThreadRecords(threads)
+  }, [storedThreadsLoaded, threads])
 
   useEffect(() => {
     void refreshThreads()
@@ -110,14 +129,15 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }, [routeThreadId, initialProjection, refreshProjection])
 
   useEffect(() => {
-    if (initialQueryStarted.current) {
-      return
-    }
     const trimmed = initialQuery?.trim()
     if (trimmed === undefined || trimmed.length === 0) {
+      startedInitialQueryRef.current = null
       return
     }
-    initialQueryStarted.current = true
+    if (startedInitialQueryRef.current === trimmed) {
+      return
+    }
+    startedInitialQueryRef.current = trimmed
     setStreamingBusy(true)
     setGeneration((current) => {
       const next = current + 1
@@ -164,29 +184,36 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   function handleThreadCreated(id: string) {
     pendingThreadIdRef.current = id
     setSessionThreadId(id)
+    setThreads((current) => upsertOptimisticThread(current, {
+      threadId: id,
+      title: liveTurn?.query.trim() ?? 'New question',
+    }))
   }
 
   function handleStreamEnd(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
     setStreamingBusy(false)
-    if (outcome === 'complete') {
-      handleTurnComplete()
+    if (outcome === 'complete' || pendingThreadIdRef.current !== null || routeThreadId !== null) {
+      handleTurnSettled(outcome)
     }
   }
 
-  function handleTurnComplete() {
-    captureClientProductEventOnClient('answer_completed', { query_length: liveTurn?.query.length ?? 0 })
-    void refreshThreads()
+  function handleTurnSettled(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
+    if (outcome === 'complete') {
+      captureClientProductEventOnClient('answer_completed', { query_length: liveTurn?.query.length ?? 0 })
+    }
 
     const pendingId = pendingThreadIdRef.current
     if (routeThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
       void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })).finally(() => {
         setLiveTurn(null)
+        void refreshThreads()
       })
       return
     }
 
     setLiveTurn(null)
+    void refreshThreads()
 
     if (routeThreadId !== null) {
       void refreshProjection(routeThreadId)
@@ -314,4 +341,108 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       {isStructuredAnswerModeEnabled() ? <AeAnswerModelProvider>{shell}</AeAnswerModelProvider> : shell}
     </AePublicShell>
   )
+}
+
+function mergeThreadRecords(
+  incoming: readonly AnswerThreadRecord[],
+  current: readonly AnswerThreadRecord[],
+): AnswerThreadRecord[] {
+  const normalizedIncoming = incoming.map(sanitizeThreadRecord)
+  const incomingIds = new Set(normalizedIncoming.map((thread) => thread.threadId))
+  const optimistic = current.map(sanitizeThreadRecord).filter((thread) => !incomingIds.has(thread.threadId))
+  return [...normalizedIncoming, ...optimistic]
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+    .slice(0, RECENT_THREADS_LIMIT)
+}
+
+function upsertOptimisticThread(
+  current: readonly AnswerThreadRecord[],
+  input: { threadId: string; title: string },
+): AnswerThreadRecord[] {
+  const now = Date.now()
+  const existing = current.find((thread) => thread.threadId === input.threadId)
+  const optimistic: AnswerThreadRecord = {
+    threadId: input.threadId,
+    pseudonymousSessionId: '',
+    title: input.title.length > 0 ? input.title : 'New question',
+    sharePolicy: existing?.sharePolicy ?? 'public',
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  }
+
+  return mergeThreadRecords([optimistic], current.filter((thread) => thread.threadId !== input.threadId))
+}
+
+function readStoredThreadRecords(): AnswerThreadRecord[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+  try {
+    const raw = window.sessionStorage.getItem(RECENT_THREADS_STORAGE_KEY)
+    if (raw === null) {
+      return []
+    }
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed.flatMap(readStoredThreadRecord).slice(0, RECENT_THREADS_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+function writeStoredThreadRecords(threads: readonly AnswerThreadRecord[]): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.sessionStorage.setItem(
+      RECENT_THREADS_STORAGE_KEY,
+      JSON.stringify(threads.map(sanitizeThreadRecord).slice(0, RECENT_THREADS_LIMIT)),
+    )
+  } catch {
+    // Recent questions still work from the server session when storage is unavailable.
+  }
+}
+
+function readStoredThreadRecord(value: unknown): AnswerThreadRecord[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return []
+  }
+  const record = value as Partial<AnswerThreadRecord>
+  if (
+    typeof record.threadId !== 'string' ||
+    record.threadId.length === 0 ||
+    typeof record.title !== 'string' ||
+    record.title.length === 0 ||
+    (record.sharePolicy !== 'public' && record.sharePolicy !== 'unlisted') ||
+    typeof record.createdAt !== 'number' ||
+    typeof record.updatedAt !== 'number'
+  ) {
+    return []
+  }
+  return [sanitizeThreadRecord({
+    threadId: record.threadId,
+    pseudonymousSessionId: '',
+    title: record.title,
+    sharePolicy: record.sharePolicy,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  })]
+}
+
+function sanitizeThreadRecord(thread: AnswerThreadRecord): AnswerThreadRecord {
+  return {
+    threadId: thread.threadId,
+    pseudonymousSessionId: '',
+    title: thread.title.trim().length > 0 ? thread.title.trim() : 'New question',
+    sharePolicy: thread.sharePolicy,
+    createdAt: finiteTimestamp(thread.createdAt),
+    updatedAt: finiteTimestamp(thread.updatedAt),
+  }
+}
+
+function finiteTimestamp(value: number): number {
+  return Number.isFinite(value) ? value : Date.now()
 }

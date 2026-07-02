@@ -3,6 +3,11 @@ import type { ActionTimingSink } from '@/modules/common/action'
 import { stableHash } from '@/modules/common/stable-hash'
 import { toAnswerSource } from '@/modules/answer/public'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
+import {
+  actionToHarnessTool,
+  runHarnessTool,
+  type HarnessToolStatus,
+} from '@/modules/harness/public'
 import type {
   PublicBusinessCatalogApiPage,
   PublicBusinessCatalogDetailResult,
@@ -69,9 +74,9 @@ export async function runAnswerToolCall(
     return refuse(input, toolCallId, 'tool_not_read_only')
   }
 
-  const parsed = action.schema.safeParse(input.input)
-  if (!parsed.success) {
-    const errorCode = 'invalid_input'
+  const tool = actionToHarnessTool(action)
+  if (tool.strictInputSchemaViolation !== undefined || tool.strictOutputSchemaViolation !== undefined) {
+    const errorCode = 'tool_schema_not_strict'
     return recordResult(input, toolCallId, {
       status: 'error',
       summary: { slugs: [], count: 0, errorCode },
@@ -82,48 +87,50 @@ export async function runAnswerToolCall(
     })
   }
 
-  try {
-    const actionStarted = Date.now()
-    const result = await action.run({ data: parsed.data, context: { timing: timings.sink } })
-    timings.record('tool.run', Date.now() - actionStarted, { toolId: input.toolId })
+  const outcome = await runHarnessTool({
+    tool,
+    input: input.input,
+    context: { timing: timings.sink },
+    surface: 'agentTools',
+    allowWrites: false,
+    toolCallId,
+  })
+  timings.record('tool.run', outcome.result.durationMs, {
+    toolId: input.toolId,
+    toolSeq: input.seq,
+    harnessStatus: outcome.result.status,
+  })
 
-    const parsedOutput = parseActionOutput(action, result)
-    if (!parsedOutput.success) {
-      const errorCode = 'invalid_output'
-      return recordResult(input, toolCallId, {
-        status: 'error',
-        summary: { slugs: [], count: 0, errorCode },
-        inputJson: safeStringify(parsed.data),
-        providers: [],
-        resultJson: safeStringify({ kind: 'error', code: errorCode }),
-        timings: timings.entries(),
-      })
-    }
-
-    const extracted = extractProviders(input.toolId as AnswerToolId, parsedOutput.data)
-    const summary: AnswerToolCallResultSummary = {
-      slugs: extracted.providers.map((provider) => provider.slug),
-      count: extracted.count,
-    }
+  if (outcome.result.status !== 'ok' || outcome.result.output === undefined) {
+    const errorCode = outcome.result.errorCode ?? harnessStatusToErrorCode(outcome.result.status)
     return recordResult(input, toolCallId, {
-      status: 'complete',
-      summary,
-      inputJson: safeStringify(parsed.data),
-      providers: extracted.providers,
-      resultJson: safeStringify(parsedOutput.data),
-      timings: timings.entries(),
-    })
-  } catch {
-    const errorCode = 'tool_run_failed'
-    return recordResult(input, toolCallId, {
-      status: 'error',
+      status: harnessStatusToAnswerStatus(outcome.result.status),
       summary: { slugs: [], count: 0, errorCode },
-      inputJson: safeStringify(parsed.data),
+      inputJson: outcome.result.inputJson,
       providers: [],
-      resultJson: safeStringify({ kind: 'error', code: errorCode }),
+      resultJson: safeStringify({
+        kind: outcome.result.status === 'blocked' || outcome.result.status === 'refused' ? 'refused' : 'error',
+        code: errorCode,
+      }),
       timings: timings.entries(),
+      resultHash: outcome.result.resultHash,
     })
   }
+
+  const extracted = extractProviders(input.toolId as AnswerToolId, outcome.result.output)
+  const summary: AnswerToolCallResultSummary = {
+    slugs: extracted.providers.map((provider) => provider.slug),
+    count: extracted.count,
+  }
+  return recordResult(input, toolCallId, {
+    status: 'complete',
+    summary,
+    inputJson: outcome.result.inputJson,
+    providers: extracted.providers,
+    resultJson: outcome.result.outputJson ?? safeStringify(outcome.result.output),
+    timings: timings.entries(),
+    resultHash: outcome.result.resultHash,
+  })
 }
 
 function refuse(
@@ -151,10 +158,11 @@ function recordResult(
     providers: AnswerSource[]
     resultJson: string
     timings: readonly AnswerTurnTimingEntry[]
+    resultHash?: string
   },
 ): RunAnswerToolCallResult {
   const resultSummaryJson = safeStringify(outcome.summary)
-  const resultHash = stableHash({
+  const resultHash = outcome.resultHash ?? stableHash({
     toolId: input.toolId,
     input: outcome.inputJson,
     summary: resultSummaryJson,
@@ -180,19 +188,6 @@ function recordResult(
     timings: outcome.timings,
     resultJson: outcome.resultJson,
   }
-}
-
-type ActionOutputParser = {
-  safeParse(
-    result: unknown,
-  ): { success: true; data: unknown } | { success: false }
-}
-
-function parseActionOutput(
-  action: { outputSchema?: ActionOutputParser },
-  result: unknown,
-): { success: true; data: unknown } | { success: false } {
-  return action.outputSchema?.safeParse(result) ?? { success: false }
 }
 
 function extractProviders(
@@ -223,6 +218,40 @@ function safeStringify(value: unknown): string {
     return JSON.stringify(value)
   } catch {
     return 'null'
+  }
+}
+
+function harnessStatusToAnswerStatus(status: HarnessToolStatus): AnswerToolCallStatus {
+  switch (status) {
+    case 'ok':
+      return 'complete'
+    case 'refused':
+    case 'blocked':
+    case 'skipped':
+      return 'refused'
+    case 'error':
+    case 'timeout':
+    case 'aborted':
+      return 'error'
+  }
+}
+
+function harnessStatusToErrorCode(status: HarnessToolStatus): string {
+  switch (status) {
+    case 'ok':
+      return 'none'
+    case 'refused':
+      return 'tool_refused'
+    case 'blocked':
+      return 'tool_blocked'
+    case 'skipped':
+      return 'tool_skipped'
+    case 'timeout':
+      return 'tool_timeout'
+    case 'aborted':
+      return 'tool_aborted'
+    case 'error':
+      return 'tool_run_failed'
   }
 }
 

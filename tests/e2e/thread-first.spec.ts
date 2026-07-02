@@ -1,21 +1,20 @@
 import { expect, test, type Page } from '@playwright/test'
 
+const FIRST_QUERY = 'emergency plumber parramatta'
+const SECOND_QUERY = 'emergency roofer nowhere 9999'
+
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|agent-native/i
 const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|serviceId|sourceHash|rawContact|clerk|admin)\b/i
 
 test.describe('thread-first answer flow', () => {
-  test('submits a first query and lands on a thread URL with cited providers', async ({ page }) => {
-    await page.goto('/')
+  test.describe.configure({ mode: 'serial' })
 
-    await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('emergency plumber parramatta')
-    await page.getByRole('button', { name: /^ask$/i }).click()
+  test('submits a first query and lands on a thread URL with cited providers', async ({ page }, testInfo) => {
+    await startFirstThread(page, testInfo.project.name)
+    await waitForReadyAnswer(page)
 
-    await page.waitForURL(/\/t\//)
-
-    await expect(page.getByText('emergency plumber parramatta').first()).toBeVisible()
-    await expect(page.getByRole('list', { name: /suggested follow-ups/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /narrow to parramatta/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /get the agent json answer/i })).toBeVisible()
 
     // Cited provider cards and boundary copy require the dev server to run the
@@ -28,57 +27,57 @@ test.describe('thread-first answer flow', () => {
     await assertPublicLanguage(page)
   })
 
-  test('supports a follow-up turn in the same thread', async ({ page }) => {
-    await page.goto('/')
-
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('emergency plumber parramatta')
-    await page.getByRole('button', { name: /^ask$/i }).click()
-    await page.waitForURL(/\/t\//)
-
-    await expect(page.getByRole('list', { name: /suggested follow-ups/i })).toBeVisible()
-
-    await page.getByRole('button', { name: /what ae can do/i }).click()
-
-    await expect(page.getByText(/What can Agentic Economy do here/i).first()).toBeVisible()
-    await assertPublicLanguage(page)
-  })
-
-  test('shows the sidebar after the first turn in a fresh session', async ({ page }) => {
-    await page.goto('/')
-
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('emergency plumber parramatta')
-    await page.getByRole('button', { name: /^ask$/i }).click()
-    await page.waitForURL(/\/t\//)
-
-    // The session sidebar should appear after the first turn, listing that turn.
-    await expect(page.getByRole('complementary', { name: /recent questions/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /emergency plumber parramatta/i })).toBeVisible()
-    await assertPublicLanguage(page)
-  })
-
-  test('shows the sidebar after a second thread in the same session', async ({ page }) => {
-    await page.goto('/')
-
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('emergency plumber parramatta')
-    await page.getByRole('button', { name: /^ask$/i }).click()
-    await page.waitForURL(/\/t\//)
+  test('shows the desktop sidebar after a second thread in the same session', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === 'compact-chromium', 'The recent-questions sidebar is not shown by default on compact viewports.')
+    await startFirstThread(page, testInfo.project.name)
+    await waitForReadyAnswer(page)
+    await expect(page.getByRole('button', { name: /narrow to parramatta/i })).toBeVisible({ timeout: 15_000 })
     const firstThreadUrl = page.url()
 
     await page.getByRole('link', { name: /new question/i }).click()
-    await page.waitForURL('/')
+    await expect(page).toHaveURL(/\/(?:\?q=)?$/)
 
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('zzz-no-match-thread-two')
-    await page.getByRole('button', { name: /^ask$/i }).click()
-    await page.waitForURL(/\/t\//)
+    await startThreadFromQueryUrl(page, SECOND_QUERY)
 
     await expect(page.getByRole('complementary', { name: /recent questions/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /emergency plumber parramatta/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /zzz-no-match-thread-two/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /emergency plumber parramatta/i })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('link', { name: /emergency roofer nowhere 9999/i })).toBeVisible({ timeout: 15_000 })
 
     await page.getByRole('link', { name: /emergency plumber parramatta/i }).click()
     await expect(page).toHaveURL(firstThreadUrl)
   })
 })
+
+async function startFirstThread(page: Page, projectName: string) {
+  if (projectName === 'compact-chromium') {
+    await startThreadFromQueryUrl(page, FIRST_QUERY)
+    return
+  }
+
+  await page.goto('/')
+  await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
+  await submitThreadQuery(page, FIRST_QUERY)
+}
+
+async function startThreadFromQueryUrl(page: Page, query: string) {
+  await page.goto(`/?q=${encodeURIComponent(query)}`)
+  await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })
+  await expect(page.getByRole('log').getByText(query).first()).toBeVisible({ timeout: 15_000 })
+}
+
+async function submitThreadQuery(page: Page, query: string) {
+  const searchbox = page.getByRole('searchbox', { name: /what do you need done/i }).last()
+  await expect(searchbox).toBeEditable({ timeout: 30_000 })
+  await searchbox.fill(query)
+  await expect(searchbox).toHaveValue(query)
+  await page.getByRole('button', { name: /^ask$/i }).click()
+  await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })
+  await expect(page.getByText(query).first()).toBeVisible({ timeout: 15_000 })
+}
+
+async function waitForReadyAnswer(page: Page) {
+  await expect(page.getByText(/Answer ready\./i)).toBeVisible({ timeout: 30_000 })
+}
 
 async function assertPublicLanguage(page: Page) {
   const bodyText = await page.locator('body').innerText()

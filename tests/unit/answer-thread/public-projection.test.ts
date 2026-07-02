@@ -50,6 +50,13 @@ describe('public thread projection', () => {
             title: 'Reading your request',
           },
         ],
+        harnessRun: {
+          summary: {
+            run: { status: 'ok' },
+            tools: { byName: { 'registry.search': { total: 1 } } },
+          },
+          coverage: { toolsInvoked: ['registry.search'] },
+        },
       }),
       snapshotHash: 'hash-secret',
       proseJson: JSON.stringify({
@@ -69,12 +76,21 @@ describe('public thread projection', () => {
     expect(projection.turns).toHaveLength(1)
     expect(projection.turns[0]?.artifacts.length).toBeGreaterThan(0)
     expect(projection.turns[0]?.workLog.map((step) => step.id)).toEqual(['interpret.request'])
+    expect(projection.turns[0]?.answerCheckSummary).toMatchObject({
+      catalogSearches: 0,
+      listingsRead: 1,
+      listedBusinesses: 1,
+      checksPassed: 2,
+      checksFailed: 0,
+    })
     expect(serialized).not.toContain('session-secret')
     expect(serialized).not.toContain('hash-secret')
     expect(serialized).not.toContain('err-secret')
     expect(serialized).not.toContain('evidenceJson')
     expect(serialized).not.toContain('pseudonymousSessionId')
     expect(serialized).not.toContain('allowedSlugs')
+    expect(serialized).not.toContain('harnessRun')
+    expect(serialized).not.toContain('toolsInvoked')
   })
 
   it('derives a replay work log for older saved turns', () => {
@@ -110,6 +126,18 @@ describe('public thread projection', () => {
             createdAt: 1,
           },
         ],
+        timings: [
+          {
+            name: 'tool.run',
+            durationMs: 14,
+            atMs: 1,
+            metadata: { toolId: 'registry.search', toolSeq: 0 },
+          },
+        ],
+        harnessRun: {
+          summary: { run: { status: 'ok' } },
+          coverage: { toolsInvoked: ['registry.search'] },
+        },
       }),
       snapshotHash: 'hash-secret',
       proseJson: JSON.stringify({
@@ -130,5 +158,14 @@ describe('public thread projection', () => {
       'compare.fit',
       'assemble.answer',
     ])
+    expect(projection.turns[0]?.answerCheckSummary).toEqual({
+      catalogSearches: 1,
+      listingsRead: 0,
+      listedBusinesses: 0,
+      checksPassed: 2,
+      checksFailed: 0,
+      elapsedMs: 14,
+    })
+    expect(JSON.stringify(projection)).not.toMatch(/toolCalls|resultSummaryJson|inputJson|resultHash|harnessRun|toolsInvoked|registry\.search|registry\.detail/)
   })
 })

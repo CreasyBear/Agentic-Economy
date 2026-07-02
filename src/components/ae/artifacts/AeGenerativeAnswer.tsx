@@ -9,6 +9,7 @@ import {
 } from '@/modules/answer/public'
 import type { AnswerArtifact, AnswerCompareField, AnswerSource } from '@/modules/answer/public'
 import { AeProviderSourceCard } from '@/components/ae/landing/AeProviderSourceCard'
+import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
 import {
   Sources,
@@ -388,8 +389,9 @@ function AnswerPartView({
           </p>
         )
       ) : null
-    case 'protected-by-ae':
     case 'agent-json':
+      return <AeAgentJsonAffordance agentJsonUrl={part.url} query={query} />
+    case 'protected-by-ae':
       return null
     default: {
       const _exhaustive: never = part

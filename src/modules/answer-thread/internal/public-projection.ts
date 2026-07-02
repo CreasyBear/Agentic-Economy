@@ -15,6 +15,7 @@ import type {
   PublicThreadProjection,
   PublicThreadTurn,
 } from '../answer-thread.schema'
+import { buildAnswerRunReport, buildPublicAnswerCheckSummary } from './answer-run-summary'
 
 export function buildPublicThreadProjection(
   thread: AnswerThreadRecord,
@@ -33,6 +34,12 @@ export function buildPublicThreadProjection(
 function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
   const evidence = parseJson<FrozenTurnEvidence>(turn.evidenceJson)
   const prose = parseJson<FrozenTurnProse>(turn.proseJson)
+  const answerRun = evidence.answerRun ?? buildAnswerRunReport({
+    intent: turn.intent,
+    status: turn.status,
+    snapshotHash: turn.snapshotHash,
+    evidence,
+  })
 
   const snapshot: AnswerSnapshot = {
     query: turn.query,
@@ -54,6 +61,7 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     workLog: evidence.workLog ?? deriveLegacyWorkLog(turn.query, evidence, prose),
     artifacts: buildArtifactsFromSnapshot(snapshot),
     oneLine: prose.oneLine,
+    answerCheckSummary: buildPublicAnswerCheckSummary(answerRun),
     ...(prose.layoutProfile === undefined ? {} : { layoutProfile: prose.layoutProfile }),
   }
 }

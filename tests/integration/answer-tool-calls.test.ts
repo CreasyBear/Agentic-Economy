@@ -150,6 +150,13 @@ describe('answerToolCalls persistence', () => {
         allowedSlugs: [],
         agentJsonUrl: '/api/businesses/search?q=plumber',
         toolCalls: [buildToolCall('tc-1', 'turn-share-1', 1, 'registry.search', [], 0)],
+        harnessRun: {
+          summary: {
+            run: { status: 'ok' },
+            tools: { byName: { 'registry.search': { total: 1 } } },
+          },
+          coverage: { toolsInvoked: ['registry.search'] },
+        },
       }),
       snapshotHash: 'hash-1',
       proseJson: JSON.stringify({ oneLine: 'Honest copy', summary: 'Summary', nextStep: 'Next' }),
@@ -162,9 +169,17 @@ describe('answerToolCalls persistence', () => {
     const serialized = JSON.stringify(projection)
 
     // Artifacts + query text only — no raw prompts, gate logs, or tool traces.
-    expect(serialized).not.toMatch(/toolCalls|resultSummaryJson|inputJson|resultHash/)
+    expect(serialized).not.toMatch(/toolCalls|resultSummaryJson|inputJson|resultHash|harnessRun|toolsInvoked|registry\.search|registry\.detail/)
     expect(projection.turns[0]?.query).toBe('after hours plumber Preston')
     expect(projection.turns[0]?.oneLine).toBe('Honest copy')
+    expect(projection.turns[0]?.answerCheckSummary).toEqual({
+      catalogSearches: 1,
+      listingsRead: 0,
+      listedBusinesses: 0,
+      checksPassed: 2,
+      checksFailed: 0,
+      elapsedMs: 0,
+    })
   })
 })
 

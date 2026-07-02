@@ -6,6 +6,7 @@ import {
   listAgentToolActions,
   type ActionContext,
 } from '@/modules/actions'
+import { actionToHarnessTool, runHarnessTool } from '@/modules/harness/public'
 import { jsonResponse } from './api.businesses'
 
 /**
@@ -54,24 +55,49 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
     return jsonError('agent_tools_not_exposed', `Action '${toolId}' is not exposed to agents.`, 403)
   }
 
-  let parsed: unknown
-  try {
-    parsed = action.schema.parse(body.input)
-  } catch (error) {
+  const tool = actionToHarnessTool(action)
+  if (tool.strictInputSchemaViolation !== undefined || tool.strictOutputSchemaViolation !== undefined) {
+    return jsonError('agent_tools_invalid_schema', 'Tool schema is not strict enough to run.', 500)
+  }
+
+  const context = contextFromRequest(request)
+  const outcome = await runHarnessTool({
+    tool,
+    input: body.input,
+    context,
+    surface: 'agentTools',
+    allowWrites: true,
+  })
+
+  if (outcome.result.status === 'ok' && outcome.result.output !== undefined) {
+    return jsonResponse(outcome.result.output)
+  }
+
+  if (outcome.result.errorCode === 'invalid_input') {
     return jsonResponse(
       {
         kind: 'error',
         code: 'agent_tools_invalid_input',
         retryable: false,
-        reason: issueText(error),
+        reason: 'Input did not match the tool schema.',
       },
       { status: 400 }
     )
   }
 
-  const context = contextFromRequest(request)
-  const result = await action.run({ data: parsed, context })
-  return jsonResponse(result)
+  if (outcome.result.status === 'blocked' || outcome.result.status === 'refused') {
+    return jsonError(
+      'agent_tools_refused',
+      outcome.result.errorCode ?? 'Tool was refused by policy.',
+      403,
+    )
+  }
+
+  if (outcome.result.errorCode === 'invalid_output') {
+    return jsonError('agent_tools_invalid_output', 'Tool result did not match its schema.', 502)
+  }
+
+  return jsonError('agent_tools_run_failed', outcome.result.errorCode ?? 'Tool run failed.', 500)
 }
 
 function contextFromRequest(request: Request): ActionContext {
@@ -93,20 +119,4 @@ function isJsonContentType(request: Request): boolean {
 
 function jsonError(code: string, reason: string, status: number): Response {
   return jsonResponse({ kind: 'error', code, retryable: false, reason }, { status })
-}
-
-function issueText(error: unknown): string {
-  if (error && typeof error === 'object' && 'issues' in error) {
-    const issues = (error as { issues?: unknown }).issues
-    if (Array.isArray(issues)) {
-      return issues
-        .map((issue) => {
-          const path = Array.isArray(issue.path) ? issue.path.join('.') : ''
-          const message = typeof issue.message === 'string' ? issue.message : 'invalid value'
-          return path.length > 0 ? `${path}: ${message}` : message
-        })
-        .join('; ')
-    }
-  }
-  return 'Input did not match the tool schema.'
 }
