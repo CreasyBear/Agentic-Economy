@@ -1,5 +1,3 @@
-import { convertSchemaToJsonSchema } from '@tanstack/ai'
-
 import type { ActionContext, AnyAction } from '@/modules/common/action'
 import { stableHash } from '@/modules/common/stable-hash'
 
@@ -9,10 +7,18 @@ import {
   type HarnessToolResult,
   type HarnessToolStatus,
 } from './harness.schema'
-import { findStrictToolSchemaViolation } from './strict-schema'
 import { resolveHarnessApproval } from './tool-policy'
+import {
+  actionToHarnessToolContract,
+  describeHarnessToolExecutionValidation,
+  harnessToolContractToDefinition,
+  type HarnessToolContract,
+} from './tool-contract'
 
 export type ActionHarnessTool = HarnessToolDefinition<unknown, unknown> & {
+  contract: HarnessToolContract<unknown, unknown>
+  descriptorHash: string
+  providerViolations: readonly string[]
   strictInputSchemaViolation?: string
   strictOutputSchemaViolation?: string
 }
@@ -33,26 +39,17 @@ export type RunHarnessToolOutcome = {
 }
 
 export function actionToHarnessTool(action: AnyAction): ActionHarnessTool {
-  const inputJsonSchema = convertSchemaToJsonSchema(action.schema)
-  const outputJsonSchema = convertSchemaToJsonSchema(action.outputSchema)
-  const strictInputSchemaViolation = findStrictToolSchemaViolation(inputJsonSchema)
-  const strictOutputSchemaViolation = findStrictToolSchemaViolation(outputJsonSchema)
+  const contract = actionToHarnessToolContract(action)
+  const definition = harnessToolContractToDefinition(contract)
+  const validation = describeHarnessToolExecutionValidation(contract)
 
   return {
-    id: action.id,
-    name: action.name,
-    summary: action.summary,
-    boundaries: action.boundaries,
-    tier: action.readOnly ? 'read' : 'write',
-    surfaces: action.surfaces,
-    inputSchema: action.schema,
-    outputSchema: action.outputSchema,
-    ...(inputJsonSchema === undefined ? {} : { inputJsonSchema }),
-    ...(outputJsonSchema === undefined ? {} : { outputJsonSchema }),
-    ...(strictInputSchemaViolation === null ? {} : { strictInputSchemaViolation: strictInputSchemaViolation.reason }),
-    ...(strictOutputSchemaViolation === null ? {} : { strictOutputSchemaViolation: strictOutputSchemaViolation.reason }),
-    run: async ({ input, context }) => action.run({ data: input, context }),
-    summarizeOutput: (output) => summarizeActionOutput(output),
+    ...definition,
+    contract,
+    descriptorHash: validation.descriptorHash,
+    providerViolations: validation.providerViolations,
+    ...(validation.strictInputSchemaViolation === undefined ? {} : { strictInputSchemaViolation: validation.strictInputSchemaViolation }),
+    ...(validation.strictOutputSchemaViolation === undefined ? {} : { strictOutputSchemaViolation: validation.strictOutputSchemaViolation }),
   }
 }
 
@@ -192,13 +189,6 @@ function buildHarnessToolResult(input: {
   }
 }
 
-function summarizeActionOutput(output: unknown): unknown {
-  if (isRecord(output) && typeof output.kind === 'string') {
-    return { kind: output.kind }
-  }
-  return { kind: 'ok' }
-}
-
 async function runWithOptionalTimeout<T>(work: Promise<T>, timeoutMs: number | undefined): Promise<T> {
   if (timeoutMs === undefined) {
     return work
@@ -234,8 +224,4 @@ function safeStringify(value: unknown): string {
   } catch {
     return 'null'
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

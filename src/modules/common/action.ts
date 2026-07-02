@@ -40,6 +40,10 @@ export type ActionTimingSink = {
   ) => void
 }
 
+export type ActionHarnessApprovalContext = {
+  authority?: 'owner' | 'admin'
+}
+
 export type ActionContext = {
   /** Admission context for writes; built from the calling surface's request. */
   sourceWriteRequest?: ActionSourceWriteRequest
@@ -47,6 +51,8 @@ export type ActionContext = {
   request?: Request
   /** Internal timing sink used by answer turns; never exposed on human surfaces. */
   timing?: ActionTimingSink
+  /** Harness-only approval authority for owner/admin-gated tools. */
+  harnessApproval?: ActionHarnessApprovalContext
 }
 
 export type ActionRunArgs<Input> = {

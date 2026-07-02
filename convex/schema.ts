@@ -5,6 +5,7 @@ import { businessTables } from '../src/modules/business/internal/schema'
 import { billingTables } from '../src/modules/billing/internal/schema'
 import { catalogTables } from '../src/modules/catalog/internal/schema'
 import { discoveryTables } from '../src/modules/discovery/internal/schema'
+import { harnessTables } from '../src/modules/harness/internal/convex-schema'
 import { inquiryTables } from '../src/modules/inquiries/internal/convex-schema'
 import { answerThreadTables } from '../src/modules/answer-thread/internal/convex-schema'
 import { notificationOutboxTables } from '../src/modules/notification-outbox/internal/schema'
@@ -21,6 +22,7 @@ export default defineSchema({
   ...catalogTables,
   ...registryTables,
   ...discoveryTables,
+  ...harnessTables,
   ...inquiryTables,
   ...notificationOutboxTables,
   ...protectedActionTables,

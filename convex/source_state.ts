@@ -8,6 +8,8 @@ export type RuntimeIndexBuilder = {
 
 export type RuntimeQuery = {
   withIndex: (indexName: string, callback: (query: RuntimeIndexBuilder) => RuntimeIndexBuilder) => RuntimeQuery
+  order?: (direction: 'asc' | 'desc') => RuntimeQuery
+  take?: (limit: number) => Promise<RuntimeDocument[]>
   collect: () => Promise<RuntimeDocument[]>
   unique: () => Promise<RuntimeDocument | null>
   first?: () => Promise<RuntimeDocument | null>

@@ -4,40 +4,44 @@ import type {
   HarnessApprovalDecision,
   HarnessToolDefinition,
 } from './harness.schema'
+import {
+  resolveHarnessApprovalPolicy,
+  sourceWriteDeclarationForTool,
+  type HarnessApprovalMode,
+  type HarnessApprovalOverrideMap,
+} from './approval-policy'
 
 export type HarnessApprovalInput = {
   tool: HarnessToolDefinition
   context?: ActionContext
   surface?: ActionSurface
+  mode?: HarnessApprovalMode
   allowWrites?: boolean
+  overrides?: HarnessApprovalOverrideMap
 }
 
 export function resolveHarnessApproval(input: HarnessApprovalInput): HarnessApprovalDecision {
-  const { tool } = input
+  const resolution = resolveHarnessApprovalPolicy({
+    tool: input.tool,
+    mode: input.mode ?? legacyModeForInput(input),
+    ...(input.context === undefined ? {} : { context: input.context }),
+    ...(input.surface === undefined ? {} : { surface: input.surface }),
+    ...(input.overrides === undefined ? {} : { overrides: input.overrides }),
+  })
 
-  if (tool.approval === 'deny') {
-    return { policy: 'deny', tier: tool.tier, reason: 'tool_policy_denied' }
+  return {
+    policy: resolution.policy,
+    tier: resolution.tier,
+    reason: resolution.reason,
+  }
+}
+
+function legacyModeForInput(input: HarnessApprovalInput): HarnessApprovalMode {
+  if (input.allowWrites === true) {
+    const declaration = sourceWriteDeclarationForTool(input.tool)
+    const [declaredMode] = declaration?.allowedModes ?? []
+    return declaredMode ?? 'public-qualified-write'
   }
 
-  if (input.surface !== undefined && !tool.surfaces.includes(input.surface)) {
-    return { policy: 'deny', tier: tool.tier, reason: 'surface_not_allowed' }
-  }
-
-  if (tool.tier === 'exec') {
-    return { policy: 'deny', tier: tool.tier, reason: 'exec_tools_not_supported' }
-  }
-
-  if (tool.tier === 'read') {
-    return { policy: 'allow', tier: tool.tier, reason: 'read_tool_auto_allowed' }
-  }
-
-  if (input.allowWrites !== true) {
-    return { policy: 'deny', tier: tool.tier, reason: 'write_not_allowed' }
-  }
-
-  if (input.context?.sourceWriteRequest === undefined) {
-    return { policy: 'prompt', tier: tool.tier, reason: 'write_requires_source_admission' }
-  }
-
-  return { policy: 'allow', tier: tool.tier, reason: 'write_source_admitted' }
+  return 'public-read'
 }

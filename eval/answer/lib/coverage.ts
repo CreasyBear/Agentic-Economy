@@ -1,8 +1,14 @@
 import {
   ANSWER_EVAL_COVERAGE_REQUIREMENTS,
+  ANSWER_HARNESS_EVAL_ASSERTIONS,
+  ANSWER_HARNESS_EVAL_CASES,
+  ANSWER_HARNESS_EVAL_REQUIREMENTS,
   ANSWER_THREAD_EVAL_CASES,
   ANSWER_TURN_EVAL_CASES,
   type AnswerEvalCoverageTag,
+  type AnswerHarnessEvalAssertion,
+  type AnswerHarnessEvalCase,
+  type AnswerHarnessEvalTag,
   type AnswerThreadEvalCase,
   type AnswerTurnEvalCase,
 } from './cases'
@@ -16,6 +22,7 @@ export type AnswerEvalCoverageIssue = {
   message: string
   caseId?: string
   tag?: AnswerEvalCoverageTag
+  harnessTag?: AnswerHarnessEvalTag
 }
 
 export type AnswerEvalCoverageAudit = {
@@ -23,8 +30,10 @@ export type AnswerEvalCoverageAudit = {
   caseCount: number
   turnCaseCount: number
   threadCaseCount: number
+  harnessCaseCount: number
   broadSeedBusinessCount: number
   coveredTags: AnswerEvalCoverageTag[]
+  coveredHarnessTags: AnswerHarnessEvalTag[]
   issues: AnswerEvalCoverageIssue[]
 }
 
@@ -41,6 +50,7 @@ export function auditAnswerEvalCoverage(): AnswerEvalCoverageAudit {
   const threadCases = [...ANSWER_THREAD_EVAL_CASES]
   const allCases = [...turnCases, ...threadCases]
   const coveredTags = new Set<AnswerEvalCoverageTag>()
+  const coveredHarnessTags = new Set<AnswerHarnessEvalTag>()
   const ids = new Set<string>()
 
   for (const testCase of allCases) {
@@ -76,8 +86,41 @@ export function auditAnswerEvalCoverage(): AnswerEvalCoverageAudit {
     }
   }
 
+  for (const testCase of ANSWER_HARNESS_EVAL_CASES as readonly AnswerHarnessEvalCase[]) {
+    if (ids.has(testCase.id)) {
+      issues.push({
+        code: 'duplicate_case_id',
+        message: `Duplicate answer eval case id "${testCase.id}".`,
+        caseId: testCase.id,
+      })
+    }
+    ids.add(testCase.id)
+
+    if (testCase.covers.length === 0) {
+      issues.push({
+        code: 'harness_case_without_coverage_tags',
+        message: 'Every harness eval case must declare the harness reliability dimensions it protects.',
+        caseId: testCase.id,
+      })
+    }
+    for (const tag of testCase.covers) {
+      coveredHarnessTags.add(tag)
+    }
+  }
+
+  for (const requirement of ANSWER_HARNESS_EVAL_REQUIREMENTS) {
+    if (!coveredHarnessTags.has(requirement.tag)) {
+      issues.push({
+        code: 'missing_required_harness_coverage',
+        message: `Missing required harness eval coverage: ${requirement.description}`,
+        harnessTag: requirement.tag,
+      })
+    }
+  }
+
   auditTurnCaseShape(turnCases, issues)
   auditThreadCaseShape(threadCases, issues)
+  auditHarnessCaseShape(ANSWER_HARNESS_EVAL_CASES, turnCases, threadCases, issues)
   auditBroadSeed(issues)
 
   return {
@@ -85,8 +128,10 @@ export function auditAnswerEvalCoverage(): AnswerEvalCoverageAudit {
     caseCount: allCases.length,
     turnCaseCount: turnCases.length,
     threadCaseCount: threadCases.length,
+    harnessCaseCount: ANSWER_HARNESS_EVAL_CASES.length,
     broadSeedBusinessCount: BROAD_ANSWER_EVAL_BUSINESS_FIXTURES.length,
     coveredTags: [...coveredTags].sort(),
+    coveredHarnessTags: [...coveredHarnessTags].sort(),
     issues,
   }
 }
@@ -231,6 +276,149 @@ function auditThreadCaseShape(
   }
 }
 
+function auditHarnessCaseShape(
+  harnessCases: readonly AnswerHarnessEvalCase[],
+  turnCases: readonly AnswerTurnEvalCase[],
+  threadCases: readonly AnswerThreadEvalCase[],
+  issues: AnswerEvalCoverageIssue[],
+): void {
+  const turnCaseById = new Map(turnCases.map((testCase) => [testCase.id, testCase]))
+  const threadCaseById = new Map(threadCases.map((testCase) => [testCase.id, testCase]))
+
+  for (const testCase of harnessCases) {
+    if (testCase.assertions.length === 0) {
+      issues.push({
+        code: 'harness_case_without_assertions',
+        message: 'Every harness eval case must name the structural assertion it protects.',
+        caseId: testCase.id,
+      })
+    }
+
+    for (const assertion of testCase.assertions) {
+      if (!(ANSWER_HARNESS_EVAL_ASSERTIONS as readonly string[]).includes(assertion)) {
+        issues.push({
+          code: 'unknown_harness_assertion',
+          message: `Harness eval case references unknown assertion "${assertion}".`,
+          caseId: testCase.id,
+        })
+      }
+    }
+
+    auditHarnessCoverageAssertionMapping(testCase, issues)
+
+    if (testCase.source.kind === 'answer-turn') {
+      const turnCase = turnCaseById.get(testCase.source.caseId)
+      if (turnCase === undefined) {
+        issues.push({
+          code: 'harness_case_unknown_turn_source',
+          message: `Harness eval case references unknown answer turn case "${testCase.source.caseId}".`,
+          caseId: testCase.id,
+        })
+        continue
+      }
+      auditHarnessTurnSource(testCase, turnCase, issues)
+      continue
+    }
+
+    if (testCase.source.kind === 'answer-thread') {
+      if (!threadCaseById.has(testCase.source.caseId)) {
+        issues.push({
+          code: 'harness_case_unknown_thread_source',
+          message: `Harness eval case references unknown answer thread case "${testCase.source.caseId}".`,
+          caseId: testCase.id,
+        })
+      }
+      continue
+    }
+
+    if (testCase.source.kind === 'unit-test' && !testCase.source.file.startsWith('tests/unit/')) {
+      issues.push({
+        code: 'harness_unit_case_outside_unit_tests',
+        message: 'Harness unit-test metadata must point at tests/unit.',
+        caseId: testCase.id,
+      })
+    }
+    if (testCase.source.kind === 'integration-test' && !testCase.source.file.startsWith('tests/integration/')) {
+      issues.push({
+        code: 'harness_integration_case_outside_integration_tests',
+        message: 'Harness integration-test metadata must point at tests/integration.',
+        caseId: testCase.id,
+      })
+    }
+    if (!testCase.source.file.endsWith('.test.ts')) {
+      issues.push({
+        code: 'harness_case_non_test_source',
+        message: 'Harness structural metadata must point at a Vitest test file.',
+        caseId: testCase.id,
+      })
+    }
+  }
+}
+
+function auditHarnessCoverageAssertionMapping(
+  testCase: AnswerHarnessEvalCase,
+  issues: AnswerEvalCoverageIssue[],
+): void {
+  const requiredAssertionsByTag: Record<AnswerHarnessEvalTag, readonly AnswerHarnessEvalAssertion[]> = {
+    'persisted-harness-run': ['requires-persisted-harness-run'],
+    'live-phase-tool-evidence': ['requires-live-phase-tool-evidence'],
+    'blocked-refused-tools': ['requires-blocked-tool', 'requires-refused-tool'],
+    'invalid-output': ['requires-invalid-output'],
+    'stale-replay': ['requires-stale-replay'],
+    'public-leakage': ['forbids-public-harness-leakage'],
+    'public-contract-refusal': ['requires-public-contract-refusal'],
+  }
+
+  for (const tag of testCase.covers) {
+    const missing = requiredAssertionsByTag[tag].filter((assertion) => !testCase.assertions.includes(assertion))
+    for (const assertion of missing) {
+      issues.push({
+        code: 'harness_coverage_without_assertion',
+        message: `Harness coverage "${tag}" must include assertion "${assertion}".`,
+        caseId: testCase.id,
+        harnessTag: tag,
+      })
+    }
+  }
+}
+
+function auditHarnessTurnSource(
+  harnessCase: AnswerHarnessEvalCase,
+  turnCase: AnswerTurnEvalCase,
+  issues: AnswerEvalCoverageIssue[],
+): void {
+  if (
+    harnessCase.assertions.includes('requires-persisted-harness-run') &&
+    turnCase.expected.requireHarnessRun !== true
+  ) {
+    issues.push({
+      code: 'harness_turn_without_harness_run_assertion',
+      message: 'Harness persisted-run metadata must point at a turn case that requires harnessRun.',
+      caseId: harnessCase.id,
+    })
+  }
+  if (
+    harnessCase.assertions.includes('requires-live-phase-tool-evidence') &&
+    ((turnCase.expected.harnessPhases ?? []).length === 0 || turnCase.expected.harnessToolsInvoked === undefined)
+  ) {
+    issues.push({
+      code: 'harness_turn_without_phase_tool_assertion',
+      message: 'Live phase/tool harness metadata must point at a turn case with harness phase and tool assertions.',
+      caseId: harnessCase.id,
+    })
+  }
+  if (
+    harnessCase.assertions.includes('requires-public-contract-refusal') &&
+    (!turnCase.covers.includes('unsupported-action-boundary') || turnCase.expected.requireBoundaryCopy !== true)
+  ) {
+    issues.push({
+      code: 'harness_refusal_without_boundary_case',
+      message: 'Public contract refusal metadata must point at an unsupported-action boundary case.',
+      caseId: harnessCase.id,
+    })
+  }
+}
+
 function auditExpectedShape(
   testCase: AnswerTurnEvalCase,
   parentCase: AnswerTurnEvalCase | AnswerThreadEvalCase,
@@ -288,6 +476,29 @@ function auditExpectedShape(
       message: 'Persisted evidence coverage cases must assert recorded tool query inputs.',
       caseId: testCase.id,
     })
+  }
+  if (expected.requireHarnessRun === true) {
+    if (expected.harnessStatus === undefined) {
+      issues.push({
+        code: 'harness_case_without_status_assertion',
+        message: 'Harness-run eval cases must assert the expected harness terminal status.',
+        caseId: testCase.id,
+      })
+    }
+    if (expected.harnessToolsInvoked === undefined) {
+      issues.push({
+        code: 'harness_case_without_tool_coverage_assertion',
+        message: 'Harness-run eval cases must assert invoked tool coverage, even when empty.',
+        caseId: testCase.id,
+      })
+    }
+    if ((expected.harnessPhases ?? []).length === 0) {
+      issues.push({
+        code: 'harness_case_without_phase_coverage_assertion',
+        message: 'Harness-run eval cases must assert at least one harness phase.',
+        caseId: testCase.id,
+      })
+    }
   }
 }
 

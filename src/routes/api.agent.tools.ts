@@ -1,12 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import {
-  describeActionForAgent,
   findAction,
   listAgentToolActions,
   type ActionContext,
 } from '@/modules/actions'
-import { actionToHarnessTool, runHarnessTool } from '@/modules/harness/public'
+import {
+  actionToHarnessTool,
+  buildHarnessToolContracts,
+  describeHarnessToolForQuietAgent,
+  filterQuietAgentToolContracts,
+  runHarnessTool,
+} from '@/modules/harness/public'
 import { jsonResponse } from './api.businesses'
 
 /**
@@ -25,7 +30,8 @@ export const Route = createFileRoute('/api/agent/tools')({
 })
 
 export async function handleListAgentTools(): Promise<Response> {
-  const tools = listAgentToolActions().map(describeActionForAgent)
+  const contracts = filterQuietAgentToolContracts(buildHarnessToolContracts(listAgentToolActions()))
+  const tools = contracts.map((contract) => describeHarnessToolForQuietAgent(contract).descriptor)
   return jsonResponse({ tools })
 }
 

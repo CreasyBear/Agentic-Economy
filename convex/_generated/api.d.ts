@@ -20,6 +20,7 @@ import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
 import type * as discovery from "../discovery.js";
+import type * as harnessSessions from "../harnessSessions.js";
 import type * as inquiries from "../inquiries.js";
 import type * as notificationOutbox from "../notificationOutbox.js";
 import type * as observability from "../observability.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;
   discovery: typeof discovery;
+  harnessSessions: typeof harnessSessions;
   inquiries: typeof inquiries;
   notificationOutbox: typeof notificationOutbox;
   observability: typeof observability;

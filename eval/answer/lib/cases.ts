@@ -83,6 +83,72 @@ export const ANSWER_EVAL_COVERAGE_REQUIREMENTS = [
 
 export type AnswerEvalCoverageTag = (typeof ANSWER_EVAL_COVERAGE_REQUIREMENTS)[number]['tag']
 
+export const ANSWER_HARNESS_EVAL_REQUIREMENTS = [
+  {
+    tag: 'persisted-harness-run',
+    description: 'Complete and error turns persist private harnessRun evidence with a terminal report.',
+  },
+  {
+    tag: 'live-phase-tool-evidence',
+    description: 'Harness reports expose phase/tool coverage derived from runtime evidence.',
+  },
+  {
+    tag: 'blocked-refused-tools',
+    description: 'Tool policy gates distinguish blocked prompt/write cases from refused deny/exec cases.',
+  },
+  {
+    tag: 'invalid-output',
+    description: 'Invalid tool output is represented as harness error evidence instead of public prose.',
+  },
+  {
+    tag: 'stale-replay',
+    description: 'Replay projections mark off-path terminal entries stale while keeping public replay sanitized.',
+  },
+  {
+    tag: 'public-leakage',
+    description: 'Public answer projections do not expose harnessRun, raw tool inputs, outputs, or hashes.',
+  },
+  {
+    tag: 'public-contract-refusal',
+    description: 'Booking, payment, dispatch, and autonomous fulfillment requests stay inside the AE boundary.',
+  },
+] as const
+
+export type AnswerHarnessEvalTag = (typeof ANSWER_HARNESS_EVAL_REQUIREMENTS)[number]['tag']
+
+export const ANSWER_HARNESS_EVAL_ASSERTIONS = [
+  'requires-persisted-harness-run',
+  'requires-live-phase-tool-evidence',
+  'requires-blocked-tool',
+  'requires-refused-tool',
+  'requires-invalid-output',
+  'requires-stale-replay',
+  'forbids-public-harness-leakage',
+  'requires-public-contract-refusal',
+] as const
+
+export type AnswerHarnessEvalAssertion = (typeof ANSWER_HARNESS_EVAL_ASSERTIONS)[number]
+
+export type EvalHarnessRunStatus =
+  | 'ok'
+  | 'error'
+  | 'refused'
+  | 'blocked'
+  | 'timeout'
+  | 'aborted'
+  | 'skipped'
+
+export type AnswerHarnessEvalCase = {
+  id: string
+  description: string
+  covers: readonly AnswerHarnessEvalTag[]
+  source:
+    | { kind: 'answer-turn'; caseId: string }
+    | { kind: 'answer-thread'; caseId: string }
+    | { kind: 'unit-test' | 'integration-test'; file: string }
+  assertions: readonly AnswerHarnessEvalAssertion[]
+}
+
 export type AnswerTurnEvalCase = {
   id: string
   description: string
@@ -107,6 +173,10 @@ export type AnswerTurnEvalCase = {
     requireBoundaryCopy?: boolean
     forbidInternalPublicTerms?: boolean
     forbidUnsafeClaims?: boolean
+    requireHarnessRun?: boolean
+    harnessStatus?: EvalHarnessRunStatus
+    harnessToolsInvoked?: readonly string[]
+    harnessPhases?: readonly string[]
     maxTotalTimingMs?: number
   }
 }
@@ -157,6 +227,10 @@ export const ANSWER_TURN_EVAL_CASES = [
       requireBoundaryCopy: true,
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
+      requireHarnessRun: true,
+      harnessStatus: 'ok',
+      harnessToolsInvoked: ['registry.search'],
+      harnessPhases: ['gate', 'assemble', 'persist', 'report'],
       maxTotalTimingMs: 5_000,
     },
   },
@@ -322,6 +396,10 @@ export const ANSWER_TURN_EVAL_CASES = [
       requireBoundaryCopy: true,
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
+      requireHarnessRun: true,
+      harnessStatus: 'ok',
+      harnessToolsInvoked: [],
+      harnessPhases: ['gate', 'assemble', 'persist', 'report'],
       maxTotalTimingMs: 5_000,
     },
   },
@@ -579,6 +657,51 @@ export const ANSWER_THREAD_EVAL_CASES = [
     ],
   },
 ] as const satisfies readonly AnswerThreadEvalCase[]
+
+export const ANSWER_HARNESS_EVAL_CASES = [
+  {
+    id: 'harness-persisted-run-direct-turn',
+    description: 'A complete direct-retrieval turn persists private harnessRun evidence and phase/tool coverage.',
+    covers: ['persisted-harness-run', 'live-phase-tool-evidence'],
+    source: { kind: 'answer-turn', caseId: 'turn-direct-parramatta-fast-path' },
+    assertions: ['requires-persisted-harness-run', 'requires-live-phase-tool-evidence'],
+  },
+  {
+    id: 'harness-public-contract-refusal-turn',
+    description: 'Unsupported booking/payment intent returns boundary copy with persisted harnessRun evidence.',
+    covers: ['persisted-harness-run', 'public-contract-refusal'],
+    source: { kind: 'answer-turn', caseId: 'turn-unsupported-booking-boundary' },
+    assertions: ['requires-persisted-harness-run', 'requires-public-contract-refusal'],
+  },
+  {
+    id: 'harness-blocked-refused-tool-policy',
+    description: 'Harness approval policy records public prompt/write blocks separately from deny/exec refusals.',
+    covers: ['blocked-refused-tools'],
+    source: { kind: 'unit-test', file: 'tests/unit/harness/approval-policy.test.ts' },
+    assertions: ['requires-blocked-tool', 'requires-refused-tool'],
+  },
+  {
+    id: 'harness-invalid-output-evidence',
+    description: 'Harness run reports keep invalid output as private error evidence and counters.',
+    covers: ['invalid-output'],
+    source: { kind: 'unit-test', file: 'tests/unit/harness/run-collector.test.ts' },
+    assertions: ['requires-invalid-output'],
+  },
+  {
+    id: 'harness-stale-replay-projection',
+    description: 'Harness replay projection identifies stale terminal branches and sanitizes public replay output.',
+    covers: ['stale-replay'],
+    source: { kind: 'unit-test', file: 'tests/unit/harness/replay-projection.test.ts' },
+    assertions: ['requires-stale-replay', 'forbids-public-harness-leakage'],
+  },
+  {
+    id: 'harness-public-projection-leakage',
+    description: 'Public answer-thread projection omits raw harnessRun, tool payloads, and result hashes.',
+    covers: ['public-leakage'],
+    source: { kind: 'integration-test', file: 'tests/integration/answer-tool-calls.test.ts' },
+    assertions: ['forbids-public-harness-leakage'],
+  },
+] as const satisfies readonly AnswerHarnessEvalCase[]
 
 export function findAnswerTurnEvalCase(caseId: string): AnswerTurnEvalCase | undefined {
   return ANSWER_TURN_EVAL_CASES.find((testCase) => testCase.id === caseId)

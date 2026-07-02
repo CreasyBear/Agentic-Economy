@@ -36,6 +36,7 @@ import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiAnswerRouteImport } from './routes/api.answer'
+import { Route as AdminRunsRouteImport } from './routes/admin.runs'
 import { Route as AdminProtectedActionsRouteImport } from './routes/admin.protected-actions'
 import { Route as AdminMonetizationRouteImport } from './routes/admin.monetization'
 import { Route as AdminInquiriesRouteImport } from './routes/admin.inquiries'
@@ -67,6 +68,7 @@ import { Route as ApiAnswerThreadsRouteImport } from './routes/api.answer.thread
 import { Route as ApiAnswerFollowUpChipsRouteImport } from './routes/api.answer.follow-up-chips'
 import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
 import { Route as ApiAgentToolsRouteImport } from './routes/api.agent.tools'
+import { Route as AdminRunsTurnIdRouteImport } from './routes/admin.runs.$turnId'
 import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
 import { Route as AdminMonetizationOperationIdRouteImport } from './routes/admin.monetization.$operationId'
 import { Route as AdminBusinessActionsRequestIdRouteImport } from './routes/admin.business-actions.$requestId'
@@ -210,6 +212,11 @@ const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
 const ApiAnswerRoute = ApiAnswerRouteImport.update({
   id: '/api/answer',
   path: '/api/answer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRunsRoute = AdminRunsRouteImport.update({
+  id: '/admin/runs',
+  path: '/admin/runs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminProtectedActionsRoute = AdminProtectedActionsRouteImport.update({
@@ -372,6 +379,11 @@ const ApiAgentToolsRoute = ApiAgentToolsRouteImport.update({
   path: '/api/agent/tools',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRunsTurnIdRoute = AdminRunsTurnIdRouteImport.update({
+  id: '/$turnId',
+  path: '/$turnId',
+  getParentRoute: () => AdminRunsRoute,
+} as any)
 const AdminProtectedActionsProposalIdRoute =
   AdminProtectedActionsProposalIdRouteImport.update({
     id: '/$proposalId',
@@ -449,6 +461,7 @@ export interface FileRoutesByFullPath {
   '/admin/inquiries': typeof AdminInquiriesRoute
   '/admin/monetization': typeof AdminMonetizationRouteWithChildren
   '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
+  '/admin/runs': typeof AdminRunsRouteWithChildren
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
@@ -467,6 +480,7 @@ export interface FileRoutesByFullPath {
   '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/monetization/$operationId': typeof AdminMonetizationOperationIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/admin/runs/$turnId': typeof AdminRunsTurnIdRoute
   '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
@@ -518,6 +532,7 @@ export interface FileRoutesByTo {
   '/admin/inquiries': typeof AdminInquiriesRoute
   '/admin/monetization': typeof AdminMonetizationRouteWithChildren
   '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
+  '/admin/runs': typeof AdminRunsRouteWithChildren
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
@@ -536,6 +551,7 @@ export interface FileRoutesByTo {
   '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/monetization/$operationId': typeof AdminMonetizationOperationIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/admin/runs/$turnId': typeof AdminRunsTurnIdRoute
   '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
@@ -588,6 +604,7 @@ export interface FileRoutesById {
   '/admin/inquiries': typeof AdminInquiriesRoute
   '/admin/monetization': typeof AdminMonetizationRouteWithChildren
   '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
+  '/admin/runs': typeof AdminRunsRouteWithChildren
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
@@ -606,6 +623,7 @@ export interface FileRoutesById {
   '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
   '/admin/monetization/$operationId': typeof AdminMonetizationOperationIdRoute
   '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
+  '/admin/runs/$turnId': typeof AdminRunsTurnIdRoute
   '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
@@ -659,6 +677,7 @@ export interface FileRouteTypes {
     | '/admin/inquiries'
     | '/admin/monetization'
     | '/admin/protected-actions'
+    | '/admin/runs'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
@@ -677,6 +696,7 @@ export interface FileRouteTypes {
     | '/admin/business-actions/$requestId'
     | '/admin/monetization/$operationId'
     | '/admin/protected-actions/$proposalId'
+    | '/admin/runs/$turnId'
     | '/api/agent/tools'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
@@ -728,6 +748,7 @@ export interface FileRouteTypes {
     | '/admin/inquiries'
     | '/admin/monetization'
     | '/admin/protected-actions'
+    | '/admin/runs'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
@@ -746,6 +767,7 @@ export interface FileRouteTypes {
     | '/admin/business-actions/$requestId'
     | '/admin/monetization/$operationId'
     | '/admin/protected-actions/$proposalId'
+    | '/admin/runs/$turnId'
     | '/api/agent/tools'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
@@ -797,6 +819,7 @@ export interface FileRouteTypes {
     | '/admin/inquiries'
     | '/admin/monetization'
     | '/admin/protected-actions'
+    | '/admin/runs'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
@@ -815,6 +838,7 @@ export interface FileRouteTypes {
     | '/admin/business-actions/$requestId'
     | '/admin/monetization/$operationId'
     | '/admin/protected-actions/$proposalId'
+    | '/admin/runs/$turnId'
     | '/api/agent/tools'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
@@ -865,6 +889,7 @@ export interface RootRouteChildren {
   AdminInquiriesRoute: typeof AdminInquiriesRoute
   AdminMonetizationRoute: typeof AdminMonetizationRouteWithChildren
   AdminProtectedActionsRoute: typeof AdminProtectedActionsRouteWithChildren
+  AdminRunsRoute: typeof AdminRunsRouteWithChildren
   ApiAnswerRoute: typeof ApiAnswerRouteWithChildren
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiChatRoute: typeof ApiChatRouteWithChildren
@@ -1079,6 +1104,13 @@ declare module '@tanstack/react-router' {
       path: '/api/answer'
       fullPath: '/api/answer'
       preLoaderRoute: typeof ApiAnswerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/runs': {
+      id: '/admin/runs'
+      path: '/admin/runs'
+      fullPath: '/admin/runs'
+      preLoaderRoute: typeof AdminRunsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/protected-actions': {
@@ -1298,6 +1330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/runs/$turnId': {
+      id: '/admin/runs/$turnId'
+      path: '/$turnId'
+      fullPath: '/admin/runs/$turnId'
+      preLoaderRoute: typeof AdminRunsTurnIdRouteImport
+      parentRoute: typeof AdminRunsRoute
+    }
     '/admin/protected-actions/$proposalId': {
       id: '/admin/protected-actions/$proposalId'
       path: '/$proposalId'
@@ -1431,6 +1470,18 @@ const AdminProtectedActionsRouteWithChildren =
   AdminProtectedActionsRoute._addFileChildren(
     AdminProtectedActionsRouteChildren,
   )
+
+interface AdminRunsRouteChildren {
+  AdminRunsTurnIdRoute: typeof AdminRunsTurnIdRoute
+}
+
+const AdminRunsRouteChildren: AdminRunsRouteChildren = {
+  AdminRunsTurnIdRoute: AdminRunsTurnIdRoute,
+}
+
+const AdminRunsRouteWithChildren = AdminRunsRoute._addFileChildren(
+  AdminRunsRouteChildren,
+)
 
 interface ApiAnswerThreadsRouteChildren {
   ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRoute
@@ -1591,6 +1642,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminInquiriesRoute: AdminInquiriesRoute,
   AdminMonetizationRoute: AdminMonetizationRouteWithChildren,
   AdminProtectedActionsRoute: AdminProtectedActionsRouteWithChildren,
+  AdminRunsRoute: AdminRunsRouteWithChildren,
   ApiAnswerRoute: ApiAnswerRouteWithChildren,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiChatRoute: ApiChatRouteWithChildren,

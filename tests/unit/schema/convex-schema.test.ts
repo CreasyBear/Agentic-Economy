@@ -87,6 +87,8 @@ const durableTables = [
   'answerThreads',
   'answerTurns',
   'answerToolCalls',
+  'harnessSessions',
+  'harnessSessionEntries',
 ] as const
 
 const requiredIndexes = {
@@ -174,6 +176,18 @@ const requiredIndexes = {
   answerThreads: ['by_threadId', 'by_session_updatedAt'],
   answerTurns: ['by_turnId', 'by_thread_createdAt'],
   answerToolCalls: ['by_toolCallId', 'by_turn_seq'],
+  harnessSessions: ['by_sessionId', 'by_ownerKey_updatedAt', 'by_lastRunId'],
+  harnessSessionEntries: [
+    'by_entryId',
+    'by_sessionId_seq',
+    'by_sessionId_entryId',
+    'by_sessionId_idempotencyKey',
+    'by_sessionId_parentEntryId',
+    'by_idempotencyKey',
+    'by_ownerKey_createdAt',
+    'by_runId_seq',
+    'by_turnId_seq',
+  ],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {

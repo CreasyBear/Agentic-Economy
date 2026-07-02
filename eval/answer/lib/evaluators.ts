@@ -83,6 +83,10 @@ export type AnswerTurnEvalResult = {
   workStepIds: string[]
   workSteps: AnswerWorkStep[]
   totalTimingMs: number
+  hasHarnessRun: boolean
+  harnessStatus?: string
+  harnessToolsInvoked: readonly string[]
+  harnessPhases: readonly string[]
   problems: string[]
   diagnostics: {
     oneLine?: string
@@ -171,6 +175,9 @@ export async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<Answ
       workStepIds: [],
       workSteps: [],
       totalTimingMs: 0,
+      hasHarnessRun: false,
+      harnessToolsInvoked: [],
+      harnessPhases: [],
       problems: [`unknown caseId "${vars.caseId}"`],
       diagnostics: {},
     }
@@ -199,6 +206,9 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
       workStepIds: [],
       workSteps: [],
       totalTimingMs: 0,
+      hasHarnessRun: false,
+      harnessToolsInvoked: [],
+      harnessPhases: [],
       problems: ['not_run'],
       diagnostics: {},
     }
@@ -332,6 +342,9 @@ async function runAnswerTurnInStore(input: {
         workStepIds: [],
         workSteps: [],
         totalTimingMs: 0,
+        hasHarnessRun: false,
+        harnessToolsInvoked: [],
+        harnessPhases: [],
         problems: [`http_${response.status}`],
         diagnostics: { errorCode: await response.text() },
       }
@@ -344,12 +357,15 @@ async function runAnswerTurnInStore(input: {
     const turn = readLatestTurn(input.store)
     const evidence = parseEvidence(turn?.evidenceJson)
     const timingEntries = evidence?.timings ?? []
+    const harnessRun = evidence?.harnessRun
     const toolQueries = readToolQueries(evidence)
     const timingNames = timingEntries.map((timing) => timing.name)
     const artifactKinds = readArtifactKinds(frames, complete)
     const workSteps = readWorkSteps(frames, evidence)
     const workStepIds = workSteps.map((step) => step.id)
     const totalTimingMs = sumTimingMs(timingEntries)
+    const harnessToolsInvoked = harnessRun?.coverage.toolsInvoked ?? []
+    const harnessPhases = harnessRun?.coverage.phases ?? []
     const status = complete !== undefined ? 'complete' : error !== undefined ? 'error' : 'missing'
     const slugs = complete?.providers.map((provider) => provider.slug) ?? []
     const diagnostics = {
@@ -373,6 +389,10 @@ async function runAnswerTurnInStore(input: {
       totalTimingMs,
       snapshot: complete,
       workSteps,
+      hasHarnessRun: harnessRun !== undefined,
+      ...(harnessRun?.summary.run.status === undefined ? {} : { harnessStatus: harnessRun.summary.run.status }),
+      harnessToolsInvoked,
+      harnessPhases,
     })
 
     return {
@@ -386,6 +406,10 @@ async function runAnswerTurnInStore(input: {
       workStepIds,
       workSteps,
       totalTimingMs,
+      hasHarnessRun: harnessRun !== undefined,
+      ...(harnessRun?.summary.run.status === undefined ? {} : { harnessStatus: harnessRun.summary.run.status }),
+      harnessToolsInvoked,
+      harnessPhases,
       problems,
       diagnostics,
     }
@@ -432,8 +456,26 @@ function evaluateAnswerTurnExpectations(input: {
   totalTimingMs: number
   snapshot: AnswerSnapshot | undefined
   workSteps: readonly AnswerWorkStep[]
+  hasHarnessRun: boolean
+  harnessStatus?: string
+  harnessToolsInvoked: readonly string[]
+  harnessPhases: readonly string[]
 }): string[] {
-  const { testCase, status, slugs, toolQueries, timingNames, artifactKinds, totalTimingMs, snapshot, workSteps } = input
+  const {
+    testCase,
+    status,
+    slugs,
+    toolQueries,
+    timingNames,
+    artifactKinds,
+    totalTimingMs,
+    snapshot,
+    workSteps,
+    hasHarnessRun,
+    harnessStatus,
+    harnessToolsInvoked,
+    harnessPhases,
+  } = input
   const expected = testCase.expected
   const problems: string[] = []
 
@@ -471,6 +513,22 @@ function evaluateAnswerTurnExpectations(input: {
   }
   if (expected.maxTotalTimingMs !== undefined && totalTimingMs > expected.maxTotalTimingMs) {
     problems.push(`timing total ${totalTimingMs}ms exceeds ${expected.maxTotalTimingMs}ms`)
+  }
+  if (expected.requireHarnessRun === true && !hasHarnessRun) {
+    problems.push('missing persisted harnessRun')
+  }
+  if (expected.harnessStatus !== undefined && harnessStatus !== expected.harnessStatus) {
+    problems.push(`expected harness status ${expected.harnessStatus}, got ${harnessStatus ?? 'missing'}`)
+  }
+  if (expected.harnessToolsInvoked !== undefined && !sameStringList(harnessToolsInvoked, expected.harnessToolsInvoked)) {
+    problems.push(
+      `expected harness tools [${expected.harnessToolsInvoked.join(', ')}], got [${harnessToolsInvoked.join(', ')}]`,
+    )
+  }
+  for (const phase of expected.harnessPhases ?? []) {
+    if (!harnessPhases.includes(phase)) {
+      problems.push(`missing harness phase "${phase}"`)
+    }
   }
   problems.push(...evaluateWorkLogExpectations({ expected, workSteps }))
 
