@@ -6,6 +6,8 @@ import {
 
 const SERVICE_WORDS = new Set([
   'a',
+  'accept',
+  'accepts',
   'after',
   'an',
   'business',
@@ -20,7 +22,10 @@ const SERVICE_WORDS = new Set([
   'electricians',
   'emergency',
   'find',
+  'filter',
   'for',
+  'has',
+  'have',
   'hot',
   'inquiry',
   'inquiries',
@@ -36,7 +41,10 @@ const SERVICE_WORDS = new Set([
   'need',
   'no',
   'now',
+  'ones',
   'open',
+  'option',
+  'options',
   'plumber',
   'plumbers',
   'plumbing',
@@ -47,6 +55,10 @@ const SERVICE_WORDS = new Set([
   'same',
   'service',
   'services',
+  'show',
+  'take',
+  'takes',
+  'that',
   'the',
   'to',
   'today',
@@ -55,6 +67,8 @@ const SERVICE_WORDS = new Set([
   'trades',
   'urgent',
   'water',
+  'which',
+  'with',
 ])
 
 const STATE_WORDS = new Set(['act', 'nsw', 'nt', 'qld', 'sa', 'tas', 'vic', 'wa'])

@@ -15,6 +15,7 @@ output/
 .codex/
 graphify-out/
 .tanstack/
+.promptfoo-home/
 
 # Generated dependency graph artifacts
 .planning/graphs/.last-build-snapshot.json

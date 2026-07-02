@@ -3,26 +3,15 @@ import { createFileRoute } from '@tanstack/react-router'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
 import {
-  selectOwnerBillingReceiptState,
-  type OwnerBillingRouteSummary,
-} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
-import {
-  readCurrentOwnerBillingServer,
   readCurrentOwnerBillingReceiptServer,
   type OwnerBillingReceiptServerResult,
-  type OwnerBillingServerResult,
 } from '@/modules/billing/billing.functions'
-import { ownerBillingServerToRouteReadback } from '@/routes/owner.billing'
 
 export const Route = createFileRoute('/owner/billing/receipts/$receiptId')({
   loader: async ({ params }) => {
-    const [billing, receipt] = await Promise.all([
-      readCurrentOwnerBillingServer(),
-      readCurrentOwnerBillingReceiptServer({ data: { receiptId: params.receiptId } }),
-    ])
-    return { billing, receipt, receiptId: params.receiptId }
+    const receipt = await readCurrentOwnerBillingReceiptServer({ data: { receiptId: params.receiptId } })
+    return { receipt, receiptId: params.receiptId }
   },
   head: () => ({
     meta: [
@@ -35,15 +24,13 @@ export const Route = createFileRoute('/owner/billing/receipts/$receiptId')({
 
 function OwnerBillingReceiptRoute() {
   const data = Route.useLoaderData()
-  const readback = ownerBillingServerToRouteReadback(data.billing as OwnerBillingServerResult)
-  const summary = selectOwnerBillingReceiptState(readback, data.receiptId)
 
   return (
     <AeOperatorShell
       role="owner"
       eyebrow="Billing receipt"
       title="Receipt readback"
-      description="Receipts are shown only when they exist in source-owned billing state for this owner operation."
+      description="The evidence recorded for this receipt."
       currentPath="/owner/billing/receipts"
       breadcrumbs={[
         { label: 'Billing', href: '/owner/billing' },
@@ -51,10 +38,7 @@ function OwnerBillingReceiptRoute() {
         { label: data.receiptId },
       ]}
     >
-      <div className="grid gap-6">
-        <OwnerBillingStatePanel summary={summary as OwnerBillingRouteSummary} />
-        <ReceiptSourceStatus receipt={data.receipt as OwnerBillingReceiptServerResult} />
-      </div>
+      <ReceiptSourceStatus receipt={data.receipt as OwnerBillingReceiptServerResult} />
     </AeOperatorShell>
   )
 }

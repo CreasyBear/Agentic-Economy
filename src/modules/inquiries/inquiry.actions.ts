@@ -23,6 +23,98 @@ import {
 
 const emptyObjectSchema = z.object({}).default({})
 
+const serverErrorOutputSchema = z
+  .object({
+    kind: z.literal('error'),
+    code: z.string(),
+    retryable: z.boolean(),
+    reason: z.string(),
+    field: z.string().optional(),
+    retryAfter: z.number().optional(),
+  })
+  .passthrough()
+
+const unknownRecordOutputSchema = z.record(z.string(), z.unknown())
+
+const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('ok'),
+      code: z.enum(['inquiry_submitted', 'inquiry_replayed']),
+      receipt: z
+        .object({
+          threadId: z.string(),
+          businessId: z.string(),
+          serviceId: z.string(),
+          status: z.string(),
+          version: z.number().int().nonnegative(),
+          notificationId: z.string(),
+          notificationStatus: z.string(),
+        })
+        .passthrough(),
+    })
+    .passthrough(),
+  serverErrorOutputSchema,
+]) as z.ZodType<PublicInquirySubmitServerResult>
+
+const ownerInboxOutputSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('ok'), inbox: unknownRecordOutputSchema }).passthrough(),
+  serverErrorOutputSchema,
+]) as z.ZodType<OwnerInboxServerResult>
+
+const ownerInquiryThreadOutputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('ok'),
+      detail: unknownRecordOutputSchema,
+      delivery: unknownRecordOutputSchema,
+      tombstones: z.array(unknownRecordOutputSchema),
+    })
+    .passthrough(),
+  serverErrorOutputSchema,
+]) as z.ZodType<OwnerInquiryThreadServerResult>
+
+const ownerInquiryMutationOutputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('ok'),
+      code: z.enum([
+        'inquiry_read_marked',
+        'inquiry_read_replayed',
+        'inquiry_replied',
+        'inquiry_reply_replayed',
+        'inquiry_closed',
+        'inquiry_close_replayed',
+      ]),
+      thread: z
+        .object({
+          threadId: z.string(),
+          status: z.string(),
+          version: z.number().int().nonnegative(),
+          updatedAt: z.number(),
+        })
+        .passthrough(),
+      message: z
+        .object({
+          messageId: z.string(),
+          sender: z.enum(['customer', 'owner']),
+          createdAt: z.number(),
+        })
+        .passthrough()
+        .optional(),
+      notification: z
+        .object({
+          notificationId: z.string(),
+          status: z.string(),
+          recipientRole: z.enum(['owner', 'customer']),
+        })
+        .passthrough()
+        .optional(),
+    })
+    .passthrough(),
+  serverErrorOutputSchema,
+]) as z.ZodType<OwnerInquiryMutationServerResult>
+
 /**
  * Public qualified inquiry — the first owned conversion event.
  *
@@ -89,6 +181,7 @@ export const submitInquiryAction = defineAction({
     'Use one of phone_inquiry / quote_request / emergency_callout_interest / ae_hosted_discovery as the capability kind, matching what the listing publishes.',
   ],
   schema: publicInquirySubmitSchema,
+  outputSchema: publicInquirySubmitOutputSchema,
   parameters: submitParameters,
   readOnly: false,
   surfaces: ['ui', 'http', 'agentJson', 'agentTools'],
@@ -121,6 +214,7 @@ export const readOwnerInboxAction = defineAction({
   summary: 'List inquiry threads for the currently signed-in owner. Owner-authenticated.',
   boundaries: ['Only callable by the authenticated owner.', 'Read-only.'],
   schema: emptyObjectSchema,
+  outputSchema: ownerInboxOutputSchema,
   parameters: [],
   readOnly: true,
   surfaces: ['ui', 'http'],
@@ -133,6 +227,7 @@ export const readOwnerInquiryThreadAction = defineAction({
   summary: 'Read one inquiry thread, its delivery readback, and privacy tombstones for the signed-in owner.',
   boundaries: ['Only callable by the authenticated owner.', 'Read-only.'],
   schema: ownerThreadSchema,
+  outputSchema: ownerInquiryThreadOutputSchema,
   parameters: ownerThreadParameters,
   readOnly: true,
   surfaces: ['ui', 'http'],
@@ -146,6 +241,7 @@ export const replyOwnerInquiryAction = defineAction({
   summary: 'Record an owner reply to an inquiry thread. Owner-authenticated write.',
   boundaries: ['Only callable by the authenticated owner.', 'Does not book or charge; it sends a message.'],
   schema: ownerReplySchema,
+  outputSchema: ownerInquiryMutationOutputSchema,
   parameters: ownerReplyParameters,
   readOnly: false,
   surfaces: ['ui', 'http'],
@@ -159,6 +255,7 @@ export const markOwnerInquiryReadAction = defineAction({
   summary: 'Mark an inquiry thread as read by the owner. Owner-authenticated write.',
   boundaries: ['Only callable by the authenticated owner.'],
   schema: ownerVersionedSchema,
+  outputSchema: ownerInquiryMutationOutputSchema,
   parameters: ownerVersionedParameters,
   readOnly: false,
   surfaces: ['ui', 'http'],
@@ -172,6 +269,7 @@ export const closeOwnerInquiryAction = defineAction({
   summary: 'Close an inquiry thread. Owner-authenticated write.',
   boundaries: ['Only callable by the authenticated owner.', 'Closing is not a booking outcome.'],
   schema: ownerVersionedSchema,
+  outputSchema: ownerInquiryMutationOutputSchema,
   parameters: ownerVersionedParameters,
   readOnly: false,
   surfaces: ['ui', 'http'],

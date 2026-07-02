@@ -5,27 +5,6 @@ import { registrySearchAction } from '@/modules/registry/registry.actions'
 import { AnswerSourceSchema } from '../answer-schema'
 import { toAnswerSource } from '../internal/dto-to-answer-source'
 
-const registrySearchInputSchema = z.object({
-  query: z.string().max(200).describe('Search query for listed businesses'),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(20)
-    .optional()
-    .describe('Maximum providers to return'),
-  mode: z
-    .enum(['near_me', 'whole_catalogue'])
-    .optional()
-    .describe('Search scope'),
-  location: z
-    .string()
-    .trim()
-    .max(80)
-    .optional()
-    .describe('Place to search around when mode is near_me'),
-})
-
 const registrySearchOutputSchema = z.object({
   providers: z.array(AnswerSourceSchema),
   total: z.number().int().nonnegative(),
@@ -35,7 +14,7 @@ export const registrySearchToolDef = toolDefinition({
   name: 'registry.search',
   description:
     'Search the Agentic Economy catalog for published local service businesses. Always use this before naming providers.',
-  inputSchema: registrySearchInputSchema,
+  inputSchema: registrySearchAction.schema,
   outputSchema: registrySearchOutputSchema,
 })
 
@@ -47,21 +26,15 @@ export const registrySearchToolDef = toolDefinition({
  * citation-bearing `AnswerSource` shape the structured chat path expects. The
  * registry stays literal — misspelling recovery is the caller's job.
  */
-export const registrySearchTool = registrySearchToolDef.server(
-  async (input) => {
-    const page = await registrySearchAction.run({
-      data: registrySearchAction.schema.parse({
-        query: input.query,
-        ...(input.limit === undefined ? {} : { limit: input.limit }),
-        ...(input.mode === undefined ? {} : { mode: input.mode }),
-        ...(input.location === undefined ? {} : { location: input.location }),
-      }),
-      context: {},
-    })
+export const registrySearchTool = registrySearchToolDef.server(async (input) => {
+  const parsedInput = registrySearchAction.schema.parse(input)
+  const page = await registrySearchAction.run({
+    data: parsedInput,
+    context: {},
+  })
 
-    return {
-      providers: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
-      total: page.pagination.total,
-    }
-  },
-)
+  return {
+    providers: page.items.map((dto, index) => toAnswerSource(dto, index + 1)),
+    total: page.pagination.total,
+  }
+})

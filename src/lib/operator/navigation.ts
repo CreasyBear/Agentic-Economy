@@ -1,5 +1,6 @@
 import {
   Activity,
+  CircleHelp,
   ClipboardList,
   Contact,
   CreditCard,
@@ -25,6 +26,16 @@ export type OperatorNavTier = 'core' | 'advanced'
 export type OperatorCommandDestination = OperatorNavItem & {
   hint?: string
 }
+
+export type OperatorUtilityItem = {
+  href: string
+  label: string
+  icon: LucideIcon
+}
+
+export type OperatorNavBadgeValue = number | string | null | undefined
+
+export type OperatorNavBadges = Partial<Record<string, OperatorNavBadgeValue>>
 
 export type OperatorNavGroup = {
   id: string
@@ -100,6 +111,12 @@ const developerNavGroups: readonly OperatorNavGroup[] = [
 const publicCommandDestinations: readonly OperatorCommandDestination[] = [
   { href: '/', label: 'Ask', icon: Search, tier: 'core', hint: 'Public' },
   { href: '/registry', label: 'Browse services', icon: ScrollText, tier: 'core', hint: 'Public' },
+] as const
+
+const operatorUtilityItems: readonly OperatorUtilityItem[] = [
+  { href: '/', label: 'Ask', icon: Search },
+  { href: '/registry', label: 'Browse services', icon: ScrollText },
+  { href: '/help', label: 'Help', icon: CircleHelp },
 ] as const
 
 export const billingSectionNav: readonly OperatorSectionNavItem[] = [
@@ -187,6 +204,28 @@ export function listOperatorCommandDestinations(role: OperatorRole): readonly Op
       items: publicCommandDestinations,
     },
   ]
+}
+
+export function operatorUtilityItemsForRole(_role: OperatorRole): readonly OperatorUtilityItem[] {
+  return operatorUtilityItems
+}
+
+export function formatOperatorNavBadge(value: OperatorNavBadgeValue): string | undefined {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) {
+      return undefined
+    }
+
+    const count = Math.floor(value)
+    return count > 99 ? '99+' : String(count)
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length === 0 ? undefined : trimmed
+  }
+
+  return undefined
 }
 
 export function isOperatorPathActive(currentPath: string, href: string): boolean {

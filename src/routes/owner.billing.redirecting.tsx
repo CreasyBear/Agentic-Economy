@@ -26,14 +26,14 @@ function OwnerBillingRedirectingRoute() {
     <AeOperatorShell
       role="owner"
       eyebrow="Provider redirect"
-      title="Continue only from a recorded operation."
-      description="A redirect link appears only when source-owned owner billing state contains one for the current operation."
+      title="Continue to the payment provider"
+      description="If a plan setup is waiting for you, continue here. Otherwise, return to billing."
       currentPath="/owner/billing/redirecting"
     >
       <div className="grid gap-6">
         <OwnerBillingStatePanel summary={summary} />
         <Button asChild variant="outline" className="w-fit">
-          <a href="/owner/billing">Back to billing readback</a>
+          <a href="/owner/billing">Back to billing</a>
         </Button>
       </div>
     </AeOperatorShell>

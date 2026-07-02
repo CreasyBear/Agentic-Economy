@@ -76,7 +76,7 @@ function ClaimSuccessRoute() {
         <Card className="ae-public-route-card">
           <CardHeader>
             <CardTitle>What was published</CardTitle>
-            <CardDescription>Customers can now read this on the public register.</CardDescription>
+            <CardDescription>Customers can now read this on the public service page.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -104,11 +104,6 @@ function ClaimSuccessRoute() {
                   <ExternalLinkIcon data-icon="inline-start" />
                   View public page
                 </a>
-              </Button>
-              <Button asChild variant="outline">
-                <Link to="/owner/status" search={{ slug: catalog.slug }}>
-                  Manage your page
-                </Link>
               </Button>
             </div>
           </CardContent>

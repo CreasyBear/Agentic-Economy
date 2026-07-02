@@ -43,8 +43,9 @@ describe('POST /api/answer/turn gate failure', () => {
       getThreadTurns: async () => ({ turns: [] }),
     })
 
-    // The agent returns overclaim prose; the gate must reject it and no
-    // deterministic fallback exists to rescue it, so the turn lands as an error.
+    // A misspelled query needs the agent recovery path. If the agent returns
+    // overclaim prose after choosing a visible registry search, the gate must
+    // reject it and the turn lands as an error.
     setAnswerToolUseAgentForTests(async () => ({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
@@ -60,7 +61,7 @@ describe('POST /api/answer/turn gate failure', () => {
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', cookie: '' },
-          body: JSON.stringify({ query: 'emergency plumber parramatta' }),
+          body: JSON.stringify({ query: 'paramata' }),
         }),
       )
 

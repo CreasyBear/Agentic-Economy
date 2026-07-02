@@ -23,6 +23,7 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -145,7 +146,7 @@ img {
    * BuilderIO/agent-native). Firefox gets scrollbar-width: thin. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--border)) transparent;
+    scrollbar-color: var(--border) transparent;
   }
   ::-webkit-scrollbar {
     width: 5px;
@@ -155,11 +156,11 @@ img {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--border));
+    background: var(--border);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.4);
+    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
   }
 }
 
@@ -456,8 +457,97 @@ img {
   }
 
   .ae-control-field:focus-visible {
-    border-color: var(--ae-public-cobalt-deep);
+    border-color: var(--ae-public-amber);
     box-shadow: var(--ae-focus-ring), var(--ae-public-control-shadow-hover);
+  }
+
+  .ae-public-shell-header {
+    position: sticky;
+    top: 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid color-mix(in oklch, var(--ae-public-line) 80%, transparent);
+    background: color-mix(in oklch, var(--ae-public-surface) 95%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  .ae-public-header-inner {
+    display: flex;
+    width: 100%;
+    max-width: 72rem;
+    height: 4rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  .ae-public-desktop-nav {
+    display: none;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .ae-public-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .ae-public-brand-link {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: var(--ae-public-radius-button);
+    padding-right: 0.5rem;
+    color: var(--ae-public-ink);
+    text-decoration: none;
+  }
+
+  .ae-public-brand-mark {
+    display: grid;
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    place-items: center;
+    border: 1px solid var(--ae-public-line-strong);
+    border-radius: var(--ae-public-radius-button);
+    background: var(--ae-public-ink);
+    color: var(--ae-public-surface);
+    font-family: var(--ae-public-font-heading);
+    font-size: var(--ae-public-text-sm);
+    font-weight: var(--ae-public-weight-semibold);
+  }
+
+  .ae-public-brand-copy {
+    display: grid;
+    min-width: 0;
+    gap: 0.125rem;
+  }
+
+  .ae-public-brand-name,
+  .ae-public-brand-tagline {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: var(--ae-public-tracking);
+  }
+
+  .ae-public-brand-name {
+    font-family: var(--ae-public-font-heading);
+    font-size: var(--ae-public-text-base);
+    font-weight: var(--ae-public-weight-semibold);
+    line-height: var(--ae-public-leading-tight);
+  }
+
+  .ae-public-brand-tagline {
+    display: none;
+    color: var(--ae-public-muted);
+    font-family: var(--ae-public-font-body);
+    font-size: var(--ae-public-text-xs);
+    font-weight: var(--ae-public-weight-regular);
+    line-height: 1;
   }
 
   .ae-public-nav-button {
@@ -497,6 +587,55 @@ img {
 
   .ae-public-nav-button-primary:active {
     transform: scale(0.96);
+  }
+
+  .ae-public-mobile-sheet {
+    width: min(22rem, calc(100vw - 2rem));
+    gap: 0;
+    border-color: var(--ae-public-line);
+    background: var(--ae-public-surface);
+    color: var(--ae-public-ink);
+    padding: 0;
+  }
+
+  .ae-public-mobile-sheet-header {
+    border-bottom: 1px solid var(--ae-public-line);
+    padding: 1rem;
+  }
+
+  .ae-public-mobile-link {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--ae-public-radius-button);
+    padding-inline: 0.75rem;
+    font-size: var(--ae-public-text-sm);
+    text-decoration: none;
+  }
+
+  .ae-public-mobile-primary-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-decoration: none;
+  }
+
+  @media (min-width: 40rem) {
+    .ae-public-brand-tagline {
+      display: block;
+    }
+  }
+
+  @media (min-width: 48rem) {
+    .ae-public-header-inner {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .ae-public-desktop-nav {
+      display: flex;
+    }
   }
 
   .ae-public-footer-link {
@@ -566,7 +705,7 @@ img {
   }
 
   .ae-owner-reply:focus-within {
-    border-color: var(--ae-public-cobalt-deep);
+    border-color: var(--ae-public-amber);
     box-shadow: var(--ae-focus-ring), var(--ae-public-control-shadow-hover);
   }
 
@@ -613,18 +752,31 @@ img {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
+    padding-inline: var(--ae-public-space-2xs);
   }
 
   .ae-thread-sidebar__row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: stretch;
-    gap: var(--ae-public-space-2xs);
+    gap: 0;
   }
 
   .ae-thread-sidebar__menu {
     align-self: center;
     color: var(--ae-public-muted);
+    opacity: 0;
+    transition: opacity var(--ae-public-duration-hover) var(--ae-public-ease),
+                color var(--ae-public-duration-hover) var(--ae-public-ease);
+  }
+
+  .ae-thread-sidebar__row:hover .ae-thread-sidebar__menu,
+  .ae-thread-sidebar__row:focus-within .ae-thread-sidebar__menu {
+    opacity: 1;
+  }
+
+  .ae-thread-sidebar__menu:hover {
+    color: var(--ae-public-ink);
   }
 
   .ae-operator-queue-row {

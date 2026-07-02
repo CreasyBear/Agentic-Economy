@@ -34,6 +34,7 @@
   --ae-success: oklch(0.40 0.045 150);       /* eucalyptus #3F5947 */
   --ae-warning: oklch(0.74 0.15 70);         /* amber (shared) */
   --ae-danger: oklch(0.45 0.16 32);          /* oxide brick #A8322A */
+  --ae-oxide: var(--ae-danger);
   --ae-info: oklch(0.42 0.07 250);           /* slate #345A7A */
 
   /* Radii — 4px panels/cards/objects, 6px buttons, 999px status pills only (DESIGN.md §17) */
@@ -56,6 +57,7 @@
   --ae-public-field-alt: var(--ae-surface-sunken);
   --ae-public-surface: var(--ae-surface);
   --ae-public-raised: var(--ae-surface-raised);
+  --ae-public-surface-raised: var(--ae-public-raised);
   --ae-public-overlay: oklch(0.975 0.005 95);
   --ae-public-ink: var(--ae-fg);
   --ae-public-muted: var(--ae-muted-fg);
@@ -69,6 +71,7 @@
   --ae-public-amber: var(--ae-primary);
   --ae-public-amber-deep: var(--ae-primary-strong);
   --ae-public-amber-fg: var(--ae-primary-fg);
+  --ae-public-amber-soft: color-mix(in oklch, var(--ae-public-amber) 9%, var(--ae-public-field));
   --ae-public-sage: var(--ae-success);
   --ae-public-gold: var(--ae-warning);
   --ae-public-blue: var(--ae-info);
@@ -118,6 +121,7 @@
   --ae-public-font-display: var(--ae-font-display);
   --ae-public-font-body: var(--ae-font-body);
   --ae-public-font-mono: var(--ae-font-mono);
+  --ae-public-font-heading: var(--ae-public-font-display);
   --ae-public-text-xs: 0.78rem;
   --ae-public-text-sm: 0.875rem;
   --ae-public-text-base: 1rem;
@@ -139,6 +143,7 @@
   --ae-public-leading-tight: 1.08;
   --ae-public-leading-snug: 1.35;
   --ae-public-leading-body: 1.6;
+  --ae-public-weight-regular: 430;
   --ae-public-weight-medium: 530;
   --ae-public-weight-semibold: 620;
   --ae-public-weight-bold: 680;
@@ -165,6 +170,7 @@
   --ae-public-float-shadow: 0 8px 28px oklch(0.21 0.012 250 / 0.08), 0 2px 6px oklch(0.21 0.012 250 / 0.04);
   --ae-public-control-shadow: 0 0 0 1px oklch(0.21 0.012 250 / 0.06);
   --ae-public-control-shadow-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
+  --ae-public-shadow-hairline: var(--ae-shadow-border);
   --ae-public-command-shadow: 0 20px 60px oklch(0.21 0.012 250 / 0.18);
   --ae-public-hard-shadow: 6px 6px 0 oklch(0.21 0.012 250 / 0.06);
   --ae-public-button-shadow: inset 0 1px 0 oklch(1 0 0 / 0.18), 0 6px 16px oklch(0.74 0.15 70 / 0.18);
@@ -173,8 +179,20 @@
   --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
   --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
 
+  /* Daylight Routing Object primitives */
+  --ae-public-routing-object-bg: color-mix(in oklch, var(--ae-public-surface) 72%, var(--ae-public-field));
+  --ae-public-routing-object-border: color-mix(in oklch, var(--ae-public-line-strong) 78%, var(--ae-public-amber) 22%);
+  --ae-public-routing-object-shadow: var(--ae-shadow-border), inset 0 1px 0 oklch(1 0 0 / 0.30);
+  --ae-public-cutout-bg: color-mix(in oklch, var(--ae-public-surface) 88%, var(--ae-public-field));
+  --ae-public-cutout-border: color-mix(in oklch, var(--ae-public-line-strong) 82%, var(--ae-public-amber) 18%);
+  --ae-public-cutout-shadow: var(--ae-shadow-border), 0 10px 28px oklch(0.21 0.012 250 / 0.08);
+  --ae-public-evidence-bg: color-mix(in oklch, var(--ae-public-surface) 70%, var(--ae-public-field));
+  --ae-public-evidence-border: color-mix(in oklch, var(--ae-public-line) 75%, transparent);
+  --ae-public-route-line: color-mix(in oklch, var(--ae-public-amber) 32%, var(--ae-public-grid-line));
+
   /* Motion — minimal-functional, leaning intentional */
   --ae-public-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ae-public-ease-standard: var(--ae-public-ease);
   --ae-public-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --ae-public-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --ae-public-duration-hover: 160ms;
@@ -186,6 +204,18 @@
   --ae-public-z-base: 0;
   --ae-public-z-content: 1;
   --ae-public-z-sticky: 20;
+  --ae-z-underlay: -1;
+  --ae-z-base: 0;
+  --ae-z-content: 1;
+  --ae-z-header: 20;
+  --ae-z-sticky: 30;
+  --ae-z-dropdown: 40;
+  --ae-z-popover: 45;
+  --ae-z-tooltip: 50;
+  --ae-z-modal: 60;
+  --ae-z-toast: 70;
+  --ae-overlay-scrim: color-mix(in oklch, var(--ae-fg) 12%, transparent);
+  --ae-public-overlay-scrim: color-mix(in oklch, var(--ae-public-ink) 10%, transparent);
 
   --ae-ease-out: var(--ae-public-ease-enter);
   --ae-ease-state: var(--ae-public-ease);
@@ -237,6 +267,7 @@
   --ae-success: oklch(0.66 0.06 150);
   --ae-warning: oklch(0.78 0.15 70);
   --ae-danger: oklch(0.62 0.17 32);
+  --ae-oxide: var(--ae-danger);
   --ae-info: oklch(0.66 0.08 250);
 
   --ae-shadow-raised: 0 1px 2px oklch(0 0 0 / 0.20), 0 12px 36px oklch(0 0 0 / 0.22);

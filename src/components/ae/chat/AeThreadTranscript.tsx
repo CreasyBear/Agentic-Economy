@@ -49,7 +49,7 @@ export function AeThreadTranscript({
           >
             <div className="ae-thread-transcript__turn">
               {expanded ? (
-                <AeThreadTurnReplaySection {...viewModel} />
+                <AeThreadTurnReplaySection {...viewModel} scrollTargetId={turn.turnId} />
               ) : (
                 <AeThreadTurnCollapsed {...viewModel} />
               )}

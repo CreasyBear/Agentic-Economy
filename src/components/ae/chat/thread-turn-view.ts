@@ -1,4 +1,4 @@
-import type { AnswerLayoutProfile } from '@/modules/answer/public'
+import type { AnswerLayoutProfile, AnswerWorkStep } from '@/modules/answer/public'
 import type { AnswerArtifact } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadTurn } from '@/modules/answer-thread/public'
 
@@ -9,6 +9,7 @@ export type ThreadTurnViewModel = {
   seq: number
   oneLine: string
   artifacts: readonly AnswerArtifact[]
+  workLog: readonly AnswerWorkStep[]
   layoutProfile?: AnswerLayoutProfile
 }
 
@@ -19,6 +20,7 @@ export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
     seq: turn.seq,
     oneLine: turn.oneLine,
     artifacts: turn.artifacts,
+    workLog: turn.workLog,
     ...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile }),
   }
 }

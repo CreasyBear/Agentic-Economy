@@ -716,6 +716,21 @@ export function scanUiContract(targets: readonly ScanTarget[]): readonly ScanVio
         pattern: new RegExp(`\\btransition-${'all'}\\b`),
       },
       {
+        rule: 'hardcoded-layer',
+        message: 'Product-owned routes and AE components must use AE z-index tokens, not hardcoded Tailwind layers.',
+        pattern: /\bz-(?:40|50|\d{3,})\b/,
+      },
+      {
+        rule: 'raw-overlay',
+        message: 'Overlays must use AE scrim tokens, not raw black opacity utilities.',
+        pattern: /\bbg-black\/\d+\b/,
+      },
+      {
+        rule: 'generic-tailwind-shadow',
+        message: 'Product-owned routes and AE components must use AE shadows or hairlines, not generic Tailwind shadows.',
+        pattern: /\bshadow-(?:sm|md|lg|xl|2xl)\b/,
+      },
+      {
         rule: 'arbitrary-visual-token',
         message: 'Arbitrary visual tokens belong in the token/component layer.',
         pattern: /\b(?:rounded|shadow|z|border-l)-\[/,

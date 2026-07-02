@@ -4,6 +4,7 @@ export type {
   AnswerToolCallResultSummary,
   AnswerToolCallStatus,
   AnswerToolId,
+  AnswerTurnTimingEntry,
   AnswerTurnRecord,
   AnswerTurnRequest,
   AnswerTurnStatus,
@@ -26,11 +27,16 @@ export {
 export {
   appendAnswerTurn,
   appendAnswerTurnWithToolCalls,
+  appendAnswerTurnWithThreadAndToolCalls,
   createAnswerThread,
+  deleteAnswerThread,
   getPublicThreadProjection,
+  getAnswerThreadWithTurns,
   getThreadTurns,
   listSessionThreads,
   setAnswerThreadPortForTests,
+  type AppendAnswerTurnWithThreadAndToolCallsArgs,
+  type DeleteAnswerThreadArgs,
 } from './answer-thread.functions'
 
 export {
@@ -77,6 +83,7 @@ export {
   checkAnswerFollowUpChipsRateLimit,
   checkAnswerStreamRateLimit,
   checkAnswerTurnRateLimit,
+  readAnswerTurnAccessContext,
   resetAnswerTurnGuardForTests,
   type AnswerTurnAccessDecision,
 } from './internal/turn-guard'

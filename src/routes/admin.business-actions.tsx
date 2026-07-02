@@ -250,6 +250,7 @@ function AdminBusinessActionsRoute() {
       title="Business action reconstruction"
       description="source/local proof only. production proof not claimed."
       currentPath="/admin/business-actions"
+      navBadges={{ '/admin/business-actions': readback.rows.length }}
     >
       {search.requestId === undefined ? <FilterPanel /> : <FilterPanel requestId={search.requestId} />}
       {readback.deniedReason === undefined ? null : (

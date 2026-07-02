@@ -89,7 +89,7 @@ function isFollowUpChipLabel(query: string): boolean {
   if (/^compare the top two$/i.test(normalized)) {
     return true
   }
-  if (/^what can agentic economy do here\??$/i.test(normalized)) {
+  if (/^what can agentic economy do here\?$/i.test(normalized)) {
     return true
   }
   return false

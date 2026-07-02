@@ -17,7 +17,7 @@ Core AE semantics:
 - Surfaces: `--ae-bg`, `--ae-surface`, `--ae-surface-raised`
 - Text: `--ae-fg`, `--ae-muted-fg`, `--ae-primary-fg`
 - Borders and focus: `--ae-border`, `--ae-ring`, `--ae-focus-ring`
-- Accent and status: `--ae-primary` (warm coral), `--ae-primary-strong`, `--ae-success`, `--ae-warning`, `--ae-danger`
+- Accent and status: `--ae-primary` (signage amber), `--ae-primary-strong`, `--ae-success`, `--ae-warning`, `--ae-danger`
 - Library bridge: `--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, and `--radius`
 
 Public landing semantics:
@@ -27,7 +27,7 @@ Public landing semantics:
 - Public accent: `--ae-public-amber`, `--ae-public-amber-deep`, `--ae-public-amber-fg`
 - Public structure: `--ae-public-line`, `--ae-public-border-soft`
 
-The public surface is warm-light. If dark public mode is introduced later, remap `--ae-public-*` semantics explicitly; do not invert light values.
+The public surface is daylight paper. If dark public mode is introduced later, remap `--ae-public-*` semantics explicitly; do not invert light values.
 
 ## Layer 3: Component
 
@@ -38,7 +38,7 @@ Existing component-level values are present but partial:
 - Core elevation: `--ae-shadow-raised`, `--ae-shadow-border`, `--ae-shadow-border-hover`
 - Component usage in code: shared `Button`, `Input`, `Textarea`, `NativeSelect`, `Alert`, `Card`, `Empty`, `AePublicShell`, and `src/components/ae/landing/*` consume these semantics
 
-Next guidance: create component tokens only when a reusable component has variants or multiple states. Priority component tokens are `listing-card`, `search-bar`, `trust-badge`, `button-primary`, `input`, and `status-readback`.
+Next guidance: create component tokens only when a reusable component has variants or multiple states. Priority component tokens are `routing-object`, `paper-cutout`, `source-card`, `listing-card`, `search-bar`, `button-primary`, `input`, and `status-readback`.
 
 # Seven Category Map
 
@@ -55,8 +55,8 @@ Next guidance: create component tokens only when a reusable component has varian
 # Public Landing Token Rules
 
 - Public route CSS must use `ae-public-*` classes plus root AE tokens. Do not add a new route-local namespace.
-- The verified action listing uses public semantic surfaces, warm accent, image-first media, and honest metadata. It is not a dense status dashboard.
-- Warm coral remains the primary action accent. Green is limited to success/verified stamps and must never replace the primary CTA color.
+- Public routing objects use public semantic surfaces, amber action moments, paper cut-outs, image-first evidence, and honest metadata. They are not dense status dashboards.
+- Signage amber remains the primary action accent. Eucalyptus is limited to available/checked/success states and must never replace the primary CTA color.
 - Raw hex, arbitrary Tailwind colors, and one-off shadows are off-spine values unless they are immediately promoted into tokens.
 - Dark command panels are retired from public surfaces. Boundaries are communicated through warm text and badges, not dark authority blocks.
 

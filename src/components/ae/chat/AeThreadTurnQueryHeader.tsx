@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { Message, MessageContent } from '@/components/ai-elements/message'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import { formatTurnQueryLabel } from '@/modules/answer-thread/public'
 
@@ -15,8 +16,12 @@ export function AeThreadTurnQueryHeader({ query, intent, seq, actions }: AeThrea
 
   return (
     <header className={`ae-chat-section__query ae-chat-section__query--${label.role}`}>
-      <p className="ae-chat-section__query-text">{label.text}</p>
-      {actions}
+      <Message from="user" className="ae-chat-section__query-message">
+        <MessageContent className="ae-chat-section__query-bubble">
+          <p className="ae-chat-section__query-text">{label.text}</p>
+          {actions}
+        </MessageContent>
+      </Message>
     </header>
   )
 }

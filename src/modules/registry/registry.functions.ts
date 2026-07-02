@@ -1,4 +1,5 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import type { ActionTimingSink } from '@/modules/common/action'
 import {
   createDefaultRegistrySourceState,
   getPublicBusinessCatalogBySlug,
@@ -25,6 +26,10 @@ export type PublicRegistrySourcePort = {
   list: (input: PublicBusinessCatalogQueryInput) => Promise<PublicBusinessCatalogApiPage>
   search: (input: PublicBusinessCatalogSearchInput) => Promise<PublicBusinessCatalogApiPage>
   detail: (input: { slug: string }) => Promise<PublicBusinessCatalogDetailResult>
+}
+
+export type PublicRegistryReadOptions = {
+  timing?: ActionTimingSink
 }
 
 const listPublicBusinessCatalogQuery = sourceQuery<PublicBusinessCatalogQueryInput, PublicBusinessCatalogApiPage>(
@@ -72,30 +77,54 @@ export async function readPublicRegistryCatalogPage(
 }
 
 export async function readPublicRegistrySearchPage(
-  input: PublicBusinessCatalogSearchInput
+  input: PublicBusinessCatalogSearchInput,
+  options: PublicRegistryReadOptions = {},
 ): Promise<PublicBusinessCatalogApiPage> {
   const sourcePort = getPublicRegistrySourcePort()
   const backend = catalogSearchBackendForTests ?? readCatalogSearchBackend()
+  const timing = options.timing
 
   if (backend === 'convex') {
-    return filterPublicRegistryPage(sourcePort.search(input))
+    return withTiming(timing, 'registry.search.convex', { backend }, () =>
+      filterPublicRegistryPage(sourcePort.search(input)),
+    )
   }
 
   const searchPort = catalogSearchPortForTests ?? createConfiguredMeiliCatalogSearchPort()
   if (searchPort === undefined) {
-    return filterPublicRegistryPage(sourcePort.search(input))
+    return withTiming(timing, 'registry.search.convex_fallback', { backend }, () =>
+      filterPublicRegistryPage(sourcePort.search(input)),
+    )
   }
 
   if (backend === 'dual') {
-    void searchPort.search(input).catch(() => undefined)
-    return filterPublicRegistryPage(sourcePort.search(input))
+    void withTiming(timing, 'registry.search.meili_shadow', { backend }, () =>
+      searchPort.search(input),
+    ).catch(() => undefined)
+    return withTiming(timing, 'registry.search.convex', { backend }, () =>
+      filterPublicRegistryPage(sourcePort.search(input)),
+    )
   }
 
   try {
-    const result = await searchPort.search(input)
-    return filterPublicRegistryPage(hydrateCatalogSearchResult(input, result, sourcePort))
+    const result = await withTiming(timing, 'registry.search.meili', { backend }, () =>
+      searchPort.search(input),
+    )
+    if (result.processingTimeMs !== undefined) {
+      timing?.record('registry.search.meili_processing', result.processingTimeMs, {
+        backend,
+      })
+    }
+    return withTiming(timing, 'registry.search.hydration', {
+      backend,
+      hits: result.hits.length,
+    }, () =>
+      filterPublicRegistryPage(hydrateCatalogSearchResult(input, result, sourcePort)),
+    )
   } catch {
-    return filterPublicRegistryPage(sourcePort.search(input))
+    return withTiming(timing, 'registry.search.convex_fallback', { backend }, () =>
+      filterPublicRegistryPage(sourcePort.search(input)),
+    )
   }
 }
 
@@ -293,4 +322,22 @@ function shouldFallbackToLegacyRegistry(): boolean {
 
 function usesLocalE2eBypass(): boolean {
   return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
+}
+
+async function withTiming<T>(
+  timing: ActionTimingSink | undefined,
+  name: string,
+  metadata: Record<string, string | number | boolean | null>,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (timing === undefined) {
+    return run()
+  }
+
+  const started = Date.now()
+  try {
+    return await run()
+  } finally {
+    timing.record(name, Date.now() - started, metadata)
+  }
 }

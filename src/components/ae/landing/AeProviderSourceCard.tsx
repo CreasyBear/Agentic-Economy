@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 
-import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { Button } from '@/components/ui/button'
 import type { AnswerSource } from '@/modules/answer/public'
 
@@ -64,14 +63,9 @@ export function AeProviderSourceCard({ source }: AeProviderSourceCardProps) {
             {source.inquiryUrl === undefined ? source.nextStepLabel : 'View details'}
           </Link>
         </Button>
-        <AeAgentJsonAffordance agentJsonUrl={buildSourceAgentJsonUrl(source.slug)} query={source.name} />
       </div>
     </article>
   )
-}
-
-function buildSourceAgentJsonUrl(slug: string): string {
-  return `/api/businesses/${slug}`
 }
 
 function slugify(value: string): string {

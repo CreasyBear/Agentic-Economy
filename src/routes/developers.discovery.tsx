@@ -224,25 +224,6 @@ function DevelopersDiscoveryRoute() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Phase 2 inquiry status</CardTitle>
-              <CardDescription>{readback.p2InquiryAvailability.publicReason}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid gap-2 text-sm">
-                <div>
-                  <dt className="font-medium">State</dt>
-                  <dd className="text-muted-foreground">{readback.p2InquiryAvailability.state}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium">Source</dt>
-                  <dd className="break-all text-muted-foreground">{readback.p2InquiryAvailability.source}</dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Gated exclusions</CardTitle>
               <CardDescription>Deferred surfaces are not part of the shipped read-only product.</CardDescription>
             </CardHeader>

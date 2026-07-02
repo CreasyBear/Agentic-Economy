@@ -51,15 +51,19 @@ describe('POST /api/answer/turn empty-state queries', () => {
   it('completes with honest empty-state copy when no providers match', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
 
-    setAnswerToolUseAgentForTests(async () => ({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick' } }],
-      prose: {
-        oneLine: 'No listed businesses match "Emergency plumber Brunswick" yet.',
-        summary:
-          'No providers are listed for that yet. You can list a business, or try a different need or suburb.',
-        whatToDoNow: 'Try a nearby suburb, browse the registry, or list a business that should appear here.',
-      },
-    }))
+    let agentCalled = false
+    setAnswerToolUseAgentForTests(async () => {
+      agentCalled = true
+      return {
+        toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick' } }],
+        prose: {
+          oneLine: 'No listed businesses match "Emergency plumber Brunswick" yet.',
+          summary:
+            'No providers are listed for that yet. You can list a business, or try a different need or suburb.',
+          whatToDoNow: 'Try a nearby suburb, browse services, or list a business that should appear here.',
+        },
+      }
+    })
 
     setAnswerThreadPortForTests({
       createThread: async (args) => ({ threadId: args.threadId }),
@@ -81,6 +85,11 @@ describe('POST /api/answer/turn empty-state queries', () => {
 
       expect(response.ok).toBe(true)
       const frames = parseStream(await response.text())
+      expect(frames.slice(0, 3).map((frame) => frame.event.type)).toEqual([
+        'thread',
+        'work-step',
+        'work-step',
+      ])
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
       if (complete?.type !== 'complete') {
@@ -89,22 +98,90 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('No listed businesses match')
       expect(complete.answer.summary).toContain('Brunswick')
+      expect(agentCalled).toBe(false)
+    })
+  })
+
+  it('answers direct registry matches without requiring model planning', async () => {
+    const turns: unknown[] = []
+    stubThreadPort(turns)
+
+    const state = createDefaultRegistrySourceState()
+    await withRegistrySourcePortForTest(state, async () => {
+      const response = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie: '' },
+          body: JSON.stringify({ query: 'emergency plumber parramatta' }),
+        }),
+      )
+
+      expect(response.ok).toBe(true)
+      const frames = parseStream(await response.text())
+      const complete = frames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+
+      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
+        'parramatta-emergency-plumbing',
+      ])
+      expect(complete.answer.summary).toContain('publishes service coverage')
+
+      const persisted = turns.at(0) as { evidenceJson: string } | undefined
+      const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
+        toolCalls?: readonly { toolId?: string; inputJson?: string }[]
+        timings?: readonly { name?: string }[]
+        workLog?: readonly { id?: string; status?: string; detailRows?: readonly { label?: string; value?: string }[] }[]
+      }
+      expect(evidence.toolCalls?.[0]?.toolId).toBe('registry.search')
+      expect(JSON.parse(evidence.toolCalls?.[0]?.inputJson ?? '{}')).toMatchObject({
+        query: 'emergency plumber parramatta',
+        limit: 3,
+      })
+      expect(evidence.timings?.map((timing) => timing.name)).toEqual(
+        expect.arrayContaining([
+          'turn.context_parse',
+          'retrieval.initial_search',
+          'registry.search.convex',
+          'tool.run',
+          'sse.emit_snapshot',
+          'turn.persistence_prepare',
+        ]),
+      )
+      expect(evidence.workLog?.map((step) => step.id)).toEqual(
+        expect.arrayContaining([
+          'interpret.request',
+          'search.registry.initial',
+          'read.providers',
+          'compare.fit',
+          'assemble.answer',
+        ]),
+      )
+      const searchStep = evidence.workLog?.find((step) => step.id === 'search.registry.initial')
+      expect(searchStep?.status).toBe('complete')
+      expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '1')).toBe(true)
     })
   })
 
   it('does not freeze service-only tool results for a suburb-specific query', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
 
-    setAnswerToolUseAgentForTests(async () => ({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumbing' } }],
-      prose: {
-        oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
-        summary:
-          'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
-        whatToDoNow:
-          'Try a nearby suburb, browse the registry, or list a business that should appear here. Agentic Economy does not book or take payment on this page.',
-      },
-    }))
+    let agentCalled = false
+    setAnswerToolUseAgentForTests(async () => {
+      agentCalled = true
+      return {
+        toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumbing' } }],
+        prose: {
+          oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
+          summary:
+            'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
+          whatToDoNow:
+            'Try a nearby suburb, browse services, or list a business that should appear here. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        },
+      }
+    })
 
     const turns: unknown[] = []
     stubThreadPort(turns)
@@ -132,9 +209,16 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
         providers?: unknown[]
         allowedSlugs?: unknown[]
+        toolCalls?: readonly { inputJson?: string }[]
+        timings?: readonly { name?: string }[]
       }
       expect(evidence.providers).toEqual([])
       expect(evidence.allowedSlugs).toEqual([])
+      expect(
+        evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
+      ).toEqual(['Emergency plumber Brunswick'])
+      expect(evidence.timings?.map((timing) => timing.name)).not.toContain('model.agent_total')
+      expect(agentCalled).toBe(false)
     })
   })
 
@@ -146,9 +230,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       prose: {
         oneLine: 'Parramatta Emergency Plumbing matches this need.',
         summary:
-          'Parramatta Emergency Plumbing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
+          'Parramatta Emergency Plumbing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
         whatToDoNow:
-          'Open Parramatta Emergency Plumbing and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'Open Parramatta Emergency Plumbing and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
       },
     }))
 
@@ -203,9 +287,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       prose: {
         oneLine: 'Parramatta Emergency Plumbing matches this need.',
         summary:
-          'Parramatta Emergency Plumbing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
+          'Parramatta Emergency Plumbing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
         whatToDoNow:
-          'Open Parramatta Emergency Plumbing and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+          'Open Parramatta Emergency Plumbing and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
       },
     }))
 
@@ -257,9 +341,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
           prose: {
             oneLine: 'One listed business matches Parramatta.',
             summary:
-              'Parramatta Emergency Plumbing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
+              'Parramatta Emergency Plumbing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
             whatToDoNow:
-              'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+              'Open the provider page and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
           },
         }
       }
@@ -272,7 +356,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
             summary:
               'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
             whatToDoNow:
-              'Try a nearby suburb, browse the registry, or list a business that should appear here.',
+              'Try a nearby suburb, browse services, or list a business that should appear here.',
           },
         }
       }
@@ -360,8 +444,9 @@ describe('POST /api/answer/turn empty-state queries', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published.',
+          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow:
+          'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
       },
     }))
 
@@ -393,6 +478,17 @@ describe('POST /api/answer/turn empty-state queries', () => {
       // The agent JSON URL reflects the tool's chosen search query.
       expect(complete.answer.agentJsonUrl).toContain('q=parramatta')
       expect(complete.answer.oneLine).not.toContain('No listed businesses match')
+
+      const persisted = turns.at(0) as { evidenceJson: string } | undefined
+      const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
+        toolCalls?: readonly { seq?: number; inputJson?: string }[]
+        timings?: readonly { name?: string }[]
+      }
+      expect(evidence.toolCalls?.map((call) => call.seq)).toEqual([0, 1])
+      expect(
+        evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
+      ).toEqual(['paramata', 'parramatta'])
+      expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
     })
   })
 })
@@ -412,8 +508,8 @@ describe('POST /api/answer/turn persistence resilience', () => {
       prose: {
         oneLine: 'One listed business matches this need.',
         summary:
-          'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
-        whatToDoNow: 'Open the provider page and send an inquiry when published.',
+          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
       },
     }))
 

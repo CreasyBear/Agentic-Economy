@@ -31,6 +31,7 @@ function AdminAuditEventsRoute() {
       title="Audit events"
       description="Inspect admin and recovery transitions with redacted payloads after source-owned membership is resolved."
       currentPath="/admin/audit-events"
+      navBadges={{ '/admin/audit-events': readback.rows.length }}
     >
       <AeAdminReadbackPanel
         title="Audit readback"

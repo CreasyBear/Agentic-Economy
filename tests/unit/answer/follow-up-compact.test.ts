@@ -34,7 +34,7 @@ describe('follow-up compact prose', () => {
     })
 
     expect(prose.oneLine).toBe('2 listed in Parramatta.')
-    expect(prose.summary).toContain('No booking or payment')
+    expect(prose.summary).toContain('The business handles timing, price, and availability')
   })
 })
 
@@ -44,8 +44,8 @@ describe('compact snapshot artifacts', () => {
       query: 'plumber Parramatta',
       oneLine: '2 listed in Parramatta.',
       providers: [provider()],
-      summary: 'No booking or payment happens on this page.',
-      nextStep: 'Open a listed provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
+      summary: 'The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+      nextStep: 'Open a listed provider page and send an inquiry when that option is published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
       agentJsonUrl: '/api/businesses/search?q=plumber',
       compactLayout: true,
     })

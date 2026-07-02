@@ -3,6 +3,7 @@ import type { AnswerSynthesizerFollowUpIntent } from '../answer-synthesizer'
 
 export const AnswerLayoutProfileValues = [
   'discovery_full',
+  'clarification',
   'refinement_compact',
   'compare_pair',
   'boundary_explain',
@@ -16,12 +17,12 @@ export function computeLayoutProfile(input: {
   followUpIntent?: AnswerSynthesizerFollowUpIntent
   providerCount: number
 }): AnswerLayoutProfile {
-  if (input.providerCount === 0) {
-    return 'empty_state'
-  }
-
   if (input.followUpIntent === 'explain_boundary' || input.followUpIntent === 'unsupported') {
     return 'boundary_explain'
+  }
+
+  if (input.providerCount === 0) {
+    return 'empty_state'
   }
 
   if (input.followUpIntent === 'compare_known' && input.providerCount >= 2) {
@@ -80,5 +81,5 @@ export function inferLayoutProfileFromArtifacts(input: {
 }
 
 export function isCompactLayoutProfile(profile: AnswerLayoutProfile): boolean {
-  return profile === 'refinement_compact' || profile === 'boundary_explain'
+  return profile === 'refinement_compact' || profile === 'boundary_explain' || profile === 'clarification'
 }

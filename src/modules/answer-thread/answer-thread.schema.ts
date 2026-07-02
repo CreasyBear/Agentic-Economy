@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import type { AnswerArtifact } from '@/modules/answer/answer-schema'
-import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
+import type { AnswerSource, AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
 import type { AnswerLayoutProfile } from '@/modules/answer/layout-profile'
 import {
   AeSearchContextSchema,
@@ -76,12 +76,20 @@ export type AnswerToolCallRecord = {
   createdAt: number
 }
 
+export type AnswerTurnTimingEntry = {
+  name: string
+  durationMs: number
+  atMs: number
+  metadata?: Record<string, string | number | boolean | null>
+}
+
 export type PublicThreadTurn = {
   turnId: string
   seq: number
   query: string
   intent: FollowUpIntent
   status: AnswerTurnStatus
+  workLog: readonly AnswerWorkStep[]
   artifacts: readonly AnswerArtifact[]
   oneLine: string
   layoutProfile?: AnswerLayoutProfile
@@ -112,6 +120,10 @@ export type FrozenTurnEvidence = {
   searchContext?: AeSearchContext
   /** Tool-call evidence persisted per turn; absent on legacy frozen turns. */
   toolCalls?: readonly AnswerToolCallRecord[]
+  /** Internal timing trace for answer quality/performance audits. */
+  timings?: readonly AnswerTurnTimingEntry[]
+  /** Public work log persisted so replay shows the same visible process as the live stream. */
+  workLog?: readonly AnswerWorkStep[]
 }
 
 export type FrozenTurnProse = {

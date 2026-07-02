@@ -307,15 +307,15 @@ export const aeStatusPresentation = {
     publicness: 'public',
   },
   discovery_unavailable: {
-    label: 'Details unavailable',
-    compactLabel: 'Unavailable',
+    label: 'Details not published',
+    compactLabel: 'Not published',
     tone: 'neutral',
-    description: 'Published business details are not available yet.',
-    nextAction: 'Restore the details or keep the unavailable state clear.',
+    description: 'Published business details are not live yet.',
+    nextAction: 'Restore the details or keep the not-published state clear.',
     priority: 'high',
     audience: 'public',
     publicness: 'public',
-    disabledReason: 'Published business details are not currently available.',
+    disabledReason: 'Published business details are not currently live.',
   },
   discovery_parity_failed: {
     label: 'Discovery parity failed',
@@ -668,7 +668,7 @@ export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
   const { discoveryStatus, firstRequestMode } = input
 
   if (discoveryStatus === 'unavailable') {
-    return 'Details unavailable'
+    return 'Details not published'
   }
 
   if (discoveryStatus === 'degraded' || discoveryStatus === 'stale') {

@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import {
   createEmptyContactFollowUpSourceState,
@@ -177,6 +177,21 @@ function OwnerContactFollowUpDetailRoute() {
   const reconstruction = readback.reconstruction
   const decisionDisabledReason = ownerDecisionDisabledReason(reconstruction)
   const canDecide = decisionDisabledReason === undefined
+  const consequenceInvalid = actionError === 'Consequence acknowledgement is required before approval.'
+  const consequenceField = getFieldAccessibility({
+    id: 'contact-follow-up-consequence',
+    invalid: consequenceInvalid,
+    hasDescription: true,
+    hasError: consequenceInvalid,
+  })
+  const rejectInvalid = actionError === 'Reject reason is required.'
+  const rejectReasonField = getFieldAccessibility({
+    id: 'contact-follow-up-reject-reason',
+    invalid: rejectInvalid,
+    hasDescription: true,
+    hasError: rejectInvalid,
+  })
+
 
   return (
     <AeOperatorShell
@@ -218,7 +233,7 @@ function OwnerContactFollowUpDetailRoute() {
                 <AlertDescription>{actionMessage}</AlertDescription>
               </Alert>
             )}
-            {actionError === undefined || actionError === 'Reject reason is required.' ? null : (
+            {actionError === undefined || consequenceInvalid || rejectInvalid ? null : (
               <Alert>
                 <AlertTitle>Decision needs attention</AlertTitle>
                 <AlertDescription>{actionError}</AlertDescription>
@@ -233,9 +248,10 @@ function OwnerContactFollowUpDetailRoute() {
             <div className="grid gap-4 lg:grid-cols-2">
               <form onSubmit={handleApprove} className="grid gap-3 rounded-md border bg-muted/20 p-4" noValidate>
                 <FieldGroup>
-                  <Field>
-                    <label className="flex items-start gap-3 text-sm">
+                  <Field {...consequenceField.fieldProps}>
+                    <label className="flex items-start gap-3 text-sm" htmlFor={consequenceField.controlProps.id}>
                       <input
+                        {...consequenceField.controlProps}
                         ref={consequenceRef}
                         type="checkbox"
                         checked={consequenceAccepted}
@@ -246,7 +262,8 @@ function OwnerContactFollowUpDetailRoute() {
                         I understand this approves one contact follow-up attempt for this proposal only, with source-owned receipt or proof-gap readback.
                       </span>
                     </label>
-                    <FieldDescription>No future action, booking, payment, or autonomous execution is authorized.</FieldDescription>
+                    <FieldDescription {...consequenceField.descriptionProps}>No future action, booking, payment, or autonomous execution is authorized.</FieldDescription>
+                    {consequenceInvalid ? <FieldError {...consequenceField.errorProps}>{actionError}</FieldError> : null}
                   </Field>
                 </FieldGroup>
                 <Button
@@ -258,17 +275,16 @@ function OwnerContactFollowUpDetailRoute() {
               </form>
               <form onSubmit={handleReject} className="grid gap-3 rounded-md border bg-muted/20 p-4" noValidate>
                 <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="contact-follow-up-reject-reason">Reject reason</FieldLabel>
+                  <Field {...rejectReasonField.fieldProps}>
+                    <FieldLabel htmlFor={rejectReasonField.controlProps.id}>Reject reason</FieldLabel>
                     <Textarea
+                      {...rejectReasonField.controlProps}
                       ref={rejectReasonRef}
-                      id="contact-follow-up-reject-reason"
                       value={rejectReason}
                       onChange={(event) => setRejectReason(event.currentTarget.value)}
-                      aria-invalid={actionError === 'Reject reason is required.'}
                     />
-                    <FieldDescription>Rejection records owner decision and audit state without creating a gateway or attempt.</FieldDescription>
-                    {actionError === 'Reject reason is required.' ? <FieldError>{actionError}</FieldError> : null}
+                    <FieldDescription {...rejectReasonField.descriptionProps}>Rejection records owner decision and audit state without creating a gateway or attempt.</FieldDescription>
+                    {rejectInvalid ? <FieldError {...rejectReasonField.errorProps}>{actionError}</FieldError> : null}
                   </Field>
                 </FieldGroup>
                 <Button

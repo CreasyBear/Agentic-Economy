@@ -1,4 +1,5 @@
 import { findAction } from '@/modules/actions'
+import type { ActionTimingSink } from '@/modules/common/action'
 import { stableHash } from '@/modules/common/stable-hash'
 import { toAnswerSource } from '@/modules/answer/public'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
@@ -12,6 +13,7 @@ import type {
   AnswerToolCallResultSummary,
   AnswerToolCallStatus,
   AnswerToolId,
+  AnswerTurnTimingEntry,
 } from '../answer-thread.schema'
 
 /**
@@ -37,6 +39,7 @@ export type RunAnswerToolCallResult = {
   record: AnswerToolCallRecord
   providers: AnswerSource[]
   allowedSlugs: ReadonlySet<string>
+  timings: readonly AnswerTurnTimingEntry[]
   /** Public action result JSON fed back to the model as tool-role content. */
   resultJson: string
 }
@@ -49,6 +52,7 @@ const KNOWN_TOOL_IDS: ReadonlySet<AnswerToolId> = new Set([
 export async function runAnswerToolCall(
   input: RunAnswerToolCallInput,
 ): Promise<RunAnswerToolCallResult> {
+  const timings = createTimingCollector()
   const toolCallId = `tc-${input.turnId}-${input.seq}-${Math.random()
     .toString(36)
     .slice(2, 10)}`
@@ -74,12 +78,29 @@ export async function runAnswerToolCall(
       inputJson: safeStringify(input.input),
       providers: [],
       resultJson: safeStringify({ kind: 'error', code: errorCode }),
+      timings: timings.entries(),
     })
   }
 
   try {
-    const result = await action.run({ data: parsed.data, context: {} })
-    const extracted = extractProviders(input.toolId as AnswerToolId, result)
+    const actionStarted = Date.now()
+    const result = await action.run({ data: parsed.data, context: { timing: timings.sink } })
+    timings.record('tool.run', Date.now() - actionStarted, { toolId: input.toolId })
+
+    const parsedOutput = parseActionOutput(action, result)
+    if (!parsedOutput.success) {
+      const errorCode = 'invalid_output'
+      return recordResult(input, toolCallId, {
+        status: 'error',
+        summary: { slugs: [], count: 0, errorCode },
+        inputJson: safeStringify(parsed.data),
+        providers: [],
+        resultJson: safeStringify({ kind: 'error', code: errorCode }),
+        timings: timings.entries(),
+      })
+    }
+
+    const extracted = extractProviders(input.toolId as AnswerToolId, parsedOutput.data)
     const summary: AnswerToolCallResultSummary = {
       slugs: extracted.providers.map((provider) => provider.slug),
       count: extracted.count,
@@ -89,7 +110,8 @@ export async function runAnswerToolCall(
       summary,
       inputJson: safeStringify(parsed.data),
       providers: extracted.providers,
-      resultJson: safeStringify(result),
+      resultJson: safeStringify(parsedOutput.data),
+      timings: timings.entries(),
     })
   } catch {
     const errorCode = 'tool_run_failed'
@@ -99,6 +121,7 @@ export async function runAnswerToolCall(
       inputJson: safeStringify(parsed.data),
       providers: [],
       resultJson: safeStringify({ kind: 'error', code: errorCode }),
+      timings: timings.entries(),
     })
   }
 }
@@ -114,6 +137,7 @@ function refuse(
     inputJson: safeStringify(input.input),
     providers: [],
     resultJson: safeStringify({ kind: 'refused', code: errorCode }),
+    timings: [],
   })
 }
 
@@ -126,6 +150,7 @@ function recordResult(
     inputJson: string
     providers: AnswerSource[]
     resultJson: string
+    timings: readonly AnswerTurnTimingEntry[]
   },
 ): RunAnswerToolCallResult {
   const resultSummaryJson = safeStringify(outcome.summary)
@@ -152,8 +177,22 @@ function recordResult(
     record,
     providers: outcome.providers,
     allowedSlugs: new Set(outcome.providers.map((provider) => provider.slug)),
+    timings: outcome.timings,
     resultJson: outcome.resultJson,
   }
+}
+
+type ActionOutputParser = {
+  safeParse(
+    result: unknown,
+  ): { success: true; data: unknown } | { success: false }
+}
+
+function parseActionOutput(
+  action: { outputSchema?: ActionOutputParser },
+  result: unknown,
+): { success: true; data: unknown } | { success: false } {
+  return action.outputSchema?.safeParse(result) ?? { success: false }
 }
 
 function extractProviders(
@@ -184,6 +223,27 @@ function safeStringify(value: unknown): string {
     return JSON.stringify(value)
   } catch {
     return 'null'
+  }
+}
+
+function createTimingCollector(): {
+  sink: ActionTimingSink
+  record: ActionTimingSink['record']
+  entries: () => readonly AnswerTurnTimingEntry[]
+} {
+  const entries: AnswerTurnTimingEntry[] = []
+  const record: ActionTimingSink['record'] = (name, durationMs, metadata) => {
+    entries.push({
+      name,
+      durationMs: Math.max(0, Math.round(durationMs * 100) / 100),
+      atMs: Date.now(),
+      ...(metadata === undefined ? {} : { metadata }),
+    })
+  }
+  return {
+    sink: { record },
+    record,
+    entries: () => [...entries],
   }
 }
 

@@ -10,14 +10,13 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
 
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('emergency plumber parramatta')
-    await page.getByRole('button', { name: /^ask$/i }).click()
+    await submitLandingQuery(page, 'emergency plumber parramatta')
 
-    await page.waitForURL(/\/t\//)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
 
     await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
-    await expect(page.getByText(/No booking or payment happens on this page/i).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /get the agent json answer/i })).toBeVisible()
+    await expect(page.getByText(/publishes service coverage/i).first()).toBeVisible()
+    await expect(page.getByText(/Open a listed provider page and send an inquiry/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/\b(?:KNOWN|UNKNOWN|UNAVAILABLE)\b/)
@@ -27,16 +26,23 @@ test.describe('landing query -> thread answer', () => {
   test('shows a listing nudge when no providers match', async ({ page }) => {
     await page.goto('/')
 
-    await page.getByRole('searchbox', { name: /what do you need done/i }).fill('zzz-no-such-trade-xyz')
-    await page.getByRole('button', { name: /^ask$/i }).click()
+    await submitLandingQuery(page, 'dentist parramatta')
 
-    await page.waitForURL(/\/t\//)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
 
     await expect(page.getByText(/No listed businesses match/i)).toBeVisible()
-    await expect(page.getByRole('link', { name: /claim your business page/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /Browse listed businesses/i })).toBeVisible()
     await assertPublicLanguage(page)
   })
 })
+
+async function submitLandingQuery(page: Page, query: string) {
+  const searchbox = page.getByRole('searchbox', { name: /what do you need done/i })
+  await expect(searchbox).toBeEnabled()
+  await searchbox.fill(query)
+  await expect(searchbox).toHaveValue(query)
+  await page.getByRole('button', { name: /^ask$/i }).click()
+}
 
 async function assertPublicLanguage(page: Page) {
   const bodyText = await page.locator('body').innerText()

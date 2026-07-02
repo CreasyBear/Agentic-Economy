@@ -16,11 +16,17 @@ Reusable UI patterns that have passed the finish bar and may be copied, not rein
 
 ## Primary CTA
 
-- Coral pill button, white text, arrow-right icon.
+- Signage amber button, ink text, 6px radius, and one tactile pressed state.
 - Secondary action is a plain text link with arrow-right, same ink as body.
 - One primary action per public viewport.
+
+## Daylight Routing Object
+
+- Dominant public hero object: one hand-drawn or real local-service evidence frame.
+- Embedded paper cut-out may hold the query, generated answer, receipt, or next action when it clarifies the flow.
+- Do not add evidence rails unless they show real provider evidence that is not already said by the headline, lede, or query panel.
 
 ## Hero
 
 - Fits in one viewport: headline ≤2 lines, lede ≤20 words, CTA visible.
-- Image is real/lifestyle, not illustration or fake UI.
+- Image is hand-drawn local architecture or real local provider evidence, not stock AI art or fake UI.

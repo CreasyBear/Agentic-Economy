@@ -1,6 +1,6 @@
 # Operator surfaces — owner, admin, builder
 
-Command-composition layout for billing, settings-shaped account flows, and admin reconstruction. Public Daylight Register rules do not apply here; operator shells use `.ae-operator-shell.dark` only.
+Command-composition layout for billing, settings-shaped account flows, and admin reconstruction. Public Daylight Commerce Routing rules do not apply here; operator shells use `.ae-operator-shell.dark` only.
 
 # Persona and composition
 

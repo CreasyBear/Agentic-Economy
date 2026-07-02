@@ -12,17 +12,18 @@ export function buildBoundarySummary(providers: readonly AnswerSource[]): string
 
   return [
     context,
-    'You can read listings, compare providers, and send a qualified inquiry when a business publishes that option.',
-    'No booking or payment happens on this page. Availability and quotes still need a reply from the business.',
+    'Use the cards to compare published services, service area, and contact path.',
+    'The business handles timing, price, and availability after you contact them.',
+    'Agentic Economy does not book or take payment on this page.',
   ].join(' ')
 }
 
 export function buildBoundaryNextStep(providers: readonly AnswerSource[]): string {
   if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
-    return 'Open a listed provider and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.'
+    return 'Open a listed provider and send a qualified inquiry when that option is published. Agentic Economy does not book or take payment on this page.'
   }
 
-  return 'Browse the registry or refine your search. Agentic Economy compares and routes; it does not book or take payment on this page.'
+  return 'Browse services or refine your search, then contact the business when you find a match. Agentic Economy does not book or take payment on this page.'
 }
 
 export function buildUnsupportedOneLine(): string {
@@ -33,11 +34,12 @@ export function buildUnsupportedSummary(providers: readonly AnswerSource[]): str
   const route =
     providers.length > 0
       ? 'Open a listed provider page and send a qualified inquiry when that option is published.'
-      : 'Browse the registry for listed providers, then open a provider page when you find a match.'
+      : 'Browse services, then open a provider page when you find a match.'
 
   return [
     route,
     'The business reviews your message and replies through your contact detail.',
+    'The business handles timing, price, and availability.',
     'Agentic Economy does not book or take payment on this page.',
   ].join(' ')
 }

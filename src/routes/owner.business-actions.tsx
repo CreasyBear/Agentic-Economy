@@ -229,6 +229,7 @@ function OwnerBusinessActionsRoute() {
       title="Business action requests need source-owned authorization."
       description="Every request stays proposal-only until the owner checkpoint records accepted, refused, clarification, proof-gap, or expired source state."
       currentPath="/owner/business-actions"
+      navBadges={{ '/owner/business-actions': readback.queue.length }}
     >
       <div className="grid gap-6">
         <Alert>
@@ -270,11 +271,6 @@ function OwnerBusinessActionQueue({ queue }: { queue: readonly OwnerBusinessActi
           { label: 'Expires', value: new Date(item.expiresAt).toISOString() },
         ],
         actions: [
-          {
-            label: 'Review checkpoint',
-            href: `/owner/business-actions/${encodeURIComponent(item.requestId)}`,
-            variant: 'outline',
-          },
           {
             label: 'Open receipt',
             href: `/owner/business-actions/${encodeURIComponent(item.requestId)}/receipt`,

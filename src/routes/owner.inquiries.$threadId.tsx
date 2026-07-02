@@ -274,7 +274,6 @@ function OwnerInquiryThreadRoute() {
         </div>
         <aside className="grid content-start gap-4">
           <DeliveryReadback notifications={readback.notifications} />
-          <PrivacyReadback tombstones={readback.tombstones} />
         </aside>
       </div>
     </AeOperatorShell>
@@ -324,7 +323,6 @@ function ThreadMessages({ detail }: { detail: OwnerInquiryDetailReadback }) {
           facts={[
             { label: 'Status', value: detail.inquiry.status },
             { label: 'Messages', value: String(detail.inquiry.messageCount) },
-            { label: 'Version', value: String(detail.inquiry.version) },
             { label: 'Updated', value: new Date(detail.inquiry.updatedAt).toISOString() },
           ]}
         />
@@ -444,30 +442,6 @@ function DeliveryReadback({ notifications }: { notifications: readonly OwnerInbo
               />
             </div>
           ))
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function PrivacyReadback({ tombstones }: { tombstones: readonly InquiryPrivacyTombstoneRecord[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Privacy readback</CardTitle>
-        <CardDescription>Private-content deletion is shown as tombstone state.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {tombstones.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No private-content tombstone recorded.</p>
-        ) : (
-          <FactList
-            facts={tombstones.flatMap((tombstone) => [
-              { label: 'Status', value: tombstone.status },
-              { label: 'Reason', value: tombstone.reasonCode },
-              { label: 'Applied', value: tombstone.appliedAt === undefined ? 'not applied' : new Date(tombstone.appliedAt).toISOString() },
-            ])}
-          />
         )}
       </CardContent>
     </Card>

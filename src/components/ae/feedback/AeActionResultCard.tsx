@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
  * results as typed cards" pattern. Each supported result code gets its own renderer;
  * the error branch is always covered so new actions don't break the surface.
  *
- * Daylight Register: hairline Card, one plain next-step, mono for receipt ids,
+ * Daylight Commerce Routing: hairline Card, one plain next-step, mono for receipt ids,
  * no epistemic-state labels, no badge cemetery (DESIGN.md §9.4, §12, §13).
  */
 
@@ -80,7 +80,7 @@ function InquirySubmittedCard({
           {notificationId ? <span>Notification {notificationId}</span> : null}
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          The owner reviews your message and replies through your chosen contact detail. This does not book, charge, or dispatch work.
+          The business reviews your message and replies through your chosen contact detail. They handle timing, price, and availability.
         </p>
       </CardContent>
     </Card>

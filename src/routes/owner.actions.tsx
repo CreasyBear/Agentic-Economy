@@ -75,6 +75,7 @@ function OwnerActionsRoute() {
       title="Contact follow-up requests need approval."
       description="Every contact follow-up proposal waits for owner approval, one-use gateway admission, and source-owned receipt or proof-gap readback."
       currentPath="/owner/actions"
+      navBadges={{ '/owner/actions': readback.queue.length }}
     >
       <div className="grid gap-6">
         <Alert>
@@ -131,14 +132,7 @@ function OwnerContactFollowUpQueue({ queue }: { queue: readonly ContactFollowUpP
           { label: 'Channel', value: item.proposal.parameters.contactChannel },
           { label: 'Owner decision', value: (item.ownerDecision?.decision ?? 'waiting').replaceAll('_', ' ') },
           { label: 'Deadline', value: new Date(item.proposal.deadlineAt).toISOString() },
-          { label: 'Correlation', value: item.proposal.correlationId },
         ],
-        actions: [{ label: 'Review detail', href: `/owner/actions/${encodeURIComponent(item.proposal.id)}`, variant: 'outline' }],
-        footer: (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Approving records one contact follow-up attempt through the source-owned follow-up outbox. It does not approve future actions, bookings, payments, or autonomous execution.
-          </p>
-        ),
       }))}
       emptyTitle="No contact follow-up requests"
       emptyDescription="New proposals appear here only after the contact follow-up contract is source-owned and policy-checked."

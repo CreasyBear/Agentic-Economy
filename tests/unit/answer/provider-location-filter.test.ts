@@ -40,6 +40,12 @@ describe('provider location filtering', () => {
     expect(extractRequestedLocation('plumber')).toBeUndefined()
   })
 
+  it('does not treat filter follow-up wording as a place', () => {
+    expect(extractRequestedLocation('which take inquiries?')).toBeUndefined()
+    expect(extractRequestedLocation('filter inquiry options')).toBeUndefined()
+    expect(extractRequestedLocation('show me the ones that accept inquiries')).toBeUndefined()
+  })
+
   it('uses user location when a tool search drops the requested suburb', () => {
     const result = filterProvidersForRequestedLocation({
       userQuery: 'Emergency plumber Brunswick',

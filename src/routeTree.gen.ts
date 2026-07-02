@@ -9,12 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as HelpRouteImport } from './routes/help'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AskRouteImport } from './routes/ask'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
@@ -73,6 +77,11 @@ import { Route as OwnerBillingCancelOperationIdRouteImport } from './routes/owne
 import { Route as OwnerActionsProposalIdReceiptRouteImport } from './routes/owner.actions.$proposalId.receipt'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -88,9 +97,19 @@ const RegistryRoute = RegistryRouteImport.update({
   path: '/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
   path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -101,6 +120,11 @@ const ClaimRoute = ClaimRouteImport.update({
 const AskRoute = AskRouteImport.update({
   id: '/ask',
   path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SlugRoute = SlugRouteImport.update({
@@ -134,9 +158,9 @@ const QAnswerIdRoute = QAnswerIdRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
-  id: '/privacy/remove-business',
-  path: '/privacy/remove-business',
-  getParentRoute: () => rootRouteImport,
+  id: '/remove-business',
+  path: '/remove-business',
+  getParentRoute: () => PrivacyRoute,
 } as any)
 const OwnerStatusRoute = OwnerStatusRouteImport.update({
   id: '/owner/status',
@@ -406,12 +430,16 @@ const ApiAnswerThreadsThreadIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/about': typeof AboutRoute
   '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/privacy': typeof PrivacyRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
@@ -471,12 +499,16 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/about': typeof AboutRoute
   '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/privacy': typeof PrivacyRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
@@ -537,12 +569,16 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/about': typeof AboutRoute
   '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/privacy': typeof PrivacyRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/admin/audit-events': typeof AdminAuditEventsRoute
@@ -604,12 +640,16 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$slug'
+    | '/about'
     | '/ask'
     | '/claim'
+    | '/help'
     | '/llms.txt'
+    | '/privacy'
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
@@ -669,12 +709,16 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$slug'
+    | '/about'
     | '/ask'
     | '/claim'
+    | '/help'
     | '/llms.txt'
+    | '/privacy'
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
@@ -734,12 +778,16 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$slug'
+    | '/about'
     | '/ask'
     | '/claim'
+    | '/help'
     | '/llms.txt'
+    | '/privacy'
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/admin/audit-events'
@@ -800,12 +848,16 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRouteWithChildren
+  AboutRoute: typeof AboutRoute
   AskRoute: typeof AskRoute
   ClaimRoute: typeof ClaimRouteWithChildren
+  HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
+  PrivacyRoute: typeof PrivacyRouteWithChildren
   RegistryRoute: typeof RegistryRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TermsRoute: typeof TermsRoute
   AdminAuditEventsRoute: typeof AdminAuditEventsRoute
   AdminBusinessActionsRoute: typeof AdminBusinessActionsRouteWithChildren
   AdminClaimsRoute: typeof AdminClaimsRoute
@@ -822,7 +874,6 @@ export interface RootRouteChildren {
   OwnerBusinessActionsRoute: typeof OwnerBusinessActionsRouteWithChildren
   OwnerInquiriesRoute: typeof OwnerInquiriesRouteWithChildren
   OwnerStatusRoute: typeof OwnerStatusRoute
-  PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
@@ -841,6 +892,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
@@ -862,11 +920,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/llms.txt': {
       id: '/llms.txt'
       path: '/llms.txt'
       fullPath: '/llms.txt'
       preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -881,6 +953,13 @@ declare module '@tanstack/react-router' {
       path: '/ask'
       fullPath: '/ask'
       preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$slug': {
@@ -927,10 +1006,10 @@ declare module '@tanstack/react-router' {
     }
     '/privacy/remove-business': {
       id: '/privacy/remove-business'
-      path: '/privacy/remove-business'
+      path: '/remove-business'
       fullPath: '/privacy/remove-business'
       preLoaderRoute: typeof PrivacyRemoveBusinessRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof PrivacyRoute
     }
     '/owner/status': {
       id: '/owner/status'
@@ -1307,6 +1386,17 @@ const ClaimRouteChildren: ClaimRouteChildren = {
 
 const ClaimRouteWithChildren = ClaimRoute._addFileChildren(ClaimRouteChildren)
 
+interface PrivacyRouteChildren {
+  PrivacyRemoveBusinessRoute: typeof PrivacyRemoveBusinessRoute
+}
+
+const PrivacyRouteChildren: PrivacyRouteChildren = {
+  PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
+}
+
+const PrivacyRouteWithChildren =
+  PrivacyRoute._addFileChildren(PrivacyRouteChildren)
+
 interface AdminBusinessActionsRouteChildren {
   AdminBusinessActionsRequestIdRoute: typeof AdminBusinessActionsRequestIdRoute
 }
@@ -1484,12 +1574,16 @@ const OwnerInquiriesRouteWithChildren = OwnerInquiriesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
+  AboutRoute: AboutRoute,
   AskRoute: AskRoute,
   ClaimRoute: ClaimRouteWithChildren,
+  HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
+  PrivacyRoute: PrivacyRouteWithChildren,
   RegistryRoute: RegistryRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TermsRoute: TermsRoute,
   AdminAuditEventsRoute: AdminAuditEventsRoute,
   AdminBusinessActionsRoute: AdminBusinessActionsRouteWithChildren,
   AdminClaimsRoute: AdminClaimsRoute,
@@ -1506,7 +1600,6 @@ const rootRouteChildren: RootRouteChildren = {
   OwnerBusinessActionsRoute: OwnerBusinessActionsRouteWithChildren,
   OwnerInquiriesRoute: OwnerInquiriesRouteWithChildren,
   OwnerStatusRoute: OwnerStatusRoute,
-  PrivacyRemoveBusinessRoute: PrivacyRemoveBusinessRoute,
   QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,

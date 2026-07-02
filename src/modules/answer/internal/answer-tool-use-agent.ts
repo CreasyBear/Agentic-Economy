@@ -25,7 +25,10 @@ import {
   runAnswerToolCall,
   toolCallRecordsToGateInput,
 } from '@/modules/answer-thread/public'
-import type { AnswerToolCallRecord } from '@/modules/answer-thread/answer-thread.schema'
+import type {
+  AnswerToolCallRecord,
+  AnswerTurnTimingEntry,
+} from '@/modules/answer-thread/answer-thread.schema'
 import type { FollowUpIntent } from '@/modules/answer-thread/answer-thread.schema'
 
 /**
@@ -47,8 +50,34 @@ import type { FollowUpIntent } from '@/modules/answer-thread/answer-thread.schem
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ROUNDS = 4
-const DEFAULT_LIMIT = 10
+const DEFAULT_LIMIT = 3
 const ANSWER_MODEL_TOOL_IDS = ['registry.search', 'registry.detail'] as const
+const ANSWER_PROSE_RESPONSE_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'answer_prose',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        oneLine: {
+          type: 'string',
+          description: 'Short answer headline grounded only in supplied catalog facts.',
+        },
+        summary: {
+          type: 'string',
+          description: 'Concise explanation that stays inside Agentic Economy boundaries.',
+        },
+        whatToDoNow: {
+          type: 'string',
+          description: 'Bounded next action. Never imply booking, payment, dispatch, or live availability.',
+        },
+      },
+      required: ['oneLine', 'summary', 'whatToDoNow'],
+    },
+  },
+} as const
 
 export type AnswerToolUseAgentInput = {
   query: string
@@ -99,6 +128,7 @@ export type AnswerToolUseAgentResult = {
   providers: readonly AnswerSource[]
   allowedSlugs: ReadonlySet<string>
   toolCalls: AnswerToolCallRecord[]
+  timings: readonly AnswerTurnTimingEntry[]
   snapshot: AnswerSnapshot
   gate: AnswerGateResult
 }
@@ -135,6 +165,7 @@ async function runPlannedAgent(
   plan: AnswerToolUseAgentPlan,
 ): Promise<AnswerToolUseAgentResult> {
   const toolCalls: AnswerToolCallRecord[] = []
+  const timings: AnswerTurnTimingEntry[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
   let seq = 0
@@ -152,11 +183,16 @@ async function runPlannedAgent(
       seq,
     })
     toolCalls.push(result.record)
+    appendTimings(timings, result.timings, {
+      phase: 'planned_agent',
+      toolId: result.record.toolId,
+      toolSeq: result.record.seq,
+    })
     seq += 1
     appendProvidersFromToolResult(providers, slugSeen, result.providers)
   }
 
-  return buildAgentResult(input, plan.prose, toolCalls, providers)
+  return buildAgentResult(input, plan.prose, toolCalls, providers, timings)
 }
 
 function buildAgentResult(
@@ -164,6 +200,7 @@ function buildAgentResult(
   prose: AnswerProse,
   toolCalls: readonly AnswerToolCallRecord[],
   providers: readonly AnswerSource[],
+  timings: readonly AnswerTurnTimingEntry[] = [],
 ): AnswerToolUseAgentResult {
   const toolAllowedSlugs = collectAllowedSlugsFromToolResults(
     toolCallRecordsToGateInput(toolCalls),
@@ -229,6 +266,7 @@ function buildAgentResult(
     providers: finalProviders,
     allowedSlugs,
     toolCalls: [...toolCalls],
+    timings: [...timings],
     snapshot,
     gate,
   }
@@ -255,11 +293,13 @@ async function runRealToolUseAgent(
   ]
 
   const toolCalls: AnswerToolCallRecord[] = []
+  const timings: AnswerTurnTimingEntry[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
   let seq = 0
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
+    const roundStarted = Date.now()
     const payload = await postChatCompletion({
       config,
       ...(input.model === undefined ? {} : { model: input.model }),
@@ -267,6 +307,10 @@ async function runRealToolUseAgent(
       messages,
       ...(input.signal === undefined ? {} : { signal: input.signal }),
     })
+    timings.push(timingEntry('model.openrouter_round', Date.now() - roundStarted, {
+      round,
+      tools: tools.length,
+    }))
 
     const assistantMessage = payload.choices?.[0]?.message
     if (assistantMessage === undefined) {
@@ -282,7 +326,7 @@ async function runRealToolUseAgent(
       if (prose === undefined) {
         throw new AnswerToolUseAgentError('prose_failed')
       }
-      return buildAgentResult(input, prose, toolCalls, providers)
+      return buildAgentResult(input, prose, toolCalls, providers, timings)
     }
 
     messages.push({ role: 'assistant', content: assistantMessage.content ?? '', tool_calls: assistantToolCalls })
@@ -301,6 +345,11 @@ async function runRealToolUseAgent(
         seq,
       })
       toolCalls.push(result.record)
+      appendTimings(timings, result.timings, {
+        phase: 'agent_tool',
+        toolId: result.record.toolId,
+        toolSeq: result.record.seq,
+      })
       appendProvidersFromToolResult(providers, slugSeen, result.providers)
       seq += 1
       messages.push({
@@ -312,6 +361,7 @@ async function runRealToolUseAgent(
   }
 
   // Exhausted rounds: request a final prose-only completion.
+  const finalStarted = Date.now()
   const finalPayload = await postChatCompletion({
     config,
     ...(input.model === undefined ? {} : { model: input.model }),
@@ -326,11 +376,43 @@ async function runRealToolUseAgent(
     ],
     ...(input.signal === undefined ? {} : { signal: input.signal }),
   })
+  timings.push(timingEntry('model.openrouter_final_prose', Date.now() - finalStarted, {
+    tools: 0,
+  }))
   const prose = parseProse(finalPayload.choices?.[0]?.message?.content)
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
-  return buildAgentResult(input, prose, toolCalls, providers)
+  return buildAgentResult(input, prose, toolCalls, providers, timings)
+}
+
+function timingEntry(
+  name: string,
+  durationMs: number,
+  metadata?: Record<string, string | number | boolean | null>,
+): AnswerTurnTimingEntry {
+  return {
+    name,
+    durationMs: Math.max(0, Math.round(durationMs * 100) / 100),
+    atMs: Date.now(),
+    ...(metadata === undefined ? {} : { metadata }),
+  }
+}
+
+function appendTimings(
+  target: AnswerTurnTimingEntry[],
+  incoming: readonly AnswerTurnTimingEntry[],
+  metadata: Record<string, string | number | boolean | null>,
+): void {
+  for (const entry of incoming) {
+    target.push({
+      ...entry,
+      metadata: {
+        ...(entry.metadata ?? {}),
+        ...metadata,
+      },
+    })
+  }
 }
 
 function buildLocationScopedProse(input: {
@@ -346,7 +428,7 @@ function buildLocationScopedProse(input: {
     return {
       oneLine: `No listed businesses match "${input.query}" yet.`,
       summary: `No listed providers publish coverage for ${place} yet.`,
-      nextStep: 'Try a nearby suburb, browse the registry, or list a business that should appear here.',
+      nextStep: 'Try a nearby suburb, browse services, or list a business that should appear here.',
     }
   }
 
@@ -354,9 +436,9 @@ function buildLocationScopedProse(input: {
     oneLine: count === 1 ? `1 listed business matches ${place}.` : `${count} listed businesses match ${place}.`,
     summary:
       count === 1
-        ? `This listing publishes service coverage for ${place}. Agentic Economy does not book or take payment on this page.`
-        : `These listings publish service coverage for ${place}. Agentic Economy does not book or take payment on this page.`,
-    nextStep: 'Open a listed provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
+        ? `This listing publishes service coverage for ${place}. The business handles timing, price, and availability.`
+        : `These listings publish service coverage for ${place}. The business handles timing, price, and availability.`,
+    nextStep: 'Open a listed provider page and send an inquiry when that option is published.',
   }
 }
 
@@ -425,7 +507,9 @@ async function postChatCompletion(input: {
     body: JSON.stringify({
       model: input.model ?? input.config.model,
       messages: input.messages,
-      ...(input.tools.length === 0 ? {} : { tools: input.tools, tool_choice: 'auto' }),
+      ...(input.tools.length === 0
+        ? { tool_choice: 'none', response_format: ANSWER_PROSE_RESPONSE_FORMAT }
+        : { tools: input.tools, tool_choice: 'auto', parallel_tool_calls: false }),
       temperature: 0.2,
     }),
     ...(input.signal === undefined ? {} : { signal: input.signal }),

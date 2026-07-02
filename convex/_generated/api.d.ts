@@ -16,6 +16,7 @@ import type * as business from "../business.js";
 import type * as businessActionStore from "../businessActionStore.js";
 import type * as businessActions from "../businessActions.js";
 import type * as catalog from "../catalog.js";
+import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
 import type * as discovery from "../discovery.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   businessActionStore: typeof businessActionStore;
   businessActions: typeof businessActions;
   catalog: typeof catalog;
+  crons: typeof crons;
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;
   discovery: typeof discovery;

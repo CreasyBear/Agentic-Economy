@@ -33,7 +33,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/',
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Ask for a local service. Get a cited answer.', 'No booking, no payment'],
+    mustContain: ['Ask for a local service. See who fits.'],
     mustNotMatch: privateSurfacePattern,
   },
   {
@@ -61,7 +61,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/registry',
     status: 200,
     contentType: /text\/html/i,
-    mustContain: ['Find business details companies can stand behind.', config.businessSlug],
+    mustContain: ['Find local service details before you contact a business.', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
   },
   {

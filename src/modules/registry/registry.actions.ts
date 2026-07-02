@@ -6,6 +6,7 @@ import {
   readPublicRegistrySearchPage,
 } from '@/modules/registry/registry.functions'
 import type {
+  PublicBusinessCatalogApiDto,
   PublicBusinessCatalogApiPage,
   PublicBusinessCatalogDetailResult,
 } from '@/modules/registry/public'
@@ -49,6 +50,85 @@ const registrySearchInputSchema = z.object({
 const registryDetailInputSchema = z.object({
   slug: z.string().min(1).max(200).describe('Published business slug'),
 })
+
+const publicBusinessCatalogApiDtoOutputSchema = z
+  .object({
+    slug: z.string(),
+    name: z.string(),
+    category: z.string(),
+    suburb: z.string(),
+    stateTerritory: z.string(),
+    postcode: z.string().optional(),
+    publicUrl: z.string(),
+    trustTier: z.string(),
+    publicStatus: z.literal('published'),
+    indexStatus: z.string(),
+    discoveryStatus: z.string(),
+    schemaVersion: z.string(),
+    updatedAt: z.number(),
+    photos: z.array(z.object({ url: z.string(), alt: z.string() }).passthrough()),
+    responseTimeMinutes: z.number().optional(),
+    services: z.array(
+      z
+        .object({
+          slug: z.string(),
+          name: z.string(),
+          category: z.string(),
+          summary: z.string(),
+          serviceArea: z.string(),
+          hoursOrUnknown: z.string(),
+          firstRequest: z
+            .object({
+              mode: z.string(),
+              publicDisclosure: z.string(),
+              publicChannel: z.string(),
+              noContactReason: z.string().optional(),
+            })
+            .passthrough(),
+          status: z.literal('published'),
+          capabilities: z.array(
+            z.object({ kind: z.string(), status: z.string() }).passthrough()
+          ),
+        })
+        .passthrough()
+    ),
+  })
+  .passthrough() as z.ZodType<PublicBusinessCatalogApiDto>
+
+const registrySearchOutputSchema = z
+  .object({
+    kind: z.literal('ok'),
+    schemaVersion: z.string(),
+    query: z.string().optional(),
+    items: z.array(publicBusinessCatalogApiDtoOutputSchema),
+    pagination: z
+      .object({
+        cursor: z.string().optional(),
+        nextCursor: z.string().optional(),
+        limit: z.number().int().nonnegative(),
+        total: z.number().int().nonnegative(),
+        hasMore: z.boolean(),
+      })
+      .passthrough(),
+  })
+  .passthrough() as z.ZodType<PublicBusinessCatalogApiPage>
+
+const registryDetailOutputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('found'),
+      schemaVersion: z.string(),
+      business: publicBusinessCatalogApiDtoOutputSchema,
+    })
+    .passthrough(),
+  z
+    .object({
+      kind: z.literal('not_found'),
+      code: z.literal('business_not_found'),
+      reason: z.string(),
+    })
+    .passthrough(),
+]) as z.ZodType<PublicBusinessCatalogDetailResult>
 
 const searchParameters: readonly ActionParameter[] = [
   {
@@ -101,6 +181,7 @@ export const registrySearchAction = defineAction({
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
   schema: registrySearchInputSchema,
+  outputSchema: registrySearchOutputSchema,
   parameters: searchParameters,
   readOnly: true,
   surfaces: ['http', 'agentJson', 'agentTools'],
@@ -127,6 +208,7 @@ export const registryDetailAction = defineAction({
     'A not_found result means no public listing exists for that slug; do not invent provider details.',
   ],
   schema: registryDetailInputSchema,
+  outputSchema: registryDetailOutputSchema,
   parameters: detailParameters,
   readOnly: true,
   surfaces: ['http', 'agentJson', 'agentTools'],

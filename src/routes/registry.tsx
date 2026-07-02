@@ -101,10 +101,10 @@ function RegistryRoute() {
       <section className="ae-public-page ae-registry-page mx-auto w-full max-w-6xl">
         <div className="ae-registry-search-hero">
           <h1 className="ae-registry-search-hero__title">
-            {hasQuery ? `Results for “${query}”` : 'Find business details companies can stand behind.'}
+            {hasQuery ? `Results for “${query}”` : 'Find local service details before you contact a business.'}
           </h1>
           <p className="ae-registry-search-hero__lede">
-            Browse claimed service pages. For a cited answer to a specific need, start from Ask on the home page.
+            Browse service pages. For a cited answer to a specific need, start from Ask on the home page.
           </p>
           <AeRegistrySearchPanel query={query} limit={limit} />
         </div>
@@ -113,28 +113,18 @@ function RegistryRoute() {
           <AeEmptyState
             title="No businesses published yet"
             description="Claimed business pages will appear here once owners publish customer-ready details."
-            action={
-              <Button asChild>
-                <Link to="/claim">Claim your business page</Link>
-              </Button>
-            }
           />
         ) : null}
         {isEmpty && hasQuery ? (
           <AeEmptyState
             title="No matching business yet"
-            description="Try a business name, suburb, or service. If this is your business, claim the page so customers can find the right details."
+            description="Try a business name, suburb, or service."
             action={
-              <>
-                <Button asChild>
-                  <Link to="/claim">Claim your business page</Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link to="/registry" search={{ q: '', limit: 10 }}>
-                    Clear search
-                  </Link>
-                </Button>
-              </>
+              <Button asChild variant="outline">
+                <Link to="/registry" search={{ q: '', limit: 10 }}>
+                  Clear search
+                </Link>
+              </Button>
             }
           />
         ) : null}
@@ -144,7 +134,6 @@ function RegistryRoute() {
               <p className="text-sm text-muted-foreground">
                 <span data-numeric>{result.pagination.total}</span> {resultSummary(result.pagination.total, query)}
               </p>
-              <RegistryClaimPrompt />
             </div>
             <ul className="ae-registry-grid" aria-label="Business results">
               {result.items.map((item) => (
@@ -167,18 +156,6 @@ function RegistryRoute() {
   )
 }
 
-function RegistryClaimPrompt() {
-  return (
-    <div className="ae-registry-claim-strip">
-      <p className="max-w-2xl text-pretty text-sm leading-6 text-muted-foreground">
-        Own one of these businesses? Claim your page so customers see the details you approve.
-      </p>
-      <Button asChild variant="outline" size="sm">
-        <Link to="/claim">Claim your business page</Link>
-      </Button>
-    </div>
-  )
-}
 
 function resultSummary(total: number, query: string): string {
   const label = total === 1 ? 'matching business' : 'matching businesses'
@@ -261,9 +238,6 @@ function RegistryError() {
             <Link to="/registry" search={{ q: '', limit: 10 }}>
               Try again
             </Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link to="/claim">Claim your business page</Link>
           </Button>
         </div>
       </section>

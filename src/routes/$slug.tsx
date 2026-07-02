@@ -4,10 +4,7 @@ import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
-import { buildPublicPaidActivationDisplay } from '@/modules/billing/public'
-import { readPublicPaidActivationServer } from '@/modules/billing/billing.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
-import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import { buildPublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 
@@ -17,16 +14,9 @@ export const Route = createFileRoute('/$slug')({
     if (page.kind === 'not_found') {
       return { page, seo: undefined }
     }
-
-    const activation = await readPublicPaidActivationServer({
-      data: { targetRef: readPublicCatalogActivationRef(page.catalog) },
-    })
-
     return {
       page,
       seo: buildPublicBusinessSeo({ catalog: page.catalog, options: { canonicalBaseUrl: 'https://ae.example' } }),
-      activationDisplay:
-        activation.kind === 'ok' ? buildPublicPaidActivationDisplay(activation.publicActivation) : undefined,
     }
   },
   head: ({ loaderData }) => {
@@ -60,7 +50,7 @@ export const Route = createFileRoute('/$slug')({
 function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const location = useLocation()
-  const { page, activationDisplay } = Route.useLoaderData()
+  const { page } = Route.useLoaderData()
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
@@ -94,7 +84,6 @@ function PublicBusinessRoute() {
         catalog={catalog}
         inquiryAffordance={inquiryAffordance}
         agentJsonUrl={agentJsonUrl}
-        {...(activationDisplay === undefined ? {} : { activationDisplay })}
       />
     </AePublicShell>
   )

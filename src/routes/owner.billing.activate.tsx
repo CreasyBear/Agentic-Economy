@@ -5,10 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import {
-  OwnerBillingReceiptList,
-  OwnerBillingStatePanel,
-} from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
+import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
 import { summarizeOwnerBillingRoute } from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 import {
   readCurrentOwnerBillingServer,
@@ -76,8 +73,8 @@ function OwnerBillingActivateRoute() {
     <AeOperatorShell
       role="owner"
       eyebrow="Owner billing"
-      title="Review the activation readback."
-      description="This route starts checkout only from an authenticated source-owned owner operation. Return URLs do not create paid state."
+      title="Start a paid plan"
+      description="Choose a plan for your business. You finish with the payment provider."
       currentPath="/owner/billing/activate"
       breadcrumbs={[
         { label: 'Billing', href: '/owner/billing' },
@@ -98,19 +95,19 @@ function OwnerBillingActivateRoute() {
           </Alert>
         )}
         <OwnerBillingStatePanel summary={summary} />
-        <form onSubmit={handleStart}>
-          <Button type="submit" disabled={pending || readback.ownerOffers.length === 0}>
-            {pending ? 'Starting activation...' : 'Start activation'}
-          </Button>
-        </form>
-        {checkoutUrl === undefined ? null : (
+        {checkoutUrl === undefined ? (
+          <form onSubmit={handleStart}>
+            <Button type="submit" disabled={pending || readback.ownerOffers.length === 0}>
+              {pending ? 'Starting…' : 'Start a paid plan'}
+            </Button>
+          </form>
+        ) : (
           <Button asChild className="w-fit">
             <a href={checkoutUrl} target="_blank" rel="noopener noreferrer">
-              Continue provider redirect
+              Continue to the payment provider
             </a>
           </Button>
         )}
-        <OwnerBillingReceiptList receipts={readback.owner.receipts} />
       </div>
     </AeOperatorShell>
   )

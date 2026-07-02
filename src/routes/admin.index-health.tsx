@@ -1,10 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-import { AdminAnalyticsPanel } from '@/components/ae/operator/AdminAnalyticsPanel'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
-import { readAdminAnalyticsServer } from '@/modules/observability/funnel.functions'
 import {
   readAdminIndexHealthThroughSource,
 } from '@/modules/security/admin-readback.functions'
@@ -14,7 +12,6 @@ const readAdminIndexHealthServer = createServerFn().handler(() => readAdminIndex
 export const Route = createFileRoute('/admin/index-health')({
   loader: async () => ({
     readback: await readAdminIndexHealthServer(),
-    analytics: await readAdminAnalyticsServer(),
   }),
   head: () => ({
     meta: [
@@ -30,7 +27,7 @@ export const Route = createFileRoute('/admin/index-health')({
 })
 
 function AdminIndexHealthRoute() {
-  const { readback, analytics } = Route.useLoaderData()
+  const { readback } = Route.useLoaderData()
 
   return (
     <AeOperatorShell
@@ -38,12 +35,9 @@ function AdminIndexHealthRoute() {
       title="Index health"
       description="Check catalog and projection readbacks before public discovery files are allowed to ship."
       currentPath="/admin/index-health"
+      navBadges={{ '/admin/index-health': readback.rows.length }}
     >
       <div className="grid gap-6">
-        <AdminAnalyticsPanel
-          activationSummary={analytics.activationSummary}
-          {...(analytics.posthogAppUrl === undefined ? {} : { posthogAppUrl: analytics.posthogAppUrl })}
-        />
         <AeAdminReadbackPanel
           title="Index readback"
           description="Denied reads return no private rows; authorized reads show source, attempt, repair, and affected public surfaces."

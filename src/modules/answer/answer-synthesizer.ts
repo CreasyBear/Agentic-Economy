@@ -45,6 +45,45 @@ export type AnswerSynthesizerInput = {
   model?: string
 }
 
+export const AnswerWorkStepPhaseValues = [
+  'interpret',
+  'search',
+  'read',
+  'compare',
+  'route',
+  'assemble',
+] as const
+
+export type AnswerWorkStepPhase = (typeof AnswerWorkStepPhaseValues)[number]
+
+export const AnswerWorkStepStatusValues = [
+  'running',
+  'complete',
+  'skipped',
+  'error',
+  'stopped',
+] as const
+
+export type AnswerWorkStepStatus = (typeof AnswerWorkStepStatusValues)[number]
+
+export type AnswerWorkStepDetailRow = {
+  label: string
+  value: string
+}
+
+export type AnswerWorkStep = {
+  id: string
+  phase: AnswerWorkStepPhase
+  status: AnswerWorkStepStatus
+  title: string
+  summary?: string
+  detailRows?: readonly AnswerWorkStepDetailRow[]
+  relatedProviderSlugs?: readonly string[]
+  startedAtMs?: number
+  completedAtMs?: number
+  durationMs?: number
+}
+
 /**
  * A single provider source card. Plain, Google-Maps-clean. Every string is
  * derived from real catalog fields via the plain label mappers in
@@ -88,10 +127,34 @@ export type AnswerSnapshot = {
   layoutProfile?: AnswerLayoutProfile
 }
 
-/** SSE event stream shape. Order: thread? -> thinking* -> one-line -> sources -> summary-delta* -> next-step -> artifact* -> complete | error. */
+export type AnswerResponseMode = 'clarify' | 'answer' | 'compare' | 'filter' | 'empty' | 'boundary' | 'error'
+
+export type AnswerProviderBudget = {
+  searchLimit: number
+  visibleLimit: number
+}
+
+export type AnswerArtifactBudget = {
+  layoutProfile: AnswerLayoutProfile
+  allowedKinds: readonly AnswerArtifact['kind'][]
+  maxArtifactCount: number
+  maxProviderCards: number
+}
+
+export type AnswerPlanEvent = {
+  type: 'plan'
+  mode: AnswerResponseMode
+  layoutProfile: AnswerLayoutProfile
+  providerBudget: AnswerProviderBudget
+  artifactBudget: AnswerArtifactBudget
+}
+
+/** SSE event stream shape. Order: thread? -> work-step* -> plan -> ... -> complete | error. */
 export type AnswerEvent =
   | { type: 'thread'; threadId: string; turnId: string; turnSeq: number }
+  | { type: 'work-step'; step: AnswerWorkStep }
   | { type: 'thinking'; step?: 'search' | 'read' | 'write'; label?: string }
+  | AnswerPlanEvent
   | { type: 'one-line'; oneLine: string }
   | { type: 'sources'; providers: readonly AnswerSource[] }
   | { type: 'summary-delta'; delta: string }

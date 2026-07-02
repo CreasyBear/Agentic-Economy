@@ -18,6 +18,7 @@ export type AeSelectFieldProps = {
   options: readonly AeSelectOption[]
   disabled?: boolean
   invalid?: boolean
+  describedBy?: string
   placeholder?: string
   onValueChange: (value: string) => void
 }
@@ -29,6 +30,7 @@ export function AeSelectField({
   options,
   disabled = false,
   invalid = false,
+  describedBy,
   placeholder = 'Choose one',
   onValueChange,
 }: AeSelectFieldProps) {
@@ -36,7 +38,7 @@ export function AeSelectField({
     <>
       {name === undefined ? null : <input type="hidden" name={name} value={value} />}
       <Select value={value} disabled={disabled} onValueChange={onValueChange}>
-        <SelectTrigger id={id} aria-invalid={invalid || undefined} className="ae-select-field">
+        <SelectTrigger id={id} aria-describedby={describedBy} aria-invalid={invalid || undefined} className="ae-select-field">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent align="start">

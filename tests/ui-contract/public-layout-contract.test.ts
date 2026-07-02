@@ -50,7 +50,7 @@ describe('public chat layout contract', () => {
 
     expect(welcome).toMatch(/Ask for a local service/)
     expect(welcome).not.toMatch(/source-owned|readback|KNOWN|UNKNOWN/i)
-    expect(welcome).toMatch(/No booking, no payment/)
+    expect(welcome).toMatch(/See who fits/)
   })
 
   it('scopes streaming status without flooding the whole answer region', () => {
@@ -75,7 +75,7 @@ describe('public chat layout contract', () => {
     expect(transcript).toMatch(/scrollAnchor=\{anchorThisTurn\}/)
   })
 
-  it('uses daylight register button radius on public CTAs', () => {
+  it('uses daylight commerce button radius on public CTAs', () => {
     const button = readSource('src/components/ui/button.tsx')
     const globals = readSource('src/styles/globals.css')
     const answerStyles = readAnswerStyles()
@@ -88,23 +88,20 @@ describe('public chat layout contract', () => {
     expect(answerStyles).not.toMatch(/backdrop-filter: blur\(8px\)/)
   })
 
-  it('hides model selector from production public query panel', () => {
+  it('keeps the model selector out of the public query panel', () => {
     const queryPanel = readSource('src/components/ae/chat/AeQueryPanel.tsx')
 
-    expect(queryPanel).toMatch(/import\.meta\.env\.DEV/)
+    expect(queryPanel).not.toMatch(/AeModelSelector/)
+    expect(queryPanel).not.toMatch(/import\.meta\.env\.DEV/)
   })
 
-  it('keeps a visible search-area control in the public chat panel', () => {
+  it('keeps the public chat panel free of search-area chrome', () => {
     const chat = readSource('src/components/ae/chat/AeChat.tsx')
-    const contextBar = readSource('src/components/ae/chat/AeSearchContextBar.tsx')
     const answerStyles = readAnswerStyles()
 
     expect(chat).toMatch(/DEFAULT_AE_SEARCH_CONTEXT/)
-    expect(chat).toMatch(/<AeSearchContextBar\b/)
-    expect(contextBar).toMatch(/Searching around/)
-    expect(contextBar).toMatch(/Near me/)
-    expect(contextBar).toMatch(/Whole catalogue/)
-    expect(answerStyles).toMatch(/\.ae-search-context-bar\b/)
+    expect(chat).not.toMatch(/<AeSearchContextBar\b/)
+    expect(answerStyles).not.toMatch(/\.ae-search-context-bar\b/)
   })
 })
 
@@ -135,7 +132,7 @@ describe('public listing layout contract', () => {
     const sourceCard = readSource('src/components/ae/landing/AeProviderSourceCard.tsx')
 
     expect(sourceCard).toMatch(/source\.trustCue/)
-    expect(sourceCard).toMatch(/AeAgentJsonAffordance/)
+    expect(sourceCard).not.toMatch(/AeAgentJsonAffordance/)
   })
 })
 

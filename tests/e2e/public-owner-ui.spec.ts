@@ -14,19 +14,19 @@ test.describe('public owner routes', () => {
   test('home exposes the public landing story and claim path', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: /ask for a local service\. get a cited answer\./i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /ask for a local service\. see who fits\./i })).toBeVisible()
     await expect(page.getByRole('link', { name: /browse services/i }).first()).toBeVisible()
     await expect(page.getByRole('link', { name: /list\/claim/i }).first()).toBeVisible()
     await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
     await expect(page.getByRole('searchbox', { name: /what do you need done/i })).toBeVisible()
-    await expect(page.locator('#main-content').getByText(/no booking, no payment/i)).toBeVisible()
+    await expect(page.locator('#main-content').getByText(/see who fits/i)).toBeVisible()
     await assertPublicLanguage(page)
   })
 
   test('registry search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
     await page.goto('/registry')
 
-    await expect(page.getByRole('heading', { name: /find business details companies can stand behind/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /find local service details before you contact a business/i })).toBeVisible()
     await expect(page.getByLabel('Business, service, or place')).toBeVisible()
     await expect(page.getByText('Parramatta Emergency Plumbing')).toBeVisible()
     await expect(page.getByText('Listed business', { exact: true })).toBeVisible()

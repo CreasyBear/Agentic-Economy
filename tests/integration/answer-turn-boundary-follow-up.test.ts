@@ -35,8 +35,8 @@ function installSearchAgentSeam(): void {
     prose: {
       oneLine: 'One listed business is listed in Parramatta.',
       summary:
-        'The listing publishes emergency pipe repair around Parramatta. Agentic Economy does not book or take payment on this page.',
-      whatToDoNow: 'Open the provider page and send an inquiry when published.',
+        'The listing publishes emergency pipe repair around Parramatta. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+      whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
     },
   }))
 }
@@ -94,7 +94,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       }
       expect(complete.answer.oneLine).toContain('does not book')
       expect(complete.answer.oneLine).not.toContain('No listed businesses match')
-      expect(complete.answer.summary).toContain('No booking or payment happens on this page')
+      expect(complete.answer.summary).toContain('The business handles timing, price, and availability')
     })
   })
 

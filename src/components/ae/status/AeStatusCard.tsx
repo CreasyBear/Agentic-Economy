@@ -43,29 +43,29 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         </CardAction>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-2" role="list">
-          <div role="listitem">
+        <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2">
+          <li>
             <AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} />
-          </div>
-          <div role="listitem">
+          </li>
+          <li>
             <AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} />
-          </div>
-          <div role="listitem">
+          </li>
+          <li>
             <AeStatusBadge status={indexStatusToAeStatus(readback.catalog.indexStatus)} />
-          </div>
-          <div role="listitem">
+          </li>
+          <li>
             <AeStatusBadge status={discoveryStatusToAeStatus(readback.catalog.discoveryStatus)} />
-          </div>
-        </div>
+          </li>
+        </ul>
         {hasUnavailableCapabilities ? (
-          <div className="mt-6 grid gap-3" role="list">
+          <ul className="m-0 mt-6 grid list-none gap-3 p-0">
             {readback.unavailableCapabilities.map((capability) => (
-              <div key={capability.label} className="rounded-lg border bg-muted/40 p-3" role="listitem">
+              <li key={capability.label} className="rounded-lg border bg-muted/40 p-3">
                 <p className="font-medium">{capability.label}</p>
                 <p className="text-sm text-muted-foreground">{capability.explanation}</p>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         ) : null}
       </CardContent>
       <CardFooter>

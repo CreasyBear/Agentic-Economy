@@ -41,16 +41,33 @@ export type DevSeedCatalogBundle = {
 }
 
 export const DEV_SEED_OWNER_CLERK_USER_ID = 'dev-seed-owner-session'
+export const DEV_SEED_BUSINESS_COUNT = 100
 
-export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = [
+type DevSeedIndustryTemplate = {
+  slug: string
+  businessSuffix: string
+  category: string
+  serviceName: string
+  serviceCategory: string
+  serviceSummary: string
+  hoursOrUnknown: string
+}
+
+type DevSeedLocale = {
+  slug: string
+  suburb: string
+  stateTerritory: string
+}
+
+const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
   {
     requestedSlug: 'plumbing-demo',
     businessName: 'Demo Plumbing',
     category: 'Emergency plumbing',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
-    ownerMessage: 'Dev seed fixture for Phase 2 inquiry verification.',
-    sourceLabel: 'Dev seed service facts',
+    ownerMessage: 'Owner supplied service facts for local inquiry testing.',
+    sourceLabel: 'Owner supplied service facts',
     serviceName: 'Emergency plumbing',
     serviceCategory: 'Emergency plumbing',
     serviceSummary: 'Human triage for urgent plumbing issues.',
@@ -62,45 +79,115 @@ export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = [
     publicDisclosure: 'Use the inquiry form for a first contact.',
     noContactReason: '',
   },
+] as const
+
+const DEV_SEED_LOCALES: readonly DevSeedLocale[] = [
+  { slug: 'parramatta', suburb: 'Parramatta', stateTerritory: 'NSW' },
+  { slug: 'coburg', suburb: 'Coburg', stateTerritory: 'VIC' },
+  { slug: 'perth', suburb: 'Perth', stateTerritory: 'WA' },
+  { slug: 'fremantle', suburb: 'Fremantle', stateTerritory: 'WA' },
+  { slug: 'hobart', suburb: 'Hobart', stateTerritory: 'TAS' },
+  { slug: 'darwin', suburb: 'Darwin', stateTerritory: 'NT' },
+  { slug: 'adelaide', suburb: 'Adelaide', stateTerritory: 'SA' },
+  { slug: 'brisbane', suburb: 'Brisbane', stateTerritory: 'QLD' },
+  { slug: 'canberra', suburb: 'Canberra', stateTerritory: 'ACT' },
+  { slug: 'geelong', suburb: 'Geelong', stateTerritory: 'VIC' },
+] as const
+
+const DEV_SEED_INDUSTRIES: readonly DevSeedIndustryTemplate[] = [
   {
-    requestedSlug: 'parramatta-emergency-plumbing',
-    businessName: 'Parramatta Emergency Plumbing',
+    slug: 'emergency-plumbing',
+    businessSuffix: 'Emergency Plumbing',
     category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
-    ownerMessage: 'Owner supplied emergency plumbing facts for the public service page.',
-    sourceLabel: 'Owner supplied service facts',
     serviceName: 'Emergency pipe repair',
     serviceCategory: 'Emergency plumbing',
-    serviceSummary: 'Burst pipe triage and repair for urgent local plumbing jobs.',
-    serviceArea: 'Parramatta and nearby suburbs',
+    serviceSummary: 'Burst pipe and blocked drain triage for urgent local plumbing issues.',
     hoursOrUnknown: 'Hours supplied by owner',
-    photoUrl: '/images/illustration/cat-plumbing.png',
-    responseTimeMinutes: 22,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Use the inquiry form for a first contact.',
-    noContactReason: '',
   },
   {
-    requestedSlug: 'agentic-economy-r10-readback',
-    businessName: 'Agentic Economy R10 Readback',
-    category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
-    ownerMessage: 'Phase 1 deployed verification fixture for public catalog routes.',
-    sourceLabel: 'Deployed verification service facts',
-    serviceName: 'Emergency pipe repair',
-    serviceCategory: 'Emergency plumbing',
-    serviceSummary: 'Verification service page for public registry and listing routes.',
-    serviceArea: 'Parramatta and nearby suburbs',
+    slug: 'electrical-repairs',
+    businessSuffix: 'Electrical Repairs',
+    category: 'Electrical repairs',
+    serviceName: 'Electrical fault repairs',
+    serviceCategory: 'Electrical repairs',
+    serviceSummary: 'Electrical fault checks and repair coordination for homes and small businesses.',
     hoursOrUnknown: 'Hours supplied by owner',
-    photoUrl: '/images/illustration/cat-plumbing.png',
-    responseTimeMinutes: 22,
-    firstRequestMode: 'inquiry_available',
-    publicDisclosure: 'Use the inquiry form for a first contact.',
-    noContactReason: '',
+  },
+  {
+    slug: 'dental-clinic',
+    businessSuffix: 'Dental Clinic',
+    category: 'Dental clinic',
+    serviceName: 'General dental care',
+    serviceCategory: 'Dental clinic',
+    serviceSummary: 'Dentist check-ups, tooth pain triage, and routine dental care information.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'family-law',
+    businessSuffix: 'Family Law',
+    category: 'Family law',
+    serviceName: 'Family lawyer consultation',
+    serviceCategory: 'Family law',
+    serviceSummary: 'Family lawyer guidance for separation, parenting, and property matter first steps.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'accounting',
+    businessSuffix: 'Accounting',
+    category: 'Accounting',
+    serviceName: 'Small business accounting',
+    serviceCategory: 'Accounting',
+    serviceSummary: 'Accountant support for BAS, payroll, and tax preparation questions.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'home-cleaning',
+    businessSuffix: 'Home Cleaning',
+    category: 'Home cleaning',
+    serviceName: 'Home cleaning',
+    serviceCategory: 'Home cleaning',
+    serviceSummary: 'Cleaner support for recurring home cleaning and end-of-lease cleaning requests.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'locksmith',
+    businessSuffix: 'Locksmith',
+    category: 'Locksmith',
+    serviceName: 'Locksmith lock repair',
+    serviceCategory: 'Locksmith',
+    serviceSummary: 'Locksmith help for lock repair, rekeying, and lost-key first steps.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'hvac-repair',
+    businessSuffix: 'HVAC Repair',
+    category: 'HVAC repair',
+    serviceName: 'Heat pump and air conditioning repair',
+    serviceCategory: 'HVAC repair',
+    serviceSummary: 'Heat pump, split system, and air conditioning fault checks.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'math-tutoring',
+    businessSuffix: 'Math Tutoring',
+    category: 'Tutoring',
+    serviceName: 'Math tutoring',
+    serviceCategory: 'Tutoring',
+    serviceSummary: 'Tutor support for maths homework, exam preparation, and study planning.',
+    hoursOrUnknown: 'Hours supplied by owner',
+  },
+  {
+    slug: 'aged-care-support',
+    businessSuffix: 'Aged Care Support',
+    category: 'Aged care support',
+    serviceName: 'Aged care support',
+    serviceCategory: 'Aged care support',
+    serviceSummary: 'Home support information for older people and family carers.',
+    hoursOrUnknown: 'Hours supplied by owner',
   },
 ] as const
+
+export const DEV_SEED_BUSINESS_FIXTURES: readonly DevSeedBusinessFixture[] = buildDevSeedBusinessFixtures()
 
 const devSeedActor: BusinessMutationActor = {
   kind: 'authenticated_owner',
@@ -109,6 +196,49 @@ const devSeedActor: BusinessMutationActor = {
 }
 
 const devSeedNow = 1_777_100_000_000
+
+function buildDevSeedBusinessFixtures(): readonly DevSeedBusinessFixture[] {
+  const anchorSlugs = new Set(DEV_SEED_ANCHOR_BUSINESSES.map((fixture) => fixture.requestedSlug))
+  const broadFixtures = DEV_SEED_LOCALES.flatMap((locale, localeIndex) =>
+    DEV_SEED_INDUSTRIES.map((industry, industryIndex) =>
+      buildBroadSeedFixture(locale, industry, localeIndex, industryIndex),
+    ),
+  ).filter((fixture) => !anchorSlugs.has(fixture.requestedSlug))
+
+  return [
+    ...DEV_SEED_ANCHOR_BUSINESSES,
+    ...broadFixtures.slice(0, DEV_SEED_BUSINESS_COUNT - DEV_SEED_ANCHOR_BUSINESSES.length),
+  ]
+}
+
+function buildBroadSeedFixture(
+  locale: DevSeedLocale,
+  industry: DevSeedIndustryTemplate,
+  localeIndex: number,
+  industryIndex: number,
+): DevSeedBusinessFixture {
+  const businessName = `${locale.suburb} ${industry.businessSuffix}`
+
+  return {
+    requestedSlug: `${locale.slug}-${industry.slug}`,
+    businessName,
+    category: industry.category,
+    suburb: locale.suburb,
+    stateTerritory: locale.stateTerritory,
+    ownerMessage: 'Owner supplied service facts for local catalog testing.',
+    sourceLabel: 'Owner supplied service facts',
+    serviceName: industry.serviceName,
+    serviceCategory: industry.serviceCategory,
+    serviceSummary: industry.serviceSummary,
+    serviceArea: `${locale.suburb} and nearby suburbs`,
+    hoursOrUnknown: industry.hoursOrUnknown,
+    photoUrl: '/images/illustration/cat-plumbing.png',
+    responseTimeMinutes: 15 + ((localeIndex + industryIndex) % 8) * 5,
+    firstRequestMode: 'inquiry_available',
+    publicDisclosure: 'Use the inquiry form for a first contact.',
+    noContactReason: '',
+  }
+}
 
 export function buildDevSeedCatalogState(
   fixtures: readonly DevSeedBusinessFixture[] = DEV_SEED_BUSINESS_FIXTURES

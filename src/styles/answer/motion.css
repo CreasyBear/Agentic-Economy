@@ -1,17 +1,49 @@
 /* ---------- Reduced motion ---------- */
 
 @media (prefers-reduced-motion: no-preference) {
+  .ae-chat-section__answer-content > .ae-research-process,
   .ae-answer__one-line {
     animation: ae-answer-reveal var(--ae-public-duration-entrance) var(--ae-public-ease-enter) both;
   }
+  .ae-answer__source-disclosure,
+  .ae-answer__summary,
+  .ae-answer__next-step,
+  .ae-answer-compare,
+  .ae-answer-fit,
+  .ae-answer-next-menu,
+  .ae-answer-checklist,
+  .ae-answer-recovery,
+  .ae-answer-perspective,
+  .ae-answer-details,
+  .ae-answer-tradeoffs,
+  .ae-answer-draft,
+  .ae-follow-up-chips {
+    animation: ae-answer-reveal var(--ae-public-duration-entrance) var(--ae-public-ease-enter) both;
+  }
+  .ae-answer__one-line { animation-delay: 40ms; }
+  .ae-answer__source-disclosure,
+  .ae-answer-compare,
+  .ae-answer-fit,
+  .ae-answer-next-menu,
+  .ae-answer-checklist,
+  .ae-answer-recovery,
+  .ae-answer-perspective,
+  .ae-answer-details,
+  .ae-answer-tradeoffs,
+  .ae-answer-draft {
+    animation-delay: 90ms;
+  }
+  .ae-answer__summary { animation-delay: 140ms; }
+  .ae-answer__next-step { animation-delay: 180ms; }
+  .ae-follow-up-chips { animation-delay: 220ms; }
   .ae-answer__sources > li {
     animation: ae-answer-reveal var(--ae-public-duration-entrance) var(--ae-public-ease-enter) both;
   }
-  .ae-answer__sources > li:nth-child(2) { animation-delay: 60ms; }
-  .ae-answer__sources > li:nth-child(3) { animation-delay: 120ms; }
-  .ae-answer__sources > li:nth-child(4) { animation-delay: 180ms; }
-  .ae-answer__sources > li:nth-child(5) { animation-delay: 240ms; }
-  .ae-answer__sources > li:nth-child(n + 6) { animation-delay: 300ms; }
+  .ae-answer__sources > li:nth-child(1) { animation-delay: 120ms; }
+  .ae-answer__sources > li:nth-child(2) { animation-delay: 160ms; }
+  .ae-answer__sources > li:nth-child(3) { animation-delay: 200ms; }
+  .ae-answer__sources > li:nth-child(4) { animation-delay: 240ms; }
+  .ae-answer__sources > li:nth-child(n + 5) { animation-delay: 280ms; }
 }
 
 @keyframes ae-answer-reveal {
@@ -39,7 +71,21 @@
     transform: none;
   }
   .ae-answer__one-line,
-  .ae-answer__sources > li {
+  .ae-answer__sources > li,
+  .ae-answer__source-disclosure,
+  .ae-answer__summary,
+  .ae-answer__next-step,
+  .ae-chat-section__answer-content > .ae-research-process,
+  .ae-answer-compare,
+  .ae-answer-fit,
+  .ae-answer-next-menu,
+  .ae-answer-checklist,
+  .ae-answer-recovery,
+  .ae-answer-perspective,
+  .ae-answer-details,
+  .ae-answer-tradeoffs,
+  .ae-answer-draft,
+  .ae-follow-up-chips {
     animation: none;
   }
 }

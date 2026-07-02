@@ -1,6 +1,6 @@
 # Illustration Assets — Hand-Drawn Pen-and-Ink Prompts
 
-The signature brand asset for Agentic Economy (Daylight Register). "Drawn by hand. Read by agents." — human craft as the counterpoint to the machine-readable underside. These 20 assets are the visual form of that thesis.
+The signature brand asset for Agentic Economy (Daylight Commerce Routing). "Drawn by hand. Read by agents." — human craft as the counterpoint to the machine-readable underside. These 20 assets are the visual form of that thesis.
 
 ## Shared style lock (applies to every prompt below)
 

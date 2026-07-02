@@ -11,7 +11,7 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
@@ -47,8 +47,8 @@ export const Route = createFileRoute('/$slug/inquiry')({
   },
   head: () => ({
     meta: [
-      { title: 'Send inquiry | Agentic Economy' },
-      { name: 'description', content: 'Send a human inquiry for a published service.' },
+      { title: 'Send job details | Agentic Economy' },
+      { name: 'description', content: 'Send job details to a published service.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -111,7 +111,7 @@ function PublicInquiryRoute() {
       setResult(submitted)
       if (submitted.kind === 'ok') {
         setValue(emptyInquiryFormInput)
-        toast.success('Inquiry sent for owner review.')
+        toast.success('Inquiry sent to the business.')
       } else {
         toast.error('reason' in submitted ? submitted.reason : 'Inquiry could not be sent.')
       }
@@ -121,13 +121,18 @@ function PublicInquiryRoute() {
   }
 
   const bodyError = errorByField.get('body')
+  const nameField = getFieldAccessibility({ id: 'name', hasDescription: true })
+  const emailInvalid = errorByField.has('email')
+  const emailField = getFieldAccessibility({ id: 'email', invalid: emailInvalid, hasDescription: true, hasError: emailInvalid })
+  const phoneInvalid = errorByField.has('phone')
+  const phoneField = getFieldAccessibility({ id: 'phone', invalid: phoneInvalid, hasDescription: true, hasError: phoneInvalid })
 
   return (
     <AePublicShell>
       <AePageHeader
         eyebrow={readback.businessName}
-        title="Send a human inquiry to the owner"
-        description="This sends a first-contact message for owner review. It does not create a booking, payment, or automated action."
+        title="Send the job details"
+        description="Share the work, location, timing, and the best way for the business to reply."
       />
       <form onSubmit={handleSubmit} noValidate className="ae-public-page mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
         {result === undefined ? null : (
@@ -140,73 +145,72 @@ function PublicInquiryRoute() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{readback.serviceName}</CardTitle>
-            <CardDescription>{readback.disclosure}</CardDescription>
+            <CardTitle>{readback.serviceName} handoff</CardTitle>
+            <CardDescription>Write the message the business should receive.</CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="name">Name</FieldLabel>
+              <Field {...nameField.fieldProps}>
+                <FieldLabel htmlFor={nameField.controlProps.id}>Name</FieldLabel>
                 <Input
-                  id="name"
+                  {...nameField.controlProps}
                   name="name"
                   autoComplete="name"
                   value={value.contact.name}
                   disabled={!hydrated || pending}
                   onChange={(event) => updateContact('name', event.currentTarget.value)}
                 />
-                <FieldDescription>Optional, but helpful for the owner reply.</FieldDescription>
+                <FieldDescription {...nameField.descriptionProps}>Optional, but helpful for the business reply.</FieldDescription>
               </Field>
-              <Field data-invalid={errorByField.has('email') ? true : undefined}>
-                <FieldLabel htmlFor="email">Contact details for the owner reply</FieldLabel>
+              <Field {...emailField.fieldProps}>
+                <FieldLabel htmlFor={emailField.controlProps.id}>Contact details for the business reply</FieldLabel>
                 <Input
-                  id="email"
+                  {...emailField.controlProps}
                   name="email"
                   type="email"
                   autoComplete="email"
                   value={value.contact.email}
-                  aria-invalid={errorByField.has('email') || undefined}
                   disabled={!hydrated || pending}
                   onChange={(event) => updateContact('email', event.currentTarget.value)}
                 />
-                <FieldDescription>Email is kept private and is not shown on public pages.</FieldDescription>
-                {fieldError('email', errorByField)}
+                <FieldDescription {...emailField.descriptionProps}>Email is kept private and is not shown on public pages.</FieldDescription>
+                {fieldError('email', errorByField, emailField.errorProps.id)}
               </Field>
-              <Field data-invalid={errorByField.has('phone') ? true : undefined}>
-                <FieldLabel htmlFor="phone">Phone</FieldLabel>
+              <Field {...phoneField.fieldProps}>
+                <FieldLabel htmlFor={phoneField.controlProps.id}>Phone</FieldLabel>
                 <Input
-                  id="phone"
+                  {...phoneField.controlProps}
                   name="phone"
                   type="tel"
                   autoComplete="tel"
                   value={value.contact.phone}
-                  aria-invalid={errorByField.has('phone') || undefined}
                   disabled={!hydrated || pending}
                   onChange={(event) => updateContact('phone', event.currentTarget.value)}
                 />
-                <FieldDescription>Use this instead of email if a phone reply is better.</FieldDescription>
-                {fieldError('phone', errorByField)}
+                <FieldDescription {...phoneField.descriptionProps}>Use this instead of email if a phone reply is better.</FieldDescription>
+                {fieldError('phone', errorByField, phoneField.errorProps.id)}
               </Field>
-              <Field data-invalid={errorByField.has('body') ? true : undefined}>
-                <AeInquiryComposer
-                  label="What do you need help with?"
-                  description={`${value.body.length}/${readback.maxBodyLength} characters.`}
-                  value={value.body}
-                  maxLength={readback.maxBodyLength}
-                  invalid={bodyError !== undefined}
-                  {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
-                  disabled={!hydrated || pending}
-                  pending={pending}
-                  onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
-                />
-              </Field>
+              <AeInquiryComposer
+                label="Describe the job"
+                description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know.`}
+                value={value.body}
+                maxLength={readback.maxBodyLength}
+                invalid={bodyError !== undefined}
+                {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
+                disabled={!hydrated || pending}
+                pending={pending}
+                onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
+              />
             </FieldGroup>
           </CardContent>
         </Card>
+        <p className="text-sm leading-6 text-muted-foreground">
+          AE sends this message to the business. The business replies with timing, quote, and availability.
+        </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={!hydrated || pending}>
             {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
-            Submit inquiry
+            Send job details
           </Button>
           <Button asChild variant="outline">
             <a href={`/${readback.slug}`}>Back to service page</a>
@@ -222,7 +226,7 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
     <AePublicShell>
       <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
         <AeEmptyState
-          title="Inquiry unavailable"
+          title="Handoff not open yet"
           description={readback.reason}
           action={
             <Button asChild>
@@ -235,9 +239,9 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
   )
 }
 
-function fieldError(field: PublicInquiryFormField, errorByField: ReadonlyMap<PublicInquiryFormField, string>) {
+function fieldError(field: PublicInquiryFormField, errorByField: ReadonlyMap<PublicInquiryFormField, string>, errorId?: string) {
   const error = errorByField.get(field)
-  return error === undefined ? null : <FieldError>{error}</FieldError>
+  return error === undefined ? null : <FieldError id={errorId}>{error}</FieldError>
 }
 
 function focusFirstError(errors: readonly PublicInquiryValidationError[]) {

@@ -79,6 +79,7 @@ function AdminProtectedActionsRoute() {
       title="Contact follow-up reconstruction"
       description="Reconstruct selected protected-action proposals, owner decisions, gateways, attempts, receipts, proof gaps, and no-repair state."
       currentPath="/admin/protected-actions"
+      navBadges={{ '/admin/protected-actions': readback.rows.length }}
     >
       {search.proposalId === undefined ? (
         <FilterPanel />

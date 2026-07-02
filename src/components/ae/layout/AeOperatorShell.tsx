@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import {
   resolveOperatorSection,
+  type OperatorNavBadges,
   type OperatorBreadcrumbItem,
   type OperatorRole,
   type OperatorSectionId,
@@ -23,6 +24,7 @@ export type AeOperatorShellProps = {
   eyebrow?: string
   actions?: ReactNode
   currentPath: string
+  navBadges?: OperatorNavBadges
   breadcrumbs?: readonly OperatorBreadcrumbItem[]
   sectionId?: OperatorSectionId
   children: ReactNode
@@ -35,6 +37,7 @@ export function AeOperatorShell({
   eyebrow,
   actions,
   currentPath,
+  navBadges,
   breadcrumbs = [],
   sectionId,
   children,
@@ -47,13 +50,13 @@ export function AeOperatorShell({
     <div className="ae-operator-shell dark min-h-dvh bg-background text-foreground">
       <a
         href="#main-content"
-        className="ae-skip-link sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:min-h-11 focus:bg-background focus:px-4 focus:py-2 focus:text-foreground"
+        className="ae-skip-link sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:min-h-11 focus:bg-background focus:px-4 focus:py-2 focus:text-foreground"
       >
         Skip to operator content
       </a>
 
       <SidebarProvider defaultOpen className="ae-operator-layout min-h-dvh">
-        <AeOperatorSidebar role={role} currentPath={currentPath} />
+        <AeOperatorSidebar role={role} currentPath={currentPath} navBadges={navBadges ?? {}} />
         <SidebarInset className="ae-operator-main min-h-dvh">
           <header className="ae-operator-topbar sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-4 md:px-6">
             <SidebarTrigger className="ae-operator-shell__sidebar-trigger min-h-10 min-w-10" />

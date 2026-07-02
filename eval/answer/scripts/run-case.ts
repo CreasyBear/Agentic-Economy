@@ -1,4 +1,4 @@
-import { evaluateCaseAsync } from '../lib/evaluators.ts'
+import { evaluateCaseAsync } from '../lib/evaluators'
 
 const vars = JSON.parse(process.argv[2] ?? '{}') as Record<string, string>
 

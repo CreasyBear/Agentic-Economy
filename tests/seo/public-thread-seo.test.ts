@@ -37,7 +37,7 @@ describe('public thread SEO builder', () => {
     const seo = buildPublicThreadSeo({
       threadId: 'thr_789',
       title: 'electrician newcastle',
-      firstTurnOneLine: 'No booking or payment happens on this page.',
+      firstTurnOneLine: 'The business handles timing, price, and availability.',
     })
 
     expect(seo.title).toBe('electrician newcastle | Agentic Economy')

@@ -25,10 +25,6 @@ export function AeModelSelector() {
     [modelsByProvider],
   )
 
-  if (!enabled) {
-    return null
-  }
-
   if (loading) {
     return (
       <div className="ae-model-selector ae-model-selector--loading" aria-hidden="true">
@@ -36,6 +32,10 @@ export function AeModelSelector() {
         <span className="ae-model-selector__trigger ae-model-selector__trigger--disabled">Loading…</span>
       </div>
     )
+  }
+
+  if (!enabled) {
+    return null
   }
 
   if (selectedModel === null) {

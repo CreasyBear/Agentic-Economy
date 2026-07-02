@@ -68,11 +68,6 @@ export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
     timing: z.string().optional(),
   }),
   z.object({
-    kind: z.literal('safe-route-rail'),
-    providers: z.array(AnswerSourceSchema).optional(),
-    query: z.string().optional(),
-  }),
-  z.object({
     kind: z.literal('location-map'),
     label: z.string(),
     placeQuery: z.string(),
@@ -124,7 +119,6 @@ export type AnswerArtifact =
       location?: string
       timing?: string
     }
-  | { kind: 'safe-route-rail'; providers?: readonly AnswerSource[]; query?: string }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string }

@@ -30,9 +30,6 @@ export function formatTurnQueryLabel(input: {
     return { text: '→ Compare the top two', role: 'follow-up' }
   }
 
-  if (/^what can agentic economy do here\??$/i.test(input.query.trim())) {
-    return { text: '→ What AE can safely do', role: 'follow-up' }
-  }
 
   if (input.intent === 'explain_boundary' || input.intent === 'unsupported') {
     return { text: input.query, role: 'follow-up' }

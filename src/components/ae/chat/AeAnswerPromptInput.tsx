@@ -1,12 +1,15 @@
-import { useId, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { SearchIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from '@/components/ui/input-group'
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputHeader,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from '@/components/ai-elements/prompt-input'
 import { Spinner } from '@/components/ui/spinner'
 
 import { AeAnswerSuggestions } from './AeSuggestionChips'
@@ -33,9 +36,27 @@ export function AeAnswerPromptInput({
   busy = false,
 }: AeAnswerPromptInputProps) {
   const inputId = useId()
-  const [value, setValue] = useState(defaultValue.slice(0, QUERY_MAX_LENGTH))
+  const counterId = `${inputId}-counter`
+  const initialValue = defaultValue.slice(0, QUERY_MAX_LENGTH)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [value, setValue] = useState(initialValue)
+  const [hydrated, setHydrated] = useState(false)
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const showCharacterLimit = charactersRemaining <= 40
+  const compact = examples.length === 0
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (input === null) {
+      return
+    }
+    input.style.height = 'auto'
+    input.style.height = `${input.scrollHeight}px`
+  }, [value])
 
   function submitQuery(query: string) {
     const trimmed = query.slice(0, QUERY_MAX_LENGTH).trim()
@@ -48,23 +69,66 @@ export function AeAnswerPromptInput({
     }
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    submitQuery(value)
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      submitQuery(value)
-    }
-  }
-
   return (
-    <div className="ae-query-box ae-answer-prompt-input">
-      <label htmlFor={inputId} className="ae-query-box__label">
-        What do you need done?
-      </label>
+    <div className={`ae-query-box ae-answer-prompt-input${compact ? ' ae-answer-prompt-input--compact' : ''}`}>
+      <PromptInput
+        action="/ask"
+        method="get"
+        className="ae-answer-prompt-input__form"
+        role="search"
+        aria-label="Find local service providers"
+        onSubmit={(message) => submitQuery(message.text)}
+      >
+        <PromptInputHeader className="ae-query-box__toolbar">
+          <PromptInputTools>
+            <span className="ae-query-box__icon" aria-hidden="true">
+              <SearchIcon />
+            </span>
+            <span className="ae-query-box__toolbar-label">Local service need</span>
+          </PromptInputTools>
+          <span
+            id={counterId}
+            className={`ae-query-box__counter${showCharacterLimit ? ' ae-query-box__counter--visible' : ''}`}
+            data-numeric
+            aria-live="polite"
+          >
+            {charactersRemaining} left
+          </span>
+        </PromptInputHeader>
+        <PromptInputBody>
+          <PromptInputTextarea
+            id={inputId}
+            name="q"
+            className="ae-query-box__input ae-query-box__textarea"
+            placeholder="What do you need done?"
+            ref={inputRef}
+            value={value}
+            maxLength={QUERY_MAX_LENGTH}
+            onChange={(event) => setValue(event.currentTarget.value)}
+            role="searchbox"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            rows={1}
+            aria-describedby={showCharacterLimit ? `${inputId}-hint ${counterId}` : `${inputId}-hint`}
+            aria-label="What do you need done?"
+            disabled={busy || !hydrated}
+          />
+        </PromptInputBody>
+        <PromptInputFooter className="ae-query-box__footer">
+          <PromptInputSubmit
+            status={busy ? 'submitted' : 'ready'}
+            variant="landingPrimary"
+            size="sm"
+            className="ae-query-box__submit"
+            aria-label={busy ? 'Building answer' : 'Ask'}
+            disabled={busy || !hydrated}
+          >
+            {busy ? <Spinner data-icon="inline-start" /> : null}
+            {busy ? 'Building' : 'Ask'}
+          </PromptInputSubmit>
+        </PromptInputFooter>
+      </PromptInput>
 
       {examples.length > 0 ? (
         <AeAnswerSuggestions
@@ -78,51 +142,8 @@ export function AeAnswerPromptInput({
         />
       ) : null}
 
-      <form
-        action="/ask"
-        method="get"
-        className="ae-answer-prompt-input__form"
-        role="search"
-        aria-label="Find local service providers"
-        onSubmit={handleSubmit}
-      >
-        <InputGroup className="ae-answer-prompt-input__group ae-query-box__row">
-          <InputGroupAddon align="inline-start" className="ae-query-box__icon">
-            <SearchIcon aria-hidden="true" className="size-5" />
-          </InputGroupAddon>
-          <InputGroupInput
-            id={inputId}
-            name="q"
-            type="search"
-            className="ae-query-box__input"
-            placeholder="No hot water in Preston 3072"
-            value={value}
-            maxLength={QUERY_MAX_LENGTH}
-            onChange={(event) => setValue(event.currentTarget.value)}
-            onKeyDown={handleKeyDown}
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            aria-describedby={`${inputId}-hint`}
-            disabled={busy}
-          />
-          <InputGroupAddon align="inline-end">
-            <Button
-              type="submit"
-              variant="landingPrimary"
-              className="ae-query-box__submit"
-              disabled={busy || value.trim().length === 0}
-            >
-              {busy ? <Spinner data-icon="inline-start" /> : null}
-              Ask
-            </Button>
-          </InputGroupAddon>
-        </InputGroup>
-      </form>
-
       <p id={`${inputId}-hint`} className="ae-query-box__hint">
         Type a real need. Name another place only when you want to search there.
-        {showCharacterLimit ? ` ${charactersRemaining} characters left.` : null}
       </p>
     </div>
   )

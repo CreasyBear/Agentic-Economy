@@ -1,36 +1,245 @@
 import { splitSentences } from './text-utils'
 import type { AnswerArtifact } from '../answer-schema'
-import { computeLayoutProfile } from './answer-layout-profile'
+import {
+  computeLayoutProfile,
+  resolveLayoutProfile,
+  type AnswerLayoutProfile,
+} from './answer-layout-profile'
 import { buildArtifactsFromSnapshot } from './snapshot-artifacts'
-import type { AnswerEvent, AnswerSnapshot, AnswerSynthesizerFollowUpIntent } from '../answer-synthesizer'
+import type {
+  AnswerEvent,
+  AnswerPlanEvent,
+  AnswerResponseMode,
+  AnswerSnapshot,
+  AnswerSynthesizerFollowUpIntent,
+} from '../answer-synthesizer'
+
+type EmitSnapshotPlan = Pick<AnswerPlanEvent, 'mode' | 'providerBudget' | 'artifactBudget'>
+
+type EmitSnapshotEventsOptions = {
+  emitThinking?: boolean
+  emitComplete?: boolean
+  pauseMs?: number
+  plan?: EmitSnapshotPlan
+  responseMode?: AnswerResponseMode
+}
+
+const DEFAULT_PLAN_SEARCH_LIMIT = 3
+
+const PROVIDER_CARD_LIMIT = 3
 
 export async function* emitSnapshotEvents(
   snapshot: AnswerSnapshot,
-  options: { emitThinking?: boolean; emitComplete?: boolean } = {},
+  options: EmitSnapshotEventsOptions = {},
 ): AsyncIterable<AnswerEvent> {
   const emitThinking = options.emitThinking !== false
   const emitComplete = options.emitComplete !== false
+  const pauseMs = options.pauseMs ?? 140
+  const providerCount = snapshot.providers.length
+  const layoutProfile = resolveLayoutProfile({
+    ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
+    ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
+    providerCount,
+  })
+  const needsClarification = layoutProfile === 'clarification'
+  const artifacts = buildArtifactsFromSnapshot(snapshot)
+
+  yield buildPlanEventFromSnapshot(snapshot, {
+    layoutProfile,
+    ...(options.plan === undefined ? {} : { plan: options.plan }),
+    ...(options.responseMode === undefined ? {} : { responseMode: options.responseMode }),
+  })
 
   if (emitThinking) {
-    yield { type: 'thinking', step: 'write', label: 'Writing answer…' }
+    yield { type: 'thinking', step: 'write', label: 'Assembling the answer…' }
   }
 
   yield { type: 'one-line', oneLine: snapshot.oneLine }
+  await progressivePause(pauseMs)
+
+  if (emitThinking) {
+    yield {
+      type: 'thinking',
+      step: 'read',
+      label: providerCount > 0 ? 'Reading published details…' : 'Checking whether more detail is needed…',
+    }
+  }
   yield { type: 'sources', providers: snapshot.providers }
+  await progressivePause(pauseMs)
+
+  if (emitThinking) {
+    yield {
+      type: 'thinking',
+      step: 'write',
+      label: needsClarification ? 'Preparing a follow-up question…' : 'Choosing the next step…',
+    }
+  }
+  yield { type: 'next-step', nextStep: snapshot.nextStep }
+  await progressivePause(pauseMs)
 
   for (const delta of splitSentences(snapshot.summary)) {
     yield { type: 'summary-delta', delta }
+    await progressivePause(pauseMs)
   }
 
-  yield { type: 'next-step', nextStep: snapshot.nextStep }
-
-  for (const artifact of buildArtifactsFromSnapshot(snapshot)) {
+  for (const artifact of artifacts) {
+    if (isBaseStreamArtifact(artifact)) {
+      continue
+    }
     yield { type: 'artifact', artifact }
+    await progressivePause(pauseMs)
   }
 
   if (emitComplete) {
     yield { type: 'complete', answer: snapshot }
   }
+}
+
+function isBaseStreamArtifact(artifact: AnswerArtifact): boolean {
+  return (
+    artifact.kind === 'one-line' ||
+    artifact.kind === 'provider-cards' ||
+    artifact.kind === 'prose' ||
+    artifact.kind === 'what-to-do-now'
+  )
+}
+
+function buildPlanEventFromSnapshot(
+  snapshot: AnswerSnapshot,
+  input: {
+    layoutProfile: AnswerLayoutProfile
+    plan?: EmitSnapshotPlan
+    responseMode?: AnswerResponseMode
+  },
+): AnswerPlanEvent {
+  const mode = input.plan?.mode ?? input.responseMode ?? deriveResponseMode(input.layoutProfile, snapshot.providers.length)
+  const artifactBudget = input.plan?.artifactBudget === undefined
+    ? buildArtifactBudget(mode, input.layoutProfile)
+    : { ...input.plan.artifactBudget, layoutProfile: input.layoutProfile }
+  return {
+    type: 'plan',
+    mode,
+    layoutProfile: input.layoutProfile,
+    providerBudget: input.plan?.providerBudget ?? buildProviderBudget(mode, snapshot.providers.length),
+    artifactBudget,
+  }
+}
+
+function deriveResponseMode(layoutProfile: AnswerLayoutProfile, providerCount: number): AnswerResponseMode {
+  if (layoutProfile === 'clarification') {
+    return 'clarify'
+  }
+  if (layoutProfile === 'boundary_explain') {
+    return 'boundary'
+  }
+  if (layoutProfile === 'compare_pair') {
+    return 'compare'
+  }
+  if (layoutProfile === 'empty_state' || providerCount === 0) {
+    return 'empty'
+  }
+  return 'answer'
+}
+
+function buildProviderBudget(
+  mode: AnswerResponseMode,
+  providerCount: number,
+): AnswerPlanEvent['providerBudget'] {
+  switch (mode) {
+    case 'clarify':
+    case 'boundary':
+    case 'error':
+      return { searchLimit: 0, visibleLimit: 0 }
+    case 'empty':
+      return { searchLimit: DEFAULT_PLAN_SEARCH_LIMIT, visibleLimit: 0 }
+    case 'compare':
+      return { searchLimit: 0, visibleLimit: Math.min(providerCount, 2) }
+    case 'filter':
+      return { searchLimit: 0, visibleLimit: Math.min(providerCount, PROVIDER_CARD_LIMIT) }
+    case 'answer':
+      return {
+        searchLimit: Math.max(providerCount, DEFAULT_PLAN_SEARCH_LIMIT),
+        visibleLimit: Math.min(providerCount, PROVIDER_CARD_LIMIT),
+      }
+  }
+}
+
+function buildArtifactBudget(
+  mode: AnswerResponseMode,
+  layoutProfile: AnswerLayoutProfile,
+): AnswerPlanEvent['artifactBudget'] {
+  switch (mode) {
+    case 'clarify':
+      return {
+        layoutProfile,
+        allowedKinds: ['one-line', 'prose', 'what-to-do-now', 'recovery-prompts'],
+        maxArtifactCount: 4,
+        maxProviderCards: 0,
+      }
+    case 'compare':
+      return {
+        layoutProfile,
+        allowedKinds: ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'],
+        maxArtifactCount: 4,
+        maxProviderCards: 0,
+      }
+    case 'filter':
+      return {
+        layoutProfile,
+        allowedKinds: ['one-line', 'provider-cards', 'provider-tradeoff-list', 'prose', 'what-to-do-now'],
+        maxArtifactCount: 5,
+        maxProviderCards: PROVIDER_CARD_LIMIT,
+      }
+    case 'empty':
+      return {
+        layoutProfile,
+        allowedKinds: ['one-line', 'recovery-prompts', 'prose', 'what-to-do-now'],
+        maxArtifactCount: 4,
+        maxProviderCards: 0,
+      }
+    case 'boundary':
+    case 'error':
+      return {
+        layoutProfile,
+        allowedKinds: ['one-line', 'prose', 'what-to-do-now'],
+        maxArtifactCount: 3,
+        maxProviderCards: 0,
+      }
+    case 'answer':
+      return {
+        layoutProfile,
+        allowedKinds: [
+          'one-line',
+          'provider-cards',
+          'location-map',
+          'service-area-fit',
+          'route-perspective',
+          'published-details-rail',
+          'prose',
+          'what-to-do-now',
+        ],
+        maxArtifactCount: 5,
+        maxProviderCards: PROVIDER_CARD_LIMIT,
+      }
+  }
+}
+
+function progressivePause(pauseMs: number): Promise<void> {
+  if (pauseMs <= 0 || process.env.NODE_ENV === 'test') {
+    return Promise.resolve()
+  }
+
+  const { promise, resolve } = (
+    Promise as PromiseConstructor & {
+      withResolvers: <T>() => {
+        promise: Promise<T>
+        resolve: (value: T | PromiseLike<T>) => void
+        reject: (reason?: unknown) => void
+      }
+    }
+  ).withResolvers<void>()
+  setTimeout(resolve, pauseMs)
+  return promise
 }
 
 export function mergeProseIntoSnapshot(input: {

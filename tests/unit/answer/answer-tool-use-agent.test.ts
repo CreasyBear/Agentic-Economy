@@ -48,6 +48,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     const requests: {
       messages: { role: string; content: string; tool_call_id?: string }[]
       tools?: { function: { name: string } }[]
+      tool_choice?: unknown
+      parallel_tool_calls?: unknown
+      response_format?: { type?: string; json_schema?: { strict?: boolean } }
     }[] = []
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(
@@ -88,8 +91,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
                   content: JSON.stringify({
                     oneLine: 'One listed business matches this need.',
                     summary:
-                      'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
-                    whatToDoNow: 'Open the provider page and send an inquiry when published.',
+                      'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+                    whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
                   }),
                 },
               },
@@ -118,9 +121,12 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       'registry.search',
       'registry.detail',
     ])
+    expect(requests[0]?.tool_choice).toBe('auto')
+    expect(requests[0]?.parallel_tool_calls).toBe(false)
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
       'inquiry.submit',
     )
+    expect(requests[1]?.tool_choice).toBe('auto')
 
     const toolMessage = requests[1]?.messages.find((message) => message.role === 'tool')
     expect(toolMessage?.tool_call_id).toBe('call-search-1')
@@ -137,7 +143,11 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   })
 
   it('fails closed if the model emits a tool call when tools are disabled', async () => {
-    const requests: { tools?: unknown[] }[] = []
+    const requests: {
+      tools?: unknown[]
+      tool_choice?: unknown
+      response_format?: { type?: string; json_schema?: { strict?: boolean } }
+    }[] = []
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(
       async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -177,6 +187,9 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     ).rejects.toMatchObject({ code: 'tool_unavailable' })
 
     expect(requests[0]?.tools).toBeUndefined()
+    expect(requests[0]?.tool_choice).toBe('none')
+    expect(requests[0]?.response_format?.type).toBe('json_schema')
+    expect(requests[0]?.response_format?.json_schema?.strict).toBe(true)
   })
 
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
@@ -187,8 +200,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         prose: {
           oneLine: 'One listed business matches this need.',
           summary:
-            'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published.',
+            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
         },
       }))
 
@@ -218,8 +231,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         prose: {
           oneLine: 'One listed business matches this need.',
           summary:
-            'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published.',
+            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
         },
       }))
 
@@ -243,7 +256,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         prose: {
           oneLine: 'No listed businesses match this need yet.',
           summary: 'No listed providers publish coverage for that place yet.',
-          whatToDoNow: 'Try a nearby suburb or browse the registry.',
+          whatToDoNow: 'Try a nearby suburb or browse services.',
         },
       }))
 
@@ -275,7 +288,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         prose: {
           oneLine: 'Fictional Plumbing is the best pick.',
           summary:
-            'Fictional Plumbing can help. Agentic Economy does not book or take payment on this page.',
+            'Fictional Plumbing can help. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
           whatToDoNow: 'Contact fictional-plumbing directly.',
         },
       }))
@@ -346,8 +359,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         prose: {
           oneLine: 'One listing matches the prior results.',
           summary:
-            'The earlier provider still applies. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published.',
+            'The earlier provider still applies. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
         },
       }))
 

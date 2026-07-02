@@ -1,7 +1,12 @@
 import type { AnswerArtifact, AnswerCompareField } from '../answer-schema'
 import type { AnswerSnapshot, AnswerSource } from '../answer-synthesizer'
 import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
-import { buildArtifactsFromSnapshot } from './snapshot-artifacts'
+import {
+  buildArtifactsFromSnapshot,
+  filterArtifactsForBudget,
+  getDefaultArtifactBudgetForLayoutProfile,
+  type AnswerArtifactBudget,
+} from './snapshot-artifacts'
 
 export type AnswerMessagePart =
   | { kind: 'one-line'; text: string }
@@ -25,7 +30,6 @@ export type AnswerMessagePart =
       location?: string
       timing?: string
     }
-  | { kind: 'safe-route-rail'; providers?: readonly AnswerSource[]; query?: string }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string; compact?: boolean }
@@ -38,28 +42,38 @@ export type AnswerMessagePartsResult = {
   parts: AnswerMessagePart[]
 }
 
-export function buildMessagePartsFromSnapshot(snapshot: AnswerSnapshot): AnswerMessagePartsResult {
+export function buildMessagePartsFromSnapshot(
+  snapshot: AnswerSnapshot,
+  budgetOverride?: AnswerArtifactBudget,
+): AnswerMessagePartsResult {
   const profile = resolveLayoutProfile({
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
     providerCount: snapshot.providers.length,
   })
 
-  const artifacts = buildArtifactsFromSnapshot({ ...snapshot, layoutProfile: profile })
-  const parts = artifactsToMessageParts(artifacts, profile)
+  const budget = budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile)
+  const artifacts = buildArtifactsFromSnapshot({ ...snapshot, layoutProfile: profile }, budget)
+  const parts = artifactsToMessageParts(artifacts, profile, budget)
   return { profile, parts }
 }
 
 export function artifactsToMessageParts(
   artifacts: readonly AnswerArtifact[],
   profile: AnswerLayoutProfile,
+  budgetOverride?: AnswerArtifactBudget,
 ): AnswerMessagePart[] {
   const scrollCards = profile === 'refinement_compact' || profile === 'compare_pair'
   const compactNextStep =
-    profile === 'refinement_compact' || profile === 'boundary_explain' || profile === 'compare_pair'
+    profile === 'clarification' ||
+    profile === 'refinement_compact' ||
+    profile === 'boundary_explain' ||
+    profile === 'compare_pair'
+  const budget = budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile)
+  const budgetedArtifacts = filterArtifactsForBudget(artifacts, budget)
   const parts: AnswerMessagePart[] = []
 
-  for (const artifact of artifacts) {
+  for (const artifact of budgetedArtifacts) {
     switch (artifact.kind) {
       case 'one-line':
         parts.push({ kind: 'one-line', text: artifact.text })
@@ -122,13 +136,6 @@ export function artifactsToMessageParts(
           need: artifact.need,
           ...(artifact.location === undefined ? {} : { location: artifact.location }),
           ...(artifact.timing === undefined ? {} : { timing: artifact.timing }),
-        })
-        break
-      case 'safe-route-rail':
-        parts.push({
-          kind: 'safe-route-rail',
-          ...(artifact.providers === undefined ? {} : { providers: artifact.providers }),
-          ...(artifact.query === undefined ? {} : { query: artifact.query }),
         })
         break
       case 'location-map':

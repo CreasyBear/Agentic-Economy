@@ -8,7 +8,7 @@ export type AeStreamingLabelProps = {
   duration?: number
 }
 
-/** Daylight Register shimmer for in-progress copy. */
+/** Daylight Commerce Routing shimmer for in-progress copy. */
 export function AeStreamingLabel({
   children,
   as = 'span',

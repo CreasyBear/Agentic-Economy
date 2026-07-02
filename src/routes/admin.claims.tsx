@@ -31,6 +31,7 @@ function AdminClaimsRoute() {
       title="Claims queue"
       description="Review owner contention, duplicate claims, and recovery work only after source-owned admin membership is active."
       currentPath="/admin/claims"
+      navBadges={{ '/admin/claims': readback.rows.length }}
     >
       <AeAdminReadbackPanel
         title="Claim recovery readback"

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
-import { ChevronDownIcon } from 'lucide-react'
-
 import { AeThinkingRail } from '@/components/ae/artifacts/AeThinkingRail'
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from '@/components/ai-elements/reasoning'
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { cn } from '@/lib/utils'
+import type { AnswerWorkStep } from '@/modules/answer/public'
 import type { ThinkingStep } from '@/modules/answer-thread/public'
 
+import { AeResearchProcess } from './AeResearchProcess'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 
 export type AeAnswerThinkingTraceProps = {
@@ -14,6 +16,7 @@ export type AeAnswerThinkingTraceProps = {
   label: string
   thinkingStep?: ThinkingStep
   steps?: readonly string[]
+  workLog?: readonly AnswerWorkStep[]
 }
 
 export function AeAnswerThinkingTrace({
@@ -21,8 +24,13 @@ export function AeAnswerThinkingTrace({
   label,
   thinkingStep,
   steps = [],
+  workLog = [],
 }: AeAnswerThinkingTraceProps) {
   const structuredMode = isStructuredAnswerModeEnabled()
+
+  if (workLog.length > 0) {
+    return <AeResearchProcess isStreaming={isStreaming} steps={workLog} />
+  }
 
   if (structuredMode) {
     if (!isStreaming && steps.length === 0) {
@@ -49,46 +57,30 @@ type AeAnswerReasoningCollapsibleProps = {
 function AeAnswerReasoningCollapsible({ isStreaming, label, steps = [] }: AeAnswerReasoningCollapsibleProps) {
   const detail = steps.join('\n\n')
   const show = isStreaming || steps.length > 0
-  const [open, setOpen] = useState(isStreaming)
-
-  useEffect(() => {
-    if (isStreaming) {
-      setOpen(true)
-    }
-  }, [isStreaming])
-
-  useEffect(() => {
-    if (!isStreaming && open) {
-      const timer = window.setTimeout(() => setOpen(false), 1000)
-      return () => window.clearTimeout(timer)
-    }
-    return undefined
-  }, [isStreaming, open])
 
   if (!show) {
     return null
   }
 
   return (
-    <Collapsible className="ae-answer-reasoning" open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="ae-answer-reasoning__trigger flex w-full items-center gap-2">
-        {isStreaming ? (
-          <Shimmer as="span" className="ae-streaming-label">
-            {label}
-          </Shimmer>
-        ) : (
-          <span className="ae-answer-reasoning__done">{label}</span>
-        )}
-        <ChevronDownIcon
-          className={cn('size-4 shrink-0 transition-transform', open ? 'rotate-180' : 'rotate-0')}
-          aria-hidden="true"
-        />
-      </CollapsibleTrigger>
+    <Reasoning className="ae-answer-reasoning" isStreaming={isStreaming}>
+      <ReasoningTrigger
+        className="ae-answer-reasoning__trigger"
+        getLabel={() =>
+          isStreaming ? (
+            <Shimmer as="span" className="ae-streaming-label">
+              {label}
+            </Shimmer>
+          ) : (
+            <span className="ae-answer-reasoning__done">{label}</span>
+          )
+        }
+      />
       {detail.length > 0 ? (
-        <CollapsibleContent className="ae-answer-reasoning__content">
+        <ReasoningContent className="ae-answer-reasoning__content">
           <p>{detail}</p>
-        </CollapsibleContent>
+        </ReasoningContent>
       ) : null}
-    </Collapsible>
+    </Reasoning>
   )
 }

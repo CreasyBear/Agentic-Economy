@@ -15,7 +15,7 @@ Append-only, date-stamped record of design decisions that override skill default
 
 ## 2026-06-30 — Chat-first IA (Morphic-adapted)
 
-- **Decision:** The primary product surface is **AeChat on `/`**, not a marketing landing that redirects. Query → generative UI → inline artifacts. Morphic is the UX reference; Daylight Register is the visual skin.
+- **Decision:** The primary product surface is **AeChat on `/`**, not a marketing landing that redirects. Query → generative UI → inline artifacts. Morphic is the UX reference; Daylight Commerce Routing is the visual/product direction.
 - **Rationale:** User feedback + ui-craft `ai-chat.md` + `.ui-craft/brief.md` principle #1 ("Query in, generative answer out"). Building mandatory maps and audit-log listings put cartography and forensic layout ahead of the chat journey.
 - **Consequences:** Rebuild `/` as chat shell; extend answer stream with artifact types; demote `/registry` to secondary browse; simplify `/$slug` to citation page. Full spec: `.ui-craft/surfaces/chat.md`; synthesis contract: `.planning/ANSWER-AI-CONTRACT.md`.
 
@@ -82,3 +82,9 @@ Append-only, date-stamped record of design decisions that override skill default
 - **Decision:** `/registry` is P2 — column browse for scan-oriented users and agent referrals. Header CTA on `/` is Ask, not Browse.
 - **Rationale:** Hick's Law — one primary action on home. Brief principle #7 (one conversion action per surface).
 - **Consequences:** Registry polish remains in plan but does not block chat shell. Nav label may stay "Browse services" as secondary.
+
+## 2026-07-01 — Visceral commerce copy, not defensive trust posture
+
+- **Decision:** Public surfaces lead with fit and tangible provider evidence, not claims of safety/trust or uncertainty-first caveats. "Register" remains route/data vocabulary only; the public emotional read is commerce routing: ask for a service, see who fits, compare published details, contact the business.
+- **Rationale:** User correction: repeated "safe", "trusted", "needs owner confirmation", and "may vary" language makes people less likely to rely on the product. The UI should demonstrate confidence through the artifact — services, service area, photos, response cues, source/freshness, and receipt — not through defensive adjectives.
+- **Consequences:** DESIGN.md + `.ui-craft/brief.md` updated. Public copy should remove top-level "safe/trusted/register/needs confirmation" positioning. Boundary copy remains just-in-time: inquiry review/result, help/terms/privacy, agent payload, and refusal when a user asks AE to book/pay/dispatch.

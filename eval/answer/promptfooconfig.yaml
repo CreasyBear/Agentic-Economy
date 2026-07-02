@@ -12,7 +12,7 @@ tests:
     vars:
       testId: gate-grounded-pass
       mode: gate
-      snapshot: '{"query":"plumber Preston","oneLine":"One listed business matches.","providers":[{"citationIndex":1,"slug":"preston-plumbing","name":"Preston Plumbing","category":"Plumber","suburb":"Preston","stateTerritory":"VIC","serviceArea":"Preston","hoursLabel":"Hours supplied","availabilityLabel":"Published","trustLabel":"Checked","nextStepLabel":"Send inquiry","detailUrl":"/preston-plumbing","services":[]}],"summary":"Here is what is listed. Agentic Economy does not book or take payment on this page.","nextStep":"Open a listed provider page.","agentJsonUrl":"/api/businesses/search?q=plumber"}'
+      snapshot: '{"query":"plumber Preston","oneLine":"One listed business matches.","providers":[{"citationIndex":1,"slug":"preston-plumbing","name":"Preston Plumbing","category":"Plumber","suburb":"Preston","stateTerritory":"VIC","serviceArea":"Preston","hoursLabel":"Hours supplied","availabilityLabel":"Published","trustLabel":"Checked","nextStepLabel":"Send inquiry","detailUrl":"/preston-plumbing","services":[]}],"summary":"Here is what is listed. Agentic Economy does not book or take payment on this page.","nextStep":"Open a listed provider page. Agentic Economy does not book or take payment on this page.","agentJsonUrl":"/api/businesses/search?q=plumber"}'
       allowedSlugs: '["preston-plumbing"]'
       expectPass: 'true'
     assert:
@@ -23,7 +23,7 @@ tests:
     vars:
       testId: gate-grounding-fail
       mode: gate
-      snapshot: '{"query":"plumber Preston","oneLine":"One match.","providers":[{"citationIndex":1,"slug":"fake-slug","name":"Fake","category":"Plumber","suburb":"Preston","stateTerritory":"VIC","serviceArea":"Preston","hoursLabel":"Hours supplied","availabilityLabel":"Published","trustLabel":"Checked","nextStepLabel":"Send inquiry","detailUrl":"/fake","services":[]}],"summary":"Agentic Economy does not book or take payment on this page.","nextStep":"Open a page.","agentJsonUrl":"/api/businesses/search?q=plumber"}'
+      snapshot: '{"query":"plumber Preston","oneLine":"One match.","providers":[{"citationIndex":1,"slug":"fake-slug","name":"Fake","category":"Plumber","suburb":"Preston","stateTerritory":"VIC","serviceArea":"Preston","hoursLabel":"Hours supplied","availabilityLabel":"Published","trustLabel":"Checked","nextStepLabel":"Send inquiry","detailUrl":"/fake","services":[]}],"summary":"The business handles timing, price, and availability.","nextStep":"Open a page.","agentJsonUrl":"/api/businesses/search?q=plumber"}'
       allowedSlugs: '["preston-plumbing"]'
       expectPass: 'false'
     assert:
@@ -100,7 +100,7 @@ tests:
     vars:
       testId: gate-overclaim-fail
       mode: gate
-      snapshot: '{"query":"plumber","oneLine":"Book now for instant service.","providers":[{"citationIndex":1,"slug":"preston-plumbing","name":"Preston Plumbing","category":"Plumber","suburb":"Preston","stateTerritory":"VIC","serviceArea":"Preston","hoursLabel":"Hours supplied","availabilityLabel":"Published","trustLabel":"Checked","nextStepLabel":"Send inquiry","detailUrl":"/preston-plumbing","services":[]}],"summary":"Pay now to confirm. Agentic Economy does not book or take payment on this page.","nextStep":"Dispatch immediately.","agentJsonUrl":"/api/businesses/search?q=plumber"}'
+      snapshot: '{"query":"plumber","oneLine":"Book now for instant service.","providers":[{"citationIndex":1,"slug":"preston-plumbing","name":"Preston Plumbing","category":"Plumber","suburb":"Preston","stateTerritory":"VIC","serviceArea":"Preston","hoursLabel":"Hours supplied","availabilityLabel":"Published","trustLabel":"Checked","nextStepLabel":"Send inquiry","detailUrl":"/preston-plumbing","services":[]}],"summary":"Pay now to confirm. The business handles timing, price, and availability.","nextStep":"Dispatch immediately.","agentJsonUrl":"/api/businesses/search?q=plumber"}'
       allowedSlugs: '["preston-plumbing"]'
       expectPass: 'false'
     assert:
@@ -157,8 +157,8 @@ tests:
       plannedTool: registry.search
       plannedInput: '{"query":"parramatta"}'
       proseOneLine: One listed business matches this need.
-      proseSummary: The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.
-      proseNextStep: Open the provider page and send an inquiry when published.
+      proseSummary: The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.
+      proseNextStep: Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.
       expectedSlug: parramatta-emergency-plumbing
       expectPass: 'true'
     assert:
@@ -173,10 +173,130 @@ tests:
       plannedTool: registry.search
       plannedInput: '{"query":"plumber"}'
       proseOneLine: Book now for instant service.
-      proseSummary: Pay now to confirm the job. Agentic Economy does not book or take payment on this page.
+      proseSummary: Pay now to confirm the job. The business handles timing, price, and availability.
       proseNextStep: Dispatch immediately.
       expectedSlug: ''
       expectPass: 'false'
     assert:
       - type: javascript
         value: file://assertions/expect-tool-input.mjs
+
+  - description: Answer turn direct Parramatta fast path
+    vars:
+      testId: turn-direct-parramatta-fast-path
+      mode: answer-turn
+      caseId: turn-direct-parramatta-fast-path
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn Paramata visible recovery
+    vars:
+      testId: turn-paramata-visible-recovery
+      mode: answer-turn
+      caseId: turn-paramata-visible-recovery
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn Brunswick empty state
+    vars:
+      testId: turn-brunswick-empty-state
+      mode: answer-turn
+      caseId: turn-brunswick-empty-state
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn broad Perth businesses clarification
+    vars:
+      testId: turn-broad-perth-businesses-clarifies
+      mode: answer-turn
+      caseId: turn-broad-perth-businesses-clarifies
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn Perth context blocks Parramatta
+    vars:
+      testId: turn-perth-context-blocks-parramatta
+      mode: answer-turn
+      caseId: turn-perth-context-blocks-parramatta
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn unsupported booking boundary
+    vars:
+      testId: turn-unsupported-booking-boundary
+      mode: answer-turn
+      caseId: turn-unsupported-booking-boundary
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn broad catalog Coburg dentist
+    vars:
+      testId: turn-broad-coburg-dentist
+      mode: answer-turn
+      caseId: turn-broad-coburg-dentist
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn broad catalog Perth near-me plumber
+    vars:
+      testId: turn-broad-perth-near-me-plumber
+      mode: answer-turn
+      caseId: turn-broad-perth-near-me-plumber
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn broad catalog Parramatta family lawyer
+    vars:
+      testId: turn-broad-parramatta-family-lawyer
+      mode: answer-turn
+      caseId: turn-broad-parramatta-family-lawyer
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer turn broad catalog Geelong locksmith
+    vars:
+      testId: turn-broad-geelong-locksmith
+      mode: answer-turn
+      caseId: turn-broad-geelong-locksmith
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-turn.mjs
+
+  - description: Answer thread filter uses frozen evidence
+    vars:
+      testId: thread-filter-uses-frozen-evidence
+      mode: answer-thread
+      caseId: thread-filter-uses-frozen-evidence
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-thread.mjs
+
+  - description: Answer thread unsafe follow-up keeps boundary
+    vars:
+      testId: thread-unsupported-follow-up-keeps-boundary
+      mode: answer-thread
+      caseId: thread-unsupported-follow-up-keeps-boundary
+      expectPass: 'true'
+    assert:
+      - type: javascript
+        value: file://assertions/expect-answer-thread.mjs

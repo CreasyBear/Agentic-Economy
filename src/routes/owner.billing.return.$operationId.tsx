@@ -4,10 +4,7 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import {
-  OwnerBillingReceiptList,
-  OwnerBillingStatePanel,
-} from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
+import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
 import { summarizeOwnerBillingRoute } from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
 import {
   readCurrentOwnerBillingServer,
@@ -46,7 +43,7 @@ function OwnerBillingReturnRoute() {
       if (cancelled) return
       if (result.kind === 'ok') {
         setReadback(result.readback)
-        setMessage('Return recorded. Paid state still waits for verified provider readback.')
+        setMessage('Return recorded.')
       } else {
         setError(result.reason)
       }
@@ -63,8 +60,8 @@ function OwnerBillingReturnRoute() {
     <AeOperatorShell
       role="owner"
       eyebrow="Provider return"
-      title="Wait for recorded provider readback."
-      description="Returning to Agentic Economy does not mark billing active unless the source-owned readback already proves it."
+      title="Return recorded"
+      description="Your return was recorded. Billing stays inactive until the payment provider confirms."
       currentPath="/owner/billing/return"
     >
       <div className="grid gap-6">
@@ -81,7 +78,6 @@ function OwnerBillingReturnRoute() {
           </Alert>
         )}
         <OwnerBillingStatePanel summary={summary} />
-        <OwnerBillingReceiptList receipts={readback.owner.receipts} />
       </div>
     </AeOperatorShell>
   )

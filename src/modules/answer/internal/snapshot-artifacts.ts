@@ -1,97 +1,77 @@
 import type { AnswerArtifact } from '../answer-schema'
 import { buildAgentJsonUrl, type AnswerSnapshot } from '../answer-synthesizer'
-import { isCompactLayoutProfile, resolveLayoutProfile } from './answer-layout-profile'
+import { isCompactLayoutProfile, resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-profile'
 import { parseLocationIntent } from './location-intent'
 
-export function buildArtifactsFromSnapshot(snapshot: AnswerSnapshot): AnswerArtifact[] {
-  const profile = resolveLayoutProfile({
+export type AnswerArtifactBudget = {
+  layoutProfile: AnswerLayoutProfile
+  allowedKinds: readonly AnswerArtifact['kind'][]
+  maxArtifactCount: number
+  maxProviderCards: number
+}
+
+const ANSWER_PROVIDER_CARD_LIMIT = 3
+const COMPARE_PROVIDER_LIMIT = 2
+
+const TEXT_ONLY_ARTIFACTS = ['one-line', 'prose', 'what-to-do-now'] as const
+const ANSWER_ARTIFACTS = [
+  'one-line',
+  'provider-cards',
+  'location-map',
+  'prose',
+  'what-to-do-now',
+] as const
+const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
+const EMPTY_ARTIFACTS = ['one-line', 'prose', 'recovery-prompts', 'what-to-do-now'] as const
+const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now'] as const
+
+export function buildArtifactsFromSnapshot(
+  snapshot: AnswerSnapshot,
+  budgetOverride?: AnswerArtifactBudget,
+): AnswerArtifact[] {
+  const profile = budgetOverride?.layoutProfile ?? resolveLayoutProfile({
     ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
     providerCount: snapshot.providers.length,
   })
+  const budget = budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile)
 
   const compact = isCompactLayoutProfile(profile)
+  const visibleProviderCards = snapshot.providers.slice(0, Math.max(0, budget.maxProviderCards))
+  const compareProviders = snapshot.providers.slice(0, COMPARE_PROVIDER_LIMIT)
   const location = parseLocationIntent(snapshot.query)
-  const contactReady = !compact && snapshot.providers.some((provider) => provider.inquiryUrl !== undefined)
   const artifacts: AnswerArtifact[] = [
     { kind: 'one-line', text: snapshot.oneLine },
   ]
 
-  if (profile === 'compare_pair' && snapshot.providers.length >= 2) {
+  if (profile === 'compare_pair' && compareProviders.length >= 2) {
     artifacts.push({
       kind: 'provider-compare-table',
-      providers: [...snapshot.providers],
+      providers: [...compareProviders],
       fields: ['area', 'response', 'availability', 'nextStep'],
     })
-    artifacts.push({ kind: 'provider-tradeoff-list', providers: [...snapshot.providers] })
   }
 
-  if (snapshot.providers.length > 0) {
-    artifacts.push({ kind: 'provider-cards', providers: [...snapshot.providers] })
+  if (visibleProviderCards.length > 0) {
+    artifacts.push({ kind: 'provider-cards', providers: [...visibleProviderCards] })
   }
 
-  if (!compact && profile !== 'empty_state' && profile !== 'compare_pair') {
-    if (location !== undefined && snapshot.providers.length > 0) {
-      artifacts.push({ kind: 'location-map', label: location.label, placeQuery: location.placeQuery })
-      artifacts.push({
-        kind: 'service-area-fit',
-        providers: [...snapshot.providers],
-        locationLabel: location.label,
-      })
-    }
-  }
-
-  if (profile === 'discovery_full' && snapshot.providers.length > 1) {
-    artifacts.push({ kind: 'published-details-rail', providers: [...snapshot.providers] })
-  }
-
-  if (profile === 'discovery_full' && snapshot.providers.length > 1 && location === undefined) {
-    artifacts.push({ kind: 'provider-tradeoff-list', providers: [...snapshot.providers] })
+  if (!compact && profile === 'discovery_full' && location !== undefined && visibleProviderCards.length > 0) {
+    artifacts.push({ kind: 'location-map', label: location.label, placeQuery: location.placeQuery })
   }
 
   const showSummary =
-    !compact &&
     snapshot.summary.length > 0 &&
-    (profile === 'discovery_full' || profile === 'compare_pair' || profile === 'empty_state')
+    (
+      profile === 'discovery_full' ||
+      profile === 'clarification' ||
+      profile === 'compare_pair' ||
+      profile === 'empty_state' ||
+      profile === 'boundary_explain'
+    )
 
   if (showSummary) {
     artifacts.push({ kind: 'prose', block: 'summary', text: snapshot.summary })
-  }
-
-  if (contactReady && profile !== 'boundary_explain') {
-    artifacts.push({ kind: 'next-step-menu', providers: [...snapshot.providers] })
-    artifacts.push({
-      kind: 'confirmation-checklist',
-      title: 'Confirm the practical details',
-      items: [
-        'What needs doing and where',
-        'Preferred timing',
-        'Photos, access, or site constraints',
-        'Quote and job acceptance',
-      ],
-    })
-  }
-
-  if (shouldShowMessageStarter(snapshot)) {
-    const provider = snapshot.providers[0]
-    if (provider !== undefined) {
-      const timing = extractTimingLabel(snapshot.query)
-      artifacts.push({
-        kind: 'message-starter',
-        provider,
-        need: snapshot.query,
-        ...(location === undefined ? {} : { location: location.label }),
-        ...(timing === undefined ? {} : { timing }),
-      })
-    }
-  }
-
-  if (profile === 'boundary_explain') {
-    artifacts.push({
-      kind: 'safe-route-rail',
-      ...(snapshot.providers.length > 0 ? { providers: [...snapshot.providers] } : {}),
-      query: snapshot.query,
-    })
   }
 
   if (profile === 'empty_state') {
@@ -106,37 +86,153 @@ export function buildArtifactsFromSnapshot(snapshot: AnswerSnapshot): AnswerArti
     artifacts.push({ kind: 'what-to-do-now', text: snapshot.nextStep })
   }
 
-  return artifacts
+  return filterArtifactsForBudget(artifacts, budget)
 }
 
-function shouldShowMessageStarter(snapshot: AnswerSnapshot): boolean {
-  if (snapshot.providers.length !== 1) {
-    return false
+export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutProfile): AnswerArtifactBudget {
+  switch (profile) {
+    case 'clarification':
+      return {
+        layoutProfile: profile,
+        allowedKinds: TEXT_ONLY_ARTIFACTS,
+        maxArtifactCount: 3,
+        maxProviderCards: 0,
+      }
+    case 'boundary_explain':
+      return {
+        layoutProfile: profile,
+        allowedKinds: TEXT_ONLY_ARTIFACTS,
+        maxArtifactCount: 3,
+        maxProviderCards: 0,
+      }
+    case 'empty_state':
+      return {
+        layoutProfile: profile,
+        allowedKinds: EMPTY_ARTIFACTS,
+        maxArtifactCount: 4,
+        maxProviderCards: 0,
+      }
+    case 'compare_pair':
+      return {
+        layoutProfile: profile,
+        allowedKinds: COMPARE_ARTIFACTS,
+        maxArtifactCount: 4,
+        maxProviderCards: 0,
+      }
+    case 'refinement_compact':
+      return {
+        layoutProfile: profile,
+        allowedKinds: FILTER_ARTIFACTS,
+        maxArtifactCount: 3,
+        maxProviderCards: ANSWER_PROVIDER_CARD_LIMIT,
+      }
+    case 'discovery_full':
+      return {
+        layoutProfile: profile,
+        allowedKinds: ANSWER_ARTIFACTS,
+        maxArtifactCount: 5,
+        maxProviderCards: ANSWER_PROVIDER_CARD_LIMIT,
+      }
   }
-  if (snapshot.providers[0]?.inquiryUrl === undefined) {
-    return false
-  }
-  if (snapshot.layoutProfile !== 'discovery_full') {
-    return false
-  }
-  return /\b(asap|contact|emergency|help|inquiry|need|quote|today|tonight|tomorrow|urgent)\b/i.test(snapshot.query)
 }
 
-function extractTimingLabel(query: string): string | undefined {
-  if (/\btoday\b/i.test(query)) {
-    return 'today if available'
+export function filterArtifactsForBudget(
+  artifacts: readonly AnswerArtifact[],
+  budget: AnswerArtifactBudget,
+): AnswerArtifact[] {
+  const maxArtifactCount = Math.max(0, budget.maxArtifactCount)
+  let remainingProviderCards = Math.max(0, budget.maxProviderCards)
+  const budgeted: AnswerArtifact[] = []
+
+  for (const artifact of artifacts) {
+    if (budgeted.length >= maxArtifactCount) {
+      break
+    }
+    if (!budget.allowedKinds.includes(artifact.kind)) {
+      continue
+    }
+
+    const capped = capArtifactForBudget(artifact, budget, remainingProviderCards)
+    if (capped === undefined) {
+      continue
+    }
+
+    if (capped.kind === 'provider-cards') {
+      remainingProviderCards -= capped.providers.length
+    }
+
+    budgeted.push(capped)
   }
-  if (/\btonight\b/i.test(query)) {
-    return 'tonight if available'
-  }
-  if (/\btomorrow\b/i.test(query)) {
-    return 'tomorrow if available'
-  }
-  if (/\b(asap|urgent|emergency)\b/i.test(query)) {
-    return 'as soon as the business can confirm'
-  }
-  return undefined
+
+  return budgeted
 }
+
+function capArtifactForBudget(
+  artifact: AnswerArtifact,
+  budget: AnswerArtifactBudget,
+  remainingProviderCards: number,
+): AnswerArtifact | undefined {
+  switch (artifact.kind) {
+    case 'provider-cards': {
+      const providers = artifact.providers.slice(0, remainingProviderCards)
+      return providers.length === 0 ? undefined : { kind: 'provider-cards', providers }
+    }
+    case 'provider-compare-table': {
+      const providers = artifact.providers.slice(0, COMPARE_PROVIDER_LIMIT)
+      return providers.length === 0
+        ? undefined
+        : {
+            kind: 'provider-compare-table',
+            providers,
+            ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
+          }
+    }
+    case 'service-area-fit': {
+      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
+      return providers.length === 0
+        ? undefined
+        : {
+            kind: 'service-area-fit',
+            providers,
+            ...(artifact.locationLabel === undefined ? {} : { locationLabel: artifact.locationLabel }),
+          }
+    }
+    case 'next-step-menu': {
+      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
+      return providers.length === 0 ? undefined : { kind: 'next-step-menu', providers }
+    }
+    case 'route-perspective': {
+      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
+      return providers.length === 0
+        ? undefined
+        : {
+            kind: 'route-perspective',
+            providers,
+            ...(artifact.query === undefined ? {} : { query: artifact.query }),
+          }
+    }
+    case 'published-details-rail': {
+      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
+      return providers.length === 0 ? undefined : { kind: 'published-details-rail', providers }
+    }
+    case 'provider-tradeoff-list': {
+      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
+      return providers.length === 0 ? undefined : { kind: 'provider-tradeoff-list', providers }
+    }
+    case 'message-starter':
+      return budget.maxProviderCards <= 0 ? undefined : artifact
+    case 'one-line':
+    case 'confirmation-checklist':
+    case 'recovery-prompts':
+    case 'location-map':
+    case 'prose':
+    case 'what-to-do-now':
+    case 'agent-json':
+    case 'protected-by-ae':
+      return artifact
+  }
+}
+
 
 function buildRecoveryPrompts(query: string): { label: string; query: string }[] {
   const normalized = query.trim()

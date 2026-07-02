@@ -27,8 +27,8 @@ export const Route = createFileRoute('/owner/billing')({
   loader: () => readCurrentOwnerBillingServer(),
   head: () => ({
     meta: [
-      { title: 'Owner billing readback | Agentic Economy' },
-      { name: 'description', content: 'Owner billing states from source-owned activation readbacks.' },
+      { title: 'Owner billing | Agentic Economy' },
+      { name: 'description', content: 'Your billing status and receipts on Agentic Economy.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -62,8 +62,8 @@ function OwnerBillingRoute() {
     <AeOperatorShell
       role="owner"
       eyebrow="Owner billing"
-      title="Read billing state before taking action."
-      description="The owner view separates offer availability, provider redirects, returns, receipts, and unavailable states without granting access from unverified provider status."
+      title="Your billing"
+      description="Your plan status, receipts, and what to do next."
       currentPath="/owner/billing"
       breadcrumbs={[{ label: 'Billing', href: '/owner/billing' }]}
     >

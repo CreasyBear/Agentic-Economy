@@ -53,9 +53,9 @@ export function AeAnswerSuggestions({
         <Suggestion
           key={item.value}
           suggestion={item.value}
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className={chipClass}
+          className={`${chipClass} rounded-[var(--ae-radius-sm)]`}
           onClick={onSelect}
         >
           {item.label}

@@ -1,6 +1,6 @@
 # Surface: Chat (AeChat) — Primary Product Shell
 
-Governed by this file. Visual authority: `DESIGN.md` (Daylight Register). UX reference: [Morphic](https://github.com/miurla/morphic) (chat-as-home, generative UI, shareable threads). When this spec and `DESIGN.md` disagree on **visuals**, `DESIGN.md` wins. When they disagree on **IA/journey**, this file wins until `DESIGN.md` is amended (see `.ui-craft/decisions.md` 2026-06-30).
+Governed by this file. Visual authority: `DESIGN.md` (Daylight Commerce Routing). UX reference: [Morphic](https://github.com/miurla/morphic) (chat-as-home, generative UI, shareable threads). When this spec and `DESIGN.md` disagree on **visuals**, `DESIGN.md` wins. When they disagree on **IA/journey**, this file wins until `DESIGN.md` is amended (see `.ui-craft/decisions.md` 2026-06-30).
 
 ## IA thesis (resolved)
 
@@ -59,21 +59,26 @@ Location intent (deterministic v1): suburb, postcode, "near", "in {place}", "dir
 
 **Non-service businesses:** same card shape; synthesizer skips `location-map` artifact; service-area text still shown when present in catalog.
 
-### 5. What artifacts can generative UI emit? (v1 catalog)
+### 5. What artifacts can generative UI emit? (v1 budgeted catalog)
 
-Locked artifact kinds — extend only via `.ui-craft/decisions.md` amendment:
+Generative artifacts are budgeted by response mode/profile before rendering. The allowlist is the authority, not the raw schema.
 
-| Kind | P0 | Component | Notes |
-| --- | --- | --- | --- |
-| `one-line` | Yes | Fraunces answer strip | From synthesizer |
-| `provider-cards` | Yes | `AeProviderSourceCard` grid | Cited links to `/$slug` |
-| `location-map` | Conditional | `AeGenerativeMap` | Google Embed; env-gated |
-| `prose` | Yes | Summary paragraphs | Streamed sentence chunks |
-| `what-to-do-now` | Yes | Plain text block | Never label "Next step" |
-| `agent-json` | Yes | `AeAgentJsonAffordance` | Mono quiet link |
-| `protected-by-ae` | Yes | `AeProtectedByAe` | Beside inquiry CTAs |
+| Response/profile | Rendered budget |
+| --- | --- |
+| `clarify` / `clarification` | `one-line` → optional `prose` → compact `what-to-do-now`; provider artifacts forbidden |
+| `answer` / `discovery_full` | `one-line` → `provider-cards` capped at 3 → optional `location-map` → optional `prose` → `what-to-do-now` |
+| `filter` / `refinement_compact` | `one-line` → horizontal `provider-cards` capped at 3 → compact `what-to-do-now`; no map |
+| `compare` / `compare_pair` | `one-line` → exactly one `provider-compare-table` using 2 providers → optional `prose` → compact `what-to-do-now`; no provider-card wall, tradeoffs, or checklists |
+| `empty` / `empty_state` | `one-line` → one compact `recovery-prompts` surface plus empty-state copy; provider artifacts forbidden |
+| `boundary` / `boundary_explain` | `one-line` → optional `prose` → compact `what-to-do-now`; provider artifacts forbidden |
 
-**Out of v1:** comparison tables, inline inquiry forms, LLM-generated related questions, json-render spec blocks, chat history sidebar.
+Rendered v1 kinds: `one-line`, `provider-cards`, `provider-compare-table`, `location-map`, `prose`, `what-to-do-now`, `recovery-prompts`.
+
+Known schema/renderer kinds not emitted by the v1 budget: `service-area-fit`, `next-step-menu`, `confirmation-checklist`, `route-perspective`, `published-details-rail`, `provider-tradeoff-list`, `message-starter`.
+
+**Thread footer (once):** `AeProtectedByAe`, agent JSON from **need query**, copy link. Per-turn artifacts omit the footer trust strip and agent JSON.
+
+**Out of v1:** artifact side panel, inline inquiry forms, LLM-generated related questions, json-render spec blocks.
 
 ### 6. What is `/registry` for?
 
@@ -108,15 +113,16 @@ Humans never see `KNOWN`/`UNKNOWN`/`NEXT_STEP` as labels. Assistants never see b
 
 ### 11. Generative layout profiles
 
-Each turn renders through **`AeGenerativeAnswer`** with an explicit **`AnswerLayoutProfile`**:
+Each turn renders through **`AeGenerativeAnswer`** with an explicit **`AnswerLayoutProfile`** and the matching artifact budget:
 
 | Profile | When | Stack |
 | --- | --- | --- |
-| `discovery_full` | First turn | One-line → cards → map? → prose → what-to-do-now |
-| `refinement_compact` | Narrow / filter follow-ups | Delta label → one-line → horizontal card rail → compact next-step |
-| `compare_pair` | Compare chip | One-line → cards (max 2) → prose |
-| `boundary_explain` | Boundary chip | One-line → prose → compact next-step |
-| `empty_state` | Zero providers | One-line → empty state → what-to-do-now |
+| `discovery_full` | First specific answer | One-line → provider cards (max 3) → map? → prose → what-to-do-now |
+| `clarification` | Broad/missing detail | One-line → optional prose → compact what-to-do-now; no providers |
+| `refinement_compact` | Narrow / filter follow-ups | One-line → horizontal cards (max 3) → compact what-to-do-now |
+| `compare_pair` | Compare chip | One-line → one compare table (2 providers) → optional prose → compact what-to-do-now |
+| `boundary_explain` | Boundary chip | One-line → prose → compact what-to-do-now; no providers |
+| `empty_state` | Zero providers | One-line → compact recovery prompts → empty-state copy |
 
 **Thread footer (once):** `AeProtectedByAe`, agent JSON from **need query**, copy link. Per-turn artifacts omit trust strip and agent JSON.
 
@@ -224,11 +230,11 @@ TanStack Virtual is a future option if transcript DOM exceeds ~100 turns; Messag
 
 - [ ] `/` renders AeChat; submit stays on `/` with `/?q=` URL sync
 - [ ] `/q/$answerId` legacy links redirect to `/?q=`
-- [ ] Artifact catalog v1 only; map appears only on location-intent fixture queries
+- [ ] Artifact budget v1 only; provider cards cap at 3; clarify/boundary turns are provider-free; map appears only on location-intent fixture queries
 - [ ] Card click → `/$slug`; no side panel
 - [ ] Registry reachable but not primary CTA on `/`
 - [ ] All ai-chat streaming contract items pass
-- [ ] Daylight Register visuals; finish bar on public chat surface
+- [ ] Daylight Commerce Routing visuals; finish bar on public chat surface
 
 ## Related specs
 

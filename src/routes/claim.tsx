@@ -12,7 +12,7 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
@@ -166,6 +166,13 @@ function ClaimRoute() {
   const [pending, setPending] = useState(false)
   const [factsConfirmed, setFactsConfirmed] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
+  const firstRequestModeInvalid = errorByField.has('firstRequestMode')
+  const firstRequestModeField = getFieldAccessibility({
+    id: 'firstRequestMode',
+    invalid: firstRequestModeInvalid,
+    hasDescription: true,
+    hasError: firstRequestModeInvalid,
+  })
 
   useEffect(() => {
     setHydrated(true)
@@ -228,14 +235,17 @@ function ClaimRoute() {
         </AeClaimFormSection>
         <AeClaimFormSection title="First request" description="Say what this page can show today.">
           <FieldGroup>
-            <Field data-invalid={errorByField.has('firstRequestMode') ? true : undefined}>
-              <FieldLabel htmlFor="firstRequestMode">First request</FieldLabel>
+            <Field {...firstRequestModeField.fieldProps}>
+              <FieldLabel htmlFor={firstRequestModeField.controlProps.id}>First request</FieldLabel>
               <AeSelectField
-                id="firstRequestMode"
+                id={firstRequestModeField.controlProps.id}
                 name="firstRequestMode"
                 value={value.firstRequestMode}
                 options={firstRequestModeOptions}
-                invalid={errorByField.has('firstRequestMode')}
+                invalid={firstRequestModeInvalid}
+                {...(firstRequestModeField.controlProps['aria-describedby'] === undefined
+                  ? {}
+                  : { describedBy: firstRequestModeField.controlProps['aria-describedby'] })}
                 disabled={!hydrated || pending}
                 onValueChange={(nextValue) => {
                   setValue((current) => ({
@@ -244,8 +254,8 @@ function ClaimRoute() {
                   }))
                 }}
               />
-              <FieldDescription>Choose unavailable if you do not want a contact path on the page yet.</FieldDescription>
-              {fieldError('firstRequestMode', errorByField)}
+              <FieldDescription {...firstRequestModeField.descriptionProps}>Choose unavailable if you do not want a contact path on the page yet.</FieldDescription>
+              {fieldError('firstRequestMode', errorByField, firstRequestModeField.errorProps.id)}
             </Field>
             {renderField(
               {
@@ -316,38 +326,37 @@ function renderField(
   const error = errorByField.get(config.field)
   const invalid = error !== undefined
   const inputId = config.field
+  const fieldA11y = getFieldAccessibility({ id: inputId, invalid, hasDescription: true, hasError: invalid })
 
   return (
-    <Field key={config.field} data-invalid={invalid ? true : undefined}>
-      <FieldLabel htmlFor={inputId}>{config.label}</FieldLabel>
+    <Field key={config.field} {...fieldA11y.fieldProps}>
+      <FieldLabel htmlFor={fieldA11y.controlProps.id}>{config.label}</FieldLabel>
       {config.control === 'textarea' ? (
         <Textarea
-          id={inputId}
+          {...fieldA11y.controlProps}
           name={config.field}
           value={value[config.field]}
-          aria-invalid={invalid || undefined}
           disabled={disabled}
           onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
         />
       ) : (
         <Input
-          id={inputId}
+          {...fieldA11y.controlProps}
           name={config.field}
           value={value[config.field]}
-          aria-invalid={invalid || undefined}
           disabled={disabled}
           onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
         />
       )}
-      <FieldDescription>{config.description}</FieldDescription>
-      {fieldError(config.field, errorByField)}
+      <FieldDescription {...fieldA11y.descriptionProps}>{config.description}</FieldDescription>
+      {fieldError(config.field, errorByField, fieldA11y.errorProps.id)}
     </Field>
   )
 }
 
-function fieldError(field: PublicOwnerClaimField, errorByField: ReadonlyMap<PublicOwnerClaimField, string>) {
+function fieldError(field: PublicOwnerClaimField, errorByField: ReadonlyMap<PublicOwnerClaimField, string>, errorId?: string) {
   const error = errorByField.get(field)
-  return error === undefined ? null : <FieldError>{error}</FieldError>
+  return error === undefined ? null : <FieldError id={errorId}>{error}</FieldError>
 }
 
 function focusFirstError(errors: readonly PublicOwnerClaimValidationError[]) {

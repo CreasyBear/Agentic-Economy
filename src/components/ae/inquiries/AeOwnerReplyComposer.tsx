@@ -1,7 +1,7 @@
 import { SendIcon } from 'lucide-react'
 import type { KeyboardEvent, RefObject } from 'react'
 
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from '@/components/ui/input-group'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -33,13 +33,15 @@ export function AeOwnerReplyComposer({
     }
   }
 
+  const fieldA11y = getFieldAccessibility({ id, invalid, hasDescription: true, hasError: invalid })
+
   return (
     <FieldGroup>
-      <Field data-invalid={invalid ? true : undefined}>
-        <FieldLabel htmlFor={id}>Owner reply</FieldLabel>
+      <Field {...fieldA11y.fieldProps}>
+        <FieldLabel htmlFor={fieldA11y.controlProps.id}>Owner reply</FieldLabel>
         <InputGroup className="ae-owner-reply min-h-24 items-end">
           <InputGroupTextarea
-            id={id}
+            {...fieldA11y.controlProps}
             name="ownerReply"
             ref={textareaRef}
             value={value}
@@ -60,10 +62,10 @@ export function AeOwnerReplyComposer({
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
-        <FieldDescription>
+        <FieldDescription {...fieldA11y.descriptionProps}>
           This message is private to the inquiry thread and the customer notification path. Press ⌘↵ or Ctrl↵ to send.
         </FieldDescription>
-        {invalid ? <FieldError>Reply body is required.</FieldError> : null}
+        {invalid ? <FieldError {...fieldA11y.errorProps}>Reply body is required.</FieldError> : null}
       </Field>
     </FieldGroup>
   )

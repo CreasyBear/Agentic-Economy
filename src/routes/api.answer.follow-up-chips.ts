@@ -53,6 +53,7 @@ export async function handleFollowUpChipsRequest(request: Request): Promise<Resp
     intent: 'refine_search' as const,
     status: 'complete' as const,
     oneLine: '',
+    workLog: [],
     artifacts: providers.length > 0 ? [providerCardsArtifact(providers)] : [],
   }
 

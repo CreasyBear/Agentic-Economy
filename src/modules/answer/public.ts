@@ -44,6 +44,7 @@ export { toAnswerSource } from './internal/dto-to-answer-source'
 export { emitSnapshotEvents } from './internal/emit-snapshot-events'
 export { mergeAnswerArtifact } from './internal/merge-answer-artifact'
 export { artifactsFromStructured } from './internal/structured-artifacts'
+export { extractRequestedLocation } from './internal/provider-location-filter'
 export {
   type AnswerLayoutProfile,
   AnswerLayoutProfileValues,
@@ -130,6 +131,10 @@ export {
   type AnswerSource,
   type AnswerSynthesizer,
   type AnswerSynthesizerInput,
+  type AnswerWorkStep,
+  type AnswerWorkStepDetailRow,
+  type AnswerWorkStepPhase,
+  type AnswerWorkStepStatus,
 } from './answer-synthesizer'
 
 export { encodeAnswerId, decodeAnswerId } from './answer-id'

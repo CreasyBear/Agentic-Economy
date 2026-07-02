@@ -3,8 +3,6 @@ import {
   type AeSearchContext,
 } from '@/modules/answer/search-context'
 import { AeAnswerPromptInput } from './AeAnswerPromptInput'
-import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
-import { AeModelSelector } from './AeModelSelector'
 
 export type AeQueryPanelProps = {
   onSubmit: (query: string) => void
@@ -21,23 +19,19 @@ export function AeQueryPanel({
   searchContext,
   showExamples = true,
 }: AeQueryPanelProps) {
-  const showModelSelector = import.meta.env.DEV && isStructuredAnswerModeEnabled()
   const examples = showExamples ? buildContextExamples(searchContext) : []
 
   return (
     <div className="ae-query-panel">
-      {showModelSelector ? (
-        <div className="ae-query-panel__toolbar">
-          <AeModelSelector />
-        </div>
-      ) : null}
       <AeAnswerPromptInput
         onSubmit={onSubmit}
         defaultValue={defaultValue}
         busy={busy}
         examples={examples}
       />
-      <p className="ae-query-panel__boundary">No booking or payment on this page.</p>
+      {showExamples ? (
+        <p className="ae-query-panel__boundary">Cited answers from published business details.</p>
+      ) : null}
     </div>
   )
 }

@@ -31,6 +31,27 @@ describe('action registry', () => {
     expect(exposed).toContain('registry.detail')
   })
 
+  it('carries output validation schemas on every action', () => {
+    for (const action of listActions()) {
+      expect(action.outputSchema).toBeDefined()
+    }
+  })
+
+  it('exposes schema metadata on agent-facing descriptors', () => {
+    const search = describeActionForAgent(findAction('registry.search')!)
+    expect(search.hasOutputSchema).toBe(true)
+    expect(search.inputJsonSchema?.type).toBe('object')
+    expect(search.outputJsonSchema?.type).toBe('object')
+
+    const detail = describeActionForAgent(findAction('registry.detail')!)
+    expect(detail.hasOutputSchema).toBe(true)
+    expect(detail.outputJsonSchema).toBeDefined()
+
+    const submit = describeActionForAgent(findAction('inquiry.submit')!)
+    expect(submit.hasOutputSchema).toBe(true)
+    expect(submit.outputJsonSchema).toBeDefined()
+  })
+
   it('marks the registry actions as read-only with honest boundaries', () => {
     const search = findAction('registry.search')
     expect(search).toBeDefined()

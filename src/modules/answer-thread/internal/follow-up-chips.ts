@@ -55,10 +55,6 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
     })
   }
 
-  chips.push({
-    label: 'What can AE safely do here?',
-    submitQuery: 'What can Agentic Economy do here?',
-  })
 
   return chips.slice(0, 4)
 }

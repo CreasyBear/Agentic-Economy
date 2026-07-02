@@ -2,7 +2,7 @@
 
 > **IA superseded by [chat.md](./chat.md)** (2026-06-30). This file retains streaming/answer-panel detail until merged. Journey and artifact rules live in `chat.md`.
 
-The `/` surface. Governed by this file for answer-stream mechanics; IA governed by `chat.md`. Source of truth for visuals: `DESIGN.md` (Daylight Register, §10–§17). When this spec and `DESIGN.md` disagree on visuals, `DESIGN.md` wins.
+The `/` surface. Governed by this file for answer-stream mechanics; IA governed by `chat.md`. Source of truth for visuals: `DESIGN.md` (Daylight Commerce Routing, §10–§17). When this spec and `DESIGN.md` disagree on visuals, `DESIGN.md` wins.
 
 ## Intent
 
@@ -114,7 +114,7 @@ Per `DESIGN.md` §17. Minimal-functional, leaning intentional.
 
 Plain, warm, exact. The surface reads like Google Maps, not an audit log.
 
-Use: "What do you need done?", "Here's what's listed for … near …", "Check hours", "Needs confirmation", "What to do now", "Get as agent JSON", "Assistants can read these published details.", "No booking or payment on this page."
+Use: "What do you need done?", "Here's what's listed for … near …", "Check hours", "What to do now", "Get as agent JSON", "Assistants can read these published details.", "The business handles timing, price, and availability."
 
 Availability labels come only from real fields (`hoursOrUnknown`, `firstRequest.mode`) via the `status-presentation.ts` plain mapper. Never invent availability, freshness, or a response time. If a field isn't known, say so plainly ("Check hours") rather than guessing.
 
@@ -143,7 +143,7 @@ Done means every item passes:
 - [ ] No-JS submit falls back to `/registry?q=…` and does not break.
 - [ ] `prefers-reduced-motion` → instant render, no caret, no stagger.
 - [ ] `aria-live="polite"` on the answer region; Stop is a labeled button; cards have accessible names.
-- [ ] Daylight Register visuals only: paper, ink, single amber accent, Fraunces/Hanken Grotesk/IBM Plex Mono, 4px/6px/999px radii, hairline rules.
+- [ ] Daylight Commerce Routing visuals only: paper, ink, single amber accent, Fraunces/Hanken Grotesk/IBM Plex Mono, 4px/6px/999px radii, hairline rules.
 - [ ] Old dark `.ae-public-answer-card`/`.ae-public-boundary-panel`/`.ae-public-command` CSS is scope-retired on this surface (kept for `/$slug` until its own pass).
 - [ ] axe scan passes on the answer surface.
 

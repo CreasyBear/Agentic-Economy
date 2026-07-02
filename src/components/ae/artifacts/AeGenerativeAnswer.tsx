@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowRightIcon, CheckIcon, MapPinIcon, SearchIcon } from 'lucide-react'
+import { ArrowRightIcon, CheckIcon, ChevronDownIcon, MapPinIcon, SearchIcon } from 'lucide-react'
 
 import {
   artifactsToMessageParts,
@@ -9,10 +9,13 @@ import {
 } from '@/modules/answer/public'
 import type { AnswerArtifact, AnswerCompareField, AnswerSource } from '@/modules/answer/public'
 import { AeProviderSourceCard } from '@/components/ae/landing/AeProviderSourceCard'
-import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
+import {
+  Sources,
+  SourcesContent,
+  SourcesTrigger,
+} from '@/components/ai-elements/sources'
 import { AeGenerativeMap } from './AeGenerativeMap'
-import { AeProtectedByAe } from './AeProtectedByAe'
 
 export type AeGenerativeAnswerPhase =
   | 'idle'
@@ -58,10 +61,11 @@ export function AeGenerativeAnswer({
         ? oneLineFallback
         : ''
 
-  const providerCards = artifacts.find((artifact) => artifact.kind === 'provider-cards')
-  const providerCount = providerCards?.kind === 'provider-cards' ? providerCards.providers.length : 0
-  const empty = phase === 'complete' && providerCount === 0
+  const empty = phase === 'complete' && profile === 'empty_state'
   const isFirstTurnProfile = profile === 'discovery_full' || profile === 'empty_state'
+  const hasProviderEvidence = parts.some(isProviderEvidencePart)
+  const hasSummary = parts.some((part) => part.kind === 'prose' && part.text.trim().length > 0)
+  const hasNextStep = parts.some((part) => part.kind === 'what-to-do-now' && part.text.trim().length > 0)
 
   return (
     <section
@@ -110,6 +114,15 @@ export function AeGenerativeAnswer({
         </div>
       ) : null}
 
+      <AeAnswerJourney
+        phase={phase}
+        profile={profile}
+        hasHeadline={headline.length > 0}
+        hasProviderEvidence={hasProviderEvidence}
+        hasSummary={hasSummary}
+        hasNextStep={hasNextStep}
+      />
+
       {parts.map((part, index) => (
         <AnswerPartView key={`${part.kind}-${index}`} part={part} query={query} empty={empty} phase={phase} />
       ))}
@@ -121,6 +134,174 @@ export function AeGenerativeAnswer({
       ) : null}
     </section>
   )
+}
+
+function isProviderEvidencePart(part: AnswerMessagePart): boolean {
+  switch (part.kind) {
+    case 'provider-cards':
+    case 'provider-compare-table':
+    case 'service-area-fit':
+    case 'next-step-menu':
+    case 'route-perspective':
+    case 'published-details-rail':
+    case 'provider-tradeoff-list':
+      return true
+    default:
+      return false
+  }
+}
+
+type AnswerJourneyState = 'complete' | 'active' | 'pending' | 'error' | 'stopped'
+
+function AeAnswerJourney({
+  phase,
+  profile,
+  hasHeadline,
+  hasProviderEvidence,
+  hasSummary,
+  hasNextStep,
+}: {
+  phase: AeGenerativeAnswerPhase
+  profile: AnswerLayoutProfile
+  hasHeadline: boolean
+  hasProviderEvidence: boolean
+  hasSummary: boolean
+  hasNextStep: boolean
+}) {
+  const empty = profile === 'empty_state'
+  const steps = [
+    { label: 'Understand need', detail: 'Read the request and place.' },
+    { label: 'Check listings', detail: 'Search published business details.' },
+    { label: 'Compare fit', detail: 'Weigh service area and response.' },
+    {
+      label: empty ? 'Refine search' : 'Choose next step',
+      detail: empty ? 'Try a sharper route.' : 'Confirm facts before contact.',
+    },
+  ] as const
+
+  const completedIndex = getJourneyCompletedIndex({
+    phase,
+    empty,
+    hasHeadline,
+    hasProviderEvidence,
+    hasSummary,
+    hasNextStep,
+  })
+  const activeIndex =
+    phase === 'streaming'
+      ? Math.min(completedIndex + 1, steps.length - 1)
+      : Math.max(0, Math.min(completedIndex, steps.length - 1))
+  const guidance =
+    phase === 'streaming'
+      ? 'The answer updates as each check finishes.'
+      : empty
+        ? 'No clear published match yet; use the route below to sharpen the search.'
+        : 'Use the evidence below to compare fit, then choose the next step.'
+
+  return (
+    <section className="ae-answer-journey" aria-label="Answer journey" data-phase={phase}>
+      <div className="ae-answer-journey__copy">
+        <p className="ae-answer-journey__kicker">Process</p>
+        <p className="ae-answer-journey__title">From need to next step</p>
+        <p className="ae-answer-journey__note">{guidance}</p>
+      </div>
+      <ol className="ae-answer-journey__steps" aria-live={phase === 'streaming' ? 'polite' : 'off'}>
+        {steps.map((step, index) => {
+          const state = getJourneyState({ index, activeIndex, completedIndex, phase })
+          return (
+            <li
+              key={step.label}
+              className="ae-answer-journey__step"
+              data-state={state}
+              aria-current={state === 'active' ? 'step' : undefined}
+            >
+              <span className="ae-answer-journey__marker" aria-hidden="true">
+                {state === 'complete' ? <CheckIcon /> : index + 1}
+              </span>
+              <span className="ae-answer-journey__step-copy">
+                <span className="sr-only">{journeyStateLabel(state)}: </span>
+                <span className="ae-answer-journey__step-title">{step.label}</span>
+                <span className="ae-answer-journey__step-detail">{step.detail}</span>
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
+  )
+}
+
+function getJourneyCompletedIndex({
+  phase,
+  empty,
+  hasHeadline,
+  hasProviderEvidence,
+  hasSummary,
+  hasNextStep,
+}: {
+  phase: AeGenerativeAnswerPhase
+  empty: boolean
+  hasHeadline: boolean
+  hasProviderEvidence: boolean
+  hasSummary: boolean
+  hasNextStep: boolean
+}): number {
+  if (phase === 'complete') {
+    return 3
+  }
+
+  let completed = -1
+  if (hasHeadline || hasProviderEvidence || hasSummary || hasNextStep || empty) {
+    completed = 0
+  }
+  if (hasProviderEvidence || hasSummary || hasNextStep || empty) {
+    completed = 1
+  }
+  if (hasSummary || hasNextStep || empty) {
+    completed = 2
+  }
+  if (hasNextStep) {
+    completed = 3
+  }
+  return completed
+}
+
+function getJourneyState({
+  index,
+  activeIndex,
+  completedIndex,
+  phase,
+}: {
+  index: number
+  activeIndex: number
+  completedIndex: number
+  phase: AeGenerativeAnswerPhase
+}): AnswerJourneyState {
+  if (index <= completedIndex) {
+    return 'complete'
+  }
+  if ((phase === 'error' || phase === 'stopped') && index === activeIndex) {
+    return phase
+  }
+  if ((phase === 'streaming' || phase === 'reconnecting' || phase === 'idle') && index === activeIndex) {
+    return 'active'
+  }
+  return 'pending'
+}
+
+function journeyStateLabel(state: AnswerJourneyState): string {
+  switch (state) {
+    case 'complete':
+      return 'Complete'
+    case 'active':
+      return 'Current'
+    case 'pending':
+      return 'Pending'
+    case 'error':
+      return 'Needs attention'
+    case 'stopped':
+      return 'Stopped'
+  }
 }
 
 function AnswerPartView({
@@ -183,13 +364,6 @@ function AnswerPartView({
           {...(part.timing === undefined ? {} : { timing: part.timing })}
         />
       ) : null
-    case 'safe-route-rail':
-      return (
-        <SafeRouteRail
-          {...(part.providers === undefined ? {} : { providers: part.providers })}
-          {...(part.query === undefined ? {} : { query: part.query })}
-        />
-      )
     case 'location-map':
       return <AeGenerativeMap label={part.label} placeQuery={part.placeQuery} />
     case 'empty-state':
@@ -215,11 +389,8 @@ function AnswerPartView({
         )
       ) : null
     case 'protected-by-ae':
-      return phase === 'complete' ? <AeProtectedByAe /> : null
     case 'agent-json':
-      return phase === 'complete' ? (
-        <AeAgentJsonAffordance agentJsonUrl={part.url} query={query} />
-      ) : null
+      return null
     default: {
       const _exhaustive: never = part
       void _exhaustive
@@ -240,16 +411,31 @@ function ProviderCardsRail({
   }
 
   return (
-    <ul
-      className={`ae-answer__sources${scroll ? ' ae-answer__sources--scroll' : ''}`}
-      aria-label="Cited local providers"
-    >
-      {providers.map((source) => (
-        <li key={source.slug}>
-          <AeProviderSourceCard source={source} />
-        </li>
-      ))}
-    </ul>
+    <Sources className="ae-answer__source-disclosure" defaultOpen>
+      <SourcesTrigger count={providers.length} className="ae-answer__source-trigger">
+        <span className="ae-answer__source-trigger-main">
+          <span>{listingCountLabel(providers.length)}</span>
+          <span className="ae-answer__source-trigger-note">Published detail cards used for this answer</span>
+        </span>
+        <ChevronDownIcon className="ae-answer__source-chevron" aria-hidden="true" />
+      </SourcesTrigger>
+      <SourcesContent>
+        <ul
+          className={`ae-answer__sources${scroll ? ' ae-answer__sources--scroll' : ''}`}
+          aria-label="Published listings used in this answer"
+        >
+          {providers.map((source) => (
+            <li key={source.slug}>
+              <AeProviderSourceCard source={source} />
+            </li>
+          ))}
+        </ul>
+        <p className="ae-answer__decision-note">
+          Compare service area, response, and next step. A person at the business still confirms timing, quote, and
+          availability.
+        </p>
+      </SourcesContent>
+    </Sources>
   )
 }
 
@@ -591,7 +777,7 @@ function MessageStarter({
         </p>
       </div>
       <div className="ae-answer-draft__footer">
-        <p>Sending this starts a human inquiry. It does not book, charge, or dispatch work.</p>
+        <p>Sending this starts a human inquiry. The business handles timing, price, and availability.</p>
         <a className="ae-answer-draft__action" href={actionHref}>
           <span>{actionLabel}</span>
           <ArrowRightIcon aria-hidden="true" />
@@ -601,42 +787,6 @@ function MessageStarter({
   )
 }
 
-function SafeRouteRail({
-  providers,
-  query,
-}: {
-  providers?: readonly AnswerSource[]
-  query?: string
-}) {
-  return (
-    <section className="ae-answer-route" aria-label="Safe route through Agentic Economy">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Safe route</p>
-          <p className="ae-answer-panel-title">From need to next human step</p>
-        </div>
-        {query === undefined ? null : <p className="ae-answer-panel-note">{query}</p>}
-      </header>
-      <ol className="ae-answer-route__steps">
-        <SafeRouteStep
-          number="1"
-          label="Read"
-          text={`Start with ${providers === undefined ? 'published listings' : listingCountLabel(providers.length)} and their service areas.`}
-        />
-        <SafeRouteStep
-          number="2"
-          label="Compare"
-          text="Check response time, availability, services, and what still needs confirmation."
-        />
-        <SafeRouteStep
-          number="3"
-          label="Ask"
-          text="Send a qualified inquiry where available. A person still confirms timing, quote, and job acceptance."
-        />
-      </ol>
-    </section>
-  )
-}
 
 function RoutePerspectiveItem({
   index,
@@ -706,25 +856,6 @@ function ProviderTradeoffRow({ provider }: { provider: AnswerSource }) {
   )
 }
 
-function SafeRouteStep({
-  number,
-  label,
-  text,
-}: {
-  number: string
-  label: string
-  text: string
-}) {
-  return (
-    <li className="ae-answer-route__step">
-      <span className="ae-answer-route__number">{number}</span>
-      <span className="ae-answer-route__copy">
-        <span className="ae-answer-route__label">{label}</span>
-        <span className="ae-answer-route__text">{text}</span>
-      </span>
-    </li>
-  )
-}
 
 function compareFieldLabel(field: AnswerCompareField): string {
   switch (field) {

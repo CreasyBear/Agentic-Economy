@@ -29,14 +29,14 @@ type OpenRouterSchemaProperty = {
 
 /**
  * Maps an AE action's flat `ActionParameter[]` descriptor into an OpenRouter
- * tool spec. This is the first tool-calling integration in the repo - the
- * `AgentToolDescriptor` shape is intentionally flat (string/number/boolean/
- * enum) so it serializes cleanly without a Zod-to-JSON-schema dependency.
+ * tool spec. OpenRouter only needs model-facing input parameters here; the
+ * action carries Zod input and output schemas server-side, and the runner
+ * validates both sides before treating a tool result as evidence.
  *
- * Constraints such as `max(200)` or `int` are not carried here; the tool-runner
- * re-validates every model-emitted call against the action's Zod schema before
- * execution, so a malformed or out-of-range argument is refused and recorded,
- * never run.
+ * The JSON-schema converter in `@tanstack/ai` is used for agent-tool
+ * descriptors, but this OpenRouter path deliberately preserves the existing
+ * flat parameter surface. Constraints such as `max(200)` or `int` remain
+ * enforced by the action schema at execution time.
  */
 export function actionToOpenRouterTool(action: AnyAction): OpenRouterToolSpec {
   const properties: Record<string, OpenRouterSchemaProperty> = {}

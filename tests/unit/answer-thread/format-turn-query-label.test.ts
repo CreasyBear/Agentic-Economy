@@ -17,7 +17,7 @@ describe('formatTurnQueryLabel', () => {
     })
   })
 
-  it('shortens boundary chip labels', () => {
+  it('keeps manual boundary questions literal', () => {
     expect(
       formatTurnQueryLabel({
         query: 'What can Agentic Economy do here?',
@@ -25,7 +25,7 @@ describe('formatTurnQueryLabel', () => {
         seq: 2,
       }),
     ).toEqual({
-      text: '→ What AE can safely do',
+      text: 'What can Agentic Economy do here?',
       role: 'follow-up',
     })
   })

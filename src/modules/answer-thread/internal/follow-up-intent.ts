@@ -11,7 +11,7 @@ const BOOKING_PATTERNS = [
 
 const BOUNDARY_PATTERNS = [
   /\bcan\s+(i|you|ae|agentic)\s+book\b/i,
-  /\bwhat\s+can\s+agentic\s+economy\s+do\b/i,
+  /\bwhat\s+can\s+(ae|agentic economy)\s+do(?:\s+(?:here|with\s+this))?\b/i,
   /\bdo\s+you\s+take\s+payment\b/i,
   /\bwill\s+you\s+dispatch\b/i,
 ]

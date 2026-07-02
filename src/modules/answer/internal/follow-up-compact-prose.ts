@@ -115,9 +115,9 @@ function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
     return 'Open a listed provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.'
   }
 
-  return 'Open a listed provider page to review what they publish. Agentic Economy does not book or take payment on this page.'
+  return 'Open a listed provider page to review what they publish, then contact the business. Agentic Economy does not book or take payment on this page.'
 }
 
 function boundaryLine(): string {
-  return 'No booking or payment happens on this page.'
+  return 'The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.'
 }

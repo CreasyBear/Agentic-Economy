@@ -374,7 +374,7 @@ const MessageStarter = defineComponent({
           </p>
         </div>
         <div className="ae-answer-draft__footer">
-          <p>Sending this starts a human inquiry. It does not book, charge, or dispatch work.</p>
+          <p>Sending this starts a human inquiry. The business handles timing, price, and availability.</p>
           <a className="ae-answer-draft__action" href={actionHref}>
             <span>{actionLabel}</span>
             <ArrowRightIcon aria-hidden="true" />
@@ -385,42 +385,6 @@ const MessageStarter = defineComponent({
   },
 })
 
-const SafeRouteRail = defineComponent({
-  name: 'SafeRouteRail',
-  description: 'Three-step route rail for what AE can safely help with',
-  props: z.object({
-    providers: providerArraySchema.optional(),
-    query: z.string().optional(),
-  }),
-  component: ({ props }) => (
-    <section className="ae-answer-route" aria-label="Safe route through Agentic Economy">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Safe route</p>
-          <p className="ae-answer-panel-title">From need to next human step</p>
-        </div>
-        {props.query === undefined ? null : <p className="ae-answer-panel-note">{props.query}</p>}
-      </header>
-      <ol className="ae-answer-route__steps">
-        <SafeRouteStep
-          number="1"
-          label="Read"
-          text={`Start with ${props.providers === undefined ? 'published listings' : listingCountLabel(props.providers.length)} and their service areas.`}
-        />
-        <SafeRouteStep
-          number="2"
-          label="Compare"
-          text="Check response time, availability, services, and what still needs confirmation."
-        />
-        <SafeRouteStep
-          number="3"
-          label="Ask"
-          text="Send a qualified inquiry where available. A person still confirms timing, quote, and job acceptance."
-        />
-      </ol>
-    </section>
-  ),
-})
 
 const LocationMap = defineComponent({
   name: 'LocationMap',
@@ -534,7 +498,6 @@ export const aeOpenUiLibrary = createLibrary({
     PublishedDetailsRail,
     ProviderTradeoffList,
     MessageStarter,
-    SafeRouteRail,
     LocationMap,
     Prose,
     WhatToDoNow,
@@ -564,11 +527,9 @@ export function aeOpenUiSystemPromptPreamble(): string {
       'Use PublishedDetailsRail when the answer needs a compact evidence-style scan; never call it proof or verification.',
       'Use ProviderTradeoffList when comparing practical fit without ranking or inventing a winner.',
       'Use MessageStarter only as editable inquiry copy; it must never imply the message was sent or that work is booked.',
-      'Use SafeRouteRail when the person needs orientation across read, compare, and inquiry steps.',
     ],
   })
 }
-
 function ProviderCompareRow({
   provider,
   fields,
@@ -702,26 +663,6 @@ function ProviderTradeoffRow({ provider }: { provider: AnswerSource }) {
       </span>
       <span className="ae-answer-tradeoffs__confirm">
         Confirm timing, quote, and job acceptance with the business.
-      </span>
-    </li>
-  )
-}
-
-function SafeRouteStep({
-  number,
-  label,
-  text,
-}: {
-  number: string
-  label: string
-  text: string
-}) {
-  return (
-    <li className="ae-answer-route__step">
-      <span className="ae-answer-route__number">{number}</span>
-      <span className="ae-answer-route__copy">
-        <span className="ae-answer-route__label">{label}</span>
-        <span className="ae-answer-route__text">{text}</span>
       </span>
     </li>
   )

@@ -27,7 +27,7 @@ function snapshot(overrides: Partial<AnswerSnapshot> = {}): AnswerSnapshot {
       },
     ],
     summary:
-      'Here is what is listed. No booking or payment happens on this page. Availability still needs a reply from the business.',
+      'Here is what is listed. Contact the business for timing, price, and availability.',
     nextStep: 'Open a listed provider page. Agentic Economy does not book or take payment on this page.',
     agentJsonUrl: '/api/businesses/search?q=plumber',
     ...overrides,

@@ -5,8 +5,8 @@ import { createAbortAwareSseStream, isAbortError, sseDataLine } from '@/lib/serv
 import {
   answerTurnRequestSchema,
   appendSessionCookie,
-  assertAnswerTurnAccess,
   checkAnswerTurnRateLimit,
+  readAnswerTurnAccessContext,
   resolveOrCreateSessionId,
   streamAnswerTurn,
 } from '@/modules/answer-thread/public'
@@ -43,14 +43,18 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
   }
 
   let threadId = parsed.data.threadId
-  let access = await assertAnswerTurnAccess({
+  let accessContext = await readAnswerTurnAccessContext({
     sessionId,
     ...(threadId === undefined ? {} : { threadId }),
   })
+  let { access } = accessContext
+  let preloadedPriorTurns = threadId === undefined ? undefined : accessContext.priorTurns
   // Dev remounts can POST a thread id from SSE before Convex persistence finishes.
   if (access.kind === 'denied' && access.code === 'thread_not_found') {
     threadId = undefined
-    access = await assertAnswerTurnAccess({ sessionId })
+    accessContext = await readAnswerTurnAccessContext({ sessionId })
+    access = accessContext.access
+    preloadedPriorTurns = undefined
   }
   if (access.kind === 'denied') {
     return jsonError(access.code, access.status)
@@ -73,6 +77,8 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
             query: parsed.data.query,
             ...(threadId === undefined ? {} : { threadId }),
             ...(parsed.data.searchContext === undefined ? {} : { searchContext: parsed.data.searchContext }),
+            precheckedAccess: access,
+            ...(preloadedPriorTurns === undefined ? {} : { preloadedPriorTurns }),
             signal: request.signal,
           },
           send,

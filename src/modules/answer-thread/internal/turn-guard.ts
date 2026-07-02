@@ -1,6 +1,7 @@
 import { rateLimitClaim, type AbuseRateLimitBucketRecord, type RateLimitDecision } from '@/modules/security/public'
 
-import { getAnswerThread } from '../answer-thread.functions'
+import { getAnswerThread, getAnswerThreadWithTurns } from '../answer-thread.functions'
+import type { AnswerTurnRecord } from '../answer-thread.schema'
 
 export const ANSWER_TURN_MAX_PER_THREAD = 25
 export const ANSWER_TURN_RATE_LIMIT = 30
@@ -117,6 +118,33 @@ export async function assertAnswerTurnAccess(input: {
   }
 
   return { kind: 'allowed', turnCount }
+}
+
+export async function readAnswerTurnAccessContext(input: {
+  sessionId: string
+  threadId?: string
+}): Promise<{
+  access: AnswerTurnAccessDecision
+  priorTurns: readonly AnswerTurnRecord[]
+}> {
+  if (input.threadId === undefined) {
+    return { access: { kind: 'allowed', turnCount: 0 }, priorTurns: [] }
+  }
+
+  const thread = await getAnswerThreadWithTurns(input.threadId)
+  if (thread === null) {
+    return { access: { kind: 'denied', code: 'thread_not_found', status: 404 }, priorTurns: [] }
+  }
+
+  if (thread.pseudonymousSessionId !== input.sessionId) {
+    return { access: { kind: 'denied', code: 'thread_forbidden', status: 403 }, priorTurns: [] }
+  }
+
+  if (thread.turnCount >= ANSWER_TURN_MAX_PER_THREAD) {
+    return { access: { kind: 'denied', code: 'thread_turn_limit', status: 403 }, priorTurns: thread.turns }
+  }
+
+  return { access: { kind: 'allowed', turnCount: thread.turnCount }, priorTurns: thread.turns }
 }
 
 export function resetAnswerTurnGuardForTests(): void {

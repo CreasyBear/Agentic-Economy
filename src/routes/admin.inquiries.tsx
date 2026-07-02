@@ -55,6 +55,7 @@ function AdminInquiriesRoute() {
       title="Inquiry reconstruction"
       description="Reconstruct customer inquiry, owner action, delivery, audit, funnel, and operation refs without exposing private content."
       currentPath="/admin/inquiries"
+      navBadges={{ '/admin/inquiries': readback.kind === 'allowed' ? readback.summary.needsRepair : 0 }}
     >
       <OperatorAccess readback={readback} />
       <FilterPanel search={search} />

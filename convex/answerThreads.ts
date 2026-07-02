@@ -180,6 +180,101 @@ export const appendAnswerTurnWithToolCalls = mutationGeneric({
   },
 })
 
+export const appendAnswerTurnWithThreadAndToolCalls = mutationGeneric({
+  args: {
+    turnId: v.string(),
+    threadId: v.string(),
+    pseudonymousSessionId: v.string(),
+    title: v.string(),
+    seq: v.number(),
+    query: v.string(),
+    intent: literalUnion(FollowUpIntentValues),
+    evidenceJson: v.string(),
+    snapshotHash: v.string(),
+    proseJson: v.string(),
+    artifactKindsJson: v.string(),
+    status: literalUnion(AnswerTurnStatusValues),
+    errorCopyId: v.optional(v.string()),
+    toolCalls: v.array(
+      v.object({
+        toolCallId: v.string(),
+        seq: v.number(),
+        toolId: literalUnion(AnswerToolIdValues),
+        inputJson: v.string(),
+        resultSummaryJson: v.string(),
+        resultHash: v.string(),
+        status: literalUnion(AnswerToolCallStatusValues),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const timestamp = now()
+    const existingThread = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
+      .unique()
+
+    if (existingThread !== null && existingThread.pseudonymousSessionId !== args.pseudonymousSessionId) {
+      throw new Error('thread_forbidden')
+    }
+
+    if (existingThread !== null) {
+      const existingTurns = await ctx.db
+        .query('answerTurns')
+        .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+        .collect()
+
+      if (existingTurns.length >= 25) {
+        throw new Error('thread_turn_limit')
+      }
+    } else {
+      await ctx.db.insert('answerThreads', {
+        threadId: args.threadId,
+        pseudonymousSessionId: args.pseudonymousSessionId,
+        title: args.title,
+        sharePolicy: 'public',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+    }
+
+    await ctx.db.insert('answerTurns', {
+      turnId: args.turnId,
+      threadId: args.threadId,
+      seq: args.seq,
+      query: args.query,
+      intent: args.intent,
+      evidenceJson: args.evidenceJson,
+      snapshotHash: args.snapshotHash,
+      proseJson: args.proseJson,
+      artifactKindsJson: args.artifactKindsJson,
+      status: args.status,
+      createdAt: timestamp,
+      ...(args.errorCopyId === undefined ? {} : { errorCopyId: args.errorCopyId }),
+    })
+
+    for (const call of args.toolCalls) {
+      await ctx.db.insert('answerToolCalls', {
+        toolCallId: call.toolCallId,
+        turnId: args.turnId,
+        seq: call.seq,
+        toolId: call.toolId,
+        inputJson: call.inputJson,
+        resultSummaryJson: call.resultSummaryJson,
+        resultHash: call.resultHash,
+        status: call.status,
+        createdAt: timestamp,
+      })
+    }
+
+    if (existingThread !== null) {
+      await ctx.db.patch(existingThread._id, { updatedAt: timestamp })
+    }
+
+    return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
+  },
+})
+
 export const appendAnswerToolCalls = mutationGeneric({
   args: {
     turnId: v.string(),
@@ -286,6 +381,32 @@ export const getAnswerThread = queryGeneric({
   },
 })
 
+export const getAnswerThreadWithTurns = queryGeneric({
+  args: { threadId: v.string() },
+  handler: async (ctx, args) => {
+    const threadRow = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
+      .unique()
+
+    if (threadRow === null) {
+      return null
+    }
+
+    const turnRows = await ctx.db
+      .query('answerTurns')
+      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+      .collect()
+
+    const turns = turnRows.map(toTurnRecord).sort((a, b) => a.seq - b.seq)
+    return {
+      ...toThreadRecord(threadRow),
+      turnCount: turns.length,
+      turns,
+    }
+  },
+})
+
 export const getPublicThreadProjection = queryGeneric({
   args: { threadId: v.string() },
   handler: async (ctx, args) => {
@@ -351,3 +472,43 @@ function toToolCallRecord(row: Record<string, unknown>): AnswerToolCallRecord {
     createdAt: Number(row.createdAt),
   }
 }
+
+export const deleteAnswerThread = mutationGeneric({
+  args: {
+    threadId: v.string(),
+    pseudonymousSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db
+      .query('answerThreads')
+      .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
+      .unique()
+
+    if (thread === null) {
+      throw new Error('thread_not_found')
+    }
+
+    if (thread.pseudonymousSessionId !== args.pseudonymousSessionId) {
+      throw new Error('thread_forbidden')
+    }
+
+    const turns = await ctx.db
+      .query('answerTurns')
+      .withIndex('by_thread_createdAt', (q) => q.eq('threadId', args.threadId))
+      .collect()
+
+    for (const turn of turns) {
+      const toolCalls = await ctx.db
+        .query('answerToolCalls')
+        .withIndex('by_turn_seq', (q) => q.eq('turnId', turn.turnId))
+        .collect()
+      for (const toolCall of toolCalls) {
+        await ctx.db.delete(toolCall._id)
+      }
+      await ctx.db.delete(turn._id)
+    }
+
+    await ctx.db.delete(thread._id)
+    return { threadId: args.threadId }
+  },
+})

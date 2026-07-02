@@ -78,6 +78,7 @@ export function AeOperatorQueueList({
 }
 
 function AeOperatorQueueItem({ row }: { row: AeOperatorQueueRow }) {
+  const hasActions = row.href !== undefined || (row.actions !== undefined && row.actions.length > 0)
   const content = (
     <ItemContent>
       <ItemHeader>
@@ -102,30 +103,27 @@ function AeOperatorQueueItem({ row }: { row: AeOperatorQueueRow }) {
           ))}
         </dl>
       )}
-      {row.actions === undefined || row.actions.length === 0 ? null : (
-        <ItemFooter className="mt-2 flex flex-wrap gap-2">
-          {row.actions.map((action) => (
+      {hasActions ? (
+        <ItemFooter className="mt-2 flex flex-wrap justify-start gap-2">
+          {row.href === undefined ? null : (
+            <Button asChild variant="outline" size="sm">
+              <a href={row.href} aria-label={`Open ${row.title}`}>Open</a>
+            </Button>
+          )}
+          {row.actions?.map((action) => (
             <Button key={`${row.id}:${action.label}`} asChild variant={action.variant ?? 'outline'} size="sm">
               <a href={action.href}>{action.label}</a>
             </Button>
           ))}
         </ItemFooter>
-      )}
+      ) : null}
       {row.footer}
     </ItemContent>
   )
 
-  if (row.href === undefined) {
-    return (
-      <Item variant="outline" size="sm" className="ae-operator-queue-row">
-        {content}
-      </Item>
-    )
-  }
-
   return (
-    <Item variant="outline" size="sm" className="ae-operator-queue-row" asChild>
-      <a href={row.href}>{content}</a>
+    <Item variant="outline" size="sm" className="ae-operator-queue-row" role="listitem">
+      {content}
     </Item>
   )
 }

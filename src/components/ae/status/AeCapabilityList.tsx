@@ -9,49 +9,51 @@ type AeCapabilityListProps = {
 
 export function AeCapabilityList({ catalog }: AeCapabilityListProps) {
   return (
-    <div className="grid gap-4" role="list">
+    <ul className="m-0 grid list-none gap-4 p-0">
       {catalog.services.map((service) => {
         const serviceTitleId = `ae-service-${service.serviceId}`
 
         return (
-          <Card key={service.serviceId} className="ae-source-card" role="listitem" aria-labelledby={serviceTitleId}>
-            <CardHeader className="border-b">
-              <CardTitle id={serviceTitleId}>{service.name}</CardTitle>
-              <CardDescription>{service.summary}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                <div>
-                  <dt className="font-medium">Service area</dt>
-                  <dd className="text-muted-foreground">{service.serviceArea}</dd>
+          <li key={service.serviceId} aria-labelledby={serviceTitleId}>
+            <Card className="ae-source-card">
+              <CardHeader className="border-b">
+                <CardTitle id={serviceTitleId}>{service.name}</CardTitle>
+                <CardDescription>{service.summary}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="font-medium">Service area</dt>
+                    <dd className="text-muted-foreground">{service.serviceArea}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium">Hours</dt>
+                    <dd className="text-muted-foreground">{service.hoursOrUnknown}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium">First request</dt>
+                    <dd className="text-muted-foreground">{firstRequestModeLabel(service.firstRequest.mode)}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium">Public note</dt>
+                    <dd className="text-muted-foreground">{service.firstRequest.publicDisclosure}</dd>
+                  </div>
+                </dl>
+                <div className="mt-4 grid gap-3">
+                  <ul className="m-0 grid list-none gap-3 p-0">
+                    {service.capabilities.map((capability) => (
+                      <li key={`${capability.serviceId}:${capability.kind}`}>
+                        <AeStatusBadge status={capabilityStatusToAeStatus(capability.status)} />
+                      </li>
+                    ))}
+                  </ul>
+                  <p role="note" className="text-sm text-muted-foreground">This page does not book, charge, or take action for the business.</p>
                 </div>
-                <div>
-                  <dt className="font-medium">Hours</dt>
-                  <dd className="text-muted-foreground">{service.hoursOrUnknown}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium">First request</dt>
-                  <dd className="text-muted-foreground">{firstRequestModeLabel(service.firstRequest.mode)}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium">Public note</dt>
-                  <dd className="text-muted-foreground">{service.firstRequest.publicDisclosure}</dd>
-                </div>
-              </dl>
-              <div className="mt-4 grid gap-3">
-                <div className="grid gap-3" role="list">
-                  {service.capabilities.map((capability) => (
-                    <div key={`${capability.serviceId}:${capability.kind}`} role="listitem">
-                      <AeStatusBadge status={capabilityStatusToAeStatus(capability.status)} />
-                    </div>
-                  ))}
-                </div>
-                <p role="note" className="text-sm text-muted-foreground">This page does not book, charge, or take action for the business.</p>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </li>
         )
       })}
-    </div>
+    </ul>
   )
 }

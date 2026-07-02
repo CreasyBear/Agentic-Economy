@@ -3,7 +3,7 @@ import { SearchIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 
 export type AeOperatorFilterField = {
@@ -47,20 +47,27 @@ export function AeOperatorFilterCard({
       <CardContent>
         <form action={action} method="get" className={gridClass}>
           <FieldGroup className={fields.length >= 3 ? 'contents' : undefined}>
-            {fields.map((field) => (
-              <Field key={field.id}>
-                <FieldLabel htmlFor={field.id}>{field.label}</FieldLabel>
-                <Input
-                  id={field.id}
-                  name={field.name}
-                  defaultValue={field.defaultValue ?? ''}
-                  autoComplete="off"
-                />
-                {field.description === undefined ? null : (
-                  <FieldDescription>{field.description}</FieldDescription>
-                )}
-              </Field>
-            ))}
+            {fields.map((field) => {
+              const fieldA11y = getFieldAccessibility({
+                id: field.id,
+                hasDescription: field.description !== undefined,
+              })
+
+              return (
+                <Field key={field.id} {...fieldA11y.fieldProps}>
+                  <FieldLabel htmlFor={fieldA11y.controlProps.id}>{field.label}</FieldLabel>
+                  <Input
+                    {...fieldA11y.controlProps}
+                    name={field.name}
+                    defaultValue={field.defaultValue ?? ''}
+                    autoComplete="off"
+                  />
+                  {field.description === undefined ? null : (
+                    <FieldDescription {...fieldA11y.descriptionProps}>{field.description}</FieldDescription>
+                  )}
+                </Field>
+              )
+            })}
           </FieldGroup>
           <div className="flex flex-wrap items-end gap-2">
             <Button type="submit">

@@ -116,8 +116,8 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         prose: {
           oneLine: 'One listed business matches this need.',
           summary:
-            'The listing publishes emergency pipe repair. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published.',
+            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
         },
       }
     })
@@ -156,8 +156,8 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         prose: {
           oneLine: 'One listing accepts inquiries.',
           summary:
-            'The earlier provider publishes an inquiry option. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published.',
+            'The earlier provider publishes an inquiry option. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
         },
       }
     })

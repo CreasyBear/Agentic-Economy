@@ -1,13 +1,24 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
+import { Building2Icon, MenuIcon, SearchIcon } from 'lucide-react'
 
 import { AeFunnelAttributionBoot } from '@/components/ae/layout/AeFunnelAttributionBoot'
 import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 
 type AePublicShellProps = {
   children: ReactNode
   immersive?: boolean
+  hideFooter?: boolean
 }
 
 const defaultRegistrySearch = { q: '', limit: 10 }
@@ -15,12 +26,13 @@ export const defaultHomeSearch = { q: '' }
 const publicNavActiveProps = { 'data-status': 'active' } as const
 const publicNavButtonClassName = 'ae-public-nav-button'
 const publicNavPrimaryButtonClassName = 'ae-public-nav-button ae-public-nav-button-primary'
+const publicMobileLinkClassName = `${publicNavButtonClassName} ae-public-mobile-link`
 
 function emitClaimCtaClicked() {
   void emitFunnelEvent({ eventType: 'claim_cta_clicked', stage: 'visitor', correlationPrefix: 'claim-cta' })
 }
 
-export function AePublicShell({ children, immersive = false }: AePublicShellProps) {
+export function AePublicShell({ children, immersive = false, hideFooter = false }: AePublicShellProps) {
   return (
     <div
       className={`ae-public-shell flex flex-col ${
@@ -34,61 +46,162 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
       >
         Skip to content
       </a>
-      <header className="ae-public-shell-header ae-sticky-layer sticky top-0 border-b border-[var(--ae-public-line)]/80 bg-[var(--ae-public-surface)]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-2 md:h-16 md:flex-row md:flex-nowrap md:items-center md:justify-between md:gap-3 md:px-6 md:py-3">
-          <Link to="/" search={defaultHomeSearch} className="inline-flex min-h-10 items-center gap-2 font-heading text-sm font-semibold tracking-normal text-[var(--ae-public-ink)]" aria-label="Agentic Economy home">
-            <span className="grid size-8 place-items-center rounded-md bg-[var(--ae-public-ink)] text-xs font-semibold text-[var(--ae-public-surface)]">AE</span>
-            <span className="grid gap-0.5">
-              <span>Agentic Economy</span>
-              <span className="hidden font-sans text-xs font-normal leading-none text-[var(--ae-public-muted)] sm:inline">A register of who handles what, where.</span>
-            </span>
-          </Link>
-          <nav aria-label="Public" className="-mx-1 flex flex-wrap items-center gap-1.5 px-1 pb-0 md:mx-0 md:flex-nowrap md:justify-end md:gap-2">
-            <Button variant="landingPrimary" size="sm" className={`${publicNavPrimaryButtonClassName} h-9 px-3 text-xs md:h-10 md:px-4 md:text-sm`} asChild>
-              <Link to="/" search={defaultHomeSearch} activeOptions={{ exact: true }} activeProps={publicNavActiveProps}>
-                Ask
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" className={`${publicNavButtonClassName} h-9 px-2 text-xs md:h-10 md:px-3 md:text-sm`} asChild>
+      <header className="ae-public-shell-header ae-sticky-layer">
+        <div className="ae-public-header-inner">
+          <PublicBrandLink />
+          <nav aria-label="Public" className="ae-public-desktop-nav">
+            <Button variant="ghost" size="sm" className={publicNavButtonClassName} asChild>
               <Link to="/registry" search={defaultRegistrySearch} activeOptions={{ includeSearch: false }} activeProps={publicNavActiveProps}>
                 Browse services
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" className={`${publicNavButtonClassName} h-9 px-2 text-xs md:h-10 md:px-3 md:text-sm`} asChild>
+            <Button variant="ghost" size="sm" className={publicNavButtonClassName} asChild>
+              <Link to="/about" activeOptions={{ exact: false }} activeProps={publicNavActiveProps}>
+                About
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className={publicNavButtonClassName} asChild>
+              <Link to="/help" activeOptions={{ exact: false }} activeProps={publicNavActiveProps}>
+                Help
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className={publicNavButtonClassName} asChild>
               <Link to="/privacy/remove-business" activeOptions={{ exact: false }} activeProps={publicNavActiveProps}>
                 Corrections
               </Link>
             </Button>
-            <Button variant="ghost" size="sm" className={`${publicNavButtonClassName} h-9 px-2 text-xs md:h-10 md:px-3 md:text-sm`} asChild>
+          </nav>
+          <div className="ae-public-header-actions">
+            <Button variant="ghost" size="sm" className={`${publicNavButtonClassName} hidden md:inline-flex`} asChild>
               <Link
                 to="/claim"
                 activeOptions={{ exact: false }}
                 activeProps={publicNavActiveProps}
                 onClick={() => emitClaimCtaClicked()}
               >
+                <Building2Icon data-icon="inline-start" />
                 List/claim
               </Link>
             </Button>
-          </nav>
+            <Button variant="landingPrimary" size="sm" className={`${publicNavPrimaryButtonClassName} hidden md:inline-flex`} asChild>
+              <Link to="/" search={defaultHomeSearch} activeOptions={{ exact: true }} activeProps={publicNavActiveProps}>
+                <SearchIcon data-icon="inline-start" />
+                Ask
+              </Link>
+            </Button>
+            <PublicMobileMenu />
+          </div>
         </div>
       </header>
-      <main id="main-content" tabIndex={-1} className={immersive ? 'min-h-0 flex-1' : 'flex-1'}>
+      <main id="main-content" tabIndex={-1} className={immersive ? 'min-h-0 flex-1 overflow-hidden' : 'flex-1'}>
         {children}
       </main>
-      {immersive ? null : (
-        <footer className="border-t border-[var(--ae-public-line)]/80 bg-[var(--ae-public-field)]">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-3 text-xs leading-5 text-[var(--ae-public-muted)] md:flex-row md:items-center md:justify-between md:gap-3 md:px-6 md:py-4 md:text-sm">
-            <span>A register of who handles what, where. Not a booking or payment tool.</span>
-            <nav aria-label="Footer" className="flex flex-wrap gap-x-3 gap-y-1 md:gap-x-4">
-              <Link to="/" search={defaultHomeSearch} className="ae-public-footer-link">Ask</Link>
-              <Link to="/registry" search={defaultRegistrySearch} className="ae-public-footer-link">Browse services</Link>
-              <a href="/llms.txt" className="ae-public-footer-link">Assistants</a>
-              <Link to="/privacy/remove-business" className="ae-public-footer-link">Corrections</Link>
-              <Link to="/claim" className="ae-public-footer-link">List/claim your business</Link>
-            </nav>
-          </div>
-        </footer>
+      {hideFooter ? null : (
+      <footer className="shrink-0 border-t border-[var(--ae-public-line)]/80 bg-[var(--ae-public-field)]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-3 text-xs leading-5 text-[var(--ae-public-muted)] md:flex-row md:items-center md:justify-between md:gap-3 md:px-6 md:py-4 md:text-sm">
+          <span>Ask for a local service. Compare published details. Contact the business.</span>
+          <nav aria-label="Footer" className="flex flex-wrap gap-x-3 gap-y-1 md:gap-x-4">
+            <a href="/llms.txt" className="ae-public-footer-link">Assistants</a>
+            <Link to="/privacy" className="ae-public-footer-link">Privacy</Link>
+            <Link to="/terms" className="ae-public-footer-link">Terms</Link>
+          </nav>
+        </div>
+      </footer>
       )}
     </div>
+  )
+}
+
+function PublicBrandLink() {
+  return (
+    <Link
+      to="/"
+      search={defaultHomeSearch}
+      className="ae-public-brand-link"
+      aria-label="Agentic Economy home"
+    >
+      <span className="ae-public-brand-mark">
+        AE
+      </span>
+      <span className="ae-public-brand-copy">
+        <span className="ae-public-brand-name">Agentic Economy</span>
+        <span className="ae-public-brand-tagline">
+          Ask for a local service. See who fits.
+        </span>
+      </span>
+    </Link>
+  )
+}
+
+function PublicMobileMenu() {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="icon-sm" className="lg:hidden" aria-label="Open navigation">
+          <MenuIcon data-icon="inline-start" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent className="ae-public-mobile-sheet">
+        <SheetHeader className="ae-public-mobile-sheet-header">
+          <SheetTitle>Agentic Economy</SheetTitle>
+          <SheetDescription>Ask for a local service. Compare published details.</SheetDescription>
+        </SheetHeader>
+        <nav aria-label="Public mobile" className="flex flex-col gap-1 p-3">
+          <SheetClose asChild>
+            <Link
+              to="/"
+              search={defaultHomeSearch}
+              activeOptions={{ exact: true }}
+              activeProps={publicNavActiveProps}
+              className={`${publicNavPrimaryButtonClassName} ae-public-mobile-primary-link`}
+            >
+              Ask
+            </Link>
+          </SheetClose>
+          <SheetClose asChild>
+            <Link
+              to="/registry"
+              search={defaultRegistrySearch}
+              activeOptions={{ includeSearch: false }}
+              activeProps={publicNavActiveProps}
+              className={publicMobileLinkClassName}
+            >
+              Browse services
+            </Link>
+          </SheetClose>
+          <SheetClose asChild>
+            <Link to="/about" activeOptions={{ exact: false }} activeProps={publicNavActiveProps} className={publicMobileLinkClassName}>
+              About
+            </Link>
+          </SheetClose>
+          <SheetClose asChild>
+            <Link to="/help" activeOptions={{ exact: false }} activeProps={publicNavActiveProps} className={publicMobileLinkClassName}>
+              Help
+            </Link>
+          </SheetClose>
+          <SheetClose asChild>
+            <Link
+              to="/privacy/remove-business"
+              activeOptions={{ exact: false }}
+              activeProps={publicNavActiveProps}
+              className={publicMobileLinkClassName}
+            >
+              Corrections
+            </Link>
+          </SheetClose>
+          <SheetClose asChild>
+            <Link
+              to="/claim"
+              activeOptions={{ exact: false }}
+              activeProps={publicNavActiveProps}
+              className={publicMobileLinkClassName}
+              onClick={() => emitClaimCtaClicked()}
+            >
+              List/claim your business
+            </Link>
+          </SheetClose>
+        </nav>
+      </SheetContent>
+    </Sheet>
   )
 }

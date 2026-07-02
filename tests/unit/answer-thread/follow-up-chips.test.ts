@@ -16,6 +16,7 @@ function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
     intent: 'refine_search',
     status: 'complete',
     oneLine: 'One listed business matches.',
+    workLog: [],
     artifacts: [
       {
         kind: 'provider-cards',
@@ -63,13 +64,12 @@ function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
 }
 
 describe('follow-up chips', () => {
-  it('builds deterministic chips with inquiry, suburb, compare, and boundary', () => {
+  it('builds deterministic chips with inquiry, suburb, and compare', () => {
     const chips = buildDeterministicFollowUpChips(turn())
     expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Compare the top two')
-    expect(chips.map((chip) => chip.submitQuery)).toContain('What can Agentic Economy do here?')
     expect(chips.some((chip) => chip.submitQuery.startsWith('Narrow to '))).toBe(true)
-    expect(chips.some((chip) => chip.label === 'What can AE safely do here?')).toBe(true)
+    expect(chips.map((chip) => chip.submitQuery)).not.toContain('What can Agentic Economy do here?')
   })
 
   it('appends validated LLM chips after deterministic chips', () => {
@@ -83,6 +83,10 @@ describe('follow-up chips', () => {
 
   it('rejects overclaim chips', () => {
     expect(validateFollowUpChip('Book now and pay today', 1)).toBe(false)
+  })
+
+  it('accepts boundary explanation chips', () => {
+    expect(validateFollowUpChip('What can Agentic Economy do here?', 1)).toBe(true)
   })
 
   it('maps deterministic chip strings to known intents', () => {

@@ -8,18 +8,20 @@ import {
 } from '@/modules/answer/search-context'
 import type { FollowUpIntent } from '@/modules/answer-thread/public'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
+import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import type { StreamAnswerResult } from './answer-stream'
 import {
   initialAnswerTurnUiState,
   reduceAnswerTurnEvent,
+  stopRunningWorkSteps,
   type AnswerTurnUiState,
 } from './answer-turn-state'
 import { abortAnswerTurnStream, attachAnswerTurnStream } from './turn-stream-session'
 
-const STREAM_ERROR_COPY = 'The answer could not be built right now. Try again or browse the registry.'
-const RATE_LIMIT_COPY = 'Too many answer requests right now. Wait a minute and try again, or browse the registry.'
+const STREAM_ERROR_COPY = 'The answer could not be built right now. Try again or browse services.'
+const RATE_LIMIT_COPY = 'Too many answer requests right now. Wait a minute and try again, or browse services.'
 
 export type TurnStreamOutcome = 'complete' | 'error' | 'stopped' | 'rate_limited'
 
@@ -164,38 +166,41 @@ export function AeThreadTurnStreamSection({
   return (
     <div className="ae-chat-section">
       <AeThreadTurnQueryHeader query={query} intent={intent} seq={seq} />
-      <div className="ae-chat-section__answer">
-        <AeAnswerThinkingTrace
-          isStreaming={busy}
-          label={state.thinkingLabel}
-          steps={state.thinkingSteps}
-          {...(state.thinkingStep === undefined ? {} : { thinkingStep: state.thinkingStep })}
-        />
-        <AeGenerativeAnswer
-          artifacts={state.artifacts}
-          query={query}
-          {...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile })}
-          busy={busy}
-          oneLineFallback={state.oneLineFallback}
-          onStop={stop}
-          phase={state.phase}
-          errorMessage={
-            state.phase === 'error' || state.phase === 'stopped' ? (
-              <>
-                {state.phase === 'stopped' ? 'Answer stopped.' : (state.errorMessage ?? STREAM_ERROR_COPY)}{' '}
-                {onRetry !== undefined ? (
-                  <button type="button" className="ae-answer__retry" onClick={onRetry}>
-                    Try again
-                  </button>
-                ) : null}{' '}
-                <Link to="/registry" search={{ q: '', limit: 10 }} className="ae-answer__error-link">
-                  Browse the registry
-                </Link>
-              </>
-            ) : null
-          }
-        />
-      </div>
+      <Message from="assistant" className="ae-chat-section__answer">
+        <MessageContent className="ae-chat-section__answer-content">
+          <AeAnswerThinkingTrace
+            isStreaming={busy}
+            label={state.thinkingLabel}
+            steps={state.thinkingSteps}
+            workLog={state.workLog}
+            {...(state.thinkingStep === undefined ? {} : { thinkingStep: state.thinkingStep })}
+          />
+          <AeGenerativeAnswer
+            artifacts={state.artifacts}
+            query={query}
+            {...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile })}
+            busy={busy}
+            oneLineFallback={state.oneLineFallback}
+            onStop={stop}
+            phase={state.phase}
+            errorMessage={
+              state.phase === 'error' || state.phase === 'stopped' ? (
+                <>
+                  {state.phase === 'stopped' ? 'Answer stopped.' : (state.errorMessage ?? STREAM_ERROR_COPY)}{' '}
+                  {onRetry !== undefined ? (
+                    <button type="button" className="ae-answer__retry" onClick={onRetry}>
+                      Try again
+                    </button>
+                  ) : null}{' '}
+                  <Link to="/registry" search={{ q: '', limit: 10 }} className="ae-answer__error-link">
+                    Browse services
+                  </Link>
+                </>
+              ) : null
+            }
+          />
+        </MessageContent>
+      </Message>
     </div>
   )
 }
@@ -215,7 +220,7 @@ function turnReducer(current: AnswerTurnUiState, action: TurnAction): AnswerTurn
     case 'event':
       return reduceAnswerTurnEvent(current, action.event)
     case 'stopped':
-      return current.phase === 'streaming' ? { ...current, phase: 'stopped' } : current
+      return current.phase === 'streaming' ? { ...stopRunningWorkSteps(current), phase: 'stopped' } : current
     case 'stream_failed':
       return current.complete
         ? current

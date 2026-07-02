@@ -48,7 +48,7 @@ describe('POST /api/answer/follow-up-chips', () => {
     expect(response.status).toBe(200)
     const body = (await response.json()) as { chips: FollowUpChip[] }
     expect(submitQueries(body.chips)).toContain('Show only businesses that accept inquiries')
-    expect(submitQueries(body.chips)).toContain('What can Agentic Economy do here?')
+    expect(submitQueries(body.chips)).not.toContain('What can Agentic Economy do here?')
   })
 
   it('appends validated LLM chips when eval gate has passed', async () => {

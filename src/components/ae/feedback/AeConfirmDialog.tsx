@@ -35,21 +35,46 @@ export function AeConfirmDialog({
   pending = false,
   onConfirm,
 }: AeConfirmDialogProps) {
+  const destructive = confirmVariant === 'destructive'
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (pending && !nextOpen) {
+      return
+    }
+
+    onOpenChange(nextOpen)
+  }
+
   async function handleConfirm(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     await onConfirm()
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent
+        aria-busy={pending || undefined}
+        data-destructive={destructive ? true : undefined}
+        data-pending={pending ? true : undefined}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {description}
+            {destructive ? <span className="sr-only"> Destructive action.</span> : null}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
+          <span className="sr-only" role="status" aria-live="polite">
+            {pending ? 'Action in progress.' : ''}
+          </span>
           <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction variant={confirmVariant} disabled={pending} onClick={handleConfirm}>
+          <AlertDialogAction
+            variant={confirmVariant}
+            disabled={pending}
+            aria-busy={pending || undefined}
+            onClick={handleConfirm}
+          >
             {pending ? <Spinner data-icon="inline-start" /> : null}
             {confirmLabel}
           </AlertDialogAction>

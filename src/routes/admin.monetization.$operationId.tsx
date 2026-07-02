@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Field, FieldDescription, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   disableAdminPaidActivationServer,
@@ -150,11 +151,14 @@ function AdminMonetizationDetailRoute() {
         <OperationCard operation={operation} />
         <ReconciliationCard reconciliations={reconciliations} />
         <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={handleReconcile}>Reconcile provider state</Button>
+          <Button type="button" onClick={handleReconcile} aria-describedby="billing-reconcile-scope">Reconcile provider state</Button>
           <Button asChild variant="outline">
             <a href="/admin/monetization">Back to monetization</a>
           </Button>
         </div>
+        <p id="billing-reconcile-scope" className="text-sm leading-6 text-muted-foreground">
+          Reconciliation records provider readback for this operation only. It does not start a plan or disable paid activation.
+        </p>
         <OperatorControlForms onNoRepair={handleNoRepair} onDisable={handleDisable} />
       </div>
     </AeOperatorShell>
@@ -235,12 +239,15 @@ function OperatorControlForms({
       <Card>
         <CardHeader>
           <CardTitle>Mark no repair</CardTitle>
-          <CardDescription>Use only after evidence shows the operation cannot be repaired automatically.</CardDescription>
+          <CardDescription>Use only after evidence shows this operation cannot be repaired automatically.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onNoRepair} className="grid gap-3">
-            <Input name="reason" placeholder="reason" />
-            <Input name="evidenceRefs" placeholder="comma-separated evidence refs" />
+          <form onSubmit={onNoRepair} className="grid gap-3" noValidate>
+            <OperatorMutationTextField id="noRepairReason" name="reason" label="Reason" description="Explain why this operation cannot be repaired automatically." />
+            <OperatorMutationTextField id="noRepairEvidenceRefs" name="evidenceRefs" label="Evidence refs" description="Comma-separated evidence refs that support the no-repair decision." />
+            <p className="text-sm leading-6 text-muted-foreground">
+              Scope: marks this operation no-repair. Paid activation remains controlled by the business-level disable action.
+            </p>
             <Button type="submit" variant="outline">Mark no repair</Button>
           </form>
         </CardContent>
@@ -248,19 +255,45 @@ function OperatorControlForms({
       <Card>
         <CardHeader>
           <CardTitle>Disable paid activation</CardTitle>
-          <CardDescription>Disables public paid-activation claims for the business.</CardDescription>
+          <CardDescription>Stops public paid-activation claims for the business until support repairs the source state.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onDisable} className="grid gap-3">
-            <Input name="reason" placeholder="reason" />
-            <Input name="evidenceRefs" placeholder="comma-separated evidence refs" />
-            <Button type="submit" variant="outline">Disable paid activation</Button>
+          <form onSubmit={onDisable} className="grid gap-3" noValidate>
+            <OperatorMutationTextField id="disableReason" name="reason" label="Reason" description="Explain why paid activation must be disabled for the whole business." />
+            <OperatorMutationTextField id="disableEvidenceRefs" name="evidenceRefs" label="Evidence refs" description="Comma-separated evidence refs that justify disabling paid activation." />
+            <p className="text-sm leading-6 text-muted-foreground">
+              Scope: disables paid activation for this business. It does not cancel existing provider-side objects or refund money.
+            </p>
+            <Button type="submit" variant="destructive">Disable paid activation</Button>
           </form>
         </CardContent>
       </Card>
     </div>
   )
 }
+
+function OperatorMutationTextField({
+  id,
+  name,
+  label,
+  description,
+}: {
+  id: string
+  name: string
+  label: string
+  description: string
+}) {
+  const fieldA11y = getFieldAccessibility({ id, hasDescription: true })
+
+  return (
+    <Field {...fieldA11y.fieldProps}>
+      <FieldLabel htmlFor={fieldA11y.controlProps.id}>{label}</FieldLabel>
+      <Input {...fieldA11y.controlProps} name={name} />
+      <FieldDescription {...fieldA11y.descriptionProps}>{description}</FieldDescription>
+    </Field>
+  )
+}
+
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (

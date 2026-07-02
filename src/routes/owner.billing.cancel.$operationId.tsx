@@ -43,7 +43,7 @@ function OwnerBillingCancelRoute() {
       if (cancelled) return
       if (result.kind === 'ok') {
         setReadback(result.readback)
-        setMessage('Cancel return recorded. No paid state was granted.')
+        setMessage('Cancel recorded.')
       } else {
         setError(result.reason)
       }
@@ -60,8 +60,8 @@ function OwnerBillingCancelRoute() {
     <AeOperatorShell
       role="owner"
       eyebrow="Canceled return"
-      title="No active billing state was granted."
-      description="A canceled return is displayed only from source-owned owner billing operation state."
+      title="Return canceled"
+      description="Your canceled return was recorded. No plan was started."
       currentPath="/owner/billing/cancel"
     >
       <div className="grid gap-6">

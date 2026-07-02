@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { PanelLeftIcon } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { AePublicShell, defaultHomeSearch } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@/components/ui/button'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import {
@@ -14,14 +15,11 @@ import type { AnswerThreadRecord, PublicThreadProjection } from '@/modules/answe
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
 import { AeChatWelcome } from './AeChatWelcome'
 import { AeQueryPanel } from './AeQueryPanel'
-import { AeSearchContextBar } from './AeSearchContextBar'
-import { AeThreadFooter } from './AeThreadFooter'
 import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
 import { AeThreadTranscript } from './AeThreadTranscript'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
-import { AeThreadStreamingIndicator } from './AeStreamingLabel'
 
 export type AeChatProps = {
   threadId?: string | null
@@ -44,7 +42,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const [generation, setGeneration] = useState(0)
   const [streamingBusy, setStreamingBusy] = useState(false)
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
-  const [searchContext, setSearchContext] = useState<AeSearchContext>(DEFAULT_AE_SEARCH_CONTEXT)
+  const [searchContext] = useState<AeSearchContext>(DEFAULT_AE_SEARCH_CONTEXT)
+  const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
   const initialQueryStarted = useRef(false)
   const pendingThreadIdRef = useRef<string | null>(null)
 
@@ -52,7 +51,11 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const streamingThreadId = routeThreadId ?? sessionThreadId
   const showWelcome = routeThreadId === null && liveTurn === null && (projection?.turns.length ?? 0) === 0
   const showThreadUnavailable = routeThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
-  const completedTurnCount = projection?.turns.filter((turn) => turn.status === 'complete').length ?? 0
+  const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
+  const completedTurnCount = completedTurns.length
+
+  const wasShowingWelcomeRef = useRef(showWelcome)
+  const [leavingWelcome, setLeavingWelcome] = useState(showWelcome)
 
   const refreshThreads = useCallback(async () => {
     try {
@@ -123,6 +126,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     })
   }, [initialQuery, searchContext])
 
+  useEffect(() => {
+    if (showWelcome) {
+      wasShowingWelcomeRef.current = true
+      setLeavingWelcome(true)
+      return
+    }
+
+    if (wasShowingWelcomeRef.current) {
+      wasShowingWelcomeRef.current = false
+      setLeavingWelcome(true)
+      const timer = window.setTimeout(() => setLeavingWelcome(false), 220)
+      return () => window.clearTimeout(timer)
+    }
+
+    setLeavingWelcome(false)
+  }, [showWelcome])
+
   function startTurn(query: string, context: AeSearchContext = searchContext) {
     setStreamingBusy(true)
     setGeneration((current) => {
@@ -155,15 +175,18 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   function handleTurnComplete() {
     captureClientProductEventOnClient('answer_completed', { query_length: liveTurn?.query.length ?? 0 })
-    setLiveTurn(null)
     void refreshThreads()
 
     const pendingId = pendingThreadIdRef.current
     if (routeThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
-      void navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })
+      void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })).finally(() => {
+        setLiveTurn(null)
+      })
       return
     }
+
+    setLiveTurn(null)
 
     if (routeThreadId !== null) {
       void refreshProjection(routeThreadId)
@@ -178,75 +201,116 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     startTurn(query)
   }
 
-  const sidebarVisible = threads.length > 0
-  const showThreadChrome = routeThreadId !== null && completedTurnCount > 0
-  const completedTurnQueries =
-    projection?.turns.filter((turn) => turn.status === 'complete').map((turn) => ({ query: turn.query })) ?? []
+  function handleDeleteThread(deletedThreadId: string) {
+    setThreads((current) => current.filter((thread) => thread.threadId !== deletedThreadId))
+    if (routeThreadId === deletedThreadId) {
+      void navigate({ to: '/', search: defaultHomeSearch, replace: true })
+    }
+  }
+
+  const landingMode = showWelcome || leavingWelcome
+
+  const sidebarContextActive = routeThreadId !== null || liveTurn !== null
+  const showSidebarToggle = sidebarContextActive || threads.length > 0 || sidebarManuallyOpen
+  const sidebarVisible = sidebarContextActive || sidebarManuallyOpen
+  const showThreadChrome = routeThreadId !== null && completedTurnCount > 1
 
   // Keep scroller mounted while a turn streams - sessionThreadId updates mid-stream must not remount.
   const scrollerKey = routeThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
   const defaultScrollPosition =
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
+  const settleMessageId =
+    liveTurn === null && completedTurns.length > 0 ? (completedTurns[completedTurns.length - 1]?.turnId ?? null) : null
 
   const shell = (
     <div className={`ae-chat-layout${sidebarVisible ? ' ae-chat-layout--with-sidebar' : ''}`}>
-      <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} />
+      <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} />
       <div className="ae-chat-shell">
+        {showSidebarToggle ? (
+          <div className="ae-chat-toolbar">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="ae-chat-sidebar-toggle"
+              onClick={() => setSidebarManuallyOpen((value) => !value)}
+              aria-controls="ae-thread-sidebar"
+              aria-expanded={sidebarVisible}
+              aria-label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
+            >
+              <PanelLeftIcon data-icon="only" />
+            </Button>
+          </div>
+        ) : null}
         {showThreadChrome && projection !== null ? (
           <AeThreadHeader title={projection.title} threadId={projection.threadId} />
         ) : null}
-        <AeThreadScroller
-          key={scrollerKey}
-          autoScroll={liveTurn !== null}
-          defaultScrollPosition={defaultScrollPosition}
-        >
-          {showWelcome ? <AeChatWelcome /> : null}
-          {showThreadUnavailable ? (
-            <div className="ae-chat-empty">
-              <AeEmptyState
-                title="Thread unavailable"
-                description="This answer thread could not be found or loaded. Start a fresh search to keep going."
-                action={
-                  <Button asChild variant="publicSecondary" size="sm">
-                    <a href="/">Start a new search</a>
-                  </Button>
-                }
+        <div className="ae-chat-stage">
+          <AeThreadScroller
+            key={scrollerKey}
+            autoScroll={liveTurn !== null}
+            defaultScrollPosition={defaultScrollPosition}
+            settleMessageId={settleMessageId}
+            streaming={streamingBusy}
+            showJumpButton={liveTurn !== null}
+          >
+            {showThreadUnavailable ? (
+              <div className="ae-chat-empty">
+                <AeEmptyState
+                  title="Thread unavailable"
+                  description="This answer thread could not be found or loaded. Start a fresh search to keep going."
+                  action={
+                    <Button asChild variant="publicSecondary" size="sm">
+                      <a href="/">Start a new search</a>
+                    </Button>
+                  }
+                />
+              </div>
+            ) : null}
+            <AeThreadTranscript
+              threadId={routeThreadId}
+              projection={projection}
+              liveTurn={liveTurn}
+              onThreadCreated={handleThreadCreated}
+              onStreamEnd={handleStreamEnd}
+              onFollowUp={handleFollowUp}
+              onRetry={handleRetry}
+            />
+          </AeThreadScroller>
+          {!showWelcome ? (
+            <div className="ae-chat-panel-wrap">
+              <AeQueryPanel
+                onSubmit={handleSubmit}
+                busy={streamingBusy}
+                searchContext={searchContext}
+                showExamples={false}
               />
             </div>
           ) : null}
-          <AeThreadTranscript
-            threadId={routeThreadId}
-            projection={projection}
-            liveTurn={liveTurn}
-            onThreadCreated={handleThreadCreated}
-            onStreamEnd={handleStreamEnd}
-            onFollowUp={handleFollowUp}
-            onRetry={handleRetry}
-          />
-          {showThreadChrome && projection !== null && liveTurn === null ? (
-            <AeThreadFooter threadId={projection.threadId} turns={completedTurnQueries} />
+          {landingMode ? (
+            <div
+              className={`ae-chat-landing ${!showWelcome ? 'ae-chat-landing--exit' : ''}`}
+              aria-hidden={!showWelcome}
+            >
+              <div className="ae-chat-landing__inner">
+                <AeChatWelcome />
+                {showWelcome ? (
+                  <AeQueryPanel
+                    onSubmit={handleSubmit}
+                    busy={streamingBusy}
+                    searchContext={searchContext}
+                    showExamples
+                  />
+                ) : null}
+              </div>
+            </div>
           ) : null}
-          <AeThreadStreamingIndicator streaming={streamingBusy} />
-        </AeThreadScroller>
-        <div className="ae-chat-panel-wrap">
-          <AeSearchContextBar
-            context={searchContext}
-            busy={streamingBusy}
-            onChange={setSearchContext}
-          />
-          <AeQueryPanel
-            onSubmit={handleSubmit}
-            busy={streamingBusy}
-            searchContext={searchContext}
-            showExamples={showWelcome}
-          />
         </div>
       </div>
     </div>
   )
 
   return (
-    <AePublicShell immersive>
+    <AePublicShell immersive hideFooter>
       {isStructuredAnswerModeEnabled() ? <AeAnswerModelProvider>{shell}</AeAnswerModelProvider> : shell}
     </AePublicShell>
   )

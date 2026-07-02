@@ -1,3 +1,4 @@
+import { convertSchemaToJsonSchema, type JSONSchema } from '@tanstack/ai'
 import { z } from 'zod'
 
 /**
@@ -31,11 +32,21 @@ export type ActionSourceWriteRequest = {
   pathname: string
 }
 
+export type ActionTimingSink = {
+  record: (
+    name: string,
+    durationMs: number,
+    metadata?: Record<string, string | number | boolean | null>,
+  ) => void
+}
+
 export type ActionContext = {
   /** Admission context for writes; built from the calling surface's request. */
   sourceWriteRequest?: ActionSourceWriteRequest
   /** The raw incoming request, when available (HTTP / agent-tools surfaces). */
   request?: Request
+  /** Internal timing sink used by answer turns; never exposed on human surfaces. */
+  timing?: ActionTimingSink
 }
 
 export type ActionRunArgs<Input> = {
@@ -71,6 +82,7 @@ export type ActionDefinition<
   readonly parameters: readonly ActionParameter[]
   readonly readOnly: boolean
   readonly surfaces: readonly ActionSurface[]
+  readonly outputSchema: z.ZodType<Result>
   readonly run: ActionRunner<Input, Result>
 }
 
@@ -93,9 +105,15 @@ export type AgentToolDescriptor = {
   boundaries: readonly string[]
   readOnly: boolean
   parameters: readonly ActionParameter[]
+  inputJsonSchema?: JSONSchema
+  outputJsonSchema?: JSONSchema
+  hasOutputSchema: true
 }
 
 export function describeActionForAgent(action: AnyAction): AgentToolDescriptor {
+  const inputJsonSchema = convertSchemaToJsonSchema(action.schema)
+  const outputJsonSchema = convertSchemaToJsonSchema(action.outputSchema)
+
   return {
     id: action.id,
     name: action.name,
@@ -103,5 +121,8 @@ export function describeActionForAgent(action: AnyAction): AgentToolDescriptor {
     boundaries: action.boundaries,
     readOnly: action.readOnly,
     parameters: action.parameters,
+    ...(inputJsonSchema === undefined ? {} : { inputJsonSchema }),
+    ...(outputJsonSchema === undefined ? {} : { outputJsonSchema }),
+    hasOutputSchema: true,
   }
 }
