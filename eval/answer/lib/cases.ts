@@ -119,6 +119,7 @@ export type AnswerHarnessEvalTag = (typeof ANSWER_HARNESS_EVAL_REQUIREMENTS)[num
 export const ANSWER_HARNESS_EVAL_ASSERTIONS = [
   'requires-persisted-harness-run',
   'requires-live-phase-tool-evidence',
+  'requires-model-accounting',
   'requires-blocked-tool',
   'requires-refused-tool',
   'requires-invalid-output',
@@ -686,6 +687,13 @@ export const ANSWER_HARNESS_EVAL_CASES = [
     covers: ['invalid-output'],
     source: { kind: 'unit-test', file: 'tests/unit/harness/run-collector.test.ts' },
     assertions: ['requires-invalid-output'],
+  },
+  {
+    id: 'harness-answer-model-accounting',
+    description: 'Answer model execution emits provider/model/usage accounting records for harness reports.',
+    covers: ['live-phase-tool-evidence'],
+    source: { kind: 'unit-test', file: 'tests/unit/answer/answer-tool-use-agent.test.ts' },
+    assertions: ['requires-live-phase-tool-evidence', 'requires-model-accounting'],
   },
   {
     id: 'harness-stale-replay-projection',

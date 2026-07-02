@@ -53,6 +53,7 @@ export {
   HarnessRunLoopExecutionError,
   HarnessRunLoopTimeoutError,
   runHarnessRunLoop,
+  type HarnessRunLoopModelAccounting,
   type HarnessRunLoopEventSink,
   type HarnessRunLoopModelInput,
   type HarnessRunLoopOptions,

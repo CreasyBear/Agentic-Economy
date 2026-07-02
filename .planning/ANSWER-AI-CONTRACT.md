@@ -122,6 +122,13 @@ Persistence policy:
 
 - Newly persisted answer turns include the existing private `answerRun` rollup
   and the reusable private `harnessRun` rollup.
+- Server-request answer turns also best-effort co-write source-write-admitted
+  harness session entries from live runtime events when a live answer harness
+  loop is present: turn start, context/intent route markers, tool/model
+  lifecycle, gate, persist, and run report. Legacy callers may still fall back
+  to the compact finalization spine. These entries are private/operator replay
+  evidence and must not make answer persistence fail if the journal append is
+  unavailable.
 - Public `/t/$threadId` projection exposes only `PublicAnswerCheckSummary`.
 - Public projection must not serialize `harnessRun`, raw tool ids, raw inputs,
   result summaries, result hashes, or internal trace names.

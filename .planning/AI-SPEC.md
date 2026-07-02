@@ -222,9 +222,12 @@ HarnessRunLoop
         +--> sanitized public answer checks
 ```
 
-The answer-thread runtime must move behind the harness loop. SSE, public
-projection, and persistence are adapters over harness events. They are not the
-core runtime.
+The answer-thread runtime is migrating behind the harness loop. Current answer
+turns create one live harness operation and feed context, intent, route,
+retrieval, model, assemble, gate, persist, and report events into the collector.
+The remaining OMP-gold target is to express the whole turn as
+`HarnessRunLoop.run()` phase handlers so SSE, public projection, and
+persistence are pure adapters over harness events.
 
 ## Harness Run Loop Contract
 
@@ -618,7 +621,10 @@ Acceptance:
 - append/idempotency/parent conflict tests,
 - replay path tests,
 - public/private projection tests,
-- complete/error turns write terminal journal entries.
+- complete/error turns write source-write-admitted journal entries from live
+  answer runtime events when a server request is available,
+- full operational replay remains blocked until admin source reads, browser
+  smoke, graph freshness, and broader module adoption are green.
 
 ### M3 - Tool Contract, Approval, Telemetry, Gates
 
@@ -663,12 +669,16 @@ The OMP carry-over register is authoritative for operational status.
 
 Status changes must follow these rules:
 
-- `R1` remains below operational until live loop evidence, graph freshness,
-  browser continuity, and eval gates are green.
+- `R1` remains below operational until the full answer state machine is owned by
+  `HarnessRunLoop.run()` and graph freshness, browser continuity, and eval gates
+  are green.
 - `R2` remains below operational until descriptor parity and allowlist equality
   are tested.
-- `R3` must not claim runtime migration while `harnessRun` is post-hoc.
-- `R4` is prototype until Convex-backed journal persistence lands.
+- `R3` may claim focused live-runtime migration for the answer slice, but not
+  operational parity until eval/browser/graph gates are rerun after the dirty
+  tree settles.
+- `R4` remains below operational until runtime-fed answer replay has admin
+  source reads, browser smoke, and graph gates green.
 - `R6` and `R7` are P0 rebuild gates, not optional polish.
 - `R8` and `R9` wait for private evidence boundaries unless a reviewer feature
   ships earlier.

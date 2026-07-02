@@ -12,6 +12,8 @@ import {
 import {
   HarnessRunPhaseValues,
   type HarnessRun,
+  type HarnessModelRequestRecord,
+  type HarnessModelUsage,
   type HarnessRunPhase,
   type HarnessRunReport,
   type HarnessRunStatus,
@@ -76,9 +78,31 @@ export type HarnessRunLoopToolInput<Input = unknown, Output = unknown> = Omit<
   toolCallId?: string
 }
 
-export type HarnessRunLoopModelInput = {
+export type HarnessRunLoopModelAccounting = Partial<Pick<
+  HarnessModelRequestRecord,
+  'seq' | 'stopReason' | 'requestId' | 'responseId' | 'usage' | 'costUsd' | 'costUnavailableReason'
+>>
+
+type HarnessRunLoopModelRuntimeEventAccounting = {
+  seq?: number
   provider?: string
   model?: string
+  stopReason?: string
+  requestId?: string
+  responseId?: string
+  usage?: HarnessModelUsage
+  costUsd?: number
+  costUnavailableReason?: string
+}
+
+export type HarnessRunLoopModelInput<Result = unknown> = {
+  seq?: number
+  provider?: string
+  model?: string
+  requestId?: string
+  costUnavailableReason?: string
+  summarize?: (result: Result) => HarnessRunLoopModelAccounting | undefined
+  summarizeError?: (error: unknown) => HarnessRunLoopModelAccounting | undefined
 }
 
 export class HarnessRunLoop {
@@ -125,17 +149,7 @@ export class HarnessRunLoop {
   }
 
   async run<State>(input: HarnessRunLoopRunInput<State>): Promise<HarnessRunLoopResult<State>> {
-    if (this.startedAt !== undefined) {
-      throw new Error('HarnessRunLoop instances can only be run once')
-    }
-
-    this.startedAt = this.now()
-    this.emit({
-      type: 'run.started',
-      runId: this.runId,
-      sessionId: this.sessionId,
-      startedAt: this.startedAt,
-    })
+    this.startRun()
 
     let state = input.initialState
     let caughtError: unknown
@@ -162,23 +176,16 @@ export class HarnessRunLoop {
       this.status = dominantStatus(this.status, statusFromError(error))
     }
 
-    this.endedAt = this.now()
-    const report = this.collector.snapshot({
-      runId: this.runId,
-      sessionId: this.sessionId,
-      status: this.status,
-      startedAt: this.startedAt,
-      endedAt: this.endedAt,
-    })
-    this.emit({ type: 'run.completed', runId: this.runId, report })
+    const report = this.completeRun(this.status)
 
+    const startedAt = this.startedAt ?? report.summary.run.startedAt ?? this.now()
     const result: HarnessRunLoopResult<State> = {
       runId: this.runId,
       sessionId: this.sessionId,
       status: this.status,
-      startedAt: this.startedAt,
-      endedAt: this.endedAt,
-      durationMs: roundDuration(this.endedAt - this.startedAt),
+      startedAt,
+      ...(this.endedAt === undefined ? {} : { endedAt: this.endedAt }),
+      durationMs: report.summary.run.durationMs,
       state,
       report,
       ...(caughtError === undefined ? {} : { error: caughtError }),
@@ -191,7 +198,48 @@ export class HarnessRunLoop {
     return result
   }
 
+  startRun(): void {
+    if (this.endedAt !== undefined) {
+      throw new Error('HarnessRunLoop instances cannot restart after completion')
+    }
+    if (this.startedAt !== undefined) {
+      return
+    }
+
+    this.startedAt = this.now()
+    this.emit({
+      type: 'run.started',
+      runId: this.runId,
+      sessionId: this.sessionId,
+      startedAt: this.startedAt,
+    })
+  }
+
+  completeRun(status?: HarnessRunStatus): HarnessRunReport {
+    this.startRun()
+
+    if (status !== undefined) {
+      this.status = dominantStatus(this.status, status)
+    }
+    if (this.endedAt !== undefined) {
+      return this.snapshot(this.status)
+    }
+
+    this.endedAt = this.now()
+    const derivedReport = this.collector.snapshot({
+      runId: this.runId,
+      sessionId: this.sessionId,
+      ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
+      endedAt: this.endedAt,
+    })
+    this.status = dominantStatus(this.status, derivedReport.summary.run.status)
+    const report = this.snapshot(this.status)
+    this.emit({ type: 'run.completed', runId: this.runId, report })
+    return report
+  }
+
   async phase<T>(phase: string, work: () => T | Promise<T>): Promise<T> {
+    this.startRun()
     const startedAt = this.now()
     this.emit({
       type: 'phase.started',
@@ -267,7 +315,7 @@ export class HarnessRunLoop {
   }
 
   async runModel<T>(
-    input: HarnessRunLoopModelInput,
+    input: HarnessRunLoopModelInput<T>,
     work: () => T | Promise<T>,
   ): Promise<T> {
     const startedAt = this.now()
@@ -275,30 +323,33 @@ export class HarnessRunLoop {
       type: 'model.started',
       runId: this.runId,
       at: startedAt,
+      ...(input.seq === undefined ? {} : { seq: input.seq }),
       ...(input.provider === undefined ? {} : { provider: input.provider }),
       ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.requestId === undefined ? {} : { requestId: input.requestId }),
+      ...(input.costUnavailableReason === undefined ? {} : { costUnavailableReason: input.costUnavailableReason }),
     })
 
     try {
       const result = await this.withRunGuards(work)
+      const accounting = input.summarize?.(result)
       this.emit({
         type: 'model.completed',
         runId: this.runId,
         at: this.now(),
         durationMs: this.elapsedSince(startedAt),
-        ...(input.provider === undefined ? {} : { provider: input.provider }),
-        ...(input.model === undefined ? {} : { model: input.model }),
+        ...this.modelEventAccounting(input, accounting),
       })
       return result
     } catch (error) {
+      const accounting = input.summarizeError?.(error)
       this.emit({
         type: 'model.failed',
         runId: this.runId,
         at: this.now(),
         durationMs: this.elapsedSince(startedAt),
         errorCode: errorCodeFromError(error),
-        ...(input.provider === undefined ? {} : { provider: input.provider }),
-        ...(input.model === undefined ? {} : { model: input.model }),
+        ...this.modelEventAccounting(input, accounting),
       })
       throw error
     }
@@ -307,6 +358,7 @@ export class HarnessRunLoop {
   async evaluateGate(
     gate: string,
     work: () => boolean | Promise<boolean>,
+    options: { errorCode?: string } = {},
   ): Promise<boolean> {
     const startedAt = this.now()
     try {
@@ -318,6 +370,7 @@ export class HarnessRunLoop {
         ok,
         at: this.now(),
         durationMs: this.elapsedSince(startedAt),
+        ...(ok || options.errorCode === undefined ? {} : { errorCode: options.errorCode }),
       })
       return ok
     } catch (error) {
@@ -372,11 +425,26 @@ export class HarnessRunLoop {
     })
   }
 
-  snapshot(status: HarnessRunStatus = this.status): HarnessRunReport {
+  recordRuntimeEvent(event: HarnessRuntimeEvent): void {
+    this.emit(event)
+  }
+
+  snapshot(status?: HarnessRunStatus): HarnessRunReport {
+    const derivedReport = this.collector.snapshot({
+      runId: this.runId,
+      sessionId: this.sessionId,
+      ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
+      ...(this.endedAt === undefined ? {} : { endedAt: this.endedAt }),
+    })
+    const resolvedStatus = status ?? dominantStatus(this.status, derivedReport.summary.run.status)
+    if (derivedReport.summary.run.status === resolvedStatus) {
+      return derivedReport
+    }
+
     return this.collector.snapshot({
       runId: this.runId,
       sessionId: this.sessionId,
-      status,
+      status: resolvedStatus,
       ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
       ...(this.endedAt === undefined ? {} : { endedAt: this.endedAt }),
     })
@@ -531,6 +599,40 @@ export class HarnessRunLoop {
       // Observers must not be able to change the runtime outcome.
     }
   }
+
+  private modelEventAccounting<Result>(
+    input: {
+      seq?: number
+      provider?: string
+      model?: string
+      requestId?: string
+      costUnavailableReason?: string
+    },
+    accounting: HarnessRunLoopModelAccounting | undefined,
+  ): HarnessRunLoopModelRuntimeEventAccounting {
+    const seq = accounting?.seq ?? input.seq
+    const requestId = accounting?.requestId ?? input.requestId
+    const costUnavailableReason = accounting?.costUnavailableReason ?? input.costUnavailableReason
+    const usage = normalizeModelUsage(accounting?.usage)
+    return {
+      ...(seq === undefined ? {} : { seq }),
+      ...(input.provider === undefined ? {} : { provider: input.provider }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(accounting?.stopReason === undefined ? {} : { stopReason: accounting.stopReason }),
+      ...(requestId === undefined ? {} : { requestId }),
+      ...(accounting?.responseId === undefined ? {} : { responseId: accounting.responseId }),
+      ...(usage === undefined ? {} : { usage }),
+      ...(accounting?.costUsd === undefined ? {} : { costUsd: accounting.costUsd }),
+      ...(costUnavailableReason === undefined ? {} : { costUnavailableReason }),
+    }
+  }
+}
+
+function normalizeModelUsage(usage: HarnessModelUsage | undefined): HarnessModelUsage | undefined {
+  if (usage === undefined) {
+    return undefined
+  }
+  return usage
 }
 
 export class HarnessRunLoopExecutionError extends Error {

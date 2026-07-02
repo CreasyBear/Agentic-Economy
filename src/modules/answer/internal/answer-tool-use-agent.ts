@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { findAction, type AnyAction } from '@/modules/actions'
+import type { AnyAction } from '@/modules/actions'
 import type { AnswerLlmConfig } from './llm-config'
 import { readAnswerLlmConfig } from './llm-config'
 import { runAnswerGate, type AnswerGateResult } from './answer-gate'
@@ -22,14 +22,15 @@ import {
   type AnswerSnapshot,
 } from '../answer-synthesizer'
 import {
+  ANSWER_READ_TOOL_IDS,
+  findAnswerReadToolAction,
   runAnswerToolCall,
   toolCallRecordsToGateInput,
-} from '@/modules/answer-thread/public'
-import type {
-  AnswerToolCallRecord,
-  AnswerTurnTimingEntry,
-} from '@/modules/answer-thread/answer-thread.schema'
-import type { FollowUpIntent } from '@/modules/answer-thread/answer-thread.schema'
+  type AnswerToolCallRecord,
+  type AnswerTurnTimingEntry,
+} from '@/modules/answer-thread/tooling'
+import type { FollowUpIntent } from '@/modules/answer-thread/public'
+import type { HarnessModelRequestRecord, HarnessModelUsage, HarnessRunLoop } from '@/modules/harness/public'
 
 /**
  * The Phase 7 answer agent: an OpenRouter tool-calling loop over the AE read
@@ -51,7 +52,6 @@ import type { FollowUpIntent } from '@/modules/answer-thread/answer-thread.schem
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_ROUNDS = 4
 const DEFAULT_LIMIT = 3
-const ANSWER_MODEL_TOOL_IDS = ['registry.search', 'registry.detail'] as const
 const ANSWER_PROSE_RESPONSE_FORMAT = {
   type: 'json_schema',
   json_schema: {
@@ -91,6 +91,10 @@ export type AnswerToolUseAgentInput = {
   priorAllowedSlugs?: readonly string[]
   followUpIntent?: FollowUpIntent
   searchContext?: AeSearchContext | undefined
+  /** Optional live accounting sink for callers that own a harness collector. */
+  onModelRequest?: (record: HarnessModelRequestRecord) => void
+  /** Optional live harness loop that owns model/tool runtime events for this turn. */
+  harnessLoop?: HarnessRunLoop
   /**
    * When true, the agent requests prose directly without exposing registry
    * tools. Used for filter_known / compare_known intents, which must reuse
@@ -128,6 +132,7 @@ export type AnswerToolUseAgentResult = {
   providers: readonly AnswerSource[]
   allowedSlugs: ReadonlySet<string>
   toolCalls: AnswerToolCallRecord[]
+  modelRequests: readonly HarnessModelRequestRecord[]
   timings: readonly AnswerTurnTimingEntry[]
   snapshot: AnswerSnapshot
   gate: AnswerGateResult
@@ -166,9 +171,30 @@ async function runPlannedAgent(
 ): Promise<AnswerToolUseAgentResult> {
   const toolCalls: AnswerToolCallRecord[] = []
   const timings: AnswerTurnTimingEntry[] = []
+  const modelRequests: HarnessModelRequestRecord[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
   let seq = 0
+
+  const plannedModelRecord: HarnessModelRequestRecord = {
+    seq: 0,
+    provider: 'test',
+    model: 'planned-answer-tool-use-agent',
+    status: 'ok',
+    durationMs: 0,
+    stopReason: plan.toolCalls.length > 0 ? 'planned_tool_calls' : 'planned_prose',
+    costUnavailableReason: 'test_seam',
+  }
+  if (input.harnessLoop !== undefined) {
+    await input.harnessLoop.runModel<void>({
+      seq: 0,
+      provider: 'test',
+      model: 'planned-answer-tool-use-agent',
+      costUnavailableReason: 'test_seam',
+      summarize: () => plannedModelRecord,
+    }, () => undefined)
+  }
+  recordModelRequest(input, modelRequests, plannedModelRecord)
 
   for (const planned of plan.toolCalls) {
     const toolInput = applySearchContextToRegistrySearchInput(
@@ -181,6 +207,7 @@ async function runPlannedAgent(
       input: toolInput,
       turnId: 'pending',
       seq,
+      ...(input.harnessLoop === undefined ? {} : { harnessLoop: input.harnessLoop }),
     })
     toolCalls.push(result.record)
     appendTimings(timings, result.timings, {
@@ -192,7 +219,7 @@ async function runPlannedAgent(
     appendProvidersFromToolResult(providers, slugSeen, result.providers)
   }
 
-  return buildAgentResult(input, plan.prose, toolCalls, providers, timings)
+  return buildAgentResult(input, plan.prose, toolCalls, providers, timings, modelRequests)
 }
 
 function buildAgentResult(
@@ -201,6 +228,7 @@ function buildAgentResult(
   toolCalls: readonly AnswerToolCallRecord[],
   providers: readonly AnswerSource[],
   timings: readonly AnswerTurnTimingEntry[] = [],
+  modelRequests: readonly HarnessModelRequestRecord[] = [],
 ): AnswerToolUseAgentResult {
   const toolAllowedSlugs = collectAllowedSlugsFromToolResults(
     toolCallRecordsToGateInput(toolCalls),
@@ -266,6 +294,7 @@ function buildAgentResult(
     providers: finalProviders,
     allowedSlugs,
     toolCalls: [...toolCalls],
+    modelRequests: [...modelRequests],
     timings: [...timings],
     snapshot,
     gate,
@@ -294,30 +323,37 @@ async function runRealToolUseAgent(
 
   const toolCalls: AnswerToolCallRecord[] = []
   const timings: AnswerTurnTimingEntry[] = []
+  const modelRequests: HarnessModelRequestRecord[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
   let seq = 0
 
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
-    const roundStarted = Date.now()
-    const payload = await postChatCompletion({
+    const payload = await runOpenRouterModelRequest({
+      input,
       config,
-      ...(input.model === undefined ? {} : { model: input.model }),
+      modelRequests,
+      timings,
+      timingName: 'model.openrouter_round',
+      timingMetadata: {
+        round,
+        tools: tools.length,
+      },
       tools,
       messages,
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
     })
-    timings.push(timingEntry('model.openrouter_round', Date.now() - roundStarted, {
+    const assistantToolCalls = payload.choices?.[0]?.message?.tool_calls ?? []
+    updateLastModelStopReason(modelRequests, assistantToolCalls.length > 0 ? 'tool_calls' : 'stop')
+    updateLastModelTiming(timings, {
       round,
       tools: tools.length,
-    }))
+    })
 
     const assistantMessage = payload.choices?.[0]?.message
     if (assistantMessage === undefined) {
       throw new AnswerToolUseAgentError('no_response')
     }
 
-    const assistantToolCalls = assistantMessage.tool_calls ?? []
     if (input.disableTools === true && assistantToolCalls.length > 0) {
       throw new AnswerToolUseAgentError('tool_unavailable')
     }
@@ -326,7 +362,7 @@ async function runRealToolUseAgent(
       if (prose === undefined) {
         throw new AnswerToolUseAgentError('prose_failed')
       }
-      return buildAgentResult(input, prose, toolCalls, providers, timings)
+      return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
     }
 
     messages.push({ role: 'assistant', content: assistantMessage.content ?? '', tool_calls: assistantToolCalls })
@@ -343,6 +379,7 @@ async function runRealToolUseAgent(
         input: parsedInput,
         turnId: 'pending',
         seq,
+        ...(input.harnessLoop === undefined ? {} : { harnessLoop: input.harnessLoop }),
       })
       toolCalls.push(result.record)
       appendTimings(timings, result.timings, {
@@ -361,10 +398,15 @@ async function runRealToolUseAgent(
   }
 
   // Exhausted rounds: request a final prose-only completion.
-  const finalStarted = Date.now()
-  const finalPayload = await postChatCompletion({
+  const finalPayload = await runOpenRouterModelRequest({
+    input,
     config,
-    ...(input.model === undefined ? {} : { model: input.model }),
+    modelRequests,
+    timings,
+    timingName: 'model.openrouter_final_prose',
+    timingMetadata: {
+      tools: 0,
+    },
     tools: [],
     messages: [
       ...messages,
@@ -374,16 +416,130 @@ async function runRealToolUseAgent(
           'Stop calling tools. Return AnswerProse JSON now: {"oneLine","summary","whatToDoNow"}.',
       },
     ],
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
   })
-  timings.push(timingEntry('model.openrouter_final_prose', Date.now() - finalStarted, {
-    tools: 0,
-  }))
+  updateLastModelStopReason(modelRequests, 'final_prose')
   const prose = parseProse(finalPayload.choices?.[0]?.message?.content)
   if (prose === undefined) {
     throw new AnswerToolUseAgentError('prose_failed')
   }
-  return buildAgentResult(input, prose, toolCalls, providers, timings)
+  return buildAgentResult(input, prose, toolCalls, providers, timings, modelRequests)
+}
+
+async function runOpenRouterModelRequest(input: {
+  input: AnswerToolUseAgentInput
+  config: AnswerLlmConfig
+  modelRequests: HarnessModelRequestRecord[]
+  timings: AnswerTurnTimingEntry[]
+  timingName: string
+  timingMetadata: Record<string, string | number | boolean | null>
+  tools: readonly ReturnType<typeof actionToOpenRouterTool>[]
+  messages: readonly OpenRouterMessage[]
+}): Promise<OpenRouterResponse> {
+  const startedAt = Date.now()
+  const model = input.input.model ?? input.config.model
+  const seq = input.modelRequests.length
+
+  try {
+    const request = () => postChatCompletion({
+      config: input.config,
+      model,
+      tools: input.tools,
+      messages: input.messages,
+      ...(input.input.signal === undefined ? {} : { signal: input.input.signal }),
+    })
+    const payload = input.input.harnessLoop === undefined
+      ? await request()
+      : await input.input.harnessLoop.runModel<OpenRouterResponse>({
+          seq,
+          provider: 'openrouter',
+          model,
+          summarize: (response) => {
+            const usage = usageFromOpenRouterResponse(response)
+            const stopReason = response.choices?.[0]?.finish_reason
+            return {
+              seq,
+              ...(stopReason === undefined ? {} : { stopReason }),
+              ...(response.id === undefined ? {} : { responseId: response.id }),
+              ...(usage === undefined ? {} : { usage }),
+              ...costAccountingFromOpenRouterResponse(response),
+            }
+          },
+          summarizeError: (error) => ({
+            seq,
+            costUnavailableReason: 'request_failed',
+            ...(isAnswerToolUseAgentError(error) ? { stopReason: error.code } : {}),
+          }),
+        }, request)
+    const durationMs = Date.now() - startedAt
+    const usage = usageFromOpenRouterResponse(payload)
+    recordModelRequest(input.input, input.modelRequests, {
+      seq,
+      provider: 'openrouter',
+      model: payload.model ?? model,
+      status: 'ok',
+      startedAt,
+      endedAt: startedAt + durationMs,
+      durationMs,
+      ...(payload.choices?.[0]?.finish_reason === undefined ? {} : { stopReason: payload.choices[0].finish_reason }),
+      ...(payload.id === undefined ? {} : { responseId: payload.id }),
+      ...(usage === undefined ? {} : { usage }),
+      ...costAccountingFromOpenRouterResponse(payload),
+    })
+    input.timings.push(timingEntry(input.timingName, durationMs, {
+      ...input.timingMetadata,
+      provider: 'openrouter',
+      model: payload.model ?? model,
+    }))
+    return payload
+  } catch (error) {
+    const durationMs = Date.now() - startedAt
+    recordModelRequest(input.input, input.modelRequests, {
+      seq,
+      provider: 'openrouter',
+      model,
+      status: 'error',
+      startedAt,
+      endedAt: startedAt + durationMs,
+      durationMs,
+      errorCode: isAnswerToolUseAgentError(error) ? error.code : 'request_failed',
+      costUnavailableReason: 'request_failed',
+    })
+    throw error
+  }
+}
+
+function recordModelRequest(
+  input: AnswerToolUseAgentInput,
+  target: HarnessModelRequestRecord[],
+  record: HarnessModelRequestRecord,
+): void {
+  target.push(record)
+  input.onModelRequest?.(record)
+}
+
+function updateLastModelStopReason(
+  modelRequests: HarnessModelRequestRecord[],
+  stopReason: string,
+): void {
+  const last = modelRequests.at(-1)
+  if (last === undefined || last.stopReason !== undefined) {
+    return
+  }
+  last.stopReason = stopReason
+}
+
+function updateLastModelTiming(
+  timings: AnswerTurnTimingEntry[],
+  metadata: Record<string, string | number | boolean | null>,
+): void {
+  const last = timings.at(-1)
+  if (last === undefined) {
+    return
+  }
+  last.metadata = {
+    ...(last.metadata ?? {}),
+    ...metadata,
+  }
 }
 
 function timingEntry(
@@ -443,9 +599,9 @@ function buildLocationScopedProse(input: {
 }
 
 function listAnswerModelToolActions(): AnyAction[] {
-  return ANSWER_MODEL_TOOL_IDS.map((toolId) => {
-    const action = findAction(toolId)
-    if (action === undefined || !action.readOnly) {
+  return ANSWER_READ_TOOL_IDS.map((toolId) => {
+    const action = findAnswerReadToolAction(toolId)
+    if (action === undefined) {
       throw new AnswerToolUseAgentError('tool_unavailable')
     }
     return action
@@ -479,6 +635,7 @@ type OpenRouterToolCall = {
 }
 
 type OpenRouterChoice = {
+  finish_reason?: string
   message?: {
     content?: string
     tool_calls?: readonly OpenRouterToolCall[]
@@ -486,7 +643,21 @@ type OpenRouterChoice = {
 }
 
 type OpenRouterResponse = {
+  id?: string
+  model?: string
   choices?: readonly OpenRouterChoice[]
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    cost?: number
+    prompt_tokens_details?: {
+      cached_tokens?: number
+    }
+    completion_tokens_details?: {
+      reasoning_tokens?: number
+    }
+  }
 }
 
 async function postChatCompletion(input: {
@@ -519,6 +690,31 @@ async function postChatCompletion(input: {
     throw new AnswerToolUseAgentError('request_failed')
   }
   return (await response.json()) as OpenRouterResponse
+}
+
+function usageFromOpenRouterResponse(payload: OpenRouterResponse): HarnessModelUsage | undefined {
+  const usage = payload.usage
+  if (usage === undefined) {
+    return undefined
+  }
+  return {
+    ...(usage.prompt_tokens === undefined ? {} : { inputTokens: usage.prompt_tokens }),
+    ...(usage.completion_tokens === undefined ? {} : { outputTokens: usage.completion_tokens }),
+    ...(usage.prompt_tokens_details?.cached_tokens === undefined ? {} : { cachedInputTokens: usage.prompt_tokens_details.cached_tokens }),
+    ...(usage.completion_tokens_details?.reasoning_tokens === undefined ? {} : { reasoningOutputTokens: usage.completion_tokens_details.reasoning_tokens }),
+    ...(usage.total_tokens === undefined ? {} : { totalTokens: usage.total_tokens }),
+  }
+}
+
+function costAccountingFromOpenRouterResponse(payload: OpenRouterResponse): Pick<
+  HarnessModelRequestRecord,
+  'costUsd' | 'costUnavailableReason'
+> {
+  const cost = payload.usage?.cost
+  if (typeof cost === 'number' && Number.isFinite(cost)) {
+    return { costUsd: cost }
+  }
+  return { costUnavailableReason: 'price_table_missing' }
 }
 
 function parseProse(content: string | undefined): AnswerProse | undefined {

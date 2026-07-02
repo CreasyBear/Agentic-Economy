@@ -3,6 +3,7 @@ import { v } from 'convex/values'
 
 import { resolveAdminAuthority } from './authz'
 import { runtimeDb } from './source_state'
+import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import type { RuntimeDocument, RuntimeQuery } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import {
@@ -110,6 +111,11 @@ const appendHarnessSessionEntryResult = v.union(
     existingEntry: v.optional(harnessSessionEntryReceiptResult),
     attemptedEntry: v.optional(harnessSessionEntryReceiptResult),
   }),
+  v.object({
+    status: v.literal('denied'),
+    reason: v.union(v.literal('missing_csrf'), v.literal('foreign_origin')),
+    message: v.string(),
+  }),
 )
 
 const listHarnessSessionEntriesResult = v.object({
@@ -148,6 +154,9 @@ const readAdminHarnessSessionEntriesResult = v.union(
 export const appendHarnessSessionEntry = mutationGeneric({
   args: {
     ownerKey: v.string(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    ...sourceWriteArgs,
     entryId: v.string(),
     sessionId: v.string(),
     runId: v.string(),
@@ -168,6 +177,15 @@ export const appendHarnessSessionEntry = mutationGeneric({
   },
   returns: appendHarnessSessionEntryResult,
   handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'harness_session')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        status: 'denied' as const,
+        reason: sourceWrite.reason,
+        message: 'Harness session append requires server source-write admission.',
+      }
+    }
+
     const db = runtimeDb(ctx.db)
     const idempotencyKey = args.idempotencyKey ?? args.entryId
     const existingByIdempotency = await db
@@ -294,15 +312,17 @@ export const listHarnessSessionEntries = queryGeneric({
   handler: async (ctx, args) => {
     const db = runtimeDb(ctx.db)
     const limit = normalizeLimit(args.limit)
-    const session = await db
-      .query('harnessSessions')
-      .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
-      .unique()
-    const rows = await orderedQuery(
-      db.query('harnessSessionEntries').withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
-    )
-      .order('desc')
-      .take(limit)
+    const [session, rows] = await Promise.all([
+      db
+        .query('harnessSessions')
+        .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
+        .unique(),
+      orderedQuery(
+        db.query('harnessSessionEntries').withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
+      )
+        .order('desc')
+        .take(limit),
+    ])
 
     return {
       kind: 'ok' as const,
@@ -359,15 +379,17 @@ export const readAdminHarnessSessionEntries = queryGeneric({
       }
     }
 
-    const session = await db
-      .query('harnessSessions')
-      .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
-      .unique()
-    const rows = await orderedQuery(
-      db.query('harnessSessionEntries').withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
-    )
-      .order('desc')
-      .take(limit)
+    const [session, rows] = await Promise.all([
+      db
+        .query('harnessSessions')
+        .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
+        .unique(),
+      orderedQuery(
+        db.query('harnessSessionEntries').withIndex('by_sessionId_seq', (query) => query.eq('sessionId', args.sessionId))
+      )
+        .order('desc')
+        .take(limit),
+    ])
 
     return {
       kind: 'allowed' as const,

@@ -240,10 +240,17 @@ export type HarnessRuntimeEvent =
     type: 'model.started' | 'model.completed' | 'model.failed'
     runId: string
     at: number
+    seq?: number
     provider?: string
     model?: string
     durationMs?: number
+    stopReason?: string
+    requestId?: string
+    responseId?: string
     errorCode?: string
+    usage?: HarnessModelUsage
+    costUsd?: number
+    costUnavailableReason?: string
   }
   | {
     type: 'gate.evaluated'

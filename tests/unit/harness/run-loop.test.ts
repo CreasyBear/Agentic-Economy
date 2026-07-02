@@ -129,6 +129,61 @@ describe('harness run loop', () => {
     expect(result.report.coverage.toolsUnused).toEqual([])
   })
 
+  it('folds non-throwing tool and gate failures into the terminal run status', async () => {
+    const clock = createClock()
+    const events: HarnessRuntimeEvent[] = []
+    const tool = createReadTool(clock)
+    const loop = new HarnessRunLoop({
+      runId: 'run-nonthrowing-failures',
+      sessionId: 'session-nonthrowing-failures',
+      tools: [tool],
+      now: clock.now,
+      onEvent: (event) => events.push(event),
+    })
+
+    const result = await loop.run({
+      initialState: {},
+      phases: {
+        retrieval: async ({ loop }) => {
+          await loop.runTool({
+            tool,
+            input: { q: 42 } as unknown as { q: string },
+            surface: 'agentTools',
+          })
+        },
+        gate: ({ loop }) => loop.evaluateGate(
+          'catalog-grounding',
+          () => false,
+          { errorCode: 'grounding_failed' },
+        ),
+      },
+    })
+
+    const completed = events.find((event) => event.type === 'run.completed')
+
+    expect(result.status).toBe('error')
+    expect(result.report.summary.run.status).toBe('error')
+    expect(completed).toMatchObject({
+      type: 'run.completed',
+      report: {
+        summary: {
+          run: { status: 'error' },
+        },
+      },
+    })
+    expect(result.report.summary.tools.byName['registry.search']).toMatchObject({
+      total: 1,
+      error: 1,
+    })
+    expect(result.report.summary.gates?.byName['catalog-grounding']).toMatchObject({
+      total: 1,
+      blocked: 1,
+    })
+    expect(result.report.summary.errors.codes).toEqual(
+      expect.arrayContaining(['grounding_failed', 'invalid_input']),
+    )
+  })
+
   it('propagates phase errors while still emitting a terminal report', async () => {
     const events: HarnessRuntimeEvent[] = []
     const loop = new HarnessRunLoop({

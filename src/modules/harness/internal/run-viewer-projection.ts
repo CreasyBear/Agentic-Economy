@@ -1,14 +1,16 @@
+import type {
+  AnswerThreadRecord,
+  AnswerTurnRecord,
+} from '@/modules/answer-thread/public'
 import {
   buildAnswerRunReport,
   buildHarnessRunReportForAnswer,
   buildPublicAnswerCheckSummary,
-  buildPublicThreadProjection,
-  type AnswerThreadRecord,
   type AnswerToolCallRecord,
-  type AnswerTurnRecord,
   type FrozenTurnEvidence,
   type FrozenTurnProse,
-} from '@/modules/answer-thread/public'
+} from '@/modules/answer-thread/harness'
+import { buildPublicThreadProjection } from '@/modules/answer-thread/projection'
 import type { AnswerWorkStep } from '@/modules/answer/answer-synthesizer'
 import type {
   HarnessEventCounters,
@@ -79,6 +81,7 @@ export function buildHarnessRunViewerListResult(
     actorRef: input.access.actorRef,
     generatedAt: input.generatedAt,
     filters: input.filters,
+    source: input.source,
   })
 }
 
@@ -100,6 +103,7 @@ export function buildHarnessRunViewerDetailResult(
     actorRef: input.access.actorRef,
     generatedAt: input.generatedAt,
     filters: input.filters,
+    source: input.source,
   })
 }
 
@@ -133,6 +137,7 @@ export function buildHarnessRunViewerListProjection(
     generatedAt: input.generatedAt ?? Date.now(),
     actorRef: input.actorRef,
     filters,
+    ...(input.source === undefined ? {} : { source: input.source }),
     summary: summarizeRows(rows),
     rows,
   }
@@ -150,6 +155,7 @@ export function buildHarnessRunViewerDetailProjection(
       generatedAt: input.generatedAt ?? Date.now(),
       filters,
       turnId: input.turnId,
+      ...(input.source === undefined ? {} : { source: input.source }),
       publicMessage: 'No answer turn matched that run evidence request.',
       rows: [],
     }
@@ -162,6 +168,7 @@ export function buildHarnessRunViewerDetailProjection(
     generatedAt: input.generatedAt ?? Date.now(),
     actorRef: input.actorRef,
     filters,
+    ...(input.source === undefined ? {} : { source: input.source }),
     rows,
     detail: buildHarnessRunViewerDetail(turn),
   }

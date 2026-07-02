@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
-  appendAnswerTurnWithToolCalls,
   buildPublicThreadProjection,
+  type AnswerThreadRecord,
+  type AnswerTurnRecord,
+} from '@/modules/answer-thread/public'
+import {
+  appendAnswerTurnWithToolCalls,
   readTurnToolCalls,
   setAnswerThreadPortForTests,
   setAnswerToolCallPortForTests,
-  type AnswerThreadRecord,
-  type AnswerToolCallRecord,
-  type AnswerTurnRecord,
-} from '@/modules/answer-thread/public'
+} from '@/modules/answer-thread/testing'
+import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
 
 describe('answerToolCalls persistence', () => {
   let resetThreadPort: () => void

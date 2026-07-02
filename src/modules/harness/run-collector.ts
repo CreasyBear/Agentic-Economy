@@ -52,7 +52,14 @@ export class HarnessRunCollector {
   private readonly gateRecords: NormalizedGateRecord[] = []
   private readonly phaseStarts = new Map<string, number>()
   private readonly toolStarts = new Map<string, { toolId: string; at: number }>()
-  private readonly modelStarts: { at: number; provider?: string; model?: string }[] = []
+  private readonly modelStarts: {
+    at: number
+    seq?: number
+    provider?: string
+    model?: string
+    requestId?: string
+    costUnavailableReason?: string
+  }[] = []
   private persistStartedAt: number | undefined
 
   noteAvailableTools(tools: readonly (string | { id: string })[]): void {
@@ -140,26 +147,39 @@ export class HarnessRunCollector {
       case 'model.started':
         this.modelStarts.push({
           at: event.at,
+          ...(event.seq === undefined ? {} : { seq: event.seq }),
           ...(event.provider === undefined ? {} : { provider: event.provider }),
           ...(event.model === undefined ? {} : { model: event.model }),
+          ...(event.requestId === undefined ? {} : { requestId: event.requestId }),
+          ...(event.costUnavailableReason === undefined ? {} : { costUnavailableReason: event.costUnavailableReason }),
         })
         return
       case 'model.completed':
       case 'model.failed': {
         const started = this.modelStarts.pop()
+        const seq = event.seq ?? started?.seq
         const provider = event.provider ?? started?.provider
         const model = event.model ?? started?.model
+        const requestId = event.requestId ?? started?.requestId
+        const costUnavailableReason = event.costUnavailableReason ?? started?.costUnavailableReason
         const startedAt = started?.at
         const durationMs = runtimeDuration(event, startedAt)
         const endedAt = startedAt === undefined ? undefined : startedAt + durationMs
         this.recordModelRequest({
+          ...(seq === undefined ? {} : { seq }),
           status: event.type === 'model.completed' ? 'ok' : statusFromRuntimeFailure(event.errorCode),
           durationMs,
           ...(startedAt === undefined ? {} : { startedAt }),
           ...(endedAt === undefined ? {} : { endedAt }),
           ...(provider === undefined ? {} : { provider }),
           ...(model === undefined ? {} : { model }),
+          ...(event.stopReason === undefined ? {} : { stopReason: event.stopReason }),
+          ...(requestId === undefined ? {} : { requestId }),
+          ...(event.responseId === undefined ? {} : { responseId: event.responseId }),
           ...(event.errorCode === undefined ? {} : { errorCode: event.errorCode }),
+          ...(event.usage === undefined ? {} : { usage: event.usage }),
+          ...(event.costUsd === undefined ? {} : { costUsd: event.costUsd }),
+          ...(costUnavailableReason === undefined ? {} : { costUnavailableReason }),
         })
         return
       }

@@ -9,7 +9,7 @@ import type {
   AnswerToolCallRecord,
   AnswerTurnTimingEntry,
   FrozenTurnEvidence,
-} from '@/modules/answer-thread/public'
+} from '@/modules/answer-thread/tooling'
 
 describe('answer run summary', () => {
   it('summarizes complete, error, refused, timings, evidence, and coverage', () => {

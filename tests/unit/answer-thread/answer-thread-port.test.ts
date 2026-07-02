@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { answerTurnRequestSchema } from '@/modules/answer-thread/public'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
-import { setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import type { AnswerThreadRecord, AnswerTurnRecord } from '@/modules/answer-thread/public'
 
 describe('POST /api/answer/turn', () => {

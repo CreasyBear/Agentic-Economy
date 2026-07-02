@@ -1,7 +1,13 @@
-import type { AeAnswerArtifacts } from '../answer-schema'
+export type CatalogGroundedProvider = {
+  slug: string
+}
+
+export type CatalogGroundedAnswer = {
+  providers: readonly CatalogGroundedProvider[]
+}
 
 export type CatalogGroundingInput = {
-  providers: readonly { slug: string }[]
+  providers: readonly CatalogGroundedProvider[]
   allowedSlugs: ReadonlySet<string>
 }
 
@@ -22,10 +28,10 @@ export function collectAllowedSlugsFromToolResults(toolResults: readonly { slug:
   return slugs
 }
 
-export function sanitizeStructuredAnswer(
-  answer: AeAnswerArtifacts,
+export function sanitizeStructuredAnswer<TAnswer extends CatalogGroundedAnswer>(
+  answer: TAnswer,
   allowedSlugs: ReadonlySet<string>,
-): AeAnswerArtifacts | undefined {
+): TAnswer | undefined {
   if (!validateCatalogGrounding({ providers: answer.providers, allowedSlugs })) {
     return undefined
   }

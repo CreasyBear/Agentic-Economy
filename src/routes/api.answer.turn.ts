@@ -80,6 +80,7 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
             precheckedAccess: access,
             ...(preloadedPriorTurns === undefined ? {} : { preloadedPriorTurns }),
             signal: request.signal,
+            sourceWriteRequest: request,
           },
           send,
         )

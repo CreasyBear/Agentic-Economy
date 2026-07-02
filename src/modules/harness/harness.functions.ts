@@ -5,6 +5,11 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import {
+  sourceWriteAdmissionFromContext,
+  sourceWriteAdmissionFromRequest,
+} from '@/lib/server/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 import type {
   HarnessRunStatus,
@@ -30,6 +35,18 @@ export type AppendHarnessSessionEntryArgs = {
   schemaVersion?: number
   toolContractHash?: string
   sourceSnapshotHash?: string
+}
+
+export type AppendHarnessSessionEntryMutationArgs = AppendHarnessSessionEntryArgs & {
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+export type AdmittedAppendHarnessSessionEntryArgs = AppendHarnessSessionEntryArgs & {
+  operationKey: string
+  correlationId: string
+  sourceWrite: SourceWriteAdmission
 }
 
 export type HarnessSessionEntryReceipt = {
@@ -64,6 +81,13 @@ export type AppendHarnessSessionEntryResult =
       existingEntry?: HarnessSessionEntryReceipt
       attemptedEntry?: HarnessSessionEntryReceipt
     }
+  | {
+      status: 'denied'
+      reason: 'missing_csrf' | 'foreign_origin'
+      message: string
+    }
+
+export type AppendHarnessSessionEntrySourceInput = AppendHarnessSessionEntryArgs
 
 export type HarnessSessionSummary = {
   sessionId: string
@@ -136,7 +160,7 @@ export type ReadAdminHarnessSessionEntriesResult =
     }
 
 export const harnessSessionSourceFunctionRefs = {
-  appendEntry: sourceMutation<AppendHarnessSessionEntryArgs, AppendHarnessSessionEntryResult>(
+  appendEntry: sourceMutation<AppendHarnessSessionEntryMutationArgs, AppendHarnessSessionEntryResult>(
     'harnessSessions:appendHarnessSessionEntry',
   ),
   listSessionEntries: sourceQuery<
@@ -154,9 +178,60 @@ export const harnessSessionSourceFunctionRefs = {
 } as const
 
 export async function appendHarnessSessionEntryToSource(
-  args: AppendHarnessSessionEntryArgs,
+  args: AdmittedAppendHarnessSessionEntryArgs,
 ): Promise<AppendHarnessSessionEntryResult> {
   return callPublicSourceMutation(harnessSessionSourceFunctionRefs.appendEntry, args)
+}
+
+export async function appendHarnessSessionEntryToSourceFromServerContext(input: {
+  context: unknown
+  entry: AppendHarnessSessionEntrySourceInput
+  operationKey?: string
+  correlationId?: string
+}): Promise<AppendHarnessSessionEntryResult> {
+  const operationKey = input.operationKey ?? harnessSessionAppendOperationKey(input.entry)
+  const correlationId = input.correlationId ?? input.entry.runId
+
+  return appendHarnessSessionEntryToSource({
+    ...input.entry,
+    operationKey,
+    correlationId,
+    sourceWrite: await sourceWriteAdmissionFromContext({
+      context: input.context,
+      scope: 'harness_session',
+      operationKey,
+      correlationId,
+    }),
+  })
+}
+
+export async function appendHarnessSessionEntryToSourceFromRequest(input: {
+  request: Request
+  entry: AppendHarnessSessionEntrySourceInput
+  operationKey?: string
+  correlationId?: string
+}): Promise<AppendHarnessSessionEntryResult> {
+  const operationKey = input.operationKey ?? harnessSessionAppendOperationKey(input.entry)
+  const correlationId = input.correlationId ?? input.entry.runId
+
+  return appendHarnessSessionEntryToSource({
+    ...input.entry,
+    operationKey,
+    correlationId,
+    sourceWrite: await sourceWriteAdmissionFromRequest({
+      request: input.request,
+      scope: 'harness_session',
+      operationKey,
+      correlationId,
+    }),
+  })
+}
+
+export function harnessSessionAppendOperationKey(entry: Pick<
+  AppendHarnessSessionEntrySourceInput,
+  'sessionId' | 'entryId' | 'idempotencyKey'
+>): string {
+  return `harness-session:${entry.sessionId}:${entry.idempotencyKey ?? entry.entryId}`
 }
 
 export async function listHarnessSessionEntriesFromSource(

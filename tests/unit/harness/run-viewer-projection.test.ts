@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AnswerTurnRecord, FrozenTurnEvidence, FrozenTurnProse } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { FrozenTurnEvidence, FrozenTurnProse } from '@/modules/answer-thread/harness'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
 import { buildHarnessRunReport } from '@/modules/harness/public'
 import {

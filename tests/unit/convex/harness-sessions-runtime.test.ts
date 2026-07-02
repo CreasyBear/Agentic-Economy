@@ -12,6 +12,8 @@ import type {
   HarnessRunStatus,
   HarnessSessionEntryKind,
 } from '../../../src/modules/harness/harness.schema'
+import type { SourceWriteAdmission } from '../../../src/modules/security/source-write-admission'
+import { withSourceWrite } from '../../helpers/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -41,6 +43,9 @@ type AuthCtx = {
 
 type AppendArgs = {
   ownerKey: string
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
   entryId: string
   sessionId: string
   runId: string
@@ -76,8 +81,8 @@ const adminReadHandler = (readAdminHarnessSessionEntries as unknown as {
 describe('Convex harness session journal source', () => {
   it('appends entries into separate session and entry tables without unbounded arrays', async () => {
     const db = new FakeDb({})
-    const first = await appendHandler(authCtx(db, null), entryArgs({ entryId: 'entry-1' }))
-    const second = await appendHandler(authCtx(db, null), entryArgs({
+    const first = await appendHandler(authCtx(db, null), admittedEntryArgs({ entryId: 'entry-1' }))
+    const second = await appendHandler(authCtx(db, null), admittedEntryArgs({
       entryId: 'entry-2',
       kind: 'tool.started',
       idempotencyKey: 'idem-2',
@@ -112,7 +117,7 @@ describe('Convex harness session journal source', () => {
 
   it('replays duplicate idempotency keys with matching request hashes and rejects drift', async () => {
     const db = new FakeDb({})
-    const args = entryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
+    const args = admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
 
     await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({ status: 'accepted' })
     await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({
@@ -137,9 +142,9 @@ describe('Convex harness session journal source', () => {
 
   it('rejects parent mismatches without advancing the active leaf', async () => {
     const db = new FakeDb({})
-    await appendHandler(authCtx(db, null), entryArgs({ entryId: 'entry-1' }))
+    await appendHandler(authCtx(db, null), admittedEntryArgs({ entryId: 'entry-1' }))
 
-    const conflict = await appendHandler(authCtx(db, null), entryArgs({
+    const conflict = await appendHandler(authCtx(db, null), admittedEntryArgs({
       entryId: 'entry-2',
       parentEntryId: 'entry-missing',
       idempotencyKey: 'bad-parent',
@@ -157,9 +162,24 @@ describe('Convex harness session journal source', () => {
     expect(db.dump('harnessSessionEntries')).toHaveLength(1)
   })
 
+  it('denies public-shaped appends without source-write admission', async () => {
+    const db = new FakeDb({})
+    const denied = await appendHandler(authCtx(db, null), entryArgs({
+      entryId: 'entry-public',
+      idempotencyKey: 'public-append',
+    }))
+
+    expect(denied).toMatchObject({
+      status: 'denied',
+      reason: 'missing_csrf',
+    })
+    expect(db.dump('harnessSessions')).toHaveLength(0)
+    expect(db.dump('harnessSessionEntries')).toHaveLength(0)
+  })
+
   it('returns bounded public session and run reads without raw payloads', async () => {
     const db = new FakeDb({})
-    await appendHandler(authCtx(db, null), entryArgs({
+    await appendHandler(authCtx(db, null), admittedEntryArgs({
       entryId: 'entry-1',
       payloadJson: '{"raw":"secret payload"}',
       privatePayloadJson: '{"provider":"secret private payload"}',
@@ -192,6 +212,25 @@ describe('Convex harness session journal source', () => {
     )
   })
 
+  it('keeps admitted idempotent append replay behavior', async () => {
+    const db = new FakeDb({})
+    const args = admittedEntryArgs({
+      entryId: 'entry-admitted',
+      idempotencyKey: 'admitted-idempotent',
+      payloadJson: '{"phase":"persist"}',
+    })
+
+    await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({
+      status: 'accepted',
+      entry: { entryId: 'entry-admitted', idempotencyKey: 'admitted-idempotent' },
+    })
+    await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({
+      status: 'replayed',
+      entry: { entryId: 'entry-admitted', idempotencyKey: 'admitted-idempotent' },
+    })
+    expect(db.dump('harnessSessionEntries')).toHaveLength(1)
+  })
+
   it('keeps private payload reads behind admin authority', async () => {
     const db = new FakeDb({
       adminMemberships: [
@@ -205,7 +244,7 @@ describe('Convex harness session journal source', () => {
         },
       ],
     })
-    await appendHandler(authCtx(db, null), entryArgs({
+    await appendHandler(authCtx(db, null), admittedEntryArgs({
       entryId: 'entry-1',
       payloadJson: '{"raw":"secret payload"}',
       privatePayloadJson: '{"provider":"secret private payload"}',
@@ -356,6 +395,8 @@ class FakeDb implements Db {
 function entryArgs(overrides: Partial<AppendArgs> = {}): AppendArgs {
   return {
     ownerKey: 'owner:session-1',
+    operationKey: 'harness-session:session-1:idem-1',
+    correlationId: 'run-1',
     entryId: 'entry-1',
     sessionId: 'session-1',
     runId: 'run-1',
@@ -368,6 +409,11 @@ function entryArgs(overrides: Partial<AppendArgs> = {}): AppendArgs {
     schemaVersion: 1,
     ...overrides,
   }
+}
+
+function admittedEntryArgs(overrides: Partial<AppendArgs> = {}): AppendArgs {
+  const args = entryArgs(overrides)
+  return withSourceWrite('harness_session', args)
 }
 
 function authCtx(db: Db, identity: UserIdentity | null): AuthCtx {

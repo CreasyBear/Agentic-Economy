@@ -1,10 +1,10 @@
 import type {
-  AnswerToolCallRecord,
   AnswerTurnRecord,
   AnswerTurnStatus,
   FollowUpIntent,
   PublicThreadTurn,
-} from '@/modules/answer-thread/answer-thread.schema'
+} from '@/modules/answer-thread/public'
+import type { AnswerToolCallRecord } from '@/modules/answer-thread/harness'
 import type {
   HarnessRunReport,
   HarnessRunStatus,
@@ -223,6 +223,7 @@ export type HarnessRunViewerDetailInput = {
   actorRef: string
   generatedAt?: number | undefined
   filters?: HarnessRunViewerFilters | undefined
+  source?: HarnessRunViewerSourceState | undefined
 }
 
 export type HarnessRunViewerListInput = {
@@ -230,6 +231,7 @@ export type HarnessRunViewerListInput = {
   actorRef: string
   generatedAt?: number | undefined
   filters?: HarnessRunViewerFilters | undefined
+  source?: HarnessRunViewerSourceState | undefined
 }
 
 export type HarnessRunViewerDeniedInput = {
@@ -248,6 +250,7 @@ export type HarnessRunViewerListAccessInput = {
   turns: readonly HarnessRunViewerSourceTurn[]
   generatedAt?: number | undefined
   filters?: HarnessRunViewerFilters | undefined
+  source?: HarnessRunViewerSourceState | undefined
 }
 
 export type HarnessRunViewerDetailAccessInput = HarnessRunViewerListAccessInput & {

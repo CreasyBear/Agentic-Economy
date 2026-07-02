@@ -280,7 +280,7 @@ function answerToolStatusToHarnessStatus(status: AnswerToolCallStatus): HarnessT
   }
 }
 
-function workLogStatusToHarnessStatus(status: string): HarnessToolStatus {
+function workLogStatusToHarnessStatus(status: NonNullable<FrozenTurnEvidence['workLog']>[number]['status']): HarnessToolStatus {
   switch (status) {
     case 'complete':
       return 'ok'

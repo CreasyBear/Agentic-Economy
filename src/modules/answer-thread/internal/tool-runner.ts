@@ -6,12 +6,14 @@ import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
 import {
   actionToHarnessTool,
   runHarnessTool,
+  type HarnessRunLoop,
   type HarnessToolStatus,
 } from '@/modules/harness/public'
 import type {
   PublicBusinessCatalogApiPage,
   PublicBusinessCatalogDetailResult,
 } from '@/modules/registry/public'
+import { isAnswerReadToolId } from './answer-tool-registry'
 
 import type {
   AnswerToolCallRecord,
@@ -38,6 +40,7 @@ export type RunAnswerToolCallInput = {
   input: unknown
   turnId: string
   seq: number
+  harnessLoop?: HarnessRunLoop
 }
 
 export type RunAnswerToolCallResult = {
@@ -49,10 +52,6 @@ export type RunAnswerToolCallResult = {
   resultJson: string
 }
 
-const KNOWN_TOOL_IDS: ReadonlySet<AnswerToolId> = new Set([
-  'registry.search',
-  'registry.detail',
-])
 
 export async function runAnswerToolCall(
   input: RunAnswerToolCallInput,
@@ -62,7 +61,7 @@ export async function runAnswerToolCall(
     .toString(36)
     .slice(2, 10)}`
 
-  if (!KNOWN_TOOL_IDS.has(input.toolId as AnswerToolId)) {
+  if (!isAnswerReadToolId(input.toolId)) {
     return refuse(input, toolCallId, 'tool_not_known')
   }
 
@@ -87,14 +86,23 @@ export async function runAnswerToolCall(
     })
   }
 
-  const outcome = await runHarnessTool({
-    tool,
-    input: input.input,
-    context: { timing: timings.sink },
-    surface: 'agentTools',
-    allowWrites: false,
-    toolCallId,
-  })
+  const outcome = input.harnessLoop === undefined
+    ? await runHarnessTool({
+        tool,
+        input: input.input,
+        context: { timing: timings.sink },
+        surface: 'agentTools',
+        allowWrites: false,
+        toolCallId,
+      })
+    : await input.harnessLoop.runTool({
+        tool,
+        input: input.input,
+        context: { timing: timings.sink },
+        surface: 'agentTools',
+        allowWrites: false,
+        toolCallId,
+      })
   timings.record('tool.run', outcome.result.durationMs, {
     toolId: input.toolId,
     toolSeq: input.seq,

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { AnswerTurnRecord, FrozenTurnEvidence, FrozenTurnProse } from '@/modules/answer-thread/public'
+import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { FrozenTurnEvidence, FrozenTurnProse } from '@/modules/answer-thread/harness'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
 import {
+  accessForHarnessRunViewerAdminMembership,
   readAdminRunViewerDetailThroughSource,
   readAdminRunViewerListThroughSource,
   setHarnessRunViewerSourcePortForTests,
@@ -66,11 +68,15 @@ describe('harness run viewer source seam', () => {
   })
 
   it('uses a configured source port for allowed admin reads', async () => {
+    let readActorRef: string | undefined
     restoreSourcePort = setHarnessRunViewerSourcePortForTests({
-      readTurns: async (filters) => ({
-        access: { kind: 'allowed', actorRef: 'admin@example.test' },
-        turns: [answerTurn('turn-allowed-source', { query: filters.turnId ?? 'source query' })],
-      }),
+      authorize: async () => ({ kind: 'allowed', actorRef: 'admin@example.test' }),
+      readTurns: async (filters, access) => {
+        readActorRef = access.actorRef
+        return [
+          answerTurn('turn-allowed-source', { query: filters.turnId ?? 'source query' }),
+        ]
+      },
     })
 
     const result = await readAdminRunViewerListThroughSource({ turnId: 'turn-allowed' })
@@ -81,7 +87,8 @@ describe('harness run viewer source seam', () => {
     }
 
     expect(result.actorRef).toBe('admin@example.test')
-    expect(result.source).toBeUndefined()
+    expect(readActorRef).toBe('admin@example.test')
+    expect(result.source).toEqual({ kind: 'configured' })
     expect(result.rows).toHaveLength(1)
     expect(result.rows[0]).toMatchObject({
       turnId: 'turn-allowed-source',
@@ -89,11 +96,13 @@ describe('harness run viewer source seam', () => {
     })
   })
 
-  it('drops private rows when a configured source port denies admin access', async () => {
+  it('does not read private turns when a configured source port denies admin access', async () => {
+    let readCalls = 0
     restoreSourcePort = setHarnessRunViewerSourcePortForTests({
-      readTurns: async () => ({
-        access: { kind: 'denied', reason: 'missing_membership' },
-        turns: [
+      authorize: async () => ({ kind: 'denied', reason: 'missing_membership' }),
+      readTurns: async () => {
+        readCalls += 1
+        return [
           answerTurn('turn-denied-source', {
             query: 'private raw-token-private query',
             evidence: {
@@ -112,12 +121,13 @@ describe('harness run viewer source seam', () => {
               ],
             },
           }),
-        ],
-      }),
+        ]
+      },
     })
 
     const result = await readAdminRunViewerListThroughSource()
 
+    expect(readCalls).toBe(0)
     expect(result).toMatchObject({
       kind: 'denied',
       httpStatus: 401,
@@ -126,6 +136,34 @@ describe('harness run viewer source seam', () => {
     })
     expect(JSON.stringify(result)).not.toContain('raw-token-private')
     expect(JSON.stringify(result)).not.toContain('tool-call-raw-token-private')
+  })
+
+  it('derives run viewer access from the shared admin authority matrix', () => {
+    expect(accessForHarnessRunViewerAdminMembership(undefined)).toMatchObject({
+      kind: 'denied',
+      reason: 'missing_membership',
+    })
+    expect(
+      accessForHarnessRunViewerAdminMembership({
+        clerkUserId: 'reviewer@example.test',
+        role: 'reviewer',
+        state: 'active',
+        grantedBy: 'owner@example.test',
+        grantedAt: 1_000,
+      }),
+    ).toEqual({ kind: 'allowed', actorRef: 'reviewer@example.test' })
+    expect(
+      accessForHarnessRunViewerAdminMembership({
+        clerkUserId: 'suspended@example.test',
+        role: 'support',
+        state: 'suspended',
+        grantedBy: 'owner@example.test',
+        grantedAt: 1_000,
+      }),
+    ).toMatchObject({
+      kind: 'denied',
+      reason: 'inactive_membership',
+    })
   })
 })
 

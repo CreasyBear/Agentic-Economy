@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   appendHarnessSessionEntry,
   appendHarnessSessionEntryWithResult,
+  buildHarnessPublicReplayProjection,
   buildHarnessSessionProjection,
   HarnessSessionJournalConflictError,
 } from '@/modules/harness/public'
@@ -175,6 +176,40 @@ describe('harness session journal', () => {
       parentEntryId: 'entry-1',
       createdAt: 30,
     }))).toThrow(HarnessSessionJournalConflictError)
+  })
+
+  it('keeps private payloads out of the public replay projection', () => {
+    const entries = appendHarnessSessionEntry([], journalInput({
+      entryId: 'entry-1',
+      runId: 'run-1',
+      kind: 'tool.completed',
+      status: 'ok',
+      createdAt: 10,
+      payload: { toolId: 'registry.search', input: { q: 'private query' } },
+      publicSummary: { count: 2 },
+      privatePayload: {
+        toolId: 'registry.search',
+        inputHash: 'private-input-hash',
+        resultHash: 'private-result-hash',
+      },
+    }))
+
+    const publicProjection = buildHarnessPublicReplayProjection('session-1', entries)
+    const publicJson = JSON.stringify(publicProjection)
+
+    expect(publicProjection.entries).toEqual([
+      expect.objectContaining({
+        seq: 1,
+        kind: 'tool.completed',
+        summary: { count: 2 },
+      }),
+    ])
+    expect(publicJson).not.toContain('privatePayload')
+    expect(publicJson).not.toContain('payload')
+    expect(publicJson).not.toContain('registry.search')
+    expect(publicJson).not.toContain('private query')
+    expect(publicJson).not.toContain('private-input-hash')
+    expect(publicJson).not.toContain('private-result-hash')
   })
 })
 

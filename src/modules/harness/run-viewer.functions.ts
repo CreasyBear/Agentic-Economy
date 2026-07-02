@@ -2,6 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
+import type { AdminMembership } from '@/modules/security/public'
+import { requireAdminAuthority } from '@/modules/security/public'
 import {
   buildHarnessRunViewerDetailResult,
   buildHarnessRunViewerListResult,
@@ -14,6 +16,7 @@ import {
   type HarnessRunViewerDetailResult,
   type HarnessRunViewerFilters,
   type HarnessRunViewerListResult,
+  type HarnessRunViewerSourceTurn,
   type HarnessRunViewerSourceState,
 } from './run-viewer.schema'
 
@@ -35,7 +38,11 @@ export type HarnessRunViewerSourceRead = {
 }
 
 export type HarnessRunViewerSourcePort = {
-  readTurns(filters: HarnessRunViewerFilters): Promise<HarnessRunViewerSourceRead>
+  authorize(filters: HarnessRunViewerFilters): Promise<HarnessRunViewerAccess>
+  readTurns(
+    filters: HarnessRunViewerFilters,
+    access: Extract<HarnessRunViewerAccess, { kind: 'allowed' }>,
+  ): Promise<readonly HarnessRunViewerSourceTurn[]>
 }
 
 const disabledSourceState = {
@@ -56,6 +63,21 @@ export function setHarnessRunViewerSourcePortForTests(
   }
 }
 
+export function accessForHarnessRunViewerAdminMembership(
+  membership: AdminMembership | undefined,
+): HarnessRunViewerAccess {
+  const authority = requireAdminAuthority(membership, 'read_admin_readbacks')
+  if (authority.kind === 'denied') {
+    return {
+      kind: 'denied',
+      reason: authority.reason,
+      publicMessage: 'Admin run evidence requires active source-owned membership.',
+    }
+  }
+
+  return { kind: 'allowed', actorRef: authority.membership.clerkUserId }
+}
+
 export const readAdminRunViewerListServer = createServerFn()
   .validator((data) => filtersSchema.parse(data ?? {}))
   .handler(async ({ data }) => readAdminRunViewerListThroughSource(data))
@@ -74,11 +96,12 @@ export async function readAdminRunViewerListThroughSource(
     return buildHarnessRunViewerDisabledListResult(normalizedFilters)
   }
 
-  const read = await source.port.readTurns(normalizedFilters)
+  const read = await readAuthorizedTurns(source.port, normalizedFilters)
   return buildHarnessRunViewerListResult({
     access: read.access,
     turns: read.turns,
     filters: normalizedFilters,
+    source: { kind: 'configured' },
   })
 }
 
@@ -93,13 +116,29 @@ export async function readAdminRunViewerDetailThroughSource(
     return buildHarnessRunViewerDisabledDetailResult(turnId, normalizedFilters)
   }
 
-  const read = await source.port.readTurns(normalizedFilters)
+  const read = await readAuthorizedTurns(source.port, normalizedFilters)
   return buildHarnessRunViewerDetailResult({
     access: read.access,
     turns: read.turns,
     turnId,
     filters: normalizedFilters,
+    source: { kind: 'configured' },
   })
+}
+
+async function readAuthorizedTurns(
+  port: HarnessRunViewerSourcePort,
+  filters: HarnessRunViewerFilters,
+): Promise<HarnessRunViewerSourceRead> {
+  const access = await port.authorize(filters)
+  if (access.kind === 'denied') {
+    return { access, turns: [] }
+  }
+
+  return {
+    access,
+    turns: await port.readTurns(filters, access),
+  }
 }
 
 function readConfiguredSource():

@@ -11,6 +11,7 @@ export const SourceWriteAdmissionScopeValues = [
   'admin_operator',
   'discovery_repair',
   'notification_repair',
+  'harness_session',
 ] as const
 
 export type SourceWriteAdmissionScope = (typeof SourceWriteAdmissionScopeValues)[number]

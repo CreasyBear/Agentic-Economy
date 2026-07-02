@@ -11,12 +11,9 @@ import {
   setAnswerToolUseAgentForTests,
 } from '../../../src/modules/answer/public'
 import type { AnswerEvent, AnswerSnapshot, AnswerWorkStep } from '../../../src/modules/answer/public'
-import {
-  resetAnswerTurnGuardForTests,
-  setAnswerThreadPortForTests,
-  validateFollowUpChip,
-  type FrozenTurnEvidence,
-} from '../../../src/modules/answer-thread/public'
+import { validateFollowUpChip } from '../../../src/modules/answer-thread/public'
+import { resetAnswerTurnGuardForTests, setAnswerThreadPortForTests } from '../../../src/modules/answer-thread/testing'
+import type { FrozenTurnEvidence } from '../../../src/modules/answer-thread/harness'
 import { handleAnswerTurnRequest } from '../../../src/routes/api.answer.turn'
 import {
   createAnswerThreadTestStore,
@@ -60,6 +57,8 @@ type ToolUseVars = {
   proseNextStep: string
   expectedSlug: string
   expectPass: string
+  expectedModelProvider?: string
+  expectedModel?: string
 }
 
 type AnswerTurnVars = {
@@ -717,9 +716,25 @@ function findUnsafeClaimProblems(publicText: string): string[] {
  */
 export async function evaluateToolUseCase(
   vars: ToolUseVars,
-): Promise<{ ok: boolean; toolInput?: string; slug?: string; gateOk?: boolean; detail?: string }> {
+): Promise<{
+  ok: boolean
+  toolInput?: string
+  slug?: string
+  gateOk?: boolean
+  modelProvider?: string
+  model?: string
+  detail?: string
+}> {
   const state = createAnswerEvalRegistrySourceState()
-  let result: { ok: boolean; toolInput?: string; slug?: string; gateOk?: boolean; detail?: string } = {
+  let result: {
+    ok: boolean
+    toolInput?: string
+    slug?: string
+    gateOk?: boolean
+    modelProvider?: string
+    model?: string
+    detail?: string
+  } = {
     ok: false,
     detail: 'not_run',
   }
@@ -741,8 +756,15 @@ export async function evaluateToolUseCase(
       const toolInput = firstCall?.inputJson ?? ''
       const slugs = [...agentResult.allowedSlugs]
       const gateOk = agentResult.gate.ok
+      const firstModel = agentResult.modelRequests[0]
       const expectedGate = vars.expectPass === 'true'
       const slugOk = vars.expectedSlug.length === 0 || slugs.includes(vars.expectedSlug)
+      const modelAccountingOk =
+        firstModel !== undefined &&
+        firstModel.status === 'ok' &&
+        firstModel.provider === (vars.expectedModelProvider ?? 'test') &&
+        firstModel.model === (vars.expectedModel ?? 'planned-answer-tool-use-agent') &&
+        firstModel.costUnavailableReason === 'test_seam'
 
       let parsedChosen: { query?: string } = {}
       try {
@@ -753,11 +775,15 @@ export async function evaluateToolUseCase(
       const inputOk = parsedChosen.query === plannedInput.query
 
       result = {
-        ok: gateOk === expectedGate && slugOk && inputOk,
+        ok: gateOk === expectedGate && slugOk && inputOk && modelAccountingOk,
         toolInput,
         slug: slugs.join(','),
         gateOk,
-        ...(slugOk && inputOk ? {} : { detail: `slug_ok=${slugOk} input_ok=${inputOk}` }),
+        ...(firstModel?.provider === undefined ? {} : { modelProvider: firstModel.provider }),
+        ...(firstModel?.model === undefined ? {} : { model: firstModel.model }),
+        ...(slugOk && inputOk && modelAccountingOk
+          ? {}
+          : { detail: `slug_ok=${slugOk} input_ok=${inputOk} model_accounting_ok=${modelAccountingOk}` }),
       }
     } catch (error) {
       result = { ok: false, detail: `agent_error:${String(error)}` }

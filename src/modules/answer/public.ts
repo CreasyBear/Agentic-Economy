@@ -72,10 +72,6 @@ export {
   buildUnsupportedSummary,
 } from './internal/boundary-prose'
 export {
-  registrySearchTool,
-  registrySearchToolDef,
-} from './tools/registry-search.tool'
-export {
   DEFAULT_OPENROUTER_MODEL,
   readAnswerLlmConfig,
   readToolUseAgentEnabled,

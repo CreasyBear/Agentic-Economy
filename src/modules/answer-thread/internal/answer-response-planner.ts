@@ -136,18 +136,6 @@ export function defaultArtifactBudgetForMode(mode: AnswerResponseMode): AnswerAr
   }
 }
 
-export function defaultToolPolicyForMode(
-  mode: AnswerResponseMode,
-  input: { allowedSlugs?: readonly string[] } = {},
-): AnswerToolPolicy {
-  if (mode === 'answer') {
-    return { kind: 'registry.search', maxCalls: 1 }
-  }
-  if (mode === 'compare' || mode === 'filter') {
-    return { kind: 'frozen', allowedSlugs: input.allowedSlugs ?? [] }
-  }
-  return { kind: 'none' }
-}
 
 export function planAnswerTurn(input: {
   query: string

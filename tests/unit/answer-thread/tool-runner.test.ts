@@ -5,7 +5,7 @@ import {
   runAnswerToolCall,
   toolCallRecordsToGateInput,
 } from '@/modules/answer-thread/internal/tool-runner'
-import type { AnswerToolCallRecord } from '@/modules/answer-thread/public'
+import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
 import { withRegistrySourcePortForTest } from '../../helpers/source-ports'
 
 const TURN_ID = 'turn-1'

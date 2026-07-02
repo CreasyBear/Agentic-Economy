@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildHarnessRunReport,
   createHarnessRunCollector,
+  HarnessRunLoop,
 } from '@/modules/harness/public'
 
 describe('harness run collector', () => {
@@ -159,6 +160,130 @@ describe('harness run collector', () => {
       'res-b',
       undefined,
     ])
+  })
+
+  it('records model accounting from runtime events', () => {
+    const collector = createHarnessRunCollector()
+
+    collector.recordRuntimeEvent({
+      type: 'model.started',
+      runId: 'run-model',
+      at: 100,
+      seq: 7,
+      provider: 'openrouter',
+      model: 'ae-model',
+      requestId: 'req-runtime',
+      costUnavailableReason: 'price_table_missing',
+    })
+    collector.recordRuntimeEvent({
+      type: 'model.completed',
+      runId: 'run-model',
+      at: 145,
+      stopReason: 'tool_calls',
+      responseId: 'res-runtime',
+      usage: {
+        inputTokens: 123,
+        outputTokens: 45,
+        totalTokens: 168,
+      },
+      costUsd: 0.00012345,
+    })
+
+    const report = collector.snapshot()
+
+    expect(report.summary.models).toMatchObject({
+      total: 1,
+      ok: 1,
+      totalDurationMs: 45,
+      byModel: {
+        'ae-model': {
+          total: 1,
+          ok: 1,
+          totalDurationMs: 45,
+        },
+      },
+      byProvider: {
+        openrouter: {
+          total: 1,
+          ok: 1,
+          totalDurationMs: 45,
+        },
+      },
+      byStopReason: {
+        tool_calls: 1,
+      },
+    })
+    expect(report.summary.usage).toMatchObject({
+      inputTokens: 123,
+      outputTokens: 45,
+      totalTokens: 168,
+    })
+    expect(report.summary.cost).toEqual({
+      estimatedUsd: 0.00012345,
+      unavailableReasons: ['price_table_missing'],
+    })
+    expect(report.privateTelemetry?.modelRequests[0]).toMatchObject({
+      seq: 7,
+      provider: 'openrouter',
+      model: 'ae-model',
+      status: 'ok',
+      startedAt: 100,
+      endedAt: 145,
+      durationMs: 45,
+      stopReason: 'tool_calls',
+      requestId: 'req-runtime',
+      responseId: 'res-runtime',
+    })
+  })
+
+  it('lets HarnessRunLoop.runModel feed usage and ids into the collector', async () => {
+    let now = 1_000
+    const loop = new HarnessRunLoop({
+      runId: 'run-loop-model',
+      sessionId: 'session-loop-model',
+      now: () => now,
+    })
+
+    const result = await loop.runModel(
+      {
+        seq: 2,
+        provider: 'openrouter',
+        model: 'ae-model',
+        requestId: 'req-loop',
+        costUnavailableReason: 'price_table_missing',
+        summarize: () => ({
+          responseId: 'res-loop',
+          stopReason: 'stop',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 5,
+          },
+        }),
+      },
+      async () => {
+        now = 1_037
+        return { ok: true }
+      },
+    )
+
+    expect(result).toEqual({ ok: true })
+    const report = loop.snapshot()
+    expect(report.summary.models).toMatchObject({
+      total: 1,
+      ok: 1,
+      totalDurationMs: 37,
+    })
+    expect(report.coverage.modelsUsed).toEqual(['ae-model'])
+    expect(report.coverage.providersUsed).toEqual(['openrouter'])
+    expect(report.privateTelemetry?.modelRequests[0]).toMatchObject({
+      seq: 2,
+      requestId: 'req-loop',
+      responseId: 'res-loop',
+      usage: {
+        inputTokens: 10,
+        outputTokens: 5,
+      },
+    })
   })
 
   it('tracks gate counters separately from phase events', () => {

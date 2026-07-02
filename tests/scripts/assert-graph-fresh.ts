@@ -154,6 +154,7 @@ export function readDirtyGitPaths(cwd = process.cwd()): string[] {
 export function formatGraphFreshnessResult(result: GraphFreshnessResult): string {
   const lines = [
     `graph freshness: ${result.status}`,
+    `operational evidence: ${result.ok ? 'usable' : 'blocked'}`,
     `current HEAD: ${result.currentHead}`,
     `graph report commit: ${result.graphReportCommit ?? '(missing)'}`,
     `graph json commit: ${result.graphJsonCommit ?? '(not checked)'}`,
@@ -167,6 +168,20 @@ export function formatGraphFreshnessResult(result: GraphFreshnessResult): string
   if (result.staleReasons.length > 0) {
     lines.push('reasons:')
     lines.push(...result.staleReasons.map((reason) => `- ${reason}`))
+  }
+
+  if (!result.ok) {
+    lines.push('next actions:')
+    if (result.relevantDirtyPaths.length > 0) {
+      lines.push('- settle or intentionally shelve graph-relevant dirty paths')
+    }
+    if (result.staleReasons.some((reason) => reason.includes('commit_mismatch'))) {
+      lines.push('- rebuild graph artifacts from the final source tree')
+    }
+    if (result.status === 'invalid') {
+      lines.push('- restore valid .planning/graphs/GRAPH_REPORT.md and graph.json metadata')
+    }
+    lines.push('- rerun npm run test:graph-freshness before claiming operational graph evidence')
   }
 
   return lines.join('\n')
