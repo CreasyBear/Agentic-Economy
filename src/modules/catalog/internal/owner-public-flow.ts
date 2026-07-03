@@ -2,7 +2,7 @@ import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/busines
 import type { BusinessMutationActor } from '@/modules/business/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { CorrelationId, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
-import { buildPublicCatalogDto, createEmptyCatalogSourceState } from './public-catalog-dto'
+import { buildPublicCatalogDto, createEmptyCatalogSourceState } from './catalog-model'
 import { publishBusinessCatalog } from './publish'
 import type {
   FirstRequestMode,
@@ -10,7 +10,7 @@ import type {
   PublicFirstRequestChannel,
   PublishBusinessCatalogState,
   ServiceCatalogInput,
-} from '@/modules/catalog/public'
+} from './catalog-model'
 
 export const PublicOwnerClaimFieldValues = [
   'businessName',

@@ -263,37 +263,36 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
 function readPublicCatalogs(
   state: RegistrySourceState,
 ): readonly PublicCatalogContract[] {
-  return state.businesses
-    .filter((business) =>
-      isPubliclyDiscoverable(business, state.suppressionRules),
+  const catalogs: PublicCatalogContract[] = []
+  for (const business of state.businesses) {
+    if (!isPubliclyDiscoverable(business, state.suppressionRules)) {
+      continue
+    }
+    const context = state.businessContexts.find(
+      (candidate) => candidate.businessId === business.businessId,
     )
-    .map((business) => {
-      const context = state.businessContexts.find(
-        (candidate) => candidate.businessId === business.businessId,
-      )
-      if (context === undefined) {
-        return undefined
-      }
+    if (context === undefined) {
+      continue
+    }
 
-      const catalog = buildPublicCatalogDto({
-        business,
-        context,
-        services: state.businessServices.filter(
-          (service) => service.businessId === business.businessId,
-        ),
-        capabilities: state.serviceCapabilities.filter(
-          (capability) => capability.businessId === business.businessId,
-        ),
-        indexStatus: indexStatusForBusiness(state, business.businessId),
-        discoveryStatus: 'degraded',
-      })
-
-      return catalog.kind === 'available' ? catalog.catalog : undefined
+    const catalog = buildPublicCatalogDto({
+      business,
+      context,
+      services: state.businessServices.filter(
+        (service) => service.businessId === business.businessId,
+      ),
+      capabilities: state.serviceCapabilities.filter(
+        (capability) => capability.businessId === business.businessId,
+      ),
+      indexStatus: indexStatusForBusiness(state, business.businessId),
+      discoveryStatus: 'degraded',
     })
-    .filter(
-      (catalog): catalog is PublicCatalogContract => catalog !== undefined,
-    )
-    .sort(compareCatalogs)
+
+    if (catalog.kind === 'available') {
+      catalogs.push(catalog.catalog)
+    }
+  }
+  return catalogs.sort(compareCatalogs)
 }
 
 function toPublicApiDto(

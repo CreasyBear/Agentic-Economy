@@ -119,7 +119,7 @@ const INTERNAL_PUBLIC_TERMS = [
   'fixture',
 ] as const
 
-export function evaluateGateCase(vars: GateVars): { ok: boolean; code?: string } {
+function evaluateGateCase(vars: GateVars): { ok: boolean; code?: string } {
   const snapshot = JSON.parse(vars.snapshot) as AnswerSnapshot
   const allowedSlugs = new Set(JSON.parse(vars.allowedSlugs) as string[])
   const result = runAnswerGate({ snapshot, allowedSlugs })
@@ -129,13 +129,13 @@ export function evaluateGateCase(vars: GateVars): { ok: boolean; code?: string }
   return { ok: false, code: result.code }
 }
 
-export function evaluateChipCase(vars: ChipVars): { ok: boolean } {
+function evaluateChipCase(vars: ChipVars): { ok: boolean } {
   const priorQueryCount = Number.parseInt(vars.priorQueryCount, 10)
   const ok = validateFollowUpChip(vars.chip, Number.isNaN(priorQueryCount) ? 1 : priorQueryCount)
   return { ok }
 }
 
-export async function evaluateParityCase(vars: ParityVars): Promise<{ ok: boolean; detail?: string }> {
+async function evaluateParityCase(vars: ParityVars): Promise<{ ok: boolean; detail?: string }> {
   const state = createAnswerEvalRegistrySourceState()
   let result: { ok: boolean; detail?: string } = { ok: false, detail: 'not_run' }
 
@@ -156,11 +156,11 @@ export async function evaluateParityCase(vars: ParityVars): Promise<{ ok: boolea
   return result
 }
 
-export function evaluateInjectionCase(vars: InjectionVars): { ok: boolean } {
+function evaluateInjectionCase(vars: InjectionVars): { ok: boolean } {
   return { ok: hasInjectionUpgrade(vars.prose) }
 }
 
-export async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<AnswerTurnEvalResult> {
+async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<AnswerTurnEvalResult> {
   const testCase = findAnswerTurnEvalCase(vars.caseId)
   if (testCase === undefined) {
     return {
@@ -234,7 +234,7 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
   }
 }
 
-export async function evaluateAnswerThreadCase(vars: AnswerThreadVars): Promise<AnswerThreadEvalResult> {
+async function evaluateAnswerThreadCase(vars: AnswerThreadVars): Promise<AnswerThreadEvalResult> {
   const testCase = findAnswerThreadEvalCase(vars.caseId)
   if (testCase === undefined) {
     return {
@@ -477,6 +477,9 @@ function evaluateAnswerTurnExpectations(input: {
   } = input
   const expected = testCase.expected
   const problems: string[] = []
+  const timingNameSet = new Set(timingNames)
+  const artifactKindSet = new Set(artifactKinds)
+  const harnessPhaseSet = new Set(harnessPhases)
 
   if (status !== expected.status) {
     problems.push(`expected status ${expected.status}, got ${status}`)
@@ -488,22 +491,22 @@ function evaluateAnswerTurnExpectations(input: {
     problems.push(`expected tool queries [${expected.toolQueries.join(', ')}], got [${toolQueries.join(', ')}]`)
   }
   for (const name of expected.includeTimingNames ?? []) {
-    if (!timingNames.includes(name)) {
+    if (!timingNameSet.has(name)) {
       problems.push(`missing timing "${name}"`)
     }
   }
   for (const name of expected.excludeTimingNames ?? []) {
-    if (timingNames.includes(name)) {
+    if (timingNameSet.has(name)) {
       problems.push(`unexpected timing "${name}"`)
     }
   }
   for (const kind of expected.includeArtifactKinds ?? []) {
-    if (!artifactKinds.includes(kind)) {
+    if (!artifactKindSet.has(kind)) {
       problems.push(`missing artifact kind "${kind}"`)
     }
   }
   for (const kind of expected.forbidArtifactKinds ?? []) {
-    if (artifactKinds.includes(kind)) {
+    if (artifactKindSet.has(kind)) {
       problems.push(`unexpected artifact kind "${kind}"`)
     }
   }
@@ -525,7 +528,7 @@ function evaluateAnswerTurnExpectations(input: {
     )
   }
   for (const phase of expected.harnessPhases ?? []) {
-    if (!harnessPhases.includes(phase)) {
+    if (!harnessPhaseSet.has(phase)) {
       problems.push(`missing harness phase "${phase}"`)
     }
   }
@@ -589,13 +592,17 @@ function evaluateWorkLogExpectations(input: {
     problems.push('missing visible work log')
     return problems
   }
-  for (const id of ['interpret.request', 'assemble.answer']) {
-    if (!ids.includes(id)) {
-      problems.push(`missing work step "${id}"`)
-    }
+  if (ids.some((id) => !/^step-\d+$/.test(id))) {
+    problems.push(`public work step ids must be sanitized: [${ids.join(', ')}]`)
   }
-  if ((input.expected.toolQueries?.length ?? 0) > 0 && !ids.some((id) => id.startsWith('search.registry.'))) {
-    problems.push('missing search work step')
+  if ((input.expected.toolQueries?.length ?? 0) > 0) {
+    const searchSteps = input.workSteps.filter((step) => step.phase === 'search')
+    if (searchSteps.length === 0) {
+      problems.push('missing search work step')
+    }
+    if (!searchSteps.some((step) => step.detailRows?.some((row) => row.label === 'Results'))) {
+      problems.push('search work step is missing result-count details')
+    }
   }
   if (input.workSteps.some((step) => step.status === 'running')) {
     problems.push('work log still has running steps')
@@ -714,7 +721,7 @@ function findUnsafeClaimProblems(publicText: string): string[] {
  * proves the agent's chosen tool input is the recorded evidence and that prose
  * is grounded against the resulting slugs - CI-runnable without an OpenRouter key.
  */
-export async function evaluateToolUseCase(
+async function evaluateToolUseCase(
   vars: ToolUseVars,
 ): Promise<{
   ok: boolean
@@ -795,7 +802,7 @@ export async function evaluateToolUseCase(
   return result
 }
 
-export function evaluateCase(vars: Record<string, string>): { ok: boolean; code?: string; detail?: string } {
+function evaluateCase(vars: Record<string, string>): { ok: boolean; code?: string; detail?: string } {
   const mode = vars.mode ?? 'gate'
   switch (mode) {
     case 'chip':

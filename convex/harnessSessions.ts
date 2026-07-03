@@ -118,6 +118,43 @@ const appendHarnessSessionEntryResult = v.union(
   }),
 )
 
+const finalizeAnswerTurnHarnessRunResult = v.union(
+  v.object({
+    status: v.literal('accepted'),
+    turnId: v.string(),
+    finalizationHash: v.string(),
+    entriesAccepted: v.number(),
+    entriesReplayed: v.number(),
+    activeLeafEntryId: v.optional(v.string()),
+  }),
+  v.object({
+    status: v.literal('replayed'),
+    turnId: v.string(),
+    finalizationHash: v.string(),
+    entriesAccepted: v.literal(0),
+    entriesReplayed: v.number(),
+    activeLeafEntryId: v.optional(v.string()),
+  }),
+  v.object({
+    status: v.literal('conflict'),
+    reason: v.union(
+      v.literal('turn_not_found'),
+      v.literal('snapshot_mismatch'),
+      v.literal('evidence_conflict'),
+      v.literal('entry_id_conflict'),
+      v.literal('idempotency_conflict'),
+      v.literal('parent_conflict'),
+    ),
+    message: v.string(),
+    activeLeafEntryId: v.optional(v.string()),
+  }),
+  v.object({
+    status: v.literal('denied'),
+    reason: v.union(v.literal('missing_csrf'), v.literal('foreign_origin')),
+    message: v.string(),
+  }),
+)
+
 const listHarnessSessionEntriesResult = v.object({
   kind: v.literal('ok'),
   session: v.union(harnessSessionPublicSummaryResult, v.null()),
@@ -188,17 +225,18 @@ export const appendHarnessSessionEntry = mutationGeneric({
 
     const db = runtimeDb(ctx.db)
     const idempotencyKey = args.idempotencyKey ?? args.entryId
-    const existingByIdempotency = await db
-      .query('harnessSessionEntries')
-      .withIndex('by_sessionId_idempotencyKey', (query) =>
-        query.eq('sessionId', args.sessionId).eq('idempotencyKey', idempotencyKey)
-      )
-      .unique()
-
-    const session = await db
-      .query('harnessSessions')
-      .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
-      .unique()
+    const [existingByIdempotency, session] = await Promise.all([
+      db
+        .query('harnessSessionEntries')
+        .withIndex('by_sessionId_idempotencyKey', (query) =>
+          query.eq('sessionId', args.sessionId).eq('idempotencyKey', idempotencyKey)
+        )
+        .unique(),
+      db
+        .query('harnessSessions')
+        .withIndex('by_sessionId', (query) => query.eq('sessionId', args.sessionId))
+        .unique(),
+    ])
     const activeLeafEntryId = optionalStringField(session ?? {}, 'activeLeafEntryId')
 
     if (existingByIdempotency !== null) {
@@ -303,6 +341,117 @@ export const appendHarnessSessionEntry = mutationGeneric({
   },
 })
 
+export const finalizeAnswerTurnHarnessRun = mutationGeneric({
+  args: {
+    turnId: v.string(),
+    snapshotHash: v.string(),
+    evidenceJson: v.string(),
+    finalizationHash: v.string(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    ...sourceWriteArgs,
+    entries: v.array(
+      v.object({
+        ownerKey: v.string(),
+        entryId: v.string(),
+        sessionId: v.string(),
+        runId: v.string(),
+        turnId: v.optional(v.string()),
+        parentEntryId: v.optional(v.string()),
+        seq: v.optional(v.number()),
+        kind: harnessSessionEntryKind,
+        status: v.optional(harnessRunStatus),
+        idempotencyKey: v.optional(v.string()),
+        requestHash: v.optional(v.string()),
+        createdAt: v.number(),
+        payloadJson: v.string(),
+        publicSummaryJson: v.optional(v.string()),
+        privatePayloadJson: v.optional(v.string()),
+        schemaVersion: v.optional(v.number()),
+        toolContractHash: v.optional(v.string()),
+        sourceSnapshotHash: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: finalizeAnswerTurnHarnessRunResult,
+  handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(args, 'harness_session')
+    if (sourceWrite.kind === 'rejected') {
+      return {
+        status: 'denied' as const,
+        reason: sourceWrite.reason,
+        message: 'Answer harness finalization requires server source-write admission.',
+      }
+    }
+
+    const db = runtimeDb(ctx.db)
+    const turn = await db
+      .query('answerTurns')
+      .withIndex('by_turnId', (query) => query.eq('turnId', args.turnId))
+      .unique()
+
+    if (turn === null) {
+      return {
+        status: 'conflict' as const,
+        reason: 'turn_not_found' as const,
+        message: `Answer turn ${args.turnId} does not exist.`,
+      }
+    }
+
+    if (stringField(turn, 'snapshotHash') !== args.snapshotHash) {
+      return {
+        status: 'conflict' as const,
+        reason: 'snapshot_mismatch' as const,
+        message: `Answer turn ${args.turnId} snapshot hash does not match final harness evidence.`,
+      }
+    }
+
+    const currentEvidenceJson = stringField(turn, 'evidenceJson')
+    const currentFinalizationHash = readHarnessFinalizationHash(currentEvidenceJson)
+    if (currentFinalizationHash !== undefined && currentFinalizationHash !== args.finalizationHash) {
+      return {
+        status: 'conflict' as const,
+        reason: 'evidence_conflict' as const,
+        message: `Answer turn ${args.turnId} was already finalized with different harness evidence.`,
+      }
+    }
+
+    const validation = await validateHarnessSessionEntryBatch(db, args.entries.map(coerceFinalizationEntryInput))
+    if (validation.status === 'conflict') {
+      return validation
+    }
+
+    const evidenceAlreadyFinal = currentFinalizationHash === args.finalizationHash || currentEvidenceJson === args.evidenceJson
+    if (!evidenceAlreadyFinal) {
+      await db.patch(turn._id, { evidenceJson: args.evidenceJson })
+    }
+
+    for (const entry of validation.entriesToInsert) {
+      await db.insert('harnessSessionEntries', entry)
+    }
+
+    if (validation.entriesToInsert.length > 0) {
+      const lastEntry = validation.entriesToInsert.at(-1)
+      if (lastEntry !== undefined) {
+        await upsertHarnessSessionForFinalization(db, validation.session, lastEntry)
+      }
+    }
+
+    const activeLeafEntryId = validation.entriesToInsert.at(-1)?.entryId ?? validation.activeLeafEntryId
+    const common = {
+      turnId: args.turnId,
+      finalizationHash: args.finalizationHash,
+      entriesAccepted: validation.entriesToInsert.length,
+      entriesReplayed: validation.entriesReplayed,
+      ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+    }
+
+    return common.entriesAccepted === 0 && evidenceAlreadyFinal
+      ? { status: 'replayed' as const, ...common, entriesAccepted: 0 as const }
+      : { status: 'accepted' as const, ...common }
+  },
+})
+
 export const listHarnessSessionEntries = queryGeneric({
   args: {
     sessionId: v.string(),
@@ -400,6 +549,271 @@ export const readAdminHarnessSessionEntries = queryGeneric({
     }
   },
 })
+
+function coerceFinalizationEntryInput(input: {
+  ownerKey: string
+  entryId: string
+  sessionId: string
+  runId: string
+  turnId?: string
+  parentEntryId?: string
+  seq?: number
+  kind?: unknown
+  status?: unknown
+  idempotencyKey?: string
+  requestHash?: string
+  createdAt: number
+  payloadJson: string
+  publicSummaryJson?: string
+  privatePayloadJson?: string
+  schemaVersion?: number
+  toolContractHash?: string
+  sourceSnapshotHash?: string
+}): {
+  ownerKey: string
+  entryId: string
+  sessionId: string
+  runId: string
+  turnId?: string
+  parentEntryId?: string
+  seq?: number
+  kind: HarnessSessionEntryKind
+  status?: HarnessRunStatus
+  idempotencyKey?: string
+  requestHash?: string
+  createdAt: number
+  payloadJson: string
+  publicSummaryJson?: string
+  privatePayloadJson?: string
+  schemaVersion?: number
+  toolContractHash?: string
+  sourceSnapshotHash?: string
+} {
+  const status = harnessStatusValue(input.status)
+  return {
+    ownerKey: input.ownerKey,
+    entryId: input.entryId,
+    sessionId: input.sessionId,
+    runId: input.runId,
+    ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
+    ...(input.parentEntryId === undefined ? {} : { parentEntryId: input.parentEntryId }),
+    ...(input.seq === undefined ? {} : { seq: input.seq }),
+    kind: harnessKindValue(input.kind),
+    ...(status === undefined ? {} : { status }),
+    ...(input.idempotencyKey === undefined ? {} : { idempotencyKey: input.idempotencyKey }),
+    ...(input.requestHash === undefined ? {} : { requestHash: input.requestHash }),
+    createdAt: input.createdAt,
+    payloadJson: input.payloadJson,
+    ...(input.publicSummaryJson === undefined ? {} : { publicSummaryJson: input.publicSummaryJson }),
+    ...(input.privatePayloadJson === undefined ? {} : { privatePayloadJson: input.privatePayloadJson }),
+    ...(input.schemaVersion === undefined ? {} : { schemaVersion: input.schemaVersion }),
+    ...(input.toolContractHash === undefined ? {} : { toolContractHash: input.toolContractHash }),
+    ...(input.sourceSnapshotHash === undefined ? {} : { sourceSnapshotHash: input.sourceSnapshotHash }),
+  }
+}
+
+async function validateHarnessSessionEntryBatch(
+  db: ReturnType<typeof runtimeDb>,
+  entries: ReadonlyArray<{
+    ownerKey: string
+    entryId: string
+    sessionId: string
+    runId: string
+    turnId?: string
+    parentEntryId?: string
+    seq?: number
+    kind: HarnessSessionEntryKind
+    status?: HarnessRunStatus
+    idempotencyKey?: string
+    requestHash?: string
+    createdAt: number
+    payloadJson: string
+    publicSummaryJson?: string
+    privatePayloadJson?: string
+    schemaVersion?: number
+    toolContractHash?: string
+    sourceSnapshotHash?: string
+  }>,
+): Promise<
+  | {
+      status: 'ok'
+      session: RuntimeDocument | null
+      activeLeafEntryId: string | undefined
+      entriesToInsert: Array<HarnessSessionEntry & { ownerKey: string }>
+      entriesReplayed: number
+    }
+  | {
+      status: 'conflict'
+      reason: 'entry_id_conflict' | 'idempotency_conflict' | 'parent_conflict'
+      message: string
+      activeLeafEntryId?: string
+    }
+> {
+  if (entries.length === 0) {
+    return {
+      status: 'ok',
+      session: null,
+      activeLeafEntryId: undefined,
+      entriesToInsert: [],
+      entriesReplayed: 0,
+    }
+  }
+
+  const first = entries[0]
+  if (first === undefined) {
+    return {
+      status: 'ok',
+      session: null,
+      activeLeafEntryId: undefined,
+      entriesToInsert: [],
+      entriesReplayed: 0,
+    }
+  }
+
+  const session = await db
+    .query('harnessSessions')
+    .withIndex('by_sessionId', (query) => query.eq('sessionId', first.sessionId))
+    .unique()
+
+  let activeLeafEntryId = optionalStringField(session ?? {}, 'activeLeafEntryId')
+  let entryCount = session === null ? 0 : numberField(session, 'entryCount')
+  let sessionOwnerKey = session === null ? first.ownerKey : stringField(session, 'ownerKey')
+  const entriesToInsert: Array<HarnessSessionEntry & { ownerKey: string }> = []
+  let entriesReplayed = 0
+
+  for (const entry of entries) {
+    if (entry.sessionId !== first.sessionId) {
+      return {
+        status: 'conflict',
+        reason: 'parent_conflict',
+        message: 'Finalization journal entries must belong to one harness session.',
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+      }
+    }
+
+    if (entry.ownerKey !== sessionOwnerKey) {
+      return {
+        status: 'conflict',
+        reason: 'parent_conflict',
+        message: 'Session owner does not match the existing harness session.',
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+      }
+    }
+
+    const idempotencyKey = entry.idempotencyKey ?? entry.entryId
+    const existingByIdempotency = await db
+      .query('harnessSessionEntries')
+      .withIndex('by_sessionId_idempotencyKey', (query) =>
+        query.eq('sessionId', entry.sessionId).eq('idempotencyKey', idempotencyKey)
+      )
+      .unique()
+
+    if (existingByIdempotency !== null) {
+      const replayAttempt = normalizeEntryForStorage(entry, entry.ownerKey, {
+        parentEntryId: optionalStringField(existingByIdempotency, 'parentEntryId'),
+        seq: numberField(existingByIdempotency, 'seq'),
+        idempotencyKey,
+      })
+      if (replayAttempt.requestHash !== stringField(existingByIdempotency, 'requestHash')) {
+        return {
+          status: 'conflict',
+          reason: 'idempotency_conflict',
+          message: `Idempotency key ${idempotencyKey} was already used with a different request hash.`,
+          ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+        }
+      }
+      entriesReplayed += 1
+      continue
+    }
+
+    const existingByEntryId = await db
+      .query('harnessSessionEntries')
+      .withIndex('by_sessionId_entryId', (query) =>
+        query.eq('sessionId', entry.sessionId).eq('entryId', entry.entryId)
+      )
+      .unique()
+
+    if (existingByEntryId !== null) {
+      return {
+        status: 'conflict',
+        reason: 'entry_id_conflict',
+        message: `Entry id ${entry.entryId} already exists in session ${entry.sessionId}.`,
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+      }
+    }
+
+    const expectedParentEntryId = activeLeafEntryId
+    const expectedSeq = entryCount + 1
+    const parentEntryId = entry.parentEntryId ?? expectedParentEntryId
+    const seq = entry.seq ?? expectedSeq
+    if (parentEntryId !== expectedParentEntryId || seq !== expectedSeq) {
+      return {
+        status: 'conflict',
+        reason: 'parent_conflict',
+        message: `Parent ${parentEntryId ?? 'root'} and seq ${seq} do not match active leaf ${expectedParentEntryId ?? 'root'} and next seq ${expectedSeq}.`,
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+      }
+    }
+
+    const attemptedEntry = normalizeEntryForStorage(entry, entry.ownerKey, {
+      parentEntryId,
+      seq,
+      idempotencyKey,
+    })
+    entriesToInsert.push(attemptedEntry)
+    activeLeafEntryId = attemptedEntry.entryId
+    entryCount = attemptedEntry.seq
+    sessionOwnerKey = attemptedEntry.ownerKey
+  }
+
+  return {
+    status: 'ok',
+    session,
+    activeLeafEntryId,
+    entriesToInsert,
+    entriesReplayed,
+  }
+}
+
+async function upsertHarnessSessionForFinalization(
+  db: ReturnType<typeof runtimeDb>,
+  session: RuntimeDocument | null,
+  lastEntry: HarnessSessionEntry & { ownerKey: string },
+): Promise<void> {
+  const patch = {
+    activeLeafEntryId: lastEntry.entryId,
+    lastRunId: lastEntry.runId,
+    entryCount: lastEntry.seq,
+    updatedAt: lastEntry.createdAt,
+    ...(lastEntry.status === undefined ? {} : { status: lastEntry.status }),
+  }
+
+  if (session === null) {
+    await db.insert('harnessSessions', {
+      sessionId: lastEntry.sessionId,
+      ownerKey: lastEntry.ownerKey,
+      entryCount: lastEntry.seq,
+      activeLeafEntryId: lastEntry.entryId,
+      lastRunId: lastEntry.runId,
+      createdAt: lastEntry.createdAt,
+      updatedAt: lastEntry.createdAt,
+      ...(lastEntry.status === undefined ? {} : { status: lastEntry.status }),
+    })
+    return
+  }
+
+  await db.patch(session._id, patch)
+}
+
+function readHarnessFinalizationHash(evidenceJson: string): string | undefined {
+  try {
+    const evidence = JSON.parse(evidenceJson) as { harnessFinalization?: { finalizationHash?: unknown } }
+    const value = evidence.harnessFinalization?.finalizationHash
+    return typeof value === 'string' && value.length > 0 ? value : undefined
+  } catch {
+    return undefined
+  }
+}
 
 function orderedQuery(query: RuntimeQuery): OrderedRuntimeQuery {
   return query as OrderedRuntimeQuery

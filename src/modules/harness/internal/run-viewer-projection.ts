@@ -125,11 +125,14 @@ export function buildHarnessRunViewerListProjection(
   input: HarnessRunViewerListInput,
 ): HarnessRunViewerListAllowed {
   const filters = normalizeHarnessRunViewerFilters(input.filters)
-  const rows = input.turns
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq)
-    .map((turn) => buildHarnessRunViewerListRow(turn))
-    .filter((row) => rowMatchesFilters(row, filters))
+  const sortedTurns = [...input.turns].sort((a, b) => b.createdAt - a.createdAt || b.seq - a.seq)
+  const rows: HarnessRunViewerListRow[] = []
+  for (const turn of sortedTurns) {
+    const row = buildHarnessRunViewerListRow(turn)
+    if (rowMatchesFilters(row, filters)) {
+      rows.push(row)
+    }
+  }
 
   return {
     kind: 'allowed',

@@ -1,7 +1,7 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
-import { validateAuditEvent } from '@/modules/observability/public'
-import type { AuditEventContract, AuditTargetType } from '@/modules/observability/public'
+import { validateAuditEvent } from '@/modules/common/audit-events'
+import type { AuditEventContract, AuditEventSink, AuditTargetType } from '@/modules/common/audit-events'
 import type {
   AdminAction,
   AdminDecisionAudit,
@@ -69,10 +69,9 @@ export function canBootstrapOwnerAdmin(clerkUserId: string, config: AdminBootstr
   return config.activeOwnerAdminCount === 0 && config.authorizedClerkUserIds.includes(clerkUserId)
 }
 
-export type AdminAuthorityState = {
+export type AdminAuthorityState = AuditEventSink & {
   adminMemberships: AdminMembership[]
   adminMembershipAuditEvents: AdminDecisionAudit[]
-  auditEvents: AuditEventContract[]
 }
 
 export type AdminBootstrapCommand = {

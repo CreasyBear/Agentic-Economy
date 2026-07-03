@@ -9,7 +9,7 @@ export const AnswerProseSchema = z.object({
 export type AnswerProse = z.infer<typeof AnswerProseSchema>
 
 /** Maps LLM prose to snapshot `nextStep` field. */
-export function proseToNextStep(prose: AnswerProse): string {
+function proseToNextStep(prose: AnswerProse): string {
   return prose.whatToDoNow
 }
 

@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { AeHarnessRunList } from '@/components/ae/harness/AeHarnessRunViewer'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   readAdminRunViewerListServer,
 } from '@/modules/harness/run-viewer.functions'
@@ -12,6 +13,7 @@ import {
 } from '@/modules/harness/run-viewer.schema'
 
 export const Route = createFileRoute('/admin/runs')({
+  ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): HarnessRunViewerFilters => compactSearch({
     status: enumSearch(search.status, HarnessRunViewerStatusFilterValues),
     turnId: stringSearch(search.turnId),

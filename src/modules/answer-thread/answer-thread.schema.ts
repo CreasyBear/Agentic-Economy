@@ -72,6 +72,7 @@ export type AnswerToolCallRecord = {
   toolId: AnswerToolId
   inputJson: string
   resultSummaryJson: string
+  resultJson: string
   resultHash: string
   status: AnswerToolCallStatus
   createdAt: number
@@ -211,6 +212,14 @@ export type FrozenTurnEvidence = {
   answerRun?: AnswerRunReport
   /** Internal reusable harness rollup; never exposed through public thread projection. */
   harnessRun?: HarnessRunReport
+  /** Private source-write receipt proving the final harness report and replay journal landed together. */
+  harnessFinalization?: {
+    schemaVersion: 1
+    status: 'accepted' | 'replayed'
+    finalizationHash: string
+    journalEntryCount: number
+    finalizedAt: number
+  }
 }
 
 export type FrozenTurnProse = {

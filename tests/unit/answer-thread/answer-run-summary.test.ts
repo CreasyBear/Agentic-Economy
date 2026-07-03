@@ -202,6 +202,7 @@ function toolCall(
     toolId,
     inputJson: '{}',
     resultSummaryJson: '{"slugs":[],"count":0}',
+    resultJson: '{"kind":"ok","items":[]}',
     resultHash,
     status,
     createdAt: 1_000,

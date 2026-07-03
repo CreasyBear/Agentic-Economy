@@ -3,12 +3,14 @@ import { z } from 'zod'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   readPublicRegistryBusinessDetail,
+  readPublicRegistryCatalogPage,
   readPublicRegistrySearchPage,
 } from '@/modules/registry/registry.functions'
 import type {
   PublicBusinessCatalogApiDto,
   PublicBusinessCatalogApiPage,
   PublicBusinessCatalogDetailResult,
+  PublicBusinessCatalogQueryInput,
 } from '@/modules/registry/public'
 
 /**
@@ -26,15 +28,27 @@ import type {
  * expose private owner fields, raw DB rows, or booking/payment/dispatch claims.
  */
 
+const registryListInputSchema = z.object({
+  cursor: z.string().max(200).optional().describe('Pagination cursor from a previous catalog page'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .optional()
+    .describe('Maximum listings to return'),
+})
+
 const registrySearchInputSchema = z.object({
   query: z.string().max(200).describe('Search query for listed businesses'),
   limit: z
     .number()
     .int()
     .min(1)
-    .max(20)
+    .max(50)
     .optional()
     .describe('Maximum providers to return'),
+  cursor: z.string().max(200).optional().describe('Pagination cursor from a previous search page'),
   mode: z
     .enum(['near_me', 'whole_catalogue'])
     .optional()
@@ -95,7 +109,7 @@ const publicBusinessCatalogApiDtoOutputSchema = z
   })
   .passthrough() as z.ZodType<PublicBusinessCatalogApiDto>
 
-const registrySearchOutputSchema = z
+const registryPageOutputSchema = z
   .object({
     kind: z.literal('ok'),
     schemaVersion: z.string(),
@@ -130,6 +144,21 @@ const registryDetailOutputSchema = z.discriminatedUnion('kind', [
     .passthrough(),
 ]) as z.ZodType<PublicBusinessCatalogDetailResult>
 
+const listParameters: readonly ActionParameter[] = [
+  {
+    name: 'cursor',
+    type: 'string',
+    description: 'Pagination cursor returned by a previous catalog page.',
+    required: false,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Maximum listings to return (1-50). Defaults to the catalog page size.',
+    required: false,
+  },
+]
+
 const searchParameters: readonly ActionParameter[] = [
   {
     name: 'query',
@@ -140,7 +169,13 @@ const searchParameters: readonly ActionParameter[] = [
   {
     name: 'limit',
     type: 'number',
-    description: 'Maximum providers to return (1-20). Defaults to 10.',
+    description: 'Maximum providers to return (1-50). Defaults to 10.',
+    required: false,
+  },
+  {
+    name: 'cursor',
+    type: 'string',
+    description: 'Pagination cursor returned by a previous search page.',
     required: false,
   },
   {
@@ -167,6 +202,31 @@ const detailParameters: readonly ActionParameter[] = [
   },
 ]
 
+export const registryListAction = defineAction({
+  id: 'registry.list',
+  name: 'List published businesses',
+  summary:
+    'List published Agentic Economy business catalog entries. ' +
+    'Returns the same public catalog subset as /api/businesses.',
+  boundaries: [
+    'Read-only. Does not book, charge, dispatch, or send inquiries.',
+    'Returns only public catalog facts for published listings.',
+    'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
+  ],
+  schema: registryListInputSchema as z.ZodType<PublicBusinessCatalogQueryInput>,
+  outputSchema: registryPageOutputSchema,
+  parameters: listParameters,
+  readOnly: true,
+  surfaces: ['http', 'agentJson'],
+  run: async ({ data }) => {
+    const page = await readPublicRegistryCatalogPage({
+      ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
+      ...(data.limit === undefined ? {} : { limit: data.limit }),
+    })
+    return page as PublicBusinessCatalogApiPage
+  },
+})
+
 export const registrySearchAction = defineAction({
   id: 'registry.search',
   name: 'Search listed businesses',
@@ -181,7 +241,7 @@ export const registrySearchAction = defineAction({
     'Availability, quotes, and job acceptance still need a human reply through the listing or qualified inquiry path.',
   ],
   schema: registrySearchInputSchema,
-  outputSchema: registrySearchOutputSchema,
+  outputSchema: registryPageOutputSchema,
   parameters: searchParameters,
   readOnly: true,
   surfaces: ['http', 'agentJson', 'agentTools'],
@@ -189,6 +249,7 @@ export const registrySearchAction = defineAction({
     const page = await readPublicRegistrySearchPage({
       query: data.query.trim(),
       ...(data.limit === undefined ? {} : { limit: data.limit }),
+      ...(data.cursor === undefined ? {} : { cursor: data.cursor.trim() }),
       ...(data.mode === undefined ? {} : { mode: data.mode }),
       ...(data.location === undefined ? {} : { location: data.location.trim() }),
     }, context.timing === undefined ? {} : { timing: context.timing })

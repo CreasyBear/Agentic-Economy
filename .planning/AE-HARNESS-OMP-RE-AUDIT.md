@@ -1,284 +1,165 @@
 # AE Harness OMP Re-Audit
 
-Date: 2026-07-02
-Frame: `$plan-eng-review` architecture review, using OMP as gold-standard reference architecture.
-Status: `DONE_WITH_CONCERNS`
+**Date:** 2026-07-03
+**Frame:** `$plan-eng-review` plus project-local `$gsd-map-codebase` and `$gsd-graphify` evidence
+**Audit stance:** OMP is the gold-standard reference architecture. AE should copy the harness discipline, not OMP's public tool surface.
+**AE audit commit:** `30e795243812e18197df35c0592524ee60eec137`
+**OMP reference:** `/Users/skchan/Jcsyc_Projects/oh-my-pi` at `31a8cfc31cf1e467efa76655ded27e64d2295139`
+**Verdict:** AE now has OMP-shaped answer runtime authority, durable source finalization, and admin readback primitives. It is still not operationally closed because graph freshness cannot pass while the broad graph-relevant dirty tree remains unsettled.
+
+## Executive Readout
+
+AE has crossed the important line from "harness-shaped reports" to "harness-owned live answer execution."
+
+Current OMP carry-over now includes:
+
+- `HarnessRunLoop` owning context, intent, route, retrieval, model, gate, assemble, persist, and report phases for answer turns.
+- `HarnessRunCollector` receiving live runtime events for phases, tools, models, gates, persistence, and operation events.
+- AE actions adapted into harness tools with validation, descriptors, hashes, approval policy, load mode, hidden flag, concurrency, and interruptibility.
+- Answer turn finalization moved into a source-backed Convex mutation that patches the final `HarnessRunReport` and appends session journal entries in one transaction.
+- Finalization outcomes are typed as accepted, replayed, conflict, denied, and error; conflict/error now block a normal complete stream.
+- Admin/operator readback is source-backed and auth-gated instead of a disabled scaffold.
+
+The remaining operational gap is evidence settlement, not core shape. OMP's bar is same-commit evidence: eval, browser, UI contract, graph freshness, and durable replay proof all green together. AE has all but standalone graph freshness green in the working tree.
 
 ## Evidence Snapshot
 
-Reference checkouts:
+| Area | Evidence | Result |
+| --- | --- | --- |
+| OMP checkout | `/Users/skchan/Jcsyc_Projects/oh-my-pi` | Present |
+| OMP commit | `31a8cfc31cf1e467efa76655ded27e64d2295139` | Reference commit |
+| OMP graphify | 69,345 nodes, 65,123 edges, built at `31a8cfc` | Fresh reference |
+| AE commit | `30e795243812e18197df35c0592524ee60eec137` | Current audit target |
+| Typecheck | `npm run typecheck` | Pass |
+| Focused finalization/admin tests | `./node_modules/.bin/vitest run tests/unit/answer-thread/answer-harness-operation.test.ts tests/unit/harness/run-loop.test.ts tests/unit/harness/run-viewer-functions.test.ts tests/unit/harness/run-viewer-projection.test.ts tests/unit/harness/session-journal.test.ts` | Pass: 5 files, 28 tests |
+| Focused harness/answer tests | `./node_modules/.bin/vitest run tests/unit/answer-thread tests/unit/harness tests/integration/answer-tool-calls.test.ts` | Pass: 24 files, 119 tests |
+| Eval suite | `npm run test:eval` | Pass: coverage ok, answer suite 12 cases/14 turns, promptfoo 27/27, eval Vitest 23/23 |
+| UI contract | `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts` | Pass: 6 files, 36 tests |
+| Browser continuity | `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium --reporter=line` | Pass with elevated local server permission: 3 passed, 1 skipped |
+| Graphify rebuild | `graphify update . && ... && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: 18,147 nodes, 17,305 edges, built/current `30e7952`, `commit_stale: false` |
+| Graph freshness | `npm run test:graph-freshness` | Fail: graph-relevant dirty paths remain |
+| Diff hygiene | `git diff --check` | Pass |
 
-- OMP reference: `/private/tmp/oh-my-pi`
-- OMP commit: `31a8cfc31cf1e467efa76655ded27e64d2295139`
-- AE workspace: `/Users/skchan/Jcsyc_Projects/agentic-economy`
-- AE HEAD: `d7db54cfa84dd4c02eebc8afd7478252615b0dd5`
+## OMP Gold Anchors
 
-Current AE generated maps:
+| OMP source | Pattern carried into AE |
+| --- | --- |
+| `packages/agent/src/agent-loop.ts` | Loop owns model/tool/phase execution, terminal status, events, aborts, and blocked calls. |
+| `packages/agent/src/run-collector.ts` | Passive collector creates stable summaries, coverage, errors, timings, usage, and status counts. |
+| `packages/agent/src/types.ts` | Rich internal tool contract with approval, concurrency, load/hidden modes, interruptibility, and schema policy. |
+| `packages/coding-agent/src/tools/approval.ts` | Approval is resolved before execution and cannot bypass product trust boundaries. |
+| `packages/coding-agent/src/session/session-manager.ts` | Append-style session journal and replay projection are first-class runtime evidence. |
+| `packages/agent/src/compaction/tool-protection.ts` | Tool evidence must be protected across replay/compaction boundaries. |
+| `packages/coding-agent/src/advisor/emission-guard.ts` | Advisor/reviewer output must be suppressed when empty, duplicate, noisy, or over budget. |
+| `packages/ai/src/utils/schema/strict-tool-validation.ts` | Tool schemas are checked before descriptors reach model/provider surfaces. |
 
-- AE codebase map: `.planning/codebase/`
-- AE graph report: `.planning/graphs/GRAPH_REPORT.md`
-- AE graph size: `18,266` nodes, `17,364` edges, `26` communities
-- AE graph artifact commit: `d7db54cfa84dd4c02eebc8afd7478252615b0dd5`
-- Graph gate status: red because graph-relevant source paths are dirty, even though the graph artifact commit matches HEAD.
-
-Validation run during this refresh:
-
-- `npm run typecheck`: currently red because unrelated dirty UI/route work has `Button` variant drift, dynamic listing-link typing, and missing `FactGrid` exports. The live harness files no longer report type errors.
-- `npm run test:eval`: passed after the live-loop follow-up: coverage audit 12 cases, suite report 12 cases / 14 turns, promptfoo 27/27, eval Vitest 23 tests. Promptfoo telemetry flush warned on DNS, after the eval had completed successfully.
-- `./node_modules/.bin/vitest run tests/unit/harness tests/unit/answer-thread tests/integration/answer-tool-calls.test.ts`: passed after the live-loop follow-up, 24 files / 115 tests.
-- `./node_modules/.bin/vitest run tests/unit/harness/run-loop.test.ts tests/unit/answer-thread/answer-harness-operation.test.ts tests/unit/answer-thread/tool-runner.test.ts tests/unit/answer/answer-tool-use-agent.test.ts`: passed, 4 files / 30 tests after the live answer-loop follow-up.
-- `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts`: currently red because unrelated dirty public-shell work imports `@clerk/tanstack-react-start` in `src/components/ae/layout/AePublicShell.tsx`, which the copy scanner flags as an internal identifier on a public surface.
-- `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium`: initially exposed duplicate wide-sidebar entries for the second query; after moving `AeChat` initial `?q=` startup out of render, passed with 3 tests and 1 compact-sidebar skip.
-- `npm run test:graph-freshness`: failed with `graph_relevant_worktree_dirty`; current output marks `operational evidence: blocked`, lists relevant dirty paths, and directs the operator to settle paths and rerun the gate before making graph-backed operational claims.
-- `git diff --check`: passed.
-
-## Executive Conclusion
-
-AE has moved beyond the first surface-level OMP port. It now has meaningful harness primitives: a reusable run loop, event collector, action-to-tool adapter, approval modes, schema validation, evidence envelopes, journal helpers, replay projections, eval hooks, and an admin run-viewer scaffold.
-
-The main gap has narrowed from "post-hoc reporting" to "state-machine ownership." OMP makes its loop the runtime spine. AE now uses one live `HarnessRunLoop` during answer turns for context, intent, route, retrieval, model, assemble, gate, persistence, and terminal reporting events. The remaining gap is that `streamAnswerTurn()` still coordinates the SSE-facing state machine instead of delegating the entire turn to `HarnessRunLoop.run()` handlers.
-
-High-ROI rebuild target:
-
-1. Move the remaining `streamAnswerTurn()` state machine into `HarnessRunLoop.run()` handlers.
-2. Keep the runtime-fed journal path and extend replay/admin source-read coverage.
-3. Keep one schema path from action definition to harness tool, quiet tool descriptor, model descriptor, execution validation, and eval fixture.
-4. Treat eval, browser continuity, graph freshness, and public-leakage scans as register gates, not afterthoughts.
-5. Keep AE's public trust contract smaller than OMP: only `registry.search`, `registry.detail`, and source-write-admitted `inquiry.submit`.
-
-## Architecture Contrast
+## AE Current Architecture
 
 ```mermaid
 flowchart TD
-  subgraph OMP["OMP gold reference"]
-    OUser["Terminal user"] --> ORuntime["Coding-agent product runtime"]
-    ORuntime --> OLoop["Agent loop"]
-    ORuntime --> OSession["SessionManager append-only journal"]
-    OLoop --> OTools["Rich AgentTool registry"]
-    OTools --> OApproval["Approval resolver"]
-    OLoop --> OCollector["AgentRunCollector"]
-    OCollector --> OSummary["Run summary and coverage"]
-    OSession --> OReplay["Branch, replay, compaction"]
-    OReplay --> OProtect["Protected tool result matchers"]
-  end
-
-  subgraph AE["AE current state"]
-    AUser["Public chat / quiet agent door"] --> AOrch["SSE-facing answer orchestrator"]
-    AOrch --> ALoop["Live HarnessRunLoop"]
-    ALoop --> AAgent["runAnswerToolUseAgent via runModel"]
-    AAgent --> AActions["Action-backed tools via runTool"]
-    ALoop --> AReport["Private harnessRun evidence"]
-    ALoop --> AJournal["Runtime-fed source-write journal"]
-    AOrch --> AFinalize["answer persistence adapter"]
-  end
+  User["User question"] --> Route["answer-thread route/SSE"]
+  Route --> Live["Live AnswerHarnessOperation"]
+  Live --> Loop["HarnessRunLoop.run"]
+  Loop --> Collector["HarnessRunCollector"]
+  Loop --> Tool["loop.runTool"]
+  Loop --> Model["loop.runModel"]
+  Loop --> Gate["gate.evaluated"]
+  Loop --> Persist["persist provisional turn"]
+  Persist --> Finalize["finalizeAnswerTurnHarnessRun"]
+  Finalize --> Evidence["patched final harnessRun"]
+  Finalize --> Journal["session journal entries"]
+  Journal --> Admin["admin run readback"]
+  Evidence --> Public["sanitized public projection"]
 ```
 
-## What Changed Since The Earlier Audit
+The public SSE shape remains stable. Public answer surfaces still receive answers, providers, next steps, and sanitized check summaries. They do not receive raw tool IDs, inputs, result hashes, private payloads, provider request IDs, or internal trace names.
 
-The earlier audit overstated some missing pieces. Current corrections:
+## Comparison Matrix
 
-| Area | Earlier claim | Current re-audit |
-| --- | --- | --- |
-| Run collector | Missing model/provider/usage dimensions | AE collector records model/provider/usage/cost, and the live answer model path now routes through `HarnessRunLoop.runModel()`. |
-| Approval | Simplified read/write policy only | AE now has approval modes and source-write-aware decisions. It is still thinner than OMP's operator prompt and override machinery. |
-| Replay/protection | Public projection tests only | AE now has evidence-envelope and replay projection helpers. They remain pure/tested pieces until durable answer-session co-writing lands. |
-| Advisor guard | Missing | AE now has `HarnessEmissionGuard`, including public-surface suppression and evidence requirements. It is not wired into a reviewer/advisor runtime yet. |
-| Eval | No harness-specific invariants | Eval cases and evaluators now check harness evidence. Current `npm run test:eval` is green. |
-| Admin viewer | Missing | A viewer scaffold exists, but the production source port is intentionally disabled. |
+| Domain | OMP reference behavior | AE current behavior | Parity |
+| --- | --- | --- | --- |
+| Runtime authority | Loop owns model response streaming, tool execution, steering, abort handling, blocked/skipped calls, and terminal events. | Answer turns run under `HarnessRunLoop.run()` handlers; tools and model calls use the same loop; finalization now happens in the report phase. | Strong partial |
+| Run collection | Passive collector aggregates runtime telemetry into stable sorted snapshots. | `HarnessRunCollector` aggregates phases, tools, models, providers, gates, status counts, private telemetry, and coverage. | Strong partial |
+| Tool contract | Rich internal tool definitions include tier, approval, load mode, visibility, concurrency, interruptibility, and validation policy. | AE action tools now carry the core OMP-like metadata while preserving the public allowlist. | Strong product-safe partial |
+| Approval | Approval is resolved before execution and respects mode/tier/user policy. | Public reads auto-allow; qualified inquiry remains the only public write; exec and unsupported writes block. | Strong for AE trust contract |
+| Tool execution | Tool calls distinguish ok/error/refused/blocked/timeout/aborted/skipped, with concurrency and cancellation. | `runHarnessTool()` and `runToolBatch()` cover these statuses and shared/exclusive scheduling; write timeout reconciliation is still future work. | Strong partial |
+| Durable finalization | Session manager treats replay and append evidence as durable runtime state. | `finalizeAnswerTurnHarnessRun` patches answer turn evidence and appends journal entries atomically; idempotent replay and conflicts are explicit. | Strong partial |
+| Replay projection | Runtime paths are reconstructable and private evidence is protected. | Public/private projection helpers and admin source readback exist; admin browser smoke is still pending. | Partial |
+| Admin evidence | OMP terminal/session workflows expose raw evidence to operators. | Admin run list/detail source reads are auth-gated and unit-tested; route smoke with seeded evidence remains. | Partial |
+| Eval coupling | Runtime evidence is tied to loop outputs. | Typecheck, focused tests, promptfoo, answer eval, UI contract, and browser continuity are green; graph freshness is red until dirty paths settle. | Strong partial |
+| Public tool surface | OMP can expose dynamic terminal tools. | AE rejects dynamic public tool discovery and shell/filesystem/browser/LSP product tools. | Correct rejection |
 
 ## Findings
 
-### P0. The answer harness loop is live, but the top-level state machine is not fully delegated yet
+### P0 - Graph freshness is the remaining operational blocker
 
-AE has a serious `HarnessRunLoop`, and the answer path now feeds it live runtime events:
+Graphify artifacts were rebuilt at `30e7952` and report `commit_stale: false`, but standalone graph freshness fails because many graph-relevant paths are dirty. The current dirty tree includes OMP closeout work plus broad UI/Astryx, billing/future-phase, audit, and support-module changes.
 
-- `src/modules/harness/run-loop.ts`: defines phases and records events through `run()`, `runTool()`, `runModel()`, `evaluateGate()`, and `persist()`.
-- `src/modules/answer-thread/internal/turn-orchestrator.ts`: `streamAnswerTurn()` creates one live answer harness operation and records context, intent, route, retrieval, model, assemble, gate, persist, and terminal report events.
-- `src/modules/answer-thread/internal/tool-runner.ts`: answer read tools run through `loop.runTool()` when a live loop is present.
-- `src/modules/answer/internal/answer-tool-use-agent.ts`: planned and real model calls run through `loop.runModel()` when a live loop is present.
-- `tests/unit/answer-thread/answer-harness-operation.test.ts`: drives the real streaming path and asserts live tool/model/gate/persist/run journal entries with sanitized public summaries.
+Impact: architecture maps can guide the work, but the register must not mark rows `5-operational` until the dirty tree is landed or isolated and `npm run test:graph-freshness` passes.
 
-OMP contrast:
+Required closeout:
 
-- `/private/tmp/oh-my-pi/packages/agent/src/run-collector.ts:1`: the collector is designed to be fed by telemetry during the loop.
-- `/private/tmp/oh-my-pi/packages/agent/src/run-collector.ts:180`: chat/model calls are begun and ended as first-class run events.
+- Land or intentionally isolate graph-relevant dirty work.
+- Rebuild graphify after settlement.
+- Rerun graph freshness and the full closeout gate list at the settled commit.
 
-Impact: AE now produces authoritative live reports for the answer path. The remaining OMP parity gap is that the orchestrator still sequences the turn; the next rebuild should express the full answer state machine as `HarnessRunLoop.run()` phase handlers, with SSE as an adapter.
+### P0 - Same-commit evidence is not yet established
 
-Acceptance criteria:
+The working tree has green typecheck, eval, UI contract, browser continuity, and focused tests. However, OMP's operational standard is evidence from the same settled commit.
 
-- `streamAnswerTurn()` delegates execution to `HarnessRunLoop.run()` phase handlers instead of owning the state machine.
-- `runAnswerToolUseAgent()` model calls flow through `HarnessRunLoop.runModel()` or an equivalent model phase helper.
-- Complete, refused, blocked, error, timeout, and abort paths are summarized from the same collector.
-- Tests inject failure at every phase and assert status, coverage, timing, and persisted report shape.
+Impact: R1/R5/R6/R7/R9 can be `4-evaled`, not `5-operational`.
 
-### P0. Durable session replay is runtime-fed for answer turns, but admin/source replay is not operational
+Required closeout:
 
-AE now has good pure primitives:
-
-- `src/modules/harness/session-journal.ts`: append/idempotency/parent conflict/projection helpers.
-- `src/modules/harness/replay-projection.ts`: private and public replay projections.
-- `src/modules/harness/harness.functions.ts:156`: source-facing append helper.
-- `convex/harnessSessions.ts:148`: public mutation for appending harness session entries.
-- `src/modules/answer-thread/internal/answer-turn-finalization.ts`: answer persistence accepts a live harness report/event stream and maps runtime events into `turn.started`, `context.loaded`, `intent.routed`, `tool.*`, `model.*`, `gate.evaluated`, `turn.persisted`, and `run.reported` entries when a server request is available.
-- `src/routes/api.answer.turn.ts`: passes the request into the answer turn so source-write admission can be minted without exposing client authority.
-- `tests/unit/answer-thread/answer-harness-operation.test.ts`: proves persisted answer turns write sanitized journal entries without raw tool ids, query text, or hashes in public summaries.
-
-This closes the earlier "compact finalization spine only" gap for the answer turn. It does not yet reach operational OMP parity because admin source reads, browser replay smoke, graph freshness, and broader module adoption are still pending.
-
-OMP contrast:
-
-- `/private/tmp/oh-my-pi/packages/coding-agent/src/session/session-manager.ts:331`: sessions are append-only JSONL journals with ids and parent ids.
-- `/private/tmp/oh-my-pi/packages/coding-agent/src/session/session-manager.ts:730`: `#recordEntry()` pushes, indexes, appends to disk, and notifies.
-- `/private/tmp/oh-my-pi/packages/coding-agent/src/session/session-manager.ts:1270`: message/model/mode/init/compaction/custom entries are appended as runtime facts.
-- `/private/tmp/oh-my-pi/packages/coding-agent/src/session/session-manager.ts:1533`: branching moves the leaf without deleting existing entries.
-
-Impact: AE can reconstruct much richer operator replay evidence for answer turns from source rows. The remaining gap is making that replay operational through authenticated admin source reads and proving it with browser/graph gates.
-
-Acceptance criteria:
-
-- Keep the source-write-admitted runtime-event co-write green.
-- Persist entries for turn start, tool completed, model completed, gate, answer persisted, run report emitted, and error/abort from live runtime events.
-- Public projection remains sanitized and never exposes raw tool ids, inputs, hashes, or internal trace names.
-- Browser continuity proves first question, new question, second question, sidebar contains both, navigation works after reload.
-
-### P0. Current graph evidence is stale-by-policy
-
-The graph artifact says it was built from current HEAD, but `npm run test:graph-freshness` correctly fails because graph-relevant source files are dirty. That distinction matters: the register cannot use the graph artifact as operational evidence until the implementation settles and graphify is rerun.
-
-Current failure summary:
-
-- `npm run test:graph-freshness`: `graph freshness: stale`
-- Operational evidence: `blocked`.
-- Commit fields match `d7db54cfa84dd4c02eebc8afd7478252615b0dd5`.
-- Reason: `graph_relevant_worktree_dirty`.
-- Actionability: the gate lists every relevant dirty path and next actions. It does not hide dirty-path failures.
-
-Acceptance criteria:
-
-- Settle harness/answer/eval source changes.
+- Settle the tree.
 - Rebuild graphify.
-- Rerun graph freshness.
-- Register rows can only claim `5-operational` when graph freshness passes against a clean graph-relevant tree.
+- Rerun every ledger command.
+- Update the register with the final commit hash and pass/fail status.
 
-### P0. Browser continuity is now current-green, and it found a real bug
+### P1 - Admin run viewer needs browser smoke
 
-The continuity gate exists in `tests/e2e/thread-first.spec.ts` and checks the public thread-first flow across compact and wide Chromium projects. It covers first query submission, thread URL navigation, safe public copy, second-thread creation, desktop recent-question sidebar visibility, and return navigation to the first thread.
+Source-backed admin readback is no longer a disabled scaffold. `convex/answerThreads.ts` exposes an admin-only query and `run-viewer.functions.ts` calls it through authenticated source query plumbing. Unit tests cover denied default/public access and configured admin reads.
 
-Current refresh status: green after fix:
+Impact: the backend evidence path is real, but user-visible operator evidence browsing is not yet proven in browser automation.
 
-- `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium`
+Required follow-up:
 
-The first rerun failed because the wide sidebar had two links named `emergency roofer nowhere 9999`. Root cause: `AeChat` started `initialQuery` during render, which could create two threads from one `?q=` query under dev/browser remount behavior. Fix: `src/components/ae/chat/AeChat.tsx` now starts the initial query from a guarded effect. The rerun passed with 3 tests and 1 expected compact-sidebar skip.
+- Seed source-backed harness run evidence.
+- Add Playwright coverage for `/admin/runs` and `/admin/runs/$turnId`.
+- Keep raw evidence admin-only and public projection sanitized.
 
-Impact: browser continuity no longer blocks this slice, but graph freshness still blocks any `5-operational` register claim.
+### P1 - Write timeout reconciliation is still thinner than OMP
 
-### P1. Model accounting is live for answer turns, but still needs eval/browser gates
+AE now propagates guard signals through phases, model work, persistence, and interruptible tools. Read tools default to interruptible; writes default to exclusive and non-interruptible.
 
-AE now has the accounting structures:
+Impact: this is safe for current public reads and qualified inquiry boundaries, but broader internal writes still need idempotency and reconciliation after timeout or abort.
 
-- `src/modules/harness/run-collector.ts`: model records, usage, cost, provider/model coverage.
-- `src/modules/harness/harness.schema.ts`: model request records and summary/coverage fields.
-- `tests/unit/harness/run-collector.test.ts`: focused model accounting coverage.
+Required follow-up:
 
-The live agent path now passes a harness loop into `runAnswerToolUseAgent()`, and planned/real model calls are recorded through `HarnessRunLoop.runModel()`. Focused unit coverage is green; promptfoo/browser gates still need a post-settle rerun before any operational claim.
+- Define per-write idempotency keys.
+- Add post-timeout reconciliation events.
+- Extend tests for interrupted writes.
 
-Acceptance criteria:
+### P2 - Protected evidence and advisor guard remain broader adoption work
 
-- Real and planned answer model calls are recorded as model phase events.
-- Summary exposes model/provider/usage/cost privately.
-- Public answer UI receives only safe elapsed/check counts.
+Evidence envelope and emission guard primitives exist, but they are not central to compaction/replay or future reviewer/advisor flows yet.
 
-### P1. Tool contract is useful, still thinner than OMP's `AgentTool`
+Required follow-up:
 
-AE's action-backed contract is the right foundation because it preserves the product boundary. It still lacks several OMP lifecycle controls that would make the harness reusable across modules.
+- Use protected evidence IDs during replay and final answer assembly.
+- Wire `HarnessEmissionGuard` before any reviewer/advisor output ships.
+- Add evals for duplicate/noisy suppression and public leakage.
 
-AE evidence:
+## High-ROI Closeout Plan
 
-- `src/modules/harness/harness.schema.ts`: `HarnessToolDefinition`.
-- `src/modules/harness/action-tool.ts`: action-to-harness-tool conversion and execution validation.
-- `src/modules/harness/approval-policy.ts`: read/write/owner/admin/internal approval modes.
+1. **Settle graph-relevant dirty work.** Choose whether the broad UI/Astryx and future-phase tree is landing with the OMP closeout or isolated first.
+2. **Rebuild graphify.** Run graphify after settlement and verify graph report/json commit equals `HEAD`.
+3. **Run full gate ledger.** Typecheck, focused tests, eval, UI contract, browser continuity, graph freshness, and diff check.
+4. **Add admin smoke.** Browser-test the admin run viewer with seeded source-backed evidence.
+5. **Promote rows.** Move R1/R5/R6/R7/R8/R9 to `5-operational` only after the same settled commit has all required evidence.
 
-OMP contrast:
+## Bottom Line
 
-- `/private/tmp/oh-my-pi/packages/agent/src/types.ts:597`: `AgentTool` includes labels, hidden tools, deferrable/load mode, concurrency, interruptibility, matcher metadata, approval hooks, approval detail formatting, execution, call/result rendering.
-- `/private/tmp/oh-my-pi/packages/coding-agent/src/tools/approval.ts:93`: approval decisions combine tool policy, user policy, mode, and prompt formatting.
+The OMP harness work is architecturally close: runtime authority, durable finalization, journal projection, and admin readback are now real.
 
-Acceptance criteria:
-
-- Add internal-only lifecycle fields where AE needs them: concurrency, deferrable/pending work, projection/render metadata, approval detail formatter, and timeout/interrupt semantics.
-- Keep quiet/public descriptors derived from a safe subset.
-- Add descriptor parity tests from `ActionDefinition` to harness tool to quiet descriptor to model descriptor to eval fixture.
-
-### P1. Admin run viewer exists but has no production source
-
-AE now has an admin viewer scaffold, but it is intentionally disabled without a source port:
-
-- `src/modules/harness/run-viewer.functions.ts:41`: disabled source state.
-- `src/modules/harness/run-viewer.functions.ts:67`: list reads return disabled projections when no source is configured.
-- `src/modules/harness/run-viewer.functions.ts:85`: detail reads also return disabled/not-found projections without source access.
-
-This is a good safety default, but not yet OMP-like inspectability.
-
-Acceptance criteria:
-
-- Add admin-authorized source read for answer turns or harness session entries.
-- Add Playwright/admin smoke covering list, filter, detail, private evidence presence, and public leakage absence.
-- Keep navigation hidden until production authorization and source-read behavior are proven.
-
-### P2. Protected evidence and advisor guard are now good primitives, not missing gaps
-
-OMP's protected compaction primitive is small and sharp:
-
-- `/private/tmp/oh-my-pi/packages/agent/src/compaction/tool-protection.ts:14`: collect tool calls by id.
-- `/private/tmp/oh-my-pi/packages/agent/src/compaction/tool-protection.ts:42`: decide protected tool results by name or matcher.
-
-AE now has the equivalent product-shaped primitives:
-
-- `src/modules/harness/evidence-envelope.ts`: private evidence, public projection, replay id remapping, protected compaction projection, stale metadata.
-- `tests/unit/harness/evidence-envelope.test.ts`: private/public/protected/stale coverage.
-
-OMP's advisor guard makes model-output rules load-bearing:
-
-- `/private/tmp/oh-my-pi/packages/coding-agent/src/advisor/emission-guard.ts:116`: per-session guard with duplicate/noise/cycle suppression.
-
-AE's version is stronger for AE's boundary:
-
-- `src/modules/harness/emission-guard.ts:225`: suppresses empty, public-surface, filler, low-severity, missing-evidence, duplicate, and cycle-limit emissions.
-
-Acceptance criteria:
-
-- Do not expand this until reviewer/advisor emissions are actually wired.
-- When wired, accepted emissions must be private/admin only and evidence-backed.
-- Suppression counters can be stored privately for debugging, never projected to public answer copy.
-
-## Rebuild Plan
-
-```mermaid
-flowchart LR
-  A["R1: Make HarnessRunLoop authoritative"] --> B["R2: Co-write durable session journal"]
-  B --> C["R3: Route model/tool calls through harness phases"]
-  C --> D["R4: Wire admin run viewer source"]
-  D --> E["R5: Browser, eval, graph gates"]
-  E --> F["R6: Broader module adoption"]
-```
-
-Order of operations:
-
-1. Fix the graph/register truth loop first: no operational claims while graph-relevant paths are dirty.
-2. Move answer execution behind `HarnessRunLoop`; preserve current SSE events as adapter output.
-3. Expand harness session entries from compact finalization entries to live phase/tool/model entries.
-4. Route model calls through collector-backed model phases.
-5. Wire the admin viewer to an authorized source read.
-6. Re-run the required gates and only then promote register rows.
-
-## Non-Goals
-
-AE should not copy these OMP capabilities into public/product assistants:
-
-- Shell, filesystem, browser, editor, LSP, or arbitrary custom tools.
-- Dynamic public tool discovery.
-- Autonomous booking, payment, dispatch, fulfillment, or availability assumptions.
-- Raw tool ids, inputs, result hashes, internal trace names, private evidence, or reviewer emissions in public UI.
-
-AE should copy OMP's engineering discipline: append-only evidence, runtime-fed collector, replayable sessions, explicit approval, durable summaries, and eval-backed confidence.
+The honest closeout is blocked by graph/same-commit settlement, not by the core harness implementation. Once the dirty tree is landed or isolated and graph freshness passes, AE can close the OMP answer-harness slice as operational.

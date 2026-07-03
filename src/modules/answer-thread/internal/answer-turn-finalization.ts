@@ -8,7 +8,7 @@ import {
   stableAeSearchContextKey,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
-import { stableHash } from '@/modules/common/stable-hash'
+import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
 import {
   appendHarnessSessionEntryToSourceFromRequest,
   type AppendHarnessSessionEntryResult,
@@ -35,7 +35,10 @@ import type {
 import {
   appendAnswerTurnWithThreadAndToolCalls,
   appendAnswerTurnWithToolCalls,
+  finalizeAnswerTurnHarnessRunFromRequest,
   getThreadTurns,
+  type AnswerHarnessFinalizationResult,
+  type FinalizeAnswerTurnHarnessRunArgs,
 } from '../answer-thread.functions'
 import { buildAnswerHarnessOperationReport } from './answer-harness-operation'
 import { buildAnswerRunReport, buildHarnessRunReportForAnswer } from './answer-run-summary'
@@ -88,8 +91,21 @@ export type AnswerHarnessSessionJournalWriter = (
   input: AnswerHarnessSessionJournalWriteInput
 ) => Promise<AppendHarnessSessionEntryResult>
 
+export type AnswerHarnessFinalizerInput = FinalizeAnswerTurnHarnessRunArgs & {
+  request: Request
+}
+
+export type AnswerHarnessFinalizer = (
+  input: AnswerHarnessFinalizerInput
+) => Promise<AnswerHarnessFinalizationResult>
+
 let answerHarnessSessionJournalWriter: AnswerHarnessSessionJournalWriter = async (input) =>
   appendHarnessSessionEntryToSourceFromRequest(input)
+
+let answerHarnessFinalizer: AnswerHarnessFinalizer = async (input) => {
+  const { request, ...args } = input
+  return finalizeAnswerTurnHarnessRunFromRequest(request, args)
+}
 
 export function setAnswerHarnessSessionJournalWriterForTests(
   writer: AnswerHarnessSessionJournalWriter,
@@ -98,6 +114,16 @@ export function setAnswerHarnessSessionJournalWriterForTests(
   answerHarnessSessionJournalWriter = writer
   return () => {
     answerHarnessSessionJournalWriter = previous
+  }
+}
+
+export function setAnswerHarnessFinalizerForTests(
+  finalizer: AnswerHarnessFinalizer,
+): () => void {
+  const previous = answerHarnessFinalizer
+  answerHarnessFinalizer = finalizer
+  return () => {
+    answerHarnessFinalizer = previous
   }
 }
 
@@ -114,7 +140,9 @@ export type PersistAnswerTurnResult = {
   status: AnswerTurnStatus
   snapshotHash: string
   harnessRun: HarnessRunReport
+  evidenceJson: string
 }
+
 
 export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput): Promise<PersistAnswerTurnResult> {
   const status = input.captured !== undefined ? ('complete' as const) : ('error' as const)
@@ -184,6 +212,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
       toolId: call.toolId,
       inputJson: call.inputJson,
       resultSummaryJson: call.resultSummaryJson,
+      resultJson: call.resultJson,
       resultHash: call.resultHash,
       status: call.status,
     })),
@@ -204,7 +233,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
           ...(input.harnessRuntimeEvents === undefined ? {} : { runtimeEvents: input.harnessRuntimeEvents }),
         })
       }
-      return { ok: true, status, snapshotHash, harnessRun }
+      return { ok: true, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
     }
 
     await appendAnswerTurnWithToolCalls(turnRow)
@@ -217,11 +246,114 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
         ...(input.harnessRuntimeEvents === undefined ? {} : { runtimeEvents: input.harnessRuntimeEvents }),
       })
     }
-    return { ok: true, status, snapshotHash, harnessRun }
+    return { ok: true, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
   } catch {
-    return { ok: false, status, snapshotHash, harnessRun }
+    return { ok: false, status, snapshotHash, harnessRun, evidenceJson: turnRow.evidenceJson }
   }
 }
+
+export async function finalizePersistedAnswerTurnHarnessRun(args: {
+  input: PersistAnswerTurnInput
+  persistResult: PersistAnswerTurnResult
+  harnessRun: HarnessRunReport
+  runtimeEvents?: readonly HarnessRuntimeEvent[]
+}): Promise<AnswerHarnessFinalizationResult> {
+  const request = args.input.sourceWriteRequest
+  if (request === undefined) {
+    return {
+      status: 'error',
+      reason: 'source_write_failed',
+      message: 'source_write_request_missing',
+    }
+  }
+
+  const entries = buildAnswerHarnessSessionJournalEntries({
+    input: args.input,
+    harnessRun: args.harnessRun,
+    snapshotHash: args.persistResult.snapshotHash,
+    status: args.persistResult.status,
+    ...(args.runtimeEvents === undefined ? {} : { runtimeEvents: args.runtimeEvents }),
+  })
+  const finalizationHash = buildAnswerHarnessFinalizationHash({
+    input: args.input,
+    persistResult: args.persistResult,
+    harnessRun: args.harnessRun,
+    entries,
+  })
+  const finalizedEvidence = finalizeEvidenceJson({
+    evidenceJson: args.persistResult.evidenceJson,
+    harnessRun: args.harnessRun,
+    finalizationHash,
+    journalEntryCount: entries.length,
+  })
+
+  return answerHarnessFinalizer({
+    request,
+    turnId: args.input.turnId,
+    snapshotHash: args.persistResult.snapshotHash,
+    evidenceJson: finalizedEvidence,
+    finalizationHash,
+    entries,
+  })
+}
+
+export function answerHarnessFinalizationSucceeded(
+  result: AnswerHarnessFinalizationResult | undefined,
+): result is Extract<AnswerHarnessFinalizationResult, { status: 'accepted' | 'replayed' }> {
+  return result?.status === 'accepted' || result?.status === 'replayed'
+}
+
+function finalizeEvidenceJson(input: {
+  evidenceJson: string
+  harnessRun: HarnessRunReport
+  finalizationHash: string
+  journalEntryCount: number
+}): string {
+  const evidence = parseFrozenEvidence(input.evidenceJson)
+  const finalized: FrozenTurnEvidence = {
+    ...evidence,
+    harnessRun: input.harnessRun,
+    harnessFinalization: {
+      schemaVersion: 1,
+      status: 'accepted',
+      finalizationHash: input.finalizationHash,
+      journalEntryCount: input.journalEntryCount,
+      finalizedAt: input.harnessRun.summary.run.endedAt ?? Date.now(),
+    },
+  }
+  return JSON.stringify(finalized)
+}
+
+function buildAnswerHarnessFinalizationHash(input: {
+  input: PersistAnswerTurnInput
+  persistResult: PersistAnswerTurnResult
+  harnessRun: HarnessRunReport
+  entries: readonly AppendHarnessSessionEntrySourceInput[]
+}): string {
+  return stableHash({
+    schemaVersion: 1,
+    turnId: input.input.turnId,
+    threadId: input.input.threadId,
+    sessionId: input.input.sessionId,
+    snapshotHash: input.persistResult.snapshotHash,
+    run: stableHashValue(input.harnessRun),
+    entries: input.entries.map((entry) => ({
+      entryId: entry.entryId,
+      idempotencyKey: entry.idempotencyKey ?? entry.entryId,
+      kind: entry.kind,
+      runId: entry.runId,
+      turnId: entry.turnId ?? null,
+      payloadJson: entry.payloadJson,
+      publicSummaryJson: entry.publicSummaryJson ?? null,
+      privatePayloadJson: entry.privatePayloadJson ?? null,
+    })),
+  }).toString()
+}
+
+function stableHashValue(value: unknown): StableHashValue {
+  return JSON.parse(JSON.stringify(value)) as StableHashValue
+}
+
 
 export function collectLatestFrozenProviders(priorTurns: readonly AnswerTurnRecordLite[]): AnswerSource[] {
   return readLatestFrozenEvidence(priorTurns)?.providers.slice() ?? []
@@ -407,6 +539,11 @@ function buildAnswerHarnessSessionJournalEntries(args: {
       },
       privatePayload: {
         harnessRun: args.harnessRun,
+        runtimeEvent: {
+          type: 'run.reported',
+          runId: args.input.turnId,
+          report: args.harnessRun,
+        },
       },
       publicSummary: {
         status: runStatus,
@@ -470,6 +607,11 @@ function buildRuntimeAnswerHarnessSessionJournalEntries(args: {
       },
       privatePayload: {
         harnessRun: args.harnessRun,
+        runtimeEvent: {
+          type: 'run.reported',
+          runId: args.input.turnId,
+          report: args.harnessRun,
+        },
       },
       publicSummary: {
         status: args.runStatus,

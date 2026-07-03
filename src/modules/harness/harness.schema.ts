@@ -35,6 +35,12 @@ export type HarnessRunPhase = (typeof HarnessRunPhaseValues)[number]
 export const HarnessToolTierValues = ['read', 'write', 'exec'] as const
 export type HarnessToolTier = (typeof HarnessToolTierValues)[number]
 
+export const HarnessToolLoadModeValues = ['essential', 'discoverable'] as const
+export type HarnessToolLoadMode = (typeof HarnessToolLoadModeValues)[number]
+
+export const HarnessToolConcurrencyValues = ['shared', 'exclusive'] as const
+export type HarnessToolConcurrency = (typeof HarnessToolConcurrencyValues)[number]
+
 export const HarnessApprovalPolicyValues = ['allow', 'deny', 'prompt'] as const
 export type HarnessApprovalPolicy = (typeof HarnessApprovalPolicyValues)[number]
 
@@ -283,7 +289,12 @@ export type HarnessToolDefinition<Input = unknown, Output = unknown> = {
   inputJsonSchema?: JSONSchema
   outputJsonSchema?: JSONSchema
   approval?: HarnessApprovalPolicy
-  run(args: { input: Input; context: ActionContext }): Promise<Output>
+  hidden?: boolean
+  loadMode?: HarnessToolLoadMode
+  concurrency?: HarnessToolConcurrency
+  interruptible?: boolean
+  customWireName?: string
+  run(args: { input: Input; context: ActionContext; signal?: AbortSignal }): Promise<Output>
   summarizeOutput?: (output: Output) => unknown
 }
 

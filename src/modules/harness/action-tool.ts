@@ -31,6 +31,7 @@ export type RunHarnessToolInput = {
   surface?: 'ui' | 'http' | 'agentJson' | 'agentTools'
   allowWrites?: boolean
   timeoutMs?: number
+  signal?: AbortSignal
 }
 
 export type RunHarnessToolOutcome = {
@@ -100,8 +101,10 @@ export async function runHarnessTool(input: RunHarnessToolInput): Promise<RunHar
 
   try {
     const output = await runWithOptionalTimeout(
-      input.tool.run({ input: parsedInput.data, context }),
+      (signal) => input.tool.run({ input: parsedInput.data, context, ...(signal === undefined ? {} : { signal }) }),
       input.timeoutMs,
+      input.signal,
+      input.tool.interruptible ?? (input.tool.tier === 'read'),
     )
     const parsedOutput = input.tool.outputSchema.safeParse(output)
 
@@ -135,13 +138,21 @@ export async function runHarnessTool(input: RunHarnessToolInput): Promise<RunHar
       }),
     }
   } catch (error) {
-    const errorCode = error instanceof HarnessToolTimeoutError ? 'tool_timeout' : 'tool_run_failed'
+    const errorCode = error instanceof HarnessToolTimeoutError
+      ? 'tool_timeout'
+      : error instanceof HarnessToolAbortError
+        ? 'tool_aborted'
+        : 'tool_run_failed'
     return {
       decision,
       result: buildHarnessToolResult({
         toolCallId,
         toolId: input.tool.id,
-        status: error instanceof HarnessToolTimeoutError ? 'timeout' : 'error',
+        status: error instanceof HarnessToolTimeoutError
+          ? 'timeout'
+          : error instanceof HarnessToolAbortError
+            ? 'aborted'
+            : 'error',
         input: parsedInput.data,
         summary: { kind: 'error', code: errorCode },
         durationMs: elapsed(startedAt),
@@ -189,17 +200,51 @@ function buildHarnessToolResult(input: {
   }
 }
 
-async function runWithOptionalTimeout<T>(work: Promise<T>, timeoutMs: number | undefined): Promise<T> {
-  if (timeoutMs === undefined) {
-    return work
+async function runWithOptionalTimeout<T>(
+  work: (signal: AbortSignal | undefined) => Promise<T>,
+  timeoutMs: number | undefined,
+  parentSignal: AbortSignal | undefined,
+  interruptible: boolean,
+): Promise<T> {
+  if (parentSignal?.aborted === true) {
+    throw new HarnessToolAbortError(parentSignal.reason)
   }
 
-  return Promise.race([
-    work,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new HarnessToolTimeoutError(timeoutMs)), timeoutMs)
-    }),
-  ])
+  const controller = new AbortController()
+  const cleanup: (() => void)[] = []
+  const races: Promise<T>[] = [
+    Promise.resolve().then(() => work(interruptible ? controller.signal : parentSignal)),
+  ]
+
+  races.push(new Promise<T>((_, reject) => {
+    const onAbort = () => reject(normalizeToolAbortReason(controller.signal.reason))
+    controller.signal.addEventListener('abort', onAbort, { once: true })
+    cleanup.push(() => controller.signal.removeEventListener('abort', onAbort))
+  }))
+
+  if (parentSignal !== undefined) {
+    const onParentAbort = () => {
+      abortController(controller, new HarnessToolAbortError(parentSignal.reason))
+    }
+    parentSignal.addEventListener('abort', onParentAbort, { once: true })
+    cleanup.push(() => parentSignal.removeEventListener('abort', onParentAbort))
+  }
+
+  if (timeoutMs !== undefined) {
+    const timer = setTimeout(
+      () => abortController(controller, new HarnessToolTimeoutError(timeoutMs)),
+      timeoutMs,
+    )
+    cleanup.push(() => clearTimeout(timer))
+  }
+
+  try {
+    return await Promise.race(races)
+  } finally {
+    for (const cleanupFn of cleanup) {
+      cleanupFn()
+    }
+  }
 }
 
 class HarnessToolTimeoutError extends Error {
@@ -207,6 +252,29 @@ class HarnessToolTimeoutError extends Error {
     super(`Harness tool timed out after ${timeoutMs}ms`)
     this.name = 'HarnessToolTimeoutError'
   }
+}
+
+class HarnessToolAbortError extends Error {
+  constructor(reason: unknown) {
+    super(reason instanceof Error ? reason.message : 'Harness tool aborted')
+    this.name = 'HarnessToolAbortError'
+  }
+}
+
+function abortController(controller: AbortController, reason: Error): void {
+  if (!controller.signal.aborted) {
+    controller.abort(reason)
+  }
+}
+
+function normalizeToolAbortReason(reason: unknown): Error {
+  if (reason instanceof HarnessToolTimeoutError || reason instanceof HarnessToolAbortError) {
+    return reason
+  }
+  if (reason instanceof Error) {
+    return new HarnessToolAbortError(reason)
+  }
+  return new HarnessToolAbortError(reason)
 }
 
 function buildToolCallId(toolId: string): string {

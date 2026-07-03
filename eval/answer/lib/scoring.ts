@@ -426,9 +426,16 @@ function aggregateTurnDimension(
   }
 
   const minScore = Math.min(...entries.map((entry) => entry.score))
-  const failingNotes = entries
-    .filter((entry) => !entry.passed)
-    .flatMap((entry, index) => entry.notes.map((note) => `turn ${index + 1}: ${note}`))
+  const failingNotes: string[] = []
+  let failingTurnIndex = 0
+  for (const entry of entries) {
+    if (!entry.passed) {
+      for (const note of entry.notes) {
+        failingNotes.push(`turn ${failingTurnIndex + 1}: ${note}`)
+      }
+      failingTurnIndex += 1
+    }
+  }
 
   return dimension(
     target,
@@ -451,11 +458,18 @@ function finishScore(breakdown: readonly AnswerEvalScoreBreakdown[]): AnswerEval
     && gotRightAnswer
     && userCanProceed
     && abandonmentRisk === 'low'
-  const notes = satisfied
-    ? ['User gets the expected answer, has a safe next step, and abandonment risk is low.']
-    : breakdown
-        .filter((item) => !item.passed)
-        .flatMap((item) => item.notes.map((note) => `${item.label}: ${note}`))
+  const notes: string[] = []
+  if (satisfied) {
+    notes.push('User gets the expected answer, has a safe next step, and abandonment risk is low.')
+  } else {
+    for (const item of breakdown) {
+      if (!item.passed) {
+        for (const note of item.notes) {
+          notes.push(`${item.label}: ${note}`)
+        }
+      }
+    }
+  }
 
   return {
     score,
@@ -547,27 +561,22 @@ function artifactStreamMatchesResult(input: TurnScoreInput): boolean {
 }
 
 function workLogMatchesResult(input: TurnScoreInput): boolean {
-  const ids = new Set(input.result.workStepIds)
-  if (!ids.has('interpret.request') || !ids.has('assemble.answer')) {
+  const ids = input.result.workStepIds
+  if (ids.length === 0 || ids.some((id) => !/^step-\d+$/.test(id))) {
     return false
   }
   if (input.result.workSteps.some((step) => step.status === 'running')) {
     return false
   }
   if ((input.testCase.expected.toolQueries?.length ?? 0) > 0) {
-    if (!ids.has('search.registry.initial') || !ids.has('read.providers') || !ids.has('compare.fit')) {
+    const searchSteps = input.result.workSteps.filter((step) => step.phase === 'search')
+    if (searchSteps.length === 0) {
       return false
     }
-    if ((input.testCase.expected.toolQueries?.length ?? 0) > 1 && !ids.has('search.registry.recovery')) {
+    if (!searchSteps.some((step) => step.detailRows?.some((row) => row.label === 'Results'))) {
       return false
     }
     return true
-  }
-  if (isRouteOnlyBoundary(input)) {
-    return ids.has('route.next_step')
-  }
-  if ((input.testCase.expected.includeTimingNames ?? []).includes('model.agent_total')) {
-    return ids.has('search.registry.recovery')
   }
   return true
 }
@@ -578,48 +587,24 @@ function workStepEvidenceMatchesPath(input: TurnScoreInput): boolean {
   }
 
   const expectedToolQueries = input.testCase.expected.toolQueries ?? []
-  const ranInitialSearch = expectedToolQueries.length > 0
-  const ranRecoverySearch = expectedToolQueries.length > 1
+  if (expectedToolQueries.length === 0) {
+    return true
+  }
 
-  if (ranInitialSearch && !stepHasDetails(input, 'search.registry.initial', ['Search words', 'Area', 'Results'])) {
+  const searchSteps = input.result.workSteps.filter((step) => step.phase === 'search')
+  if (searchSteps.length === 0) {
     return false
   }
-  if (ranRecoverySearch && !stepHasDetails(input, 'search.registry.recovery', ['Results'])) {
-    return false
-  }
-  if ((input.testCase.expected.includeTimingNames ?? []).includes('retrieval.initial_search')) {
-    if (!stepIsFinished(input, 'read.providers') || !stepIsFinished(input, 'compare.fit')) {
-      return false
-    }
-  }
-  if (isRouteOnlyBoundary(input) && !stepHasDetails(input, 'route.next_step', ['Listed businesses carried forward'])) {
+  if (expectedToolQueries.length > 1 && searchSteps.length < 2) {
     return false
   }
 
-  return true
+  return searchSteps.every((step) =>
+    step.status !== 'running' &&
+    step.detailRows?.some((row) => row.label === 'Results') === true
+  )
 }
 
-function stepIsFinished(input: TurnScoreInput, id: string): boolean {
-  const status = input.result.workSteps.find((step) => step.id === id)?.status
-  return status === 'complete' || status === 'skipped' || status === 'stopped'
-}
-
-function stepHasDetails(input: TurnScoreInput, id: string, labels: readonly string[]): boolean {
-  const step = input.result.workSteps.find((item) => item.id === id)
-  if (step === undefined || !stepIsFinished(input, id)) {
-    return false
-  }
-  const actualLabels = new Set((step.detailRows ?? []).map((row) => row.label))
-  return labels.every((label) => actualLabels.has(label))
-}
-
-function isRouteOnlyBoundary(input: TurnScoreInput): boolean {
-  const expected = input.testCase.expected
-  return expected.requireBoundaryCopy === true
-    && (expected.toolQueries?.length ?? 0) === 0
-    && (expected.excludeTimingNames ?? []).includes('retrieval.initial_search')
-    && (expected.excludeTimingNames ?? []).includes('model.agent_total')
-}
 
 function timingExpectationsPass(
   expected: AnswerTurnEvalCase['expected'],

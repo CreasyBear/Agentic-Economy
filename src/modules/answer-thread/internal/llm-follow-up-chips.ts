@@ -78,11 +78,20 @@ async function fetchLlmFollowUpChips(input: GenerateLlmFollowUpChipsInput): Prom
     if (!Array.isArray(parsed.chips)) {
       return []
     }
-    const chips = parsed.chips
-      .filter((chip): chip is string => typeof chip === 'string')
-      .map((chip) => chip.trim())
-      .filter((chip) => validateFollowUpChip(chip, 1))
-      .slice(0, MAX_LLM_CHIPS)
+    const chips: string[] = []
+    for (const chip of parsed.chips) {
+      if (typeof chip !== 'string') {
+        continue
+      }
+      const trimmed = chip.trim()
+      if (!validateFollowUpChip(trimmed, 1)) {
+        continue
+      }
+      chips.push(trimmed)
+      if (chips.length >= MAX_LLM_CHIPS) {
+        break
+      }
+    }
     return chips
   } catch {
     return []

@@ -78,6 +78,8 @@ export type HarnessRunLoopToolInput<Input = unknown, Output = unknown> = Omit<
   toolCallId?: string
 }
 
+export type HarnessRunLoopToolBatchInput = HarnessRunLoopToolInput<unknown, unknown>
+
 export type HarnessRunLoopModelAccounting = Partial<Pick<
   HarnessModelRequestRecord,
   'seq' | 'stopReason' | 'requestId' | 'responseId' | 'usage' | 'costUsd' | 'costUnavailableReason'
@@ -104,6 +106,8 @@ export type HarnessRunLoopModelInput<Result = unknown> = {
   summarize?: (result: Result) => HarnessRunLoopModelAccounting | undefined
   summarizeError?: (error: unknown) => HarnessRunLoopModelAccounting | undefined
 }
+
+export type HarnessRunLoopGuardedWork<T> = (signal: AbortSignal | undefined) => T | Promise<T>
 
 export class HarnessRunLoop {
   readonly runId: string
@@ -238,7 +242,7 @@ export class HarnessRunLoop {
     return report
   }
 
-  async phase<T>(phase: string, work: () => T | Promise<T>): Promise<T> {
+  async phase<T>(phase: string, work: HarnessRunLoopGuardedWork<T>): Promise<T> {
     this.startRun()
     const startedAt = this.now()
     this.emit({
@@ -286,7 +290,7 @@ export class HarnessRunLoop {
     })
 
     try {
-      const outcome = await this.withRunGuards(() => runHarnessTool(this.toolInput(input, toolCallId)))
+      const outcome = await this.withRunGuards((signal) => runHarnessTool(this.toolInput(input, toolCallId, signal)))
       const status = outcome.result.status
       this.emit({
         type: status === 'ok' ? 'tool.completed' : 'tool.failed',
@@ -314,9 +318,44 @@ export class HarnessRunLoop {
     }
   }
 
+  async runToolBatch(
+    inputs: readonly HarnessRunLoopToolBatchInput[],
+  ): Promise<RunHarnessToolOutcome[]> {
+    const outcomes: RunHarnessToolOutcome[] = []
+    const tasks: Promise<void>[] = []
+    let lastExclusive: Promise<void> = Promise.resolve()
+    let sharedTasks: Promise<void>[] = []
+
+    inputs.forEach((input, index) => {
+      const concurrency = input.tool.concurrency ?? 'shared'
+      const start = concurrency === 'exclusive'
+        ? Promise.all([lastExclusive, ...sharedTasks])
+        : lastExclusive
+      const task = start.then(async () => {
+        outcomes[index] = await this.runTool(input)
+      })
+
+      tasks.push(task)
+      if (concurrency === 'exclusive') {
+        lastExclusive = task
+        sharedTasks = []
+      } else {
+        sharedTasks.push(task)
+      }
+    })
+
+    const settled = await Promise.allSettled(tasks)
+    const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (rejected !== undefined) {
+      throw rejected.reason
+    }
+
+    return outcomes
+  }
+
   async runModel<T>(
     input: HarnessRunLoopModelInput<T>,
-    work: () => T | Promise<T>,
+    work: HarnessRunLoopGuardedWork<T>,
   ): Promise<T> {
     const startedAt = this.now()
     this.emit({
@@ -387,7 +426,7 @@ export class HarnessRunLoop {
     }
   }
 
-  async persist<T>(work: () => T | Promise<T>): Promise<T> {
+  async persist<T>(work: HarnessRunLoopGuardedWork<T>): Promise<T> {
     const startedAt = this.now()
     this.emit({
       type: 'persist.started',
@@ -493,7 +532,7 @@ export class HarnessRunLoop {
     handler: HarnessRunLoopPhaseHandler<State> | undefined,
     options: { applyGuards: boolean },
   ): Promise<State> {
-    const execute = async (): Promise<State> => {
+    const execute = async (signal: AbortSignal | undefined): Promise<State> => {
       if (handler === undefined) {
         return state
       }
@@ -501,25 +540,30 @@ export class HarnessRunLoop {
         loop: this,
         phase,
         state,
-        ...(this.signal === undefined ? {} : { signal: this.signal }),
+        ...(signal === undefined ? {} : { signal }),
       })
       return maybeNextState === undefined ? state : maybeNextState
     }
 
-    return options.applyGuards ? this.withRunGuards(execute) : execute()
+    return options.applyGuards ? this.withRunGuards(execute) : execute(this.signal)
   }
 
-  private async withRunGuards<T>(work: () => T | Promise<T>): Promise<T> {
+  private async withRunGuards<T>(work: HarnessRunLoopGuardedWork<T>): Promise<T> {
     this.throwIfAborted()
     this.throwIfTimedOut()
 
-    const workPromise = Promise.resolve().then(work)
+    const controller = new AbortController()
+    const workPromise = Promise.resolve().then(() => work(controller.signal))
     const races: Promise<T>[] = [workPromise]
     const cleanup: (() => void)[] = []
 
     if (this.signal !== undefined) {
       races.push(new Promise<T>((_, reject) => {
-        const onAbort = (): void => reject(new HarnessRunLoopAbortError(this.signal?.reason))
+        const onAbort = (): void => {
+          const error = new HarnessRunLoopAbortError(this.signal?.reason)
+          abortController(controller, error)
+          reject(error)
+        }
         this.signal?.addEventListener('abort', onAbort, { once: true })
         cleanup.push(() => this.signal?.removeEventListener('abort', onAbort))
       }))
@@ -529,7 +573,11 @@ export class HarnessRunLoop {
     if (remainingTimeoutMs !== undefined) {
       races.push(new Promise<T>((_, reject) => {
         const timer = setTimeout(
-          () => reject(new HarnessRunLoopTimeoutError(this.timeoutMs ?? remainingTimeoutMs)),
+          () => {
+            const error = new HarnessRunLoopTimeoutError(this.timeoutMs ?? remainingTimeoutMs)
+            abortController(controller, error)
+            reject(error)
+          },
           remainingTimeoutMs,
         )
         cleanup.push(() => clearTimeout(timer))
@@ -548,6 +596,7 @@ export class HarnessRunLoop {
   private toolInput<Input, Output>(
     input: HarnessRunLoopToolInput<Input, Output>,
     toolCallId: string,
+    signal: AbortSignal | undefined,
   ): RunHarnessToolInput {
     const context = input.context ?? this.toolContext
     const surface = input.surface ?? this.surface
@@ -562,6 +611,7 @@ export class HarnessRunLoop {
       ...(surface === undefined ? {} : { surface }),
       ...(allowWrites === undefined ? {} : { allowWrites }),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      ...(signal === undefined ? {} : { signal }),
     }
   }
 
@@ -633,6 +683,12 @@ function normalizeModelUsage(usage: HarnessModelUsage | undefined): HarnessModel
     return undefined
   }
   return usage
+}
+
+function abortController(controller: AbortController, reason: Error): void {
+  if (!controller.signal.aborted) {
+    controller.abort(reason)
+  }
 }
 
 export class HarnessRunLoopExecutionError extends Error {

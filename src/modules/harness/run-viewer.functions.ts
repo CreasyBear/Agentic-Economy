@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
+import { callSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
 import type { AdminMembership } from '@/modules/security/public'
 import { requireAdminAuthority } from '@/modules/security/public'
@@ -31,6 +32,27 @@ const filtersSchema = z.object({
 const detailSchema = filtersSchema.extend({
   turnId: z.string().trim().min(1),
 })
+
+type AdminHarnessRunTurnsSourceResult =
+  | {
+      kind: 'allowed'
+      actorRef: string
+      turns: readonly AnswerTurnRecord[]
+      limit: number
+      truncated: boolean
+    }
+  | {
+      kind: 'denied'
+      reason: 'missing_membership' | 'inactive_membership' | 'action_not_allowed'
+      turns: readonly AnswerTurnRecord[]
+      limit: number
+      truncated: false
+    }
+
+const listAdminHarnessRunTurnsQuery = sourceQuery<
+  HarnessRunViewerFilters & { limit?: number },
+  AdminHarnessRunTurnsSourceResult
+>('answerThreads:listAdminHarnessRunTurns')
 
 export type HarnessRunViewerSourceRead = {
   access: HarnessRunViewerAccess
@@ -90,18 +112,12 @@ export async function readAdminRunViewerListThroughSource(
   filters: HarnessRunViewerFilters = {},
 ): Promise<HarnessRunViewerListResult> {
   const normalizedFilters = normalizeHarnessRunViewerFilters(filters)
-  const source = readConfiguredSource()
-
-  if (source.kind === 'disabled') {
-    return buildHarnessRunViewerDisabledListResult(normalizedFilters)
-  }
-
-  const read = await readAuthorizedTurns(source.port, normalizedFilters)
+  const read = await readRunViewerSourceTurns(normalizedFilters)
   return buildHarnessRunViewerListResult({
     access: read.access,
     turns: read.turns,
     filters: normalizedFilters,
-    source: { kind: 'configured' },
+    source: read.source,
   })
 }
 
@@ -110,20 +126,61 @@ export async function readAdminRunViewerDetailThroughSource(
   filters: HarnessRunViewerFilters = {},
 ): Promise<HarnessRunViewerDetailResult> {
   const normalizedFilters = normalizeHarnessRunViewerFilters({ ...filters, turnId })
-  const source = readConfiguredSource()
-
-  if (source.kind === 'disabled') {
-    return buildHarnessRunViewerDisabledDetailResult(turnId, normalizedFilters)
-  }
-
-  const read = await readAuthorizedTurns(source.port, normalizedFilters)
+  const read = await readRunViewerSourceTurns(normalizedFilters)
   return buildHarnessRunViewerDetailResult({
     access: read.access,
     turns: read.turns,
     turnId,
     filters: normalizedFilters,
-    source: { kind: 'configured' },
+    source: read.source,
   })
+}
+
+async function readRunViewerSourceTurns(filters: HarnessRunViewerFilters): Promise<
+  HarnessRunViewerSourceRead & { source: HarnessRunViewerSourceState }
+> {
+  const source = readConfiguredSource()
+  if (source.kind === 'configured') {
+    const read = await readAuthorizedTurns(source.port, filters)
+    return { ...read, source: { kind: 'configured' } }
+  }
+
+  return readDefaultSourceTurns(filters)
+}
+
+async function readDefaultSourceTurns(filters: HarnessRunViewerFilters): Promise<
+  HarnessRunViewerSourceRead & { source: HarnessRunViewerSourceState }
+> {
+  try {
+    const result = await callSourceQuery(listAdminHarnessRunTurnsQuery, { ...filters, limit: 100 })
+    if (result.kind === 'denied') {
+      return {
+        access: {
+          kind: 'denied',
+          reason: result.reason,
+          publicMessage: 'Admin run evidence requires active source-owned membership.',
+        },
+        turns: [],
+        source: { kind: 'configured' },
+      }
+    }
+
+    return {
+      access: { kind: 'allowed', actorRef: result.actorRef },
+      turns: result.turns,
+      source: { kind: 'configured' },
+    }
+  } catch {
+    return {
+      access: {
+        kind: 'denied',
+        reason: 'missing_membership',
+        publicMessage: 'Admin run evidence requires active source-owned membership.',
+      },
+      turns: [],
+      source: { kind: 'configured' },
+    }
+  }
 }
 
 async function readAuthorizedTurns(

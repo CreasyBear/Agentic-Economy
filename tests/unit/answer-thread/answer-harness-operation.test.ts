@@ -8,7 +8,9 @@ import {
 import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
 import { streamAnswerTurn } from '@/modules/answer-thread/public'
 import {
+  setAnswerHarnessFinalizerForTests,
   setAnswerHarnessSessionJournalWriterForTests,
+  type AnswerHarnessFinalizerInput,
   setAnswerThreadPortForTests,
   type AnswerHarnessSessionJournalWriteInput,
 } from '@/modules/answer-thread/testing'
@@ -289,7 +291,7 @@ describe('answer harness operation persistence bridge', () => {
   it('streams answer turns through the live harness loop and journals runtime events directly', async () => {
     const state = createDefaultRegistrySourceState()
     const turns = new Map<string, AnswerTurnRecord>()
-    const journalWrites: AnswerHarnessSessionJournalWriteInput[] = []
+    const finalizationWrites: AnswerHarnessFinalizerInput[] = []
     const events: AnswerEvent[] = []
 
     resets.push(setAnswerThreadPortForTests({
@@ -315,23 +317,23 @@ describe('answer harness operation persistence bridge', () => {
       getPublicThreadProjection: async () => null,
       getThreadTurns: async () => ({ turns: [] }),
     }))
-    resets.push(setAnswerHarnessSessionJournalWriterForTests(async (write) => {
-      journalWrites.push(write)
+    resets.push(setAnswerHarnessFinalizerForTests(async (write) => {
+      finalizationWrites.push(write)
+      const turn = turns.get(write.turnId)
+      if (turn !== undefined) {
+        turns.set(write.turnId, {
+          ...turn,
+          evidenceJson: write.evidenceJson,
+        })
+      }
+      const activeLeafEntryId = write.entries.at(-1)?.entryId
       return {
         status: 'accepted',
-        entry: {
-          entryId: write.entry.entryId,
-          sessionId: write.entry.sessionId,
-          runId: write.entry.runId,
-          ...(write.entry.turnId === undefined ? {} : { turnId: write.entry.turnId }),
-          seq: journalWrites.length,
-          ...(write.entry.parentEntryId === undefined ? {} : { parentEntryId: write.entry.parentEntryId }),
-          kind: write.entry.kind,
-          ...(write.entry.status === undefined ? {} : { status: write.entry.status }),
-          idempotencyKey: write.entry.idempotencyKey ?? write.entry.entryId,
-          createdAt: write.entry.createdAt,
-        },
-        activeLeafEntryId: write.entry.entryId,
+        turnId: write.turnId,
+        finalizationHash: write.finalizationHash,
+        entriesAccepted: write.entries.length,
+        entriesReplayed: 0,
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
       }
     }))
     resets.push(setAnswerToolUseAgentForTests(async () => ({
@@ -376,7 +378,8 @@ describe('answer harness operation persistence bridge', () => {
       expect.arrayContaining(['context', 'intent', 'route', 'retrieval', 'model', 'assemble', 'gate']),
     )
 
-    const journalKinds = journalWrites.map((write) => write.entry.kind)
+    const journalEntries = finalizationWrites.flatMap((write) => write.entries)
+    const journalKinds = journalEntries.map((entry) => entry.kind)
     expect(journalKinds).toEqual(expect.arrayContaining([
       'turn.started',
       'context.loaded',
@@ -390,11 +393,71 @@ describe('answer harness operation persistence bridge', () => {
       'run.reported',
     ]))
     expect(journalKinds.filter((kind) => kind === 'tool.completed')).toHaveLength(2)
-    expect(journalWrites.find((write) => write.entry.kind === 'run.reported')?.entry.privatePayloadJson).toContain('runtimeEvent')
+    expect(journalEntries.find((entry) => entry.kind === 'run.reported')?.privatePayloadJson).toContain('runtimeEvent')
+    expect(finalizationWrites[0]?.finalizationHash).toMatch(/^hash:/)
+    expect(evidence.harnessFinalization).toMatchObject({
+      schemaVersion: 1,
+      status: 'accepted',
+      journalEntryCount: journalEntries.length,
+    })
 
-    const publicSummaries = JSON.stringify(journalWrites.map((write) => write.entry.publicSummaryJson))
+    const publicSummaries = JSON.stringify(journalEntries.map((entry) => entry.publicSummaryJson))
     expect(publicSummaries).not.toContain('registry.search')
     expect(publicSummaries).not.toContain('paramata')
+  })
+
+  it('does not complete a captured stream when final harness finalization fails', async () => {
+    const state = createDefaultRegistrySourceState()
+    const turns = new Map<string, AnswerTurnRecord>()
+    const events: AnswerEvent[] = []
+
+    resets.push(setAnswerThreadPortForTests({
+      createThread: async (args) => ({ threadId: args.threadId }),
+      appendTurn: async (args) => {
+        turns.set(args.turnId, { ...args, createdAt: 1_000 })
+        return { turnId: args.turnId }
+      },
+      appendTurnWithToolCalls: async (args) => {
+        const { toolCalls: _toolCalls, ...turnArgs } = args
+        turns.set(args.turnId, { ...turnArgs, createdAt: 1_000 })
+        return { turnId: args.turnId, insertedToolCalls: args.toolCalls.length }
+      },
+      listSessionThreads: async () => ({ threads: [] }),
+      getPublicThreadProjection: async () => null,
+      getThreadTurns: async () => ({ turns: [] }),
+    }))
+    resets.push(setAnswerHarnessFinalizerForTests(async () => ({
+      status: 'error',
+      reason: 'source_write_failed',
+      message: 'forced finalization failure',
+    })))
+    resets.push(setAnswerToolUseAgentForTests(async () => ({
+      toolCalls: [
+        { toolId: 'registry.search', input: { query: 'parramatta', limit: 3 } },
+      ],
+      prose: {
+        oneLine: 'One listed business matches.',
+        summary: 'Parramatta Emergency Plumbing publishes service coverage. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
+      },
+    })))
+
+    await withRegistrySourcePortForTest(state, async () => {
+      await streamAnswerTurn(
+        {
+          sessionId: 'session-stream-finalization-fail',
+          query: 'parramatta plumber',
+          searchContext: { mode: 'whole_catalogue', allowOutsideArea: true },
+          precheckedAccess: { kind: 'allowed', turnCount: 0 },
+          sourceWriteRequest: new Request('https://ae.test/api/answer/turn', { method: 'POST' }),
+        },
+        ({ event }) => events.push(event),
+      )
+    })
+
+    expect([...turns.values()]).toHaveLength(1)
+    expect(events.some((event) => event.type === 'complete')).toBe(false)
+    expect(events.some((event) => event.type === 'error' && event.code === 'answer_turn_persist_failed')).toBe(true)
   })
 })
 
@@ -454,6 +517,7 @@ function toolCall(
     toolId,
     inputJson: '{}',
     resultSummaryJson: '{"slugs":["preston-plumbing"],"count":1}',
+    resultJson: '{"kind":"ok","items":[{"slug":"preston-plumbing"}]}',
     resultHash,
     status,
     createdAt: 1_000,

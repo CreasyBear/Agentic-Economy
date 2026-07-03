@@ -184,15 +184,19 @@ async function hydrateCatalogSearchResult(
   sourcePort: PublicRegistrySourcePort,
 ): Promise<PublicBusinessCatalogApiPage> {
   const seenSlugs = new Set<string>()
-  const hydrated: PublicBusinessCatalogApiDto[] = []
+  const uniqueSlugs: string[] = []
 
   for (const hit of result.hits) {
     if (seenSlugs.has(hit.businessSlug)) {
       continue
     }
     seenSlugs.add(hit.businessSlug)
+    uniqueSlugs.push(hit.businessSlug)
+  }
 
-    const detail = await sourcePort.detail({ slug: hit.businessSlug })
+  const hydrated: PublicBusinessCatalogApiDto[] = []
+  const details = await Promise.all(uniqueSlugs.map((slug) => sourcePort.detail({ slug })))
+  for (const detail of details) {
     if (detail.kind === 'found') {
       hydrated.push(detail.business)
     }

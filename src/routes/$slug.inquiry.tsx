@@ -1,19 +1,21 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { SendIcon } from 'lucide-react'
-import { toast } from 'sonner'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { FormLayout } from '@astryxdesign/core/FormLayout'
+import { Text } from '@astryxdesign/core/Text'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import { toast } from '@/lib/ui/toast'
+import { useClientMounted } from '@/hooks/use-client-mounted'
 
 import { AeActionResultCard } from '@/components/ae/feedback/AeActionResultCard'
 import { AeInquiryComposer } from '@/components/ae/inquiries/AeInquiryComposer'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
+import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import {
   submitPublicInquiryServer,
@@ -22,7 +24,6 @@ import {
 import {
   readPublicInquiryRouteReadback,
   validatePublicInquiryFormInput,
-  type PublicInquiryFormField,
   type PublicInquiryFormInput,
   type PublicInquiryRouteReadback,
   type PublicInquirySubmittedReceipt,
@@ -63,16 +64,12 @@ function PublicInquiryRoute() {
     ? submittedReceiptToResult(readback.submitted)
     : undefined
   const submitInquiry = useServerFn(submitInquiryServer)
-  const [hydrated, setHydrated] = useState(false)
+  const hydrated = useClientMounted()
   const [value, setValue] = useState<PublicInquiryFormInput>(emptyInquiryFormInput)
   const [errors, setErrors] = useState<readonly PublicInquiryValidationError[]>([])
   const [result, setResult] = useState<PublicInquirySubmitServerResult | undefined>(initialResult)
   const [pending, setPending] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
-
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
 
   if (readback.kind === 'unavailable') {
     return <UnavailableInquiry readback={readback} />
@@ -82,8 +79,7 @@ function PublicInquiryRoute() {
     setValue((current) => ({ ...current, contact: { ...current.contact, [field]: nextValue } }))
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function submitFormValue() {
     setResult(undefined)
 
     if (readback.kind !== 'available') {
@@ -93,7 +89,7 @@ function PublicInquiryRoute() {
     const validation = validatePublicInquiryFormInput(value)
     if (validation.kind === 'invalid') {
       setErrors(validation.errors)
-      focusFirstError(validation.errors)
+      focusFirstPublicInquiryError(validation.errors)
       return
     }
 
@@ -120,12 +116,14 @@ function PublicInquiryRoute() {
     }
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void submitFormValue()
+  }
+
   const bodyError = errorByField.get('body')
-  const nameField = getFieldAccessibility({ id: 'name', hasDescription: true })
-  const emailInvalid = errorByField.has('email')
-  const emailField = getFieldAccessibility({ id: 'email', invalid: emailInvalid, hasDescription: true, hasError: emailInvalid })
-  const phoneInvalid = errorByField.has('phone')
-  const phoneField = getFieldAccessibility({ id: 'phone', invalid: phoneInvalid, hasDescription: true, hasError: phoneInvalid })
+  const emailError = errorByField.get('email')
+  const phoneError = errorByField.get('phone')
 
   return (
     <AePublicShell>
@@ -134,7 +132,7 @@ function PublicInquiryRoute() {
         title="Send the job details"
         description="Share the work, location, timing, and the best way for the business to reply."
       />
-      <form onSubmit={handleSubmit} noValidate className="ae-public-page mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
+      <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
         {result === undefined ? null : (
           <AeActionResultCard
             result={result}
@@ -143,82 +141,76 @@ function PublicInquiryRoute() {
           />
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{readback.serviceName} handoff</CardTitle>
-            <CardDescription>Write the message the business should receive.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FieldGroup>
-              <Field {...nameField.fieldProps}>
-                <FieldLabel htmlFor={nameField.controlProps.id}>Name</FieldLabel>
-                <Input
-                  {...nameField.controlProps}
-                  name="name"
-                  autoComplete="name"
-                  value={value.contact.name}
-                  disabled={!hydrated || pending}
-                  onChange={(event) => updateContact('name', event.currentTarget.value)}
-                />
-                <FieldDescription {...nameField.descriptionProps}>Optional, but helpful for the business reply.</FieldDescription>
-              </Field>
-              <Field {...emailField.fieldProps}>
-                <FieldLabel htmlFor={emailField.controlProps.id}>Contact details for the business reply</FieldLabel>
-                <Input
-                  {...emailField.controlProps}
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={value.contact.email}
-                  disabled={!hydrated || pending}
-                  onChange={(event) => updateContact('email', event.currentTarget.value)}
-                />
-                <FieldDescription {...emailField.descriptionProps}>Email is kept private and is not shown on public pages.</FieldDescription>
-                {fieldError('email', errorByField, emailField.errorProps.id)}
-              </Field>
-              <Field {...phoneField.fieldProps}>
-                <FieldLabel htmlFor={phoneField.controlProps.id}>Phone</FieldLabel>
-                <Input
-                  {...phoneField.controlProps}
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  value={value.contact.phone}
-                  disabled={!hydrated || pending}
-                  onChange={(event) => updateContact('phone', event.currentTarget.value)}
-                />
-                <FieldDescription {...phoneField.descriptionProps}>Use this instead of email if a phone reply is better.</FieldDescription>
-                {fieldError('phone', errorByField, phoneField.errorProps.id)}
-              </Field>
-              <AeInquiryComposer
-                label="Describe the job"
-                description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know.`}
-                value={value.body}
-                maxLength={readback.maxBodyLength}
-                invalid={bodyError !== undefined}
-                {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
-                disabled={!hydrated || pending}
-                pending={pending}
-                onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
-              />
-            </FieldGroup>
-          </CardContent>
+        <Card padding={5} className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Text type="large" weight="semibold" color="primary" display="block">{readback.serviceName} handoff</Text>
+            <Text color="secondary" display="block">Write the message the business should receive.</Text>
+          </div>
+          <FormLayout>
+            <TextInput
+              label="Name"
+              description="Optional, but helpful for the business reply."
+              htmlName="name"
+              value={value.contact.name ?? ''}
+              isDisabled={!hydrated || pending}
+              onChange={(nextValue) => updateContact('name', nextValue)}
+            />
+            <TextInput
+              label="Contact details for the business reply"
+              description="Email is kept private and is not shown on public pages."
+              htmlName="email"
+              type="email"
+              value={value.contact.email ?? ''}
+              isDisabled={!hydrated || pending}
+              {...(emailError === undefined ? {} : { status: { type: 'error' as const, message: emailError } })}
+              onChange={(nextValue) => updateContact('email', nextValue)}
+            />
+            <TextInput
+              label="Phone"
+              description="Use this instead of email if a phone reply is better."
+              htmlName="phone"
+              type={'tel' as 'text'}
+              value={value.contact.phone ?? ''}
+              isDisabled={!hydrated || pending}
+              {...(phoneError === undefined ? {} : { status: { type: 'error' as const, message: phoneError } })}
+              onChange={(nextValue) => updateContact('phone', nextValue)}
+            />
+            <AeInquiryComposer
+              label="Describe the job"
+              description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know.`}
+              value={value.body}
+              maxLength={readback.maxBodyLength}
+              invalid={bodyError !== undefined}
+              {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
+              disabled={!hydrated || pending}
+              pending={pending}
+              onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
+            />
+          </FormLayout>
         </Card>
-        <p className="text-sm leading-6 text-muted-foreground">
+        <p className="text-sm leading-6 text-secondary">
           AE sends this message to the business. The business replies with timing, quote, and availability.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={!hydrated || pending}>
-            {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
+          <AeActionButton type="button" state={pending ? 'loading' : 'idle'} leadingIcon={<SendIcon />} disabled={!hydrated || pending} onClick={() => void submitFormValue()}>
             Send job details
-          </Button>
-          <Button asChild variant="outline">
-            <a href={`/${readback.slug}`}>Back to service page</a>
-          </Button>
+          </AeActionButton>
+          <Button label="Back to service page" variant="secondary" href={`/${readback.slug}`} />
         </div>
       </form>
     </AePublicShell>
   )
+}
+
+function focusFirstPublicInquiryError(errors: readonly PublicInquiryValidationError[]) {
+  const first = errors.at(0)
+  if (first === undefined) {
+    return
+  }
+
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`[name="${first.field}"]`)?.focus()
+  })
 }
 
 function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRouteReadback, { kind: 'unavailable' }> }) {
@@ -228,31 +220,11 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
         <AeEmptyState
           title="Handoff not open yet"
           description={readback.reason}
-          action={
-            <Button asChild>
-              <a href={`/${readback.slug}`}>Back to service page</a>
-            </Button>
-          }
+          action={<Button label="Back to service page" variant="primary" href={`/${readback.slug}`} />}
         />
       </section>
     </AePublicShell>
   )
-}
-
-function fieldError(field: PublicInquiryFormField, errorByField: ReadonlyMap<PublicInquiryFormField, string>, errorId?: string) {
-  const error = errorByField.get(field)
-  return error === undefined ? null : <FieldError id={errorId}>{error}</FieldError>
-}
-
-function focusFirstError(errors: readonly PublicInquiryValidationError[]) {
-  const first = errors.at(0)
-  if (first === undefined) {
-    return
-  }
-
-  requestAnimationFrame(() => {
-    document.querySelector<HTMLElement>(`[name="${first.field}"]`)?.focus()
-  })
 }
 
 function submittedReceiptToResult(receipt: PublicInquirySubmittedReceipt): PublicInquirySubmitServerResult {

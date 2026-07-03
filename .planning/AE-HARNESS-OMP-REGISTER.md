@@ -1,123 +1,114 @@
 # AE Harness OMP Carry-Over Register
 
-Updated: 2026-07-02
-Purpose: measurable progress register for carrying OMP engineering-harness discipline into AE.
+**Date:** 2026-07-03
+**Audit commit:** `30e795243812e18197df35c0592524ee60eec137`
+**OMP reference:** `/Users/skchan/Jcsyc_Projects/oh-my-pi` at `31a8cfc31cf1e467efa76655ded27e64d2295139`
+**Mode:** Operational gate, with OMP as reference architecture and AE's public trust contract unchanged.
+**Register rule:** no row may reach `5-operational` without named passing commands, browser evidence, promptfoo/eval evidence, graph freshness, and public leakage checks at the same AE commit.
 
-Reference:
+## Status Scale
 
-- OMP checkout: `/private/tmp/oh-my-pi`
-- OMP commit: `31a8cfc31cf1e467efa76655ded27e64d2295139`
-- AE HEAD for this refresh: `d7db54cfa84dd4c02eebc8afd7478252615b0dd5`
-- Current AE graph report: `.planning/graphs/GRAPH_REPORT.md`
-- Current AE graph size: `18,266` nodes, `17,364` edges, `26` communities
+| Status | Meaning |
+| --- | --- |
+| `0-not-started` | No AE artifact yet. |
+| `1-reference-read` | OMP reference understood and anchored. |
+| `2-internal` | Internal AE primitive exists, but is not wired to the product runtime. |
+| `3-projected` | Wired into a product path with focused tests or partial evidence. |
+| `4-evaled` | Product path has current unit/integration/eval evidence, but at least one operational gate is still pending. |
+| `5-operational` | All required gates passed at the same settled commit, with graph freshness and browser evidence. |
+| `rejected` | Intentionally not adopted because it violates AE's trust contract. |
 
-## Register Rules
+## Current Gate Ledger
 
-Statuses:
+| Gate | Command | Result |
+| --- | --- | --- |
+| Typecheck | `npm run typecheck` | Pass |
+| Finalization/admin focused tests | `./node_modules/.bin/vitest run tests/unit/answer-thread/answer-harness-operation.test.ts tests/unit/harness/run-loop.test.ts tests/unit/harness/run-viewer-functions.test.ts tests/unit/harness/run-viewer-projection.test.ts tests/unit/harness/session-journal.test.ts` | Pass: 5 files, 28 tests |
+| Focused harness/answer tests | `./node_modules/.bin/vitest run tests/unit/answer-thread tests/unit/harness tests/integration/answer-tool-calls.test.ts` | Pass: 24 files, 119 tests |
+| Eval coverage | Included in `npm run test:eval` | Pass: 12 cases, 10 turn cases, 2 thread cases |
+| Answer eval report | Included in `npm run test:eval` | Pass: 12 cases, 14 turns, 0 failed, min score 9.84/9, avg 9.99 |
+| Promptfoo | Included in `npm run test:eval` | Pass: 27/27 |
+| Eval Vitest | Included in `npm run test:eval` | Pass: 2 files, 23 tests |
+| Combined eval | `npm run test:eval` | Pass; promptfoo PostHog flush warning was non-fatal telemetry |
+| UI contract | `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts` | Pass: 6 files, 36 tests |
+| Browser continuity | `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium --reporter=line` | Pass with elevated local server permission: 3 passed, 1 skipped |
+| Graphify rebuild | `graphify update . && cp graphify-out/graph.json .planning/graphs/graph.json && cp graphify-out/GRAPH_REPORT.md .planning/graphs/GRAPH_REPORT.md && node .codex/gsd-core/bin/gsd-tools.cjs graphify build snapshot && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: 18,147 nodes, 17,305 edges, built/current `30e7952`, `commit_stale: false` |
+| Graph freshness | `npm run test:graph-freshness` | Fail: graph commit matches HEAD, but graph-relevant dirty paths remain |
+| Diff hygiene | `git diff --check` | Pass |
 
-- `0-not-started`: no AE artifact exists.
-- `1-raw-material`: source evidence exists, but no stable AE abstraction.
-- `2-internal`: internal abstraction exists and has focused tests.
-- `3-projected`: safe projection or human review surface exists.
-- `4-evaled`: named tests/evals/browser checks prove behavior and boundary.
-- `5-operational`: exact code, browser, promptfoo/eval, graph, and safety evidence are green in the current tree.
-- `blocked`: cannot proceed without a product, security, or architecture decision.
-- `rejected`: intentionally not copied into AE.
+## Dirty Tree Classification
 
-No row may move to `5-operational` unless it names:
+This closeout cannot honestly claim graph freshness until the dirty tree is landed or isolated. Current inventory from `git status --short`:
 
-- Code evidence: exact file/type/function.
-- Test evidence: exact command and pass/fail.
-- Browser evidence: exact Playwright/manual route check and pass/fail.
-- Eval evidence: exact promptfoo/eval command and pass/fail.
-- Graph evidence: graph freshness against current `HEAD` with no graph-relevant dirty paths.
-- Safety evidence: proof public projection/copy does not leak raw harness evidence or expand AE's assistant contract.
+| Group | Count | Notes |
+| --- | ---: | --- |
+| OMP closeout | 61 | Harness runtime, answer-thread finalization, admin run viewer, eval and focused tests. |
+| Generated graph artifacts | 1 | `.planning/graphs/GRAPH_REPORT.md` currently modified. |
+| UI/Astryx migration | 202 | Broad design/component/style/route migration; verified by UI contract but still graph-relevant dirty work. |
+| Future billing/work | 20 | Billing and future-phase relocation/deletions. |
+| Audit artifacts | 15 | React-doctor/domain audit outputs. |
+| Mixed support/other | 85 | Docs, Convex modules, package files, routing, catalog/security/observability support. |
 
-## Current Gate Snapshot
+## Progress Register
 
-Green on this refresh:
+| ID | OMP pattern | AE target | Priority | Status | Current evidence | Exit criteria |
+| --- | --- | --- | ---: | --- | --- | --- |
+| R0 | Measurable carry-over register | Register rows with commands, dates, status, and blockers | P0 | `4-evaled` | This register now records exact commands, counts, and dirty-tree blocker | Same settled commit has all gates green, including graph freshness |
+| R1 | Authoritative run loop | `HarnessRunLoop` owns answer phase/model/tool execution | P0 | `4-evaled` | `streamAnswerTurn()` runs context, intent, route, retrieval, model, gate, assemble, persist, and report through `HarnessRunLoop.run()` handlers; focused tests pass | Same commit passes graph freshness after dirty tree settlement |
+| R2 | Passive run collector | Runtime-fed summary, coverage, timings, failures | P0 | `4-evaled` | Runtime events feed `HarnessRunCollector`; phase/tool/model/gate coverage is tested | Same commit graph freshness and browser evidence remain green |
+| R3 | Action-to-tool contract | One schema path feeds quiet tools, model tools, validation, eval fixtures | P0 | `4-evaled` | Action tools carry descriptor hashes, validation, allowlists, load mode, hidden flag, concurrency, interruptibility | Descriptor parity and public allowlist stay green in full closeout suite |
+| R4 | Approval/read-write policy | Public reads allowed; qualified inquiry write source-admitted; unsupported writes/exec blocked | P0 | `4-evaled` | Approval policy and eval coverage protect public read/write boundary | Add broader refused/blocked write eval cases before operational |
+| R5 | Answer runtime migration | Retrieval/model/gate/persist behind live harness | P0 | `4-evaled` | Live answer turns use harness phase handlers; finalization failure blocks normal complete | Same commit graph freshness passes |
+| R6 | Durable session journal/replay | Atomic final report patch plus session entries | P0 | `4-evaled` | `finalizeAnswerTurnHarnessRun` patches final evidence and appends journal entries in one Convex mutation; accepted/replayed/conflict/denied are typed; finalization failure becomes a report-phase persistence failure | Source-backed replay/browser/admin smoke plus graph freshness at same commit |
+| R7 | Eval coupling | Promptfoo/Vitest/graph gates prove harness invariants | P0 | `4-evaled` | `npm run test:eval` passes, including promptfoo 27/27 and eval Vitest 23/23 | Keep green after dirty tree is settled and graph freshness passes |
+| R8 | Graphify freshness | Graph commit matches current HEAD before operational claims | P0 | `3-projected` | Graph artifacts rebuilt at HEAD `30e7952` and `commit_stale: false`; standalone freshness still fails due graph-relevant dirty paths | `npm run test:graph-freshness` passes after landing or isolating dirty work |
+| R9 | Admin run viewer | Operator-only raw evidence and replay UI | P1 | `4-evaled` | Admin-only source readback query exists; run-viewer source tests and public projection leakage tests pass | Browser/admin smoke with seeded source-backed evidence |
+| R10 | Protected evidence/compaction | Tool evidence protected during replay/finalization | P1 | `2-internal` | Evidence envelope and protected-evidence primitives exist | Runtime compaction/replay integration and leakage evals pass |
+| R11 | Advisor/emission guard | Private reviewer notes suppressed/deduped/rate-limited | P2 | `2-internal` | `HarnessEmissionGuard` unit coverage exists | Wired into reviewer/advisor runtime before any note emission feature ships |
+| R12 | Public dynamic tool discovery | OMP-style broad tool discovery exposed publicly | P0 | `rejected` | Violates AE public trust contract | Keep rejected |
+| R13 | Shell/filesystem/browser/LSP public tools | Terminal-agent tools exposed to product assistants | P0 | `rejected` | Violates AE public trust contract | Keep rejected |
 
-- `npm run test:eval`: passed after the live-loop follow-up. Coverage audit 12 cases, suite report 12 cases / 14 turns, promptfoo 27/27, eval Vitest 23 tests. Promptfoo telemetry flush warned on DNS after success.
-- `./node_modules/.bin/vitest run tests/unit/harness tests/unit/answer-thread tests/integration/answer-tool-calls.test.ts`: passed after the live-loop follow-up, 24 files / 115 tests.
-- `./node_modules/.bin/vitest run tests/unit/harness/run-loop.test.ts tests/unit/answer-thread/answer-harness-operation.test.ts tests/unit/answer-thread/tool-runner.test.ts tests/unit/answer/answer-tool-use-agent.test.ts`: passed, 4 files / 30 tests after live answer loop ownership, live model/tool accounting, and runtime-fed journal changes.
-- `./node_modules/.bin/vitest run tests/unit/convex/harness-sessions-runtime.test.ts tests/unit/harness/session-journal.test.ts tests/unit/harness/run-viewer-functions.test.ts`: passed, 3 files / 19 tests.
-- `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium`: passed after rerun with local-server permission, 3 passed / 1 compact-sidebar skip.
-- `git diff --check`: passed.
-- Current graph artifact is built from AE HEAD `d7db54cfa84dd4c02eebc8afd7478252615b0dd5`.
+## Remaining P0 Blockers
 
-Red or not yet proven on this refresh:
+1. **Graph freshness:** graph artifacts match `HEAD`, but graph-relevant dirty paths remain. This is now the primary operational blocker.
+2. **Same-commit landing:** green evidence exists in the working tree, but not yet at a settled commit that also passes graph freshness.
+3. **Admin smoke depth:** source-backed admin readback is implemented and unit-tested, but browser/admin smoke with seeded run evidence is still a follow-up before R9 can be called operational.
 
-- `npm run typecheck`: currently fails on unrelated dirty UI/route work (`Button` variant drift, dynamic listing links, and missing `FactGrid` exports). The live harness files no longer report type errors.
-- `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts`: currently fails on unrelated dirty public-shell work because `src/components/ae/layout/AePublicShell.tsx` imports `@clerk/tanstack-react-start`, which the public-copy scan flags as an internal identifier on a public surface.
-- `npm run test:graph-freshness`: failed with `graph_relevant_worktree_dirty`; the gate now prints `operational evidence: blocked`, the relevant dirty paths, and next actions.
-- Admin run viewer has no production source-read port.
-- Full `HarnessRunLoop.run()` state-machine ownership is not complete. The live answer path now uses one harness loop for context, intent, route, retrieval, model, assemble, gate, persist, and report events, but `streamAnswerTurn()` still coordinates the SSE-facing state machine.
+## Operational Checklist
 
-Historical green evidence remains useful, but it does not promote rows to `5-operational` unless the current gates above are green.
+- [x] `npm run typecheck`
+- [x] Focused finalization/admin tests
+- [x] Focused harness/answer Vitest suite
+- [x] `npm run test:eval`
+- [x] Promptfoo 100% pass rate
+- [x] `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts`
+- [x] Browser thread continuity on compact and wide Chromium, with local-server elevation
+- [x] Graph report commit equals current `HEAD`
+- [x] Live persisted answer turns have a final `harnessRun` report patched through source finalization
+- [x] Finalization conflict/error blocks normal complete
+- [x] Admin-only run readback is source-backed and unit-tested
+- [x] Public projection tests exclude raw tool ids, inputs, hashes, provider trace names, and internal event labels
+- [ ] `npm run test:graph-freshness`
+- [ ] Same settled commit has all of the above evidence
+- [ ] Admin viewer browser smoke with seeded source-backed evidence
+- [x] `git diff --check`
 
-## Progress Dashboard
+## Next Slice
 
-| ID | OMP pattern | AE target | Priority | Status | Current evidence | Next measurable step |
-| --- | --- | --- | --- | --- | --- | --- |
-| R0 | Evidence register | Measurable OMP carry-over checklist | P0 | `4-evaled` | This register now names green typecheck/eval/unit/browser/public-copy/diff gates and blocks `5-operational` on graph freshness plus runtime authority gaps | Rerun graphify after source changes settle and make `npm run test:graph-freshness` green |
-| R1 | Live run loop + collector | Reusable harness runtime kernel | P0 | `3-projected` | `src/modules/harness/run-loop.ts` now supports streaming lifecycle `startRun()`/`completeRun()`; focused loop tests green | Move the remaining SSE-facing state machine into `HarnessRunLoop.run()` handlers after dirty tree settles |
-| R2 | Schema-first tools | Canonical action-to-harness tool path | P0 | `2-internal` | `src/modules/harness/action-tool.ts`, `src/modules/harness/tool-contract.ts`, approval/schema tests in harness slice | Add descriptor parity tests over quiet descriptor, model descriptor, runtime validation, and eval fixture |
-| R3 | Answer run migration | Runtime-fed report on every answer turn | P0 | `3-projected` | `streamAnswerTurn()` creates one live answer harness loop; `runAnswerToolCall()` uses `loop.runTool()`; `runAnswerToolUseAgent()` uses `loop.runModel()`; focused live-path regression green | Rerun promptfoo/browser gates after unrelated dirty typecheck failures are cleared |
-| R4 | Session journal/replay | Deterministic durable session projection | P0 | `3-projected` | Runtime events now map into source-write-admitted journal entries for turn/context/intent/tool/model/gate/persist/run report with sanitized public summaries | Add admin source-read port and replay browser smoke; keep public projection leakage tests green |
-| R5 | Public-safe projection | Sanitized checks only | P1 | `4-evaled` | Eval and unit coverage check public leakage; `npm run test:eval` green | Rerun browser public flows and public-copy scans after loop migration |
-| R6 | Eval coupling | Harness gates in baseline eval | P0 | `4-evaled` | `npm run test:eval` green in current tree; harness cases exist in `eval/answer` | Add eval rows that fail if model/tool phases bypass live collector |
-| R7 | Graph-aware review | Graphify freshness gate | P0 | `2-internal` | Graph report at current HEAD with 18,266 nodes / 17,364 edges; `npm run test:graph-freshness` exists | Clear graph-relevant dirty paths, rerun graphify, then make the graph freshness test pass |
-| R8 | Internal run viewer | Admin/operator raw run evidence viewer | P2 | `2-internal` | `src/modules/harness/run-viewer.functions.ts` and projections exist; source is disabled by default | Add admin-authorized source read and Playwright smoke before exposing navigation |
-| R9 | Advisor/emission guard | Bounded reviewer notes with evidence | P2 | `2-internal` | `src/modules/harness/emission-guard.ts` suppresses public/no-evidence/noise/duplicates/cycle overflow | Wire only when reviewer/advisor emissions are added to journal/admin viewer |
-| R10 | Dynamic public tools | Public assistant custom tool discovery | P0 safety | `rejected` | AE trust contract exposes only explicit action-backed tools | Do not copy OMP dynamic public discovery |
-| R11 | Shell/filesystem/LSP/browser tools | Product answer tools | P0 safety | `rejected` | AE assistant contract is read/compare/qualified inquiry only | Do not expose non-AE engineering tools to product assistants |
+The remaining closeout slice is **Graph/Same-Commit Settlement**.
 
-## Required Gates Before Any Row Reaches `5-operational`
+Deliverables:
 
-- `npm run typecheck`
-- `npm run test:eval`
-- `./node_modules/.bin/vitest run tests/unit/harness tests/unit/answer-thread tests/integration/answer-tool-calls.test.ts`
-- `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium`
-- `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts`
-- `npm run test:graph-freshness`
-- `git diff --check`
+- Land or intentionally isolate the graph-relevant dirty tree.
+- Rebuild graphify after the tree is settled.
+- Rerun `npm run test:graph-freshness`.
+- Rerun the full gate ledger at the settled commit.
+- Add browser/admin smoke for `/admin/runs` with seeded source-backed harness evidence.
 
-## First Operational Slice Acceptance Criteria
+## Change Log
 
-R1-R4 are not operational until all of these are true:
-
-- `streamAnswerTurn()` delegates the complete turn state machine to `HarnessRunLoop.run()` handlers.
-- Real and planned answer model calls are recorded through harness model phases.
-- Tool begin/end/error/timeout/abort records are captured by the live collector, not reconstructed after the fact.
-- Every newly persisted complete/error/refused/blocked answer turn includes private `harnessRun` evidence.
-- Harness session entries are co-written from live runtime events at the answer persistence boundary.
-- Replay projection can rebuild public-safe thread state without raw tool ids, inputs, hashes, or internal trace names.
-- Admin run viewer source reads are authenticated and covered by a browser/admin smoke.
-- Graph freshness is green after implementation settles.
-
-## Implementation Evidence Log
-
-- 2026-07-02: Added reusable harness kernel under `src/modules/harness/`.
-- 2026-07-02: Added focused unit tests under `tests/unit/harness/`.
-- 2026-07-02: Adapted answer tool runner and quiet agent-tools execution toward `runHarnessTool()`.
-- 2026-07-02: Added private `FrozenTurnEvidence.harnessRun` and public projection leakage tests.
-- 2026-07-02: Created OMP comparison artifacts and wrote the first OMP re-audit.
-- 2026-07-02: Rewrote `.planning/AI-SPEC.md` as the discovery + OMP-gold harness implementation contract.
-- 2026-07-02: Added live `HarnessRunLoop`, richer collector telemetry, canonical `HarnessToolContract`, AE approval policy modes, pure journal/replay helpers, protected evidence envelope, graph freshness gate, admin run viewer scaffold, and harness emission guard.
-- 2026-07-02: Added the answer finalization bridge through `answer-harness-operation.ts`.
-- 2026-07-02: Added Convex-backed harness session schema/functions and runtime tests while keeping public answer projection sanitized.
-- 2026-07-02: Re-audited against OMP and demoted operational claims that are not supported by the current graph/browser/source-read/runtime evidence.
-- 2026-07-02: Sharpened `npm run test:graph-freshness` output so dirty graph-relevant paths explicitly block operational evidence and point to settle/rebuild/rerun actions.
-- 2026-07-02: Added source-write-admitted answer journal co-writing for `turn.started`, `gate.evaluated`, `turn.persisted`, and `run.reported`, with a persistence bridge test proving public summaries stay sanitized.
-- 2026-07-02: Moved the live answer path onto one `HarnessRunLoop` for context/intent/route/retrieval/model/assemble/gate/persist/report events; answer tools now use `loop.runTool()`, answer model requests use `loop.runModel()`, and the session journal is fed from runtime events rather than the compact finalization spine when a live loop is present.
-- 2026-07-02: Fixed `?q=` thread-start idempotence in `AeChat` by moving initial-query startup out of render and reran thread-first browser continuity green.
-
-## Safety Boundary
-
-OMP is architectural reference code, not a vendored dependency. AE remains limited to:
-
-- `registry.search`: read-only public catalog search.
-- `registry.detail`: read-only public listing detail.
-- `inquiry.submit`: source-write-admitted qualified inquiry only.
-
-This register explicitly rejects OMP-style dynamic public tool discovery, shell/filesystem/browser/LSP product tools, booking, payment, dispatch, arbitrary writes, and autonomous fulfillment.
+- 2026-07-02: Reset register against AE commit `8d7d0f8f8d7b6039be2ffa775d03562f59ca5ea0` and OMP commit `31a8cfc31cf1e467efa76655ded27e64d2295139`.
+- 2026-07-02: Downgraded operational claims because graph freshness, combined eval, and current browser evidence were not green together.
+- 2026-07-02: Added OMP-style private tool metadata, guard-signal propagation, and shared/exclusive `runToolBatch()` scheduling.
+- 2026-07-03: Moved live `streamAnswerTurn()` execution under `HarnessRunLoop.run()` phase handlers, deferred visible assembly until after gate, and patched persisted turn evidence with the final run report.
+- 2026-07-03: Added atomic source finalization through `finalizeAnswerTurnHarnessRun`, report-phase finalization failure semantics, source-backed admin run readback, current eval/browser/UI evidence, and dirty-tree graph blocker classification.

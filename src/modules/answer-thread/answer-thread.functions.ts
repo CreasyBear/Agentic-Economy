@@ -4,6 +4,9 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import type { AppendHarnessSessionEntrySourceInput } from '@/modules/harness/harness.functions'
 
 import type {
   AnswerThreadRecord,
@@ -43,6 +46,60 @@ export type AppendAnswerTurnWithThreadAndToolCallsArgs = AppendAnswerTurnWithToo
   title: string
 }
 
+export type FinalizeAnswerTurnHarnessRunArgs = {
+  turnId: string
+  snapshotHash: string
+  evidenceJson: string
+  finalizationHash: string
+  entries: readonly AppendHarnessSessionEntrySourceInput[]
+}
+
+export type FinalizeAnswerTurnHarnessRunMutationArgs = FinalizeAnswerTurnHarnessRunArgs & {
+  operationKey: string
+  correlationId: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+export type AnswerHarnessFinalizationResult =
+  | {
+      status: 'accepted'
+      turnId: string
+      finalizationHash: string
+      entriesAccepted: number
+      entriesReplayed: number
+      activeLeafEntryId?: string
+    }
+  | {
+      status: 'replayed'
+      turnId: string
+      finalizationHash: string
+      entriesAccepted: 0
+      entriesReplayed: number
+      activeLeafEntryId?: string
+    }
+  | {
+      status: 'conflict'
+      reason:
+        | 'turn_not_found'
+        | 'snapshot_mismatch'
+        | 'evidence_conflict'
+        | 'entry_id_conflict'
+        | 'idempotency_conflict'
+        | 'parent_conflict'
+      message: string
+      activeLeafEntryId?: string
+    }
+  | {
+      status: 'denied'
+      reason: 'missing_csrf' | 'foreign_origin'
+      message: string
+    }
+  | {
+      status: 'error'
+      reason: 'source_write_failed'
+      message: string
+    }
+
 export type DeleteAnswerThreadArgs = {
   threadId: string
   pseudonymousSessionId: string
@@ -77,6 +134,11 @@ export const appendAnswerTurnWithThreadAndToolCallsMutation = sourceMutation<
   AppendAnswerTurnWithThreadAndToolCallsArgs,
   { turnId: string; insertedToolCalls: number }
 >('answerThreads:appendAnswerTurnWithThreadAndToolCalls')
+
+export const finalizeAnswerTurnHarnessRunMutation = sourceMutation<
+  FinalizeAnswerTurnHarnessRunMutationArgs,
+  Exclude<AnswerHarnessFinalizationResult, { status: 'error' }>
+>('harnessSessions:finalizeAnswerTurnHarnessRun')
 
 export const deleteAnswerThreadMutation = sourceMutation<DeleteAnswerThreadArgs, { threadId: string }>(
   'answerThreads:deleteAnswerThread',
@@ -118,6 +180,7 @@ type AnswerThreadPort = {
   getThreadTurns(threadId: string): Promise<{ turns: readonly AnswerTurnRecord[] }>
   deleteThread?(args: DeleteAnswerThreadArgs): Promise<{ threadId: string }>
   getAnswerThread?(threadId: string): Promise<AnswerThreadWithTurnCount | null>
+  finalizeTurnHarnessRun?(args: FinalizeAnswerTurnHarnessRunArgs): Promise<AnswerHarnessFinalizationResult>
 }
 
 let testPort: AnswerThreadPort | undefined
@@ -194,6 +257,50 @@ export async function appendAnswerTurnWithThreadAndToolCalls(
   })
   return appendAnswerTurnWithToolCalls(appendArgs)
 }
+
+export async function finalizeAnswerTurnHarnessRunFromRequest(
+  request: Request,
+  args: FinalizeAnswerTurnHarnessRunArgs,
+): Promise<AnswerHarnessFinalizationResult> {
+  if (testPort !== undefined) {
+    if (testPort.finalizeTurnHarnessRun !== undefined) {
+      return testPort.finalizeTurnHarnessRun(args)
+    }
+    const activeLeafEntryId = args.entries.at(-1)?.entryId
+    return {
+      status: 'accepted',
+      turnId: args.turnId,
+      finalizationHash: args.finalizationHash,
+      entriesAccepted: args.entries.length,
+      entriesReplayed: 0,
+      ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+    }
+  }
+
+  const operationKey = answerHarnessFinalizationOperationKey(args)
+  const correlationId = args.turnId
+
+  try {
+    return await callPublicSourceMutation(finalizeAnswerTurnHarnessRunMutation, {
+      ...args,
+      operationKey,
+      correlationId,
+      sourceWrite: await sourceWriteAdmissionFromRequest({
+        request,
+        scope: 'harness_session',
+        operationKey,
+        correlationId,
+      }),
+    })
+  } catch (error) {
+    return {
+      status: 'error',
+      reason: 'source_write_failed',
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 
 export async function listSessionThreads(
   pseudonymousSessionId: string,
@@ -278,4 +385,11 @@ function isMissingConvexFunction(error: unknown, functionName: string): boolean 
 function markOptimizedAnswerThreadFunctionsMissing(): void {
   missingConvexFunctions.add('answerThreads:appendAnswerTurnWithThreadAndToolCalls')
   missingConvexFunctions.add('answerThreads:getAnswerThreadWithTurns')
+}
+
+function answerHarnessFinalizationOperationKey(args: Pick<
+  FinalizeAnswerTurnHarnessRunArgs,
+  'turnId' | 'finalizationHash'
+>): string {
+  return `answer-turn-finalize:${args.turnId}:${args.finalizationHash}`
 }

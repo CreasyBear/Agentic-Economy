@@ -43,7 +43,7 @@ import type {
   AdminReadbackSurface,
   AdminShellReadback,
 } from './internal/admin-readbacks'
-import type { AuditEventContract } from '@/modules/observability/public'
+import type { AuditEventContract, AuditEventSink } from '@/modules/common/audit-events'
 
 export const AdminRoleValues = ['owner_admin', 'support', 'reviewer'] as const
 export type AdminRole = (typeof AdminRoleValues)[number]
@@ -220,10 +220,9 @@ export type DisputeRecord = {
   updatedAt: number
 }
 
-export type DisputeSourceState = {
+export type DisputeSourceState = AuditEventSink & {
   disputes: DisputeRecord[]
   abuseRateLimitBuckets: AbuseRateLimitBucketRecord[]
-  auditEvents: AuditEventContract[]
 }
 
 export type DisputeOpenCommand = {

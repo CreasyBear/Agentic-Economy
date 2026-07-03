@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import {
-  legacyPublicRegistryList,
-  readPublicRegistryCatalogPage,
-} from '@/modules/registry/registry.functions'
+import { registryListAction } from '@/modules/registry/registry.actions'
+import { legacyPublicRegistryList } from '@/modules/registry/registry.functions'
 
 export const Route = createFileRoute('/api/businesses')({
   server: {
@@ -15,10 +13,11 @@ export const Route = createFileRoute('/api/businesses')({
 
 export async function handleDurableListBusinessesRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const result = await readPublicRegistryCatalogPage({
+  const data = registryListAction.schema.parse({
     ...optionalCursor(url.searchParams.get('cursor')),
     ...optionalLimit(url.searchParams.get('limit')),
   })
+  const result = await registryListAction.run({ data, context: { request } })
 
   return jsonResponse(result)
 }

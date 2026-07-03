@@ -2,11 +2,13 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { AeHarnessRunDetail } from '@/components/ae/harness/AeHarnessRunViewer'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   readAdminRunViewerDetailServer,
 } from '@/modules/harness/run-viewer.functions'
 
 export const Route = createFileRoute('/admin/runs/$turnId')({
+  ...operatorRouteOptions,
   loader: ({ params }) => readAdminRunViewerDetailServer({ data: { turnId: params.turnId } }),
   head: () => ({
     meta: [
@@ -31,10 +33,6 @@ function AdminRunDetailRoute() {
       title="Run evidence detail"
       description="Inspect one answer turn's private run evidence, public projection comparison, and collapsed raw JSON."
       currentPath="/admin/runs"
-      breadcrumbs={[
-        { label: 'Run evidence', href: '/admin/runs' },
-        { label: params.turnId },
-      ]}
     >
       <AeHarnessRunDetail result={result} />
     </AeOperatorShell>

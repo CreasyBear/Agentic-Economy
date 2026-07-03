@@ -319,8 +319,10 @@ export const bootstrapOwnerAdmin = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
-    const identity = await ctx.auth.getUserIdentity()
+    const [source, identity] = await Promise.all([
+      loadPhaseOneSourceState(db),
+      ctx.auth.getUserIdentity(),
+    ])
     const state = adminAuthorityState(source)
     const result = bootstrapOwnerAdminModule(state, {
       clerkUserId: identity?.subject ?? 'anonymous',
@@ -355,8 +357,10 @@ export const grantAdminMembership = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
-    const actorMembership = await readCurrentActiveMembership(ctx)
+    const [source, actorMembership] = await Promise.all([
+      loadPhaseOneSourceState(db),
+      readCurrentActiveMembership(ctx),
+    ])
     const result = grantAdminMembershipModule(adminAuthorityState(source), {
       actorMembership,
       targetClerkUserId: args.targetClerkUserId,
@@ -390,8 +394,10 @@ export const revokeAdminMembership = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
-    const actorMembership = await readCurrentActiveMembership(ctx)
+    const [source, actorMembership] = await Promise.all([
+      loadPhaseOneSourceState(db),
+      readCurrentActiveMembership(ctx),
+    ])
     const result = revokeAdminMembershipModule(adminAuthorityState(source), {
       actorMembership,
       targetClerkUserId: args.targetClerkUserId,
@@ -528,8 +534,10 @@ export const closeRemovalDispute = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
-    const actorMembership = await readCurrentActiveMembership(ctx)
+    const [source, actorMembership] = await Promise.all([
+      loadPhaseOneSourceState(db),
+      readCurrentActiveMembership(ctx),
+    ])
     const authority = requireAdminAuthority(actorMembership, 'close_dispute')
     if (authority.kind === 'denied') {
       const denied = recordAdminActionDenied(adminAuthorityState(source), {
@@ -615,8 +623,10 @@ async function readAdminRows(
 ) {
   const db = runtimeDb(ctx.db)
   const now = Date.now()
-  const source = await loadPhaseOneSourceState(db)
-  const membership = await readCurrentActiveMembership(ctx)
+  const [source, membership] = await Promise.all([
+    loadPhaseOneSourceState(db),
+    readCurrentActiveMembership(ctx),
+  ])
   return summarizeAdminReadback(readAdminRouteShell({
     membership,
     surface,
@@ -907,7 +917,12 @@ function adminSourceWriteDenied(reason: 'missing_csrf' | 'foreign_origin') {
 
 function envList(name: string): string[] {
   const value = typeof process === 'undefined' ? undefined : process.env[name]
-  return value === undefined ? [] : value.split(',').map((item) => item.trim()).filter(Boolean)
+  return value === undefined
+    ? []
+    : value.split(',').flatMap((item) => {
+        const trimmed = item.trim()
+        return trimmed === '' ? [] : [trimmed]
+      })
 }
 
 function cleanupCutoff(value: number | undefined): number {

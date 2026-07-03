@@ -129,6 +129,61 @@ describe('harness run loop', () => {
     expect(result.report.coverage.toolsUnused).toEqual([])
   })
 
+  it('schedules tool batches with OMP-style shared and exclusive ordering', async () => {
+    const log: string[] = []
+    const first = createDeferred<void>()
+    const second = createDeferred<void>()
+    const third = createDeferred<void>()
+    const loop = new HarnessRunLoop({
+      runId: 'run-tool-batch',
+      sessionId: 'session-tool-batch',
+      tools: ['tool.first', 'tool.second', 'tool.third'],
+    })
+
+    const batch = loop.runToolBatch([
+      {
+        tool: createBatchTool('tool.first', 'shared', 'first', first.promise, log),
+        input: {},
+        surface: 'agentTools',
+      },
+      {
+        tool: createBatchTool('tool.second', 'exclusive', 'second', second.promise, log),
+        input: {},
+        surface: 'agentTools',
+      },
+      {
+        tool: createBatchTool('tool.third', 'shared', 'third', third.promise, log),
+        input: {},
+        surface: 'agentTools',
+      },
+    ])
+
+    await waitForLog(log, ['start:first'])
+    expect(log).toEqual(['start:first'])
+
+    first.resolve()
+    await waitForLog(log, ['start:first', 'finish:first', 'start:second'])
+    expect(log).toEqual(['start:first', 'finish:first', 'start:second'])
+
+    second.resolve()
+    await waitForLog(log, ['start:first', 'finish:first', 'start:second', 'finish:second', 'start:third'])
+    expect(log).toEqual(['start:first', 'finish:first', 'start:second', 'finish:second', 'start:third'])
+
+    third.resolve()
+    const outcomes = await batch
+
+    expect(log).toEqual([
+      'start:first',
+      'finish:first',
+      'start:second',
+      'finish:second',
+      'start:third',
+      'finish:third',
+    ])
+    expect(outcomes.map((outcome) => outcome.result.status)).toEqual(['ok', 'ok', 'ok'])
+    expect(loop.snapshot().summary.tools.total).toBe(3)
+  })
+
   it('folds non-throwing tool and gate failures into the terminal run status', async () => {
     const clock = createClock()
     const events: HarnessRuntimeEvent[] = []
@@ -258,6 +313,30 @@ describe('harness run loop', () => {
     expect(timedOut.report.summary.errors.codes).toContain('run_timeout')
   })
 
+  it('passes timeout signals into guarded phase handlers', async () => {
+    let sawAbort = false
+
+    const timedOut = await new HarnessRunLoop({
+      runId: 'run-phase-timeout-signal',
+      sessionId: 'session-phase-timeout-signal',
+      timeoutMs: 1,
+    }).run({
+      initialState: {},
+      phases: {
+        context: ({ signal }) => new Promise<void>((resolve) => {
+          signal?.addEventListener('abort', () => {
+            sawAbort = true
+            resolve()
+          }, { once: true })
+        }),
+      },
+    })
+
+    expect(sawAbort).toBe(true)
+    expect(timedOut.status).toBe('timeout')
+    expect(timedOut.report.summary.errors.codes).toContain('run_timeout')
+  })
+
   it('builds a collector report from runtime events', () => {
     const report = buildHarnessRunReport({
       availableTools: ['registry.search', 'registry.detail'],
@@ -329,6 +408,53 @@ function createReadTool(clock: ReturnType<typeof createClock>): HarnessToolDefin
       return { kind: 'ok', count: 1 }
     },
     summarizeOutput: (output: { kind: 'ok'; count: number }) => ({ kind: output.kind, count: output.count }),
+  }
+}
+
+function createBatchTool(
+  id: string,
+  concurrency: 'shared' | 'exclusive',
+  label: string,
+  waitFor: Promise<void>,
+  log: string[],
+): HarnessToolDefinition<unknown, unknown> {
+  return {
+    id,
+    name: label,
+    summary: 'Batch test tool.',
+    boundaries: ['Read-only test fixture.'],
+    tier: 'read',
+    surfaces: ['agentTools'],
+    inputSchema: z.object({}) as z.ZodType<unknown>,
+    outputSchema: z.object({ kind: z.literal('ok'), label: z.string() }) as z.ZodType<unknown>,
+    approval: 'allow',
+    concurrency,
+    async run() {
+      log.push(`start:${label}`)
+      await waitFor
+      log.push(`finish:${label}`)
+      return { kind: 'ok', label }
+    },
+  }
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+} {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve
+  })
+  return { promise, resolve }
+}
+
+async function waitForLog(log: readonly string[], expected: readonly string[]): Promise<void> {
+  for (let index = 0; index < 20; index += 1) {
+    if (JSON.stringify(log) === JSON.stringify(expected)) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0))
   }
 }
 

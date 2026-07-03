@@ -12,7 +12,9 @@ import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type {
   HarnessApprovalPolicy,
+  HarnessToolConcurrency,
   HarnessToolDefinition,
+  HarnessToolLoadMode,
   HarnessToolTier,
 } from './harness.schema'
 import {
@@ -54,7 +56,10 @@ export type HarnessToolExposure = {
 export type HarnessToolPolicy = {
   tier: HarnessToolTier
   approval: HarnessApprovalDeclaration
-  concurrency?: 'shared' | 'exclusive'
+  concurrency?: HarnessToolConcurrency
+  interruptible?: boolean
+  loadMode?: HarnessToolLoadMode
+  hidden?: boolean
   timeoutMs?: number
 }
 
@@ -75,6 +80,7 @@ export type HarnessToolSchemaBundle<Input, Output> = {
 export type HarnessExecuteArgs<Input> = {
   input: Input
   context: ActionContext
+  signal?: AbortSignal
 }
 
 export type HarnessToolProjection<Output> = {
@@ -200,6 +206,10 @@ export function harnessToolContractToDefinition<Input, Output>(
     ...(contract.schemas.inputJsonSchema === undefined ? {} : { inputJsonSchema: contract.schemas.inputJsonSchema }),
     ...(contract.schemas.outputJsonSchema === undefined ? {} : { outputJsonSchema: contract.schemas.outputJsonSchema }),
     approval: contract.policy.approval.policy,
+    ...(contract.policy.hidden === undefined ? {} : { hidden: contract.policy.hidden }),
+    ...(contract.policy.loadMode === undefined ? {} : { loadMode: contract.policy.loadMode }),
+    ...(contract.policy.concurrency === undefined ? {} : { concurrency: contract.policy.concurrency }),
+    ...(contract.policy.interruptible === undefined ? {} : { interruptible: contract.policy.interruptible }),
     run: contract.execute,
     summarizeOutput: contract.projection.summarizeOutput,
   }
@@ -342,6 +352,8 @@ function policyForAction(action: AnyAction, exposure: HarnessToolExposure): Harn
         reason: 'read_tool_auto_allowed',
       },
       concurrency: 'shared',
+      interruptible: true,
+      loadMode: 'essential',
     }
   }
 
@@ -354,6 +366,8 @@ function policyForAction(action: AnyAction, exposure: HarnessToolExposure): Harn
         reason: 'write_requires_source_admission',
       },
       concurrency: 'exclusive',
+      interruptible: false,
+      loadMode: 'essential',
     }
   }
 
@@ -365,6 +379,9 @@ function policyForAction(action: AnyAction, exposure: HarnessToolExposure): Harn
       reason: tier === 'read' ? 'owner_read_requires_auth' : 'owner_write_requires_auth',
     },
     concurrency: tier === 'read' ? 'shared' : 'exclusive',
+    interruptible: tier === 'read',
+    loadMode: 'discoverable',
+    hidden: true,
   }
 }
 

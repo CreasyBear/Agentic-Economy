@@ -2,6 +2,8 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { v } from 'convex/values'
 
 import { literalUnion } from '../src/modules/common/convex-literals'
+import { resolveAdminAuthority } from './authz'
+import { runtimeDb } from './source_state'
 import {
   AnswerTurnStatusValues,
   AnswerThreadSharePolicyValues,
@@ -17,6 +19,38 @@ import type {
 } from '../src/modules/answer-thread/answer-thread.schema'
 
 const now = () => Date.now()
+
+const answerTurnRecordResult = v.object({
+  turnId: v.string(),
+  threadId: v.string(),
+  seq: v.number(),
+  query: v.string(),
+  intent: literalUnion(FollowUpIntentValues),
+  evidenceJson: v.string(),
+  snapshotHash: v.string(),
+  proseJson: v.string(),
+  artifactKindsJson: v.string(),
+  status: literalUnion(AnswerTurnStatusValues),
+  errorCopyId: v.optional(v.string()),
+  createdAt: v.number(),
+})
+
+const adminHarnessRunTurnsResult = v.union(
+  v.object({
+    kind: v.literal('allowed'),
+    actorRef: v.string(),
+    turns: v.array(answerTurnRecordResult),
+    limit: v.number(),
+    truncated: v.boolean(),
+  }),
+  v.object({
+    kind: v.literal('denied'),
+    reason: v.union(v.literal('missing_membership'), v.literal('inactive_membership'), v.literal('action_not_allowed')),
+    turns: v.array(answerTurnRecordResult),
+    limit: v.number(),
+    truncated: v.literal(false),
+  }),
+)
 
 export const createAnswerThread = mutationGeneric({
   args: {
@@ -117,6 +151,7 @@ export const appendAnswerTurnWithToolCalls = mutationGeneric({
         toolId: literalUnion(AnswerToolIdValues),
         inputJson: v.string(),
         resultSummaryJson: v.string(),
+        resultJson: v.string(),
         resultHash: v.string(),
         status: literalUnion(AnswerToolCallStatusValues),
       }),
@@ -169,6 +204,7 @@ export const appendAnswerTurnWithToolCalls = mutationGeneric({
         toolId: call.toolId,
         inputJson: call.inputJson,
         resultSummaryJson: call.resultSummaryJson,
+        resultJson: call.resultJson,
         resultHash: call.resultHash,
         status: call.status,
         createdAt: timestamp,
@@ -202,6 +238,7 @@ export const appendAnswerTurnWithThreadAndToolCalls = mutationGeneric({
         toolId: literalUnion(AnswerToolIdValues),
         inputJson: v.string(),
         resultSummaryJson: v.string(),
+        resultJson: v.string(),
         resultHash: v.string(),
         status: literalUnion(AnswerToolCallStatusValues),
       }),
@@ -261,6 +298,7 @@ export const appendAnswerTurnWithThreadAndToolCalls = mutationGeneric({
         toolId: call.toolId,
         inputJson: call.inputJson,
         resultSummaryJson: call.resultSummaryJson,
+        resultJson: call.resultJson,
         resultHash: call.resultHash,
         status: call.status,
         createdAt: timestamp,
@@ -285,6 +323,7 @@ export const appendAnswerToolCalls = mutationGeneric({
         toolId: literalUnion(AnswerToolIdValues),
         inputJson: v.string(),
         resultSummaryJson: v.string(),
+        resultJson: v.string(),
         resultHash: v.string(),
         status: literalUnion(AnswerToolCallStatusValues),
       }),
@@ -300,6 +339,7 @@ export const appendAnswerToolCalls = mutationGeneric({
         toolId: call.toolId,
         inputJson: call.inputJson,
         resultSummaryJson: call.resultSummaryJson,
+        resultJson: call.resultJson,
         resultHash: call.resultHash,
         status: call.status,
         createdAt: nowTs,
@@ -322,6 +362,7 @@ export const readTurnToolCalls = queryGeneric({
     }
   },
 })
+
 
 export const listSessionThreads = queryGeneric({
   args: {
@@ -352,6 +393,62 @@ export const getThreadTurns = queryGeneric({
 
     return {
       turns: rows.map(toTurnRecord).sort((a, b) => a.seq - b.seq),
+    }
+  },
+})
+
+export const listAdminHarnessRunTurns = queryGeneric({
+  args: {
+    status: v.optional(v.string()),
+    turnId: v.optional(v.string()),
+    threadId: v.optional(v.string()),
+    date: v.optional(v.string()),
+    hasRunEvidence: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  returns: adminHarnessRunTurnsResult,
+  handler: async (ctx, args) => {
+    const limit = normalizeAdminRunViewerLimit(args.limit)
+    const authority = await resolveAdminAuthority({ db: runtimeDb(ctx.db), auth: ctx.auth }, 'read_admin_readbacks')
+    if (authority.kind === 'denied') {
+      return {
+        kind: 'denied' as const,
+        reason: authority.reason,
+        turns: [],
+        limit,
+        truncated: false as const,
+      }
+    }
+
+    const turnId = normalizeAdminFilter(args.turnId)
+    const threadId = normalizeAdminFilter(args.threadId)
+    let rows
+    if (turnId !== undefined) {
+      const row = await ctx.db
+        .query('answerTurns')
+        .withIndex('by_turnId', (query) => query.eq('turnId', turnId))
+        .unique()
+      rows = row === null ? [] : [row]
+    } else if (threadId !== undefined) {
+      rows = await ctx.db
+        .query('answerTurns')
+        .withIndex('by_thread_createdAt', (query) => query.eq('threadId', threadId))
+        .order('desc')
+        .take(limit)
+    } else {
+      rows = await ctx.db.query('answerTurns').order('desc').take(limit)
+    }
+    const filtered = rows
+      .map(toTurnRecord)
+      .filter((turn) => adminHarnessTurnMatchesFilters(turn, args))
+      .sort((left, right) => right.createdAt - left.createdAt || right.seq - left.seq)
+
+    return {
+      kind: 'allowed' as const,
+      actorRef: authority.membership.clerkUserId,
+      turns: filtered.slice(0, limit),
+      limit,
+      truncated: filtered.length > limit || rows.length === limit,
     }
   },
 })
@@ -459,6 +556,76 @@ function toTurnRecord(row: Record<string, unknown>): AnswerTurnRecord {
   }
 }
 
+function adminHarnessTurnMatchesFilters(
+  turn: AnswerTurnRecord,
+  filters: {
+    status?: string
+    turnId?: string
+    threadId?: string
+    date?: string
+    hasRunEvidence?: string
+  },
+): boolean {
+  const turnId = normalizeAdminFilter(filters.turnId)
+  if (turnId !== undefined && turn.turnId !== turnId) {
+    return false
+  }
+
+  const threadId = normalizeAdminFilter(filters.threadId)
+  if (threadId !== undefined && turn.threadId !== threadId) {
+    return false
+  }
+
+  const date = normalizeAdminFilter(filters.date)
+  if (date !== undefined && !new Date(turn.createdAt).toISOString().startsWith(date)) {
+    return false
+  }
+
+  const harnessStatus = readHarnessRunStatus(turn.evidenceJson)
+  const hasRunEvidence = harnessStatus !== undefined
+  if (filters.hasRunEvidence === 'yes' && !hasRunEvidence) {
+    return false
+  }
+  if (filters.hasRunEvidence === 'no' && hasRunEvidence) {
+    return false
+  }
+
+  const status = normalizeAdminFilter(filters.status)
+  if (status !== undefined && status !== 'any') {
+    if (status === 'missing') {
+      return !hasRunEvidence
+    }
+    return turn.status === status || harnessStatus === status
+  }
+
+  return true
+}
+
+function readHarnessRunStatus(evidenceJson: string): string | undefined {
+  try {
+    const evidence = JSON.parse(evidenceJson) as { harnessRun?: { summary?: { run?: { status?: unknown } } } }
+    const status = evidence.harnessRun?.summary?.run?.status
+    return typeof status === 'string' ? status : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function normalizeAdminRunViewerLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 100
+  }
+  return Math.min(Math.max(Math.trunc(limit), 1), 250)
+}
+
+function normalizeAdminFilter(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  const trimmed = value.trim()
+  return trimmed.length === 0 ? undefined : trimmed
+}
+
 function toToolCallRecord(row: Record<string, unknown>): AnswerToolCallRecord {
   return {
     toolCallId: String(row.toolCallId),
@@ -467,10 +634,18 @@ function toToolCallRecord(row: Record<string, unknown>): AnswerToolCallRecord {
     toolId: row.toolId as AnswerToolCallRecord['toolId'],
     inputJson: String(row.inputJson),
     resultSummaryJson: String(row.resultSummaryJson),
+    resultJson: typeof row.resultJson === 'string' ? row.resultJson : legacyToolResultJson(row.resultSummaryJson),
     resultHash: String(row.resultHash),
     status: row.status as AnswerToolCallRecord['status'],
     createdAt: Number(row.createdAt),
   }
+}
+
+function legacyToolResultJson(resultSummaryJson: unknown): string {
+  return JSON.stringify({
+    kind: 'legacy_missing_result',
+    resultSummary: typeof resultSummaryJson === 'string' ? resultSummaryJson : '',
+  })
 }
 
 export const deleteAnswerThread = mutationGeneric({

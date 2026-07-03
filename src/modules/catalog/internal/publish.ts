@@ -3,7 +3,7 @@ import { stableHash } from '@/modules/common/stable-hash'
 import {
   buildPublicCatalogDto,
   validateServiceCatalogInput,
-} from '@/modules/catalog/public'
+} from './catalog-model'
 import type {
   BusinessServiceRecord,
   PublishBusinessCatalogCommand,
@@ -11,7 +11,7 @@ import type {
   PublishBusinessCatalogState,
   ServiceCapabilityRecord,
   ValidatedServiceCatalogInput,
-} from '@/modules/catalog/public'
+} from './catalog-model'
 import type { AuditEventContract, OperationKeyInput, OperationKeyRecord, OperationKeyStore } from '@/modules/observability/public'
 import {
   markOperationSucceeded,

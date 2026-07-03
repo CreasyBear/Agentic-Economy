@@ -83,14 +83,19 @@ export function buildHarnessPrivateReplayProjection(
     ? undefined
     : buildTerminal(projection.activeLeafEntry, false)
 
+  const staleTerminalEntryIds: string[] = []
+  for (const entry of projection.entries) {
+    if (isHarnessTerminalSessionEntry(entry) && !pathEntryIds.has(entry.entryId)) {
+      staleTerminalEntryIds.push(entry.entryId)
+    }
+  }
+
   return {
     sessionId,
     ...(projection.activeLeafEntryId === undefined ? {} : { activeLeafEntryId: projection.activeLeafEntryId }),
     entries: projection.replayPath.map(toPrivateReplayEntry),
     ...(terminal === undefined ? {} : { terminal }),
-    staleTerminalEntryIds: projection.entries
-      .filter((entry) => isHarnessTerminalSessionEntry(entry) && !pathEntryIds.has(entry.entryId))
-      .map((entry) => entry.entryId),
+    staleTerminalEntryIds,
   }
 }
 

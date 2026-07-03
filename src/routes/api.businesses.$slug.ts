@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import {
-  legacyPublicRegistryDetail,
-  readPublicRegistryBusinessDetail,
-} from '@/modules/registry/registry.functions'
+import { registryDetailAction } from '@/modules/registry/registry.actions'
+import { legacyPublicRegistryDetail } from '@/modules/registry/registry.functions'
 import { jsonResponse } from './api.businesses'
 
 export const Route = createFileRoute('/api/businesses/$slug')({
@@ -15,7 +13,10 @@ export const Route = createFileRoute('/api/businesses/$slug')({
 })
 
 export async function handleDurableBusinessDetailRequest(slug: string): Promise<Response> {
-  const result = await readPublicRegistryBusinessDetail({ slug })
+  const result = await registryDetailAction.run({
+    data: registryDetailAction.schema.parse({ slug }),
+    context: {},
+  })
 
   if (result.kind === 'not_found') {
     return jsonResponse(result, { status: 404 })

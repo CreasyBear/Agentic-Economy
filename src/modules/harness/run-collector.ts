@@ -663,20 +663,23 @@ function normalizeGateRecord(record: HarnessGateRecord): NormalizedGateRecord {
 }
 
 function gatesFromEvents(records: readonly EventRecord[]): NormalizedGateRecord[] {
-  return records
-    .filter((record) => record.phase === 'gate')
-    .map((record) => {
-      const normalized: NormalizedGateRecord = {
-        gate: normalizeString(record.name) ?? record.phase,
-        status: record.status,
-        durationMs: roundDuration(record.durationMs ?? 0),
-      }
-      const errorCode = normalizeString(record.errorCode)
-      if (errorCode !== undefined) {
-        normalized.errorCode = errorCode
-      }
-      return normalized
-    })
+  const gates: NormalizedGateRecord[] = []
+  for (const record of records) {
+    if (record.phase !== 'gate') {
+      continue
+    }
+    const normalized: NormalizedGateRecord = {
+      gate: normalizeString(record.name) ?? record.phase,
+      status: record.status,
+      durationMs: roundDuration(record.durationMs ?? 0),
+    }
+    const errorCode = normalizeString(record.errorCode)
+    if (errorCode !== undefined) {
+      normalized.errorCode = errorCode
+    }
+    gates.push(normalized)
+  }
+  return gates
 }
 
 function sortedModelRecords(records: readonly HarnessModelRequestRecord[]): HarnessModelRequestRecord[] {

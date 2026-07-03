@@ -174,6 +174,7 @@ function recordResult(
     toolId: input.toolId,
     input: outcome.inputJson,
     summary: resultSummaryJson,
+    resultJson: outcome.resultJson,
     status: outcome.status,
   }).toString()
 
@@ -184,6 +185,7 @@ function recordResult(
     toolId: input.toolId as AnswerToolId,
     inputJson: outcome.inputJson,
     resultSummaryJson,
+    resultJson: outcome.resultJson,
     resultHash,
     status: outcome.status,
     createdAt: Date.now(),

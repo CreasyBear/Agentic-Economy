@@ -180,6 +180,7 @@ function buildRecord(
     toolId,
     inputJson: '{}',
     resultSummaryJson: JSON.stringify(summary),
+    resultJson: JSON.stringify({ kind: 'ok', items: summary.slugs.map((slug) => ({ slug })) }),
     resultHash: 'hash:test',
     status: 'complete',
     createdAt: 1_000,

@@ -1,4 +1,4 @@
-import type { AuditEventId, BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
+import type { BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
 import type { VisibilityTargetType } from '@/modules/business/public'
 import {
   markOperationSucceeded as markOperationSucceededImpl,
@@ -16,8 +16,13 @@ import {
   initialOwnerActivationState as initialOwnerActivationStateImpl,
 } from './internal/funnel'
 import type {
+  ActorKind,
+  AuditEventContract,
   AuditEventInput,
+  AuditEventType,
+  AuditTargetType,
   AuditValidationResult,
+  RedactedPayload,
 } from './internal/audit'
 import type { AdminMembership, CsrfCheckInput } from '@/modules/security/public'
 import type {
@@ -52,9 +57,6 @@ export {
 }
 
 export type OperationKeyStatus = (typeof OperationKeyStatusValues)[number]
-export type ActorKind = (typeof ActorKindValues)[number]
-export type AuditTargetType = (typeof AuditTargetTypeValues)[number]
-export type AuditEventType = (typeof AuditEventTypeValues)[number]
 export type OperatorControlKey = (typeof OperatorControlKeyValues)[number]
 export type InvalidationSurface = (typeof InvalidationSurfaceValues)[number]
 export type InvalidationIntentStatus = (typeof InvalidationIntentStatusValues)[number]
@@ -75,34 +77,6 @@ export type OperationKeyRecord = {
   createdAt: number
   updatedAt: number
 }
-
-export type AuditEventContract = {
-  eventId: AuditEventId
-  eventType: AuditEventType
-  actorKind: ActorKind
-  actorRef: string
-  targetType: AuditTargetType
-  targetRef: string
-  businessId?: BusinessId
-  idempotencyKey: OperationKey
-  correlationId: CorrelationId
-  beforeState?: string
-  afterState?: string
-  reasonCode?: string
-  evidenceRefs: readonly string[]
-  redactedPayload: RedactedPayload
-  payloadHash: SourceHash
-  failureCode?: string
-  createdAt: number
-}
-
-export type RedactedPayload =
-  | null
-  | string
-  | number
-  | boolean
-  | readonly RedactedPayload[]
-  | { readonly [key: string]: RedactedPayload }
 
 export type OwnerActivationState = {
   businessId: BusinessId
@@ -488,8 +462,13 @@ export function projectBusinessActionPrivateEvidenceForPublic(
 }
 
 export type {
+  ActorKind,
+  AuditEventContract,
   AuditEventInput,
+  AuditEventType,
+  AuditTargetType,
   AuditValidationResult,
+  RedactedPayload,
   FunnelEventContract,
   OperationKeyAuditSink,
   OperationKeyDecision,

@@ -27,6 +27,7 @@ export type AnswerToolCallInputRow = {
   toolId: AnswerToolId
   inputJson: string
   resultSummaryJson: string
+  resultJson: string
   resultHash: string
   status: AnswerToolCallStatus
 }

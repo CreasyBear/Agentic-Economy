@@ -70,6 +70,7 @@ import {
   createLiveAnswerHarnessOperation,
   type LiveAnswerHarnessOperation,
 } from './answer-harness-operation'
+import type { AnswerHarnessFinalizationResult } from '../answer-thread.functions'
 
 const DEFAULT_LIMIT = ANSWER_SEARCH_PROVIDER_LIMIT
 
@@ -131,6 +132,7 @@ type StreamAnswerTurnRuntimeState = {
   assembled: boolean
   persistInput?: PersistAnswerTurnInput | undefined
   persistResult?: PersistAnswerTurnResult | undefined
+  finalizationResult?: AnswerHarnessFinalizationResult | undefined
 }
 
 export type StreamAnswerTurnInput = {
@@ -233,22 +235,7 @@ export async function streamAnswerTurn(
   const finalState = runResult.state
   const persistInput = finalState.persistInput
   const persistResult = finalState.persistResult
-  const finalHarnessRun = runResult.report
-  const finalizationResult = persistResult?.ok === true && persistInput !== undefined && persistInput.sourceWriteRequest !== undefined
-    ? await finalizePersistedAnswerTurnHarnessRun({
-        input: persistInput,
-        persistResult,
-        harnessRun: finalHarnessRun,
-        runtimeEvents: harness.events,
-      })
-    : undefined
-
-  if (finalizationResult !== undefined) {
-    harness.loop.emitOperationEvent({
-      type: 'answer.harness_finalization',
-      status: finalizationResult.status,
-    })
-  }
+  const finalizationResult = finalState.finalizationResult
 
   if (finalState.captured !== undefined) {
     if (persistResult?.ok !== true) {
@@ -519,7 +506,48 @@ function buildStreamAnswerTurnPhases(input: {
         persistResult,
       }
     },
-    report: ({ state }) => state,
+    report: async ({ state }) => {
+      const persistInput = state.persistInput
+      const persistResult = state.persistResult
+      if (persistResult?.ok !== true || persistInput === undefined || persistInput.sourceWriteRequest === undefined) {
+        return state
+      }
+
+      const finalizationResult = await finalizePersistedAnswerTurnHarnessRun({
+        input: persistInput,
+        persistResult,
+        harnessRun: input.harness.loop.snapshot(harnessStatusForAnswerTurn(
+          state.finalTurnStatus ?? persistResult.status,
+          state.finalGate ?? persistInput.gate,
+        )),
+        runtimeEvents: input.harness.events,
+      })
+      input.harness.loop.emitOperationEvent({
+        type: 'answer.harness_finalization',
+        status: finalizationResult.status,
+        ...(finalizationResult.status === 'accepted' || finalizationResult.status === 'replayed'
+          ? {}
+          : { reason: finalizationResult.reason }),
+      })
+
+      if (!answerHarnessFinalizationSucceeded(finalizationResult)) {
+        throw new AnswerHarnessFinalizationError(finalizationResult)
+      }
+
+      return {
+        ...state,
+        finalizationResult,
+      }
+    },
+  }
+}
+
+class AnswerHarnessFinalizationError extends Error {
+  readonly code = 'answer_harness_finalization_failed'
+
+  constructor(readonly result: AnswerHarnessFinalizationResult) {
+    super(`Answer harness finalization failed with ${result.status}`)
+    this.name = 'AnswerHarnessFinalizationError'
   }
 }
 

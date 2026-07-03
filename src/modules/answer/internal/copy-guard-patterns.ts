@@ -1,14 +1,14 @@
 /** Shared human-copy guard patterns for answer gate and follow-up chip validation. */
 
-export const EPISTEMIC_VOCABULARY_PATTERN = /\b(?:KNOWN|UNKNOWN|UNAVAILABLE|NEXT_STEP)\b/
+const EPISTEMIC_VOCABULARY_PATTERN = /\b(?:KNOWN|UNKNOWN|UNAVAILABLE|NEXT_STEP)\b/
 
-export const OVERCLAIM_PATTERN =
+const OVERCLAIM_PATTERN =
   /\b(?:book instantly|book now|booking confirmed|pay now|payment required|callable endpoint|agent-native|autonomous agent|verified by default|dispatch now|payment required on ae)\b/i
 
-export const BOUNDARY_COPY_PATTERN =
+const BOUNDARY_COPY_PATTERN =
   /\b(?:cannot book|does not book|doesn't book|do not book|not book|no booking|no payment|does not pay|doesn't pay|do not pay|not pay|does not book or take payment|no booking or payment)\b/i
 
-export const INJECTION_UPGRADE_PATTERN =
+const INJECTION_UPGRADE_PATTERN =
   /\b(?:ignore previous instructions|callable=true|paymentrequired=true|mark as verified|verified emergency)\b/i
 
 export function hasEpistemicVocabulary(text: string): boolean {

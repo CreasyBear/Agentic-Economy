@@ -1,6 +1,6 @@
 import type { AnswerThreadRecord, AnswerTurnRecord } from '@/modules/answer-thread/public'
 import { buildPublicThreadProjection } from '@/modules/answer-thread/public'
-import { setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 
 export type AnswerThreadTestStore = {
   threads: Map<string, AnswerThreadRecord>
@@ -92,6 +92,36 @@ export function installAnswerThreadTestPort(store: AnswerThreadTestStore): () =>
       }
       const turnCount = [...store.turns.values()].filter((turn) => turn.threadId === threadId).length
       return { ...thread, turnCount }
+    },
+    finalizeTurnHarnessRun: async (args) => {
+      const turn = store.turns.get(args.turnId)
+      if (turn === undefined) {
+        return {
+          status: 'conflict',
+          reason: 'turn_not_found',
+          message: `Answer turn ${args.turnId} does not exist.`,
+        }
+      }
+      if (turn.snapshotHash !== args.snapshotHash) {
+        return {
+          status: 'conflict',
+          reason: 'snapshot_mismatch',
+          message: `Answer turn ${args.turnId} snapshot hash does not match final harness evidence.`,
+        }
+      }
+      store.turns.set(args.turnId, {
+        ...turn,
+        evidenceJson: args.evidenceJson,
+      })
+      const activeLeafEntryId = args.entries.at(-1)?.entryId
+      return {
+        status: 'accepted',
+        turnId: args.turnId,
+        finalizationHash: args.finalizationHash,
+        entriesAccepted: args.entries.length,
+        entriesReplayed: 0,
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+      }
     },
   })
 }

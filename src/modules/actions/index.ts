@@ -1,38 +1,29 @@
 /**
  * Central action registry for AE.
  *
- * Imports every module's action consts into one array and exposes
- * `listActions` / `findAction` / `listAgentToolActions` over it. Registration is
- * explicit (not via module-eval side-effects) so the production bundler cannot
- * tree-shake it.
+ * Registered actions are explicit public machine-operation contracts. They do
+ * not cover every backend write: owner/admin/provider/telemetry flows that
+ * depend on authenticated route context, webhook signatures, or source-write
+ * admission remain TanStack server-function or route-handler exceptions.
  *
- * To add a module: create `<module>/<module>.actions.ts` exporting its action
- * consts, then add the import and an entry in `actions` below.
+ * To add an action-backed surface: create `<module>/<module>.actions.ts`
+ * exporting its action consts, then add the import and an entry below. Do not
+ * rely on module-eval side effects; production bundlers can tree-shake them.
  */
 
 import type { AnyAction } from '@/modules/common/action'
-import {
-  closeOwnerInquiryAction,
-  markOwnerInquiryReadAction,
-  readOwnerInboxAction,
-  readOwnerInquiryThreadAction,
-  replyOwnerInquiryAction,
-  submitInquiryAction,
-} from '@/modules/inquiries/inquiry.actions'
+import { submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 import {
   registryDetailAction,
+  registryListAction,
   registrySearchAction,
 } from '@/modules/registry/registry.actions'
 
 const actions: readonly AnyAction[] = [
   submitInquiryAction,
+  registryListAction,
   registrySearchAction,
   registryDetailAction,
-  readOwnerInboxAction,
-  readOwnerInquiryThreadAction,
-  replyOwnerInquiryAction,
-  markOwnerInquiryReadAction,
-  closeOwnerInquiryAction,
 ]
 
 assertUniqueActionIds(actions)

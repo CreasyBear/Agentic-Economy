@@ -75,7 +75,7 @@ describe('public thread projection', () => {
 
     expect(projection.turns).toHaveLength(1)
     expect(projection.turns[0]?.artifacts.length).toBeGreaterThan(0)
-    expect(projection.turns[0]?.workLog.map((step) => step.id)).toEqual(['interpret.request'])
+    expect(projection.turns[0]?.workLog.map((step) => step.id)).toEqual(['step-1'])
     expect(projection.turns[0]?.answerCheckSummary).toMatchObject({
       catalogSearches: 0,
       listingsRead: 1,
@@ -152,11 +152,11 @@ describe('public thread projection', () => {
 
     const projection = buildPublicThreadProjection(thread, [turn])
     expect(projection.turns[0]?.workLog.map((step) => step.id)).toEqual([
-      'interpret.request',
-      'search.registry.initial',
-      'read.providers',
-      'compare.fit',
-      'assemble.answer',
+      'step-1',
+      'step-2',
+      'step-3',
+      'step-4',
+      'step-5',
     ])
     expect(projection.turns[0]?.answerCheckSummary).toEqual({
       catalogSearches: 1,

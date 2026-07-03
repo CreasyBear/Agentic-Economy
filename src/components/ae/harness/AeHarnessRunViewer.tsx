@@ -6,16 +6,17 @@ import {
   FileJsonIcon,
   LockKeyholeIcon,
 } from 'lucide-react'
+import { useState } from 'react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
 import type {
   HarnessRunViewerDetail,
   HarnessRunViewerDetailResult,
@@ -61,16 +62,17 @@ export function AeHarnessRunDetail({ result }: { result: HarnessRunViewerDetailR
   if (result.kind === 'not_found') {
     return (
       <>
-        <Alert variant="destructive">
-          <AlertTriangleIcon aria-hidden="true" className="size-4" />
-          <AlertTitle>Run evidence not found</AlertTitle>
-          <AlertDescription>{result.publicMessage} HTTP {result.httpStatus}.</AlertDescription>
-        </Alert>
-        <Card>
-          <CardHeader>
-            <CardTitle className="break-words">Turn {result.turnId}</CardTitle>
-            <CardDescription>No private rows were returned for this detail request.</CardDescription>
-          </CardHeader>
+        <Banner
+          status="error"
+          icon={<AlertTriangleIcon aria-hidden="true" className="size-4" />}
+          title="Run evidence not found"
+          description={`${result.publicMessage} HTTP ${result.httpStatus}.`}
+        />
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words">Turn {result.turnId}</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">No private rows were returned for this detail request.</Text>
+          </div>
         </Card>
       </>
     )
@@ -92,19 +94,17 @@ function RunViewerAccess({
 }) {
   const denied = result.kind === 'denied'
   return (
-    <Alert data-readback-kind={result.kind} variant={denied ? 'destructive' : 'default'}>
-      {denied ? (
-        <LockKeyholeIcon aria-hidden="true" className="size-4" />
-      ) : (
-        <CheckCircle2Icon aria-hidden="true" className="size-4" />
-      )}
-      <AlertTitle>{denied ? 'Access withheld' : 'Run evidence surface ready'}</AlertTitle>
-      <AlertDescription>
-        {denied
+    <Banner
+      data-readback-kind={result.kind}
+      status={denied ? 'error' : 'success'}
+      icon={denied ? <LockKeyholeIcon aria-hidden="true" className="size-4" /> : <CheckCircle2Icon aria-hidden="true" className="size-4" />}
+      title={denied ? 'Access withheld' : 'Run evidence surface ready'}
+      description={
+        denied
           ? `${result.publicMessage} HTTP ${result.httpStatus}.`
-          : `Run evidence is scoped to the admin operator surface. HTTP ${result.httpStatus}.`}
-      </AlertDescription>
-    </Alert>
+          : `Run evidence is scoped to the admin operator surface. HTTP ${result.httpStatus}.`
+      }
+    />
   )
 }
 
@@ -161,12 +161,12 @@ function DeniedRows({
   result: Extract<HarnessRunViewerListResult | HarnessRunViewerDetailResult, { kind: 'denied' }>
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Private rows withheld</CardTitle>
-        <CardDescription>Denied run evidence reads return no raw turn, tool, or model rows.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Private rows withheld</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Denied run evidence reads return no raw turn, tool, or model rows.</Text>
+      </div>
+      <div className="grid gap-4">
         <AeOperatorFactGrid
           facts={[
             { label: 'Decision', value: result.reason.replaceAll('_', ' ') },
@@ -174,7 +174,7 @@ function DeniedRows({
             { label: 'Generated', value: new Date(result.generatedAt).toISOString() },
           ]}
         />
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -182,12 +182,12 @@ function DeniedRows({
 function AllowedList({ result }: { result: HarnessRunViewerListAllowed }) {
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Run evidence summary</CardTitle>
-          <CardDescription>Rows are derived from private answer-turn evidence after admin access is resolved.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">Run evidence summary</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Rows are derived from private answer-turn evidence after admin access is resolved.</Text>
+        </div>
+        <div className="grid gap-4">
           <AeOperatorFactGrid
             facts={[
               { label: 'Turns', value: result.summary.turns },
@@ -198,7 +198,7 @@ function AllowedList({ result }: { result: HarnessRunViewerListAllowed }) {
               { label: 'Generated', value: new Date(result.generatedAt).toISOString() },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
       {result.rows.length === 0 ? (
         <AeEmptyState
@@ -229,23 +229,21 @@ function AllowedList({ result }: { result: HarnessRunViewerListAllowed }) {
 
 function RunDetailHeader({ detail }: { detail: HarnessRunViewerDetail }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={statusBadgeVariant(detail.run.status)}>
-            {detail.run.status.replaceAll('_', ' ')}
-          </Badge>
-          <Badge variant="outline">{detail.run.source.replaceAll(/([A-Z])/g, ' $1').toLowerCase()}</Badge>
+          <Badge variant={toAstryxHarnessBadgeVariant(statusBadgeVariant(detail.run.status))} label={detail.run.status.replaceAll('_', ' ')} />
+          <Badge variant="neutral" label={detail.run.source.replaceAll(/([A-Z])/g, ' $1').toLowerCase()} />
           {detail.publicProjection.leakedMarkers.length === 0 ? (
-            <Badge variant="secondary">public diff clean</Badge>
+            <Badge variant="info" label="public diff clean" />
           ) : (
-            <Badge variant="destructive">public diff leak</Badge>
+            <Badge variant="error" label="public diff leak" />
           )}
         </div>
-        <CardTitle className="break-words font-mono text-lg">{detail.turn.turnId}</CardTitle>
-        <CardDescription>{detail.turn.query}</CardDescription>
-      </CardHeader>
-      <CardContent>
+        <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words font-mono text-lg">{detail.turn.turnId}</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">{detail.turn.query}</Text>
+      </div>
+      <div className="grid gap-4">
         <AeOperatorFactGrid
           facts={[
             { label: 'Thread', value: detail.turn.threadId },
@@ -256,52 +254,42 @@ function RunDetailHeader({ detail }: { detail: HarnessRunViewerDetail }) {
             { label: 'Phases', value: detail.phases.length },
           ]}
         />
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
 function RunDetailTabs({ detail }: { detail: HarnessRunViewerDetail }) {
+  const [activeTab, setActiveTab] = useState('overview')
+
   return (
-    <Tabs defaultValue="overview" className="gap-4">
-      <TabsList variant="line" aria-label="Run evidence detail tabs" className="max-w-full flex-wrap justify-start">
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="tools">Tools</TabsTrigger>
-        <TabsTrigger value="phases">Phases</TabsTrigger>
-        <TabsTrigger value="evidence">Evidence</TabsTrigger>
-        <TabsTrigger value="public">Public view</TabsTrigger>
-        <TabsTrigger value="raw">Raw JSON</TabsTrigger>
-      </TabsList>
-      <TabsContent value="overview">
-        <OverviewTab detail={detail} />
-      </TabsContent>
-      <TabsContent value="tools">
-        <ToolRows rows={detail.tools} />
-      </TabsContent>
-      <TabsContent value="phases">
-        <PhaseRows rows={detail.phases} />
-      </TabsContent>
-      <TabsContent value="evidence">
-        <EvidenceTab detail={detail} />
-      </TabsContent>
-      <TabsContent value="public">
-        <PublicProjectionTab detail={detail} />
-      </TabsContent>
-      <TabsContent value="raw">
-        <RawJsonTab detail={detail} />
-      </TabsContent>
-    </Tabs>
+    <div className="grid gap-4">
+      <TabList value={activeTab} onChange={setActiveTab} hasDivider aria-label="Run evidence detail tabs" className="max-w-full flex-wrap justify-start">
+        <Tab value="overview" label="Overview" />
+        <Tab value="tools" label="Tools" />
+        <Tab value="phases" label="Phases" />
+        <Tab value="evidence" label="Evidence" />
+        <Tab value="public" label="Public view" />
+        <Tab value="raw" label="Raw JSON" />
+      </TabList>
+      {activeTab === 'overview' ? <OverviewTab detail={detail} /> : null}
+      {activeTab === 'tools' ? <ToolRows rows={detail.tools} /> : null}
+      {activeTab === 'phases' ? <PhaseRows rows={detail.phases} /> : null}
+      {activeTab === 'evidence' ? <EvidenceTab detail={detail} /> : null}
+      {activeTab === 'public' ? <PublicProjectionTab detail={detail} /> : null}
+      {activeTab === 'raw' ? <RawJsonTab detail={detail} /> : null}
+    </div>
   )
 }
 
 function OverviewTab({ detail }: { detail: HarnessRunViewerDetail }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Overview</CardTitle>
-        <CardDescription>Run identity, coverage, and terminal state.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Overview</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Run identity, coverage, and terminal state.</Text>
+      </div>
+      <div className="grid gap-4">
         <AeOperatorFactGrid
           facts={[
             { label: 'Run ID', value: detail.run.runId ?? 'not recorded' },
@@ -312,7 +300,7 @@ function OverviewTab({ detail }: { detail: HarnessRunViewerDetail }) {
             { label: 'Errors', value: detail.run.report?.summary.errors.count ?? 0 },
           ]}
         />
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -339,7 +327,7 @@ function ToolRows({ rows }: { rows: readonly HarnessRunViewerToolRow[] }) {
         ],
       }))}
       emptyTitle="No tool rows"
-      emptyDescription="This turn does not include tool-call evidence."
+      emptyDescription="This turn does not include tool evidence."
     />
   )
 }
@@ -373,12 +361,12 @@ function PhaseRows({ rows }: { rows: readonly HarnessRunViewerPhaseRow[] }) {
 
 function EvidenceTab({ detail }: { detail: HarnessRunViewerDetail }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Evidence</CardTitle>
-        <CardDescription>Private evidence shape without expanding raw JSON.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-5">
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Evidence</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Private evidence shape without expanding raw JSON.</Text>
+      </div>
+      <div className="grid gap-5">
         <AeOperatorFactGrid
           facts={[
             { label: 'Providers', value: detail.evidence.providerCount },
@@ -391,7 +379,7 @@ function EvidenceTab({ detail }: { detail: HarnessRunViewerDetail }) {
         />
         <TokenList title="Result hashes" values={detail.evidence.resultHashes} />
         <TokenList title="Artifact kinds" values={detail.evidence.artifactKinds} />
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -399,12 +387,12 @@ function EvidenceTab({ detail }: { detail: HarnessRunViewerDetail }) {
 function PublicProjectionTab({ detail }: { detail: HarnessRunViewerDetail }) {
   const diff = detail.publicProjection
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Public projection comparison</CardTitle>
-        <CardDescription>Public thread projection is an allowlist; raw tool and run evidence must stay absent.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-5">
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Public projection comparison</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Public thread projection is an allowlist; raw tool and run evidence must stay absent.</Text>
+      </div>
+      <div className="grid gap-5">
         <AeOperatorFactGrid
           facts={[
             { label: 'Leaked markers', value: diff.leakedMarkers.length },
@@ -416,48 +404,50 @@ function PublicProjectionTab({ detail }: { detail: HarnessRunViewerDetail }) {
           ]}
         />
         {diff.leakedMarkers.length === 0 ? (
-          <Alert>
-            <CheckCircle2Icon aria-hidden="true" className="size-4" />
-            <AlertTitle>Public projection is clean</AlertTitle>
-            <AlertDescription>No configured raw-evidence markers appear in the public projection.</AlertDescription>
-          </Alert>
+          <Banner
+            status="success"
+            icon={<CheckCircle2Icon aria-hidden="true" className="size-4" />}
+            title="Public projection is clean"
+            description="No configured raw-evidence markers appear in the public projection."
+          />
         ) : (
-          <Alert variant="destructive">
-            <AlertTriangleIcon aria-hidden="true" className="size-4" />
-            <AlertTitle>Public projection needs review</AlertTitle>
-            <AlertDescription>{diff.leakedMarkers.join(', ')}</AlertDescription>
-          </Alert>
+          <Banner
+            status="error"
+            icon={<AlertTriangleIcon aria-hidden="true" className="size-4" />}
+            title="Public projection needs review"
+            description={diff.leakedMarkers.join(', ')}
+          />
         )}
         <JsonBlock label="Public projection JSON" value={diff.serializedPublicProjection} />
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
 function RawJsonTab({ detail }: { detail: HarnessRunViewerDetail }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <FileJsonIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-          <CardTitle>Raw JSON</CardTitle>
+          <FileJsonIcon aria-hidden="true" className="size-4 text-secondary" />
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">Raw JSON</Text>
         </div>
-        <CardDescription>Collapsed by default. This section is only for authorized admin/operator contexts.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
+        <Text as="div" type="supporting" color="secondary" display="block">Collapsed by default. This section is only for authorized admin/operator contexts.</Text>
+      </div>
+      <div className="grid gap-3">
         <CollapsedJson label="Turn JSON" value={detail.rawJson.turnJson} />
         <CollapsedJson label="Evidence JSON" value={detail.rawJson.evidenceJson} />
         <CollapsedJson label="Prose JSON" value={detail.rawJson.proseJson} />
         <CollapsedJson label="Artifact kinds JSON" value={detail.rawJson.artifactKindsJson} />
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
 function CollapsedJson({ label, value }: { label: string; value: string }) {
   return (
-    <details className="rounded-[var(--ae-radius-sm)] border bg-muted/20">
-      <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-foreground">{label}</summary>
+    <details className="rounded-sm border bg-muted/20">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-primary">{label}</summary>
       <div className="border-t p-3">
         <JsonBlock label={label} value={value} />
       </div>
@@ -467,24 +457,24 @@ function CollapsedJson({ label, value }: { label: string; value: string }) {
 
 function JsonBlock({ label, value }: { label: string; value: string }) {
   return (
-    <ScrollArea className="ae-operator-scroll-panel border" style={{ maxHeight: 'min(60vh, 32rem)' }}>
-      <pre aria-label={label} className="whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-foreground">
+    <div className="overflow-auto rounded-md border border-border" style={{ maxHeight: 'min(60vh, 32rem)' }}>
+      <pre aria-label={label} className="whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-primary">
         {value}
       </pre>
-    </ScrollArea>
+    </div>
   )
 }
 
 function TokenList({ title, values }: { title: string; values: readonly string[] }) {
   return (
     <section className="grid gap-2">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <h2 className="text-sm font-semibold text-primary">{title}</h2>
       {values.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No values recorded.</p>
+        <p className="text-sm text-secondary">No values recorded.</p>
       ) : (
         <ul className="grid gap-2">
           {values.map((value) => (
-            <li key={`${title}:${value}`} className="break-words rounded-[var(--ae-radius-sm)] border bg-muted/20 p-3 font-mono text-xs leading-5 text-foreground">
+            <li key={`${title}:${value}`} className="break-words rounded-sm border bg-muted/20 p-3 font-mono text-xs leading-5 text-primary">
               {value}
             </li>
           ))}
@@ -505,7 +495,9 @@ function listRowFacts(row: HarnessRunViewerListRow): readonly { label: string; v
   ]
 }
 
-function statusBadgeVariant(status: Exclude<HarnessRunViewerStatusFilter, 'any'>): 'default' | 'secondary' | 'destructive' | 'outline' {
+type HarnessBadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline'
+
+function statusBadgeVariant(status: Exclude<HarnessRunViewerStatusFilter, 'any'>): HarnessBadgeVariant {
   if (status === 'error' || status === 'blocked' || status === 'timeout' || status === 'aborted') {
     return 'destructive'
   }
@@ -516,4 +508,10 @@ function statusBadgeVariant(status: Exclude<HarnessRunViewerStatusFilter, 'any'>
     return 'default'
   }
   return 'outline'
+}
+
+function toAstryxHarnessBadgeVariant(variant: HarnessBadgeVariant): 'neutral' | 'info' | 'error' {
+  if (variant === 'destructive') return 'error'
+  if (variant === 'secondary') return 'info'
+  return 'neutral'
 }

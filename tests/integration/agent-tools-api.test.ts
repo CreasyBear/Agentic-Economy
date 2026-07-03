@@ -54,6 +54,16 @@ describe('GET /api/agent/tools', () => {
     expect(detail?.readOnly).toBe(true)
     expect(detail?.boundaries.length).toBeGreaterThan(0)
   })
+
+  it('does not list registry.list because quiet agents only get narrow search/detail tools', async () => {
+    const response = await handleListAgentTools()
+    const body = (await response.json()) as {
+      tools: readonly { id: string }[]
+    }
+
+    expect(response.status).toBe(200)
+    expect(body.tools.map((tool) => tool.id)).not.toContain('registry.list')
+  })
 })
 
 describe('POST /api/agent/tools', () => {
@@ -78,6 +88,21 @@ describe('POST /api/agent/tools', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tool: 'does-not-exist', input: {} }),
+      })
+    )
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'agent_tools_unknown_tool',
+    })
+  })
+
+  it('rejects registered actions that are not quiet-agent tools', async () => {
+    const response = await handleInvokeAgentTool(
+      new Request('https://ae.example/api/agent/tools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: 'registry.list', input: { limit: 1 } }),
       })
     )
 

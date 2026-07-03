@@ -16,20 +16,7 @@ export type AnswerMessagePart =
       providers: readonly AnswerSource[]
       fields?: readonly AnswerCompareField[]
     }
-  | { kind: 'service-area-fit'; providers: readonly AnswerSource[]; locationLabel?: string }
-  | { kind: 'next-step-menu'; providers: readonly AnswerSource[] }
-  | { kind: 'confirmation-checklist'; title?: string; items: readonly string[] }
   | { kind: 'recovery-prompts'; title?: string; prompts: readonly { label: string; query: string }[] }
-  | { kind: 'route-perspective'; providers: readonly AnswerSource[]; query?: string }
-  | { kind: 'published-details-rail'; providers: readonly AnswerSource[] }
-  | { kind: 'provider-tradeoff-list'; providers: readonly AnswerSource[] }
-  | {
-      kind: 'message-starter'
-      provider: AnswerSource
-      need: string
-      location?: string
-      timing?: string
-    }
   | { kind: 'location-map'; label: string; placeQuery: string }
   | { kind: 'prose'; block: 'summary'; text: string }
   | { kind: 'what-to-do-now'; text: string; compact?: boolean }
@@ -92,50 +79,11 @@ export function artifactsToMessageParts(
           ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
         })
         break
-      case 'service-area-fit':
-        parts.push({
-          kind: 'service-area-fit',
-          providers: artifact.providers,
-          ...(artifact.locationLabel === undefined ? {} : { locationLabel: artifact.locationLabel }),
-        })
-        break
-      case 'next-step-menu':
-        parts.push({ kind: 'next-step-menu', providers: artifact.providers })
-        break
-      case 'confirmation-checklist':
-        parts.push({
-          kind: 'confirmation-checklist',
-          items: artifact.items,
-          ...(artifact.title === undefined ? {} : { title: artifact.title }),
-        })
-        break
       case 'recovery-prompts':
         parts.push({
           kind: 'recovery-prompts',
           prompts: artifact.prompts,
           ...(artifact.title === undefined ? {} : { title: artifact.title }),
-        })
-        break
-      case 'route-perspective':
-        parts.push({
-          kind: 'route-perspective',
-          providers: artifact.providers,
-          ...(artifact.query === undefined ? {} : { query: artifact.query }),
-        })
-        break
-      case 'published-details-rail':
-        parts.push({ kind: 'published-details-rail', providers: artifact.providers })
-        break
-      case 'provider-tradeoff-list':
-        parts.push({ kind: 'provider-tradeoff-list', providers: artifact.providers })
-        break
-      case 'message-starter':
-        parts.push({
-          kind: 'message-starter',
-          provider: artifact.provider,
-          need: artifact.need,
-          ...(artifact.location === undefined ? {} : { location: artifact.location }),
-          ...(artifact.timing === undefined ? {} : { timing: artifact.timing }),
         })
         break
       case 'location-map':

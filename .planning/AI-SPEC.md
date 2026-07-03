@@ -1,7 +1,7 @@
 # AI-SPEC - AE Agent Discovery And Harness Contract
 
 **Status:** source of truth for AE AI-facing discovery, answer/action harness behavior, and evaluation gates.
-**Rewritten:** 2026-07-02 for the OMP-gold harness rebuild.
+**Rewritten:** 2026-07-03 for the OMP-gold harness operational closeout.
 **Product authority:** `PRODUCT.md` and `AGENTS.md` override this document on public trust, copy, and assistant boundaries.
 **Design authority:** `DESIGN.md` overrides this document for visual/UI decisions.
 
@@ -177,7 +177,7 @@ Reference checkout:
 
 - OMP repo: `/Users/skchan/Jcsyc_Projects/oh-my-pi`
 - OMP commit: `31a8cfc31cf1e467efa76655ded27e64d2295139`
-- AE baseline for the re-audit: `f614a82075365c016da70fe7024e30b2d2885d85`
+- AE current re-audit commit: `30e795243812e18197df35c0592524ee60eec137`
 
 OMP patterns to copy:
 
@@ -222,12 +222,36 @@ HarnessRunLoop
         +--> sanitized public answer checks
 ```
 
-The answer-thread runtime is migrating behind the harness loop. Current answer
-turns create one live harness operation and feed context, intent, route,
-retrieval, model, assemble, gate, persist, and report events into the collector.
-The remaining OMP-gold target is to express the whole turn as
-`HarnessRunLoop.run()` phase handlers so SSE, public projection, and
-persistence are pure adapters over harness events.
+The answer-thread runtime now runs the live answer turn through
+`HarnessRunLoop.run()` phase handlers. Current answer turns create one live
+harness operation for context, intent, route, retrieval, model, gate, assemble,
+persist, and report; tools and model calls use the same loop. Source-backed
+turns then finalize through `finalizeAnswerTurnHarnessRun`, which patches the
+final run report and appends harness session journal entries in one Convex
+transaction.
+
+Current re-audit state on 2026-07-03:
+
+- Live answer runtime authority is present for `streamAnswerTurn()` and focused
+  harness/answer tests pass.
+- Private harness tools now carry OMP-style load mode, hidden, concurrency, and
+  interruptibility metadata; guarded phases and tools receive abort signals.
+- Final answer harness finalization is durable and idempotent for source-backed
+  turns. Accepted and replayed results complete; conflict, denied, and error
+  outcomes become runtime persistence failures.
+- Admin/operator harness run readback is source-backed and auth-gated. Browser
+  smoke for the admin viewer remains a follow-up before operational status.
+- `npm run typecheck` passes.
+- Promptfoo and the answer eval report pass inside `npm run test:eval`.
+- `npm run test:eval` passes.
+- `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts`
+  passes.
+- Browser thread continuity passes in compact and wide Chromium with local
+  server elevation.
+- Graphify artifacts were rebuilt at HEAD `30e7952`, but the graph freshness
+  gate is still red while graph-relevant dirty paths remain.
+- Graph freshness must be green at the same settled commit before any OMP
+  carry-over row is marked operational.
 
 ## Harness Run Loop Contract
 
@@ -242,8 +266,9 @@ Required phases for answer turns:
 5. `model`: record model request lifecycle and prose generation.
 6. `gate`: answer gate plus catalog grounding.
 7. `assemble`: build private snapshot and public-safe operation events.
-8. `persist`: write answer turn, tool summaries, run report, journal entries.
-9. `report`: finalize collector snapshot and terminal status.
+8. `persist`: write the provisional answer turn and tool summaries.
+9. `report`: finalize the source-backed harness run report and journal entries,
+   then finalize collector snapshot and terminal status.
 
 Runtime event minimum:
 
@@ -263,6 +288,8 @@ Loop requirements:
 
 - Tool begin/end must be recorded live, not reconstructed from frozen evidence.
 - Complete and error paths both produce a terminal `HarnessRunReport`.
+- Source-backed complete paths must not emit normal complete if final harness
+  finalization fails.
 - Timeout and abort are distinct. Do not claim cancellation unless an abort
   signal actually reaches the operation.
 - `buildHarnessRunReportForAnswer()` is legacy/backfill only once the live loop
@@ -446,13 +473,20 @@ branch.created
 compaction.summarized
 ```
 
-Append semantics:
+Append/finalization semantics:
 
 - Append is transactional.
 - Duplicate `(sessionId, idempotencyKey)` with same request hash is replay.
 - Duplicate key with different hash is conflict.
 - Parent mismatch is retryable conflict; do not splice history.
 - Active leaf advances only after accepted append.
+- Final answer turn source mutation patches the final `harnessRun` evidence and
+  appends all journal entries in one transaction.
+- Finalization idempotency is keyed by turn, final run identity, snapshot hash,
+  finalization hash, and journal entry request hashes.
+- Accepted and replayed finalization outcomes may complete the answer stream.
+- Conflict, denied, and error finalization outcomes are runtime persistence
+  failures and must not silently complete.
 - Public projection must be rebuildable from journal entries without reading
   raw private payloads.
 
@@ -507,9 +541,9 @@ Information architecture:
 - raw JSON collapsed by default and available only to authorized admin/operator
   contexts.
 
-Before this route ships, raw full-turn reads must be split or tightened so
-`evidenceJson`, `harnessRun`, raw tool rows, and private payloads are not
-available outside admin/session-authorized paths.
+The source readback path is admin/operator-gated. Raw full-turn reads must stay
+split or tightened so `evidenceJson`, `harnessRun`, raw tool rows, and private
+payloads are not available outside admin/session-authorized paths.
 
 Public answer UI remains unchanged: answer, providers, next step, sanitized
 checks.
@@ -550,7 +584,8 @@ npm run typecheck
 npm run test:eval
 ./node_modules/.bin/vitest run tests/unit/harness tests/unit/answer-thread tests/integration/answer-tool-calls.test.ts tests/integration/agent-tools-api.test.ts
 ./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium
-AE_SCAN_MODE=clean ./node_modules/.bin/vitest run tests/ui-contract/public-language-copy.test.ts
+npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts
+npm run test:graph-freshness
 git diff --check
 ```
 
@@ -623,8 +658,10 @@ Acceptance:
 - public/private projection tests,
 - complete/error turns write source-write-admitted journal entries from live
   answer runtime events when a server request is available,
-- full operational replay remains blocked until admin source reads, browser
-  smoke, graph freshness, and broader module adoption are green.
+- source-backed answer finalization patches the final run report and journal in
+  one Convex transaction,
+- full operational replay remains blocked until admin browser smoke, graph
+  freshness, and broader module adoption are green.
 
 ### M3 - Tool Contract, Approval, Telemetry, Gates
 
@@ -669,16 +706,16 @@ The OMP carry-over register is authoritative for operational status.
 
 Status changes must follow these rules:
 
-- `R1` remains below operational until the full answer state machine is owned by
-  `HarnessRunLoop.run()` and graph freshness, browser continuity, and eval gates
-  are green.
+- `R1` may claim focused live answer-loop authority, but remains below
+  operational until graph freshness and all other gates are green at the same
+  settled commit.
 - `R2` remains below operational until descriptor parity and allowlist equality
   are tested.
 - `R3` may claim focused live-runtime migration for the answer slice, but not
   operational parity until eval/browser/graph gates are rerun after the dirty
   tree settles.
-- `R4` remains below operational until runtime-fed answer replay has admin
-  source reads, browser smoke, and graph gates green.
+- `R4` may claim source-backed finalization and admin readback, but remains
+  below operational until admin browser smoke and graph gates are green.
 - `R6` and `R7` are P0 rebuild gates, not optional polish.
 - `R8` and `R9` wait for private evidence boundaries unless a reviewer feature
   ships earlier.

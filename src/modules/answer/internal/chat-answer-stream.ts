@@ -88,11 +88,13 @@ function readMessageText(message: ChatMessage): string | undefined {
     return undefined
   }
 
-  const text = parts
-    .filter((part) => part.type === undefined || part.type === 'text')
-    .map((part) => part.text ?? '')
-    .join('')
-    .trim()
+  let text = ''
+  for (const part of parts) {
+    if (part.type === undefined || part.type === 'text') {
+      text += part.text ?? ''
+    }
+  }
+  text = text.trim()
 
   return text.length > 0 ? text : undefined
 }

@@ -14,9 +14,12 @@ export type FollowUpChipBuildInput = {
 
 export function buildFollowUpChips(input: FollowUpChipBuildInput): FollowUpChip[] {
   const deterministic = buildDeterministicFollowUpChips(input.turn)
-  const llm = (input.llmChips ?? [])
-    .filter((chip) => validateFollowUpChip(chip, 1))
-    .map((chip) => ({ label: chip, submitQuery: chip }))
+  const llm: FollowUpChip[] = []
+  for (const chip of input.llmChips ?? []) {
+    if (validateFollowUpChip(chip, 1)) {
+      llm.push({ label: chip, submitQuery: chip })
+    }
+  }
   const merged = [...deterministic]
   for (const chip of llm) {
     if (merged.some((existing) => existing.submitQuery === chip.submitQuery)) {
@@ -81,7 +84,14 @@ function inferSuburbLabel(
   query: string,
   providers: ReadonlyArray<{ suburb: string }>,
 ): string | undefined {
-  const suburbs = [...new Set(providers.map((provider) => provider.suburb.trim()).filter((value) => value.length > 0))]
+  const suburbSet = new Set<string>()
+  for (const provider of providers) {
+    const value = provider.suburb.trim()
+    if (value.length > 0) {
+      suburbSet.add(value)
+    }
+  }
+  const suburbs = [...suburbSet]
   if (suburbs.length === 1) {
     return suburbs[0]
   }

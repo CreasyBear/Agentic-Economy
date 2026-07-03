@@ -193,14 +193,24 @@ export function auditPromptfooAnswerConfig(configText: string): AnswerEvalCovera
   return issues
 }
 
+function hasString(values: readonly string[], expected: string): boolean {
+  for (const value of values) {
+    if (value === expected) {
+      return true
+    }
+  }
+  return false
+}
+
 function auditTurnCaseShape(
   turnCases: readonly AnswerTurnEvalCase[],
   issues: AnswerEvalCoverageIssue[],
 ): void {
   for (const testCase of turnCases) {
+    const coverTags = new Set(testCase.covers)
     auditExpectedShape(testCase, testCase, issues)
 
-    if (testCase.covers.includes('visible-typo-recovery')) {
+    if (coverTags.has('visible-typo-recovery')) {
       const toolQueries = testCase.expected.toolQueries ?? []
       if (toolQueries.length < 2 || toolQueries[0] === toolQueries[1]) {
         issues.push({
@@ -211,7 +221,7 @@ function auditTurnCaseShape(
       }
     }
 
-    if (testCase.covers.includes('near-me-location-guard')) {
+    if (coverTags.has('near-me-location-guard')) {
       if (testCase.searchContext?.mode !== 'near_me' && !testCase.expected.agentJsonIncludes?.some(hasLocationSignal)) {
         issues.push({
           code: 'location_guard_without_location_signal',
@@ -221,7 +231,7 @@ function auditTurnCaseShape(
       }
     }
 
-    if (testCase.covers.includes('broad-catalog-scale') && testCase.registrySeed !== 'broad') {
+    if (coverTags.has('broad-catalog-scale') && testCase.registrySeed !== 'broad') {
       issues.push({
         code: 'broad_case_without_broad_seed',
         message: 'Broad catalog cases must opt into the broad registry seed.',
@@ -236,6 +246,7 @@ function auditThreadCaseShape(
   issues: AnswerEvalCoverageIssue[],
 ): void {
   for (const testCase of threadCases) {
+    const coverTags = new Set(testCase.covers)
     if (testCase.turns.length < 2) {
       issues.push({
         code: 'thread_case_too_short',
@@ -260,10 +271,10 @@ function auditThreadCaseShape(
       )
     }
 
-    if (testCase.covers.includes('frozen-evidence-follow-up')) {
+    if (coverTags.has('frozen-evidence-follow-up')) {
       const followUp = testCase.turns.slice(1).find((turn) =>
         sameStringList(turn.expected.toolQueries ?? [], []) &&
-        (turn.expected.excludeTimingNames ?? []).includes('retrieval.initial_search'),
+        hasString(turn.expected.excludeTimingNames ?? [], 'retrieval.initial_search'),
       )
       if (followUp === undefined) {
         issues.push({
@@ -285,6 +296,8 @@ function auditHarnessCaseShape(
   const turnCaseById = new Map(turnCases.map((testCase) => [testCase.id, testCase]))
   const threadCaseById = new Map(threadCases.map((testCase) => [testCase.id, testCase]))
 
+  const validHarnessAssertions = new Set<string>(ANSWER_HARNESS_EVAL_ASSERTIONS)
+
   for (const testCase of harnessCases) {
     if (testCase.assertions.length === 0) {
       issues.push({
@@ -295,7 +308,7 @@ function auditHarnessCaseShape(
     }
 
     for (const assertion of testCase.assertions) {
-      if (!(ANSWER_HARNESS_EVAL_ASSERTIONS as readonly string[]).includes(assertion)) {
+      if (!validHarnessAssertions.has(assertion)) {
         issues.push({
           code: 'unknown_harness_assertion',
           message: `Harness eval case references unknown assertion "${assertion}".`,
@@ -369,8 +382,10 @@ function auditHarnessCoverageAssertionMapping(
     'public-contract-refusal': ['requires-public-contract-refusal'],
   }
 
+  const assertionSet = new Set(testCase.assertions)
+
   for (const tag of testCase.covers) {
-    const missing = requiredAssertionsByTag[tag].filter((assertion) => !testCase.assertions.includes(assertion))
+    const missing = requiredAssertionsByTag[tag].filter((assertion) => !assertionSet.has(assertion))
     for (const assertion of missing) {
       issues.push({
         code: 'harness_coverage_without_assertion',

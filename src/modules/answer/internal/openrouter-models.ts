@@ -56,7 +56,7 @@ export function providerLabelFromModelId(modelId: string): string {
   return formatProviderId(providerId)
 }
 
-export function formatProviderId(providerId: string): string {
+function formatProviderId(providerId: string): string {
   return providerId
     .split(/[-_]/)
     .filter((part) => part.length > 0)
@@ -78,7 +78,7 @@ export function readAnswerModelWhitelist(): readonly string[] | undefined {
   return models.length > 0 ? models : undefined
 }
 
-export function isChatModelCandidate(model: OpenRouterModelRecord): boolean {
+function isChatModelCandidate(model: OpenRouterModelRecord): boolean {
   const id = model.id.toLowerCase()
   if (EXCLUDED_ID_KEYWORDS.some((keyword) => id.includes(keyword))) {
     return false
@@ -101,18 +101,22 @@ export function normalizeOpenRouterModels(records: readonly OpenRouterModelRecor
   const whitelist = readAnswerModelWhitelist()
   const whitelistSet = whitelist !== undefined ? new Set(whitelist) : undefined
 
-  const models = records
-    .filter(isChatModelCandidate)
-    .filter((record) => whitelistSet === undefined || whitelistSet.has(record.id))
-    .map((record) => {
-      const providerId = record.id.includes('/') ? record.id.slice(0, record.id.indexOf('/')) : 'openrouter'
-      return {
-        id: record.id,
-        name: record.name,
-        provider: providerLabelFromModelId(record.id),
-        providerId,
-      }
+  const models: AnswerModel[] = []
+  for (const record of records) {
+    if (!isChatModelCandidate(record)) {
+      continue
+    }
+    if (whitelistSet !== undefined && !whitelistSet.has(record.id)) {
+      continue
+    }
+    const providerId = record.id.includes('/') ? record.id.slice(0, record.id.indexOf('/')) : 'openrouter'
+    models.push({
+      id: record.id,
+      name: record.name,
+      provider: providerLabelFromModelId(record.id),
+      providerId,
     })
+  }
 
   return sortModels(dedupeModels(models))
 }

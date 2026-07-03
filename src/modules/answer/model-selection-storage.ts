@@ -1,4 +1,4 @@
-export const ANSWER_MODEL_STORAGE_KEY = 'ae.selectedModel'
+const ANSWER_MODEL_STORAGE_KEY = 'ae.selectedModel'
 
 export function readStoredAnswerModelId(): string | null {
   if (typeof window === 'undefined') {

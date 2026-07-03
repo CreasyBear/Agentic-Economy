@@ -18,50 +18,31 @@ afterEach(() => {
 })
 
 describe('harness run viewer source seam', () => {
-  it('returns a disabled zero-row scaffold when no admin source port is configured', async () => {
+  it('denies private source reads when no authenticated admin source is available', async () => {
     const result = await readAdminRunViewerListThroughSource({
       status: 'any',
       turnId: '  turn-private  ',
       hasRunEvidence: 'any',
     })
 
-    expect(result.kind).toBe('allowed')
-    if (result.kind !== 'allowed') {
-      throw new Error('Expected disabled source scaffold.')
-    }
-
     expect(result).toMatchObject({
-      httpStatus: 200,
-      actorRef: 'admin-run-viewer-source-disabled',
+      kind: 'denied',
+      httpStatus: 401,
+      reason: 'missing_membership',
       filters: { turnId: 'turn-private' },
-      source: {
-        kind: 'disabled',
-        reason: 'admin_source_port_missing',
-      },
-      summary: {
-        turns: 0,
-        withHarnessRun: 0,
-        legacyBackfilled: 0,
-        missingRunEvidence: 0,
-        attention: 0,
-      },
       rows: [],
     })
     expect(JSON.stringify(result)).not.toContain('source_read_not_configured')
   })
 
-  it('does not perform a private detail read while the source port is disabled', async () => {
+  it('does not expose private detail rows when the default source read is denied', async () => {
     const result = await readAdminRunViewerDetailThroughSource('turn-disabled')
 
     expect(result).toMatchObject({
-      kind: 'not_found',
-      httpStatus: 404,
-      turnId: 'turn-disabled',
+      kind: 'denied',
+      httpStatus: 401,
+      reason: 'missing_membership',
       rows: [],
-      source: {
-        kind: 'disabled',
-        reason: 'admin_source_port_missing',
-      },
     })
     expect(JSON.stringify(result)).not.toContain('source_read_not_configured')
     expect(JSON.stringify(result)).not.toContain('raw-token-private')
@@ -114,6 +95,7 @@ describe('harness run viewer source seam', () => {
                   toolId: 'registry.detail',
                   inputJson: JSON.stringify({ slug: 'raw-token-private' }),
                   resultSummaryJson: JSON.stringify({ count: 1, slugs: ['raw-token-private'] }),
+                  resultJson: JSON.stringify({ kind: 'ok', items: [{ slug: 'raw-token-private' }] }),
                   resultHash: 'raw-token-private-result',
                   status: 'complete',
                   createdAt: 1_000,

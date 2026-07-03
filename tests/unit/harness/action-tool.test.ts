@@ -7,6 +7,7 @@ import {
   findStrictToolSchemaViolation,
   resolveHarnessApproval,
   runHarnessTool,
+  type HarnessToolDefinition,
 } from '@/modules/harness/public'
 
 describe('harness action tool adapter', () => {
@@ -107,6 +108,43 @@ describe('harness action tool adapter', () => {
       reason: 'write_source_admitted',
     })
     expect(admitted.result.status).toBe('ok')
+  })
+
+  it('passes timeout abort signals into interruptible tool execution', async () => {
+    let sawAbort = false
+    const tool: HarnessToolDefinition<unknown, unknown> = {
+      id: 'registry.search',
+      name: 'Search listed businesses',
+      summary: 'Search published listings.',
+      boundaries: ['Read-only. Does not book, charge, dispatch, or send inquiries.'],
+      tier: 'read',
+      surfaces: ['agentTools'],
+      inputSchema: z.object({ query: z.string().min(1) }) as z.ZodType<unknown>,
+      outputSchema: z.object({ kind: z.literal('ok') }) as z.ZodType<unknown>,
+      approval: 'allow',
+      interruptible: true,
+      run: ({ signal }) => new Promise((resolve) => {
+        signal?.addEventListener('abort', () => {
+          sawAbort = true
+          resolve({ kind: 'ok' })
+        }, { once: true })
+      }),
+    }
+
+    const timedOut = await runHarnessTool({
+      tool,
+      input: { query: 'plumber' },
+      surface: 'agentTools',
+      timeoutMs: 1,
+      toolCallId: 'tc-timeout',
+    })
+
+    expect(sawAbort).toBe(true)
+    expect(timedOut.result).toMatchObject({
+      toolCallId: 'tc-timeout',
+      status: 'timeout',
+      errorCode: 'tool_timeout',
+    })
   })
 
   it('detects strict JSON-schema type mismatches before model exposure', () => {

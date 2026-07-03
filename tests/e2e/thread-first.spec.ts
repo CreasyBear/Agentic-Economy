@@ -15,7 +15,7 @@ test.describe('thread-first answer flow', () => {
     await waitForReadyAnswer(page)
 
     await expect(page.getByRole('button', { name: /narrow to parramatta/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /get the agent json answer/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /get as agent json/i })).toBeVisible()
 
     // Cited provider cards and boundary copy require the dev server to run the
     // tool-use agent (OPENROUTER_API_KEY). When the key is absent the turn emits
@@ -62,7 +62,7 @@ async function startFirstThread(page: Page, projectName: string) {
 async function startThreadFromQueryUrl(page: Page, query: string) {
   await page.goto(`/?q=${encodeURIComponent(query)}`)
   await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })
-  await expect(page.getByRole('log').getByText(query).first()).toBeVisible({ timeout: 15_000 })
+  await expectQueryInTranscript(page, query)
 }
 
 async function submitThreadQuery(page: Page, query: string) {
@@ -70,9 +70,17 @@ async function submitThreadQuery(page: Page, query: string) {
   await expect(searchbox).toBeEditable({ timeout: 30_000 })
   await searchbox.fill(query)
   await expect(searchbox).toHaveValue(query)
-  await page.getByRole('button', { name: /^ask$/i }).click()
+  const sendButton = page.getByRole('button', { name: /^send$/i })
+  await expect(sendButton).toBeEnabled()
+  await sendButton.click()
   await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })
-  await expect(page.getByText(query).first()).toBeVisible({ timeout: 15_000 })
+  await expectQueryInTranscript(page, query)
+}
+
+async function expectQueryInTranscript(page: Page, query: string) {
+  await expect(
+    page.getByRole('log', { name: /chat transcript/i }).getByText(query).first(),
+  ).toBeVisible({ timeout: 15_000 })
 }
 
 async function waitForReadyAnswer(page: Page) {

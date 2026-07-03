@@ -1,14 +1,27 @@
-import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Button } from '@astryxdesign/core/Button'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@/components/ui/button'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { buildPublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
 
+type ProviderListingSearch = {
+  from?: 'thread' | 'registry'
+  id?: string
+}
+
 export const Route = createFileRoute('/$slug')({
+  validateSearch: (search: Record<string, unknown>): ProviderListingSearch => {
+    const from = search.from === 'thread' || search.from === 'registry' ? search.from : undefined
+    const id = typeof search.id === 'string' && search.id.trim().length > 0 ? search.id.trim() : undefined
+    return {
+      ...(from === undefined ? {} : { from }),
+      ...(id === undefined ? {} : { id }),
+    }
+  },
   loader: async ({ params }) => {
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind === 'not_found') {
@@ -49,6 +62,7 @@ export const Route = createFileRoute('/$slug')({
 
 function PublicBusinessRoute() {
   const { slug } = Route.useParams()
+  const { from, id } = Route.useSearch()
   const location = useLocation()
   const { page } = Route.useLoaderData()
 
@@ -63,11 +77,7 @@ function PublicBusinessRoute() {
           <AeEmptyState
             title="Business page unavailable"
             description="This page is not visible right now. It may still need to be published, reviewed, or claimed by the business."
-            action={
-              <Button asChild>
-                <Link to="/claim">Claim your business page</Link>
-              </Button>
-            }
+            action={<Button label="Claim your business page" variant="primary" href="/claim" />}
           />
         </section>
       </AePublicShell>
@@ -84,6 +94,8 @@ function PublicBusinessRoute() {
         catalog={catalog}
         inquiryAffordance={inquiryAffordance}
         agentJsonUrl={agentJsonUrl}
+        {...(from === undefined ? {} : { backFrom: from })}
+        {...(id === undefined ? {} : { backThreadId: id })}
       />
     </AePublicShell>
   )

@@ -1,15 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import {
-  findAction,
   listAgentToolActions,
   type ActionContext,
 } from '@/modules/actions'
 import {
-  actionToHarnessTool,
   buildHarnessToolContracts,
+  describeHarnessToolExecutionValidation,
   describeHarnessToolForQuietAgent,
   filterQuietAgentToolContracts,
+  harnessToolContractToDefinition,
   runHarnessTool,
 } from '@/modules/harness/public'
 import { jsonResponse } from './api.businesses'
@@ -30,7 +30,7 @@ export const Route = createFileRoute('/api/agent/tools')({
 })
 
 export async function handleListAgentTools(): Promise<Response> {
-  const contracts = filterQuietAgentToolContracts(buildHarnessToolContracts(listAgentToolActions()))
+  const contracts = quietAgentToolContracts()
   const tools = contracts.map((contract) => describeHarnessToolForQuietAgent(contract).descriptor)
   return jsonResponse({ tools })
 }
@@ -53,18 +53,17 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
   }
 
   const toolId = typeof body.tool === 'string' ? body.tool : ''
-  const action = findAction(toolId)
-  if (action === undefined) {
+  const contract = quietAgentToolContracts().find((toolContract) => toolContract.id === toolId)
+  if (contract === undefined) {
     return jsonError('agent_tools_unknown_tool', `No agent tool named '${toolId}'.`, 404)
   }
-  if (!action.surfaces.includes('agentTools')) {
-    return jsonError('agent_tools_not_exposed', `Action '${toolId}' is not exposed to agents.`, 403)
-  }
 
-  const tool = actionToHarnessTool(action)
-  if (tool.strictInputSchemaViolation !== undefined || tool.strictOutputSchemaViolation !== undefined) {
+  const validation = describeHarnessToolExecutionValidation(contract)
+  if (validation.strictInputSchemaViolation !== undefined || validation.strictOutputSchemaViolation !== undefined) {
     return jsonError('agent_tools_invalid_schema', 'Tool schema is not strict enough to run.', 500)
   }
+
+  const tool = harnessToolContractToDefinition(contract)
 
   const context = contextFromRequest(request)
   const outcome = await runHarnessTool({
@@ -104,6 +103,10 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
   }
 
   return jsonError('agent_tools_run_failed', outcome.result.errorCode ?? 'Tool run failed.', 500)
+}
+
+function quietAgentToolContracts() {
+  return filterQuietAgentToolContracts(buildHarnessToolContracts(listAgentToolActions()))
 }
 
 function contextFromRequest(request: Request): ActionContext {

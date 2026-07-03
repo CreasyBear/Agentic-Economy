@@ -211,18 +211,23 @@ export function createMeiliCatalogSearchPort(
         { method: 'POST', body: JSON.stringify(body) },
       )
 
-      const hits = (response.hits ?? [])
-        .map(toRegistrySearchDocument)
-        .filter((document): document is RegistrySearchDocument => document !== undefined)
-        .filter((document) => documentMatchesRegistryQuery(document, input))
-        .slice(0, limit)
-        .map((document, index): CatalogSearchHit => ({
+      const hits: CatalogSearchHit[] = []
+      for (const hit of response.hits ?? []) {
+        const document = toRegistrySearchDocument(hit)
+        if (document === undefined || !documentMatchesRegistryQuery(document, input)) {
+          continue
+        }
+        hits.push({
           documentId: document.documentId,
           businessSlug: document.businessSlug,
           serviceSlug: document.serviceSlug,
           generatedHash: document.generatedHash,
-          rank: index + 1,
-        }))
+          rank: hits.length + 1,
+        })
+        if (hits.length >= limit) {
+          break
+        }
+      }
 
       return {
         kind: 'ok',
