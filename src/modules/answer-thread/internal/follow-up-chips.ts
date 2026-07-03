@@ -35,8 +35,17 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
   const providerCards = turn.artifacts.find((artifact) => artifact.kind === 'provider-cards')
   const providers =
     providerCards?.kind === 'provider-cards' ? providerCards.providers : []
+  const inquiryReadyProviders = providers.filter(hasPublishedInquiryPath)
 
-  if (providers.some((provider) => provider.inquiryUrl !== undefined)) {
+  const inquiryHandoffQuery = buildInquiryHandoffQuery(providers, inquiryReadyProviders)
+  if (inquiryHandoffQuery !== undefined) {
+    chips.push({
+      label: 'Start qualified inquiry',
+      submitQuery: inquiryHandoffQuery,
+    })
+  }
+
+  if (inquiryReadyProviders.length > 0) {
     chips.push({
       label: 'Only inquiry-ready listings',
       submitQuery: 'Show only businesses that accept inquiries',
@@ -60,6 +69,23 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
 
   return chips.slice(0, 4)
+}
+
+function buildInquiryHandoffQuery(
+  providers: ReadonlyArray<{ name: string; inquiryUrl?: string }>,
+  inquiryReadyProviders: ReadonlyArray<{ name: string; inquiryUrl?: string }>,
+): string | undefined {
+  const firstProvider = providers[0]
+  if (firstProvider !== undefined && hasPublishedInquiryPath(firstProvider)) {
+    return 'Send a qualified inquiry to the first listed business'
+  }
+
+  const onlyInquiryReady = inquiryReadyProviders[0]
+  if (inquiryReadyProviders.length === 1 && onlyInquiryReady !== undefined) {
+    return `Send a qualified inquiry to ${onlyInquiryReady.name}`
+  }
+
+  return undefined
 }
 
 export function validateFollowUpChip(chip: string, priorQueryCount: number): boolean {
@@ -119,4 +145,8 @@ function inferSuburbLabel(
   }
 
   return undefined
+}
+
+function hasPublishedInquiryPath(provider: { inquiryUrl?: string }): boolean {
+  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
 }
