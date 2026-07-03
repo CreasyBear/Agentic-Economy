@@ -8,11 +8,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const testState = vi.hoisted(() => ({
   navigate: vi.fn(),
+  nextQuery: 'businesses in Perth',
   latestTranscriptProps: undefined as
     | {
         threadId?: string | null
         projection?: { threadId: string } | null
-        liveTurn?: { query: string; generation: number } | null
+        liveTurn?: { query: string; generation: number; intent: string } | null
         onThreadCreated?: (threadId: string) => void
         onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
       }
@@ -63,7 +64,7 @@ vi.mock('@/components/ae/chat/AeQueryPanel', () => ({
       type="button"
       data-testid={showExamples === true ? 'welcome-query-panel' : 'active-query-panel'}
       data-busy={String(busy === true)}
-      onClick={() => onSubmit('businesses in Perth')}
+      onClick={() => onSubmit(testState.nextQuery)}
     >
       Ask
     </button>
@@ -80,6 +81,10 @@ vi.mock('@/components/ae/chat/AeThreadScroller', () => ({
 
 vi.mock('@/components/ae/chat/AeThreadSidebar', () => ({
   AeThreadSidebar: () => <aside data-testid="thread-sidebar" />,
+}))
+
+vi.mock('@/components/ae/chat/AeSessionJourney', () => ({
+  AeSessionJourney: () => <div data-testid="session-journey" />,
 }))
 
 vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
@@ -118,6 +123,7 @@ describe('AeChat route promotion', () => {
     cleanup()
     testState.navigate.mockReset()
     testState.latestTranscriptProps = undefined
+    testState.nextQuery = 'businesses in Perth'
   })
 
   it('keeps the active answer shell mounted while promoting a new home turn to its thread route', async () => {
@@ -158,6 +164,16 @@ describe('AeChat route promotion', () => {
 
     expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-two')
     expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
+  })
+
+  it('passes the classified follow-up intent to live turns before replay catches up', () => {
+    const projection = buildProjection('thread-one', 'First answer')
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    testState.nextQuery = 'message the first one'
+    fireEvent.click(screen.getByTestId('active-query-panel'))
+
+    expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
   })
 })
 

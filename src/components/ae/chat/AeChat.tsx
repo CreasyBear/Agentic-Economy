@@ -13,10 +13,16 @@ import {
   aeSearchContextLocationLabel,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
-import type { AnswerThreadRecord, PublicThreadProjection } from '@/modules/answer-thread/public'
+import {
+  classifyFollowUpIntent,
+  type AnswerThreadRecord,
+  type FollowUpIntent,
+  type PublicThreadProjection,
+} from '@/modules/answer-thread/public'
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
 import { AeChatWelcome } from './AeChatWelcome'
 import { AeQueryPanel } from './AeQueryPanel'
+import { AeSessionJourney } from './AeSessionJourney'
 import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
@@ -38,6 +44,7 @@ type LiveTurn = {
   query: string
   generation: number
   searchContext: AeSearchContext
+  intent: FollowUpIntent
 }
 
 type ProjectionFetchState = {
@@ -63,7 +70,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const initialRouteQuery = routeThreadId === null ? (initialQuery?.trim() ?? '') : ''
   const initialLiveTurn =
     initialRouteQuery.length > 0
-      ? ({ query: initialRouteQuery, generation: 1, searchContext: DEFAULT_AE_SEARCH_CONTEXT } satisfies LiveTurn)
+      ? ({
+          query: initialRouteQuery,
+          generation: 1,
+          searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+          intent: 'refine_search',
+        } satisfies LiveTurn)
       : null
   const [fetchedProjection, setFetchedProjection] = useState<ProjectionFetchState | null>(null)
   const threads = useStoredThreadRecords()
@@ -160,21 +172,26 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setLeavingWelcome(false)
   }, [showWelcome])
 
-  function startTurn(query: string, context: AeSearchContext = searchContext) {
+  function startTurn(
+    query: string,
+    context: AeSearchContext = searchContext,
+    intent: FollowUpIntent = classifyFollowUpIntent(query, completedTurnCount),
+  ) {
     setStreamingBusy(true)
     const nextGeneration = generationRef.current + 1
     generationRef.current = nextGeneration
-    setLiveTurn({ query, generation: nextGeneration, searchContext: context })
+    setLiveTurn({ query, generation: nextGeneration, searchContext: context, intent })
   }
 
   function handleSubmit(query: string) {
+    const intent = classifyFollowUpIntent(query, completedTurnCount)
     captureClientProductEventOnClient('query_submitted', {
       query_length: query.length,
       search_mode: searchContext.mode,
       search_location: aeSearchContextLocationLabel(searchContext) ?? 'none',
     })
     emitChatFunnelEvents(buildChatSubmitFunnelEvents({ query, completedTurnCount }))
-    startTurn(query, searchContext)
+    startTurn(query, searchContext, intent)
   }
 
   function handleThreadCreated(id: string) {
@@ -230,7 +247,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleRetry(query: string) {
-    startTurn(query)
+    const retryIntent = liveTurn?.query === query ? liveTurn.intent : classifyFollowUpIntent(query, completedTurnCount)
+    startTurn(query, searchContext, retryIntent)
   }
 
   function handleDeleteThread(deletedThreadId: string) {
@@ -295,6 +313,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 />
               </div>
             ) : null}
+            <AeSessionJourney projection={projection} liveTurn={liveTurn} />
             <AeThreadTranscript
               threadId={routeThreadId}
               projection={projection}

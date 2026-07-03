@@ -1,6 +1,6 @@
 import { MessageScrollerItem } from './AeThreadMessageScroller'
 import type { AeSearchContext } from '@/modules/answer/search-context'
-import type { PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
+import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import { AeThreadTurnCollapsed } from './AeThreadTurnCollapsed'
 import { AeThreadTurnReplaySection } from './AeThreadTurnReplaySection'
 import { AeThreadTurnStreamSection } from './AeThreadTurnStreamSection'
@@ -14,6 +14,7 @@ export type AeThreadTranscriptProps = {
     query: string
     generation: number
     searchContext: AeSearchContext
+    intent: FollowUpIntent
   } | null
   onThreadCreated?: (threadId: string) => void
   onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
@@ -78,7 +79,7 @@ export function AeThreadTranscript({
               searchContext={liveTurn.searchContext}
               generation={liveTurn.generation}
               seq={completedTurns.length + 1}
-              intent="refine_search"
+              intent={liveTurn.intent}
               {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })}
               {...(onThreadCreated === undefined ? {} : { onThreadCreated })}
               {...(onStreamEnd === undefined ? {} : { onStreamEnd })}
