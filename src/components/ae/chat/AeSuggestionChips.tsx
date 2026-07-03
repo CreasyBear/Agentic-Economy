@@ -116,13 +116,23 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
     return null
   }
 
+  const summary = chips.some((chip) => chip.label.toLowerCase().includes('inquiry'))
+    ? 'Narrow, compare, or start a qualified inquiry from the listed businesses above.'
+    : 'Narrow or compare the listed businesses from this thread.'
+
   return (
-    <AeAnswerSuggestions
-      variant="follow-up"
-      aria-label="Suggested follow-ups"
-      suggestions={chips.map((chip) => ({ label: chip.label, value: chip.submitQuery }))}
-      onSelect={onSelect}
-    />
+    <section className="grid gap-3 rounded-md border border-border bg-surface p-3" aria-label="Continue this thread">
+      <div className="grid gap-0.5">
+        <p className="font-heading text-sm text-primary">Continue with these listings</p>
+        <p className="text-xs leading-snug text-secondary">{summary}</p>
+      </div>
+      <AeAnswerSuggestions
+        variant="follow-up"
+        aria-label="Suggested follow-ups"
+        suggestions={chips.map((chip) => ({ label: chip.label, value: chip.submitQuery }))}
+        onSelect={onSelect}
+      />
+    </section>
   )
 }
 
