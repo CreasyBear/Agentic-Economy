@@ -5,73 +5,82 @@
 ## Test Framework
 
 **Runner:**
-- Vitest 4.1.9 - unit, integration, type contract, import scan, copy, SEO, UI contract, and eval tests.
-  - Config: `vitest.config.ts`
-  - Include: `tests/**/*.test.ts`, `tests/**/*.test.tsx`
-  - Default environment: `node`
-- Playwright 1.61.1 - browser E2E, accessibility, and deploy smoke tests.
-  - Config: `playwright.config.ts`
-  - Deploy smoke config: `playwright.deploy-smoke.config.ts`
-- Promptfoo 0.120.3 - answer eval suite validation and live prompt evaluation.
-  - Config: `eval/answer/promptfooconfig.yaml`
+- Vitest 4.1.9 for unit, integration, type-contract, copy, SEO, UI-contract, import, eval, and script tests.
+- Config: `vitest.config.ts`
+- Playwright 1.61.1 for browser E2E, a11y, and deployed/provider smoke.
+- Config: `playwright.config.ts`, `playwright.deploy-smoke.config.ts`
+- Promptfoo is part of answer eval validation through `eval/answer/promptfooconfig.yaml`.
 
 **Assertion Library:**
-- Vitest `expect` for `.test.ts` and `.test.tsx` files, imported from `vitest`.
-- Playwright `expect` for `.spec.ts` files, imported from `@playwright/test`.
-- Testing Library React for jsdom component tests: `@testing-library/react` in `tests/unit/chat/ae-chat-route-promotion.test.tsx` and `tests/unit/observability/error-boundary-client.test.tsx`.
+- Vitest `expect`, `expectTypeOf`, `describe`, `it`, `afterEach`, `beforeEach`, and `vi`.
+- Testing Library React for jsdom component tests: `@testing-library/react` in `tests/unit/chat/ae-answer-checks.test.tsx`, `tests/unit/inquiries/ae-action-result-card.test.tsx`, `tests/unit/observability/error-boundary-client.test.tsx`.
+- Playwright `expect` and role/label-based locators in `tests/e2e/public-owner-ui.spec.ts`, `tests/e2e/a11y/public-owner-a11y.spec.ts`, and `tests/deploy-smoke/phase1-deploy-smoke.spec.ts`.
 
 **Run Commands:**
 ```bash
-npm test                         # Run all Vitest tests under tests/**/*.test.ts(x)
-npm run test:unit                # Run tests/unit
-npm run test:integration         # Run tests/integration
-npm run test:types               # Run tests/types
-npm run test:imports             # Run import boundary tests in clean scan mode
-npm run test:source-mining       # Run source-mining guardrails in clean scan mode
-npm run test:ts-standards        # Run TypeScript standards scan in clean scan mode
-npm run test:copy                # Run copy claim guardrails in clean scan mode
-npm run test:seo                 # Run SEO tests
-npm run test:ui-contract         # Run UI contract tests in clean scan mode
-npm run test:e2e                 # Run Playwright tests/e2e
-npm run test:a11y                # Run Playwright tests/e2e/a11y
-npm run test:deploy-smoke        # Run the phase 1 deploy smoke Playwright spec
-npm run test:eval                # Run eval coverage, report, promptfoo eval, then tests/eval
-npm run test:release             # Full release gate including typecheck, Convex codegen, tests, and build
-npm run test:eval:coverage       # Custom answer eval coverage audit
+npm run test              # Run all Vitest tests matched by vitest.config.ts
+npm run test:unit         # Run unit tests under tests/unit
+npm run test:integration  # Run integration tests under tests/integration
+npm run test:e2e          # Run browser E2E tests under tests/e2e
+npm run test:a11y         # Run Playwright accessibility-focused tests
+npm run test:eval         # Run answer eval coverage, report, promptfoo eval, and Vitest eval tests
+npm run test:all          # Typecheck, Convex codegen dry-run, unit/integration/type/import/copy/SEO/UI/build suite
+npm run test:release      # Broader release gate including eval, graph freshness, E2E, a11y, and build
+```
+
+Additional focused gates from `package.json`:
+```bash
+npm run typecheck
+npm run check:convex-codegen
+npm run test:types
+npm run test:imports
+npm run test:source-mining
+npm run test:ts-standards
+npm run test:copy
+npm run test:seo
+npm run test:ui-contract
+npm run test:graph-freshness
+npm run test:deploy-smoke
+npm run test:phase2-support-smoke
+npm run test:provider-smoke:resend
+npm run test:provider-smoke:novu
+npm run test:provider-smoke:autumn-stripe
+npm run test:provider-smoke:business-action-stripe
 ```
 
 ## Test File Organization
 
 **Location:**
-- Vitest tests live under `tests/<type>/**/*.test.ts` and `tests/<type>/**/*.test.tsx`.
-- Playwright tests live under `tests/e2e/**/*.spec.ts` and deploy smoke specs under `tests/deploy-smoke/*.spec.ts`.
-- Shared test helpers live in `tests/helpers/`.
-- Negative scanner fixtures live in `tests/fixtures/bad-*`.
-- Answer eval catalog, scoring, and scripts live under `eval/answer/`.
+- Unit tests live under `tests/unit/<domain>/`: `tests/unit/business/claim.test.ts`, `tests/unit/registry/search-sync.test.ts`, `tests/unit/business-action/stripe-checkout-evidence.test.ts`.
+- Integration tests live under `tests/integration/` and call route handlers, server seams, Convex `_handler` functions, or source-port seams directly: `tests/integration/agent-tools-api.test.ts`, `tests/integration/claim-publish.test.ts`, `tests/integration/discovery-route-parity.test.ts`.
+- Type-level contract tests live under `tests/types/`: `tests/types/domain-contracts.test.ts`, `tests/types/protected-actions-contracts.test.ts`, `tests/types/business-action-contracts.test.ts`.
+- Guardrail tests live under `tests/imports/`, `tests/copy/`, `tests/ui-contract/`, `tests/seo/`, and `tests/scripts/`.
+- Browser E2E and a11y tests live under `tests/e2e/` and `tests/e2e/a11y/`.
+- Deployed and provider smoke tests live under `tests/deploy-smoke/` and use `playwright.deploy-smoke.config.ts`.
+- Shared helpers live under `tests/helpers/`; bad fixtures used to prove guardrail detection live under `tests/fixtures/`.
+- Answer eval harness files live under `eval/answer/` and are tested by `tests/eval/answer-pipeline.test.ts`.
 
 **Naming:**
-- Unit tests: `tests/unit/<domain>/<feature>.test.ts`, e.g. `tests/unit/registry/registry-fallback.test.ts`.
-- Integration tests: `tests/integration/<route-or-flow>.test.ts`, e.g. `tests/integration/agent-tools-api.test.ts`.
-- UI contract tests: `tests/ui-contract/<contract>.test.ts`, e.g. `tests/ui-contract/public-layout-contract.test.ts`.
-- Playwright specs: `tests/e2e/<flow>.spec.ts`, e.g. `tests/e2e/public-owner-ui.spec.ts`.
-- Deploy smoke specs: `tests/deploy-smoke/<phase>-<provider>-smoke.spec.ts`, e.g. `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts`.
+- Use `*.test.ts` for Vitest Node tests and `*.test.tsx` for React component tests.
+- Use a file-level `/** @vitest-environment jsdom */` pragma for jsdom component tests, as in `tests/unit/chat/ae-answer-checks.test.tsx`.
+- Use `*.spec.ts` for Playwright tests: `tests/e2e/public-owner-ui.spec.ts`, `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`.
+- Name tests after behavior and domain, not implementation details: `registry search sync attempts`, `public owner routes`, `Phase 1 deployed readback smoke`.
 
 **Structure:**
 ```text
 tests/
-├── unit/             # Pure domain, component, source-state, Convex bridge tests
-├── integration/      # Route handlers, HTTP-shaped Request/Response flows
-├── e2e/              # Playwright local-browser flows
-├── e2e/a11y/         # Keyboard, focus, viewport, and overflow checks
-├── deploy-smoke/     # Deployed-environment smoke specs
-├── imports/          # Source boundary and TypeScript standards scanners
-├── ui-contract/      # UI copy/layout/class contract scans
-├── copy/             # Product claim and boundary copy guardrails
-├── seo/              # Metadata, JSON-LD, public crawl posture
-├── types/            # Runtime/type contract parity checks
-├── eval/             # Vitest assertions over answer eval suites
-├── helpers/          # Source ports and admission helpers
-└── fixtures/         # Negative fixtures for scanner fixture mode
+├── unit/<domain>/*.test.ts[x]          # Pure domain, component, server seam, Convex runtime fakes
+├── integration/*.test.ts               # Route/server/source behavior across module boundaries
+├── types/*.test.ts                     # expectTypeOf and @ts-expect-error contract tests
+├── imports/*.test.ts                   # Module/route/type guardrail scanners
+├── copy/*.test.ts                      # Public copy and overclaim scanners
+├── ui-contract/*.test.ts               # Visual/token/language contract scanners
+├── seo/*.test.ts                       # SEO/AEO/discovery route assertions
+├── e2e/**/*.spec.ts                    # Local browser flows and a11y
+├── deploy-smoke/*.spec.ts              # Fail-loud deployed/provider proof gates
+├── scripts/*.test.ts                   # CLI/script unit tests
+├── fixtures/*                          # Bad examples for scan fixture mode
+└── helpers/*                           # Source ports, source-write admission, thread test seams
 ```
 
 ## Test Structure
@@ -80,58 +89,43 @@ tests/
 ```typescript
 import { describe, expect, it } from 'vitest'
 
-import { handleInvokeAgentTool } from '@/routes/api.agent.tools'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
 
-describe('POST /api/agent/tools registry detail', () => {
-  it('returns a not_found result for an unknown slug without erroring', async () => {
-    const response = await handleInvokeAgentTool(
-      new Request('https://ae.example/api/agent/tools', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'registry.detail',
-          input: { slug: 'no-such-business' },
-        }),
-      }),
-    )
+describe('claimBusiness', () => {
+  it('rejects anonymous claims', () => {
+    const state = createEmptyBusinessSourceState()
 
-    expect(response.status).toBe(200)
-    const body = (await response.json()) as { kind: string; code?: string }
-    expect(body.kind).toBe('not_found')
+    const result = claimBusiness(state, {
+      actor: { kind: 'anonymous', anonymousBucket: 'ip:masked' },
+      facts: validFacts(),
+      security: validSecurity('anonymous'),
+      operationKey: brandNonEmpty('op:claim:anonymous', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:anonymous', 'CorrelationId'),
+      now: 1,
+    })
+
+    expect(result).toMatchObject({
+      kind: 'error',
+      code: 'claim_unauthenticated',
+      retryable: false,
+    })
+    expect(state.businesses).toEqual([])
   })
 })
 ```
-
-This pattern is used in `tests/integration/agent-tools-api.test.ts`.
+Use this pure-domain pattern from `tests/unit/business/claim.test.ts` for state-machine logic.
 
 **Patterns:**
-- Group by public behavior, route, or domain contract using `describe`.
-- Name tests in behavior terms: `keeps the registry literal: a misspelled suburb does not auto-correct` in `tests/integration/agent-tools-api.test.ts`.
-- Use HTTP-shaped `new Request(...)` objects for route handler tests under `tests/integration/`.
-- Assert stable result contracts with `toEqual`, `toMatchObject`, and `expect.objectContaining` rather than brittle full payloads when fields outside the contract can change.
-- Add negative assertions for boundary honesty and privacy leakage. Examples: `tests/unit/actions/registry.test.ts`, `tests/e2e/public-owner-ui.spec.ts`, `tests/copy/phase1-banned-copy.test.ts`.
-- For scanner tests, run clean mode by default and fixture mode with `AE_SCAN_MODE=fixtures`. See `tests/imports/ts-standards.test.ts` and `tests/ui-contract/class-scan.test.ts`.
-
-**Playwright Pattern:**
-```typescript
-import { expect, test, type Page } from '@playwright/test'
-
-test.describe('public owner routes', () => {
-  test('registry search lists Sam and renders truthful no-results and pagination states', async ({ page }) => {
-    await page.goto('/registry')
-
-    await expect(page.getByRole('heading', { name: /find local service details/i })).toBeVisible()
-    await expect(page.getByLabel('Business, service, or place')).toBeVisible()
-    await expect(page.getByText('Needs confirmation', { exact: true })).toBeVisible()
-  })
-})
-```
-
-This pattern is used in `tests/e2e/public-owner-ui.spec.ts` and `tests/e2e/thread-first.spec.ts`.
+- Arrange a source state or fake adapter, call the public seam, assert the result contract and source-state side effects. Examples: `tests/unit/business/claim.test.ts`, `tests/unit/registry/search-sync.test.ts`, `tests/unit/inquiries/inquiry-flow.test.ts`.
+- For route/API tests, construct real `Request` objects and call exported handlers directly. Examples: `tests/integration/agent-tools-api.test.ts`, `tests/seo/discovery-files.test.ts`, `tests/unit/server/server-seams.test.ts`.
+- For TanStack server functions and Convex runtime exports, reach `_handler` only in tests and wrap it with typed fake context objects. Examples: `tests/unit/convex/registry-runtime.test.ts`, `tests/integration/admin-runtime.test.ts`, `tests/integration/suppression-runtime.test.ts`.
+- For React unit tests, render with Testing Library, clean up in `afterEach`, and assert accessible text/roles/links rather than snapshots. Examples: `tests/unit/chat/ae-answer-checks.test.tsx`, `tests/unit/inquiries/ae-inquiry-origin-ui.test.tsx`.
+- For Playwright, use role and label locators, assert user-visible copy, URL transitions, focus movement, and private/future-surface absence. Examples: `tests/e2e/public-owner-ui.spec.ts`, `tests/e2e/a11y/public-owner-a11y.spec.ts`.
 
 ## Mocking
 
-**Framework:** Vitest `vi` plus explicit source-port injection.
+**Framework:** Vitest `vi`, local fake DB classes, explicit source-port injection, and Playwright request/browser contexts.
 
 **Patterns:**
 ```typescript
@@ -148,13 +142,12 @@ afterEach(() => {
   setCatalogSearchPortForTests(undefined)
 })
 ```
-
-This module mock pattern is used in `tests/unit/registry/registry-fallback.test.ts`.
+Use this module-mock pattern from `tests/unit/registry/registry-fallback.test.ts` only at adapter boundaries.
 
 ```typescript
 export async function withRegistrySourcePortForTest(
   state: RegistrySourceState,
-  run: () => Promise<void>,
+  run: () => Promise<void>
 ): Promise<void> {
   const reset = setPublicRegistrySourcePortForTests({
     list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
@@ -169,171 +162,183 @@ export async function withRegistrySourcePortForTest(
   }
 }
 ```
+Prefer source-port injection from `tests/helpers/source-ports.ts` when exercising route/API behavior with controlled source state.
 
-This seam-injection pattern lives in `tests/helpers/source-ports.ts`.
+```typescript
+const listHandler = (listPublicBusinessCatalog as unknown as {
+  _handler: (ctx: QueryCtx, args: { cursor?: string; limit?: number }) => Promise<unknown>
+})._handler
+```
+Use typed `_handler` extraction for Convex runtime tests, paired with local `FakeDb`/`FakeQuery` implementations as in `tests/unit/convex/registry-runtime.test.ts`.
 
 **What to Mock:**
-- Source ports and transport seams, not core domain behavior. Use `setPublicRegistrySourcePortForTests` in `src/modules/registry/registry.functions.ts` and helpers in `tests/helpers/source-ports.ts`.
-- External network/provider calls such as `fetch`, Stripe webhook admission, Sentry, and router navigation. Examples: `tests/unit/billing/autumn-provider.test.ts`, `tests/unit/business-action/stripe-checkout-evidence.test.ts`, `tests/unit/observability/error-boundary-client.test.tsx`, `tests/unit/chat/ae-chat-route-promotion.test.tsx`.
-- Environment variables with `vi.stubEnv`/`vi.unstubAllEnvs` when testing config failure modes, as in `tests/unit/convex/authz.test.ts`.
-- Complex React children/components when the unit under test is route state or shell behavior, using `vi.mock` and `vi.hoisted` as in `tests/unit/chat/ae-chat-route-promotion.test.tsx`.
+- External transport and provider boundaries: Convex HTTP source calls, Stripe/Autumn/Resend/Novu provider adapters, PostHog/Sentry where needed.
+- Browser globals only in jsdom tests and reset them after each test: `vi.stubGlobal('fetch', ...)` in `tests/unit/chat/ae-follow-up-chips.test.tsx`, `vi.spyOn(globalThis, 'fetch')` in `tests/unit/answer/answer-tool-use-agent.test.ts`.
+- Test-only source ports: registry, discovery, answer-thread ports, and catalog search ports.
+- Time and env only through narrow setup/cleanup blocks. Example: `tests/unit/registry/registry-fallback.test.ts` saves and restores `process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`.
 
 **What NOT to Mock:**
-- Do not mock the public contract being tested. `tests/integration/agent-tools-api.test.ts` invokes `handleInvokeAgentTool` directly and only injects source data through the registry source port.
-- Do not mock scanners when testing guardrails. `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and `tests/ui-contract/class-scan.test.ts` run actual scanner functions from `src/lib/ui/contract-scans.ts`.
-- Do not mock domain pure functions when source-state behavior is the subject. Tests such as `tests/unit/catalog/publish.test.ts` and `tests/unit/harness/run-collector.test.ts` operate on real source-state functions.
+- Do not mock pure domain functions under test. Use real state factories and assert resulting state.
+- Do not mock public copy scanners or guardrail scanners when testing contracts in `tests/imports`, `tests/copy`, or `tests/ui-contract`.
+- Do not replace deploy/provider smokes with env-var presence, screenshots, dashboard state, return URL arrival, or webhook arrival alone. The smoke tests under `tests/deploy-smoke/` require source-owned deployed readback IDs and fail loudly when inputs are absent.
+- Do not mock route boundaries in browser E2E; use the local Playwright dev server configured in `playwright.config.ts` with `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E=true`.
 
 ## Fixtures and Factories
 
 **Test Data:**
 ```typescript
-function businessDto(
-  overrides: Partial<PublicBusinessCatalogApiDto> = {},
-): PublicBusinessCatalogApiDto {
+function validFacts() {
   return {
-    slug: 'parramatta-emergency-plumbing',
     name: 'Parramatta Emergency Plumbing',
     category: 'Emergency plumbing',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
-    publicUrl: '/parramatta-emergency-plumbing',
-    trustTier: 'claimed',
-    publicStatus: 'published',
-    indexStatus: 'indexed',
-    discoveryStatus: 'available',
-    schemaVersion: 'public-business-catalog-api:v1',
-    updatedAt: 1_000,
-    photos: [],
-    services: [serviceDto()],
-    ...overrides,
+    requestedSlug: 'parramatta-emergency-plumbing',
+    sourceRefs: [
+      {
+        label: 'Owner supplied',
+        evidenceRef: 'private:evidence:1',
+        sourceHash: brandNonEmpty('hash:source:1', 'SourceHash'),
+      },
+    ],
   }
 }
 ```
-
-This local factory style is used in `tests/unit/registry/registry-fallback.test.ts`.
+Use local helper factories close to the tests, as in `tests/unit/business/claim.test.ts`, when the fixture is specific to one behavior.
 
 **Location:**
-- Shared helpers: `tests/helpers/source-ports.ts`, `tests/helpers/source-write-admission.ts`, `tests/helpers/answer-thread-test-port.ts`.
-- Negative scanner fixtures: `tests/fixtures/bad-imports/`, `tests/fixtures/bad-copy/`, `tests/fixtures/bad-ts-standards/`, `tests/fixtures/bad-ui-contract/`, `tests/fixtures/bad-source-mining/`.
-- Source-state builders in production modules are reused in tests: `createDefaultRegistrySourceState` from `src/modules/registry/public.ts`, `createEmptyBusinessActionSourceState` from `src/modules/business-action/public.ts`, `createEmptyInquirySourceState` from `src/modules/inquiries/public.ts`.
-- Answer eval cases and coverage requirements live in `eval/answer/lib/cases.ts` and `eval/answer/lib/coverage.ts`.
+- Domain source-state constructors live in module public seams: `createEmptyBusinessSourceState` in `src/modules/business/public.ts`, `createEmptyCatalogSourceState` in `src/modules/catalog/public.ts`, `createDefaultRegistrySourceState` in `src/modules/registry/public.ts`, `createDefaultDiscoverySourceState` in `src/modules/discovery/public.ts`.
+- Cross-test helper fixtures live in `tests/helpers/`: `tests/helpers/source-write-admission.ts`, `tests/helpers/source-ports.ts`, `tests/helpers/answer-thread-test-port.ts`.
+- Negative scan fixtures live under `tests/fixtures/bad-*` and are selected with `AE_SCAN_MODE=fixtures`.
+- Eval case catalogs and broad registry seed live under `eval/answer/lib/cases.ts` and `eval/answer/lib/registry-seed.ts`.
+- Browser artifacts are written under `output/playwright/`, as in `tests/e2e/public-owner-ui.spec.ts`.
 
 ## Coverage
 
-**Requirements:** No generic line/branch coverage target is enforced by Vitest config. Coverage is contract-driven.
+**Requirements:** No line/branch coverage threshold is configured in `vitest.config.ts`. Coverage is enforced through behavior gates, type guards, scan fixtures, eval coverage, graph freshness, Playwright E2E/a11y, and fail-loud deployed/provider smokes.
 
 **View Coverage:**
 ```bash
-npm run test:eval:coverage       # Audit answer eval coverage tags and promptfoo catalog coverage
-npm run test:eval:report         # Generate output/eval/answer-suite-report.json
-npm run test:graph-freshness     # Verify graph/eval freshness constraints
+npm run test:eval:coverage     # Audits answer-eval case coverage and promptfoo sync
+npm run test:graph-freshness   # Verifies graph artifacts are fresh for graph-relevant source changes
+npm run test:release           # Broadest local release gate in package.json
 ```
 
-**Contract Coverage Gates:**
-- `eval/answer/lib/coverage.ts` requires eval cases to declare coverage tags, expected timing names, timing budgets, public-copy safety, tool-query evidence, and harness assertions.
-- `tests/eval/answer-pipeline.test.ts` asserts eval case IDs are unique, required coverage exists, promptfoo config stays in sync, and suite scores clear thresholds.
-- `tests/unit/schema/convex-schema.test.ts` asserts every source-owned durable table and required index remains present in `convex/schema.ts`.
-- `tests/imports/*.test.ts` and `tests/ui-contract/*.test.ts` act as lint/architecture coverage for import boundaries, TS standards, source-mining, public language, and UI layout.
+The answer eval coverage auditor in `eval/answer/lib/coverage.ts` fails when required dimensions lack cases, cases lack timing/evidence/copy assertions, promptfoo diverges from the shared catalog, broad seed counts fall below requirements, or public projections expose private harness evidence. `tests/eval/answer-pipeline.test.ts` asserts the suite report passes the 9/10 product-score threshold.
 
 ## Test Types
 
 **Unit Tests:**
-- Scope: pure domain functions, source-state transitions, source adapters, schema exports, config helpers, React components under jsdom.
-- Location: `tests/unit/**`.
-- Approach: direct function calls, in-memory source states, local factories, fake DB/query classes for Convex runtime bridge tests.
-- Examples: `tests/unit/catalog/publish.test.ts`, `tests/unit/convex/registry-runtime.test.ts`, `tests/unit/chat/ae-chat-route-promotion.test.tsx`.
+- Scope: pure domain commands, source-state mutation, validators, projections, adapters, UI components, server seams, Convex runtime functions with fake DBs.
+- Approach: instantiate in-memory source state, call module public seams or extracted `_handler`s, assert exact result contracts and state deltas.
+- Examples: `tests/unit/business/claim.test.ts`, `tests/unit/catalog/publish.test.ts`, `tests/unit/observability/operation-keys.test.ts`, `tests/unit/convex/inquiries-runtime.test.ts`, `tests/unit/chat/ae-answer-checks.test.tsx`.
 
 **Integration Tests:**
-- Scope: route handlers, action/tool APIs, durable route parity, session behavior, source-port flow.
-- Location: `tests/integration/**`.
-- Approach: construct `Request` objects against handler functions and assert `Response` status/body contracts.
-- Examples: `tests/integration/agent-tools-api.test.ts`, `tests/integration/registry-api.test.ts`, `tests/integration/answer-turn-session-auth.test.ts`.
+- Scope: route handlers, TanStack route loaders, source-port injection, API/agent-tool payloads, source-backed route readbacks, suppression/admin flows, answer turn orchestration.
+- Approach: call exported handlers/functions with real `Request` objects and controlled ports/fake contexts; avoid browser unless layout, focus, or navigation matters.
+- Examples: `tests/integration/agent-tools-api.test.ts`, `tests/integration/registry-api.test.ts`, `tests/integration/discovery-route-parity.test.ts`, `tests/integration/business-action-route-readbacks.test.ts`.
 
 **E2E Tests:**
 - Framework: Playwright.
-- Scope: public owner routes, inquiry flow, thread-first answer flow, developer discovery, protected action owner flow.
-- Location: `tests/e2e/**`.
-- Approach: role/label/text assertions, URL assertions, keyboard/focus checks, compact and wide Chromium projects from `playwright.config.ts`.
+- Scope: local user-visible flows, public/owner/admin navigation, form validation/focus, inquiry/protected-action flows, discovery, answer thread continuity, a11y keyboard/focus checks.
+- Config: `playwright.config.ts` runs compact 375x812 and wide 1440x1100 Chromium projects and starts `npm run dev -- --port 3020 --strictPort --host 127.0.0.1` with local Clerk bypass.
 - Examples: `tests/e2e/public-owner-ui.spec.ts`, `tests/e2e/thread-first.spec.ts`, `tests/e2e/a11y/public-owner-a11y.spec.ts`.
 
-**Deploy Smoke Tests:**
+**Deploy/Provider Smoke Tests:**
 - Framework: Playwright with `playwright.deploy-smoke.config.ts`.
-- Location: `tests/deploy-smoke/**`.
-- Purpose: deployed-route and provider smoke validation with retained traces on failure.
+- Scope: deployed route readback, real storage-state sessions, provider smoke evidence, and source-owned proof refs.
+- These tests fail when required env/source inputs are missing and must not be treated as optional skips. Examples: `tests/deploy-smoke/phase1-deploy-smoke.spec.ts`, `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts`, `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`.
 
-**Copy and Public Contract Tests:**
-- Scope: AE boundary language, unsupported claims, internal vocabulary leakage, public copy posture.
-- Location: `tests/copy/**`, `tests/ui-contract/public-language-copy.test.ts`, `tests/seo/**`.
-- Product rule: public and assistant-facing copy must not imply booking, charging, dispatch, auto-fulfilment, guaranteed response, availability, quote, or job acceptance outside a human reply.
-
-**Convex Tests:**
-- Current pattern: in-memory fake DB/query classes and handler extraction from exported Convex functions, not `convex-test`.
-- Location: `tests/unit/convex/**` and `tests/unit/schema/convex-schema.test.ts`.
-- Follow `convex/_generated/ai/guidelines.md` before adding Convex implementation tests. `convex-test` is not listed in `package.json`.
+**Guardrail Tests:**
+- Import and boundary scans: `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, `tests/imports/source-mining.test.ts`.
+- Type standards: `tests/imports/ts-standards.test.ts`.
+- Copy and overclaim scans: `tests/copy/phase1-banned-copy.test.ts`, `tests/copy/discovery-overclaim.test.ts`, `tests/copy/phase6-business-action-claims.test.ts`.
+- UI contract scans: `tests/ui-contract/class-scan.test.ts`, `tests/ui-contract/public-language-copy.test.ts`, `tests/ui-contract/public-layout-contract.test.ts`.
+- SEO/AEO: `tests/seo/discovery-files.test.ts`, `tests/seo/public-business-seo.test.ts`, `tests/seo/business-action-claims.test.ts`.
 
 ## Common Patterns
 
 **Async Testing:**
 ```typescript
-const response = await handleInvokeAgentTool(new Request('https://ae.example/api/agent/tools', init))
+await withRegistrySourcePortForTest(state, async () => {
+  const response = await handleInvokeAgentTool(
+    new Request('https://ae.example/api/agent/tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool: 'registry.search',
+        input: { query: 'parramatta' },
+      }),
+    })
+  )
 
-expect(response.status).toBe(400)
-await expect(response.json()).resolves.toMatchObject({
-  kind: 'error',
-  code: 'agent_tools_invalid_input',
-  retryable: false,
+  expect(response.status).toBe(200)
+  await expect(response.json()).resolves.toMatchObject({ kind: 'ok' })
 })
 ```
-
-Used in `tests/integration/agent-tools-api.test.ts`.
+Use this pattern from `tests/integration/agent-tools-api.test.ts` for API/route-handler behavior.
 
 **Error Testing:**
 ```typescript
-await expect(import('../../../convex/auth.config')).rejects.toThrow(
-  'CLERK_JWT_ISSUER_DOMAIN is required for Convex auth configuration',
-)
-```
-
-Used in `tests/unit/convex/authz.test.ts`.
-
-**React Testing:**
-```typescript
-/**
- * @vitest-environment jsdom
- */
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
+expect(result).toMatchObject({
+  kind: 'error',
+  code: 'claim_rate_limited',
+  retryable: true,
 })
+expect(state.businesses).toHaveLength(1)
 ```
+Assert the error contract and the absence or exact shape of side effects, as in `tests/unit/business/claim.test.ts`.
 
-Use this pattern for component tests under `tests/unit/**/*.test.tsx`.
+**Guardrail Fixture Mode:**
+```typescript
+const violations = scanTypeScriptStandards(
+  isFixtureMode() ? fixtureTargets('tests/fixtures/bad-ts-standards') : cleanRuntimeTargets()
+)
 
-**Playwright Accessibility Testing:**
+if (isFixtureMode()) {
+  expect(violations.map((violation) => violation.rule)).toEqual(
+    expect.arrayContaining(['explicit-any', 'non-null-assertion'])
+  )
+  return
+}
+
+expect(violations).toEqual([])
+```
+Use clean mode and fixture mode together so the scanner proves both runtime compliance and bad-example detection. Examples: `tests/imports/ts-standards.test.ts`, `tests/copy/phase1-banned-copy.test.ts`, `tests/ui-contract/class-scan.test.ts`.
+
+**Playwright Testing:**
+```typescript
+await page.goto('/claim')
+await page.getByLabel('Business name').fill('Northside Solar')
+await page.getByRole('button', { name: /publish service page/i }).click()
+await expect(page.getByLabel('Service category')).toBeFocused()
+await expect(page.getByText('Service category is required.')).toBeVisible()
+```
+Use roles, labels, headings, URL assertions, and focus checks. Avoid brittle CSS selectors except when checking structural overflow or explicit ids such as `#astryx-app-shell-main`.
+
+**A11y Testing:**
 ```typescript
 await page.keyboard.press('Tab')
 await expect(page.getByTestId('skip-to-content')).toBeFocused()
 await page.keyboard.press('Enter')
 await expect(page.locator('#astryx-app-shell-main')).toBeFocused()
 ```
+Use keyboard navigation, persistent labels, `aria-invalid`, disabled states, no-horizontal-overflow checks, and visible focus assertions as in `tests/e2e/a11y/public-owner-a11y.spec.ts`.
 
-Used in `tests/e2e/a11y/public-owner-a11y.spec.ts`.
+**Convex Runtime Testing:**
+- Use local fake DBs to assert indexed reads, bounded `take()`, and no broad table scans. `tests/unit/convex/registry-runtime.test.ts` traces reads and asserts `unscopedCollects(db.reads)` is empty.
+- Keep tests aligned with `convex/_generated/ai/guidelines.md`: validators on Convex functions, indexes named for fields, bounded collections, server-derived auth, and no direct DB access in actions.
+- The repo does not use `convex-test` despite the generated Convex guideline recommending it; current Convex tests use `_handler` extraction plus typed fake contexts.
 
-**Convex Runtime Bridge Testing:**
+**Type Contract Testing:**
 ```typescript
-const handler = (listPublicBusinessCatalog as unknown as {
-  _handler: (ctx: QueryCtx, args: { cursor?: string; limit?: number }) => Promise<unknown>
-})._handler
+expectTypeOf<z.infer<typeof PublicStatusSchema>>().toEqualTypeOf<PublicStatus>()
 
-const db = new FakeDb()
-seedCatalogs(db, 12)
-const page = await handler({ db }, { limit: 2 })
+// @ts-expect-error broad live state is not a valid public status
+const invalidPublicStatus: PublicStatus = 'live'
+void invalidPublicStatus
 ```
-
-Used in `tests/unit/convex/registry-runtime.test.ts`.
+Use `expectTypeOf` and `@ts-expect-error` together to protect exact unions, as in `tests/types/domain-contracts.test.ts`.
 
 ---
 
