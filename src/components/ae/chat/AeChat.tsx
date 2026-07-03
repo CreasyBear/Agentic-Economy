@@ -22,6 +22,7 @@ import {
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
 import { AeChatWelcome } from './AeChatWelcome'
 import { AeQueryPanel } from './AeQueryPanel'
+import { AeSessionContextPanel } from './AeSessionContextPanel'
 import { AeSessionJourney } from './AeSessionJourney'
 import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
@@ -314,6 +315,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               </div>
             ) : null}
             <AeSessionJourney projection={projection} liveTurn={liveTurn} />
+            <AeSessionContextPanel projection={projection} liveTurn={liveTurn} />
             <AeThreadTranscript
               threadId={routeThreadId}
               projection={projection}
