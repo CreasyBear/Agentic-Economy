@@ -342,6 +342,7 @@ function AnswerPartView({
       return (
         <ProviderCompareTable
           providers={part.providers}
+          threadId={threadId}
           {...(part.fields === undefined ? {} : { fields: part.fields })}
         />
       )
@@ -498,9 +499,11 @@ const DEFAULT_COMPARE_FIELDS: readonly AnswerCompareField[] = ['area', 'response
 
 function ProviderCompareTable({
   providers,
+  threadId,
   fields = DEFAULT_COMPARE_FIELDS,
 }: {
   providers: readonly AnswerSource[]
+  threadId: string | undefined
   fields?: readonly AnswerCompareField[]
 }) {
   if (providers.length === 0) {
@@ -543,7 +546,7 @@ function ProviderCompareTable({
           </thead>
           <tbody>
             {providers.map((provider) => (
-              <ProviderCompareRow key={provider.slug} provider={provider} fields={fields} />
+              <ProviderCompareRow key={provider.slug} provider={provider} fields={fields} threadId={threadId} />
             ))}
           </tbody>
         </table>
@@ -555,17 +558,21 @@ function ProviderCompareTable({
 function ProviderCompareRow({
   provider,
   fields,
+  threadId,
 }: {
   provider: AnswerSource
   fields: readonly AnswerCompareField[]
+  threadId: string | undefined
 }) {
+  const detailHref = appendThreadOrigin(provider.detailUrl, threadId)
+
   return (
     <tr>
       <th scope="row" className="sticky left-0 z-10 border-t border-border bg-surface px-4 py-3 text-left align-top">
         <span className="grid gap-0.5">
-          <Link to={provider.detailUrl} className="font-medium text-primary underline-offset-4 hover:underline">
+          <a href={detailHref} className="font-medium text-primary underline-offset-4 hover:underline">
             {provider.name}
-          </Link>
+          </a>
           <span className="font-mono text-2xs text-secondary">{provider.category}</span>
         </span>
       </th>

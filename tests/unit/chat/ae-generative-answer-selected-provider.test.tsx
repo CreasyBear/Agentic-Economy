@@ -77,6 +77,40 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       '/demo-plumbing?from=thread&id=thread-123',
     )
   })
+
+  it('keeps thread origin on comparison table listing links', () => {
+    const artifacts: AnswerArtifact[] = [
+      { kind: 'one-line', text: 'Compare these two listed businesses.' },
+      {
+        kind: 'provider-compare-table',
+        providers: [
+          provider(),
+          provider({ citationIndex: 2, slug: 'northside-plumbing', name: 'Northside Plumbing', detailUrl: '/northside-plumbing' }),
+        ],
+      },
+      {
+        kind: 'what-to-do-now',
+        text: 'Open the listing that fits, then use an inquiry path when published.',
+      },
+    ]
+
+    render(
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="compare the top two"
+        layoutProfile="compare_pair"
+        phase="complete"
+        threadId="thread-compare"
+      />,
+    )
+
+    expect(screen.getByText('Demo Plumbing').closest('a')?.getAttribute('href')).toBe(
+      '/demo-plumbing?from=thread&id=thread-compare',
+    )
+    expect(screen.getByText('Northside Plumbing').closest('a')?.getAttribute('href')).toBe(
+      '/northside-plumbing?from=thread&id=thread-compare',
+    )
+  })
 })
 
 function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
