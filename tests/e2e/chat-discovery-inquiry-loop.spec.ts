@@ -4,6 +4,7 @@ const QUERY = 'emergency plumber parramatta'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
 const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
 const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to the first listed business'
+const BOUNDARY_FOLLOW_UP_QUERY = 'Can AE book this for me?'
 const FILTER_FOLLOW_UP_QUERY = 'Show only businesses that accept inquiries'
 const FILTER_FOLLOW_UP_LABEL = /Inquiry-ready listings/
 const COMPARE_FOLLOW_UP_QUERY = 'Compare the top two'
@@ -199,6 +200,56 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(inquiryLink).toHaveAttribute('href', /\/plumbing-demo\/inquiry\?from=thread&id=.+/)
     await assertPublicLanguage(page)
   })
+
+  test('keeps a boundary follow-up recoverable into a qualified inquiry handoff', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+
+    await submitLandingQuery(page, INQUIRY_READY_QUERY)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, INQUIRY_READY_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    await expect(page.getByRole('region', { name: /business shortlist/i }).last()).toContainText(/Demo Plumbing/i)
+
+    await submitThreadFollowUp(page, BOUNDARY_FOLLOW_UP_QUERY)
+    await expectQueryInTranscript(page, BOUNDARY_FOLLOW_UP_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    await expect(page.getByLabel(/turn context/i).last()).toContainText(
+      /Checking this request against AE's inquiry-only limits/i,
+    )
+    await expect(page.getByText(/Agentic Economy reads and compares published listings/i).last()).toBeVisible()
+    await expect(page.getByText(/It does not book, charge, or dispatch/i).last()).toBeVisible()
+    await expect(page.getByText(/Agentic Economy does not book or take payment on this page/i).last()).toBeVisible()
+
+    const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
+    await expect(checks).toContainText(/0 searches.*1 read.*1 listed/i)
+    const steps = page.getByRole('list', { name: /ae check steps/i }).last()
+    await expect(steps).toContainText(/Preparing the next step/i)
+    await expect(steps).toContainText(/Listed businesses carried forward/i)
+
+    const continuePanel = page.getByRole('region', { name: /continue this thread/i })
+    await expect(continuePanel).toContainText(
+      /Narrow, compare, or start a qualified inquiry from the businesses already found in this thread/i,
+    )
+    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry/i })
+    await expect(startInquiryButton).toBeEnabled()
+    await startInquiryButton.click()
+
+    await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const selectedBusiness = page.getByRole('region', { name: /selected business/i })
+    await expect(selectedBusiness).toContainText(/Demo Plumbing/i, { timeout: 30_000 })
+    await expect(selectedBusiness).toContainText(/The business still confirms timing, quote, and availability/i)
+    await expect(selectedBusiness.getByRole('link', { name: /open inquiry form/i })).toHaveAttribute(
+      'href',
+      /\/plumbing-demo\/inquiry\?from=thread&id=.+/,
+    )
+    await assertPublicLanguage(page)
+  })
 })
 
 async function submitLandingQuery(page: Page, query: string) {
@@ -227,6 +278,19 @@ async function expectQueryInTranscript(page: Page, query: string, displayLabel: 
     ? headers.getByText(displayLabel, { exact: true }).first()
     : headers.getByText(displayLabel).first()
   await expect(queryLabel).toBeVisible({ timeout: 15_000 })
+}
+
+async function submitThreadFollowUp(page: Page, query: string) {
+  const search = page.getByRole('search', { name: /find local service businesses/i }).last()
+  const searchbox = search.getByRole('searchbox')
+  const sendButton = search.getByRole('button', { name: /^send$/i })
+  await expect(searchbox).toBeEditable({ timeout: 30_000 })
+
+  await searchbox.click()
+  await searchbox.fill(query)
+  await expect(searchbox).toHaveValue(query)
+  await expect(sendButton).toBeEnabled()
+  await sendButton.click()
 }
 
 async function waitForLatestReadyAnswer(page: Page) {
