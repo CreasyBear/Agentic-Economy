@@ -194,17 +194,17 @@ test.describe('public owner routes', () => {
     mkdirSync(phase2ArtifactDir, { recursive: true })
 
     await page.goto('/plumbing-demo/inquiry')
-    await expect(page.getByRole('heading', { name: /send the job details/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /send inquiry details/i })).toBeVisible()
 
-    const submitButton = page.getByRole('button', { name: /send job details/i })
+    const submitButton = page.getByRole('button', { name: /send inquiry/i })
     await expect(submitButton).toBeEnabled()
     await submitButton.click()
     await expect(page.getByText('Message is required.')).toBeVisible()
-    await expect(page.getByLabel('Describe the job')).toBeFocused()
+    await expect(page.getByLabel('Describe the inquiry')).toBeFocused()
 
     await page.getByLabel('Contact details for the business reply').fill('phase2.customer@example.test')
-    await page.getByLabel('Describe the job').fill('Please have a human owner review the source-owned inquiry path.')
-    await page.getByRole('button', { name: /send job details/i }).click()
+    await page.getByLabel('Describe the inquiry').fill('Please have a human owner review the source-owned inquiry path.')
+    await page.getByRole('button', { name: /send inquiry/i }).click()
     await expect(page.getByText(/Message saved for Demo Plumbing/i)).toBeVisible()
     await expect(page.getByText(/Delivery state: delivery awaiting review/i)).toBeVisible()
     await assertNoFutureSurfaceCopy(page)

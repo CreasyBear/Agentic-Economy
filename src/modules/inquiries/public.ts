@@ -86,6 +86,7 @@ export type {
   OwnerInboxInquiryProjection,
   OwnerInboxMessageProjection,
   OwnerInboxNotificationProjection,
+  OwnerInboxOriginProjection,
   OwnerInboxReadback,
   OwnerInquiryDetailReadback,
   PublicInquiryContactInput,

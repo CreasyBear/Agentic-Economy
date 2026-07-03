@@ -168,6 +168,11 @@ function AeInquiryInboxRow({ inquiry }: { inquiry: OwnerInboxInquiryProjection }
         {needsDeliveryAttention ? <Badge variant="warning" label="Delivery attention" /> : null}
       </div>
       <p className="line-clamp-2 text-sm text-primary">{inquiry.preview}</p>
+      {inquiry.origin === undefined ? null : (
+        <p className="text-xs leading-snug text-secondary">
+          Chat answer context: review the listed facts and limits before replying.
+        </p>
+      )}
     </div>
   )
 
@@ -217,6 +222,7 @@ function inquiryMatchesQuery(inquiry: OwnerInboxInquiryProjection, query: string
     inquiry.status,
     inquiry.notificationLabel,
     bucketLabel(inquiry.bucket),
+    inquiry.origin === undefined ? '' : 'chat answer context',
   ].some((value) => normalizeQuery(value).includes(query))
 }
 

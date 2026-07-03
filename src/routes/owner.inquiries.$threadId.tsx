@@ -11,6 +11,7 @@ import { toast } from '@/lib/ui/toast'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeConfirmDialog } from '@/components/ae/feedback/AeConfirmDialog'
+import { AeInquiryOriginCard } from '@/components/ae/inquiries/AeInquiryOriginCard'
 import { AeInquiryMessage } from '@/components/ae/inquiries/AeInquiryMessage'
 import { AeInquiryThreadScroll } from '@/components/ae/inquiries/AeInquiryThreadScroll'
 import { AeOwnerReplyComposer } from '@/components/ae/inquiries/AeOwnerReplyComposer'
@@ -287,19 +288,7 @@ function InquiryOriginCard({ detail }: { detail: OwnerInquiryDetailReadback }) {
     return null
   }
 
-  return (
-    <Card padding={3} className="grid gap-3">
-      <div className="grid gap-1">
-        <Text as="h2" type="supporting" weight="semibold">
-          {origin.label}
-        </Text>
-        <Text as="p" type="supporting">
-          This inquiry started from a business selection in chat. Review the original answer before replying.
-        </Text>
-      </div>
-      <Button label="Open answer" href={origin.href} variant="secondary" size="sm" className="justify-self-start" />
-    </Card>
-  )
+  return <AeInquiryOriginCard origin={origin} />
 }
 
 function ownerServerThreadToRouteReadback(result: OwnerInquiryThreadServerResult): OwnerInquiryThreadRouteReadback {
