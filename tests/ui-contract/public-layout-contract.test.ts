@@ -132,6 +132,7 @@ describe('public listing layout contract', () => {
     expect(listing).toMatch(/appendThreadOrigin/)
     expect(inquiryRoute).toMatch(/validateSearch/)
     expect(inquiryRoute).toMatch(/From your answer/)
+    expect(inquiryRoute).toMatch(/continues the business from your answer thread/)
     expect(inquiryRoute).toMatch(/Back to answer/)
   })
 })

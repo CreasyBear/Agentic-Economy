@@ -169,7 +169,7 @@ function PublicInquiryRoute() {
           <Card padding={4} className="grid gap-2" role="note" aria-label="Answer context">
             <Text type="supporting" color="secondary" weight="medium" display="block">From your answer</Text>
             <Text color="primary" display="block">
-              This inquiry continues the provider you selected in chat. Review the details, then describe the job for owner review.
+              This inquiry continues the business from your answer thread. Review the details, then describe the job for owner review.
             </Text>
             <div>
               <Button label="Back to answer" variant="secondary" size="sm" href={origin.backHref} />
