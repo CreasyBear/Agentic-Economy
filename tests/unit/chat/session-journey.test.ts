@@ -26,6 +26,7 @@ describe('session journey', () => {
 
     expect(journey?.providerCount).toBe(2)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
+    expect(journey?.status).toBe('2 listed businesses ready to compare')
     expect(journey?.guidance).toBe(
       'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.',
     )
@@ -56,13 +57,22 @@ describe('session journey', () => {
 
   it('keeps completed inquiry handoffs visible on replay', () => {
     const journey = buildSessionJourney({
-      projection: projection([turn(), turn({ seq: 2, intent: 'inquiry_handoff' })]),
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          artifacts: [{ kind: 'selected-provider', provider: provider() }],
+          oneLine: 'Ready to send a qualified inquiry to Demo Plumber.',
+        }),
+      ]),
       liveTurn: null,
     })
 
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
+    expect(journey?.status).toBe('Demo Plumber selected for inquiry review')
     expect(journey?.guidance).toBe(
-      'AE has selected the business for qualified inquiry review. The business still confirms timing, quote, and availability.',
+      'Demo Plumber is selected for qualified inquiry review. The business still confirms timing, quote, and availability.',
     )
   })
 
@@ -81,8 +91,36 @@ describe('session journey', () => {
 
     expect(journey?.providerCount).toBe(1)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
+    expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing', hasInquiryPath: true })
+    expect(journey?.status).toBe('Northside Plumbing selected for inquiry review')
     expect(journey?.steps.find((step) => step.id === 'compare')?.detail).toBe('1 listed business')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Qualified inquiry only')
+    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
+  })
+
+  it('does not call a selected review-only business inquiry-ready just because another thread listing is ready', () => {
+    const selected = providerWithoutInquiry({ slug: 'review-only-plumbing', name: 'Review Only Plumbing' })
+    const journey = buildSessionJourney({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Review Only Plumbing does not publish an AE inquiry form yet.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(journey?.providerCount).toBe(3)
+    expect(journey?.hasInquiryReadyProvider).toBe(true)
+    expect(journey?.selectedProvider).toEqual({ name: 'Review Only Plumbing', hasInquiryPath: false })
+    expect(journey?.status).toBe('Review Only Plumbing selected for listing review')
+    expect(journey?.guidance).toBe(
+      'Review Only Plumbing is selected for listing review. This business needs a published inquiry path before AE can route contact.',
+    )
+    expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Needs listed inquiry path')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
   })
 })
@@ -137,4 +175,9 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     services: [],
     ...overrides,
   }
+}
+
+function providerWithoutInquiry(overrides: Partial<AnswerSource> = {}): AnswerSource {
+  const { inquiryUrl: _inquiryUrl, ...source } = provider(overrides)
+  return source
 }

@@ -75,6 +75,9 @@ test.describe('chat discovery to inquiry loop', () => {
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
     await waitForLatestReadyAnswer(page)
 
+    await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(
+      /Demo Plumbing selected for inquiry review/i,
+    )
     const selectedBusiness = page.getByRole('region', { name: /selected business/i })
     await expect(selectedBusiness).toContainText(/Demo Plumbing/i, { timeout: 30_000 })
     await expect(selectedBusiness).toContainText(/Choice 1 from this thread/i)
@@ -226,6 +229,13 @@ test.describe('chat discovery to inquiry loop', () => {
       /Preparing the qualified inquiry next step for Parramatta Emergency Plumbing/i,
     )
     await expect(page.getByText(/Parramatta Emergency Plumbing does not publish an AE inquiry form yet/i).last()).toBeVisible()
+
+    const inquiryPath = page.getByRole('region', { name: /inquiry path/i })
+    await expect(inquiryPath).toContainText(/Parramatta Emergency Plumbing selected for listing review/i)
+    await expect(inquiryPath).toContainText(
+      /This business needs a published inquiry path before AE can route contact/i,
+    )
+    await expect(inquiryPath).toContainText(/Needs listed inquiry path/i)
 
     const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
     await expect(checks).toContainText(/0 searches.*1 read.*1 listed/i)

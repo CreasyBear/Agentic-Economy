@@ -1,4 +1,4 @@
-import type { AnswerArtifact } from '@/modules/answer/public'
+import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection } from '@/modules/answer-thread/public'
 
 export type SessionJourneyStatus = 'complete' | 'active' | 'pending'
@@ -13,7 +13,12 @@ export type SessionJourneyStep = {
 export type SessionJourney = {
   providerCount: number
   hasInquiryReadyProvider: boolean
+  selectedProvider?: {
+    name: string
+    hasInquiryPath: boolean
+  }
   heading: string
+  status: string
   guidance: string
   steps: readonly SessionJourneyStep[]
 }
@@ -30,6 +35,7 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
   const allArtifacts = completedTurns.flatMap((turn) => turn.artifacts)
   const providerCount = countSessionProviders(allArtifacts)
   const hasInquiryReadyProvider = hasInquiryPath(allArtifacts)
+  const selectedProvider = latestSelectedProvider(completedTurns)
   const completedTurnCount = completedTurns.length
   const liveIntent = input.liveTurn?.intent
   const liveTurnCount = input.liveTurn === null || input.liveTurn === undefined ? 0 : 1
@@ -49,10 +55,20 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
   return {
     providerCount,
     hasInquiryReadyProvider,
+    ...(selectedProvider === undefined
+      ? {}
+      : {
+          selectedProvider: {
+            name: selectedProvider.name,
+            hasInquiryPath: providerHasInquiryPath(selectedProvider),
+          },
+        }),
     heading: 'Inquiry path',
+    status: buildSessionJourneyStatus({ providerCount, selectedProvider }),
     guidance: buildSessionJourneyGuidance({
       providerCount,
       hasInquiryReadyProvider,
+      selectedProvider,
       handoffActive,
       handoffComplete,
       hasSearchCompleted,
@@ -82,7 +98,7 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
       {
         id: 'inquiry',
         label: 'Inquiry next step',
-        detail: hasInquiryReadyProvider ? 'Qualified inquiry only' : 'Needs listed inquiry path',
+        detail: inquiryStepDetail({ hasInquiryReadyProvider, selectedProvider }),
         status: handoffComplete ? 'complete' : handoffActive ? 'active' : 'pending',
       },
     ],
@@ -92,6 +108,7 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
 function buildSessionJourneyGuidance(input: {
   providerCount: number
   hasInquiryReadyProvider: boolean
+  selectedProvider: AnswerSource | undefined
   handoffActive: boolean
   handoffComplete: boolean
   hasSearchCompleted: boolean
@@ -101,6 +118,12 @@ function buildSessionJourneyGuidance(input: {
   }
 
   if (input.handoffComplete) {
+    if (input.selectedProvider !== undefined && !providerHasInquiryPath(input.selectedProvider)) {
+      return `${input.selectedProvider.name} is selected for listing review. This business needs a published inquiry path before AE can route contact.`
+    }
+    if (input.selectedProvider !== undefined) {
+      return `${input.selectedProvider.name} is selected for qualified inquiry review. The business still confirms timing, quote, and availability.`
+    }
     return 'AE has selected the business for qualified inquiry review. The business still confirms timing, quote, and availability.'
   }
 
@@ -117,6 +140,34 @@ function buildSessionJourneyGuidance(input: {
   }
 
   return 'Compare the published facts first; these listings need a published inquiry path before contact.'
+}
+
+function buildSessionJourneyStatus(input: {
+  providerCount: number
+  selectedProvider: AnswerSource | undefined
+}): string {
+  if (input.selectedProvider !== undefined) {
+    return providerHasInquiryPath(input.selectedProvider)
+      ? `${input.selectedProvider.name} selected for inquiry review`
+      : `${input.selectedProvider.name} selected for listing review`
+  }
+
+  if (input.providerCount > 0) {
+    return `${input.providerCount} listed ${input.providerCount === 1 ? 'business' : 'businesses'} ready to compare`
+  }
+
+  return 'Finding the right listed business'
+}
+
+function inquiryStepDetail(input: {
+  hasInquiryReadyProvider: boolean
+  selectedProvider: AnswerSource | undefined
+}): string {
+  if (input.selectedProvider !== undefined) {
+    return providerHasInquiryPath(input.selectedProvider) ? 'Qualified inquiry only' : 'Needs listed inquiry path'
+  }
+
+  return input.hasInquiryReadyProvider ? 'Qualified inquiry only' : 'Needs listed inquiry path'
 }
 
 function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {
@@ -141,6 +192,19 @@ function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {
   return slugs.size
 }
 
+function latestSelectedProvider(
+  turns: readonly NonNullable<PublicThreadProjection['turns']>[number][],
+): AnswerSource | undefined {
+  for (const turn of [...turns].reverse()) {
+    for (const artifact of [...turn.artifacts].reverse()) {
+      if (artifact.kind === 'selected-provider') {
+        return artifact.provider
+      }
+    }
+  }
+  return undefined
+}
+
 function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {
   return artifacts.some((artifact) => {
     switch (artifact.kind) {
@@ -153,4 +217,8 @@ function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {
         return false
     }
   })
+}
+
+function providerHasInquiryPath(provider: AnswerSource): boolean {
+  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
 }
