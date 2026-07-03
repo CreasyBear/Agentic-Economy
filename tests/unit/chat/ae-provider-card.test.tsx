@@ -13,7 +13,7 @@ describe('AeProviderCard answer variant', () => {
   })
 
   it('makes the selected listing and published inquiry path explicit', () => {
-    render(<AeProviderCard variant="answer" source={provider({ citationIndex: 2 })} />)
+    render(<AeProviderCard variant="answer" source={provider({ citationIndex: 2 })} threadId="thread-abc" />)
 
     expect(screen.getByText('Choice 2 in this answer')).toBeTruthy()
     expect(screen.getByText('Inquiry path')).toBeTruthy()
@@ -22,8 +22,12 @@ describe('AeProviderCard answer variant', () => {
         'AE inquiry form published for owner review. The business still confirms timing, quote, and availability.',
       ),
     ).toBeTruthy()
-    expect(screen.getByText('Open inquiry form')).toBeTruthy()
-    expect(screen.getByText('Review listing')).toBeTruthy()
+    expect(screen.getByText('Open inquiry form').closest('a')?.getAttribute('href')).toBe(
+      '/demo-plumbing/inquiry?from=thread&id=thread-abc',
+    )
+    expect(screen.getByText('Review listing').closest('a')?.getAttribute('href')).toBe(
+      '/demo-plumbing?from=thread&id=thread-abc',
+    )
   })
 
   it('does not imply an AE inquiry form when the listing has no inquiry URL', () => {

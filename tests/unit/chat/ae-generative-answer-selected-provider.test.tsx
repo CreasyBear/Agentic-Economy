@@ -29,6 +29,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
         query="message the first one"
         layoutProfile="refinement_compact"
         phase="complete"
+        threadId="thread-123"
       />,
     )
 
@@ -36,8 +37,12 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     expect(screen.getByText('Demo Plumbing')).toBeTruthy()
     expect(screen.getByText('Choice 1 in this answer · Plumber · Parramatta')).toBeTruthy()
     expect(screen.getByText('Inquiry form published')).toBeTruthy()
-    expect(screen.getByText('Open inquiry form')).toBeTruthy()
-    expect(screen.getByText('Review listing')).toBeTruthy()
+    expect(screen.getByText('Open inquiry form').closest('a')?.getAttribute('href')).toBe(
+      '/demo-plumbing/inquiry?from=thread&id=thread-123',
+    )
+    expect(screen.getByText('Review listing').closest('a')?.getAttribute('href')).toBe(
+      '/demo-plumbing?from=thread&id=thread-123',
+    )
   })
 })
 

@@ -340,9 +340,9 @@ function AnswerPartView({
     case 'one-line':
       return null
     case 'selected-provider':
-      return <SelectedProviderConfirmation provider={part.provider} />
+      return <SelectedProviderConfirmation provider={part.provider} threadId={threadId} />
     case 'provider-cards':
-      return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} />
+      return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} threadId={threadId} />
     case 'provider-compare-table':
       return (
         <ProviderCompareTable
@@ -391,9 +391,11 @@ function AnswerPartView({
   }
 }
 
-function SelectedProviderConfirmation({ provider }: { provider: AnswerSource }) {
+function SelectedProviderConfirmation({ provider, threadId }: { provider: AnswerSource; threadId: string | undefined }) {
   const inquiryUrl = provider.inquiryUrl
   const hasInquiryForm = inquiryUrl !== undefined
+  const detailHref = appendThreadOrigin(provider.detailUrl, threadId)
+  const inquiryHref = inquiryUrl === undefined ? undefined : appendThreadOrigin(inquiryUrl, threadId)
 
   return (
     <section
@@ -426,14 +428,14 @@ function SelectedProviderConfirmation({ provider }: { provider: AnswerSource }) 
             ].join(' ')}
       </p>
       <div className="flex flex-wrap gap-2">
-        {hasInquiryForm ? (
-          <Button label="Open inquiry form" variant="primary" size="sm" href={inquiryUrl} />
+        {inquiryHref !== undefined ? (
+          <Button label="Open inquiry form" variant="primary" size="sm" href={inquiryHref} />
         ) : null}
         <Button
           label="Review listing"
           variant={hasInquiryForm ? 'secondary' : 'primary'}
           size="sm"
-          href={provider.detailUrl}
+          href={detailHref}
         />
       </div>
     </section>
@@ -443,9 +445,11 @@ function SelectedProviderConfirmation({ provider }: { provider: AnswerSource }) 
 function ProviderCardsRail({
   providers,
   scroll,
+  threadId,
 }: {
   providers: readonly AnswerSource[]
   scroll: boolean
+  threadId: string | undefined
 }) {
   if (providers.length === 0) {
     return null
@@ -477,7 +481,7 @@ function ProviderCardsRail({
         >
           {providers.map((source) => (
             <li key={source.slug} className={REVEAL_ENTER}>
-              <AeProviderCard variant="answer" source={source} />
+              <AeProviderCard variant="answer" source={source} {...(threadId === undefined ? {} : { threadId })} />
             </li>
           ))}
         </ul>
@@ -488,6 +492,15 @@ function ProviderCardsRail({
       </SourcesContent>
     </Sources>
   )
+}
+
+function appendThreadOrigin(href: string, threadId: string | undefined): string {
+  if (threadId === undefined || threadId.length === 0) {
+    return href
+  }
+
+  const separator = href.includes('?') ? '&' : '?'
+  return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
 const DEFAULT_COMPARE_FIELDS: readonly AnswerCompareField[] = ['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep']

@@ -12,13 +12,13 @@ import type { PublicRouteServiceContract } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
 
 export type AeProviderCardProps =
-  | { variant: 'answer'; source: AnswerSource }
+  | { variant: 'answer'; source: AnswerSource; threadId?: string }
   | { variant: 'registry'; item: PublicBusinessCatalogApiDto }
   | { variant: 'capability'; service: PublicRouteServiceContract }
 
 export function AeProviderCard(props: AeProviderCardProps) {
   if (props.variant === 'answer') {
-    return <AeProviderCardAnswer source={props.source} />
+    return <AeProviderCardAnswer source={props.source} {...(props.threadId === undefined ? {} : { threadId: props.threadId })} />
   }
   if (props.variant === 'registry') {
     return <AeProviderCardRegistry item={props.item} />
@@ -26,10 +26,12 @@ export function AeProviderCard(props: AeProviderCardProps) {
   return <AeProviderCardCapability service={props.service} />
 }
 
-function AeProviderCardAnswer({ source }: { source: AnswerSource }) {
+function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; threadId?: string }) {
   const area = source.serviceArea || source.suburb
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(source.availabilityLabel))
   const inquiryPath = answerCardInquiryPath(source)
+  const detailHref = appendThreadOrigin(source.detailUrl, threadId)
+  const inquiryHref = source.inquiryUrl === undefined ? undefined : appendThreadOrigin(source.inquiryUrl, threadId)
 
   return (
     <Card
@@ -49,7 +51,7 @@ function AeProviderCardAnswer({ source }: { source: AnswerSource }) {
             color="primary"
             display="block"
           >
-            <a href={source.detailUrl} className="text-primary underline-offset-4 hover:underline">{source.name}</a>
+            <a href={detailHref} className="text-primary underline-offset-4 hover:underline">{source.name}</a>
           </Text>
           <Text type="supporting" color="secondary" display="block">{source.category}</Text>
           <Text type="supporting" color="secondary" display="block">Choice {source.citationIndex} in this answer</Text>
@@ -72,18 +74,27 @@ function AeProviderCardAnswer({ source }: { source: AnswerSource }) {
         <Text type="supporting" color="primary" display="block">{inquiryPath.description}</Text>
       </div>
       <div className="flex flex-wrap gap-2">
-        {source.inquiryUrl !== undefined ? (
-          <Button label={inquiryPath.actionLabel} variant="primary" size="sm" href={source.inquiryUrl} />
+        {inquiryHref !== undefined ? (
+          <Button label={inquiryPath.actionLabel} variant="primary" size="sm" href={inquiryHref} />
         ) : null}
         <Button
           label={source.inquiryUrl === undefined ? inquiryPath.actionLabel : 'Review listing'}
           variant="secondary"
           size="sm"
-          href={source.detailUrl}
+          href={detailHref}
         />
       </div>
     </Card>
   )
+}
+
+function appendThreadOrigin(href: string, threadId: string | undefined): string {
+  if (threadId === undefined || threadId.length === 0) {
+    return href
+  }
+
+  const separator = href.includes('?') ? '&' : '?'
+  return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
 function answerCardInquiryPath(source: AnswerSource): { description: string; actionLabel: string } {

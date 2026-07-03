@@ -30,6 +30,7 @@ export function AeProviderListingPage({
   const presentation = buildProviderPresentation(catalog)
   const officeAddress = readOfficeAddress(catalog)
   const availabilityVariant = badgeVariantForTone(pillToneForAvailabilityLabel(presentation.availabilityLabel))
+  const inquiryHref = appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backFrom, backThreadId)
 
   return (
     <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10">
@@ -70,7 +71,7 @@ export function AeProviderListingPage({
                 : inquiryAffordance.reason}
             </Text>
           </div>
-          {inquiryAffordance.kind === 'available' ? <Button label={inquiryAffordance.label} variant="primary" href={inquiryAffordance.href} /> : null}
+          {inquiryAffordance.kind === 'available' ? <Button label={inquiryAffordance.label} variant="primary" href={inquiryHref} /> : null}
           <AeProtectedByAe />
         </Card>
       </section>
@@ -129,6 +130,15 @@ export function AeProviderListingPage({
       </div>
     </article>
   )
+}
+
+function appendThreadOrigin(href: string, from: 'thread' | 'registry' | undefined, threadId: string | undefined): string {
+  if (from !== 'thread' || threadId === undefined || threadId.length === 0) {
+    return href
+  }
+
+  const separator = href.includes('?') ? '&' : '?'
+  return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
 function ListingPhotosSection({ catalog, presentation }: { catalog: PublicRouteCatalogContract; presentation: ProviderPresentation }) {

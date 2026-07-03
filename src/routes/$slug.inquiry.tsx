@@ -42,7 +42,20 @@ const emptyInquiryFormInput = {
 
 const submitInquiryServer = submitPublicInquiryServer
 
+type PublicInquirySearch = {
+  from?: 'thread'
+  id?: string
+}
+
 export const Route = createFileRoute('/$slug/inquiry')({
+  validateSearch: (search: Record<string, unknown>): PublicInquirySearch => {
+    const from = search.from === 'thread' ? search.from : undefined
+    const id = typeof search.id === 'string' && search.id.trim().length > 0 ? search.id.trim() : undefined
+    return {
+      ...(from === undefined ? {} : { from }),
+      ...(id === undefined ? {} : { id }),
+    }
+  },
   loader: async ({ params }) => {
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     return readPublicInquiryRouteReadback({ slug: params.slug, page })
@@ -61,6 +74,7 @@ export { readPublicInquiryRouteReadback, validatePublicInquiryFormInput }
 
 function PublicInquiryRoute() {
   const readback = Route.useLoaderData()
+  const search = Route.useSearch()
   const initialResult = readback.kind === 'available' && readback.submitted
     ? submittedReceiptToResult(readback.submitted)
     : undefined
@@ -131,6 +145,7 @@ function PublicInquiryRoute() {
   const bodyError = errorByField.get('body')
   const emailError = errorByField.get('email')
   const phoneError = errorByField.get('phone')
+  const origin = inquiryOrigin(search)
 
   return (
     <AePublicShell>
@@ -146,6 +161,17 @@ function PublicInquiryRoute() {
             businessName={readback.businessName}
             serviceName={readback.serviceName}
           />
+        )}
+        {origin === undefined ? null : (
+          <Card padding={4} className="grid gap-2" role="note" aria-label="Answer context">
+            <Text type="supporting" color="secondary" weight="medium" display="block">From your answer</Text>
+            <Text color="primary" display="block">
+              This inquiry continues the provider you selected in chat. Review the details, then describe the job for owner review.
+            </Text>
+            <div>
+              <Button label="Back to answer" variant="secondary" size="sm" href={origin.backHref} />
+            </div>
+          </Card>
         )}
 
         <Card padding={5} className="grid gap-4">
@@ -202,11 +228,18 @@ function PublicInquiryRoute() {
           <AeActionButton type="button" state={pending ? 'loading' : 'idle'} leadingIcon={<SendIcon />} disabled={!hydrated || pending} onClick={() => void submitFormValue()}>
             Send inquiry
           </AeActionButton>
-          <Button label="Back to service page" variant="secondary" href={`/${readback.slug}`} />
+          <Button label={origin === undefined ? 'Back to service page' : 'Back to answer'} variant="secondary" href={origin?.backHref ?? `/${readback.slug}`} />
         </div>
       </form>
     </AePublicShell>
   )
+}
+
+function inquiryOrigin(search: PublicInquirySearch): { backHref: string } | undefined {
+  if (search.from !== 'thread' || search.id === undefined) {
+    return undefined
+  }
+  return { backHref: `/t/${encodeURIComponent(search.id)}` }
 }
 
 function focusFirstPublicInquiryError(errors: readonly PublicInquiryValidationError[]) {

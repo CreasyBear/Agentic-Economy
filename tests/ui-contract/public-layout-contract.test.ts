@@ -120,6 +120,20 @@ describe('public listing layout contract', () => {
     expect(sourceCard).toMatch(/source\.trustCue/)
     expect(sourceCard).not.toMatch(/AeAgentJsonAffordance/)
   })
+
+  it('keeps answer-origin context through public inquiry entry', () => {
+    const answer = readSource('src/components/ae/artifacts/AeGenerativeAnswer.tsx')
+    const providerCard = readSource('src/components/ae/primitives/AeProviderCard.tsx')
+    const inquiryRoute = readSource('src/routes/$slug.inquiry.tsx')
+    const listing = readSource('src/components/ae/listing/AeProviderListingPage.tsx')
+
+    expect(answer).toMatch(/from=thread&id=/)
+    expect(providerCard).toMatch(/from=thread&id=/)
+    expect(listing).toMatch(/appendThreadOrigin/)
+    expect(inquiryRoute).toMatch(/validateSearch/)
+    expect(inquiryRoute).toMatch(/From your answer/)
+    expect(inquiryRoute).toMatch(/Back to answer/)
+  })
 })
 
 describe('operator shell contract', () => {
