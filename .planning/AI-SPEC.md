@@ -248,9 +248,9 @@ Current re-audit state on 2026-07-03:
   passes.
 - Browser thread continuity passes in compact and wide Chromium with local
   server elevation.
-- Graphify artifacts were rebuilt at HEAD `075ac37`, and
+- Graphify artifacts were rebuilt against current `HEAD`, and
   `npm run test:graph-freshness` passes with graph report/json commit matching
-  `075ac3767718358d96a9ae9025b9098db8bcb0b8`.
+  current `HEAD`.
 - The answer-harness closeout slice may be treated as operational for runtime
   authority, durable finalization, eval coupling, browser continuity, and graph
   freshness. Admin browser smoke and broader module adoption remain follow-up
@@ -719,7 +719,7 @@ Status changes must follow these rules:
 - `R4` may claim source-backed finalization and admin readback; admin browser
   smoke is the remaining confidence follow-up before expanding that claim.
 - `R6` and `R7` are P0 rebuild gates, not optional polish; they are green for
-  the answer-harness closeout slice at `075ac37`.
+  the answer-harness closeout slice.
 - `R8` and `R9` wait for private evidence boundaries unless a reviewer feature
   ships earlier.
 - `R10` and `R11` remain rejected.

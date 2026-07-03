@@ -32,8 +32,8 @@
 | Combined eval | `npm run test:eval` | Pass; promptfoo PostHog flush warning was non-fatal telemetry |
 | UI contract | `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts` | Pass: 6 files, 36 tests |
 | Browser continuity | `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium --reporter=line` | Pass with elevated local server permission: 3 passed, 1 skipped |
-| Graphify rebuild | `graphify update . && cp graphify-out/graph.json .planning/graphs/graph.json && cp graphify-out/GRAPH_REPORT.md .planning/graphs/GRAPH_REPORT.md && node .codex/gsd-core/bin/gsd-tools.cjs graphify build snapshot && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: 18,150 nodes, 17,307 edges, built/current `075ac37`, `commit_stale: false` |
-| Graph freshness | `npm run test:graph-freshness` | Pass: graph report/json commit equals `075ac3767718358d96a9ae9025b9098db8bcb0b8`; 0 graph-relevant dirty paths |
+| Graphify rebuild | `graphify update . && cp graphify-out/graph.json .planning/graphs/graph.json && cp graphify-out/GRAPH_REPORT.md .planning/graphs/GRAPH_REPORT.md && node .codex/gsd-core/bin/gsd-tools.cjs graphify build snapshot && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: graph status reports built/current `HEAD` and `commit_stale: false` |
+| Graph freshness | `npm run test:graph-freshness` | Pass: graph report/json commit equals current `HEAD`; 0 graph-relevant dirty paths |
 | Diff hygiene | `git diff --check` | Pass |
 
 ## Dirty Tree Classification
@@ -61,7 +61,7 @@ The graph-relevant dirty tree was landed in `075ac3767718358d96a9ae9025b9098db8b
 | R5 | Answer runtime migration | Retrieval/model/gate/persist behind live harness | P0 | `5-operational` | Live answer turns use harness phase handlers; finalization failure blocks normal complete; graph freshness passes | Keep green in future runtime changes |
 | R6 | Durable session journal/replay | Atomic final report patch plus session entries | P0 | `5-operational` | `finalizeAnswerTurnHarnessRun` patches final evidence and appends journal entries in one Convex mutation; accepted/replayed/conflict/denied are typed; finalization failure becomes a report-phase persistence failure | Add admin browser smoke as a non-P0 follow-up |
 | R7 | Eval coupling | Promptfoo/Vitest/graph gates prove harness invariants | P0 | `5-operational` | `npm run test:eval` passes, including promptfoo 27/27 and eval Vitest 23/23; graph freshness passes | Keep as baseline harness gate |
-| R8 | Graphify freshness | Graph commit matches current HEAD before operational claims | P0 | `5-operational` | Graph artifacts rebuilt at HEAD `075ac37`, `commit_stale: false`, and `npm run test:graph-freshness` passes | Keep green after each graph-relevant change |
+| R8 | Graphify freshness | Graph commit matches current HEAD before operational claims | P0 | `5-operational` | Graph artifacts rebuilt at current `HEAD`, `commit_stale: false`, and `npm run test:graph-freshness` passes | Keep green after each graph-relevant change |
 | R9 | Admin run viewer | Operator-only raw evidence and replay UI | P1 | `4-evaled` | Admin-only source readback query exists; run-viewer source tests and public projection leakage tests pass | Browser/admin smoke with seeded source-backed evidence |
 | R10 | Protected evidence/compaction | Tool evidence protected during replay/finalization | P1 | `2-internal` | Evidence envelope and protected-evidence primitives exist | Runtime compaction/replay integration and leakage evals pass |
 | R11 | Advisor/emission guard | Private reviewer notes suppressed/deduped/rate-limited | P2 | `2-internal` | `HarnessEmissionGuard` unit coverage exists | Wired into reviewer/advisor runtime before any note emission feature ships |
@@ -109,4 +109,4 @@ Deliverables:
 - 2026-07-02: Added OMP-style private tool metadata, guard-signal propagation, and shared/exclusive `runToolBatch()` scheduling.
 - 2026-07-03: Moved live `streamAnswerTurn()` execution under `HarnessRunLoop.run()` phase handlers, deferred visible assembly until after gate, and patched persisted turn evidence with the final run report.
 - 2026-07-03: Added atomic source finalization through `finalizeAnswerTurnHarnessRun`, report-phase finalization failure semantics, source-backed admin run readback, current eval/browser/UI evidence, and dirty-tree graph blocker classification.
-- 2026-07-03: Landed the graph-relevant closeout tree in `075ac3767718358d96a9ae9025b9098db8bcb0b8`, rebuilt graphify at that commit, and `npm run test:graph-freshness` passed.
+- 2026-07-03: Landed the graph-relevant closeout tree in `075ac3767718358d96a9ae9025b9098db8bcb0b8`, rebuilt graphify against current `HEAD`, and `npm run test:graph-freshness` passed.

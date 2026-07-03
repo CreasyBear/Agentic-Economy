@@ -36,8 +36,8 @@ The graph-relevant dirty tree has been landed. The remaining work is no longer a
 | Eval suite | `npm run test:eval` | Pass: coverage ok, answer suite 12 cases/14 turns, promptfoo 27/27, eval Vitest 23/23 |
 | UI contract | `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts` | Pass: 6 files, 36 tests |
 | Browser continuity | `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium --reporter=line` | Pass with elevated local server permission: 3 passed, 1 skipped |
-| Graphify rebuild | `graphify update . && ... && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: 18,150 nodes, 17,307 edges, built/current `075ac37`, `commit_stale: false` |
-| Graph freshness | `npm run test:graph-freshness` | Pass: graph report/json commit equals `075ac3767718358d96a9ae9025b9098db8bcb0b8`; 0 graph-relevant dirty paths |
+| Graphify rebuild | `graphify update . && ... && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: graph status reports built/current `HEAD` and `commit_stale: false` |
+| Graph freshness | `npm run test:graph-freshness` | Pass: graph report/json commit equals current `HEAD`; 0 graph-relevant dirty paths |
 | Diff hygiene | `git diff --check` | Pass |
 
 ## OMP Gold Anchors
@@ -93,7 +93,7 @@ The public SSE shape remains stable. Public answer surfaces still receive answer
 
 ### P0 - Graph freshness is now closed
 
-Graphify artifacts were rebuilt at `075ac37` and report `commit_stale: false`. Standalone graph freshness now passes because the graph-relevant dirty tree was landed.
+Graphify artifacts were rebuilt against current `HEAD` and report `commit_stale: false`. Standalone graph freshness now passes because the graph-relevant dirty tree was landed.
 
 Impact: architecture maps and graph evidence are usable for the closeout implementation commit.
 
