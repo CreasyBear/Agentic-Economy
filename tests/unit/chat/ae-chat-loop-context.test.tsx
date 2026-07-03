@@ -69,6 +69,7 @@ describe('AeResearchProcess', () => {
     const { getByText } = render(<AeResearchProcess isStreaming={false} steps={[workStep()]} />)
 
     expect(getByText('How AE checked this')).toBeTruthy()
+    expect(getByText('Public checks and listed facts, not private reasoning.')).toBeTruthy()
     expect(getByText('Searching listed businesses')).toBeTruthy()
     expect(getByText('2 listed businesses found.')).toBeTruthy()
     expect(getByText('Results')).toBeTruthy()

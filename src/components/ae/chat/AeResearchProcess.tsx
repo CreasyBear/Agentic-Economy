@@ -82,6 +82,9 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResear
         />
       </CollapsibleTrigger>
       <CollapsibleContent className="p-3">
+        <p className="mb-3 text-xs leading-snug text-secondary">
+          Public checks and listed facts, not private reasoning.
+        </p>
         {checkSummary === undefined ? null : (
           <dl className="mb-3 grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3" aria-label="Answer check summary">
             <CheckSummaryFact label="Searches" value={String(checkSummary.catalogSearches)} />
