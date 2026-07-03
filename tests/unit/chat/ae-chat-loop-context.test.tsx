@@ -69,6 +69,7 @@ describe('AeResearchProcess', () => {
     const { getByText } = render(<AeResearchProcess isStreaming={false} steps={[workStep()]} />)
 
     expect(getByText('How AE checked this')).toBeTruthy()
+    expect(getByText('1 public check complete · 2 listed businesses found.')).toBeTruthy()
     expect(getByText('Public checks and listed facts, not private reasoning.')).toBeTruthy()
     expect(getByText('Searching listed businesses')).toBeTruthy()
     expect(getByText('2 listed businesses found.')).toBeTruthy()
@@ -116,6 +117,46 @@ describe('AeResearchProcess', () => {
 
     expect(getByText('0 searches · 0 read · 0 listed · 1/1 checks · <1s')).toBeTruthy()
   })
+
+  it('keeps running and failed public work visible in the process header', () => {
+    const { getByText, rerender } = render(
+      <AeResearchProcess
+        isStreaming
+        steps={[
+          workStep(),
+          workStep({
+            id: 'step-2',
+            phase: 'read',
+            status: 'running',
+            title: 'Reading listed business details',
+            summary: '',
+            detailRows: [],
+          }),
+        ]}
+      />,
+    )
+
+    expect(getByText('Checking now: Reading listed business details')).toBeTruthy()
+
+    rerender(
+      <AeResearchProcess
+        isStreaming={false}
+        steps={[
+          workStep(),
+          workStep({
+            id: 'step-2',
+            phase: 'read',
+            status: 'error',
+            title: 'Reading listed business details',
+            summary: 'Listing details were not available.',
+            detailRows: [],
+          }),
+        ]}
+      />,
+    )
+
+    expect(getByText('Needs attention: Reading listed business details')).toBeTruthy()
+  })
 })
 
 describe('AeThinkingRail', () => {
@@ -160,7 +201,7 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
   }
 }
 
-function workStep(): AnswerWorkStep {
+function workStep(overrides: Partial<AnswerWorkStep> = {}): AnswerWorkStep {
   return {
     id: 'step-1',
     phase: 'search',
@@ -168,5 +209,6 @@ function workStep(): AnswerWorkStep {
     title: 'Searching listed businesses',
     summary: '2 listed businesses found.',
     detailRows: [{ label: 'Results', value: '2' }],
+    ...overrides,
   }
 }

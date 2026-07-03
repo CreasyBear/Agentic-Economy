@@ -42,8 +42,8 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResear
 
   const overallStatus = steps.length === 0 && checkSummary !== undefined ? 'complete' : getOverallStatus(steps)
   const running = steps.find((step) => step.status === 'running')
-  const latest = running ?? steps.at(-1)
-  const statusLabel = checkSummary === undefined ? getOverallStatusLabel(overallStatus, latest) : answerCheckSummaryLine(checkSummary)
+  const latest = running ?? latestProblemStep(steps) ?? steps.at(-1)
+  const statusLabel = checkSummary === undefined ? getOverallStatusLabel(overallStatus, latest, steps) : answerCheckSummaryLine(checkSummary)
 
   function handleOpenChange(nextOpen: boolean) {
     userManagedOpenRef.current = true
@@ -205,19 +205,39 @@ function getOverallStatus(steps: readonly AnswerWorkStep[]): OverallStatus {
   return 'idle'
 }
 
-function getOverallStatusLabel(status: OverallStatus, latest: AnswerWorkStep | undefined): string {
+function latestProblemStep(steps: readonly AnswerWorkStep[]): AnswerWorkStep | undefined {
+  return steps.find((step) => step.status === 'error') ?? steps.find((step) => step.status === 'stopped')
+}
+
+function getOverallStatusLabel(
+  status: OverallStatus,
+  latest: AnswerWorkStep | undefined,
+  steps: readonly AnswerWorkStep[],
+): string {
   switch (status) {
     case 'running':
-      return latest?.title ?? 'In progress'
+      return latest === undefined ? 'Checking published facts' : `Checking now: ${latest.title}`
     case 'complete':
-      return 'Ready'
+      return completedWorkLabel(steps, latest)
     case 'error':
-      return 'Needs attention'
+      return latest === undefined ? 'Needs attention' : `Needs attention: ${latest.title}`
     case 'stopped':
-      return 'Stopped'
+      return latest === undefined ? 'Stopped' : `Stopped at ${latest.title}`
     case 'idle':
-      return latest?.title ?? 'Planning'
+      return latest?.title ?? 'Planning public checks'
   }
+}
+
+function completedWorkLabel(steps: readonly AnswerWorkStep[], latest: AnswerWorkStep | undefined): string {
+  const stepCount = steps.length
+  const prefix = stepCount === 1 ? '1 public check complete' : `${stepCount} public checks complete`
+  const summary = latest?.summary?.trim()
+
+  if (summary === undefined || summary.length === 0 || summary === latest?.title) {
+    return prefix
+  }
+
+  return `${prefix} · ${summary}`
 }
 
 function answerCheckSummaryLine(summary: PublicAnswerCheckSummary): string {
