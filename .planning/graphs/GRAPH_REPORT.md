@@ -1,23 +1,23 @@
 # Graph Report - agentic-economy (2026-07-03)
 
 ## Corpus Check
-- 907 files · ~869,199 words
+- 907 files · ~863,598 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 18147 nodes · 17304 edges · 25 communities
+- 17966 nodes · 17125 edges · 25 communities
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 - Builder: project-local graphify compatibility executable
 
 ## Graph Freshness
-- Built from commit: `624cd789d3bf512309d1650e04bbbdd5fc5482af`
+- Built from commit: `2d6205b984ba8c7176aea8ef7d63c9644f48b112`
 - Input path: `.`
 - Run `graphify update .` after code changes.
 
 ## Node Types
 - code: 10024
-- document: 8123
+- document: 7942
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_agents|.agents]] (0)
