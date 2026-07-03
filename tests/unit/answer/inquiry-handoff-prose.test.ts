@@ -29,7 +29,8 @@ describe('inquiry handoff prose', () => {
     })
 
     expect(resolution.kind).toBe('choose_provider')
-    expect(buildInquiryHandoffNextStep(resolution)).toContain('name the provider')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('listed businesses in this answer')
+    expect(buildInquiryHandoffNextStep(resolution)).toContain('name the business')
   })
 
   it('does not imply a missing inquiry path is available', () => {
