@@ -2,7 +2,7 @@ import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 
 export type SessionContextFact = {
-  id: 'focus' | 'businesses' | 'selected' | 'inquiry' | 'boundary'
+  id: 'focus' | 'current' | 'businesses' | 'selected' | 'inquiry' | 'boundary'
   label: string
   value: string
 }
@@ -29,18 +29,33 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
   }
 
   const providers = listedProvidersFromTurns(completedTurns)
+  const latestProviders = listedProvidersFromArtifacts(latestTurn.artifacts)
   const selectedProvider = latestSelectedProvider(completedTurns)
+  const currentSelectedProvider = selectedProviderFromArtifacts(latestTurn.artifacts)
+  const summarySelectedProvider =
+    currentSelectedProvider ?? (latestProviders.length === 0 ? selectedProvider : undefined)
   const inquiryReadyCount = providers.filter((provider) => hasInquiryPath(provider)).length
   const liveTurn = input.liveTurn ?? null
 
   return {
     badgeLabel: liveTurn === null ? 'Saved context' : intentLabel(liveTurn.intent),
-    summary: contextSummary({ providerCount: providers.length, selectedProvider, liveTurn }),
+    summary: contextSummary({
+      providerCount: providers.length,
+      currentProviders: latestProviders,
+      selectedProvider: summarySelectedProvider,
+      latestIntent: latestTurn.intent,
+      liveTurn,
+    }),
     facts: [
       {
         id: 'focus',
         label: liveTurn === null ? 'Last request' : 'Current follow-up',
         value: liveTurn?.query ?? latestTurn.query,
+      },
+      {
+        id: 'current',
+        label: liveTurn === null ? 'Current answer' : 'Last answer',
+        value: currentAnswerLabel(latestTurn),
       },
       {
         id: 'businesses',
@@ -70,7 +85,9 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
 
 function contextSummary(input: {
   providerCount: number
+  currentProviders: readonly AnswerSource[]
   selectedProvider: AnswerSource | undefined
+  latestIntent: FollowUpIntent
   liveTurn: { query: string; intent: FollowUpIntent } | null
 }): string {
   if (input.liveTurn !== null) {
@@ -79,6 +96,14 @@ function contextSummary(input: {
 
   if (input.selectedProvider !== undefined) {
     return `${input.selectedProvider.name} is the current business selected for inquiry review.`
+  }
+
+  if (input.currentProviders.length > 0 && input.providerCount > input.currentProviders.length) {
+    return `This answer is narrowed to ${providerListLabel(input.currentProviders)} while AE keeps earlier listed businesses in the thread.`
+  }
+
+  if (input.currentProviders.length === 0 && input.providerCount > 0 && input.latestIntent !== 'refine_search') {
+    return `${completedIntentSummary(input.latestIntent)} while AE keeps earlier listed businesses in the thread.`
   }
 
   if (input.providerCount > 0) {
@@ -122,6 +147,23 @@ function intentSummary(intent: FollowUpIntent): string {
   }
 }
 
+function completedIntentSummary(intent: FollowUpIntent): string {
+  switch (intent) {
+    case 'filter_known':
+      return 'This answer narrowed the known results'
+    case 'compare_known':
+      return 'This answer compared known options'
+    case 'inquiry_handoff':
+      return 'This answer prepared a qualified inquiry next step'
+    case 'explain_boundary':
+      return "This answer checked AE's inquiry-only limits"
+    case 'unsupported':
+      return 'This answer routed the request back to published listings'
+    case 'refine_search':
+      return 'This answer searched again'
+  }
+}
+
 function listedProvidersFromTurns(turns: readonly PublicThreadTurn[]): AnswerSource[] {
   const providersBySlug = new Map<string, AnswerSource>()
 
@@ -154,12 +196,38 @@ function listedProvidersFromArtifacts(artifacts: readonly AnswerArtifact[]): Ans
   return providers
 }
 
+function currentAnswerLabel(turn: PublicThreadTurn): string {
+  const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
+  if (selectedProvider !== undefined) {
+    return `${selectedProvider.name} selected for inquiry review`
+  }
+
+  const providers = listedProvidersFromArtifacts(turn.artifacts)
+  if (providers.length === 0) {
+    return 'No listed business in this answer'
+  }
+
+  if (providers.length === 1 && providers[0] !== undefined) {
+    return `${providers[0].name} in this answer`
+  }
+
+  return `${providers.length} listed businesses in this answer: ${providerListLabel(providers)}`
+}
+
 function latestSelectedProvider(turns: readonly PublicThreadTurn[]): AnswerSource | undefined {
   for (const turn of [...turns].reverse()) {
-    for (const artifact of [...turn.artifacts].reverse()) {
-      if (artifact.kind === 'selected-provider') {
-        return artifact.provider
-      }
+    const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
+    if (selectedProvider !== undefined) {
+      return selectedProvider
+    }
+  }
+  return undefined
+}
+
+function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource | undefined {
+  for (const artifact of [...artifacts].reverse()) {
+    if (artifact.kind === 'selected-provider') {
+      return artifact.provider
     }
   }
   return undefined

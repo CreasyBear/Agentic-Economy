@@ -15,6 +15,7 @@ describe('session context', () => {
     expect(context?.badgeLabel).toBe('Saved context')
     expect(context?.summary).toBe('AE is holding the listed businesses from this thread for comparison and follow-up.')
     expect(context?.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'current', value: '2 listed businesses in this answer: Demo Plumber, Northside Plumbing' }),
       expect.objectContaining({ id: 'businesses', value: 'Demo Plumber, Northside Plumbing' }),
       expect.objectContaining({ id: 'inquiry', value: '1 listed business publishes an inquiry path' }),
       expect.objectContaining({ id: 'boundary', value: 'Business confirms timing, quote, and availability.' }),
@@ -30,6 +31,31 @@ describe('session context', () => {
     expect(context?.badgeLabel).toBe('Comparing')
     expect(context?.summary).toBe('This follow-up is comparing known options using the businesses already found in this thread.')
     expect(context?.facts[0]).toMatchObject({ id: 'focus', label: 'Current follow-up', value: 'compare the first two' })
+    expect(context?.facts[1]).toMatchObject({ id: 'current', label: 'Last answer' })
+  })
+
+  it('separates the latest narrowed answer from the wider thread context', () => {
+    const context = buildSessionContext({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'filter_known',
+          query: 'Show only businesses that accept inquiries',
+          artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
+          oneLine: 'One listed business accepts inquiries.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(context?.summary).toBe(
+      'This answer is narrowed to Demo Plumber while AE keeps earlier listed businesses in the thread.',
+    )
+    expect(context?.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'current', label: 'Current answer', value: 'Demo Plumber in this answer' }),
+      expect.objectContaining({ id: 'businesses', value: 'Demo Plumber, Northside Plumbing' }),
+    ]))
   })
 
   it('keeps the selected business explicit after an inquiry handoff turn', () => {
@@ -49,8 +75,41 @@ describe('session context', () => {
 
     expect(context?.summary).toBe('Northside Plumbing is the current business selected for inquiry review.')
     expect(context?.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'current', value: 'Northside Plumbing selected for inquiry review' }),
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
       expect.objectContaining({ id: 'inquiry', value: '2 listed businesses publish an inquiry path' }),
+    ]))
+  })
+
+  it('does not let an older selected business hide a later narrowed answer', () => {
+    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing', inquiryUrl: '/northside-plumbing/inquiry' })
+    const context = buildSessionContext({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          query: 'Send a qualified inquiry to the first listed business',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Northside Plumbing is selected for inquiry review.',
+        }),
+        turn({
+          seq: 3,
+          intent: 'filter_known',
+          query: 'Show only businesses that accept inquiries',
+          artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
+          oneLine: 'One listed business accepts inquiries.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(context?.summary).toBe(
+      'This answer is narrowed to Demo Plumber while AE keeps earlier listed businesses in the thread.',
+    )
+    expect(context?.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'current', value: 'Demo Plumber in this answer' }),
+      expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
     ]))
   })
 })
