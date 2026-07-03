@@ -2,12 +2,17 @@ import { expect, test, type Page } from '@playwright/test'
 
 const QUERY = 'emergency plumber parramatta'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
+const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
 const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to the first listed business'
+const COMPARE_FOLLOW_UP_QUERY = 'Compare the top two'
+const COMPARE_FOLLOW_UP_LABEL = /Compare the top two/
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|agent-native/i
 const publicInternalCopy = /\b(?:product|internal|runtime|ownerId|businessId|serviceId|sourceHash|rawContact|clerk|admin)\b/i
 
 test.describe('chat discovery to inquiry loop', () => {
+  test.describe.configure({ mode: 'serial' })
+
   test('keeps the discovery loop boundary-honest when inquiry is not published', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
@@ -84,23 +89,78 @@ test.describe('chat discovery to inquiry loop', () => {
     ).toHaveAttribute('href', threadPath)
     await assertPublicLanguage(page)
   })
+
+  test('keeps a compare follow-up grounded in the businesses already found', async ({ page }) => {
+    test.setTimeout(45_000)
+    await page.goto('/')
+    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+
+    await submitLandingQuery(page, MULTI_PROVIDER_QUERY)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, MULTI_PROVIDER_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const shortlist = page.getByRole('region', { name: /business shortlist/i })
+    await expect(shortlist).toContainText(/Demo Plumbing/i)
+    await expect(shortlist).toContainText(/Parramatta Emergency Plumbing/i)
+
+    const compareButton = page.getByRole('button', { name: /compare the top two listings/i })
+    await expect(compareButton).toBeEnabled()
+    await compareButton.click()
+
+    await expectQueryInTranscript(page, COMPARE_FOLLOW_UP_QUERY, COMPARE_FOLLOW_UP_LABEL)
+    await waitForLatestReadyAnswer(page)
+    await expect(page.getByLabel(/turn context/i).last()).toContainText(
+      /Comparing 2 listed businesses from this thread/i,
+    )
+
+    const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
+    await expect(checks).toContainText(/0 searches.*2 read.*2 listed.*5\/5 checks/i)
+    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(
+      /Using previous listed businesses/i,
+    )
+    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(
+      /Comparing listed options/i,
+    )
+
+    const comparison = page.getByRole('region', { name: /business comparison/i })
+    await expect(comparison).toContainText(/Published fit, side by side/i)
+    await expect(comparison).toContainText(/Demo Plumbing/i)
+    await expect(comparison).toContainText(/Parramatta Emergency Plumbing/i)
+    await expect(comparison).toContainText(/Next step/i)
+    await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
+      /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
+    )
+    await assertPublicLanguage(page)
+  })
 })
 
 async function submitLandingQuery(page: Page, query: string) {
   const search = page.getByRole('search', { name: /find local service businesses/i })
   const searchbox = search.getByRole('searchbox', { name: /what do you need done/i })
-  await expect(searchbox).toBeEditable({ timeout: 30_000 })
-  await searchbox.fill(query)
-  await expect(searchbox).toHaveValue(query)
   const sendButton = search.getByRole('button', { name: /^send$/i })
+  await expect(searchbox).toBeEditable({ timeout: 30_000 })
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await searchbox.click()
+    await searchbox.fill(query)
+    await page.waitForTimeout(100)
+    if ((await searchbox.inputValue()) === query && (await sendButton.isEnabled())) {
+      break
+    }
+  }
+
+  await expect(searchbox).toHaveValue(query)
   await expect(sendButton).toBeEnabled()
-  await searchbox.press('Enter')
+  await sendButton.click()
 }
 
-async function expectQueryInTranscript(page: Page, query: string) {
-  await expect(
-    page.getByRole('log', { name: /chat transcript/i }).getByText(query).first(),
-  ).toBeVisible({ timeout: 15_000 })
+async function expectQueryInTranscript(page: Page, query: string, displayLabel: string | RegExp = query) {
+  const headers = page.getByRole('log', { name: /chat transcript/i }).locator('header')
+  const queryLabel = typeof displayLabel === 'string'
+    ? headers.getByText(displayLabel, { exact: true }).first()
+    : headers.getByText(displayLabel).first()
+  await expect(queryLabel).toBeVisible({ timeout: 15_000 })
 }
 
 async function waitForLatestReadyAnswer(page: Page) {

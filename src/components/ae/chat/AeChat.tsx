@@ -212,6 +212,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleTurnSettled(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
+    const settledGeneration = liveTurn?.generation ?? null
     if (outcome === 'complete') {
       captureClientProductEventOnClient('answer_completed', { query_length: liveTurn?.query.length ?? 0 })
       if (liveTurn !== null) {
@@ -229,18 +230,27 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     if (routeThreadId === null && pendingId !== null) {
       pendingThreadIdRef.current = null
       void Promise.resolve(navigate({ to: '/t/$threadId', params: { threadId: pendingId }, replace: true })).finally(() => {
-        setLiveTurn(null)
+        clearLiveTurnIfSettled(settledGeneration)
         void refreshThreads()
       })
       return
     }
 
-    setLiveTurn(null)
+    clearLiveTurnIfSettled(settledGeneration)
     void refreshThreads()
 
     if (routeThreadId !== null) {
       void refreshProjection(routeThreadId)
     }
+  }
+
+  function clearLiveTurnIfSettled(settledGeneration: number | null) {
+    setLiveTurn((current) => {
+      if (current === null || current.generation === settledGeneration) {
+        return null
+      }
+      return current
+    })
   }
 
   function handleFollowUp(query: string) {
@@ -323,7 +333,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               liveTurn={liveTurn}
               onThreadCreated={handleThreadCreated}
               onStreamEnd={handleStreamEnd}
-              onFollowUp={handleFollowUp}
+              {...(routeThreadId === null ? {} : { onFollowUp: handleFollowUp })}
               onRetry={handleRetry}
             />
           </AeThreadScroller>

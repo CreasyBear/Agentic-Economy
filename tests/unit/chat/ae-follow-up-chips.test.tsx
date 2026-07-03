@@ -30,6 +30,17 @@ describe('AeFollowUpChips', () => {
     expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
   })
 
+  it('submits compare chips as carried thread follow-ups', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+    const onSelect = vi.fn()
+
+    render(<AeFollowUpChips turn={turn()} onSelect={onSelect} />)
+
+    fireEvent.click(screen.getByText('Compare the top two listings'))
+
+    expect(onSelect).toHaveBeenCalledWith('Compare the top two')
+  })
+
   it('keeps the inquiry loop available after a compare-table answer', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
     const onSelect = vi.fn()

@@ -62,6 +62,7 @@ export {
   type AnswerMessagePart,
   type AnswerMessagePartsResult,
 } from './internal/build-message-parts'
+export { buildCompactFollowUpProse } from './internal/follow-up-compact-prose'
 export {
   validateCatalogGrounding,
   collectAllowedSlugsFromToolResults,

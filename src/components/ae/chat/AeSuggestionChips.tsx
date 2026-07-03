@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
+import { useClientMounted } from '@/hooks/use-client-mounted'
 import type { PublicThreadTurn } from '@/modules/answer-thread/public'
 import {
   buildDeterministicFollowUpChips,
@@ -17,6 +18,7 @@ export type AeAnswerSuggestionsProps = {
   onSelect: (query: string) => void
   /** Landing example pills vs thread follow-up chips. */
   variant?: 'landing' | 'follow-up'
+  disabled?: boolean
   'aria-label'?: string
 }
 
@@ -33,6 +35,7 @@ export function AeAnswerSuggestions({
   suggestions,
   onSelect,
   variant = 'landing',
+  disabled = false,
   'aria-label': ariaLabel,
 }: AeAnswerSuggestionsProps) {
   const items = normalizeSuggestions(suggestions)
@@ -51,6 +54,7 @@ export function AeAnswerSuggestions({
           suggestion={item.value}
           variant="secondary"
           size="sm"
+          disabled={disabled}
           onClick={onSelect}
         >
           {item.label}
@@ -68,6 +72,7 @@ export type AeFollowUpChipsProps = {
 
 /** Deterministic follow-ups with optional LLM chips after eval gate. */
 export function AeFollowUpChips({ turn, onSelect, contextPlacement = 'current' }: AeFollowUpChipsProps) {
+  const hydrated = useClientMounted()
   const [chips, setChips] = useState<FollowUpChip[]>(() => buildDeterministicFollowUpChips(turn))
 
   useEffect(() => {
@@ -129,6 +134,7 @@ export function AeFollowUpChips({ turn, onSelect, contextPlacement = 'current' }
         variant="follow-up"
         aria-label="Suggested follow-ups"
         suggestions={chips.map((chip) => ({ label: chip.label, value: chip.submitQuery }))}
+        disabled={!hydrated}
         onSelect={onSelect}
       />
     </section>

@@ -19,6 +19,7 @@ import {
 } from '@/modules/answer/public'
 import {
   buildAgentJsonUrl,
+  buildCompactFollowUpProse,
   collectAllowedSlugsFromToolResults,
   computeLayoutProfile,
   emitSnapshotEvents,
@@ -375,14 +376,11 @@ function buildStreamAnswerTurnPhases(input: {
             )
           }
           emitFrozenProviderSteps(input.workLog, route.kind, frozen)
-          const result = await streamAgentTurn(runtimeStreamInput(input, state), {
-            query: state.query,
-            priorProviders: frozen,
-            priorAllowedSlugs: state.priorAllowedSlugs,
-            followUpIntent: state.intent,
-            searchContext: state.searchContext,
-            disableTools: true,
-          }, [], route.kind === 'frozen_compare' ? 'compare' : 'filter')
+          const result = await streamFrozenKnownProviderTurn(
+            runtimeStreamInput(input, state),
+            frozen,
+            route.kind,
+          )
           return applyToolLedResult(state, result)
         }
         case 'tool_search': {
@@ -980,6 +978,64 @@ async function streamInsufficientFrozenContextTurn(
   })
 
   const allowedSlugs = new Set<string>()
+
+  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
+  if (!finalized.ok) {
+    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
+  }
+  const assembly = await emitOrDeferSnapshot(
+    input,
+    finalized.snapshot,
+    routeKind,
+    { planMode: routeKind === 'frozen_compare' ? 'compare' : 'filter' },
+  )
+
+  return {
+    snapshot: finalized.snapshot,
+    toolCalls: [],
+    allowedSlugs,
+    errorCopyId: undefined,
+    gate: finalized.gate,
+    ...(assembly === undefined ? {} : { assembly }),
+  }
+}
+
+async function streamFrozenKnownProviderTurn(
+  input: {
+    query: string
+    intent: FollowUpIntent
+    priorTurnsCount: number
+    priorAllowedSlugs: readonly string[]
+    signal: AbortSignal | undefined
+    send: (event: AnswerEvent) => void
+    timings: TurnTimingCollector
+    workLog: WorkStepEmitter
+    harness: LiveAnswerHarnessOperation
+    deferAssembly?: boolean
+  },
+  providers: readonly AnswerSource[],
+  routeKind: 'frozen_filter' | 'frozen_compare',
+): Promise<StreamToolLedTurnResult> {
+  const prose = buildCompactFollowUpProse({
+    followUpIntent: input.intent,
+    displayQuery: input.query,
+    providers,
+  })
+  const snapshot = withFollowUpLayout(
+    {
+      query: input.query,
+      providers,
+      oneLine: prose.oneLine,
+      summary: prose.summary,
+      nextStep: prose.nextStep,
+      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
+    },
+    input.priorTurnsCount,
+    input.intent,
+  )
+  const allowedSlugs = new Set(input.priorAllowedSlugs.length > 0
+    ? input.priorAllowedSlugs
+    : providers.map((provider) => provider.slug))
 
   const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
   if (!finalized.ok) {
