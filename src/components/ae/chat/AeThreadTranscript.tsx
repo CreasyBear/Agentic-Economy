@@ -33,7 +33,7 @@ export function AeThreadTranscript({
 }: AeThreadTranscriptProps) {
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const resolvedThreadId = resolveThreadId(threadId, projection?.threadId).threadId
-  const followUpContextTurn = buildFollowUpContextTurn(completedTurns)
+  const followUpContext = buildFollowUpContext(completedTurns)
 
   return (
     <>
@@ -61,7 +61,11 @@ export function AeThreadTranscript({
                 <AeThreadTurnCollapsed {...viewModel} {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })} />
               )}
               {isLastCompleted && liveTurn === null ? (
-                <AeFollowUpChips turn={followUpContextTurn ?? turn} {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })} />
+                <AeFollowUpChips
+                  turn={followUpContext?.turn ?? turn}
+                  contextPlacement={followUpContext?.contextPlacement ?? 'current'}
+                  {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })}
+                />
               ) : null}
             </div>
           </MessageScrollerItem>
@@ -103,10 +107,15 @@ function resolveThreadId(
   return id === undefined || id.length === 0 ? {} : { threadId: id }
 }
 
-function buildFollowUpContextTurn(turns: readonly PublicThreadTurn[]): PublicThreadTurn | undefined {
+type FollowUpContext = {
+  turn: PublicThreadTurn
+  contextPlacement: 'current' | 'carried'
+}
+
+function buildFollowUpContext(turns: readonly PublicThreadTurn[]): FollowUpContext | undefined {
   const latest = turns.at(-1)
   if (latest === undefined || hasProviderContext(latest)) {
-    return latest
+    return latest === undefined ? undefined : { turn: latest, contextPlacement: 'current' }
   }
 
   const providerContextTurn = turns
@@ -114,15 +123,18 @@ function buildFollowUpContextTurn(turns: readonly PublicThreadTurn[]): PublicThr
     .reverse()
     .find(hasProviderContext)
   if (providerContextTurn === undefined) {
-    return latest
+    return { turn: latest, contextPlacement: 'current' }
   }
 
   return {
-    ...latest,
-    artifacts: [
-      ...latest.artifacts,
-      ...providerContextTurn.artifacts.filter(isProviderContextArtifact),
-    ],
+    turn: {
+      ...latest,
+      artifacts: [
+        ...latest.artifacts,
+        ...providerContextTurn.artifacts.filter(isProviderContextArtifact),
+      ],
+    },
+    contextPlacement: 'carried',
   }
 }
 

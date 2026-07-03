@@ -22,10 +22,32 @@ describe('AeThreadTranscript', () => {
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
+    expect(
+      panel.contains(
+        screen.getByText(
+          'Narrow, compare, or start a qualified inquiry from the businesses already found in this thread.',
+        ),
+      ),
+    ).toBe(true)
 
     fireEvent.click(screen.getByText('Start qualified inquiry'))
 
     expect(onFollowUp).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
+  })
+
+  it('labels selected-provider follow-ups as carried from the thread after a boundary turn', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+    const onFollowUp = vi.fn()
+
+    render(<AeThreadTranscript projection={projectionWithSelectedProviderBoundaryTurn()} onFollowUp={onFollowUp} />)
+
+    const panel = screen.getByRole('region', { name: 'Continue this thread' })
+    expect(panel.contains(screen.getByText('Use the selected inquiry path from this thread, or keep narrowing this thread.'))).toBe(true)
+    expect(screen.queryByText('Start qualified inquiry')).toBeNull()
+
+    fireEvent.click(screen.getByText('Only inquiry-ready listings'))
+
+    expect(onFollowUp).toHaveBeenCalledWith('Show only businesses that accept inquiries')
   })
 })
 
@@ -64,6 +86,48 @@ function projectionWithBoundaryTurn(): PublicThreadProjection {
           {
             kind: 'what-to-do-now',
             text: 'Use a published inquiry path when the listing offers one.',
+          },
+        ],
+      },
+    ],
+  }
+}
+
+function projectionWithSelectedProviderBoundaryTurn(): PublicThreadProjection {
+  const source = provider()
+
+  return {
+    threadId: 'thread-1',
+    title: 'Emergency plumber Parramatta',
+    turns: [
+      {
+        turnId: 'turn-1',
+        seq: 1,
+        query: 'Send a qualified inquiry to the first listed business',
+        intent: 'inquiry_handoff',
+        status: 'complete',
+        oneLine: 'Parramatta Emergency Plumbing is ready for inquiry review.',
+        workLog: [],
+        artifacts: [{ kind: 'selected-provider', provider: source }],
+      },
+      {
+        turnId: 'turn-2',
+        seq: 2,
+        query: 'Can AE book this for me?',
+        intent: 'explain_boundary',
+        status: 'complete',
+        oneLine: 'AE cannot book, charge, or dispatch.',
+        workLog: [],
+        artifacts: [
+          { kind: 'one-line', text: 'AE cannot book, charge, or dispatch.' },
+          {
+            kind: 'prose',
+            block: 'summary',
+            text: 'AE can keep the inquiry context, but the business confirms details.',
+          },
+          {
+            kind: 'what-to-do-now',
+            text: 'Use the selected inquiry path for owner review.',
           },
         ],
       },

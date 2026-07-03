@@ -63,10 +63,11 @@ export function AeAnswerSuggestions({
 export type AeFollowUpChipsProps = {
   turn: PublicThreadTurn
   onSelect?: (query: string) => void
+  contextPlacement?: 'current' | 'carried'
 }
 
 /** Deterministic follow-ups with optional LLM chips after eval gate. */
-export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
+export function AeFollowUpChips({ turn, onSelect, contextPlacement = 'current' }: AeFollowUpChipsProps) {
   const [chips, setChips] = useState<FollowUpChip[]>(() => buildDeterministicFollowUpChips(turn))
 
   useEffect(() => {
@@ -116,7 +117,7 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
     return null
   }
 
-  const summary = followUpSummary(turn, chips)
+  const summary = followUpSummary(turn, chips, contextPlacement)
 
   return (
     <section className="grid gap-3 rounded-md border border-border bg-surface p-3" aria-label="Continue this thread">
@@ -134,12 +135,22 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
   )
 }
 
-function followUpSummary(turn: PublicThreadTurn, chips: readonly FollowUpChip[]): string {
+function followUpSummary(
+  turn: PublicThreadTurn,
+  chips: readonly FollowUpChip[],
+  contextPlacement: NonNullable<AeFollowUpChipsProps['contextPlacement']>,
+): string {
   if (chips.some((chip) => chip.label === 'Start qualified inquiry')) {
+    if (contextPlacement === 'carried') {
+      return 'Narrow, compare, or start a qualified inquiry from the businesses already found in this thread.'
+    }
     return 'Narrow, compare, or start a qualified inquiry from the listed businesses above.'
   }
 
   if (turn.artifacts.some((artifact) => artifact.kind === 'selected-provider')) {
+    if (contextPlacement === 'carried') {
+      return 'Use the selected inquiry path from this thread, or keep narrowing this thread.'
+    }
     return 'Use the selected inquiry path above, or keep narrowing this thread.'
   }
 
