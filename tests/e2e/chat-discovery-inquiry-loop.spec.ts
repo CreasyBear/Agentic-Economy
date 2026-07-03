@@ -260,6 +260,39 @@ test.describe('chat discovery to inquiry loop', () => {
     await assertPublicLanguage(page)
   })
 
+  test('lets a later provider search replace the selected inquiry journey state', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+
+    await submitLandingQuery(page, INQUIRY_READY_QUERY)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, INQUIRY_READY_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
+    await expect(startInquiryButton).toBeEnabled()
+    await startInquiryButton.click()
+    await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
+    await waitForLatestReadyAnswer(page)
+    await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(
+      /Demo Plumbing selected for inquiry review/i,
+    )
+
+    await submitThreadFollowUp(page, MULTI_PROVIDER_QUERY)
+    await expectQueryInTranscript(page, MULTI_PROVIDER_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const inquiryPath = page.getByRole('region', { name: /inquiry path/i })
+    await expect(inquiryPath).toContainText(/2 listed businesses ready to compare/i)
+    await expect(inquiryPath).not.toContainText(/Demo Plumbing selected for inquiry review/i)
+
+    const shortlist = page.getByRole('region', { name: /business shortlist/i }).last()
+    await expect(shortlist).toContainText(/Demo Plumbing/i)
+    await expect(shortlist).toContainText(/Parramatta Emergency Plumbing/i)
+    await assertPublicLanguage(page)
+  })
+
   test('keeps a boundary follow-up recoverable into a qualified inquiry handoff', async ({ page }) => {
     test.setTimeout(60_000)
     await page.goto('/')

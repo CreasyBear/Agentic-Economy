@@ -32,10 +32,13 @@ export type SessionJourneyInput = {
 
 export function buildSessionJourney(input: SessionJourneyInput): SessionJourney | null {
   const completedTurns = input.projection?.turns.filter((turn) => turn.status === 'complete') ?? []
+  const latestTurn = completedTurns.at(-1)
   const allArtifacts = completedTurns.flatMap((turn) => turn.artifacts)
   const providerCount = countSessionProviders(allArtifacts)
   const hasInquiryReadyProvider = hasInquiryPath(allArtifacts)
-  const selectedProvider = latestSelectedProvider(completedTurns)
+  const selectedProvider = latestTurn === undefined
+    ? undefined
+    : selectedProviderForJourney(completedTurns, latestTurn)
   const completedTurnCount = completedTurns.length
   const liveIntent = input.liveTurn?.intent
   const liveTurnCount = input.liveTurn === null || input.liveTurn === undefined ? 0 : 1
@@ -124,7 +127,6 @@ function buildSessionJourneyGuidance(input: {
     if (input.selectedProvider !== undefined) {
       return `${input.selectedProvider.name} is selected for qualified inquiry review. The business still confirms timing, quote, and availability.`
     }
-    return 'AE has selected the business for qualified inquiry review. The business still confirms timing, quote, and availability.'
   }
 
   if (!input.hasSearchCompleted) {
@@ -203,6 +205,47 @@ function latestSelectedProvider(
     }
   }
   return undefined
+}
+
+function selectedProviderForJourney(
+  turns: readonly NonNullable<PublicThreadProjection['turns']>[number][],
+  latestTurn: NonNullable<PublicThreadProjection['turns']>[number],
+): AnswerSource | undefined {
+  const currentSelectedProvider = selectedProviderFromArtifacts(latestTurn.artifacts)
+  if (currentSelectedProvider !== undefined) {
+    return currentSelectedProvider
+  }
+
+  if (hasProviderContext(latestTurn.artifacts)) {
+    return undefined
+  }
+
+  return latestTurn.intent === 'explain_boundary' || latestTurn.intent === 'unsupported'
+    ? latestSelectedProvider(turns)
+    : undefined
+}
+
+function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource | undefined {
+  for (const artifact of [...artifacts].reverse()) {
+    if (artifact.kind === 'selected-provider') {
+      return artifact.provider
+    }
+  }
+  return undefined
+}
+
+function hasProviderContext(artifacts: readonly AnswerArtifact[]): boolean {
+  return artifacts.some((artifact) => {
+    switch (artifact.kind) {
+      case 'selected-provider':
+        return true
+      case 'provider-cards':
+      case 'provider-compare-table':
+        return artifact.providers.length > 0
+      default:
+        return false
+    }
+  })
 }
 
 function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {

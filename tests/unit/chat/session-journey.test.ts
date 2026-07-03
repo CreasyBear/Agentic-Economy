@@ -123,6 +123,71 @@ describe('session journey', () => {
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Needs listed inquiry path')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
   })
+
+  it('keeps a selected provider through a later boundary-only answer', () => {
+    const selected = provider({ slug: 'northside-plumbing', name: 'Northside Plumbing' })
+    const journey = buildSessionJourney({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Ready to send a qualified inquiry to Northside Plumbing.',
+        }),
+        turn({
+          seq: 3,
+          intent: 'explain_boundary',
+          query: 'Can AE book this for me?',
+          artifacts: [
+            { kind: 'one-line', text: 'AE cannot book, charge, or dispatch.' },
+            {
+              kind: 'prose',
+              block: 'summary',
+              text: 'AE can keep the inquiry context, but the business confirms details.',
+            },
+          ],
+          oneLine: 'AE cannot book, charge, or dispatch.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing', hasInquiryPath: true })
+    expect(journey?.status).toBe('Northside Plumbing selected for inquiry review')
+    expect(journey?.guidance).toBe(
+      'Northside Plumbing is selected for qualified inquiry review. The business still confirms timing, quote, and availability.',
+    )
+  })
+
+  it('lets a later provider-list answer replace an older selected provider as the active journey state', () => {
+    const selected = provider({ slug: 'northside-plumbing', name: 'Northside Plumbing' })
+    const journey = buildSessionJourney({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Ready to send a qualified inquiry to Northside Plumbing.',
+        }),
+        turn({
+          seq: 3,
+          intent: 'filter_known',
+          query: 'Show only businesses that accept inquiries',
+          artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
+          oneLine: 'One listed business accepts inquiries.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(journey?.selectedProvider).toBeUndefined()
+    expect(journey?.status).toBe('2 listed businesses ready to compare')
+    expect(journey?.guidance).toBe(
+      'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.',
+    )
+  })
 })
 
 function projection(turns: readonly PublicThreadTurn[]): PublicThreadProjection {
