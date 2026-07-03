@@ -4,6 +4,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { AeThinkingRail } from '@/components/ae/artifacts/AeThinkingRail'
 import { AeResearchProcess } from '@/components/ae/chat/AeResearchProcess'
 import {
   buildTurnContextLine,
@@ -103,6 +104,26 @@ describe('AeResearchProcess', () => {
     )
 
     expect(getByText('0 searches · 0 read · 0 listed · 1/1 checks · <1s')).toBeTruthy()
+  })
+})
+
+describe('AeThinkingRail', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('shows the public live answer process when a detailed work log is not available yet', () => {
+    const { container, getByText } = render(
+      <AeThinkingRail visible label="Reading listed businesses..." step="read" />,
+    )
+
+    expect(getByText('Visible process')).toBeTruthy()
+    expect(getByText('Reading listed businesses...')).toBeTruthy()
+    expect(getByText('AE is checking published listing facts and routing to the next safe step.')).toBeTruthy()
+    expect(getByText('Search listings')).toBeTruthy()
+    expect(getByText('Read details')).toBeTruthy()
+    expect(getByText('Prepare next step')).toBeTruthy()
+    expect(container.querySelector('[aria-current="step"]')?.textContent).toContain('Read details')
   })
 })
 
