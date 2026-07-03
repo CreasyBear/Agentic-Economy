@@ -5,6 +5,7 @@ const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
 const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
 const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to Demo Plumbing'
 const BOUNDARY_FOLLOW_UP_QUERY = 'Can AE book this for me?'
+const NON_INQUIRY_PROVIDER_QUERY = 'Message Parramatta Emergency Plumbing'
 const FILTER_FOLLOW_UP_QUERY = 'Show only businesses that accept inquiries'
 const FILTER_FOLLOW_UP_LABEL = /Inquiry-ready listings/
 const COMPARE_FOLLOW_UP_QUERY = 'Compare the top two'
@@ -199,6 +200,53 @@ test.describe('chat discovery to inquiry loop', () => {
 
     const inquiryLink = selectedBusiness.getByRole('link', { name: /open inquiry form/i })
     await expect(inquiryLink).toHaveAttribute('href', /\/plumbing-demo\/inquiry\?from=thread&id=.+/)
+    await assertPublicLanguage(page)
+  })
+
+  test('keeps a named provider without an inquiry form out of the inquiry handoff', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+
+    await submitLandingQuery(page, MULTI_PROVIDER_QUERY)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, MULTI_PROVIDER_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const firstShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
+    await expect(firstShortlist).toContainText(/Demo Plumbing/i)
+    await expect(firstShortlist).toContainText(/Parramatta Emergency Plumbing/i)
+    await expect(firstShortlist).toContainText(/No AE inquiry form is published yet/i)
+
+    await submitThreadFollowUp(page, NON_INQUIRY_PROVIDER_QUERY)
+    await expectQueryInTranscript(page, NON_INQUIRY_PROVIDER_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    await expect(page.getByLabel(/turn context/i).last()).toContainText(
+      /Preparing the qualified inquiry next step for Parramatta Emergency Plumbing/i,
+    )
+    await expect(page.getByText(/Parramatta Emergency Plumbing does not publish an AE inquiry form yet/i).last()).toBeVisible()
+
+    const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
+    await expect(checks).toContainText(/0 searches.*1 read.*1 listed/i)
+    const steps = page.getByRole('list', { name: /ae check steps/i }).last()
+    await expect(steps).toContainText(/Resolving provider/i)
+    await expect(steps).toContainText(/Selected business.*Parramatta Emergency Plumbing/i)
+    await expect(steps).toContainText(/Inquiry path.*Not published/i)
+
+    const selectedBusiness = page.getByRole('region', { name: /selected business/i })
+    await expect(selectedBusiness).toContainText(/Parramatta Emergency Plumbing/i, { timeout: 30_000 })
+    await expect(selectedBusiness).toContainText(/Review listing first/i)
+    await expect(selectedBusiness).toContainText(/This business does not publish an AE inquiry form yet/i)
+    await expect(selectedBusiness).toContainText(/Review the listing and use its published contact guidance/i)
+    await expect(selectedBusiness.getByRole('link', { name: /open inquiry form/i })).toHaveCount(0)
+
+    const reviewLink = selectedBusiness.getByRole('link', { name: /review listing/i })
+    await expect(reviewLink).toHaveAttribute('href', /\/parramatta-emergency-plumbing\?from=thread&id=.+/)
+    await reviewLink.click()
+
+    await expect(page).toHaveURL(/\/parramatta-emergency-plumbing\?from=thread&id=.+/, { timeout: 15_000 })
+    await expect(page.getByText(/This service has not published a human inquiry path yet/i)).toBeVisible()
     await assertPublicLanguage(page)
   })
 
