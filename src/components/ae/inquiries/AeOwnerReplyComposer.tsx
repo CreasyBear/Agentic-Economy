@@ -60,7 +60,7 @@ export function AeOwnerReplyComposer({
     }
   }
 
-  const description = 'This message is private to the inquiry thread and the customer notification path. Press ⌘↵ or Ctrl↵ to send.'
+  const description = 'This reply is saved on the thread and sent through the customer notification path. It does not confirm booking, payment, or dispatch.'
   const descriptionId = `${id}-desc`
   const statusId = `${id}-error`
   const describedBy = [descriptionId, invalid ? statusId : undefined].filter(Boolean).join(' ')

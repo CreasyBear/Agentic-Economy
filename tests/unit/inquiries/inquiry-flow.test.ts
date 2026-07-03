@@ -201,6 +201,23 @@ describe('human inquiry owner inbox slice', () => {
     expect(JSON.stringify(submitted.receipt)).not.toContain('route.customer@example.test')
     expect(JSON.stringify(submitted.receipt)).not.toContain('contact me about this leak')
 
+    const unsafeActionIntent = submitPublicInquiryRouteReadback({
+      state: eligibleState,
+      slug: 'plumbing-demo',
+      body: 'Please book this appointment and charge my card now.',
+      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
+      operationKey: operationKey('public-route-unsafe-action'),
+      correlationId: correlationId('public-route-unsafe-action'),
+      pseudonymousSessionId: 'session:public-route-unsafe-action',
+      abuseBucketKey: 'ip:public-route-unsafe-action',
+      now,
+    })
+    expect(unsafeActionIntent).toMatchObject({
+      kind: 'error',
+      code: 'inquiry_unsafe_action_intent',
+      field: 'body',
+    })
+
     const notReady = readPublicInquiryRouteReadback({
       state: sourceState({ serviceCapabilities: [{ ...capability(), status: 'degraded' }] }),
       slug: 'plumbing-demo',
@@ -709,6 +726,15 @@ describe('human inquiry owner inbox slice', () => {
       unsafeClientFields: { paymentIntentId: 'pi_123' },
     }))
     expect(unsafe).toMatchObject({ kind: 'error', code: 'inquiry_unsafe_future_surface_field', field: 'paymentIntentId' })
+
+    const unsafeActionIntent = inquiries.submitInquiry(sourceState(), submitCommand('unsafe-action-intent', {
+      body: 'Please dispatch a plumber and process payment through checkout.',
+    }))
+    expect(unsafeActionIntent).toMatchObject({
+      kind: 'error',
+      code: 'inquiry_unsafe_action_intent',
+      field: 'body',
+    })
   })
 })
 

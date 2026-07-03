@@ -45,6 +45,7 @@ import {
   type OwnerInquiryDetailReadback,
   type PublicInquiryContactInput,
 } from './schema'
+import { findUnsafeInquiryActionIntent } from './policy'
 
 export type SubmitInquiryCommand = {
   target: InquiryTargetRef
@@ -67,6 +68,7 @@ export type SubmitInquiryErrorCode =
   | 'inquiry_invalid_input'
   | 'inquiry_duplicate_conflict'
   | 'inquiry_rate_limited'
+  | 'inquiry_unsafe_action_intent'
   | 'inquiry_unsafe_future_surface_field'
 
 export type SubmitInquiryResult = ModuleResult<
@@ -286,6 +288,13 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
   const body = normalizeText(command.body)
   if (body.length === 0 || body.length > state.operatorControls.maxBodyLength) {
     return error('inquiry_invalid_input', 'Inquiry body must be non-empty and within the source-owned length cap.')
+  }
+  if (findUnsafeInquiryActionIntent(body) !== undefined) {
+    return error(
+      'inquiry_unsafe_action_intent',
+      'Inquiry messages must ask for owner follow-up, not booking, payment, dispatch, or job acceptance.',
+      'body'
+    )
   }
 
   const contact = normalizeContact(command.contact)

@@ -107,6 +107,7 @@ const submitInquiryErrorCode = v.union(
   v.literal('inquiry_invalid_input'),
   v.literal('inquiry_duplicate_conflict'),
   v.literal('inquiry_rate_limited'),
+  v.literal('inquiry_unsafe_action_intent'),
   v.literal('inquiry_unsafe_future_surface_field'),
   v.literal('inquiry_csrf_rejected')
 )

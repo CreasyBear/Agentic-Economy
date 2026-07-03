@@ -100,6 +100,8 @@ export {
   InquiryUnsafeFutureSurfaceFieldValues,
   OwnerInboxBucketValues,
 } from './internal/schema'
+export { findUnsafeInquiryActionIntent } from './internal/policy'
+export type { InquiryUnsafeActionIntent } from './internal/policy'
 
 export const createEmptyInquirySourceState = createEmptyInquirySourceStateImpl
 export const submitInquiry = submitInquiryImpl

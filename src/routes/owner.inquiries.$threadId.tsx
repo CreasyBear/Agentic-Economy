@@ -251,7 +251,7 @@ function OwnerInquiryThreadRoute() {
       operatorRole="owner"
       eyebrow={readback.detail.inquiry.businessName}
       title={readback.detail.inquiry.serviceName}
-      description="Owner inquiry detail shows messages and delivery state for this conversation."
+      description="Review the customer message, reply through the saved contact path, then close the thread when follow-up is done."
       currentPath="/owner/inquiries"
     >
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_340px]">
@@ -272,6 +272,7 @@ function OwnerInquiryThreadRoute() {
           />
         </div>
         <aside className="grid content-start gap-4">
+          <InquiryNextStep detail={readback.detail} />
           <DeliveryReadback notifications={readback.notifications} />
         </aside>
       </div>
@@ -385,7 +386,7 @@ function OwnerReplyControls({
           Owner controls
         </Text>
         <Text as="p" type="supporting">
-          Replies and close state write back to the inquiry source state.
+          Replies notify the customer through the saved contact path. They do not confirm booking, payment, or dispatch.
         </Text>
       </div>
       <div className="mt-4">
@@ -476,6 +477,38 @@ function DeliveryReadback({ notifications }: { notifications: readonly OwnerInbo
       </div>
     </Card>
   )
+}
+
+function InquiryNextStep({ detail }: { detail: OwnerInquiryDetailReadback }) {
+  return (
+    <Card padding={3}>
+      <div className="grid gap-1.5">
+        <Text as="h2" type="large" weight="semibold">
+          Next step
+        </Text>
+        <Text as="p" type="supporting">
+          {nextStepCopy(detail)}
+        </Text>
+      </div>
+    </Card>
+  )
+}
+
+function nextStepCopy(detail: OwnerInquiryDetailReadback): string {
+  if (detail.inquiry.notificationStatus === 'failed' || detail.inquiry.notificationStatus === 'held') {
+    return 'Review delivery status before relying on customer notification, while keeping the saved message visible here.'
+  }
+
+  switch (detail.inquiry.status) {
+    case 'unread':
+      return 'Read the customer message, then reply or mark it read for owner follow-up.'
+    case 'read':
+      return 'Reply when the owner has enough detail, or close if no further follow-up is needed.'
+    case 'replied':
+      return 'Close the thread when the customer follow-up is complete.'
+    case 'closed':
+      return 'This thread is closed and remains available for reference.'
+  }
 }
 
 function notificationVariant(status: InquiryNotificationStatus): NonNullable<BadgeProps['variant']> {

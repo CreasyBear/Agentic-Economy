@@ -25,6 +25,7 @@ import {
   readPublicInquiryRouteReadback,
   validatePublicInquiryFormInput,
   type PublicInquiryFormInput,
+  type PublicInquiryFormField,
   type PublicInquiryRouteReadback,
   type PublicInquirySubmittedReceipt,
   type PublicInquiryValidationError,
@@ -48,8 +49,8 @@ export const Route = createFileRoute('/$slug/inquiry')({
   },
   head: () => ({
     meta: [
-      { title: 'Send job details | Agentic Economy' },
-      { name: 'description', content: 'Send job details to a published service.' },
+      { title: 'Send inquiry details | Agentic Economy' },
+      { name: 'description', content: 'Send first-contact inquiry details to a published service.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -107,8 +108,14 @@ function PublicInquiryRoute() {
       setResult(submitted)
       if (submitted.kind === 'ok') {
         setValue(emptyInquiryFormInput)
-        toast.success('Inquiry sent to the business.')
+        toast.success('Inquiry sent for owner review.')
       } else {
+        const serverField = publicInquiryFormField(submitted.field)
+        if (serverField !== undefined) {
+          const nextErrors = [{ field: serverField, message: submitted.reason }]
+          setErrors(nextErrors)
+          focusFirstPublicInquiryError(nextErrors)
+        }
         toast.error('reason' in submitted ? submitted.reason : 'Inquiry could not be sent.')
       }
     } finally {
@@ -129,8 +136,8 @@ function PublicInquiryRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow={readback.businessName}
-        title="Send the job details"
-        description="Share the work, location, timing, and the best way for the business to reply."
+        title="Send inquiry details"
+        description="Share the work, location, timing, and how the business should reply."
       />
       <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
         {result === undefined ? null : (
@@ -143,8 +150,8 @@ function PublicInquiryRoute() {
 
         <Card padding={5} className="grid gap-4">
           <div className="grid gap-1.5">
-            <Text type="large" weight="semibold" color="primary" display="block">{readback.serviceName} handoff</Text>
-            <Text color="secondary" display="block">Write the message the business should receive.</Text>
+            <Text type="large" weight="semibold" color="primary" display="block">{readback.serviceName} inquiry</Text>
+            <Text color="secondary" display="block">Write the message the business should review.</Text>
           </div>
           <FormLayout>
             <TextInput
@@ -176,8 +183,8 @@ function PublicInquiryRoute() {
               onChange={(nextValue) => updateContact('phone', nextValue)}
             />
             <AeInquiryComposer
-              label="Describe the job"
-              description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know.`}
+              label="Describe the inquiry"
+              description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know before replying.`}
               value={value.body}
               maxLength={readback.maxBodyLength}
               invalid={bodyError !== undefined}
@@ -189,11 +196,11 @@ function PublicInquiryRoute() {
           </FormLayout>
         </Card>
         <p className="text-sm leading-6 text-secondary">
-          AE sends this message to the business. The business replies with timing, quote, and availability.
+          AE sends a qualified inquiry for owner review. The business replies with timing, quote, and availability; AE does not confirm them.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <AeActionButton type="button" state={pending ? 'loading' : 'idle'} leadingIcon={<SendIcon />} disabled={!hydrated || pending} onClick={() => void submitFormValue()}>
-            Send job details
+            Send inquiry
           </AeActionButton>
           <Button label="Back to service page" variant="secondary" href={`/${readback.slug}`} />
         </div>
@@ -211,6 +218,10 @@ function focusFirstPublicInquiryError(errors: readonly PublicInquiryValidationEr
   requestAnimationFrame(() => {
     document.querySelector<HTMLElement>(`[name="${first.field}"]`)?.focus()
   })
+}
+
+function publicInquiryFormField(value: string | undefined): PublicInquiryFormField | undefined {
+  return value === 'body' || value === 'email' || value === 'phone' ? value : undefined
 }
 
 function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRouteReadback, { kind: 'unavailable' }> }) {

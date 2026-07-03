@@ -259,15 +259,23 @@ function runCli(): void {
   const graphReportCommit = graphReportText === undefined
     ? undefined
     : parseGraphReportCommit(graphReportText)
-  const result = checkGraphFreshness({
+  const input: Parameters<typeof checkGraphFreshness>[0] = {
     currentHead: readCurrentGitHead(repoRoot),
     dirtyPaths: readDirtyGitPaths(repoRoot),
-    ...(graphReportCommit === undefined ? {} : {
-      committedPathsSinceGraph: readCommittedGitPathsSince(graphReportCommit, repoRoot),
-    }),
-    ...(graphReportText === undefined ? {} : { graphReportText }),
-    ...(graphJsonText === undefined ? {} : { graphJsonText }),
-  })
+  }
+  if (graphReportCommit !== undefined) {
+    const committedPathsSinceGraph = readCommittedGitPathsSince(graphReportCommit, repoRoot)
+    if (committedPathsSinceGraph !== undefined) {
+      input.committedPathsSinceGraph = committedPathsSinceGraph
+    }
+  }
+  if (graphReportText !== undefined) {
+    input.graphReportText = graphReportText
+  }
+  if (graphJsonText !== undefined) {
+    input.graphJsonText = graphJsonText
+  }
+  const result = checkGraphFreshness(input)
 
   const formatted = formatGraphFreshnessResult(result)
   if (!result.ok) {
