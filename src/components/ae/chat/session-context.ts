@@ -94,7 +94,7 @@ function contextSummary(input: {
   liveTurn: { query: string; intent: FollowUpIntent } | null
 }): string {
   if (input.liveTurn !== null) {
-    return `${intentSummary(input.liveTurn.intent)} using the businesses already found in this thread.`
+    return liveIntentSummary(input.liveTurn.intent)
   }
 
   if (input.selectedProvider !== undefined) {
@@ -116,6 +116,20 @@ function contextSummary(input: {
   }
 
   return 'AE has not found a listed business to carry forward yet.'
+}
+
+function liveIntentSummary(intent: FollowUpIntent): string {
+  switch (intent) {
+    case 'filter_known':
+    case 'compare_known':
+    case 'inquiry_handoff':
+    case 'explain_boundary':
+      return `${intentSummary(intent)} using the businesses already found in this thread.`
+    case 'unsupported':
+      return 'This follow-up is being routed back to published listings while AE keeps this thread visible.'
+    case 'refine_search':
+      return 'This follow-up is searching published listings again while AE keeps this thread visible.'
+  }
 }
 
 function intentLabel(intent: FollowUpIntent): string {

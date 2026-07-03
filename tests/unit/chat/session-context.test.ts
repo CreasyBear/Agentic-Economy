@@ -34,6 +34,36 @@ describe('session context', () => {
     expect(context?.facts[1]).toMatchObject({ id: 'current', label: 'Last answer' })
   })
 
+  it('does not describe a fresh live search as filtering prior businesses', () => {
+    const context = buildSessionContext({
+      projection: projection([turn()]),
+      liveTurn: { query: 'Find electricians in Fremantle', intent: 'refine_search' },
+    })
+
+    expect(context?.badgeLabel).toBe('Refining')
+    expect(context?.summary).toBe(
+      'This follow-up is searching published listings again while AE keeps this thread visible.',
+    )
+    expect(context?.facts[0]).toMatchObject({
+      id: 'focus',
+      label: 'Current follow-up',
+      value: 'Find electricians in Fremantle',
+    })
+    expect(context?.facts[1]).toMatchObject({ id: 'current', label: 'Last answer' })
+  })
+
+  it('labels unsupported live requests as a redirect instead of a context-bound comparison', () => {
+    const context = buildSessionContext({
+      projection: projection([turn()]),
+      liveTurn: { query: 'Book the first one for me', intent: 'unsupported' },
+    })
+
+    expect(context?.badgeLabel).toBe('Needs redirect')
+    expect(context?.summary).toBe(
+      'This follow-up is being routed back to published listings while AE keeps this thread visible.',
+    )
+  })
+
   it('separates the latest narrowed answer from the wider thread context', () => {
     const context = buildSessionContext({
       projection: projection([
