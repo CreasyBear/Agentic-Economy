@@ -118,6 +118,7 @@ function PublicInquiryRoute() {
     setErrors([])
     submitLockRef.current = true
     setPending(true)
+    let releaseSubmitLock = true
     try {
       const submitted = await submitInquiry({
         data: {
@@ -130,6 +131,7 @@ function PublicInquiryRoute() {
 
       setResult(submitted)
       if (submitted.kind === 'ok') {
+        releaseSubmitLock = false
         setValue(emptyInquiryFormInput)
         toast.success('Inquiry sent for owner review.')
       } else {
@@ -142,7 +144,9 @@ function PublicInquiryRoute() {
         toast.error('reason' in submitted ? submitted.reason : 'Inquiry could not be sent.')
       }
     } finally {
-      submitLockRef.current = false
+      if (releaseSubmitLock) {
+        submitLockRef.current = false
+      }
       setPending(false)
     }
   }

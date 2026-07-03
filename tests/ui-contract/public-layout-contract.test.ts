@@ -137,6 +137,7 @@ describe('public listing layout contract', () => {
     expect(inquiryRoute).toMatch(/result\?\.kind === 'ok'/)
     expect(inquiryRoute).toMatch(/submittedOk \? null/)
     expect(inquiryRoute).toMatch(/submitLockRef/)
+    expect(inquiryRoute).toMatch(/releaseSubmitLock = false/)
     expect(inquiryRoute).toMatch(/Back to answer/)
   })
 })
