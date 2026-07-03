@@ -1,6 +1,5 @@
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { Message, MessageContent } from '@/components/ai-elements/message'
-import { AeAnswerChecks } from './AeAnswerChecks'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
@@ -27,8 +26,8 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
             label="Ready"
             steps={[]}
             workLog={turn.workLog}
+            checkSummary={turn.answerCheckSummary}
           />
-          <AeAnswerChecks summary={turn.answerCheckSummary} />
           <AeGenerativeAnswer
             artifacts={turn.artifacts}
             query={turn.query}

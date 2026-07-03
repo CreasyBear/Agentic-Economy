@@ -8,6 +8,7 @@ import {
 } from '@/components/ae/primitives/AeCollapsible'
 import { cn } from '@/lib/utils'
 import type { AnswerWorkStep } from '@/modules/answer/public'
+import type { PublicAnswerCheckSummary } from '@/modules/answer-thread/public'
 
 const STATUS_TONE =
   'data-[status=complete]:border-green-ring data-[status=complete]:bg-green-subtle data-[status=complete]:text-green-vivid data-[status=running]:border-border-strong data-[status=running]:text-primary data-[status=error]:border-red-ring data-[status=error]:bg-red-subtle data-[status=error]:text-red-vivid data-[status=stopped]:border-red-ring data-[status=stopped]:bg-red-subtle data-[status=stopped]:text-red-vivid'
@@ -15,16 +16,17 @@ const STATUS_TONE =
 export type AeResearchProcessProps = {
   isStreaming: boolean
   steps: readonly AnswerWorkStep[]
+  checkSummary?: PublicAnswerCheckSummary | undefined
 }
 
 /**
  * Public check trace. This shows the sanitized work log AE already stores for
  * replay, not hidden chain-of-thought.
  */
-export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps) {
+export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResearchProcessProps) {
   const needsReview = steps.some((step) => step.status === 'error' || step.status === 'stopped')
   const userManagedOpenRef = useRef(false)
-  const defaultOpen = isStreaming || needsReview || steps.length > 0
+  const defaultOpen = isStreaming || needsReview || steps.length > 0 || checkSummary !== undefined
   const [open, setOpen] = useState(defaultOpen)
 
   useEffect(() => {
@@ -34,14 +36,14 @@ export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps
     setOpen(defaultOpen)
   }, [defaultOpen])
 
-  if (steps.length === 0) {
+  if (steps.length === 0 && checkSummary === undefined) {
     return null
   }
 
-  const overallStatus = getOverallStatus(steps)
+  const overallStatus = steps.length === 0 && checkSummary !== undefined ? 'complete' : getOverallStatus(steps)
   const running = steps.find((step) => step.status === 'running')
   const latest = running ?? steps.at(-1)
-  const statusLabel = getOverallStatusLabel(overallStatus, latest)
+  const statusLabel = checkSummary === undefined ? getOverallStatusLabel(overallStatus, latest) : answerCheckSummaryLine(checkSummary)
 
   function handleOpenChange(nextOpen: boolean) {
     userManagedOpenRef.current = true
@@ -80,7 +82,14 @@ export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps
         />
       </CollapsibleTrigger>
       <CollapsibleContent className="p-3">
-        <ol className="grid gap-3" aria-label="AE check steps">
+        {checkSummary === undefined ? null : (
+          <dl className="mb-3 grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3" aria-label="Answer check summary">
+            <CheckSummaryFact label="Searches" value={String(checkSummary.catalogSearches)} />
+            <CheckSummaryFact label="Listings read" value={String(checkSummary.listingsRead)} />
+            <CheckSummaryFact label="Checks" value={`${checkSummary.checksPassed}/${checkSummary.checksPassed + checkSummary.checksFailed}`} />
+          </dl>
+        )}
+        {steps.length === 0 ? null : <ol className="grid gap-3" aria-label="AE check steps">
           {steps.map((step) => {
             const detailRows = visibleDetailRows(step.detailRows)
             const summary = step.summary?.trim()
@@ -121,9 +130,18 @@ export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps
               </li>
             )
           })}
-        </ol>
+        </ol>}
       </CollapsibleContent>
     </Collapsible>
+  )
+}
+
+function CheckSummaryFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">{label}</dt>
+      <dd className="text-sm font-medium leading-snug text-primary">{value}</dd>
+    </div>
   )
 }
 
@@ -197,4 +215,28 @@ function getOverallStatusLabel(status: OverallStatus, latest: AnswerWorkStep | u
     case 'idle':
       return latest?.title ?? 'Planning'
   }
+}
+
+function answerCheckSummaryLine(summary: PublicAnswerCheckSummary): string {
+  const total = summary.checksPassed + summary.checksFailed
+  return [
+    `${summary.catalogSearches} ${summary.catalogSearches === 1 ? 'search' : 'searches'}`,
+    `${summary.listingsRead} read`,
+    `${summary.listedBusinesses} listed`,
+    `${summary.checksPassed}/${total} checks`,
+    formatElapsed(summary.elapsedMs),
+  ].join(' · ')
+}
+
+function formatElapsed(ms: number): string {
+  if (ms <= 0) {
+    return '<1s'
+  }
+  if (ms < 1_000) {
+    return `${ms}ms`
+  }
+  if (ms < 10_000) {
+    return `${(ms / 1_000).toFixed(1)}s`
+  }
+  return `${Math.round(ms / 1_000)}s`
 }

@@ -4,7 +4,6 @@ import { Button } from '@astryxdesign/core/Button'
 import { formatTurnQueryLabel } from '@/modules/answer-thread/public'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { Message, MessageContent } from '@/components/ai-elements/message'
-import { AeAnswerChecks } from './AeAnswerChecks'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
@@ -43,8 +42,8 @@ export function AeThreadTurnCollapsed({ threadId, ...turn }: AeThreadTurnCollaps
               label="Ready"
               steps={[]}
               workLog={turn.workLog}
+              checkSummary={turn.answerCheckSummary}
             />
-            <AeAnswerChecks summary={turn.answerCheckSummary} />
             <AeGenerativeAnswer
               artifacts={turn.artifacts}
               query={turn.query}

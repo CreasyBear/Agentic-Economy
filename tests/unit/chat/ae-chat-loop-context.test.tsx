@@ -63,6 +63,47 @@ describe('AeResearchProcess', () => {
     expect(getByText('Results')).toBeTruthy()
     expect(getByText('2')).toBeTruthy()
   })
+
+  it('summarizes public answer checks in the process header', () => {
+    const { getByText } = render(
+      <AeResearchProcess
+        isStreaming={false}
+        steps={[workStep()]}
+        checkSummary={{
+          catalogSearches: 1,
+          listingsRead: 2,
+          listedBusinesses: 2,
+          checksPassed: 5,
+          checksFailed: 0,
+          elapsedMs: 1250,
+        }}
+      />,
+    )
+
+    expect(getByText('1 search · 2 read · 2 listed · 5/5 checks · 1.3s')).toBeTruthy()
+    expect(getByText('Searches')).toBeTruthy()
+    expect(getByText('Listings read')).toBeTruthy()
+    expect(getByText('Checks')).toBeTruthy()
+  })
+
+  it('renders a summary-only process for sparse saved turns', () => {
+    const { getByText } = render(
+      <AeResearchProcess
+        isStreaming={false}
+        steps={[]}
+        checkSummary={{
+          catalogSearches: 0,
+          listingsRead: 0,
+          listedBusinesses: 0,
+          checksPassed: 1,
+          checksFailed: 0,
+          elapsedMs: 0,
+        }}
+      />,
+    )
+
+    expect(getByText('0 searches · 0 read · 0 listed · 1/1 checks · <1s')).toBeTruthy()
+  })
 })
 
 function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {

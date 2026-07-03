@@ -6,7 +6,7 @@ import {
 } from '@/components/ai-elements/reasoning'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import type { AnswerWorkStep } from '@/modules/answer/public'
-import type { ThinkingStep } from '@/modules/answer-thread/public'
+import type { PublicAnswerCheckSummary, ThinkingStep } from '@/modules/answer-thread/public'
 
 import { AeResearchProcess } from './AeResearchProcess'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
@@ -17,6 +17,7 @@ export type AeAnswerThinkingTraceProps = {
   thinkingStep?: ThinkingStep
   steps?: readonly string[]
   workLog?: readonly AnswerWorkStep[]
+  checkSummary?: PublicAnswerCheckSummary | undefined
 }
 
 export function AeAnswerThinkingTrace({
@@ -25,11 +26,12 @@ export function AeAnswerThinkingTrace({
   thinkingStep,
   steps = [],
   workLog = [],
+  checkSummary,
 }: AeAnswerThinkingTraceProps) {
   const structuredMode = isStructuredAnswerModeEnabled()
 
-  if (workLog.length > 0) {
-    return <AeResearchProcess isStreaming={isStreaming} steps={workLog} />
+  if (workLog.length > 0 || checkSummary !== undefined) {
+    return <AeResearchProcess isStreaming={isStreaming} steps={workLog} checkSummary={checkSummary} />
   }
 
   if (structuredMode) {
