@@ -182,19 +182,64 @@ describe('AeChat route promotion', () => {
     expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
   })
 
-  it('guides the composer toward follow-up moves after a completed turn', () => {
+  it('guides the composer toward refinement when no listed business is available', () => {
     const projection = buildProjection('thread-one', 'First answer')
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
     const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or ask for an inquiry path')
+    expect(panel.getAttribute('data-placeholder')).toBe('Refine the search or ask what AE can safely do')
     expect(panel.getAttribute('data-loop-hint')).toBe(
-      'Continue by narrowing, comparing, or starting a qualified inquiry when a listing publishes that path.',
+      'AE needs a listed business before it can compare options or route a qualified inquiry.',
+    )
+  })
+
+  it('guides the composer toward inquiry once a listed business publishes that path', () => {
+    const projection = buildProjection('thread-one', 'First answer', [
+      { kind: 'provider-cards', providers: [provider()] },
+    ])
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    const panel = screen.getByTestId('active-query-panel')
+    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or start a qualified inquiry')
+    expect(panel.getAttribute('data-loop-hint')).toBe(
+      'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+    )
+  })
+
+  it('guides the composer toward contact limits when listings lack inquiry paths', () => {
+    const projection = buildProjection('thread-one', 'First answer', [
+      { kind: 'provider-cards', providers: [providerWithoutInquiry()] },
+    ])
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    const panel = screen.getByTestId('active-query-panel')
+    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or ask for the contact step')
+    expect(panel.getAttribute('data-loop-hint')).toBe(
+      'These listings need a published inquiry path before AE can route contact.',
+    )
+  })
+
+  it('guides the composer around the selected inquiry business after handoff', () => {
+    const projection = buildProjection('thread-one', 'First answer', [
+      { kind: 'selected-provider', provider: provider() },
+    ])
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    const panel = screen.getByTestId('active-query-panel')
+    expect(panel.getAttribute('data-placeholder')).toBe('Ask limits, refine, or continue with the selected business')
+    expect(panel.getAttribute('data-loop-hint')).toBe(
+      'AE keeps that business in context for qualified inquiry review. The business still confirms timing, price, and availability.',
     )
   })
 })
 
-function buildProjection(threadId: string, title: string): PublicThreadProjection {
+type TestArtifact = PublicThreadProjection['turns'][number]['artifacts'][number]
+
+function buildProjection(
+  threadId: string,
+  title: string,
+  artifacts: readonly TestArtifact[] = [],
+): PublicThreadProjection {
   return {
     threadId,
     title,
@@ -206,9 +251,40 @@ function buildProjection(threadId: string, title: string): PublicThreadProjectio
         intent: 'refine_search',
         status: 'complete',
         workLog: [],
-        artifacts: [],
+        artifacts,
         oneLine: title,
       },
     ],
   }
+}
+
+function provider(
+  overrides: Partial<Extract<TestArtifact, { kind: 'provider-cards' }>['providers'][number]> = {},
+): Extract<TestArtifact, { kind: 'provider-cards' }>['providers'][number] {
+  return {
+    citationIndex: 1,
+    slug: 'parramatta-emergency-plumbing',
+    name: 'Parramatta Emergency Plumbing',
+    category: 'Plumber',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    serviceArea: 'Parramatta',
+    hoursLabel: 'Hours supplied',
+    availabilityLabel: 'Published',
+    trustLabel: 'Checked',
+    responseTimeLabel: 'Responds ~22m',
+    trustCue: 'Responds ~22m - Checked',
+    nextStepLabel: 'Send inquiry',
+    detailUrl: '/parramatta-emergency-plumbing',
+    services: [],
+    inquiryUrl: '/parramatta-emergency-plumbing/inquiry',
+    ...overrides,
+  }
+}
+
+function providerWithoutInquiry(
+  overrides: Partial<Extract<TestArtifact, { kind: 'provider-cards' }>['providers'][number]> = {},
+): Extract<TestArtifact, { kind: 'provider-cards' }>['providers'][number] {
+  const { inquiryUrl: _inquiryUrl, ...source } = provider(overrides)
+  return source
 }

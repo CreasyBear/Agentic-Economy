@@ -272,12 +272,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
   const settleMessageId =
     liveTurn === null && completedTurns.length > 0 ? (completedTurns[completedTurns.length - 1]?.turnId ?? null) : null
-  const followUpComposerPlaceholder =
-    completedTurnCount > 0 ? 'Narrow, compare, or ask for an inquiry path' : undefined
-  const followUpComposerHint =
-    completedTurnCount > 0
-      ? 'Continue by narrowing, comparing, or starting a qualified inquiry when a listing publishes that path.'
-      : undefined
+  const followUpComposerCopy = buildFollowUpComposerCopy(completedTurns)
 
   const shell = (
     <div className={`grid h-full min-h-0 w-full bg-body${sidebarVisible ? ' lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]' : ''}`}>
@@ -339,8 +334,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 busy={streamingBusy}
                 searchContext={searchContext}
                 showExamples={false}
-                {...(followUpComposerPlaceholder === undefined ? {} : { placeholder: followUpComposerPlaceholder })}
-                {...(followUpComposerHint === undefined ? {} : { loopHint: followUpComposerHint })}
+                {...(followUpComposerCopy === null ? {} : { placeholder: followUpComposerCopy.placeholder })}
+                {...(followUpComposerCopy === null ? {} : { loopHint: followUpComposerCopy.loopHint })}
               />
             </div>
           ) : null}
@@ -372,6 +367,89 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       {isStructuredAnswerModeEnabled() ? <AeAnswerModelProvider>{shell}</AeAnswerModelProvider> : shell}
     </AePublicShell>
   )
+}
+
+type FollowUpComposerCopy = {
+  placeholder: string
+  loopHint: string
+}
+
+function buildFollowUpComposerCopy(
+  completedTurns: readonly NonNullable<PublicThreadProjection>['turns'][number][],
+): FollowUpComposerCopy | null {
+  if (completedTurns.length === 0) {
+    return null
+  }
+
+  const state = readComposerContext(completedTurns)
+  if (state.hasSelectedProvider) {
+    return {
+      placeholder: 'Ask limits, refine, or continue with the selected business',
+      loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, price, and availability.',
+    }
+  }
+
+  if (state.hasInquiryReadyProvider) {
+    return {
+      placeholder: 'Narrow, compare, or start a qualified inquiry',
+      loopHint: 'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+    }
+  }
+
+  if (state.hasListedProvider) {
+    return {
+      placeholder: 'Narrow, compare, or ask for the contact step',
+      loopHint: 'These listings need a published inquiry path before AE can route contact.',
+    }
+  }
+
+  return {
+    placeholder: 'Refine the search or ask what AE can safely do',
+    loopHint: 'AE needs a listed business before it can compare options or route a qualified inquiry.',
+  }
+}
+
+function readComposerContext(
+  completedTurns: readonly NonNullable<PublicThreadProjection>['turns'][number][],
+): {
+  hasListedProvider: boolean
+  hasInquiryReadyProvider: boolean
+  hasSelectedProvider: boolean
+} {
+  let hasListedProvider = false
+  let hasInquiryReadyProvider = false
+  let hasSelectedProvider = false
+
+  for (const turn of completedTurns) {
+    for (const artifact of turn.artifacts) {
+      switch (artifact.kind) {
+        case 'selected-provider':
+          hasListedProvider = true
+          hasSelectedProvider = true
+          if (hasPublishedInquiryPath(artifact.provider)) {
+            hasInquiryReadyProvider = true
+          }
+          break
+        case 'provider-cards':
+        case 'provider-compare-table':
+          if (artifact.providers.length > 0) {
+            hasListedProvider = true
+          }
+          if (artifact.providers.some(hasPublishedInquiryPath)) {
+            hasInquiryReadyProvider = true
+          }
+          break
+        default:
+          break
+      }
+    }
+  }
+
+  return { hasListedProvider, hasInquiryReadyProvider, hasSelectedProvider }
+}
+
+function hasPublishedInquiryPath(provider: { inquiryUrl?: string }): boolean {
+  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
 }
 
 function emitChatFunnelEvents(events: readonly ChatFunnelEvent[]): void {
