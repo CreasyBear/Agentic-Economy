@@ -40,22 +40,17 @@ export function AeAnswerSuggestions({
     return null
   }
 
-  const chipClass =
-    variant === 'follow-up' ? 'ae-follow-up-chips__chip' : 'ae-query-box__example'
-
   return (
     <Suggestions
-      className={variant === 'follow-up' ? 'ae-follow-up-chips' : 'ae-query-box__examples'}
       aria-label={ariaLabel}
-      wrap={variant === 'follow-up'}
+      wrap
     >
       {items.map((item) => (
         <Suggestion
           key={item.value}
           suggestion={item.value}
-          variant="outline"
+          variant="secondary"
           size="sm"
-          className={`${chipClass} rounded-[var(--ae-radius-sm)]`}
           onClick={onSelect}
         >
           {item.label}
@@ -73,49 +68,35 @@ export type AeFollowUpChipsProps = {
 /** Deterministic follow-ups with optional LLM chips after eval gate. */
 export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
   const [chips, setChips] = useState<FollowUpChip[]>(() => buildDeterministicFollowUpChips(turn))
-  const [llmChipsEnabled, setLlmChipsEnabled] = useState<boolean | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    setChips(buildDeterministicFollowUpChips(turn))
+
     void fetch('/api/answer/eval-status')
       .then(async (response) => {
         if (!response.ok || cancelled) {
-          return
+          return false
         }
         const body = (await response.json()) as { llmChipsEnabled?: boolean }
-        if (!cancelled) {
-          setLlmChipsEnabled(body.llmChipsEnabled === true)
-        }
+        return body.llmChipsEnabled === true
       })
-      .catch(() => {
-        if (!cancelled) {
-          setLlmChipsEnabled(false)
+      .then(async (llmChipsEnabled) => {
+        if (!llmChipsEnabled || cancelled) {
+          return
         }
-      })
 
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    if (llmChipsEnabled !== true) {
-      setChips(buildDeterministicFollowUpChips(turn))
-      return
-    }
-
-    let cancelled = false
-    const providers = extractProviders(turn)
-
-    void fetch('/api/answer/follow-up-chips', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: turn.query, providers }),
-    })
-      .then(async (response) => {
+        const providers = extractProviders(turn)
+        const response = await fetch('/api/answer/follow-up-chips', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: turn.query, providers }),
+        })
         if (!response.ok || cancelled) {
           return
         }
+
         const body = (await response.json()) as { chips?: FollowUpChip[] }
         if (cancelled || !Array.isArray(body.chips) || body.chips.length === 0) {
           return
@@ -129,7 +110,7 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
     return () => {
       cancelled = true
     }
-  }, [turn.turnId, turn.query, turn.artifacts, llmChipsEnabled])
+  }, [turn])
 
   if (chips.length === 0 || onSelect === undefined) {
     return null

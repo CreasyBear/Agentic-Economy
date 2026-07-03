@@ -22,7 +22,7 @@ export function AeQueryPanel({
   const examples = showExamples ? buildContextExamples(searchContext) : []
 
   return (
-    <div className="ae-query-panel">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       <AeAnswerPromptInput
         onSubmit={onSubmit}
         defaultValue={defaultValue}
@@ -30,7 +30,7 @@ export function AeQueryPanel({
         examples={examples}
       />
       {showExamples ? (
-        <p className="ae-query-panel__boundary">Cited answers from published business details.</p>
+        <p className="font-mono text-xs leading-snug text-secondary">Cited answers from published business details.</p>
       ) : null}
     </div>
   )

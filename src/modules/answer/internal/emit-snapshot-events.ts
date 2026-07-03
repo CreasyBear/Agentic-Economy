@@ -5,7 +5,7 @@ import {
   resolveLayoutProfile,
   type AnswerLayoutProfile,
 } from './answer-layout-profile'
-import { buildArtifactsFromSnapshot } from './snapshot-artifacts'
+import { buildArtifactsFromSnapshot, getDefaultArtifactBudgetForLayoutProfile } from './snapshot-artifacts'
 import type {
   AnswerEvent,
   AnswerPlanEvent,
@@ -114,7 +114,7 @@ function buildPlanEventFromSnapshot(
 ): AnswerPlanEvent {
   const mode = input.plan?.mode ?? input.responseMode ?? deriveResponseMode(input.layoutProfile, snapshot.providers.length)
   const artifactBudget = input.plan?.artifactBudget === undefined
-    ? buildArtifactBudget(mode, input.layoutProfile)
+    ? getDefaultArtifactBudgetForLayoutProfile(input.layoutProfile)
     : { ...input.plan.artifactBudget, layoutProfile: input.layoutProfile }
   return {
     type: 'plan',
@@ -160,66 +160,6 @@ function buildProviderBudget(
       return {
         searchLimit: Math.max(providerCount, DEFAULT_PLAN_SEARCH_LIMIT),
         visibleLimit: Math.min(providerCount, PROVIDER_CARD_LIMIT),
-      }
-  }
-}
-
-function buildArtifactBudget(
-  mode: AnswerResponseMode,
-  layoutProfile: AnswerLayoutProfile,
-): AnswerPlanEvent['artifactBudget'] {
-  switch (mode) {
-    case 'clarify':
-      return {
-        layoutProfile,
-        allowedKinds: ['one-line', 'prose', 'what-to-do-now', 'recovery-prompts'],
-        maxArtifactCount: 4,
-        maxProviderCards: 0,
-      }
-    case 'compare':
-      return {
-        layoutProfile,
-        allowedKinds: ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'],
-        maxArtifactCount: 4,
-        maxProviderCards: 0,
-      }
-    case 'filter':
-      return {
-        layoutProfile,
-        allowedKinds: ['one-line', 'provider-cards', 'provider-tradeoff-list', 'prose', 'what-to-do-now'],
-        maxArtifactCount: 5,
-        maxProviderCards: PROVIDER_CARD_LIMIT,
-      }
-    case 'empty':
-      return {
-        layoutProfile,
-        allowedKinds: ['one-line', 'recovery-prompts', 'prose', 'what-to-do-now'],
-        maxArtifactCount: 4,
-        maxProviderCards: 0,
-      }
-    case 'boundary':
-    case 'error':
-      return {
-        layoutProfile,
-        allowedKinds: ['one-line', 'prose', 'what-to-do-now'],
-        maxArtifactCount: 3,
-        maxProviderCards: 0,
-      }
-    case 'answer':
-      return {
-        layoutProfile,
-        allowedKinds: [
-          'one-line',
-          'provider-cards',
-          'location-map',
-          'service-area-fit',
-          'route-perspective',
-          'published-details-rail',
-          'prose',
-          'what-to-do-now',
-        ],
-        maxArtifactCount: 5,
-        maxProviderCards: PROVIDER_CARD_LIMIT,
       }
   }
 }

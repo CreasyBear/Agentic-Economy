@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeAnswerChecks } from '@/components/ae/chat/AeAnswerChecks'
@@ -25,15 +25,11 @@ describe('AeAnswerChecks', () => {
       elapsedMs: 1250,
     })
 
-    render(<AeAnswerChecks summary={viewModel.answerCheckSummary} />)
+    const { container } = render(<AeAnswerChecks summary={viewModel.answerCheckSummary} />)
 
-    expect(screen.getByRole('region', { name: 'Answer checks' })).not.toBeNull()
-    expect(screen.getByText('Catalog searches')).not.toBeNull()
-    expect(screen.getByText('Listings read')).not.toBeNull()
-    expect(screen.getByText('Listed businesses')).not.toBeNull()
-    expect(screen.getByText('Checks passed')).not.toBeNull()
-    expect(screen.getByText('Checks failed')).not.toBeNull()
-    expect(screen.getByText('1.3s')).not.toBeNull()
+    const line = container.querySelector('[aria-label="Answer checks"]')
+    expect(line).not.toBeNull()
+    expect(line?.textContent).toBe('1 search · 2 read · 2 listed · 5/5 checks · 1.3s')
   })
 
   it('renders nothing when a saved turn has no check summary', () => {

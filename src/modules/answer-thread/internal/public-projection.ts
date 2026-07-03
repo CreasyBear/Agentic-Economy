@@ -1,11 +1,9 @@
 import {
   buildArtifactsFromSnapshot,
-  hasEpistemicVocabulary,
-  hasInjectionUpgrade,
-  hasOverclaim,
   type AnswerSnapshot,
   type AnswerWorkStep,
 } from '@/modules/answer/projection'
+import { publicWorkLog, safeWorkLogUserText } from './public-worklog'
 
 import type {
   AnswerTurnRecord,
@@ -58,7 +56,7 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     query: turn.query,
     intent: turn.intent,
     status: turn.status,
-    workLog: evidence.workLog ?? deriveLegacyWorkLog(turn.query, evidence, prose),
+    workLog: publicWorkLog(evidence.workLog ?? deriveLegacyWorkLog(turn.query, evidence, prose)),
     artifacts: buildArtifactsFromSnapshot(snapshot),
     oneLine: prose.oneLine,
     answerCheckSummary: buildPublicAnswerCheckSummary(answerRun),
@@ -175,36 +173,4 @@ function describeProviderCount(count: number): string {
     return '1 listed business found.'
   }
   return `${count} listed businesses found.`
-}
-
-const INTERNAL_PUBLIC_TERMS = [
-  'source-owned',
-  'readback',
-  'manifest',
-  'capability',
-  'gateway',
-  'operator',
-  'MCP',
-  'OpenAPI',
-  'callable',
-  'autonomous',
-  'agent-native',
-  'DTO',
-  'fixture',
-] as const
-
-function safeWorkLogUserText(value: string): string {
-  const trimmed = value.trim()
-  if (trimmed.length === 0) {
-    return 'Request shown above'
-  }
-  if (
-    hasOverclaim(trimmed) ||
-    hasEpistemicVocabulary(trimmed) ||
-    hasInjectionUpgrade(trimmed) ||
-    INTERNAL_PUBLIC_TERMS.some((term) => trimmed.toLowerCase().includes(term.toLowerCase()))
-  ) {
-    return 'Request shown above'
-  }
-  return trimmed
 }

@@ -39,7 +39,11 @@ export {
   type AnswerProse,
   snapshotProseFromAnswer,
 } from './answer-prose'
-export { buildArtifactsFromSnapshot } from './internal/snapshot-artifacts'
+export {
+  buildArtifactsFromSnapshot,
+  getDefaultArtifactBudgetForLayoutProfile,
+  type AnswerArtifactBudget,
+} from './internal/snapshot-artifacts'
 export { toAnswerSource } from './internal/dto-to-answer-source'
 export { emitSnapshotEvents } from './internal/emit-snapshot-events'
 export { mergeAnswerArtifact } from './internal/merge-answer-artifact'

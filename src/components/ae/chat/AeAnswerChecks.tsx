@@ -9,29 +9,19 @@ export function AeAnswerChecks({ summary }: AeAnswerChecksProps) {
     return null
   }
 
-  const items = [
-    { label: 'Catalog searches', value: summary.catalogSearches },
-    { label: 'Listings read', value: summary.listingsRead },
-    { label: 'Listed businesses', value: summary.listedBusinesses },
-    { label: 'Checks passed', value: summary.checksPassed },
-    { label: 'Checks failed', value: summary.checksFailed },
-    { label: 'Elapsed', value: formatElapsed(summary.elapsedMs) },
-  ] as const
+  const total = summary.checksPassed + summary.checksFailed
+  const parts = [
+    `${summary.catalogSearches} ${summary.catalogSearches === 1 ? 'search' : 'searches'}`,
+    `${summary.listingsRead} read`,
+    `${summary.listedBusinesses} listed`,
+    `${summary.checksPassed}/${total} checks`,
+    formatElapsed(summary.elapsedMs),
+  ]
 
   return (
-    <section className="ae-answer-checks" aria-label="Answer checks">
-      <div className="ae-answer-checks__header">
-        <h3 className="ae-answer-checks__title">Answer checks</h3>
-      </div>
-      <dl className="ae-answer-checks__grid">
-        {items.map((item) => (
-          <div key={item.label} className="ae-answer-checks__item">
-            <dt className="ae-answer-checks__label">{item.label}</dt>
-            <dd className="ae-answer-checks__value">{item.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <p aria-label="Answer checks" className="font-mono text-2xs tabular-nums text-secondary">
+      {parts.join(' · ')}
+    </p>
   )
 }
 

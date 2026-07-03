@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 import { ArrowRightIcon, CheckIcon, ChevronDownIcon, MapPinIcon, SearchIcon } from 'lucide-react'
+
+import { Button } from '@astryxdesign/core/Button'
 
 import {
   artifactsToMessageParts,
@@ -8,7 +11,8 @@ import {
   type AnswerMessagePart,
 } from '@/modules/answer/public'
 import type { AnswerArtifact, AnswerCompareField, AnswerSource } from '@/modules/answer/public'
-import { AeProviderSourceCard } from '@/components/ae/landing/AeProviderSourceCard'
+import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
+import { AeKicker } from '@/components/ae/primitives/AeKicker'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
 import {
@@ -17,6 +21,9 @@ import {
   SourcesTrigger,
 } from '@/components/ai-elements/sources'
 import { AeGenerativeMap } from './AeGenerativeMap'
+
+const REVEAL_ENTER =
+  'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300'
 
 export type AeGenerativeAnswerPhase =
   | 'idle'
@@ -35,6 +42,8 @@ export type AeGenerativeAnswerProps = {
   onStop?: () => void
   phase?: AeGenerativeAnswerPhase
   errorMessage?: ReactNode | null
+  /** Thread this answer belongs to, if one exists yet. Lets provider links carry a "back to answer" origin instead of always falling back to home. */
+  threadId?: string
 }
 
 export function AeGenerativeAnswer({
@@ -46,6 +55,7 @@ export function AeGenerativeAnswer({
   onStop,
   phase = 'idle',
   errorMessage = null,
+  threadId,
 }: AeGenerativeAnswerProps) {
   const profile = inferLayoutProfileFromArtifacts({
     artifacts,
@@ -70,62 +80,66 @@ export function AeGenerativeAnswer({
 
   return (
     <section
-      className="ae-answer ae-generative-answer"
+      className="grid gap-4"
       data-phase={phase}
       data-profile={profile}
       data-empty={empty ? 'true' : 'false'}
       aria-busy={busy}
     >
-      <div className="ae-answer__head">
+      <div className="flex items-start justify-between gap-3">
         {headline.length > 0 ? (
           <p
-            className={`ae-answer__one-line${isFirstTurnProfile ? '' : ' ae-answer__one-line--follow-up'}`}
+            className={
+              isFirstTurnProfile
+                ? `${REVEAL_ENTER} min-w-0 flex-1 font-heading text-2xl leading-snug text-balance text-primary`
+                : 'min-w-0 flex-1 text-sm text-secondary'
+            }
             aria-live={busy ? 'polite' : 'off'}
           >
             {headline}
           </p>
         ) : busy ? (
           <p
-            className="ae-answer__one-line ae-answer__one-line--thinking"
+            className="min-w-0 flex-1 text-lg text-secondary"
             aria-live="polite"
             aria-label="Finding listed providers"
           >
             <AeStreamingLabel as="span">Finding listed providers</AeStreamingLabel>
           </p>
         ) : (
-          <p className="ae-answer__one-line ae-answer__one-line--placeholder">Finding listed providers</p>
+          <p className="min-w-0 flex-1 text-lg text-secondary">Finding listed providers</p>
         )}
 
         {phase === 'reconnecting' ? (
-          <span className="ae-answer__reconnect" role="status">
+          <span className="shrink-0 text-xs text-secondary" role="status">
             <AeStreamingLabel as="span">Reconnecting…</AeStreamingLabel>
           </span>
         ) : null}
 
         {busy && onStop !== undefined ? (
-          <button type="button" className="ae-answer__stop" onClick={onStop} aria-label="Stop generating the answer">
-            Stop
-          </button>
+          <Button label="Stop" type="button" variant="secondary" size="sm" onClick={onStop} />
         ) : null}
       </div>
 
       {phase === 'error' && errorMessage !== null ? (
-        <div className="ae-answer__error" role="alert">
+        <div className="rounded-md border border-red-ring bg-red-subtle p-4 text-sm text-red-vivid" role="alert">
           <div>{errorMessage}</div>
         </div>
       ) : null}
 
-      <AeAnswerJourney
-        phase={phase}
-        profile={profile}
-        hasHeadline={headline.length > 0}
-        hasProviderEvidence={hasProviderEvidence}
-        hasSummary={hasSummary}
-        hasNextStep={hasNextStep}
-      />
+      {phase !== 'complete' ? (
+        <AeAnswerJourney
+          phase={phase}
+          profile={profile}
+          hasHeadline={headline.length > 0}
+          hasProviderEvidence={hasProviderEvidence}
+          hasSummary={hasSummary}
+          hasNextStep={hasNextStep}
+        />
+      ) : null}
 
       {parts.map((part, index) => (
-        <AnswerPartView key={`${part.kind}-${index}`} part={part} query={query} empty={empty} phase={phase} />
+        <AnswerPartView key={`${part.kind}-${index}`} part={part} query={query} empty={empty} phase={phase} threadId={threadId} />
       ))}
 
       {phase === 'complete' && !empty ? (
@@ -141,11 +155,6 @@ function isProviderEvidencePart(part: AnswerMessagePart): boolean {
   switch (part.kind) {
     case 'provider-cards':
     case 'provider-compare-table':
-    case 'service-area-fit':
-    case 'next-step-menu':
-    case 'route-perspective':
-    case 'published-details-rail':
-    case 'provider-tradeoff-list':
       return true
     default:
       return false
@@ -200,29 +209,37 @@ function AeAnswerJourney({
         : 'Use the evidence below to compare fit, then choose the next step.'
 
   return (
-    <section className="ae-answer-journey" aria-label="Answer journey" data-phase={phase}>
-      <div className="ae-answer-journey__copy">
-        <p className="ae-answer-journey__kicker">Process</p>
-        <p className="ae-answer-journey__title">From need to next step</p>
-        <p className="ae-answer-journey__note">{guidance}</p>
+    <section
+      className={`${REVEAL_ENTER} grid gap-4 rounded-lg border border-border bg-surface p-4 sm:grid-cols-[minmax(10rem,0.7fr)_minmax(0,1.5fr)]`}
+      aria-label="Answer journey"
+      data-phase={phase}
+    >
+      <div className="flex flex-col justify-center gap-1">
+        <AeKicker>Process</AeKicker>
+        <p className="font-heading text-base text-primary">From need to next step</p>
+        <p className="text-pretty text-sm text-secondary">{guidance}</p>
       </div>
-      <ol className="ae-answer-journey__steps" aria-live={phase === 'streaming' ? 'polite' : 'off'}>
+      <ol className="grid gap-2 sm:grid-cols-2" aria-live={phase === 'streaming' ? 'polite' : 'off'}>
         {steps.map((step, index) => {
           const state = getJourneyState({ index, activeIndex, completedIndex, phase })
           return (
             <li
               key={step.label}
-              className="ae-answer-journey__step"
               data-state={state}
               aria-current={state === 'active' ? 'step' : undefined}
+              className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-md border border-border bg-card p-2 transition-colors data-[state=active]:border-border-strong data-[state=active]:bg-muted data-[state=complete]:border-green-ring data-[state=complete]:bg-green-subtle data-[state=error]:border-red-ring data-[state=error]:bg-red-subtle data-[state=stopped]:border-red-ring data-[state=stopped]:bg-red-subtle data-[state=pending]:opacity-70"
             >
-              <span className="ae-answer-journey__marker" aria-hidden="true">
-                {state === 'complete' ? <CheckIcon /> : index + 1}
+              <span
+                data-state={state}
+                className="inline-flex size-5 items-center justify-center rounded-full border border-border bg-surface font-mono text-2xs font-semibold text-secondary data-[state=complete]:border-green-ring data-[state=complete]:text-green-vivid"
+                aria-hidden="true"
+              >
+                {state === 'complete' ? <CheckIcon className="size-3" /> : index + 1}
               </span>
-              <span className="ae-answer-journey__step-copy">
+              <span className="grid min-w-0 gap-0.5">
                 <span className="sr-only">{journeyStateLabel(state)}: </span>
-                <span className="ae-answer-journey__step-title">{step.label}</span>
-                <span className="ae-answer-journey__step-detail">{step.detail}</span>
+                <span className="text-sm font-medium leading-snug text-primary">{step.label}</span>
+                <span className="text-xs leading-snug text-secondary">{step.detail}</span>
               </span>
             </li>
           )
@@ -310,11 +327,13 @@ function AnswerPartView({
   query,
   empty,
   phase,
+  threadId,
 }: {
   part: AnswerMessagePart
   query: string
   empty: boolean
   phase: AeGenerativeAnswerPhase
+  threadId: string | undefined
 }) {
   switch (part.kind) {
     case 'one-line':
@@ -328,64 +347,32 @@ function AnswerPartView({
           {...(part.fields === undefined ? {} : { fields: part.fields })}
         />
       )
-    case 'service-area-fit':
-      return (
-        <ServiceAreaFit
-          providers={part.providers}
-          {...(part.locationLabel === undefined ? {} : { locationLabel: part.locationLabel })}
-        />
-      )
-    case 'next-step-menu':
-      return !empty ? <NextStepMenu providers={part.providers} /> : null
-    case 'confirmation-checklist':
-      return !empty ? (
-        <ConfirmationChecklist items={part.items} {...(part.title === undefined ? {} : { title: part.title })} />
-      ) : null
     case 'recovery-prompts':
       return empty ? (
         <RecoveryPrompts prompts={part.prompts} {...(part.title === undefined ? {} : { title: part.title })} />
-      ) : null
-    case 'route-perspective':
-      return (
-        <RoutePerspective
-          providers={part.providers}
-          {...(part.query === undefined ? {} : { query: part.query })}
-        />
-      )
-    case 'published-details-rail':
-      return <PublishedDetailsRail providers={part.providers} />
-    case 'provider-tradeoff-list':
-      return <ProviderTradeoffList providers={part.providers} />
-    case 'message-starter':
-      return !empty ? (
-        <MessageStarter
-          provider={part.provider}
-          need={part.need}
-          {...(part.location === undefined ? {} : { location: part.location })}
-          {...(part.timing === undefined ? {} : { timing: part.timing })}
-        />
       ) : null
     case 'location-map':
       return <AeGenerativeMap label={part.label} placeQuery={part.placeQuery} />
     case 'empty-state':
       return empty ? (
-        <div className="ae-answer__empty" role="status">
+        <div className={`${REVEAL_ENTER} rounded-md border border-border bg-surface p-4 text-sm text-primary`} role="status">
           <p>{part.text}</p>
         </div>
       ) : null
     case 'prose':
       return !empty && part.text.length > 0 ? (
-        <p className="ae-answer__summary" aria-live="off">
+        <p className={`${REVEAL_ENTER} max-w-[68ch] text-pretty text-base leading-relaxed text-primary`} aria-live="off">
           {part.text}
         </p>
       ) : null
     case 'what-to-do-now':
       return !empty && part.text.length > 0 ? (
         part.compact === true ? (
-          <p className="ae-answer__next-step ae-answer__next-step--compact">{part.text}</p>
+          <p className={`${REVEAL_ENTER} text-sm text-secondary`}>{part.text}</p>
         ) : (
-          <p className="ae-answer__next-step">
-            <span className="ae-answer__next-step-label">What to do now</span> {part.text}
+          <p className={`${REVEAL_ENTER} grid gap-1 border-l-2 border-border-strong py-1 pl-3 text-base text-primary`}>
+            <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">What to do now</span>
+            <span>{part.text}</span>
           </p>
         )
       ) : null
@@ -413,26 +400,36 @@ function ProviderCardsRail({
   }
 
   return (
-    <Sources className="ae-answer__source-disclosure" defaultOpen>
-      <SourcesTrigger count={providers.length} className="ae-answer__source-trigger">
-        <span className="ae-answer__source-trigger-main">
-          <span>{listingCountLabel(providers.length)}</span>
-          <span className="ae-answer__source-trigger-note">Published detail cards used for this answer</span>
+    <Sources className="grid gap-2" defaultOpen>
+      <SourcesTrigger
+        count={providers.length}
+        className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-border-strong"
+      >
+        <span className="grid min-w-0 gap-0.5">
+          <span className="text-sm font-medium text-primary">{listingCountLabel(providers.length)}</span>
+          <span className="font-mono text-2xs text-secondary">Published detail cards used for this answer</span>
         </span>
-        <ChevronDownIcon className="ae-answer__source-chevron" aria-hidden="true" />
+        <ChevronDownIcon
+          className="size-4 shrink-0 text-secondary transition-transform group-data-[state=open]/ai-sources-trigger:rotate-180"
+          aria-hidden="true"
+        />
       </SourcesTrigger>
       <SourcesContent>
         <ul
-          className={`ae-answer__sources${scroll ? ' ae-answer__sources--scroll' : ''}`}
+          className={
+            scroll
+              ? 'flex snap-x snap-proximity gap-3 overflow-x-auto pb-1 [&>li]:w-[min(18rem,85vw)] [&>li]:shrink-0 [&>li]:snap-start'
+              : 'grid gap-3 sm:grid-cols-2'
+          }
           aria-label="Published listings used in this answer"
         >
           {providers.map((source) => (
-            <li key={source.slug}>
-              <AeProviderSourceCard source={source} />
+            <li key={source.slug} className={REVEAL_ENTER}>
+              <AeProviderCard variant="answer" source={source} />
             </li>
           ))}
         </ul>
-        <p className="ae-answer__decision-note">
+        <p className="mt-2 font-mono text-2xs text-secondary">
           Compare service area, response, and next step. A person at the business still confirms timing, quote, and
           availability.
         </p>
@@ -455,24 +452,34 @@ function ProviderCompareTable({
   }
 
   return (
-    <section className="ae-answer-compare" aria-label="Provider comparison">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Compare</p>
-          <p className="ae-answer-panel-title">Published fit, side by side</p>
+    <section
+      className={`${REVEAL_ENTER} grid gap-0 overflow-hidden rounded-lg border border-border bg-surface`}
+      aria-label="Provider comparison"
+    >
+      <header className="flex items-start justify-between gap-3 border-b border-border p-4">
+        <div className="grid gap-1">
+          <AeKicker marker>Compare</AeKicker>
+          <p className="font-heading text-base text-primary">Published fit, side by side</p>
         </div>
-        <p className="ae-answer-panel-note">{listingCountLabel(providers.length)}</p>
+        <p className="shrink-0 font-mono text-2xs text-secondary">{listingCountLabel(providers.length)}</p>
       </header>
-      <div className="ae-answer-compare__scroller">
-        <table className="ae-answer-compare__table">
-          <caption className="ae-answer-compare__caption">
-            Comparison based on published provider details.
-          </caption>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[44rem] border-collapse text-sm">
+          <caption className="sr-only">Comparison based on published provider details.</caption>
           <thead>
             <tr>
-              <th scope="col">Provider</th>
+              <th
+                scope="col"
+                className="sticky left-0 z-10 w-[13.5rem] border-b border-border bg-surface px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-secondary"
+              >
+                Provider
+              </th>
               {fields.map((field) => (
-                <th key={field} scope="col">
+                <th
+                  key={field}
+                  scope="col"
+                  className="border-b border-border px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-secondary"
+                >
                   {compareFieldLabel(field)}
                 </th>
               ))}
@@ -498,130 +505,25 @@ function ProviderCompareRow({
 }) {
   return (
     <tr>
-      <th scope="row">
-        <span className="ae-answer-compare__provider">
-          <a href={provider.detailUrl}>{provider.name}</a>
-          <span>{provider.category}</span>
+      <th scope="row" className="sticky left-0 z-10 border-t border-border bg-surface px-4 py-3 text-left align-top">
+        <span className="grid gap-0.5">
+          <Link to={provider.detailUrl} className="font-medium text-primary underline-offset-4 hover:underline">
+            {provider.name}
+          </Link>
+          <span className="font-mono text-2xs text-secondary">{provider.category}</span>
         </span>
       </th>
       {fields.map((field) => (
-        <td key={`${provider.slug}-${field}`}>
-          <span className={`ae-answer-compare__value ae-answer-compare__value--${field}`}>
-            {compareFieldValue(provider, field)}
-          </span>
+        <td key={`${provider.slug}-${field}`} className="border-t border-border px-4 py-3 align-top tabular-nums text-secondary">
+          {compareFieldValue(provider, field)}
         </td>
       ))}
     </tr>
   )
 }
 
-function ServiceAreaFit({
-  providers,
-  locationLabel,
-}: {
-  providers: readonly AnswerSource[]
-  locationLabel?: string
-}) {
-  if (providers.length === 0) {
-    return null
-  }
 
-  return (
-    <section className="ae-answer-fit" aria-label="Service area fit">
-      <div className="ae-answer-fit__head">
-        <span className="ae-answer-fit__icon" aria-hidden="true">
-          <MapPinIcon />
-        </span>
-        <div>
-          <p className="ae-answer-panel-kicker">Service area fit</p>
-          <p className="ae-answer-panel-title">Where each listing says it works</p>
-        </div>
-        {locationLabel === undefined ? null : <p className="ae-answer-fit__location">{locationLabel}</p>}
-      </div>
-      <ul className="ae-answer-fit__list">
-        {providers.map((provider) => (
-          <li key={provider.slug} className="ae-answer-fit__item">
-            <span className="ae-answer-fit__marker">{provider.citationIndex}</span>
-            <span className="ae-answer-fit__copy">
-              <span className="ae-answer-fit__name">{provider.name}</span>
-              <span className="ae-answer-fit__area">{provider.serviceArea}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
 
-function NextStepMenu({ providers }: { providers: readonly AnswerSource[] }) {
-  if (providers.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="ae-answer-next-menu" aria-label="Provider next steps">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Contact path</p>
-          <p className="ae-answer-panel-title">Choose a route with clear expectations</p>
-        </div>
-      </header>
-      <ul className="ae-answer-next-menu__list">
-        {providers.map((provider) => {
-          const actionHref = provider.inquiryUrl ?? provider.detailUrl
-          const actionLabel = provider.inquiryUrl === undefined ? 'View details' : provider.nextStepLabel
-
-          return (
-            <li key={provider.slug} className="ae-answer-next-menu__item">
-              <span className="ae-answer-next-menu__index">{provider.citationIndex}</span>
-              <div className="ae-answer-next-menu__copy">
-                <span className="ae-answer-next-menu__name">{provider.name}</span>
-                <span className="ae-answer-next-menu__meta">
-                  <span>{provider.responseTimeLabel}</span>
-                  <span>{provider.availabilityLabel}</span>
-                </span>
-              </div>
-              <a className="ae-answer-next-menu__action" href={actionHref}>
-                <span>{actionLabel}</span>
-                <ArrowRightIcon aria-hidden="true" />
-              </a>
-            </li>
-          )
-        })}
-      </ul>
-      <p className="ae-answer-next-menu__boundary">Availability, quote, and job acceptance still need a reply.</p>
-    </section>
-  )
-}
-
-function ConfirmationChecklist({
-  title,
-  items,
-}: {
-  title?: string
-  items: readonly string[]
-}) {
-  return (
-    <section className="ae-answer-checklist" aria-label={title ?? 'Before contacting'}>
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Before you send</p>
-          <p className="ae-answer-panel-title">{title ?? 'Confirm the handoff details'}</p>
-        </div>
-      </header>
-      <ul className="ae-answer-checklist__list">
-        {items.map((item) => (
-          <li key={item} className="ae-answer-checklist__item">
-            <span className="ae-answer-checklist__check" aria-hidden="true">
-              <CheckIcon />
-            </span>
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
 
 function RecoveryPrompts({
   title,
@@ -635,22 +537,32 @@ function RecoveryPrompts({
   }
 
   return (
-    <section className="ae-answer-recovery" aria-label={title ?? 'Try another search'}>
-      <header className="ae-answer-recovery__head">
-        <span className="ae-answer-recovery__icon" aria-hidden="true">
-          <SearchIcon />
+    <section
+      className={`${REVEAL_ENTER} grid gap-3 rounded-lg border border-border bg-surface p-4`}
+      aria-label={title ?? 'Try another search'}
+    >
+      <header className="flex items-center gap-2">
+        <span
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-secondary"
+          aria-hidden="true"
+        >
+          <SearchIcon className="size-4" />
         </span>
-        <div>
-          <p className="ae-answer-panel-kicker">Refine search</p>
-          <p className="ae-answer-panel-title">{title ?? 'Try a narrower query'}</p>
+        <div className="grid gap-0.5">
+          <AeKicker marker>Refine search</AeKicker>
+          <p className="font-heading text-base text-primary">{title ?? 'Try a narrower query'}</p>
         </div>
       </header>
-      <ul className="ae-answer-recovery__list">
+      <ul className="flex flex-wrap gap-2">
         {prompts.map((prompt) => (
           <li key={`${prompt.label}-${prompt.query}`}>
-            <a className="ae-answer-recovery__prompt" href={`/?q=${encodeURIComponent(prompt.query)}`}>
+            <Link
+              className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-primary transition-colors hover:bg-muted active:scale-[0.96]"
+              to="/"
+              search={{ q: prompt.query }}
+            >
               {prompt.label}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
@@ -658,205 +570,13 @@ function RecoveryPrompts({
   )
 }
 
-function RoutePerspective({
-  providers,
-  query,
-}: {
-  providers: readonly AnswerSource[]
-  query?: string
-}) {
-  const target =
-    providers.length === 1 && providers[0] !== undefined
-      ? providers[0].name
-      : listingCountLabel(providers.length)
-
-  return (
-    <section className="ae-answer-perspective" aria-label="How this route works">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Three views</p>
-          <p className="ae-answer-panel-title">How to read this route</p>
-        </div>
-        {query === undefined ? null : <p className="ae-answer-panel-note">{query}</p>}
-      </header>
-      <ul className="ae-answer-perspective__list">
-        <RoutePerspectiveItem
-          index="1"
-          label="Person"
-          text={`Compare ${target}, then open details or send a qualified inquiry where available.`}
-        />
-        <RoutePerspectiveItem
-          index="2"
-          label="Assistant"
-          text="Read, compare, summarize, and route to the next step from the same published details."
-        />
-        <RoutePerspectiveItem
-          index="3"
-          label="Business"
-          text="Confirm timing, quote, availability, and whether the job can be accepted."
-        />
-      </ul>
-    </section>
-  )
-}
-
-function PublishedDetailsRail({ providers }: { providers: readonly AnswerSource[] }) {
-  if (providers.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="ae-answer-details" aria-label="Published provider details">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Published details</p>
-          <p className="ae-answer-panel-title">Same facts, different readers</p>
-        </div>
-        <p className="ae-answer-panel-note">People and assistants read this from the same listing data.</p>
-      </header>
-      <ul className="ae-answer-details__list">
-        {providers.map((provider) => (
-          <ProviderDetailStamp key={provider.slug} provider={provider} />
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function ProviderTradeoffList({ providers }: { providers: readonly AnswerSource[] }) {
-  if (providers.length === 0) {
-    return null
-  }
-
-  return (
-    <section className="ae-answer-tradeoffs" aria-label="Provider tradeoffs">
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Tradeoffs</p>
-          <p className="ae-answer-panel-title">What stands out before you ask</p>
-        </div>
-      </header>
-      <ul className="ae-answer-tradeoffs__list">
-        {providers.map((provider) => (
-          <ProviderTradeoffRow key={provider.slug} provider={provider} />
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function MessageStarter({
-  provider,
-  need,
-  location,
-  timing,
-}: {
-  provider: AnswerSource
-  need: string
-  location?: string
-  timing?: string
-}) {
-  const actionHref = provider.inquiryUrl ?? provider.detailUrl
-  const actionLabel = provider.inquiryUrl === undefined ? 'Open details' : provider.nextStepLabel
-
-  return (
-    <section className="ae-answer-draft" aria-label={`Message starter for ${provider.name}`}>
-      <header className="ae-answer-panel-head">
-        <div>
-          <p className="ae-answer-panel-kicker">Message starter</p>
-          <p className="ae-answer-panel-title">A clearer first inquiry</p>
-        </div>
-      </header>
-      <div className="ae-answer-draft__paper">
-        <p className="ae-answer-draft__line">Hi {provider.name},</p>
-        <p className="ae-answer-draft__line">I'm looking for help with {need}.</p>
-        <p className="ae-answer-draft__line">
-          Location: {location ?? 'please confirm whether this is inside your service area'}.
-        </p>
-        <p className="ae-answer-draft__line">Timing: {timing ?? 'please confirm your next available time'}.</p>
-        <p className="ae-answer-draft__line">
-          Could you confirm availability, what details you need from me, and whether you can quote?
-        </p>
-      </div>
-      <div className="ae-answer-draft__footer">
-        <p>Sending this starts a human inquiry. The business handles timing, price, and availability.</p>
-        <a className="ae-answer-draft__action" href={actionHref}>
-          <span>{actionLabel}</span>
-          <ArrowRightIcon aria-hidden="true" />
-        </a>
-      </div>
-    </section>
-  )
-}
 
 
-function RoutePerspectiveItem({
-  index,
-  label,
-  text,
-}: {
-  index: string
-  label: string
-  text: string
-}) {
-  return (
-    <li className="ae-answer-perspective__item">
-      <span className="ae-answer-perspective__index">{index}</span>
-      <span className="ae-answer-perspective__copy">
-        <span className="ae-answer-perspective__label">{label}</span>
-        <span className="ae-answer-perspective__text">{text}</span>
-      </span>
-    </li>
-  )
-}
 
-function ProviderDetailStamp({ provider }: { provider: AnswerSource }) {
-  return (
-    <li className="ae-answer-details__item">
-      <span className="ae-answer-details__stamp">{provider.citationIndex}</span>
-      <span className="ae-answer-details__copy">
-        <a className="ae-answer-details__name" href={provider.detailUrl}>
-          {provider.name}
-        </a>
-        <span className="ae-answer-details__facts">
-          <span>{provider.category}</span>
-          <span>{provider.serviceArea}</span>
-          <span>{provider.responseTimeLabel}</span>
-          <span>{provider.trustCue}</span>
-        </span>
-      </span>
-    </li>
-  )
-}
 
-function ProviderTradeoffRow({ provider }: { provider: AnswerSource }) {
-  const services = provider.services.slice(0, 3)
 
-  return (
-    <li className="ae-answer-tradeoffs__row">
-      <span className="ae-answer-tradeoffs__index">{provider.citationIndex}</span>
-      <span className="ae-answer-tradeoffs__main">
-        <a className="ae-answer-tradeoffs__name" href={provider.detailUrl}>
-          {provider.name}
-        </a>
-        <span className="ae-answer-tradeoffs__meta">
-          <span>{provider.availabilityLabel}</span>
-          <span>{provider.responseTimeLabel}</span>
-        </span>
-        {services.length === 0 ? null : (
-          <span className="ae-answer-tradeoffs__services">
-            {services.map((service) => (
-              <span key={`${provider.slug}-${service.name}`}>{service.name}</span>
-            ))}
-          </span>
-        )}
-      </span>
-      <span className="ae-answer-tradeoffs__confirm">
-        Confirm timing, quote, and job acceptance with the business.
-      </span>
-    </li>
-  )
-}
+
+
 
 
 function compareFieldLabel(field: AnswerCompareField): string {

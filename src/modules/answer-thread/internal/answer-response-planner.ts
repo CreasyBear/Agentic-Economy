@@ -1,6 +1,7 @@
 import {
   buildAgentJsonUrl,
   extractRequestedLocation,
+  getDefaultArtifactBudgetForLayoutProfile,
   type AnswerArtifact,
   type AnswerLayoutProfile,
   type AnswerSnapshot,
@@ -59,81 +60,43 @@ export type AnswerTurnResponsePlan = Extract<AnswerResponsePlan, { mode: 'clarif
 const RESPONSE_MODE_BUDGETS = {
   clarify: {
     providerBudget: { searchLimit: 0, visibleLimit: 0 },
-    artifactBudget: {
-      layoutProfile: 'clarification',
-      allowedKinds: ['one-line', 'prose', 'what-to-do-now'],
-      maxArtifactCount: 3,
-      maxProviderCards: 0,
-    },
+    layoutProfile: 'clarification',
   },
   answer: {
     providerBudget: { searchLimit: ANSWER_SEARCH_PROVIDER_LIMIT, visibleLimit: ANSWER_SEARCH_PROVIDER_LIMIT },
-    artifactBudget: {
-      layoutProfile: 'discovery_full',
-      allowedKinds: ['one-line', 'provider-cards', 'location-map', 'prose', 'what-to-do-now'],
-      maxArtifactCount: 5,
-      maxProviderCards: ANSWER_SEARCH_PROVIDER_LIMIT,
-    },
+    layoutProfile: 'discovery_full',
   },
   compare: {
     providerBudget: { searchLimit: 0, visibleLimit: 2 },
-    artifactBudget: {
-      layoutProfile: 'compare_pair',
-      allowedKinds: ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'],
-      maxArtifactCount: 4,
-      maxProviderCards: 0,
-    },
+    layoutProfile: 'compare_pair',
   },
   filter: {
     providerBudget: { searchLimit: 0, visibleLimit: ANSWER_SEARCH_PROVIDER_LIMIT },
-    artifactBudget: {
-      layoutProfile: 'refinement_compact',
-      allowedKinds: ['one-line', 'provider-cards', 'what-to-do-now'],
-      maxArtifactCount: 3,
-      maxProviderCards: ANSWER_SEARCH_PROVIDER_LIMIT,
-    },
+    layoutProfile: 'refinement_compact',
   },
   empty: {
     providerBudget: { searchLimit: ANSWER_SEARCH_PROVIDER_LIMIT, visibleLimit: 0 },
-    artifactBudget: {
-      layoutProfile: 'empty_state',
-      allowedKinds: ['one-line', 'prose', 'recovery-prompts', 'what-to-do-now'],
-      maxArtifactCount: 4,
-      maxProviderCards: 0,
-    },
+    layoutProfile: 'empty_state',
   },
   boundary: {
     providerBudget: { searchLimit: 0, visibleLimit: 0 },
-    artifactBudget: {
-      layoutProfile: 'boundary_explain',
-      allowedKinds: ['one-line', 'prose', 'what-to-do-now'],
-      maxArtifactCount: 3,
-      maxProviderCards: 0,
-    },
+    layoutProfile: 'boundary_explain',
   },
   error: {
     providerBudget: { searchLimit: 0, visibleLimit: 0 },
-    artifactBudget: {
-      layoutProfile: 'boundary_explain',
-      allowedKinds: ['one-line', 'what-to-do-now'],
-      maxArtifactCount: 2,
-      maxProviderCards: 0,
-    },
+    layoutProfile: 'boundary_explain',
   },
-} satisfies Record<AnswerResponseMode, { providerBudget: AnswerProviderBudget; artifactBudget: AnswerArtifactBudget }>
+} satisfies Record<AnswerResponseMode, { providerBudget: AnswerProviderBudget; layoutProfile: AnswerLayoutProfile }>
 
 export function defaultProviderBudgetForMode(mode: AnswerResponseMode): AnswerProviderBudget {
   return { ...RESPONSE_MODE_BUDGETS[mode].providerBudget }
 }
 
+// Single artifact-budget source of truth: the layout profile owns the budget
+// (getDefaultArtifactBudgetForLayoutProfile in snapshot-artifacts). This module
+// only maps response mode -> layout profile; it never re-declares budgets.
 export function defaultArtifactBudgetForMode(mode: AnswerResponseMode): AnswerArtifactBudget {
-  const budget = RESPONSE_MODE_BUDGETS[mode].artifactBudget
-  return {
-    layoutProfile: budget.layoutProfile,
-    allowedKinds: budget.allowedKinds,
-    maxArtifactCount: budget.maxArtifactCount,
-    maxProviderCards: budget.maxProviderCards,
-  }
+  return getDefaultArtifactBudgetForLayoutProfile(RESPONSE_MODE_BUDGETS[mode].layoutProfile)
 }
 
 

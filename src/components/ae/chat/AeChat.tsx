@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeftIcon } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { AePublicShell, defaultHomeSearch } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@/components/ui/button'
+import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { Button } from '@astryxdesign/core/Button'
+import { IconButton } from '@astryxdesign/core/IconButton'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
@@ -33,30 +34,62 @@ type LiveTurn = {
   searchContext: AeSearchContext
 }
 
+type ProjectionFetchState = {
+  threadId: string
+  projection: PublicThreadProjection | null
+  unavailable: boolean
+}
+
+type ThreadRecordsUpdater =
+  | readonly AnswerThreadRecord[]
+  | ((current: readonly AnswerThreadRecord[]) => readonly AnswerThreadRecord[])
+
 const RECENT_THREADS_STORAGE_KEY = 'ae.recentThreads.v1'
 const RECENT_THREADS_LIMIT = 20
+const EMPTY_THREAD_RECORDS_SNAPSHOT = '[]'
+let fallbackThreadRecordsSnapshot = EMPTY_THREAD_RECORDS_SNAPSHOT
+let preferFallbackThreadRecordsSnapshot = false
+const threadRecordsSubscribers = new Set<() => void>()
 
 export function AeChat({ threadId = null, initialQuery = null, initialProjection }: AeChatProps) {
   const navigate = useNavigate()
-  const [projection, setProjection] = useState<PublicThreadProjection | null>(initialProjection ?? null)
-  const [projectionUnavailable, setProjectionUnavailable] = useState(false)
-  const [threads, setThreads] = useState<readonly AnswerThreadRecord[]>([])
-  const [storedThreadsLoaded, setStoredThreadsLoaded] = useState(false)
-  const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(null)
-  const [generation, setGeneration] = useState(0)
-  const [streamingBusy, setStreamingBusy] = useState(false)
-  const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
-  const [searchContext] = useState<AeSearchContext>(DEFAULT_AE_SEARCH_CONTEXT)
-  const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
-  const startedInitialQueryRef = useRef<string | null>(null)
-  const pendingThreadIdRef = useRef<string | null>(null)
-
   const routeThreadId = threadId
+  const initialRouteQuery = routeThreadId === null ? (initialQuery?.trim() ?? '') : ''
+  const initialLiveTurn =
+    initialRouteQuery.length > 0
+      ? ({ query: initialRouteQuery, generation: 1, searchContext: DEFAULT_AE_SEARCH_CONTEXT } satisfies LiveTurn)
+      : null
+  const [fetchedProjection, setFetchedProjection] = useState<ProjectionFetchState | null>(null)
+  const threads = useStoredThreadRecords()
+  const threadsRef = useRef(threads)
+  const [liveTurn, setLiveTurn] = useState<LiveTurn | null>(initialLiveTurn)
+  const generationRef = useRef(initialLiveTurn === null ? 0 : 1)
+  const [streamingBusy, setStreamingBusy] = useState(initialLiveTurn !== null)
+  const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
+  const searchContext = DEFAULT_AE_SEARCH_CONTEXT
+  const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
+  const pendingThreadIdRef = useRef<string | null>(null)
+  threadsRef.current = threads
+
+  const setThreadRecords = useCallback((updater: ThreadRecordsUpdater) => {
+    const nextThreads = typeof updater === 'function' ? updater(threadsRef.current) : updater
+    writeStoredThreadRecords(nextThreads)
+  }, [])
+
+  const initialRouteProjection =
+    routeThreadId !== null && initialProjection?.threadId === routeThreadId ? initialProjection : null
+  const fetchedRouteProjection = fetchedProjection?.threadId === routeThreadId ? fetchedProjection : null
+  const projection =
+    routeThreadId === null ? null : (initialRouteProjection ?? fetchedRouteProjection?.projection ?? null)
+  const projectionUnavailable =
+    routeThreadId !== null &&
+    (initialProjection === null || (initialRouteProjection === null && fetchedRouteProjection?.unavailable === true))
   const streamingThreadId = routeThreadId ?? sessionThreadId
   const showWelcome = routeThreadId === null && liveTurn === null && (projection?.turns.length ?? 0) === 0
   const showThreadUnavailable = routeThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const completedTurnCount = completedTurns.length
+
 
   const wasShowingWelcomeRef = useRef(showWelcome)
   const [leavingWelcome, setLeavingWelcome] = useState(showWelcome)
@@ -68,42 +101,26 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         return
       }
       const body = (await response.json()) as { threads: readonly AnswerThreadRecord[] }
-      setThreads((current) => mergeThreadRecords(body.threads, current))
+      setThreadRecords((current) => mergeThreadRecords(body.threads, current))
     } catch {
       // Sidebar is optional when persistence is unavailable.
     }
-  }, [])
+  }, [setThreadRecords])
 
   const refreshProjection = useCallback(async (id: string) => {
     try {
       const response = await fetch(`/api/answer/threads/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
       if (!response.ok) {
-        setProjection(null)
-        setProjectionUnavailable(true)
+        setFetchedProjection({ threadId: id, projection: null, unavailable: true })
         return
       }
       const body = (await response.json()) as PublicThreadProjection
-      setProjection(body)
-      setProjectionUnavailable(false)
+      setFetchedProjection({ threadId: id, projection: body, unavailable: false })
     } catch {
-      setProjectionUnavailable(true)
+      setFetchedProjection({ threadId: id, projection: null, unavailable: true })
     }
   }, [])
 
-  useEffect(() => {
-    const stored = readStoredThreadRecords()
-    if (stored.length > 0) {
-      setThreads((current) => mergeThreadRecords(stored, current))
-    }
-    setStoredThreadsLoaded(true)
-  }, [])
-
-  useEffect(() => {
-    if (!storedThreadsLoaded) {
-      return
-    }
-    writeStoredThreadRecords(threads)
-  }, [storedThreadsLoaded, threads])
 
   useEffect(() => {
     void refreshThreads()
@@ -111,40 +128,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   useEffect(() => {
     if (routeThreadId === null) {
-      setProjection(null)
-      setProjectionUnavailable(false)
       return
     }
-    if (initialProjection?.threadId === routeThreadId) {
-      setProjection(initialProjection)
-      setProjectionUnavailable(false)
-      return
-    }
-    if (initialProjection === null) {
-      setProjection(null)
-      setProjectionUnavailable(true)
+    if (initialProjection?.threadId === routeThreadId || initialProjection === null) {
       return
     }
     void refreshProjection(routeThreadId)
   }, [routeThreadId, initialProjection, refreshProjection])
 
-  useEffect(() => {
-    const trimmed = initialQuery?.trim()
-    if (trimmed === undefined || trimmed.length === 0) {
-      startedInitialQueryRef.current = null
-      return
-    }
-    if (startedInitialQueryRef.current === trimmed) {
-      return
-    }
-    startedInitialQueryRef.current = trimmed
-    setStreamingBusy(true)
-    setGeneration((current) => {
-      const next = current + 1
-      setLiveTurn({ query: trimmed, generation: next, searchContext })
-      return next
-    })
-  }, [initialQuery, searchContext])
 
   useEffect(() => {
     if (showWelcome) {
@@ -165,11 +156,9 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   function startTurn(query: string, context: AeSearchContext = searchContext) {
     setStreamingBusy(true)
-    setGeneration((current) => {
-      const next = current + 1
-      setLiveTurn({ query, generation: next, searchContext: context })
-      return next
-    })
+    const nextGeneration = generationRef.current + 1
+    generationRef.current = nextGeneration
+    setLiveTurn({ query, generation: nextGeneration, searchContext: context })
   }
 
   function handleSubmit(query: string) {
@@ -184,7 +173,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   function handleThreadCreated(id: string) {
     pendingThreadIdRef.current = id
     setSessionThreadId(id)
-    setThreads((current) => upsertOptimisticThread(current, {
+    setThreadRecords((current) => upsertOptimisticThread(current, {
       threadId: id,
       title: liveTurn?.query.trim() ?? 'New question',
     }))
@@ -229,9 +218,9 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleDeleteThread(deletedThreadId: string) {
-    setThreads((current) => current.filter((thread) => thread.threadId !== deletedThreadId))
+    setThreadRecords((current) => current.filter((thread) => thread.threadId !== deletedThreadId))
     if (routeThreadId === deletedThreadId) {
-      void navigate({ to: '/', search: defaultHomeSearch, replace: true })
+      void navigate({ to: '/', replace: true })
     }
   }
 
@@ -250,28 +239,27 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     liveTurn === null && completedTurns.length > 0 ? (completedTurns[completedTurns.length - 1]?.turnId ?? null) : null
 
   const shell = (
-    <div className={`ae-chat-layout${sidebarVisible ? ' ae-chat-layout--with-sidebar' : ''}`}>
+    <div className={`grid h-full min-h-0 w-full bg-body${sidebarVisible ? ' lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]' : ''}`}>
       <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} />
-      <div className="ae-chat-shell">
+      <div className="flex h-full min-h-0 w-full flex-col bg-body">
         {showSidebarToggle ? (
-          <div className="ae-chat-toolbar">
-            <Button
+          <div className="flex min-h-10 items-center px-4 pt-2 md:px-6">
+            <IconButton
+              label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
               variant="ghost"
-              size="icon-sm"
-              className="ae-chat-sidebar-toggle"
+              size="sm"
+              className="hidden text-secondary lg:inline-flex"
+              icon={<PanelLeftIcon aria-hidden="true" />}
               onClick={() => setSidebarManuallyOpen((value) => !value)}
               aria-controls="ae-thread-sidebar"
               aria-expanded={sidebarVisible}
-              aria-label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
-            >
-              <PanelLeftIcon data-icon="only" />
-            </Button>
+            />
           </div>
         ) : null}
         {showThreadChrome && projection !== null ? (
           <AeThreadHeader title={projection.title} threadId={projection.threadId} />
         ) : null}
-        <div className="ae-chat-stage">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           <AeThreadScroller
             key={scrollerKey}
             autoScroll={liveTurn !== null}
@@ -281,14 +269,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             showJumpButton={liveTurn !== null}
           >
             {showThreadUnavailable ? (
-              <div className="ae-chat-empty">
+              <div className="mx-auto my-12 w-full max-w-[36rem]">
                 <AeEmptyState
                   title="Thread unavailable"
                   description="This answer thread could not be found or loaded. Start a fresh search to keep going."
                   action={
-                    <Button asChild variant="publicSecondary" size="sm">
-                      <a href="/">Start a new search</a>
-                    </Button>
+                    <Button label="Start a new search" href="/" variant="secondary" size="sm" />
                   }
                 />
               </div>
@@ -304,7 +290,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             />
           </AeThreadScroller>
           {!showWelcome ? (
-            <div className="ae-chat-panel-wrap">
+            <div className="mx-auto w-full max-w-[52rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
               <AeQueryPanel
                 onSubmit={handleSubmit}
                 busy={streamingBusy}
@@ -315,10 +301,10 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           ) : null}
           {landingMode ? (
             <div
-              className={`ae-chat-landing ${!showWelcome ? 'ae-chat-landing--exit' : ''}`}
+              className={`absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-body px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-200${!showWelcome ? ' pointer-events-none invisible opacity-0' : ''}`}
               aria-hidden={!showWelcome}
             >
-              <div className="ae-chat-landing__inner">
+              <div className="mx-auto flex w-full min-w-0 max-w-[44rem] flex-col gap-8">
                 <AeChatWelcome />
                 {showWelcome ? (
                   <AeQueryPanel
@@ -337,10 +323,60 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   )
 
   return (
-    <AePublicShell immersive hideFooter>
+    <AePublicShell immersive>
       {isStructuredAnswerModeEnabled() ? <AeAnswerModelProvider>{shell}</AeAnswerModelProvider> : shell}
     </AePublicShell>
   )
+}
+
+function useStoredThreadRecords(): readonly AnswerThreadRecord[] {
+  const snapshot = useSyncExternalStore(
+    subscribeThreadRecords,
+    getThreadRecordsSnapshot,
+    getServerThreadRecordsSnapshot,
+  )
+  return useMemo(() => readStoredThreadRecordsSnapshot(snapshot), [snapshot])
+}
+
+function subscribeThreadRecords(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => undefined
+  }
+
+  threadRecordsSubscribers.add(onStoreChange)
+  const handleStorage = (event: StorageEvent) => {
+    if (event.storageArea === window.sessionStorage && event.key === RECENT_THREADS_STORAGE_KEY) {
+      onStoreChange()
+    }
+  }
+  window.addEventListener('storage', handleStorage)
+
+  return () => {
+    threadRecordsSubscribers.delete(onStoreChange)
+    window.removeEventListener('storage', handleStorage)
+  }
+}
+
+function getThreadRecordsSnapshot(): string {
+  if (typeof window === 'undefined') {
+    return fallbackThreadRecordsSnapshot
+  }
+  if (preferFallbackThreadRecordsSnapshot) {
+    return fallbackThreadRecordsSnapshot
+  }
+  try {
+    return window.sessionStorage.getItem(RECENT_THREADS_STORAGE_KEY) ?? fallbackThreadRecordsSnapshot
+  } catch {
+    return fallbackThreadRecordsSnapshot
+  }
+}
+
+function getServerThreadRecordsSnapshot(): string {
+  return EMPTY_THREAD_RECORDS_SNAPSHOT
+}
+
+function notifyThreadRecordsSubscribers(): void {
+  threadRecordsSubscribers.forEach((subscriber) => subscriber())
 }
 
 function mergeThreadRecords(
@@ -373,15 +409,8 @@ function upsertOptimisticThread(
   return mergeThreadRecords([optimistic], current.filter((thread) => thread.threadId !== input.threadId))
 }
 
-function readStoredThreadRecords(): AnswerThreadRecord[] {
-  if (typeof window === 'undefined') {
-    return []
-  }
+function readStoredThreadRecordsSnapshot(raw: string): AnswerThreadRecord[] {
   try {
-    const raw = window.sessionStorage.getItem(RECENT_THREADS_STORAGE_KEY)
-    if (raw === null) {
-      return []
-    }
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) {
       return []
@@ -393,17 +422,17 @@ function readStoredThreadRecords(): AnswerThreadRecord[] {
 }
 
 function writeStoredThreadRecords(threads: readonly AnswerThreadRecord[]): void {
-  if (typeof window === 'undefined') {
-    return
+  fallbackThreadRecordsSnapshot = JSON.stringify(threads.map(sanitizeThreadRecord).slice(0, RECENT_THREADS_LIMIT))
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.setItem(RECENT_THREADS_STORAGE_KEY, fallbackThreadRecordsSnapshot)
+      preferFallbackThreadRecordsSnapshot = false
+    } catch {
+      preferFallbackThreadRecordsSnapshot = true
+      // Recent questions still work in-memory when storage is unavailable.
+    }
   }
-  try {
-    window.sessionStorage.setItem(
-      RECENT_THREADS_STORAGE_KEY,
-      JSON.stringify(threads.map(sanitizeThreadRecord).slice(0, RECENT_THREADS_LIMIT)),
-    )
-  } catch {
-    // Recent questions still work from the server session when storage is unavailable.
-  }
+  notifyThreadRecordsSubscribers()
 }
 
 function readStoredThreadRecord(value: unknown): AnswerThreadRecord[] {

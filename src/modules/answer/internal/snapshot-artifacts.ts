@@ -87,7 +87,7 @@ export function buildArtifactsFromSnapshot(
     artifacts.push({ kind: 'what-to-do-now', text: snapshot.nextStep })
   }
 
-  if (!compact && snapshot.agentJsonUrl.length > 0) {
+  if (snapshot.agentJsonUrl.length > 0) {
     artifacts.push({ kind: 'agent-json', url: snapshot.agentJsonUrl })
   }
 
@@ -148,12 +148,13 @@ export function filterArtifactsForBudget(
   const maxArtifactCount = Math.max(0, budget.maxArtifactCount)
   let remainingProviderCards = Math.max(0, budget.maxProviderCards)
   const budgeted: AnswerArtifact[] = []
+  const allowedKinds = new Set(budget.allowedKinds)
 
   for (const artifact of artifacts) {
     if (budgeted.length >= maxArtifactCount) {
       break
     }
-    if (!budget.allowedKinds.includes(artifact.kind)) {
+    if (!allowedKinds.has(artifact.kind)) {
       continue
     }
 
@@ -192,42 +193,7 @@ function capArtifactForBudget(
             ...(artifact.fields === undefined ? {} : { fields: artifact.fields }),
           }
     }
-    case 'service-area-fit': {
-      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
-      return providers.length === 0
-        ? undefined
-        : {
-            kind: 'service-area-fit',
-            providers,
-            ...(artifact.locationLabel === undefined ? {} : { locationLabel: artifact.locationLabel }),
-          }
-    }
-    case 'next-step-menu': {
-      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
-      return providers.length === 0 ? undefined : { kind: 'next-step-menu', providers }
-    }
-    case 'route-perspective': {
-      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
-      return providers.length === 0
-        ? undefined
-        : {
-            kind: 'route-perspective',
-            providers,
-            ...(artifact.query === undefined ? {} : { query: artifact.query }),
-          }
-    }
-    case 'published-details-rail': {
-      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
-      return providers.length === 0 ? undefined : { kind: 'published-details-rail', providers }
-    }
-    case 'provider-tradeoff-list': {
-      const providers = artifact.providers.slice(0, Math.max(0, budget.maxProviderCards))
-      return providers.length === 0 ? undefined : { kind: 'provider-tradeoff-list', providers }
-    }
-    case 'message-starter':
-      return budget.maxProviderCards <= 0 ? undefined : artifact
     case 'one-line':
-    case 'confirmation-checklist':
     case 'recovery-prompts':
     case 'location-map':
     case 'prose':
@@ -256,8 +222,4 @@ function stripPlaceWords(query: string): string {
     .replace(/\b\d{4}\b/g, '')
     .trim()
   return stripped.length > 0 ? stripped : query
-}
-
-export function buildAgentJsonUrlForQuery(query: string, limit?: number): string {
-  return buildAgentJsonUrl(query, limit)
 }
