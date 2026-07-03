@@ -4,6 +4,8 @@ const QUERY = 'emergency plumber parramatta'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
 const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
 const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to the first listed business'
+const FILTER_FOLLOW_UP_QUERY = 'Show only businesses that accept inquiries'
+const FILTER_FOLLOW_UP_LABEL = /Inquiry-ready listings/
 const COMPARE_FOLLOW_UP_QUERY = 'Compare the top two'
 const COMPARE_FOLLOW_UP_LABEL = /Compare the top two/
 const futureSurfaceCopy =
@@ -131,6 +133,61 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
       /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
     )
+    await assertPublicLanguage(page)
+  })
+
+  test('keeps an inquiry-ready filter as context for the qualified inquiry handoff', async ({ page }) => {
+    test.setTimeout(60_000)
+    await page.goto('/')
+    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
+
+    await submitLandingQuery(page, MULTI_PROVIDER_QUERY)
+    await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, MULTI_PROVIDER_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const firstShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
+    await expect(firstShortlist).toContainText(/Demo Plumbing/i)
+    await expect(firstShortlist).toContainText(/Parramatta Emergency Plumbing/i)
+
+    const inquiryReadyButton = page.getByRole('button', { name: /only inquiry-ready listings/i })
+    await expect(inquiryReadyButton).toBeEnabled()
+    await inquiryReadyButton.click()
+
+    await expectQueryInTranscript(page, FILTER_FOLLOW_UP_QUERY, FILTER_FOLLOW_UP_LABEL)
+    await waitForLatestReadyAnswer(page)
+    await expect(page.getByLabel(/turn context/i).last()).toContainText(
+      /Filtering 1 listed business from this thread/i,
+    )
+
+    const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
+    await expect(checks).toContainText(/0 searches.*1 read.*1 listed.*5\/5 checks/i)
+    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(
+      /Using previous listed businesses/i,
+    )
+    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(/Checking fit/i)
+
+    const filteredShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
+    await expect(filteredShortlist).toContainText(/1 listing/i)
+    await expect(filteredShortlist).toContainText(/Demo Plumbing/i)
+    await expect(filteredShortlist).not.toContainText(/Parramatta Emergency Plumbing/i)
+    await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
+      /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
+    )
+
+    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry/i })
+    await expect(startInquiryButton).toBeEnabled()
+    await startInquiryButton.click()
+    await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
+    await waitForLatestReadyAnswer(page)
+
+    const selectedBusiness = page.getByRole('region', { name: /selected business/i })
+    await expect(selectedBusiness).toContainText(/Demo Plumbing/i, { timeout: 30_000 })
+    await expect(selectedBusiness).toContainText(/Choice 1 from this thread/i)
+    await expect(selectedBusiness).toContainText(/The business still confirms timing, quote, and availability/i)
+
+    const inquiryLink = selectedBusiness.getByRole('link', { name: /open inquiry form/i })
+    await expect(inquiryLink).toHaveAttribute('href', /\/plumbing-demo\/inquiry\?from=thread&id=.+/)
     await assertPublicLanguage(page)
   })
 })
