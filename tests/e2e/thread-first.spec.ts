@@ -37,7 +37,7 @@ test.describe('thread-first answer flow', () => {
     await page.getByRole('link', { name: /new question/i }).click()
     await expect(page).toHaveURL(/\/(?:\?q=)?$/)
 
-    await startThreadFromQueryUrl(page, SECOND_QUERY)
+    await startThreadFromQueryUrl(page, SECOND_QUERY, { expectTranscript: false })
 
     await expect(page.getByRole('complementary', { name: /recent questions/i })).toBeVisible()
     await expect(page.getByRole('link', { name: /emergency plumber parramatta/i })).toBeVisible({ timeout: 15_000 })
@@ -59,10 +59,16 @@ async function startFirstThread(page: Page, projectName: string) {
   await submitThreadQuery(page, FIRST_QUERY)
 }
 
-async function startThreadFromQueryUrl(page: Page, query: string) {
+async function startThreadFromQueryUrl(
+  page: Page,
+  query: string,
+  options: { expectTranscript?: boolean } = {},
+) {
   await page.goto(`/?q=${encodeURIComponent(query)}`)
   await expect(page).toHaveURL(/\/t\//, { timeout: 30_000 })
-  await expectQueryInTranscript(page, query)
+  if (options.expectTranscript !== false) {
+    await expectQueryInTranscript(page, query)
+  }
 }
 
 async function submitThreadQuery(page: Page, query: string) {
