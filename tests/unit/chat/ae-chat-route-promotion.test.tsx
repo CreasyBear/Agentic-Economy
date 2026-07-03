@@ -186,6 +186,11 @@ describe('AeChat route promotion', () => {
     fireEvent.click(screen.getByTestId('active-query-panel'))
 
     expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
+    const panel = screen.getByTestId('active-query-panel')
+    expect(panel.getAttribute('data-placeholder')).toBe('Preparing the qualified inquiry next step')
+    expect(panel.getAttribute('data-loop-hint')).toBe(
+      'AE is carrying the selected business into inquiry review. The business still confirms timing, price, and availability.',
+    )
   })
 
   it('guides the composer toward refinement when no listed business is available', () => {
