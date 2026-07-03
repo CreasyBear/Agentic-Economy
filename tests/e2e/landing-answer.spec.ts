@@ -8,7 +8,7 @@ test.describe('landing query -> thread answer', () => {
   test('submits a need and streams a cited provider answer on a thread page', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
+    await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
 
     const query = 'emergency plumber parramatta'
     await submitLandingQuery(page, query)
@@ -18,7 +18,7 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
     await expect(page.getByText(/publishes service coverage/i).first()).toBeVisible()
-    await expect(page.getByText(/Open a listed provider page and send an inquiry/i).first()).toBeVisible()
+    await expect(page.getByText(/Open a listed business page and send an inquiry/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
     expect(bodyText).not.toMatch(/\b(?:KNOWN|UNKNOWN|UNAVAILABLE)\b/)

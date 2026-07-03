@@ -53,6 +53,25 @@ describe('AeFollowUpChips', () => {
     expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
   })
 
+  it('states the contact boundary when listed businesses lack an inquiry path', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+
+    render(<AeFollowUpChips turn={turn({
+      artifacts: [
+        {
+          kind: 'provider-cards',
+          providers: [providerWithoutInquiry()],
+        },
+      ],
+    })} onSelect={vi.fn()} />)
+
+    const panel = screen.getByRole('region', { name: 'Continue this thread' })
+    expect(panel.contains(screen.getByText(
+      'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.',
+    ))).toBe(true)
+    expect(screen.queryByText('Start qualified inquiry')).toBeNull()
+  })
+
   it('keeps the follow-up panel available after a selected-provider handoff', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
     const onSelect = vi.fn()

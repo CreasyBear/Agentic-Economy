@@ -140,11 +140,20 @@ function followUpSummary(
   chips: readonly FollowUpChip[],
   contextPlacement: NonNullable<AeFollowUpChipsProps['contextPlacement']>,
 ): string {
+  const providers = extractProviders(turn)
+  const hasListedBusinesses = providers.length > 0
+  const hasInquiryReadyBusiness = providers.some((provider) =>
+    typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0)
+
   if (chips.some((chip) => chip.label === 'Start qualified inquiry')) {
     if (contextPlacement === 'carried') {
       return 'Narrow, compare, or start a qualified inquiry from the businesses already found in this thread.'
     }
     return 'Narrow, compare, or start a qualified inquiry from the listed businesses above.'
+  }
+
+  if (hasListedBusinesses && !hasInquiryReadyBusiness) {
+    return 'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.'
   }
 
   if (turn.artifacts.some((artifact) => artifact.kind === 'selected-provider')) {

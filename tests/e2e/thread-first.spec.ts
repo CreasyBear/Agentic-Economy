@@ -55,7 +55,7 @@ async function startFirstThread(page: Page, projectName: string) {
   }
 
   await page.goto('/')
-  await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
+  await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
   await submitThreadQuery(page, FIRST_QUERY)
 }
 
