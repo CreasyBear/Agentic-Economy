@@ -318,7 +318,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             <AeSessionJourney projection={projection} liveTurn={liveTurn} />
             <AeSessionContextPanel projection={projection} liveTurn={liveTurn} />
             <AeThreadTranscript
-              threadId={routeThreadId}
+              threadId={streamingThreadId}
               projection={projection}
               liveTurn={liveTurn}
               onThreadCreated={handleThreadCreated}

@@ -146,6 +146,12 @@ describe('AeChat route promotion', () => {
 
     await act(async () => {
       testState.latestTranscriptProps?.onThreadCreated?.('thread-promoted-1')
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-promoted-1')
+
+    await act(async () => {
       testState.latestTranscriptProps?.onStreamEnd?.('complete')
       await Promise.resolve()
     })
