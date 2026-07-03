@@ -70,6 +70,8 @@ describe('AeFollowUpChips', () => {
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
+    expect(panel.contains(screen.getByText('Use the selected inquiry path above, or keep narrowing this thread.'))).toBe(true)
+    expect(screen.queryByText('Start qualified inquiry')).toBeNull()
     fireEvent.click(screen.getByText('Only inquiry-ready listings'))
 
     expect(onSelect).toHaveBeenCalledWith('Show only businesses that accept inquiries')

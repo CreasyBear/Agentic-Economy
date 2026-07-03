@@ -15,7 +15,11 @@ export type FollowUpChipBuildInput = {
 export function buildFollowUpChips(input: FollowUpChipBuildInput): FollowUpChip[] {
   const deterministic = buildDeterministicFollowUpChips(input.turn)
   const llm: FollowUpChip[] = []
+  const selectedProviderContext = hasSelectedProviderArtifact(input.turn.artifacts)
   for (const chip of input.llmChips ?? []) {
+    if (selectedProviderContext && classifyFollowUpIntent(chip, 1) === 'inquiry_handoff') {
+      continue
+    }
     if (validateFollowUpChip(chip, 1)) {
       llm.push({ label: chip, submitQuery: chip })
     }
@@ -34,9 +38,10 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
   const chips: FollowUpChip[] = []
   const providers = providersForFollowUps(turn.artifacts)
   const inquiryReadyProviders = providers.filter(hasPublishedInquiryPath)
+  const selectedProviderContext = hasSelectedProviderArtifact(turn.artifacts)
 
   const inquiryHandoffQuery = buildInquiryHandoffQuery(providers, inquiryReadyProviders)
-  if (inquiryHandoffQuery !== undefined) {
+  if (!selectedProviderContext && inquiryHandoffQuery !== undefined) {
     chips.push({
       label: 'Start qualified inquiry',
       submitQuery: inquiryHandoffQuery,
@@ -67,6 +72,10 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
 
   return chips.slice(0, 4)
+}
+
+function hasSelectedProviderArtifact(artifacts: PublicThreadTurn['artifacts']): boolean {
+  return artifacts.some((artifact) => artifact.kind === 'selected-provider')
 }
 
 function providersForFollowUps(

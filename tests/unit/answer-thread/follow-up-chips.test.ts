@@ -118,11 +118,27 @@ describe('follow-up chips', () => {
       ],
     }))
 
-    expect(chips[0]).toEqual({
-      label: 'Start qualified inquiry',
-      submitQuery: 'Send a qualified inquiry to the first listed business',
-    })
+    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Send a qualified inquiry to the first listed business')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Narrow to Parramatta')
+  })
+
+  it('does not re-add inquiry handoff LLM chips after a selected-provider handoff', () => {
+    const chips = buildFollowUpChips({
+      turn: turn({
+        intent: 'inquiry_handoff',
+        query: 'Send a qualified inquiry to the first listed business',
+        artifacts: [
+          {
+            kind: 'selected-provider',
+            provider: provider({ slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+          },
+        ],
+      }),
+      llmChips: ['Send a qualified inquiry to the first listed business', 'Narrow to Parramatta'],
+    })
+
+    expect(chips.map((chip) => chip.submitQuery)).not.toContain('Send a qualified inquiry to the first listed business')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Narrow to Parramatta')
   })
 

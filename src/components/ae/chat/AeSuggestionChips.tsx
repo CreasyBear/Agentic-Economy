@@ -116,9 +116,7 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
     return null
   }
 
-  const summary = chips.some((chip) => chip.label.toLowerCase().includes('inquiry'))
-    ? 'Narrow, compare, or start a qualified inquiry from the listed businesses above.'
-    : 'Narrow or compare the listed businesses from this thread.'
+  const summary = followUpSummary(turn, chips)
 
   return (
     <section className="grid gap-3 rounded-md border border-border bg-surface p-3" aria-label="Continue this thread">
@@ -134,6 +132,22 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
       />
     </section>
   )
+}
+
+function followUpSummary(turn: PublicThreadTurn, chips: readonly FollowUpChip[]): string {
+  if (chips.some((chip) => chip.label === 'Start qualified inquiry')) {
+    return 'Narrow, compare, or start a qualified inquiry from the listed businesses above.'
+  }
+
+  if (turn.artifacts.some((artifact) => artifact.kind === 'selected-provider')) {
+    return 'Use the selected inquiry path above, or keep narrowing this thread.'
+  }
+
+  if (chips.some((chip) => chip.label === 'Only inquiry-ready listings')) {
+    return 'Filter to inquiry-ready listings, or keep narrowing this thread.'
+  }
+
+  return 'Narrow or compare the listed businesses from this thread.'
 }
 
 function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {
