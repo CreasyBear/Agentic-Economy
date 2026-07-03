@@ -34,6 +34,10 @@ import {
   buildChatSubmitFunnelEvents,
   type ChatFunnelEvent,
 } from './chat-funnel'
+import {
+  activeSelectedProviderForTurns,
+  providerHasInquiryPath,
+} from './session-provider-context'
 
 export type AeChatProps = {
   threadId?: string | null
@@ -397,11 +401,16 @@ export function buildFollowUpComposerCopy(
   }
 
   const state = readComposerContext(completedTurns)
-  if (state.hasSelectedProvider) {
-    return {
-      placeholder: 'Ask limits, refine, or continue with the selected business',
-      loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
-    }
+  if (state.selectedProvider !== undefined) {
+    return providerHasInquiryPath(state.selectedProvider)
+      ? {
+          placeholder: 'Ask limits, refine, or continue with the selected business',
+          loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
+        }
+      : {
+          placeholder: 'Ask limits, refine, or review the selected listing',
+          loopHint: 'This business needs a published inquiry path before AE can route contact.',
+        }
   }
 
   if (state.hasInquiryReadyProvider) {
@@ -464,18 +473,17 @@ function readComposerContext(
 ): {
   hasListedProvider: boolean
   hasInquiryReadyProvider: boolean
-  hasSelectedProvider: boolean
+  selectedProvider: ReturnType<typeof activeSelectedProviderForTurns>
 } {
   let hasListedProvider = false
   let hasInquiryReadyProvider = false
-  let hasSelectedProvider = false
+  const selectedProvider = activeSelectedProviderForTurns(completedTurns)
 
   for (const turn of completedTurns) {
     for (const artifact of turn.artifacts) {
       switch (artifact.kind) {
         case 'selected-provider':
           hasListedProvider = true
-          hasSelectedProvider = true
           if (hasPublishedInquiryPath(artifact.provider)) {
             hasInquiryReadyProvider = true
           }
@@ -495,7 +503,7 @@ function readComposerContext(
     }
   }
 
-  return { hasListedProvider, hasInquiryReadyProvider, hasSelectedProvider }
+  return { hasListedProvider, hasInquiryReadyProvider, selectedProvider }
 }
 
 function hasPublishedInquiryPath(provider: { inquiryUrl?: string }): boolean {

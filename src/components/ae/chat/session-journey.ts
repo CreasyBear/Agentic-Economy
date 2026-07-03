@@ -1,5 +1,9 @@
 import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection } from '@/modules/answer-thread/public'
+import {
+  activeSelectedProviderForTurns,
+  providerHasInquiryPath,
+} from './session-provider-context'
 
 export type SessionJourneyStatus = 'complete' | 'active' | 'pending'
 
@@ -32,13 +36,10 @@ export type SessionJourneyInput = {
 
 export function buildSessionJourney(input: SessionJourneyInput): SessionJourney | null {
   const completedTurns = input.projection?.turns.filter((turn) => turn.status === 'complete') ?? []
-  const latestTurn = completedTurns.at(-1)
   const allArtifacts = completedTurns.flatMap((turn) => turn.artifacts)
   const providerCount = countSessionProviders(allArtifacts)
   const hasInquiryReadyProvider = hasInquiryPath(allArtifacts)
-  const selectedProvider = latestTurn === undefined
-    ? undefined
-    : selectedProviderForJourney(completedTurns, latestTurn)
+  const selectedProvider = activeSelectedProviderForTurns(completedTurns)
   const completedTurnCount = completedTurns.length
   const liveIntent = input.liveTurn?.intent
   const liveTurnCount = input.liveTurn === null || input.liveTurn === undefined ? 0 : 1
@@ -194,60 +195,6 @@ function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {
   return slugs.size
 }
 
-function latestSelectedProvider(
-  turns: readonly NonNullable<PublicThreadProjection['turns']>[number][],
-): AnswerSource | undefined {
-  for (const turn of [...turns].reverse()) {
-    for (const artifact of [...turn.artifacts].reverse()) {
-      if (artifact.kind === 'selected-provider') {
-        return artifact.provider
-      }
-    }
-  }
-  return undefined
-}
-
-function selectedProviderForJourney(
-  turns: readonly NonNullable<PublicThreadProjection['turns']>[number][],
-  latestTurn: NonNullable<PublicThreadProjection['turns']>[number],
-): AnswerSource | undefined {
-  const currentSelectedProvider = selectedProviderFromArtifacts(latestTurn.artifacts)
-  if (currentSelectedProvider !== undefined) {
-    return currentSelectedProvider
-  }
-
-  if (hasProviderContext(latestTurn.artifacts)) {
-    return undefined
-  }
-
-  return latestTurn.intent === 'explain_boundary' || latestTurn.intent === 'unsupported'
-    ? latestSelectedProvider(turns)
-    : undefined
-}
-
-function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource | undefined {
-  for (const artifact of [...artifacts].reverse()) {
-    if (artifact.kind === 'selected-provider') {
-      return artifact.provider
-    }
-  }
-  return undefined
-}
-
-function hasProviderContext(artifacts: readonly AnswerArtifact[]): boolean {
-  return artifacts.some((artifact) => {
-    switch (artifact.kind) {
-      case 'selected-provider':
-        return true
-      case 'provider-cards':
-      case 'provider-compare-table':
-        return artifact.providers.length > 0
-      default:
-        return false
-    }
-  })
-}
-
 function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {
   return artifacts.some((artifact) => {
     switch (artifact.kind) {
@@ -260,8 +207,4 @@ function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {
         return false
     }
   })
-}
-
-function providerHasInquiryPath(provider: AnswerSource): boolean {
-  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
 }

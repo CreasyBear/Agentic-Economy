@@ -37,11 +37,69 @@ describe('chat composer loop copy', () => {
       loopHint: 'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
     })
   })
+
+  it('keeps an active selected provider through a boundary-only answer', () => {
+    expect(buildFollowUpComposerCopy([
+      turn({
+        intent: 'inquiry_handoff',
+        artifacts: [{ kind: 'selected-provider', provider: provider() }],
+        oneLine: 'Ready to send a qualified inquiry.',
+      }),
+      turn({
+        seq: 2,
+        query: 'Can AE book this for me?',
+        intent: 'explain_boundary',
+        artifacts: [{ kind: 'one-line', text: 'AE cannot book, charge, or dispatch.' }],
+        oneLine: 'AE cannot book, charge, or dispatch.',
+      }),
+    ], null)).toEqual({
+      placeholder: 'Ask limits, refine, or continue with the selected business',
+      loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
+    })
+  })
+
+  it('clears older selected-provider guidance after a later provider answer', () => {
+    expect(buildFollowUpComposerCopy([
+      turn({
+        intent: 'inquiry_handoff',
+        artifacts: [
+          {
+            kind: 'selected-provider',
+            provider: provider({ name: 'Northside Plumbing', slug: 'northside-plumbing' }),
+          },
+        ],
+        oneLine: 'Northside Plumbing is selected for inquiry review.',
+      }),
+      turn({
+        seq: 2,
+        query: 'Show plumbing in Parramatta',
+        intent: 'refine_search',
+        artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
+        oneLine: 'One listed business matches.',
+      }),
+    ], null)).toEqual({
+      placeholder: 'Narrow, compare, or start a qualified inquiry',
+      loopHint: 'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+    })
+  })
+
+  it('does not call a selected review-only listing inquiry-ready', () => {
+    expect(buildFollowUpComposerCopy([
+      turn({
+        intent: 'inquiry_handoff',
+        artifacts: [{ kind: 'selected-provider', provider: provider({ inquiryUrl: '' }) }],
+        oneLine: 'This business needs listing review first.',
+      }),
+    ], null)).toEqual({
+      placeholder: 'Ask limits, refine, or review the selected listing',
+      loopHint: 'This business needs a published inquiry path before AE can route contact.',
+    })
+  })
 })
 
-function turn(): PublicThreadTurn {
+function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
   return {
-    turnId: 'turn-1',
+    turnId: `turn-${overrides.seq ?? 1}`,
     seq: 1,
     query: 'plumbers in Perth',
     intent: 'refine_search',
@@ -49,6 +107,7 @@ function turn(): PublicThreadTurn {
     workLog: [],
     artifacts: [{ kind: 'provider-cards', providers: [provider()] }],
     oneLine: 'One listed business matches.',
+    ...overrides,
   }
 }
 

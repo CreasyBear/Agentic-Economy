@@ -278,6 +278,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(
       /Demo Plumbing selected for inquiry review/i,
     )
+    await expect(page.getByRole('region', { name: /session context/i })).toContainText(/Selected business/i)
 
     await submitThreadFollowUp(page, MULTI_PROVIDER_QUERY)
     await expectQueryInTranscript(page, MULTI_PROVIDER_QUERY)
@@ -286,6 +287,16 @@ test.describe('chat discovery to inquiry loop', () => {
     const inquiryPath = page.getByRole('region', { name: /inquiry path/i })
     await expect(inquiryPath).toContainText(/2 listed businesses ready to compare/i)
     await expect(inquiryPath).not.toContainText(/Demo Plumbing selected for inquiry review/i)
+
+    const sessionContext = page.getByRole('region', { name: /session context/i })
+    await expect(sessionContext).toContainText(/Current answer/i)
+    await expect(sessionContext).toContainText(/2 listed businesses in this answer/i)
+    await expect(sessionContext).not.toContainText(/Selected business/i)
+    const followUpSearch = page.getByRole('search', { name: /find local service businesses/i }).last()
+    await expect(
+      followUpSearch.getByRole('searchbox', { name: /narrow, compare, or start a qualified inquiry/i }),
+    ).toBeEditable()
+    await expect(page.getByText(/Continue by narrowing or comparing the listed businesses/i).last()).toBeVisible()
 
     const shortlist = page.getByRole('region', { name: /business shortlist/i }).last()
     await expect(shortlist).toContainText(/Demo Plumbing/i)

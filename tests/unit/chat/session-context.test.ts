@@ -81,6 +81,65 @@ describe('session context', () => {
     ]))
   })
 
+  it('keeps the selected business active through a later boundary-only answer', () => {
+    const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing', inquiryUrl: '/northside-plumbing/inquiry' })
+    const context = buildSessionContext({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Northside Plumbing is selected for inquiry review.',
+        }),
+        turn({
+          seq: 3,
+          intent: 'explain_boundary',
+          query: 'Can AE book this for me?',
+          artifacts: [
+            { kind: 'one-line', text: 'AE cannot book, charge, or dispatch.' },
+            {
+              kind: 'prose',
+              block: 'summary',
+              text: 'AE can keep the inquiry context, but the business confirms details.',
+            },
+          ],
+          oneLine: 'AE cannot book, charge, or dispatch.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(context?.summary).toBe('Northside Plumbing is the current business selected for inquiry review.')
+    expect(context?.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'current', value: 'No listed business in this answer' }),
+      expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
+    ]))
+  })
+
+  it('labels a selected review-only business as listing review', () => {
+    const selected = provider({ name: 'Review Only Plumbing', slug: 'review-only-plumbing', inquiryUrl: '' })
+    const context = buildSessionContext({
+      projection: projection([
+        turn(),
+        turn({
+          seq: 2,
+          intent: 'inquiry_handoff',
+          query: 'Message Review Only Plumbing',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Review Only Plumbing needs listing review first.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(context?.summary).toBe('Review Only Plumbing is the current business selected for listing review.')
+    expect(context?.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'current', value: 'Review Only Plumbing selected for listing review' }),
+      expect.objectContaining({ id: 'selected', value: 'Review Only Plumbing' }),
+    ]))
+  })
+
   it('does not let an older selected business hide a later narrowed answer', () => {
     const selected = provider({ name: 'Northside Plumbing', slug: 'northside-plumbing', inquiryUrl: '/northside-plumbing/inquiry' })
     const context = buildSessionContext({
@@ -109,6 +168,8 @@ describe('session context', () => {
     )
     expect(context?.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'current', value: 'Demo Plumber in this answer' }),
+    ]))
+    expect(context?.facts).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'selected', value: 'Northside Plumbing' }),
     ]))
   })

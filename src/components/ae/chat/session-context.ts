@@ -1,5 +1,10 @@
 import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
+import {
+  activeSelectedProviderForTurns,
+  providerHasInquiryPath,
+  selectedProviderFromArtifacts,
+} from './session-provider-context'
 
 export type SessionContextFact = {
   id: 'focus' | 'current' | 'businesses' | 'selected' | 'inquiry' | 'boundary'
@@ -30,10 +35,8 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
 
   const providers = listedProvidersFromTurns(completedTurns)
   const latestProviders = listedProvidersFromArtifacts(latestTurn.artifacts)
-  const selectedProvider = latestSelectedProvider(completedTurns)
+  const selectedProvider = activeSelectedProviderForTurns(completedTurns)
   const currentSelectedProvider = selectedProviderFromArtifacts(latestTurn.artifacts)
-  const summarySelectedProvider =
-    currentSelectedProvider ?? (latestProviders.length === 0 ? selectedProvider : undefined)
   const inquiryReadyCount = providers.filter((provider) => hasInquiryPath(provider)).length
   const liveTurn = input.liveTurn ?? null
 
@@ -42,7 +45,7 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
     summary: contextSummary({
       providerCount: providers.length,
       currentProviders: latestProviders,
-      selectedProvider: summarySelectedProvider,
+      selectedProvider: selectedProvider ?? currentSelectedProvider,
       latestIntent: latestTurn.intent,
       liveTurn,
     }),
@@ -95,7 +98,9 @@ function contextSummary(input: {
   }
 
   if (input.selectedProvider !== undefined) {
-    return `${input.selectedProvider.name} is the current business selected for inquiry review.`
+    return providerHasInquiryPath(input.selectedProvider)
+      ? `${input.selectedProvider.name} is the current business selected for inquiry review.`
+      : `${input.selectedProvider.name} is the current business selected for listing review.`
   }
 
   if (input.currentProviders.length > 0 && input.providerCount > input.currentProviders.length) {
@@ -199,7 +204,9 @@ function listedProvidersFromArtifacts(artifacts: readonly AnswerArtifact[]): Ans
 function currentAnswerLabel(turn: PublicThreadTurn): string {
   const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
   if (selectedProvider !== undefined) {
-    return `${selectedProvider.name} selected for inquiry review`
+    return providerHasInquiryPath(selectedProvider)
+      ? `${selectedProvider.name} selected for inquiry review`
+      : `${selectedProvider.name} selected for listing review`
   }
 
   const providers = listedProvidersFromArtifacts(turn.artifacts)
@@ -212,25 +219,6 @@ function currentAnswerLabel(turn: PublicThreadTurn): string {
   }
 
   return `${providers.length} listed businesses in this answer: ${providerListLabel(providers)}`
-}
-
-function latestSelectedProvider(turns: readonly PublicThreadTurn[]): AnswerSource | undefined {
-  for (const turn of [...turns].reverse()) {
-    const selectedProvider = selectedProviderFromArtifacts(turn.artifacts)
-    if (selectedProvider !== undefined) {
-      return selectedProvider
-    }
-  }
-  return undefined
-}
-
-function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact[]): AnswerSource | undefined {
-  for (const artifact of [...artifacts].reverse()) {
-    if (artifact.kind === 'selected-provider') {
-      return artifact.provider
-    }
-  }
-  return undefined
 }
 
 function providerListLabel(providers: readonly AnswerSource[]): string {
