@@ -17,6 +17,7 @@ describe('turn context line', () => {
     const artifacts: AnswerArtifact[] = [
       { kind: 'provider-cards', providers: [provider()] },
       { kind: 'provider-compare-table', providers: [provider(), provider({ slug: 'northside', name: 'Northside Plumbing' })] },
+      { kind: 'selected-provider', provider: provider() },
     ]
 
     expect(countListedProvidersInArtifacts(artifacts)).toBe(2)
@@ -36,6 +37,15 @@ describe('turn context line', () => {
     )
     expect(buildTurnContextLine({ intent: 'refine_search', seq: 2, artifacts: [] })).toBe(
       'Searching again for this follow-up.',
+    )
+  })
+
+  it('names the selected business during inquiry handoff turns', () => {
+    const artifacts: AnswerArtifact[] = [{ kind: 'selected-provider', provider: provider() }]
+
+    expect(countListedProvidersInArtifacts(artifacts)).toBe(1)
+    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
+      'Preparing the qualified inquiry next step for Demo Plumber.',
     )
   })
 

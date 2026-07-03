@@ -36,6 +36,9 @@ export function countListedProvidersInArtifacts(artifacts: readonly AnswerArtifa
 
   for (const artifact of artifacts) {
     switch (artifact.kind) {
+      case 'selected-provider':
+        providerSlugs.add(artifact.provider.slug)
+        break
       case 'provider-cards':
       case 'provider-compare-table':
         for (const provider of artifact.providers) {
@@ -74,6 +77,9 @@ function listedProvidersInArtifacts(artifacts: readonly AnswerArtifact[]): Answe
 
   for (const artifact of artifacts) {
     switch (artifact.kind) {
+      case 'selected-provider':
+        providersBySlug.set(artifact.provider.slug, artifact.provider)
+        break
       case 'provider-cards':
       case 'provider-compare-table':
         for (const provider of artifact.providers) {
