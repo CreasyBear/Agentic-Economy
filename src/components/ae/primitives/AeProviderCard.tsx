@@ -29,16 +29,30 @@ export function AeProviderCard(props: AeProviderCardProps) {
 function AeProviderCardAnswer({ source }: { source: AnswerSource }) {
   const area = source.serviceArea || source.suburb
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(source.availabilityLabel))
+  const inquiryPath = answerCardInquiryPath(source)
 
   return (
-    <Card padding={4} className="grid gap-4" data-variant="answer" id={`source-${source.citationIndex}`}>
+    <Card
+      padding={4}
+      className="grid gap-4"
+      data-variant="answer"
+      id={`source-${source.citationIndex}`}
+      aria-labelledby={`source-${source.citationIndex}-name`}
+    >
       <div className="flex items-start gap-3">
-        <Badge label={String(source.citationIndex)} variant="neutral" />
+        <Badge label={`#${source.citationIndex}`} variant="neutral" />
         <div className="min-w-0 flex-1">
-          <Text type="large" weight="semibold" color="primary" display="block">
+          <Text
+            id={`source-${source.citationIndex}-name`}
+            type="large"
+            weight="semibold"
+            color="primary"
+            display="block"
+          >
             <a href={source.detailUrl} className="text-primary underline-offset-4 hover:underline">{source.name}</a>
           </Text>
           <Text type="supporting" color="secondary" display="block">{source.category}</Text>
+          <Text type="supporting" color="secondary" display="block">Choice {source.citationIndex} in this answer</Text>
           {source.trustCue.length > 0 ? <Text type="supporting" color="secondary" display="block">{source.trustCue}</Text> : null}
         </div>
         <Badge label={source.availabilityLabel} variant={badgeVariant} />
@@ -53,12 +67,38 @@ function AeProviderCardAnswer({ source }: { source: AnswerSource }) {
         ]}
       />
       <TokenList labels={source.services.slice(0, 4).map((service) => service.name)} />
+      <div className="rounded-md border border-border bg-surface p-3" role="note">
+        <Text type="supporting" color="secondary" weight="medium" display="block">Inquiry path</Text>
+        <Text type="supporting" color="primary" display="block">{inquiryPath.description}</Text>
+      </div>
       <div className="flex flex-wrap gap-2">
-        {source.inquiryUrl !== undefined ? <Button label="Send inquiry" variant="primary" size="sm" href={source.inquiryUrl} /> : null}
-        <Button label={source.inquiryUrl === undefined ? source.nextStepLabel : 'View details'} variant="secondary" size="sm" href={source.detailUrl} />
+        {source.inquiryUrl !== undefined ? (
+          <Button label={inquiryPath.actionLabel} variant="primary" size="sm" href={source.inquiryUrl} />
+        ) : null}
+        <Button
+          label={source.inquiryUrl === undefined ? inquiryPath.actionLabel : 'Review listing'}
+          variant="secondary"
+          size="sm"
+          href={source.detailUrl}
+        />
       </div>
     </Card>
   )
+}
+
+function answerCardInquiryPath(source: AnswerSource): { description: string; actionLabel: string } {
+  if (source.inquiryUrl !== undefined) {
+    return {
+      description:
+        'AE inquiry form published for owner review. The business still confirms timing, quote, and availability.',
+      actionLabel: 'Open inquiry form',
+    }
+  }
+
+  return {
+    description: 'No AE inquiry form is published yet. Review the listing before using its contact guidance.',
+    actionLabel: source.nextStepLabel.length > 0 ? source.nextStepLabel : 'Review listing',
+  }
 }
 
 function AeProviderCardRegistry({ item }: { item: PublicBusinessCatalogApiDto }) {

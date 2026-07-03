@@ -64,7 +64,7 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
     case 'choose_provider':
       return [
         'AE can route you to a qualified inquiry form when a listed business publishes one.',
-        'Name the provider you want to contact, or use Send inquiry on a provider card.',
+        'Name the provider you want to contact, or use Open inquiry form on a provider card.',
         'The business confirms timing, quote, and availability.',
       ].join(' ')
     case 'no_provider':
@@ -82,7 +82,7 @@ export function buildInquiryHandoffNextStep(resolution: InquiryHandoffResolution
     case 'provider_unavailable':
       return `Open ${resolution.provider.name}'s listing and use the published contact guidance. AE does not book, charge, or dispatch.`
     case 'choose_provider':
-      return 'Use Send inquiry on a provider card, or name the provider you want to contact. AE does not book, charge, or dispatch.'
+      return 'Use Open inquiry form on a provider card, or name the provider you want to contact. AE does not book, charge, or dispatch.'
     case 'no_provider':
       return 'Ask for a service and place first, then send a qualified inquiry when a listed provider publishes that path.'
   }
