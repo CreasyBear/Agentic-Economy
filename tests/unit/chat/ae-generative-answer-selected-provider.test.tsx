@@ -12,6 +12,39 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     cleanup()
   })
 
+  it('presents provider matches as an actionable shortlist before answer prose', () => {
+    const artifacts: AnswerArtifact[] = [
+      { kind: 'one-line', text: 'One listed business matches this request.' },
+      { kind: 'provider-cards', providers: [provider()] },
+      {
+        kind: 'prose',
+        block: 'summary',
+        text: 'The business handles timing, price, and availability.',
+      },
+      {
+        kind: 'what-to-do-now',
+        text: 'Open the listing or inquiry form once the fit looks right.',
+      },
+    ]
+
+    render(
+      <AeGenerativeAnswer
+        artifacts={artifacts}
+        query="plumber Parramatta"
+        layoutProfile="discovery_full"
+        phase="complete"
+        threadId="thread-123"
+      />,
+    )
+
+    const shortlist = screen.getByRole('region', { name: 'Provider shortlist' })
+    const summary = screen.getByText('The business handles timing, price, and availability.')
+
+    expect(shortlist.contains(screen.getByText('These are the listed businesses AE found for this request.'))).toBe(true)
+    expect(shortlist.contains(screen.getByText('Open inquiry form'))).toBe(true)
+    expect(shortlist.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('shows the chosen provider before routing to the inquiry form', () => {
     const selected = provider()
     const artifacts: AnswerArtifact[] = [

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ArrowRightIcon, CheckIcon, ChevronDownIcon, MapPinIcon, SearchIcon } from 'lucide-react'
+import { CheckIcon, SearchIcon } from 'lucide-react'
 
 import { Button } from '@astryxdesign/core/Button'
 
@@ -15,11 +15,6 @@ import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import { AeKicker } from '@/components/ae/primitives/AeKicker'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
-import {
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from '@/components/ai-elements/sources'
 import { AeGenerativeMap } from './AeGenerativeMap'
 
 const REVEAL_ENTER =
@@ -456,41 +451,37 @@ function ProviderCardsRail({
   }
 
   return (
-    <Sources className="grid gap-2" defaultOpen>
-      <SourcesTrigger
-        count={providers.length}
-        className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-border-strong"
-      >
-        <span className="grid min-w-0 gap-0.5">
-          <span className="text-sm font-medium text-primary">{listingCountLabel(providers.length)}</span>
-          <span className="font-mono text-2xs text-secondary">Published detail cards used for this answer</span>
+    <section className={`${REVEAL_ENTER} grid gap-3`} aria-label="Provider shortlist">
+      <header className="grid gap-1 rounded-md border border-border bg-surface px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="grid min-w-0 gap-0.5">
+          <AeKicker marker>Provider shortlist</AeKicker>
+          <p className="text-sm font-medium text-primary">These are the listed businesses AE found for this request.</p>
+          <p className="text-xs leading-snug text-secondary">
+            Compare area, response, and next step before opening a listing or inquiry form.
+          </p>
+        </div>
+        <span className="w-fit rounded-md border border-border bg-card px-2 py-1 font-mono text-2xs text-secondary">
+          {listingCountLabel(providers.length)}
         </span>
-        <ChevronDownIcon
-          className="size-4 shrink-0 text-secondary transition-transform group-data-[state=open]/ai-sources-trigger:rotate-180"
-          aria-hidden="true"
-        />
-      </SourcesTrigger>
-      <SourcesContent>
-        <ul
-          className={
-            scroll
-              ? 'flex snap-x snap-proximity gap-3 overflow-x-auto pb-1 [&>li]:w-[min(18rem,85vw)] [&>li]:shrink-0 [&>li]:snap-start'
-              : 'grid gap-3 sm:grid-cols-2'
-          }
-          aria-label="Published listings used in this answer"
-        >
-          {providers.map((source) => (
-            <li key={source.slug} className={REVEAL_ENTER}>
-              <AeProviderCard variant="answer" source={source} {...(threadId === undefined ? {} : { threadId })} />
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 font-mono text-2xs text-secondary">
-          Compare service area, response, and next step. A person at the business still confirms timing, quote, and
-          availability.
-        </p>
-      </SourcesContent>
-    </Sources>
+      </header>
+      <ul
+        className={
+          scroll
+            ? 'flex snap-x snap-proximity gap-3 overflow-x-auto pb-1 [&>li]:w-[min(18rem,85vw)] [&>li]:shrink-0 [&>li]:snap-start'
+            : 'grid gap-3 sm:grid-cols-2'
+        }
+        aria-label="Listed businesses found for this answer"
+      >
+        {providers.map((source) => (
+          <li key={source.slug}>
+            <AeProviderCard variant="answer" source={source} {...(threadId === undefined ? {} : { threadId })} />
+          </li>
+        ))}
+      </ul>
+      <p className="font-mono text-2xs text-secondary">
+        A person at the business still confirms timing, quote, and availability.
+      </p>
+    </section>
   )
 }
 
