@@ -102,6 +102,7 @@ export type AnswerSource = {
   trustLabel: string
   responseTimeLabel: string
   trustCue: string
+  freshnessLabel?: string
   photoUrl?: string
   nextStepLabel: string
   detailUrl: string

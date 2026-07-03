@@ -4,6 +4,7 @@ import {
   plainNextStepLabel,
   plainTrustLabel,
   plainResponseTimeLabel,
+  plainFreshnessLabel,
   formatProviderTrustCue,
 } from '@/lib/ui/status-presentation'
 import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
@@ -63,6 +64,7 @@ export function toAnswerSource(
         : { responseTimeMinutes: dto.responseTimeMinutes }),
     }),
     ...(primaryPhoto === undefined ? {} : { photoUrl: primaryPhoto.url }),
+    freshnessLabel: plainFreshnessLabel(dto.updatedAt),
     nextStepLabel:
       firstRequestMode === 'inquiry_available'
         ? 'Send inquiry'

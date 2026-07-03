@@ -172,6 +172,51 @@ describe('buildArtifactsFromSnapshot artifact budgets', () => {
     ])
   })
 
+  it('exposes hours, trust, and freshness columns on the compare table', () => {
+    const artifacts = buildArtifactsFromSnapshot({
+      query: 'compare these plumbers',
+      oneLine: '2 listed businesses can be compared.',
+      providers: [
+        provider({ freshnessLabel: 'Updated 2 days ago' }),
+        provider({
+          citationIndex: 2,
+          slug: 'other',
+          name: 'Other Plumbing',
+          freshnessLabel: 'Updated 5 days ago',
+        }),
+      ],
+      summary: 'The business handles timing, price, and availability.',
+      nextStep: 'Open a listed provider page.',
+      agentJsonUrl: '/api/businesses/search?q=plumber',
+      layoutProfile: 'compare_pair',
+    })
+
+    const table = artifacts.find((artifact) => artifact.kind === 'provider-compare-table')
+    expect(table?.kind).toBe('provider-compare-table')
+    if (table?.kind !== 'provider-compare-table') {
+      throw new Error('expected a provider-compare-table artifact')
+    }
+
+    // The trust-surfacing columns must all be declared, freshness alongside the
+    // established area/response/availability/nextStep and the newer hours/trust.
+    expect(table.fields).toEqual([
+      'area',
+      'response',
+      'availability',
+      'hours',
+      'trust',
+      'freshness',
+      'nextStep',
+    ])
+
+    // The declared freshness column is backed by real per-provider data, so the
+    // column renders "Updated ..." rather than empty cells.
+    expect(table.providers.map((source) => source.freshnessLabel)).toEqual([
+      'Updated 2 days ago',
+      'Updated 5 days ago',
+    ])
+  })
+
   it('adds only the earned location map for place-shaped discovery turns', () => {
     const artifacts = buildArtifactsFromSnapshot({
       query: 'urgent plumber near Parramatta 2150',

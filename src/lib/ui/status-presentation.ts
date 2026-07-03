@@ -2,6 +2,7 @@ import type { PublicStatus, TrustTier } from '@/modules/business/public'
 import type { FirstRequestMode, ServiceCapabilityStatus } from '@/modules/catalog/public'
 import type { DiscoveryStatus } from '@/modules/discovery/public'
 import type { IndexStatus } from '@/modules/registry/public'
+import { formatRelativeTime } from './format-time'
 
 export const aeStatusValues = [
   'available',
@@ -763,6 +764,18 @@ export function plainResponseTimeLabel(minutes: number | undefined): string {
   return `Responds ~${hours}h`
 }
 
+/**
+ * Plain freshness label from a record `updatedAt` timestamp. Honest wording:
+ * "Updated {relative}" — never "Verified"/"Checked" (updatedAt is a record
+ * update, not a passed check). Empty when unknown.
+ */
+export function plainFreshnessLabel(updatedAtMs: number | undefined): string {
+  if (updatedAtMs === undefined || !Number.isFinite(updatedAtMs) || updatedAtMs <= 0) {
+    return ''
+  }
+  return `Updated ${formatRelativeTime(updatedAtMs)}`
+}
+
 /** Combines response time and trust into one card cue (DESIGN §9.2). */
 export function formatProviderTrustCue(input: {
   responseTimeMinutes?: number
@@ -771,7 +784,7 @@ export function formatProviderTrustCue(input: {
   return [plainResponseTimeLabel(input.responseTimeMinutes), input.trustLabel].filter((part) => part.length > 0).join(' · ')
 }
 
-/** Hand-drawn category mark when no business photo is published. */
+/** Category illustration fallback when no business photo is published. */
 export function categoryIllustrationPath(category: string): string {
   const normalized = category.trim().toLowerCase()
 

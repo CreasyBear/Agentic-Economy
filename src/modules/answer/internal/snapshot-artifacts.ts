@@ -49,7 +49,7 @@ export function buildArtifactsFromSnapshot(
     artifacts.push({
       kind: 'provider-compare-table',
       providers: [...compareProviders],
-      fields: ['area', 'response', 'availability', 'nextStep'],
+      fields: ['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep'],
     })
   }
 

@@ -438,7 +438,7 @@ function ProviderCardsRail({
   )
 }
 
-const DEFAULT_COMPARE_FIELDS: readonly AnswerCompareField[] = ['area', 'response', 'availability', 'nextStep']
+const DEFAULT_COMPARE_FIELDS: readonly AnswerCompareField[] = ['area', 'response', 'availability', 'hours', 'trust', 'freshness', 'nextStep']
 
 function ProviderCompareTable({
   providers,
@@ -591,6 +591,8 @@ function compareFieldLabel(field: AnswerCompareField): string {
       return 'Hours'
     case 'trust':
       return 'Published detail'
+    case 'freshness':
+      return 'Updated'
     case 'nextStep':
       return 'Next step'
   }
@@ -608,6 +610,8 @@ function compareFieldValue(provider: AnswerSource, field: AnswerCompareField): s
       return provider.hoursLabel
     case 'trust':
       return provider.trustCue
+    case 'freshness':
+      return provider.freshnessLabel ?? ''
     case 'nextStep':
       return provider.nextStepLabel
   }
