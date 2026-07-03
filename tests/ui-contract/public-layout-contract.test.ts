@@ -130,6 +130,7 @@ describe('public listing layout contract', () => {
     expect(answer).toMatch(/from=thread&id=/)
     expect(providerCard).toMatch(/from=thread&id=/)
     expect(listing).toMatch(/appendThreadOrigin/)
+    expect(listing).toMatch(/\/t\/\$\{encodeURIComponent\(threadId\)\}/)
     expect(inquiryRoute).toMatch(/validateSearch/)
     expect(inquiryRoute).toMatch(/From your answer/)
     expect(inquiryRoute).toMatch(/continues \{readback\.businessName\} from your answer thread/)

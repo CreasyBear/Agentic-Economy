@@ -177,7 +177,7 @@ function readOfficeAddress(catalog: PublicRouteCatalogContract): string | undefi
 }
 
 function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; threadId?: string }) {
-  const href = from === 'thread' && threadId !== undefined ? `/t/${threadId}` : from === 'registry' ? '/registry?q=&limit=10' : '/'
+  const href = from === 'thread' && threadId !== undefined ? `/t/${encodeURIComponent(threadId)}` : from === 'registry' ? '/registry?q=&limit=10' : '/'
   const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : from === 'registry' ? 'Back to results' : 'Ask another'
   return (
     <a href={href} className="inline-flex min-h-11 items-center gap-2 text-sm text-secondary underline-offset-4 hover:underline">
