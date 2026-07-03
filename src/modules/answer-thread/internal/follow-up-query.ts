@@ -1,11 +1,16 @@
 import { isNarrowToChipQuery, parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
+import { classifyFollowUpIntent } from './follow-up-intent'
 
 export { isNarrowToChipQuery, parseNarrowToSuburb }
 
 export function findThreadNeedQuery(priorTurns: readonly { query: string }[]): string | undefined {
   for (let index = priorTurns.length - 1; index >= 0; index -= 1) {
     const query = priorTurns[index]?.query.trim()
-    if (query !== undefined && query.length > 0 && !isFollowUpChipLabel(query)) {
+    if (
+      query !== undefined &&
+      query.length > 0 &&
+      !isFollowUpChipLabel(query, hasEarlierQuery(priorTurns, index))
+    ) {
       return query
     }
   }
@@ -25,7 +30,7 @@ export function resolveThreadRegistryQuery(turns: readonly { query: string }[]):
     const suburb = parseNarrowToSuburb(query)
     if (suburb !== undefined) {
       registryQuery = resolveNarrowToSearchQuery(suburb, acceptedTurns)
-    } else if (!isFollowUpChipLabel(query)) {
+    } else if (!isFollowUpChipLabel(query, acceptedTurns.length > 0)) {
       registryQuery = query
     }
 
@@ -78,7 +83,7 @@ export function filterProvidersBySuburb<T extends { suburb: string; serviceArea:
   })
 }
 
-function isFollowUpChipLabel(query: string): boolean {
+function isFollowUpChipLabel(query: string, hasEarlierContext = false): boolean {
   const normalized = query.trim()
   if (isNarrowToChipQuery(normalized)) {
     return true
@@ -92,5 +97,15 @@ function isFollowUpChipLabel(query: string): boolean {
   if (/^what can agentic economy do here\?$/i.test(normalized)) {
     return true
   }
+  if (/^send a qualified inquiry(?: to .+)?$/i.test(normalized)) {
+    return true
+  }
+  if (hasEarlierContext && classifyFollowUpIntent(normalized, 1) !== 'refine_search') {
+    return true
+  }
   return false
+}
+
+function hasEarlierQuery(turns: readonly { query: string }[], index: number): boolean {
+  return turns.slice(0, Math.max(0, index)).some((turn) => turn.query.trim().length > 0)
 }

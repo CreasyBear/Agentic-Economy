@@ -61,6 +61,30 @@ describe('follow-up query resolution', () => {
     ).toBe('plumber Parramatta')
   })
 
+  it('does not let inquiry handoff follow-ups replace the active registry query', () => {
+    expect(
+      findThreadNeedQuery([
+        { query: 'plumber' },
+        { query: 'Send a qualified inquiry to the first listed business' },
+      ]),
+    ).toBe('plumber')
+    expect(
+      resolveThreadRegistryQuery([
+        { query: 'plumber' },
+        { query: 'Send a qualified inquiry to the first listed business' },
+        { query: 'Narrow to Parramatta' },
+      ]),
+    ).toBe('plumber Parramatta')
+  })
+
+  it('keeps first-turn compare searches as search context', () => {
+    expect(
+      resolveThreadRegistryQuery([
+        { query: 'Compare emergency plumbers in Parramatta' },
+      ]),
+    ).toBe('Compare emergency plumbers in Parramatta')
+  })
+
   it('filters frozen providers by catalog suburb', () => {
     const providers = [
       { suburb: 'Perth', serviceArea: 'Perth metro' },
