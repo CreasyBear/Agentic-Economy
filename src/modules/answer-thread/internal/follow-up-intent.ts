@@ -17,6 +17,8 @@ const BOUNDARY_PATTERNS = [
 ]
 
 const INQUIRY_HANDOFF_PATTERNS = [
+  /\bprepare\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
+  /\bopen\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
   /\bsend\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
   /\bsubmit\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
   /\bstart\s+(?:a\s+)?(?:qualified\s+)?inquir/i,

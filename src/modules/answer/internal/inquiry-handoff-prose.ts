@@ -37,13 +37,13 @@ export function resolveInquiryHandoff(input: {
 export function buildInquiryHandoffOneLine(resolution: InquiryHandoffResolution): string {
   switch (resolution.kind) {
     case 'resolved':
-      return `Ready to send a qualified inquiry to ${resolution.provider.name}.`
+      return `Ready to open ${resolution.provider.name}'s qualified inquiry form.`
     case 'provider_unavailable':
       return `${resolution.provider.name} does not publish an AE inquiry form yet.`
     case 'choose_provider':
       return 'Choose which listed business to message.'
     case 'no_provider':
-      return 'Find a listed business before sending an inquiry.'
+      return 'Find a listed business before opening a qualified inquiry form.'
   }
 }
 
@@ -129,7 +129,7 @@ function ordinalIndex(normalizedQuery: string): number | undefined {
 }
 
 function asksForInquiry(query: string): boolean {
-  return /\b(?:send|submit|start)\b.*\binquir/i.test(query)
+  return /\b(?:prepare|open|send|submit|start)\b.*\binquir/i.test(query)
 }
 
 function normalize(value: string): string {

@@ -146,7 +146,7 @@ describe('buildMessagePartsFromSnapshot', () => {
     const selected = provider()
     const result = buildMessagePartsFromSnapshot({
       query: 'message the first one',
-      oneLine: 'Ready to send a qualified inquiry to Demo Plumbing.',
+      oneLine: "Ready to open Demo Plumbing's qualified inquiry form.",
       providers: [selected],
       selectedProvider: selected,
       summary: 'Demo Plumbing publishes an inquiry path for owner review.',
@@ -195,7 +195,7 @@ describe('buildMessagePartsFromSnapshot', () => {
       }),
       snapshotHash: 'hash',
       proseJson: JSON.stringify({
-        oneLine: 'Ready to send a qualified inquiry to Demo Plumbing.',
+        oneLine: "Ready to open Demo Plumbing's qualified inquiry form.",
         summary: 'Demo Plumbing publishes an inquiry path for owner review.',
         nextStep: 'Open the inquiry form.',
         compactLayout: true,

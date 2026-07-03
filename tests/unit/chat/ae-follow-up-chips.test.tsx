@@ -22,12 +22,12 @@ describe('AeFollowUpChips', () => {
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
     expect(
-      panel.contains(screen.getByText('Narrow, compare, or start a qualified inquiry from the listed businesses above.')),
+      panel.contains(screen.getByText('Narrow, compare, or prepare a qualified inquiry from the listed businesses above.')),
     ).toBe(true)
 
-    fireEvent.click(screen.getByText('Start qualified inquiry with Parramatta Emergency Plumbing'))
+    fireEvent.click(screen.getByText('Prepare qualified inquiry with Parramatta Emergency Plumbing'))
 
-    expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to Parramatta Emergency Plumbing')
+    expect(onSelect).toHaveBeenCalledWith('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
   })
 
   it('submits compare chips as carried thread follow-ups', () => {
@@ -59,9 +59,9 @@ describe('AeFollowUpChips', () => {
     })} onSelect={onSelect} />)
 
     expect(screen.getByRole('region', { name: 'Continue this thread' })).toBeTruthy()
-    fireEvent.click(screen.getByText('Start qualified inquiry with Top Inquiry Ready'))
+    fireEvent.click(screen.getByText('Prepare qualified inquiry with Top Inquiry Ready'))
 
-    expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to Top Inquiry Ready')
+    expect(onSelect).toHaveBeenCalledWith('Prepare a qualified inquiry for Top Inquiry Ready')
   })
 
   it('states the contact boundary when listed businesses lack an inquiry path', () => {
@@ -80,7 +80,7 @@ describe('AeFollowUpChips', () => {
     expect(panel.contains(screen.getByText(
       'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.',
     ))).toBe(true)
-    expect(screen.queryByText(/Start qualified inquiry/)).toBeNull()
+    expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
   })
 
   it('keeps the follow-up panel available after a selected-provider handoff', () => {
@@ -89,7 +89,7 @@ describe('AeFollowUpChips', () => {
 
     render(<AeFollowUpChips turn={turn({
       intent: 'inquiry_handoff',
-      query: 'Send a qualified inquiry to the first listed business',
+      query: 'Prepare a qualified inquiry for the first listed business',
       artifacts: [
         {
           kind: 'selected-provider',
@@ -101,7 +101,7 @@ describe('AeFollowUpChips', () => {
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
     expect(panel.contains(screen.getByText('Use the selected inquiry path above, or keep narrowing this thread.'))).toBe(true)
-    expect(screen.queryByText(/Start qualified inquiry/)).toBeNull()
+    expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
     fireEvent.click(screen.getByText('Only inquiry-ready listings'))
 
     expect(onSelect).toHaveBeenCalledWith('Show only businesses that accept inquiries')

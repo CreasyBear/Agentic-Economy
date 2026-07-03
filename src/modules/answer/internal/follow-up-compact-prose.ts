@@ -41,7 +41,7 @@ export function buildCompactFollowUpProse(input: {
     case 'inquiry_handoff':
       return {
         oneLine: count === 1 && input.providers[0] !== undefined
-          ? `Ready to send a qualified inquiry to ${input.providers[0].name}.`
+          ? `Ready to open ${input.providers[0].name}'s qualified inquiry form.`
           : 'Choose which listed business to message.',
         summary: boundaryLine(),
         nextStep: buildInquiryNextStep(input.providers),

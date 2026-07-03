@@ -65,13 +65,13 @@ describe('follow-up query resolution', () => {
     expect(
       findThreadNeedQuery([
         { query: 'plumber' },
-        { query: 'Send a qualified inquiry to the first listed business' },
+        { query: 'Prepare a qualified inquiry for the first listed business' },
       ]),
     ).toBe('plumber')
     expect(
       resolveThreadRegistryQuery([
         { query: 'plumber' },
-        { query: 'Send a qualified inquiry to the first listed business' },
+        { query: 'Prepare a qualified inquiry for the first listed business' },
         { query: 'Narrow to Parramatta' },
       ]),
     ).toBe('plumber Parramatta')

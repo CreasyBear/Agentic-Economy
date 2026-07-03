@@ -20,7 +20,9 @@ describe('inquiry handoff prose', () => {
       throw new Error('expected resolved provider')
     }
     expect(resolution.provider.slug).toBe('northside')
-    expect(buildInquiryHandoffOneLine(resolution)).toBe('Ready to send a qualified inquiry to Northside Plumbing.')
+    expect(buildInquiryHandoffOneLine(resolution)).toBe(
+      "Ready to open Northside Plumbing's qualified inquiry form.",
+    )
   })
 
   it('asks the user to choose when multiple providers could be messaged', () => {

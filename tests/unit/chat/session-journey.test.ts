@@ -63,7 +63,7 @@ describe('session journey', () => {
           seq: 2,
           intent: 'inquiry_handoff',
           artifacts: [{ kind: 'selected-provider', provider: provider() }],
-          oneLine: 'Ready to send a qualified inquiry to Demo Plumber.',
+          oneLine: "Ready to open Demo Plumber's qualified inquiry form.",
         }),
       ]),
       liveTurn: null,
@@ -83,7 +83,7 @@ describe('session journey', () => {
         turn({
           intent: 'inquiry_handoff',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Ready to send a qualified inquiry to Northside Plumbing.',
+          oneLine: "Ready to open Northside Plumbing's qualified inquiry form.",
         }),
       ]),
       liveTurn: null,
@@ -133,7 +133,7 @@ describe('session journey', () => {
           seq: 2,
           intent: 'inquiry_handoff',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Ready to send a qualified inquiry to Northside Plumbing.',
+          oneLine: "Ready to open Northside Plumbing's qualified inquiry form.",
         }),
         turn({
           seq: 3,
@@ -169,7 +169,7 @@ describe('session journey', () => {
           seq: 2,
           intent: 'inquiry_handoff',
           artifacts: [{ kind: 'selected-provider', provider: selected }],
-          oneLine: 'Ready to send a qualified inquiry to Northside Plumbing.',
+          oneLine: "Ready to open Northside Plumbing's qualified inquiry form.",
         }),
         turn({
           seq: 3,

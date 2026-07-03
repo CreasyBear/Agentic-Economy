@@ -25,14 +25,14 @@ describe('AeThreadTranscript', () => {
     expect(
       panel.contains(
         screen.getByText(
-          'Narrow, compare, or start a qualified inquiry from the businesses already found in this thread.',
+          'Narrow, compare, or prepare a qualified inquiry from the businesses already found in this thread.',
         ),
       ),
     ).toBe(true)
 
-    fireEvent.click(screen.getByText('Start qualified inquiry with Parramatta Emergency Plumbing'))
+    fireEvent.click(screen.getByText('Prepare qualified inquiry with Parramatta Emergency Plumbing'))
 
-    expect(onFollowUp).toHaveBeenCalledWith('Send a qualified inquiry to Parramatta Emergency Plumbing')
+    expect(onFollowUp).toHaveBeenCalledWith('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
   })
 
   it('labels selected-provider follow-ups as carried from the thread after a boundary turn', () => {
@@ -43,7 +43,7 @@ describe('AeThreadTranscript', () => {
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Use the selected inquiry path from this thread, or keep narrowing this thread.'))).toBe(true)
-    expect(screen.queryByText(/Start qualified inquiry/)).toBeNull()
+    expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
 
     fireEvent.click(screen.getByText('Only inquiry-ready listings'))
 
@@ -103,7 +103,7 @@ function projectionWithSelectedProviderBoundaryTurn(): PublicThreadProjection {
       {
         turnId: 'turn-1',
         seq: 1,
-        query: 'Send a qualified inquiry to the first listed business',
+        query: 'Prepare a qualified inquiry for the first listed business',
         intent: 'inquiry_handoff',
         status: 'complete',
         oneLine: 'Parramatta Emergency Plumbing is ready for inquiry review.',

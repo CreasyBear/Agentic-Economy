@@ -153,9 +153,9 @@ function followUpSummary(
 
   if (chips.some(isInquiryHandoffChip)) {
     if (contextPlacement === 'carried') {
-      return 'Narrow, compare, or start a qualified inquiry from the businesses already found in this thread.'
+      return 'Narrow, compare, or prepare a qualified inquiry from the businesses already found in this thread.'
     }
-    return 'Narrow, compare, or start a qualified inquiry from the listed businesses above.'
+    return 'Narrow, compare, or prepare a qualified inquiry from the listed businesses above.'
   }
 
   if (hasListedBusinesses && !hasInquiryReadyBusiness) {
@@ -177,7 +177,7 @@ function followUpSummary(
 }
 
 function isInquiryHandoffChip(chip: FollowUpChip): boolean {
-  return /^send a qualified inquiry(?:\s+to\b|$)/i.test(chip.submitQuery.trim())
+  return /^(?:prepare|send|start) a qualified inquiry(?:\s+(?:for|to|with)\b|$)/i.test(chip.submitQuery.trim())
 }
 
 function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {

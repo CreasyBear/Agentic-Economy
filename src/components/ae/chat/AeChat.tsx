@@ -415,8 +415,8 @@ export function buildFollowUpComposerCopy(
 
   if (state.hasInquiryReadyProvider) {
     return {
-      placeholder: 'Narrow, compare, or start a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
+      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
     }
   }
 

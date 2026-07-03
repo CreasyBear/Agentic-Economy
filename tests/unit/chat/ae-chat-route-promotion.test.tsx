@@ -206,10 +206,10 @@ describe('AeChat route promotion', () => {
         {
           turnId: 'thread-one-turn-2',
           seq: 2,
-          query: 'Send a qualified inquiry to the first listed business',
+          query: 'Prepare a qualified inquiry for the first listed business',
           intent: 'inquiry_handoff' as const,
           status: 'complete' as const,
-          oneLine: 'Ready to send a qualified inquiry.',
+          oneLine: "Ready to open Demo Plumbing's qualified inquiry form.",
           workLog: [],
           artifacts: [{ kind: 'selected-provider' as const, provider: provider() }],
         },
@@ -229,7 +229,7 @@ describe('AeChat route promotion', () => {
     render(<AeChat threadId="thread-one" initialProjection={initialProjection} />)
 
     await act(async () => {
-      testState.latestTranscriptProps?.onFollowUp?.('Send a qualified inquiry to the first listed business')
+      testState.latestTranscriptProps?.onFollowUp?.('Prepare a qualified inquiry for the first listed business')
       await Promise.resolve()
     })
     expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
@@ -262,9 +262,9 @@ describe('AeChat route promotion', () => {
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
     const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or start a qualified inquiry')
+    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or prepare a qualified inquiry')
     expect(panel.getAttribute('data-loop-hint')).toBe(
-      'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+      'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
     )
   })
 

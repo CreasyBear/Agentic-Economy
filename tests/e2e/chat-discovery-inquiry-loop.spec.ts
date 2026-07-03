@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 const QUERY = 'emergency plumber parramatta'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
 const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
-const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to Demo Plumbing'
+const INQUIRY_HANDOFF_QUERY = 'Prepare a qualified inquiry for Demo Plumbing'
 const BOUNDARY_FOLLOW_UP_QUERY = 'Can AE book this for me?'
 const NON_INQUIRY_PROVIDER_QUERY = 'Message Parramatta Emergency Plumbing'
 const FILTER_FOLLOW_UP_QUERY = 'Show only businesses that accept inquiries'
@@ -33,7 +33,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
       /These listings need a published inquiry path before AE can route contact/i,
     )
-    await expect(page.getByRole('region', { name: /continue this thread/i })).not.toContainText(/Start qualified inquiry/i)
+    await expect(page.getByRole('region', { name: /continue this thread/i })).not.toContainText(/Prepare qualified inquiry/i)
     await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/No AE inquiry form is published yet/i)
 
     const reviewLink = page
@@ -66,10 +66,10 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/Demo Plumbing/i)
     await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/AE inquiry form published/i)
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
+      /Narrow, compare, or prepare a qualified inquiry from the listed businesses above/i,
     )
 
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
+    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
@@ -136,9 +136,9 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(comparison).toContainText(/Parramatta Emergency Plumbing/i)
     await expect(comparison).toContainText(/Next step/i)
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
+      /Narrow, compare, or prepare a qualified inquiry from the listed businesses above/i,
     )
-    await expect(page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })).toBeVisible()
     await assertPublicLanguage(page)
   })
 
@@ -187,10 +187,10 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(sessionContext).toContainText(/Listed businesses/i)
     await expect(sessionContext).toContainText(/Parramatta Emergency Plumbing/i)
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
+      /Narrow, compare, or prepare a qualified inquiry from the listed businesses above/i,
     )
 
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
+    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
@@ -270,7 +270,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expectQueryInTranscript(page, INQUIRY_READY_QUERY)
     await waitForLatestReadyAnswer(page)
 
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
+    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
@@ -294,7 +294,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(sessionContext).not.toContainText(/Selected business/i)
     const followUpSearch = page.getByRole('search', { name: /find local service businesses/i }).last()
     await expect(
-      followUpSearch.getByRole('searchbox', { name: /narrow, compare, or start a qualified inquiry/i }),
+      followUpSearch.getByRole('searchbox', { name: /narrow, compare, or prepare a qualified inquiry/i }),
     ).toBeEditable()
     await expect(page.getByText(/Continue by narrowing or comparing the listed businesses/i).last()).toBeVisible()
 
@@ -335,9 +335,9 @@ test.describe('chat discovery to inquiry loop', () => {
 
     const continuePanel = page.getByRole('region', { name: /continue this thread/i })
     await expect(continuePanel).toContainText(
-      /Narrow, compare, or start a qualified inquiry from the businesses already found in this thread/i,
+      /Narrow, compare, or prepare a qualified inquiry from the businesses already found in this thread/i,
     )
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
+    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
 

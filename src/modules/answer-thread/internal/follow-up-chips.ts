@@ -119,16 +119,16 @@ function buildInquiryHandoffChip(
   const firstProvider = providers[0]
   if (firstProvider !== undefined && hasPublishedInquiryPath(firstProvider)) {
     return {
-      label: `Start qualified inquiry with ${firstProvider.name}`,
-      submitQuery: `Send a qualified inquiry to ${firstProvider.name}`,
+      label: `Prepare qualified inquiry with ${firstProvider.name}`,
+      submitQuery: `Prepare a qualified inquiry for ${firstProvider.name}`,
     }
   }
 
   const onlyInquiryReady = inquiryReadyProviders[0]
   if (inquiryReadyProviders.length === 1 && onlyInquiryReady !== undefined) {
     return {
-      label: `Start qualified inquiry with ${onlyInquiryReady.name}`,
-      submitQuery: `Send a qualified inquiry to ${onlyInquiryReady.name}`,
+      label: `Prepare qualified inquiry with ${onlyInquiryReady.name}`,
+      submitQuery: `Prepare a qualified inquiry for ${onlyInquiryReady.name}`,
     }
   }
 

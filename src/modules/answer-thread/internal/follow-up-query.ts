@@ -97,7 +97,7 @@ function isFollowUpChipLabel(query: string, hasEarlierContext = false): boolean 
   if (/^what can agentic economy do here\?$/i.test(normalized)) {
     return true
   }
-  if (/^send a qualified inquiry(?: to .+)?$/i.test(normalized)) {
+  if (/^(?:prepare|send|start) a qualified inquiry(?: (?:for|to|with) .+)?$/i.test(normalized)) {
     return true
   }
   if (hasEarlierContext && classifyFollowUpIntent(normalized, 1) !== 'refine_search') {

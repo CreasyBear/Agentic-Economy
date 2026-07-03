@@ -203,7 +203,9 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      expect(complete.answer.oneLine).toBe('Ready to send a qualified inquiry to Parramatta Emergency Plumbing.')
+      expect(complete.answer.oneLine).toBe(
+        "Ready to open Parramatta Emergency Plumbing's qualified inquiry form.",
+      )
       expect(complete.answer.selectedProvider?.slug).toBe('parramatta-emergency-plumbing')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',

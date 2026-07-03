@@ -48,7 +48,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
   it('shows the chosen provider before routing to the inquiry form', () => {
     const selected = provider()
     const artifacts: AnswerArtifact[] = [
-      { kind: 'one-line', text: 'Ready to send a qualified inquiry to Demo Plumbing.' },
+      { kind: 'one-line', text: "Ready to open Demo Plumbing's qualified inquiry form." },
       { kind: 'selected-provider', provider: selected },
       {
         kind: 'what-to-do-now',

@@ -33,8 +33,8 @@ describe('chat composer loop copy', () => {
 
   it('keeps saved thread guidance when no turn is streaming', () => {
     expect(buildFollowUpComposerCopy([turn()], null)).toEqual({
-      placeholder: 'Narrow, compare, or start a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
+      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
     })
   })
 
@@ -43,7 +43,7 @@ describe('chat composer loop copy', () => {
       turn({
         intent: 'inquiry_handoff',
         artifacts: [{ kind: 'selected-provider', provider: provider() }],
-        oneLine: 'Ready to send a qualified inquiry.',
+        oneLine: "Ready to open Demo Plumber's qualified inquiry form.",
       }),
       turn({
         seq: 2,
@@ -78,8 +78,8 @@ describe('chat composer loop copy', () => {
         oneLine: 'One listed business matches.',
       }),
     ], null)).toEqual({
-      placeholder: 'Narrow, compare, or start a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then use qualified inquiry when one fits.',
+      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
+      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
     })
   })
 

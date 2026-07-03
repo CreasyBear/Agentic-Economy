@@ -29,6 +29,7 @@ describe('follow-up intent router', () => {
 
   it('detects inquiry handoff follow-ups after a provider answer exists', () => {
     expect(classifyFollowUpIntent('message the first one', 1)).toBe('inquiry_handoff')
+    expect(classifyFollowUpIntent('prepare a qualified inquiry', 1)).toBe('inquiry_handoff')
     expect(classifyFollowUpIntent('send a qualified inquiry', 1)).toBe('inquiry_handoff')
   })
 
