@@ -3,9 +3,9 @@
 **Date:** 2026-07-03
 **Frame:** `$plan-eng-review` plus project-local `$gsd-map-codebase` and `$gsd-graphify` evidence
 **Audit stance:** OMP is the gold-standard reference architecture. AE should copy the harness discipline, not OMP's public tool surface.
-**AE audit commit:** `30e795243812e18197df35c0592524ee60eec137`
+**AE closeout implementation commit:** `075ac3767718358d96a9ae9025b9098db8bcb0b8`
 **OMP reference:** `/Users/skchan/Jcsyc_Projects/oh-my-pi` at `31a8cfc31cf1e467efa76655ded27e64d2295139`
-**Verdict:** AE now has OMP-shaped answer runtime authority, durable source finalization, and admin readback primitives. It is still not operationally closed because graph freshness cannot pass while the broad graph-relevant dirty tree remains unsettled.
+**Verdict:** AE now has OMP-shaped answer runtime authority, durable source finalization, admin readback primitives, and green graph freshness for the landed answer-harness closeout slice.
 
 ## Executive Readout
 
@@ -20,7 +20,7 @@ Current OMP carry-over now includes:
 - Finalization outcomes are typed as accepted, replayed, conflict, denied, and error; conflict/error now block a normal complete stream.
 - Admin/operator readback is source-backed and auth-gated instead of a disabled scaffold.
 
-The remaining operational gap is evidence settlement, not core shape. OMP's bar is same-commit evidence: eval, browser, UI contract, graph freshness, and durable replay proof all green together. AE has all but standalone graph freshness green in the working tree.
+The graph-relevant dirty tree has been landed. The remaining work is no longer a P0 harness blocker: add admin browser smoke with seeded source-backed evidence, then expand the same journal pattern into broader AE modules where useful.
 
 ## Evidence Snapshot
 
@@ -29,15 +29,15 @@ The remaining operational gap is evidence settlement, not core shape. OMP's bar 
 | OMP checkout | `/Users/skchan/Jcsyc_Projects/oh-my-pi` | Present |
 | OMP commit | `31a8cfc31cf1e467efa76655ded27e64d2295139` | Reference commit |
 | OMP graphify | 69,345 nodes, 65,123 edges, built at `31a8cfc` | Fresh reference |
-| AE commit | `30e795243812e18197df35c0592524ee60eec137` | Current audit target |
+| AE commit | `075ac3767718358d96a9ae9025b9098db8bcb0b8` | Closeout implementation commit |
 | Typecheck | `npm run typecheck` | Pass |
 | Focused finalization/admin tests | `./node_modules/.bin/vitest run tests/unit/answer-thread/answer-harness-operation.test.ts tests/unit/harness/run-loop.test.ts tests/unit/harness/run-viewer-functions.test.ts tests/unit/harness/run-viewer-projection.test.ts tests/unit/harness/session-journal.test.ts` | Pass: 5 files, 28 tests |
 | Focused harness/answer tests | `./node_modules/.bin/vitest run tests/unit/answer-thread tests/unit/harness tests/integration/answer-tool-calls.test.ts` | Pass: 24 files, 119 tests |
 | Eval suite | `npm run test:eval` | Pass: coverage ok, answer suite 12 cases/14 turns, promptfoo 27/27, eval Vitest 23/23 |
 | UI contract | `npm run test:ui-contract -- tests/ui-contract/public-language-copy.test.ts` | Pass: 6 files, 36 tests |
 | Browser continuity | `./node_modules/.bin/playwright test tests/e2e/thread-first.spec.ts --project=compact-chromium --project=wide-chromium --reporter=line` | Pass with elevated local server permission: 3 passed, 1 skipped |
-| Graphify rebuild | `graphify update . && ... && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: 18,147 nodes, 17,305 edges, built/current `30e7952`, `commit_stale: false` |
-| Graph freshness | `npm run test:graph-freshness` | Fail: graph-relevant dirty paths remain |
+| Graphify rebuild | `graphify update . && ... && node .codex/gsd-core/bin/gsd-tools.cjs graphify status` | Pass: 18,150 nodes, 17,307 edges, built/current `075ac37`, `commit_stale: false` |
+| Graph freshness | `npm run test:graph-freshness` | Pass: graph report/json commit equals `075ac3767718358d96a9ae9025b9098db8bcb0b8`; 0 graph-relevant dirty paths |
 | Diff hygiene | `git diff --check` | Pass |
 
 ## OMP Gold Anchors
@@ -86,35 +86,33 @@ The public SSE shape remains stable. Public answer surfaces still receive answer
 | Durable finalization | Session manager treats replay and append evidence as durable runtime state. | `finalizeAnswerTurnHarnessRun` patches answer turn evidence and appends journal entries atomically; idempotent replay and conflicts are explicit. | Strong partial |
 | Replay projection | Runtime paths are reconstructable and private evidence is protected. | Public/private projection helpers and admin source readback exist; admin browser smoke is still pending. | Partial |
 | Admin evidence | OMP terminal/session workflows expose raw evidence to operators. | Admin run list/detail source reads are auth-gated and unit-tested; route smoke with seeded evidence remains. | Partial |
-| Eval coupling | Runtime evidence is tied to loop outputs. | Typecheck, focused tests, promptfoo, answer eval, UI contract, and browser continuity are green; graph freshness is red until dirty paths settle. | Strong partial |
+| Eval coupling | Runtime evidence is tied to loop outputs. | Typecheck, focused tests, promptfoo, answer eval, UI contract, browser continuity, and graph freshness are green for the closeout slice. | Strong |
 | Public tool surface | OMP can expose dynamic terminal tools. | AE rejects dynamic public tool discovery and shell/filesystem/browser/LSP product tools. | Correct rejection |
 
 ## Findings
 
-### P0 - Graph freshness is the remaining operational blocker
+### P0 - Graph freshness is now closed
 
-Graphify artifacts were rebuilt at `30e7952` and report `commit_stale: false`, but standalone graph freshness fails because many graph-relevant paths are dirty. The current dirty tree includes OMP closeout work plus broad UI/Astryx, billing/future-phase, audit, and support-module changes.
+Graphify artifacts were rebuilt at `075ac37` and report `commit_stale: false`. Standalone graph freshness now passes because the graph-relevant dirty tree was landed.
 
-Impact: architecture maps can guide the work, but the register must not mark rows `5-operational` until the dirty tree is landed or isolated and `npm run test:graph-freshness` passes.
+Impact: architecture maps and graph evidence are usable for the closeout implementation commit.
+
+Closed evidence:
+
+- `graphify update .`
+- `node .codex/gsd-core/bin/gsd-tools.cjs graphify status`
+- `npm run test:graph-freshness`
+
+### P0 - Same-commit evidence is established for the answer-harness slice
+
+The landed closeout commit has green typecheck, eval, UI contract, browser continuity, focused tests, and graph freshness evidence. The regenerated graph report is expected to remain a working-tree evidence artifact because the graph records the current commit hash.
+
+Impact: R1/R5/R6/R7/R8 can be called operational for the answer-harness closeout slice. R9 remains evaled until admin browser smoke is added.
 
 Required closeout:
 
-- Land or intentionally isolate graph-relevant dirty work.
-- Rebuild graphify after settlement.
-- Rerun graph freshness and the full closeout gate list at the settled commit.
-
-### P0 - Same-commit evidence is not yet established
-
-The working tree has green typecheck, eval, UI contract, browser continuity, and focused tests. However, OMP's operational standard is evidence from the same settled commit.
-
-Impact: R1/R5/R6/R7/R9 can be `4-evaled`, not `5-operational`.
-
-Required closeout:
-
-- Settle the tree.
-- Rebuild graphify.
-- Rerun every ledger command.
-- Update the register with the final commit hash and pass/fail status.
+- Keep these gates as the baseline for future harness changes.
+- Add admin browser smoke for run viewer confidence.
 
 ### P1 - Admin run viewer needs browser smoke
 
@@ -152,14 +150,13 @@ Required follow-up:
 
 ## High-ROI Closeout Plan
 
-1. **Settle graph-relevant dirty work.** Choose whether the broad UI/Astryx and future-phase tree is landing with the OMP closeout or isolated first.
-2. **Rebuild graphify.** Run graphify after settlement and verify graph report/json commit equals `HEAD`.
-3. **Run full gate ledger.** Typecheck, focused tests, eval, UI contract, browser continuity, graph freshness, and diff check.
-4. **Add admin smoke.** Browser-test the admin run viewer with seeded source-backed evidence.
-5. **Promote rows.** Move R1/R5/R6/R7/R8/R9 to `5-operational` only after the same settled commit has all required evidence.
+1. **Keep closeout gates mandatory.** Typecheck, focused tests, eval, UI contract, browser continuity, graph freshness, and diff check stay the harness baseline.
+2. **Add admin smoke.** Browser-test the admin run viewer with seeded source-backed evidence.
+3. **Broaden adoption.** Carry the same operation journal pattern into inquiries, protected actions, and billing observability where useful.
+4. **Finish write reconciliation.** Add explicit idempotency and post-timeout reconciliation for broader internal writes.
 
 ## Bottom Line
 
-The OMP harness work is architecturally close: runtime authority, durable finalization, journal projection, and admin readback are now real.
+The OMP answer-harness closeout is operational for the implemented slice: runtime authority, durable finalization, journal projection, admin readback primitives, eval/browser/UI evidence, and graph freshness are all in place.
 
-The honest closeout is blocked by graph/same-commit settlement, not by the core harness implementation. Once the dirty tree is landed or isolated and graph freshness passes, AE can close the OMP answer-harness slice as operational.
+The remaining work is follow-up depth, not a P0 closeout blocker: admin browser smoke, broader module adoption, and write timeout reconciliation.

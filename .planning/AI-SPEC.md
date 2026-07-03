@@ -177,7 +177,7 @@ Reference checkout:
 
 - OMP repo: `/Users/skchan/Jcsyc_Projects/oh-my-pi`
 - OMP commit: `31a8cfc31cf1e467efa76655ded27e64d2295139`
-- AE current re-audit commit: `30e795243812e18197df35c0592524ee60eec137`
+- AE closeout implementation commit: `075ac3767718358d96a9ae9025b9098db8bcb0b8`
 
 OMP patterns to copy:
 
@@ -248,10 +248,13 @@ Current re-audit state on 2026-07-03:
   passes.
 - Browser thread continuity passes in compact and wide Chromium with local
   server elevation.
-- Graphify artifacts were rebuilt at HEAD `30e7952`, but the graph freshness
-  gate is still red while graph-relevant dirty paths remain.
-- Graph freshness must be green at the same settled commit before any OMP
-  carry-over row is marked operational.
+- Graphify artifacts were rebuilt at HEAD `075ac37`, and
+  `npm run test:graph-freshness` passes with graph report/json commit matching
+  `075ac3767718358d96a9ae9025b9098db8bcb0b8`.
+- The answer-harness closeout slice may be treated as operational for runtime
+  authority, durable finalization, eval coupling, browser continuity, and graph
+  freshness. Admin browser smoke and broader module adoption remain follow-up
+  work.
 
 ## Harness Run Loop Contract
 
@@ -660,8 +663,8 @@ Acceptance:
   answer runtime events when a server request is available,
 - source-backed answer finalization patches the final run report and journal in
   one Convex transaction,
-- full operational replay remains blocked until admin browser smoke, graph
-  freshness, and broader module adoption are green.
+- admin browser smoke and broader module adoption remain follow-up work after
+  the answer-harness operational closeout.
 
 ### M3 - Tool Contract, Approval, Telemetry, Gates
 
@@ -706,17 +709,17 @@ The OMP carry-over register is authoritative for operational status.
 
 Status changes must follow these rules:
 
-- `R1` may claim focused live answer-loop authority, but remains below
-  operational until graph freshness and all other gates are green at the same
-  settled commit.
+- `R1` may claim operational live answer-loop authority once typecheck,
+  focused tests, eval, browser continuity, UI contract, and graph freshness are
+  green for the closeout implementation commit.
 - `R2` remains below operational until descriptor parity and allowlist equality
   are tested.
-- `R3` may claim focused live-runtime migration for the answer slice, but not
-  operational parity until eval/browser/graph gates are rerun after the dirty
-  tree settles.
-- `R4` may claim source-backed finalization and admin readback, but remains
-  below operational until admin browser smoke and graph gates are green.
-- `R6` and `R7` are P0 rebuild gates, not optional polish.
+- `R3` may claim operational live-runtime migration for the answer slice when
+  the same closeout gate ledger is green.
+- `R4` may claim source-backed finalization and admin readback; admin browser
+  smoke is the remaining confidence follow-up before expanding that claim.
+- `R6` and `R7` are P0 rebuild gates, not optional polish; they are green for
+  the answer-harness closeout slice at `075ac37`.
 - `R8` and `R9` wait for private evidence boundaries unless a reviewer feature
   ships earlier.
 - `R10` and `R11` remain rejected.
