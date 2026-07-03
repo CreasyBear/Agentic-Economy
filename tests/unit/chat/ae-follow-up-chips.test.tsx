@@ -52,6 +52,28 @@ describe('AeFollowUpChips', () => {
 
     expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
   })
+
+  it('keeps the follow-up panel available after a selected-provider handoff', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+    const onSelect = vi.fn()
+
+    render(<AeFollowUpChips turn={turn({
+      intent: 'inquiry_handoff',
+      query: 'Send a qualified inquiry to the first listed business',
+      artifacts: [
+        {
+          kind: 'selected-provider',
+          provider: provider({ slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+        },
+      ],
+    })} onSelect={onSelect} />)
+
+    const panel = screen.getByRole('region', { name: 'Continue this thread' })
+    expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
+    fireEvent.click(screen.getByText('Only inquiry-ready listings'))
+
+    expect(onSelect).toHaveBeenCalledWith('Show only businesses that accept inquiries')
+  })
 })
 
 function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {

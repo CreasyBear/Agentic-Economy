@@ -140,6 +140,11 @@ function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {
   const providersBySlug = new Map<string, Record<string, unknown>>()
 
   for (const artifact of turn.artifacts) {
+    if (artifact.kind === 'selected-provider') {
+      providersBySlug.set(artifact.provider.slug, { ...artifact.provider })
+      continue
+    }
+
     if (artifact.kind !== 'provider-cards' && artifact.kind !== 'provider-compare-table') {
       continue
     }

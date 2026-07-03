@@ -75,6 +75,17 @@ function providersForFollowUps(
   const providersBySlug = new Map<string, { slug: string; name: string; suburb: string; inquiryUrl?: string }>()
 
   for (const artifact of artifacts) {
+    if (artifact.kind === 'selected-provider') {
+      const provider = artifact.provider
+      providersBySlug.set(provider.slug, {
+        slug: provider.slug,
+        name: provider.name,
+        suburb: provider.suburb,
+        ...(provider.inquiryUrl === undefined ? {} : { inquiryUrl: provider.inquiryUrl }),
+      })
+      continue
+    }
+
     if (artifact.kind !== 'provider-cards' && artifact.kind !== 'provider-compare-table') {
       continue
     }

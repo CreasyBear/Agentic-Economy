@@ -106,6 +106,26 @@ describe('follow-up chips', () => {
     expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
   })
 
+  it('keeps listed context after a selected-provider handoff turn', () => {
+    const chips = buildDeterministicFollowUpChips(turn({
+      intent: 'inquiry_handoff',
+      query: 'Send a qualified inquiry to the first listed business',
+      artifacts: [
+        {
+          kind: 'selected-provider',
+          provider: provider({ slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+        },
+      ],
+    }))
+
+    expect(chips[0]).toEqual({
+      label: 'Start qualified inquiry',
+      submitQuery: 'Send a qualified inquiry to the first listed business',
+    })
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Narrow to Parramatta')
+  })
+
   it('rejects overclaim chips', () => {
     expect(validateFollowUpChip('Book now and pay today', 1)).toBe(false)
   })
