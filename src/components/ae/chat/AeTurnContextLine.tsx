@@ -2,6 +2,7 @@ import {
   CircleAlertIcon,
   GitCompareArrowsIcon,
   RefreshCcwIcon,
+  SendIcon,
   ShieldCheckIcon,
   SlidersHorizontalIcon,
 } from 'lucide-react'
@@ -43,6 +44,8 @@ function iconForIntent(intent: FollowUpIntent) {
       return SlidersHorizontalIcon
     case 'compare_known':
       return GitCompareArrowsIcon
+    case 'inquiry_handoff':
+      return SendIcon
     case 'explain_boundary':
       return ShieldCheckIcon
     case 'unsupported':

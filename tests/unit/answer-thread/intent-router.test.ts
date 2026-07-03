@@ -8,6 +8,7 @@ describe('resolveIntentRoute — exhaustive intent routing', () => {
     expect(resolveIntentRoute('refine_search').kind).toBe('tool_search')
     expect(resolveIntentRoute('filter_known').kind).toBe('frozen_filter')
     expect(resolveIntentRoute('compare_known').kind).toBe('frozen_compare')
+    expect(resolveIntentRoute('inquiry_handoff').kind).toBe('inquiry_handoff')
     expect(resolveIntentRoute('explain_boundary').kind).toBe('boundary_explain')
     expect(resolveIntentRoute('unsupported').kind).toBe('unsupported')
   })

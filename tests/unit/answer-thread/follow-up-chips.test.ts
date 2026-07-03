@@ -92,6 +92,7 @@ describe('follow-up chips', () => {
   it('maps deterministic chip strings to known intents', () => {
     expect(classifyFollowUpIntent('Show only businesses that accept inquiries', 1)).toBe('filter_known')
     expect(classifyFollowUpIntent('Compare the top two', 1)).toBe('compare_known')
+    expect(classifyFollowUpIntent('Message the first one', 1)).toBe('inquiry_handoff')
     expect(classifyFollowUpIntent('What can Agentic Economy do here?', 1)).toBe('explain_boundary')
     expect(classifyFollowUpIntent('Narrow to Parramatta', 1)).toBe('refine_search')
   })

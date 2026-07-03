@@ -13,6 +13,7 @@ export const FollowUpIntentValues = [
   'refine_search',
   'filter_known',
   'compare_known',
+  'inquiry_handoff',
   'explain_boundary',
   'unsupported',
 ] as const

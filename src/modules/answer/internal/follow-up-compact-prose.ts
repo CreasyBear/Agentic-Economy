@@ -38,6 +38,14 @@ export function buildCompactFollowUpProse(input: {
         summary: buildCompareSummary(input.providers),
         nextStep: buildInquiryNextStep(input.providers),
       }
+    case 'inquiry_handoff':
+      return {
+        oneLine: count === 1 && input.providers[0] !== undefined
+          ? `Ready to send a qualified inquiry to ${input.providers[0].name}.`
+          : 'Choose which listed business to message.',
+        summary: boundaryLine(),
+        nextStep: buildInquiryNextStep(input.providers),
+      }
     case 'explain_boundary':
     case 'unsupported':
       return {

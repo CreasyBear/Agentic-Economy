@@ -22,6 +22,7 @@ export type AnswerSynthesizerFollowUpIntent =
   | 'refine_search'
   | 'filter_known'
   | 'compare_known'
+  | 'inquiry_handoff'
   | 'explain_boundary'
   | 'unsupported'
 

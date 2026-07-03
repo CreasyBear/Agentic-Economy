@@ -181,6 +181,43 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     })
   })
 
+  it('inquiry_handoff: resolves a prior provider without calling the agent', async () => {
+    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
+    process.env.OPENROUTER_API_KEY = 'test-key'
+
+    let agentCalled = false
+    setAnswerToolUseAgentForTests(async () => {
+      agentCalled = true
+      return { toolCalls: [], prose: { oneLine: 'x', summary: 'y', whatToDoNow: 'z' } }
+    })
+
+    priorThreadPort()
+    const state = createDefaultRegistrySourceState()
+    await withRegistrySourcePortForTest(state, async () => {
+      const response = await handleAnswerTurnRequest(turnRequest('message the first one'))
+
+      const frames = parseStream(await response.text())
+      const complete = frames.at(-1)?.event
+      expect(complete?.type).toBe('complete')
+      expect(agentCalled).toBe(false)
+      if (complete?.type !== 'complete') {
+        throw new Error('expected complete event')
+      }
+      expect(complete.answer.oneLine).toBe('Ready to send a qualified inquiry to Parramatta Emergency Plumbing.')
+      expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
+        'parramatta-emergency-plumbing',
+      ])
+      expect(complete.answer.nextStep).toContain('inquiry form')
+      expect(complete.answer.nextStep).toContain('does not book, charge, or dispatch')
+      expect(
+        frames
+          .map((frame) => frame.event)
+          .filter((event): event is Extract<AnswerEvent, { type: 'work-step' }> => event.type === 'work-step')
+          .map((event) => event.step.title),
+      ).toEqual(expect.arrayContaining(['Resolving provider', 'Checking inquiry path', 'Checking safe-action boundary']))
+    })
+  })
+
   it('explain_boundary: answers from boundary-prose directly without calling the agent', async () => {
     process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
     process.env.OPENROUTER_API_KEY = 'test-key'

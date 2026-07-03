@@ -8,9 +8,14 @@ import {
   buildBoundaryNextStep,
   buildBoundaryOneLine,
   buildBoundarySummary,
+  buildInquiryHandoffNextStep,
+  buildInquiryHandoffOneLine,
+  buildInquiryHandoffSummary,
   buildUnsupportedNextStep,
   buildUnsupportedOneLine,
   buildUnsupportedSummary,
+  inquiryHandoffProviders,
+  resolveInquiryHandoff,
 } from '@/modules/answer/public'
 import {
   buildAgentJsonUrl,
@@ -354,6 +359,11 @@ function buildStreamAnswerTurnPhases(input: {
           return applyToolLedResult(
             state,
             await streamBoundaryTurn(runtimeStreamInput(input, state), route.kind),
+          )
+        case 'inquiry_handoff':
+          return applyToolLedResult(
+            state,
+            await streamInquiryHandoffTurn(runtimeStreamInput(input, state)),
           )
         case 'frozen_filter':
         case 'frozen_compare': {
@@ -1148,6 +1158,117 @@ function resequenceToolCalls(
   }))
 }
 
+async function streamInquiryHandoffTurn(
+  input: {
+    query: string
+    intent: FollowUpIntent
+    priorTurnsCount: number
+    priorProviders: AnswerSource[]
+    priorAllowedSlugs: readonly string[]
+    signal: AbortSignal | undefined
+    send: (event: AnswerEvent) => void
+    timings: TurnTimingCollector
+    workLog: WorkStepEmitter
+    deferAssembly?: boolean
+  },
+): Promise<StreamToolLedTurnResult> {
+  const priorProviders = reindexProviders(input.priorProviders)
+  const resolution = resolveInquiryHandoff({ query: input.query, providers: priorProviders })
+  const providers = reindexProviders(inquiryHandoffProviders(resolution))
+  const selectedProvider =
+    resolution.kind === 'resolved' || resolution.kind === 'provider_unavailable'
+      ? resolution.provider
+      : undefined
+  const routeStartedAt = Date.now()
+
+  input.workLog.emit({
+    id: 'route.resolve_provider',
+    phase: 'route',
+    status: 'running',
+    title: 'Resolving provider',
+    summary: 'Matching the follow-up to a listed business already in this thread.',
+    detailRows: [{ label: 'Listed businesses in thread', value: String(priorProviders.length) }],
+    relatedProviderSlugs: priorProviders.map((provider) => provider.slug),
+    startedAtMs: routeStartedAt,
+  })
+  input.workLog.emit({
+    id: 'route.resolve_provider',
+    phase: 'route',
+    status: selectedProvider === undefined && resolution.kind !== 'choose_provider' ? 'skipped' : 'complete',
+    title: 'Resolving provider',
+    summary: describeInquiryHandoffResolution(resolution),
+    detailRows: [
+      { label: 'Listed businesses in thread', value: String(priorProviders.length) },
+      { label: 'Selected provider', value: selectedProvider?.name ?? 'Needs selection' },
+    ],
+    relatedProviderSlugs: providers.map((provider) => provider.slug),
+    startedAtMs: routeStartedAt,
+    completedAtMs: Date.now(),
+  })
+
+  const pathStartedAt = Date.now()
+  input.workLog.emit({
+    id: 'route.inquiry_path',
+    phase: 'route',
+    status: 'running',
+    title: 'Checking inquiry path',
+    summary: 'Checking whether the selected listing publishes a qualified inquiry form.',
+    relatedProviderSlugs: providers.map((provider) => provider.slug),
+    startedAtMs: pathStartedAt,
+  })
+  input.workLog.emit({
+    id: 'route.inquiry_path',
+    phase: 'route',
+    status: resolution.kind === 'resolved' ? 'complete' : 'skipped',
+    title: 'Checking inquiry path',
+    summary: describeInquiryPath(resolution),
+    detailRows: [{ label: 'Inquiry path', value: inquiryPathLabel(resolution) }],
+    relatedProviderSlugs: providers.map((provider) => provider.slug),
+    startedAtMs: pathStartedAt,
+    completedAtMs: Date.now(),
+  })
+
+  const boundaryStartedAt = Date.now()
+  input.workLog.emit({
+    id: 'route.safe_boundary',
+    phase: 'route',
+    status: 'complete',
+    title: 'Checking safe-action boundary',
+    summary: 'AE can route a qualified inquiry for owner review; it does not book, charge, or dispatch.',
+    detailRows: [{ label: 'Allowed next step', value: 'Qualified inquiry for owner review' }],
+    relatedProviderSlugs: providers.map((provider) => provider.slug),
+    startedAtMs: boundaryStartedAt,
+    completedAtMs: Date.now(),
+  })
+
+  const snapshot = withFollowUpLayout(
+    {
+      query: input.query,
+      oneLine: buildInquiryHandoffOneLine(resolution),
+      providers,
+      summary: buildInquiryHandoffSummary(resolution),
+      nextStep: buildInquiryHandoffNextStep(resolution),
+      agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
+    },
+    input.priorTurnsCount,
+    input.intent,
+  )
+
+  const allowedSlugs = new Set(input.priorAllowedSlugs)
+  const finalized = finalizeAnswerTurnSnapshot({ snapshot, allowedSlugs })
+  if (!finalized.ok) {
+    return rejectBlockedSnapshot(input, [], allowedSlugs, finalized)
+  }
+  const assembly = await emitOrDeferSnapshot(input, finalized.snapshot, 'inquiry_handoff', { planMode: 'boundary' })
+  return {
+    snapshot: finalized.snapshot,
+    toolCalls: [],
+    allowedSlugs,
+    errorCopyId: undefined,
+    gate: finalized.gate,
+    ...(assembly === undefined ? {} : { assembly }),
+  }
+}
 
 async function streamBoundaryTurn(
   input: {
@@ -1224,6 +1345,45 @@ async function streamBoundaryTurn(
   }
 }
 
+function describeInquiryHandoffResolution(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
+  switch (resolution.kind) {
+    case 'resolved':
+      return `${resolution.provider.name} was selected from the latest listed businesses.`
+    case 'provider_unavailable':
+      return `${resolution.provider.name} was selected, but it does not publish an AE inquiry form yet.`
+    case 'choose_provider':
+      return 'More than one listed business could match; the user needs to choose one.'
+    case 'no_provider':
+      return 'No listed business is available in the latest answer thread.'
+  }
+}
+
+function describeInquiryPath(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
+  switch (resolution.kind) {
+    case 'resolved':
+      return `${resolution.provider.name} publishes a qualified inquiry path.`
+    case 'provider_unavailable':
+      return `${resolution.provider.name} does not publish an AE inquiry form yet.`
+    case 'choose_provider':
+      return 'Choose a provider before opening an inquiry path.'
+    case 'no_provider':
+      return 'Find a listed provider before opening an inquiry path.'
+  }
+}
+
+function inquiryPathLabel(resolution: ReturnType<typeof resolveInquiryHandoff>): string {
+  switch (resolution.kind) {
+    case 'resolved':
+      return 'Available'
+    case 'provider_unavailable':
+      return 'Not published'
+    case 'choose_provider':
+      return 'Needs provider selection'
+    case 'no_provider':
+      return 'Needs listed provider'
+  }
+}
+
 function withFollowUpLayout(
   snapshot: AnswerSnapshot,
   priorTurnsCount: number,
@@ -1277,7 +1437,7 @@ async function emitTimedSnapshot(
 }
 
 function snapshotStreamPauseMs(path: string): number {
-  if (path === 'boundary_explain' || path === 'unsupported' || path === 'clarification') {
+  if (path === 'boundary_explain' || path === 'unsupported' || path === 'inquiry_handoff' || path === 'clarification') {
     return 0
   }
   if (

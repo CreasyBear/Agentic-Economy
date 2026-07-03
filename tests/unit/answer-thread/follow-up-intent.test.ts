@@ -27,6 +27,15 @@ describe('follow-up intent router', () => {
     expect(classifyFollowUpIntent('which take inquiries?', 1)).toBe('filter_known')
   })
 
+  it('detects inquiry handoff follow-ups after a provider answer exists', () => {
+    expect(classifyFollowUpIntent('message the first one', 1)).toBe('inquiry_handoff')
+    expect(classifyFollowUpIntent('send a qualified inquiry', 1)).toBe('inquiry_handoff')
+  })
+
+  it('keeps first-turn contact-shaped requests as searches', () => {
+    expect(classifyFollowUpIntent('contact a plumber in Preston', 0)).toBe('refine_search')
+  })
+
   it('truncates thread titles to 80 characters', () => {
     const title = buildThreadTitle(`${'a'.repeat(100)}`)
     expect(title.length).toBeLessThanOrEqual(80)

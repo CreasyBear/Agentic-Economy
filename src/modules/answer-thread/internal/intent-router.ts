@@ -14,6 +14,8 @@ import type { FollowUpIntent } from '../answer-thread.schema'
  * - `filter_known` / `compare_known` → frozen-evidence routes: the agent
  *   writes prose over frozen prior providers with `disableTools`, and the gate
  *   uses the frozen `allowedSlugs`. No new catalog search.
+ * - `inquiry_handoff` → deterministic provider-resolution route over frozen
+ *   prior providers. It opens the existing inquiry path; it does not submit.
  * - `explain_boundary` / `unsupported` → boundary-prose routes: deterministic
  *   copy from `boundary-prose.ts`, no LLM call, no tools.
  */
@@ -21,6 +23,7 @@ export type IntentRoute =
   | { kind: 'tool_search' }
   | { kind: 'frozen_filter' }
   | { kind: 'frozen_compare' }
+  | { kind: 'inquiry_handoff' }
   | { kind: 'boundary_explain' }
   | { kind: 'unsupported' }
 
@@ -32,6 +35,8 @@ export function resolveIntentRoute(intent: FollowUpIntent): IntentRoute {
       return { kind: 'frozen_filter' }
     case 'compare_known':
       return { kind: 'frozen_compare' }
+    case 'inquiry_handoff':
+      return { kind: 'inquiry_handoff' }
     case 'explain_boundary':
       return { kind: 'boundary_explain' }
     case 'unsupported':

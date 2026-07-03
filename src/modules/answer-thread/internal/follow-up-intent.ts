@@ -16,6 +16,15 @@ const BOUNDARY_PATTERNS = [
   /\bwill\s+you\s+dispatch\b/i,
 ]
 
+const INQUIRY_HANDOFF_PATTERNS = [
+  /\bsend\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
+  /\bsubmit\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
+  /\bstart\s+(?:a\s+)?(?:qualified\s+)?inquir/i,
+  /\bmessage\s+(?:them|him|her|the\s+(?:first|second|third|top|listed)\s+(?:one|business|provider|listing)|[a-z0-9][\w '&.-]{1,80})\b/i,
+  /\bcontact\s+(?:them|him|her|the\s+(?:first|second|third|top|listed)\s+(?:one|business|provider|listing)|[a-z0-9][\w '&.-]{1,80})\b/i,
+  /\bemail\s+(?:them|him|her|the\s+(?:first|second|third|top|listed)\s+(?:one|business|provider|listing)|[a-z0-9][\w '&.-]{1,80})\b/i,
+]
+
 const COMPARE_PATTERNS = [
   /\bcompare\b/i,
   /\bdifference\s+between\b/i,
@@ -45,6 +54,10 @@ export function classifyFollowUpIntent(query: string, priorQueryCount: number): 
 
   if (BOOKING_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return 'unsupported'
+  }
+
+  if (INQUIRY_HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return 'inquiry_handoff'
   }
 
   if (COMPARE_PATTERNS.some((pattern) => pattern.test(normalized))) {

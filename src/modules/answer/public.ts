@@ -76,6 +76,14 @@ export {
   buildUnsupportedSummary,
 } from './internal/boundary-prose'
 export {
+  buildInquiryHandoffNextStep,
+  buildInquiryHandoffOneLine,
+  buildInquiryHandoffSummary,
+  inquiryHandoffProviders,
+  resolveInquiryHandoff,
+  type InquiryHandoffResolution,
+} from './internal/inquiry-handoff-prose'
+export {
   DEFAULT_OPENROUTER_MODEL,
   readAnswerLlmConfig,
   readToolUseAgentEnabled,

@@ -30,6 +30,9 @@ describe('turn context line', () => {
     expect(buildTurnContextLine({ intent: 'compare_known', seq: 2, artifacts })).toBe(
       'Comparing 1 listed provider from this thread.',
     )
+    expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
+      'Preparing the qualified inquiry next step for Demo Plumber.',
+    )
     expect(buildTurnContextLine({ intent: 'refine_search', seq: 2, artifacts: [] })).toBe(
       'Searching again for this follow-up.',
     )
