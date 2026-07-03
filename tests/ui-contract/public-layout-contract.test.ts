@@ -135,6 +135,7 @@ describe('public listing layout contract', () => {
     expect(inquiryRoute).toMatch(/continues \{readback\.businessName\} from your answer thread/)
     expect(inquiryRoute).toMatch(/result\?\.kind === 'ok'/)
     expect(inquiryRoute).toMatch(/submittedOk \? null/)
+    expect(inquiryRoute).toMatch(/submitLockRef/)
     expect(inquiryRoute).toMatch(/Back to answer/)
   })
 })

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { SendIcon } from 'lucide-react'
@@ -85,6 +85,7 @@ function PublicInquiryRoute() {
   const [errors, setErrors] = useState<readonly PublicInquiryValidationError[]>([])
   const [result, setResult] = useState<PublicInquirySubmitServerResult | undefined>(initialResult)
   const [pending, setPending] = useState(false)
+  const submitLockRef = useRef(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
   const origin = inquiryOrigin(search)
 
@@ -97,6 +98,10 @@ function PublicInquiryRoute() {
   }
 
   async function submitFormValue() {
+    if (submitLockRef.current || result?.kind === 'ok') {
+      return
+    }
+
     setResult(undefined)
 
     if (readback.kind !== 'available') {
@@ -111,6 +116,7 @@ function PublicInquiryRoute() {
     }
 
     setErrors([])
+    submitLockRef.current = true
     setPending(true)
     try {
       const submitted = await submitInquiry({
@@ -136,6 +142,7 @@ function PublicInquiryRoute() {
         toast.error('reason' in submitted ? submitted.reason : 'Inquiry could not be sent.')
       }
     } finally {
+      submitLockRef.current = false
       setPending(false)
     }
   }
