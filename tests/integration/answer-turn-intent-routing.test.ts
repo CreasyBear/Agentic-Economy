@@ -204,6 +204,7 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toBe('Ready to send a qualified inquiry to Parramatta Emergency Plumbing.')
+      expect(complete.answer.selectedProvider?.slug).toBe('parramatta-emergency-plumbing')
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
@@ -215,6 +216,16 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
           .filter((event): event is Extract<AnswerEvent, { type: 'work-step' }> => event.type === 'work-step')
           .map((event) => event.step.title),
       ).toEqual(expect.arrayContaining(['Resolving provider', 'Checking inquiry path', 'Checking safe-action boundary']))
+      const eventTypes = frames.map((frame) => frame.event.type)
+      const selectedProviderArtifactEvent = frames
+        .map((frame) => frame.event)
+        .find((event) =>
+          event.type === 'artifact' && event.artifact.kind === 'selected-provider')
+      if (selectedProviderArtifactEvent?.type !== 'artifact' || selectedProviderArtifactEvent.artifact.kind !== 'selected-provider') {
+        throw new Error('expected selected-provider artifact')
+      }
+      expect(selectedProviderArtifactEvent.artifact.provider.slug).toBe('parramatta-emergency-plumbing')
+      expect(eventTypes.indexOf('artifact')).toBeLessThan(eventTypes.indexOf('next-step'))
     })
   })
 

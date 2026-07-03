@@ -4,12 +4,14 @@ import { resolveLayoutProfile, type AnswerLayoutProfile } from './answer-layout-
 import {
   buildArtifactsFromSnapshot,
   filterArtifactsForBudget,
-  getDefaultArtifactBudgetForLayoutProfile,
+  getArtifactBudgetForArtifacts,
+  getArtifactBudgetForSnapshot,
   type AnswerArtifactBudget,
 } from './snapshot-artifacts'
 
 export type AnswerMessagePart =
   | { kind: 'one-line'; text: string }
+  | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'provider-cards'; providers: AnswerSnapshot['providers']; scroll?: boolean }
   | {
       kind: 'provider-compare-table'
@@ -39,7 +41,7 @@ export function buildMessagePartsFromSnapshot(
     providerCount: snapshot.providers.length,
   })
 
-  const budget = budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile)
+  const budget = getArtifactBudgetForSnapshot({ ...snapshot, layoutProfile: profile }, budgetOverride)
   const artifacts = buildArtifactsFromSnapshot({ ...snapshot, layoutProfile: profile }, budget)
   const parts = artifactsToMessageParts(artifacts, profile, budget)
   return { profile, parts }
@@ -56,7 +58,7 @@ export function artifactsToMessageParts(
     profile === 'refinement_compact' ||
     profile === 'boundary_explain' ||
     profile === 'compare_pair'
-  const budget = budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile)
+  const budget = getArtifactBudgetForArtifacts(profile, artifacts, budgetOverride)
   const budgetedArtifacts = filterArtifactsForBudget(artifacts, budget)
   const parts: AnswerMessagePart[] = []
 
@@ -64,6 +66,9 @@ export function artifactsToMessageParts(
     switch (artifact.kind) {
       case 'one-line':
         parts.push({ kind: 'one-line', text: artifact.text })
+        break
+      case 'selected-provider':
+        parts.push({ kind: 'selected-provider', provider: artifact.provider })
         break
       case 'provider-cards':
         parts.push({

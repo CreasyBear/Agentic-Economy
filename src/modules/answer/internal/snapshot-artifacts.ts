@@ -25,6 +25,7 @@ const ANSWER_ARTIFACTS = [
 const COMPARE_ARTIFACTS = ['one-line', 'provider-compare-table', 'prose', 'what-to-do-now'] as const
 const EMPTY_ARTIFACTS = ['one-line', 'prose', 'recovery-prompts', 'what-to-do-now', 'agent-json'] as const
 const FILTER_ARTIFACTS = ['one-line', 'provider-cards', 'what-to-do-now'] as const
+const HANDOFF_ARTIFACTS = ['one-line', 'selected-provider', 'what-to-do-now'] as const
 
 export function buildArtifactsFromSnapshot(
   snapshot: AnswerSnapshot,
@@ -35,7 +36,8 @@ export function buildArtifactsFromSnapshot(
     ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
     providerCount: snapshot.providers.length,
   })
-  const budget = budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile)
+  const selectedProvider = snapshot.selectedProvider
+  const budget = getArtifactBudgetForSnapshot({ ...snapshot, layoutProfile: profile }, budgetOverride)
 
   const compact = isCompactLayoutProfile(profile)
   const visibleProviderCards = snapshot.providers.slice(0, Math.max(0, budget.maxProviderCards))
@@ -45,6 +47,10 @@ export function buildArtifactsFromSnapshot(
     { kind: 'one-line', text: snapshot.oneLine },
   ]
 
+  if (selectedProvider !== undefined) {
+    artifacts.push({ kind: 'selected-provider', provider: selectedProvider })
+  }
+
   if (profile === 'compare_pair' && compareProviders.length >= 2) {
     artifacts.push({
       kind: 'provider-compare-table',
@@ -53,7 +59,7 @@ export function buildArtifactsFromSnapshot(
     })
   }
 
-  if (visibleProviderCards.length > 0) {
+  if (selectedProvider === undefined && visibleProviderCards.length > 0) {
     artifacts.push({ kind: 'provider-cards', providers: [...visibleProviderCards] })
   }
 
@@ -92,6 +98,32 @@ export function buildArtifactsFromSnapshot(
   }
 
   return filterArtifactsForBudget(artifacts, budget)
+}
+
+export function getArtifactBudgetForSnapshot(
+  snapshot: AnswerSnapshot,
+  budgetOverride?: AnswerArtifactBudget,
+): AnswerArtifactBudget {
+  const profile = budgetOverride?.layoutProfile ?? resolveLayoutProfile({
+    ...(snapshot.layoutProfile === undefined ? {} : { layoutProfile: snapshot.layoutProfile }),
+    ...(snapshot.compactLayout === true ? { compactLayout: true } : {}),
+    providerCount: snapshot.providers.length,
+  })
+  return withSelectedProviderBudget(
+    budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile),
+    snapshot.selectedProvider !== undefined,
+  )
+}
+
+export function getArtifactBudgetForArtifacts(
+  profile: AnswerLayoutProfile,
+  artifacts: readonly AnswerArtifact[],
+  budgetOverride?: AnswerArtifactBudget,
+): AnswerArtifactBudget {
+  return withSelectedProviderBudget(
+    budgetOverride ?? getDefaultArtifactBudgetForLayoutProfile(profile),
+    artifacts.some((artifact) => artifact.kind === 'selected-provider'),
+  )
 }
 
 export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutProfile): AnswerArtifactBudget {
@@ -138,6 +170,22 @@ export function getDefaultArtifactBudgetForLayoutProfile(profile: AnswerLayoutPr
         maxArtifactCount: 6,
         maxProviderCards: ANSWER_PROVIDER_CARD_LIMIT,
       }
+  }
+}
+
+function withSelectedProviderBudget(
+  budget: AnswerArtifactBudget,
+  hasSelectedProvider: boolean,
+): AnswerArtifactBudget {
+  if (!hasSelectedProvider || budget.layoutProfile !== 'refinement_compact') {
+    return budget
+  }
+
+  return {
+    ...budget,
+    allowedKinds: HANDOFF_ARTIFACTS,
+    maxArtifactCount: 3,
+    maxProviderCards: 0,
   }
 }
 
@@ -194,6 +242,7 @@ function capArtifactForBudget(
           }
     }
     case 'one-line':
+    case 'selected-provider':
     case 'recovery-prompts':
     case 'location-map':
     case 'prose':

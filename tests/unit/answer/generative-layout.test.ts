@@ -142,6 +142,27 @@ describe('buildMessagePartsFromSnapshot', () => {
     expect(artifacts.some((artifact) => artifact.kind === 'protected-by-ae')).toBe(false)
   })
 
+  it('uses a selected-provider confirmation instead of full cards for inquiry handoffs', () => {
+    const selected = provider()
+    const result = buildMessagePartsFromSnapshot({
+      query: 'message the first one',
+      oneLine: 'Ready to send a qualified inquiry to Demo Plumbing.',
+      providers: [selected],
+      selectedProvider: selected,
+      summary: 'Demo Plumbing publishes an inquiry path for owner review.',
+      nextStep: 'Open Demo Plumbing\'s inquiry form. AE does not book, charge, or dispatch.',
+      agentJsonUrl: '/api/businesses/search?q=plumber',
+      compactLayout: true,
+      layoutProfile: 'refinement_compact',
+    })
+
+    expect(result.parts.map((part) => part.kind)).toEqual([
+      'one-line',
+      'selected-provider',
+      'what-to-do-now',
+    ])
+  })
+
   it('resolves profile from compactLayout when layoutProfile missing', () => {
     expect(
       resolveLayoutProfile({
@@ -149,6 +170,48 @@ describe('buildMessagePartsFromSnapshot', () => {
         providerCount: 1,
       }),
     ).toBe('refinement_compact')
+  })
+
+  it('restores selected-provider confirmation on inquiry handoff replay', () => {
+    const thread: AnswerThreadRecord = {
+      threadId: 'thread-1',
+      pseudonymousSessionId: 'session',
+      title: 'plumber',
+      sharePolicy: 'public',
+      createdAt: 1,
+      updatedAt: 1,
+    }
+
+    const turn: AnswerTurnRecord = {
+      turnId: 'turn-2',
+      threadId: 'thread-1',
+      seq: 2,
+      query: 'message the first one',
+      intent: 'inquiry_handoff',
+      evidenceJson: JSON.stringify({
+        providers: [provider()],
+        allowedSlugs: ['demo'],
+        agentJsonUrl: '/api/businesses/search?q=plumber',
+      }),
+      snapshotHash: 'hash',
+      proseJson: JSON.stringify({
+        oneLine: 'Ready to send a qualified inquiry to Demo Plumbing.',
+        summary: 'Demo Plumbing publishes an inquiry path for owner review.',
+        nextStep: 'Open the inquiry form.',
+        compactLayout: true,
+        layoutProfile: 'refinement_compact',
+      }),
+      artifactKindsJson: JSON.stringify(['one-line', 'selected-provider', 'what-to-do-now']),
+      status: 'complete',
+      createdAt: 2,
+    }
+
+    const projection = buildPublicThreadProjection(thread, [turn])
+    expect(projection.turns[0]?.artifacts.map((artifact) => artifact.kind)).toEqual([
+      'one-line',
+      'selected-provider',
+      'what-to-do-now',
+    ])
   })
 })
 

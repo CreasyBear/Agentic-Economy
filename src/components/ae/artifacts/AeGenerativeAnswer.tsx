@@ -153,6 +153,7 @@ export function AeGenerativeAnswer({
 
 function isProviderEvidencePart(part: AnswerMessagePart): boolean {
   switch (part.kind) {
+    case 'selected-provider':
     case 'provider-cards':
     case 'provider-compare-table':
       return true
@@ -338,6 +339,8 @@ function AnswerPartView({
   switch (part.kind) {
     case 'one-line':
       return null
+    case 'selected-provider':
+      return <SelectedProviderConfirmation provider={part.provider} />
     case 'provider-cards':
       return <ProviderCardsRail providers={part.providers} scroll={part.scroll === true} />
     case 'provider-compare-table':
@@ -386,6 +389,55 @@ function AnswerPartView({
       return null
     }
   }
+}
+
+function SelectedProviderConfirmation({ provider }: { provider: AnswerSource }) {
+  const inquiryUrl = provider.inquiryUrl
+  const hasInquiryForm = inquiryUrl !== undefined
+
+  return (
+    <section
+      className={`${REVEAL_ENTER} grid gap-3 rounded-md border border-border bg-surface p-4`}
+      aria-label="Selected provider"
+    >
+      <header className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+        <div className="grid min-w-0 gap-0.5">
+          <AeKicker marker>Selected provider</AeKicker>
+          <p className="font-heading text-base leading-snug text-primary">{provider.name}</p>
+          <p className="text-sm leading-snug text-secondary">
+            Choice {provider.citationIndex} in this answer · {provider.category} ·{' '}
+            {provider.serviceArea || provider.suburb}
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-secondary">
+          <CheckIcon className="size-3" aria-hidden="true" />
+          {hasInquiryForm ? 'Inquiry form published' : 'Review listing first'}
+        </span>
+      </header>
+      <p className="text-sm leading-relaxed text-primary">
+        {hasInquiryForm
+          ? [
+              'AE can open this provider\'s qualified inquiry form for owner review.',
+              'The business still confirms timing, quote, and availability.',
+            ].join(' ')
+          : [
+              'This provider does not publish an AE inquiry form yet.',
+              'Review the listing and use its published contact guidance.',
+            ].join(' ')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {hasInquiryForm ? (
+          <Button label="Open inquiry form" variant="primary" size="sm" href={inquiryUrl} />
+        ) : null}
+        <Button
+          label="Review listing"
+          variant={hasInquiryForm ? 'secondary' : 'primary'}
+          size="sm"
+          href={provider.detailUrl}
+        />
+      </div>
+    </section>
+  )
 }
 
 function ProviderCardsRail({

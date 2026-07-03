@@ -43,6 +43,9 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     query: turn.query,
     oneLine: prose.oneLine,
     providers: evidence.providers,
+    ...(turn.intent === 'inquiry_handoff' && evidence.providers.length === 1
+      ? { selectedProvider: evidence.providers[0] }
+      : {}),
     summary: prose.summary,
     nextStep: prose.nextStep,
     agentJsonUrl: evidence.agentJsonUrl,

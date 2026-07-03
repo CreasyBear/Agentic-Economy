@@ -120,6 +120,8 @@ export type AnswerSnapshot = {
   query: string
   oneLine: string
   providers: readonly AnswerSource[]
+  /** Chosen provider for compact inquiry-path confirmations. */
+  selectedProvider?: AnswerSource
   summary: string
   nextStep: string
   agentJsonUrl: string

@@ -32,6 +32,7 @@ export const AnswerCompareFieldSchema = z.enum(['area', 'response', 'availabilit
 
 export const AnswerArtifactSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('one-line'), text: z.string() }),
+  z.object({ kind: z.literal('selected-provider'), provider: AnswerSourceSchema }),
   z.object({ kind: z.literal('provider-cards'), providers: z.array(AnswerSourceSchema) }),
   z.object({
     kind: z.literal('provider-compare-table'),
@@ -75,6 +76,7 @@ export const AeAnswerArtifactsSchema = z.object({
 
 export type AnswerArtifact =
   | { kind: 'one-line'; text: string }
+  | { kind: 'selected-provider'; provider: AnswerSource }
   | { kind: 'provider-cards'; providers: readonly AnswerSource[] }
   | {
       kind: 'provider-compare-table'

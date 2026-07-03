@@ -5,7 +5,7 @@ import {
   resolveLayoutProfile,
   type AnswerLayoutProfile,
 } from './answer-layout-profile'
-import { buildArtifactsFromSnapshot, getDefaultArtifactBudgetForLayoutProfile } from './snapshot-artifacts'
+import { buildArtifactsFromSnapshot, getArtifactBudgetForSnapshot } from './snapshot-artifacts'
 import type {
   AnswerEvent,
   AnswerPlanEvent,
@@ -67,6 +67,14 @@ export async function* emitSnapshotEvents(
   yield { type: 'sources', providers: snapshot.providers }
   await progressivePause(pauseMs)
 
+  for (const artifact of artifacts) {
+    if (artifact.kind !== 'selected-provider') {
+      continue
+    }
+    yield { type: 'artifact', artifact }
+    await progressivePause(pauseMs)
+  }
+
   if (emitThinking) {
     yield {
       type: 'thinking',
@@ -98,6 +106,7 @@ export async function* emitSnapshotEvents(
 function isBaseStreamArtifact(artifact: AnswerArtifact): boolean {
   return (
     artifact.kind === 'one-line' ||
+    artifact.kind === 'selected-provider' ||
     artifact.kind === 'provider-cards' ||
     artifact.kind === 'prose' ||
     artifact.kind === 'what-to-do-now'
@@ -114,8 +123,11 @@ function buildPlanEventFromSnapshot(
 ): AnswerPlanEvent {
   const mode = input.plan?.mode ?? input.responseMode ?? deriveResponseMode(input.layoutProfile, snapshot.providers.length)
   const artifactBudget = input.plan?.artifactBudget === undefined
-    ? getDefaultArtifactBudgetForLayoutProfile(input.layoutProfile)
-    : { ...input.plan.artifactBudget, layoutProfile: input.layoutProfile }
+    ? getArtifactBudgetForSnapshot({ ...snapshot, layoutProfile: input.layoutProfile })
+    : getArtifactBudgetForSnapshot(
+        { ...snapshot, layoutProfile: input.layoutProfile },
+        { ...input.plan.artifactBudget, layoutProfile: input.layoutProfile },
+      )
   return {
     type: 'plan',
     mode,

@@ -1246,6 +1246,7 @@ async function streamInquiryHandoffTurn(
       query: input.query,
       oneLine: buildInquiryHandoffOneLine(resolution),
       providers,
+      ...(selectedProvider === undefined ? {} : { selectedProvider }),
       summary: buildInquiryHandoffSummary(resolution),
       nextStep: buildInquiryHandoffNextStep(resolution),
       agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
