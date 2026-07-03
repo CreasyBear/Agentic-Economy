@@ -1,0 +1,94 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { AeThreadTranscript } from '@/components/ae/chat/AeThreadTranscript'
+import type { AnswerSource } from '@/modules/answer/public'
+import type { PublicThreadProjection } from '@/modules/answer-thread/public'
+
+describe('AeThreadTranscript', () => {
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps follow-up chips connected after a providerless boundary turn', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+    const onFollowUp = vi.fn()
+
+    render(<AeThreadTranscript projection={projectionWithBoundaryTurn()} onFollowUp={onFollowUp} />)
+
+    const panel = screen.getByRole('region', { name: 'Continue this thread' })
+    expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
+
+    fireEvent.click(screen.getByText('Start qualified inquiry'))
+
+    expect(onFollowUp).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
+  })
+})
+
+function projectionWithBoundaryTurn(): PublicThreadProjection {
+  const source = provider()
+
+  return {
+    threadId: 'thread-1',
+    title: 'Emergency plumber Parramatta',
+    turns: [
+      {
+        turnId: 'turn-1',
+        seq: 1,
+        query: 'Emergency plumber Parramatta',
+        intent: 'refine_search',
+        status: 'complete',
+        oneLine: 'One listed business matches.',
+        workLog: [],
+        artifacts: [{ kind: 'provider-cards', providers: [source] }],
+      },
+      {
+        turnId: 'turn-2',
+        seq: 2,
+        query: 'Can AE book this for me?',
+        intent: 'explain_boundary',
+        status: 'complete',
+        oneLine: 'AE cannot book, charge, or dispatch.',
+        workLog: [],
+        artifacts: [
+          { kind: 'one-line', text: 'AE cannot book, charge, or dispatch.' },
+          {
+            kind: 'prose',
+            block: 'summary',
+            text: 'AE can route you back to a listed provider page.',
+          },
+          {
+            kind: 'what-to-do-now',
+            text: 'Use a published inquiry path when the listing offers one.',
+          },
+        ],
+      },
+    ],
+  }
+}
+
+function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
+  return {
+    citationIndex: 1,
+    slug: 'parramatta-emergency-plumbing',
+    name: 'Parramatta Emergency Plumbing',
+    category: 'Plumber',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    serviceArea: 'Parramatta',
+    hoursLabel: 'Hours supplied',
+    availabilityLabel: 'Published',
+    trustLabel: 'Checked',
+    responseTimeLabel: 'Responds ~22m',
+    trustCue: 'Responds ~22m - Checked',
+    nextStepLabel: 'Send inquiry',
+    detailUrl: '/parramatta-emergency-plumbing',
+    services: [],
+    inquiryUrl: '/parramatta-emergency-plumbing/inquiry',
+    ...overrides,
+  }
+}

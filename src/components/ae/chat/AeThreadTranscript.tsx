@@ -33,6 +33,7 @@ export function AeThreadTranscript({
 }: AeThreadTranscriptProps) {
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const resolvedThreadId = resolveThreadId(threadId, projection?.threadId).threadId
+  const followUpContextTurn = buildFollowUpContextTurn(completedTurns)
 
   return (
     <>
@@ -60,7 +61,7 @@ export function AeThreadTranscript({
                 <AeThreadTurnCollapsed {...viewModel} {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })} />
               )}
               {isLastCompleted && liveTurn === null ? (
-                <AeFollowUpChips turn={turn} {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })} />
+                <AeFollowUpChips turn={followUpContextTurn ?? turn} {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })} />
               ) : null}
             </div>
           </MessageScrollerItem>
@@ -100,4 +101,43 @@ function resolveThreadId(
 ): { threadId?: string } {
   const id = routeThreadId ?? projectionThreadId
   return id === undefined || id.length === 0 ? {} : { threadId: id }
+}
+
+function buildFollowUpContextTurn(turns: readonly PublicThreadTurn[]): PublicThreadTurn | undefined {
+  const latest = turns.at(-1)
+  if (latest === undefined || hasProviderContext(latest)) {
+    return latest
+  }
+
+  const providerContextTurn = turns
+    .slice(0, -1)
+    .reverse()
+    .find(hasProviderContext)
+  if (providerContextTurn === undefined) {
+    return latest
+  }
+
+  return {
+    ...latest,
+    artifacts: [
+      ...latest.artifacts,
+      ...providerContextTurn.artifacts.filter(isProviderContextArtifact),
+    ],
+  }
+}
+
+function hasProviderContext(turn: PublicThreadTurn): boolean {
+  return turn.artifacts.some(isProviderContextArtifact)
+}
+
+function isProviderContextArtifact(artifact: PublicThreadTurn['artifacts'][number]): boolean {
+  switch (artifact.kind) {
+    case 'selected-provider':
+      return true
+    case 'provider-cards':
+    case 'provider-compare-table':
+      return artifact.providers.length > 0
+    default:
+      return false
+  }
 }
