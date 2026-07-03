@@ -45,7 +45,7 @@ describe('compact snapshot artifacts', () => {
       oneLine: '2 listed in Parramatta.',
       providers: [provider()],
       summary: 'The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-      nextStep: 'Open a listed provider page and send an inquiry when that option is published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+      nextStep: 'Open a listed business page and send an inquiry when that option is published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
       agentJsonUrl: '/api/businesses/search?q=plumber',
       compactLayout: true,
     })

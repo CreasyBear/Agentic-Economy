@@ -69,7 +69,7 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
         label: 'Compare fit',
         detail:
           providerCount > 0
-            ? `${providerCount} listed ${providerCount === 1 ? 'provider' : 'providers'}`
+            ? `${providerCount} listed ${providerCount === 1 ? 'business' : 'businesses'}`
             : 'Service area and response',
         status: hasProviderEvidence ? 'complete' : hasSearchCompleted ? 'active' : 'pending',
       },

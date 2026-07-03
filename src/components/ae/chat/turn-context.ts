@@ -14,11 +14,11 @@ export function buildTurnContextLine(input: TurnContextLineInput): string | unde
   switch (input.intent) {
     case 'filter_known':
       return providerLabel === undefined
-        ? 'Filtering listed providers from this thread.'
+        ? 'Filtering listed businesses from this thread.'
         : `Filtering ${providerLabel} from this thread.`
     case 'compare_known':
       return providerLabel === undefined
-        ? 'Comparing listed providers from this thread.'
+        ? 'Comparing listed businesses from this thread.'
         : `Comparing ${providerLabel} from this thread.`
     case 'inquiry_handoff':
       return buildInquiryHandoffContextLine(input.artifacts)
@@ -57,7 +57,7 @@ function formatProviderCount(count: number): string | undefined {
   if (count <= 0) {
     return undefined
   }
-  return `${count} listed ${count === 1 ? 'provider' : 'providers'}`
+  return `${count} listed ${count === 1 ? 'business' : 'businesses'}`
 }
 
 function buildInquiryHandoffContextLine(artifacts: readonly AnswerArtifact[]): string {
@@ -67,7 +67,7 @@ function buildInquiryHandoffContextLine(artifacts: readonly AnswerArtifact[]): s
     return `Preparing the qualified inquiry next step for ${firstProvider.name}.`
   }
   if (providers.length > 1) {
-    return `Preparing the qualified inquiry next step from ${providers.length} listed providers.`
+    return `Preparing the qualified inquiry next step from ${providers.length} listed businesses.`
   }
   return 'Preparing the qualified inquiry next step from this thread.'
 }

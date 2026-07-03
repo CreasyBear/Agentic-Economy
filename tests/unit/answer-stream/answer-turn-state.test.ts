@@ -38,12 +38,12 @@ describe('reduceAnswerTurnEvent', () => {
 
     const advanced = reduceAnswerTurnEvent(repeated, {
       type: 'thinking',
-      label: 'Finding listed providers',
+      label: 'Finding listed businesses',
       step: 'read',
     })
 
     expect(advanced.thinkingSteps).toEqual(['Searching listed businesses…'])
-    expect(advanced.thinkingLabel).toBe('Finding listed providers')
+    expect(advanced.thinkingLabel).toBe('Finding listed businesses')
   })
 
   it('turns semantic stream frames into visible answer artifacts', () => {

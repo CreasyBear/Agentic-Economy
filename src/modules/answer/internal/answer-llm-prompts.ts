@@ -91,7 +91,7 @@ export function buildFollowUpChipsSystemPrompt(): string {
   return [
     'You suggest follow-up questions for Agentic Economy.',
     'Return JSON: {"chips":["..."]} with at most 3 short follow-up questions.',
-    'Each chip must be about listed providers, narrowing the search, comparing listings, or inquiry readiness.',
+    'Each chip must be about listed businesses, narrowing the search, comparing listings, or inquiry readiness.',
     'Do not suggest AE boundary/meta questions such as "what can Agentic Economy do here".',
     'Never use KNOWN, UNKNOWN, UNAVAILABLE, or NEXT_STEP.',
   ].join(' ')
@@ -104,6 +104,6 @@ export function buildFollowUpChipsUserPrompt(
   return [
     buildCatalogDataBlock(providers),
     `Prior query: ${query}`,
-    'Suggest follow-up chips only about listed providers, narrowing the search, comparing listings, or inquiry readiness.',
+    'Suggest follow-up chips only about listed businesses, narrowing the search, comparing listings, or inquiry readiness.',
   ].join('\n\n')
 }

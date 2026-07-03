@@ -583,7 +583,7 @@ function buildLocationScopedProse(input: {
   if (count === 0) {
     return {
       oneLine: `No listed businesses match "${input.query}" yet.`,
-      summary: `No listed providers publish coverage for ${place} yet.`,
+      summary: `No listed businesses publish coverage for ${place} yet.`,
       nextStep: 'Try a nearby suburb, browse services, or list a business that should appear here.',
     }
   }
@@ -594,7 +594,7 @@ function buildLocationScopedProse(input: {
       count === 1
         ? `This listing publishes service coverage for ${place}. The business handles timing, price, and availability.`
         : `These listings publish service coverage for ${place}. The business handles timing, price, and availability.`,
-    nextStep: 'Open a listed provider page and send an inquiry when that option is published.',
+    nextStep: 'Open a listed business page and send an inquiry when that option is published.',
   }
 }
 

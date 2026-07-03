@@ -37,7 +37,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       />,
     )
 
-    const shortlist = screen.getByRole('region', { name: 'Provider shortlist' })
+    const shortlist = screen.getByRole('region', { name: 'Business shortlist' })
     const summary = screen.getByText('The business handles timing, price, and availability.')
 
     expect(shortlist.contains(screen.getByText('These are the listed businesses AE found for this request.'))).toBe(true)

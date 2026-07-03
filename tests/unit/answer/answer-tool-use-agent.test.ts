@@ -355,7 +355,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber' } }],
         prose: {
           oneLine: 'No listed businesses match this need yet.',
-          summary: 'No listed providers publish coverage for that place yet.',
+          summary: 'No listed businesses publish coverage for that place yet.',
           whatToDoNow: 'Try a nearby suburb or browse services.',
         },
       }))

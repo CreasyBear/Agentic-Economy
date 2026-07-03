@@ -120,10 +120,10 @@ function buildCompareSummary(providers: readonly AnswerSource[]): string {
 function buildInquiryNextStep(providers: readonly AnswerSource[]): string {
   const inquiryReady = providers.find((provider) => provider.inquiryUrl !== undefined)
   if (inquiryReady !== undefined) {
-    return 'Open a listed provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.'
+    return 'Open a listed business page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.'
   }
 
-  return 'Open a listed provider page to review what they publish, then contact the business. Agentic Economy does not book or take payment on this page.'
+  return 'Open a listed business page to review what they publish, then contact the business. Agentic Economy does not book or take payment on this page.'
 }
 
 function boundaryLine(): string {

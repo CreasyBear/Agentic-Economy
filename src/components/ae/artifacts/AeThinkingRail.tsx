@@ -3,7 +3,7 @@ import type { ThinkingStep } from '@/modules/answer-thread/public'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
 
 const STEPS: readonly { id: ThinkingStep; label: string; detail: string }[] = [
-  { id: 'search', label: 'Search listings', detail: 'Find published providers.' },
+  { id: 'search', label: 'Search listings', detail: 'Find published businesses.' },
   { id: 'read', label: 'Read details', detail: 'Check service area and inquiry path.' },
   { id: 'write', label: 'Prepare next step', detail: 'Summarize fit and route safely.' },
 ]

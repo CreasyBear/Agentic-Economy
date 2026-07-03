@@ -78,7 +78,7 @@ describe('session journey', () => {
 
     expect(journey?.providerCount).toBe(1)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
-    expect(journey?.steps.find((step) => step.id === 'compare')?.detail).toBe('1 listed provider')
+    expect(journey?.steps.find((step) => step.id === 'compare')?.detail).toBe('1 listed business')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Qualified inquiry only')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
   })
@@ -109,7 +109,7 @@ function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
         ],
       },
     ],
-    oneLine: 'Two listed providers match.',
+    oneLine: 'Two listed businesses match.',
     ...overrides,
   }
 }

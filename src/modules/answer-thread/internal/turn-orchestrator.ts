@@ -838,7 +838,7 @@ function buildRetrievalFirstSnapshot(input: {
     summary: count === 1
       ? `${names} publishes service coverage${placeSuffix}. Agentic Economy does not book or take payment on this page.`
       : `${names} publish service coverage${placeSuffix}. Agentic Economy does not book or take payment on this page.`,
-    nextStep: 'Open a listed provider page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
+    nextStep: 'Open a listed business page and send an inquiry when that option is published. Agentic Economy does not book or take payment on this page.',
     agentJsonUrl: buildAgentJsonUrl(
       buildAgentJsonQuery(input.query, input.searchInput),
       input.searchInput.limit,
@@ -860,8 +860,8 @@ function buildDeterministicEmptySnapshot(input: {
     oneLine: `No listed businesses match "${input.query}" yet.`,
     providers: [],
     summary: place === undefined
-      ? 'No listed providers publish matching coverage yet.'
-      : `No listed providers publish coverage${placeSuffix} yet.`,
+      ? 'No listed businesses publish matching coverage yet.'
+      : `No listed businesses publish coverage${placeSuffix} yet.`,
     nextStep: 'Try a nearby suburb, browse the registry, or list a business that should appear here.',
     agentJsonUrl: buildAgentJsonUrl(
       buildAgentJsonQuery(input.query, input.searchInput),
@@ -960,8 +960,8 @@ async function streamInsufficientFrozenContextTurn(
       oneLine: isCompare ? 'No two listed businesses to compare yet.' : 'No listed businesses to filter yet.',
       providers: [],
       summary: isCompare
-        ? 'There are not enough listed providers in the latest answer to compare.'
-        : 'There are no listed providers in the latest answer to filter.',
+        ? 'There are not enough listed businesses in the latest answer to compare.'
+        : 'There are no listed businesses in the latest answer to filter.',
       nextStep: 'Ask for a need and place, then compare or filter the listed businesses that appear.',
       agentJsonUrl: buildAgentJsonUrl(input.query, DEFAULT_LIMIT),
     },
@@ -1366,9 +1366,9 @@ function describeInquiryPath(resolution: ReturnType<typeof resolveInquiryHandoff
     case 'provider_unavailable':
       return `${resolution.provider.name} does not publish an AE inquiry form yet.`
     case 'choose_provider':
-      return 'Choose a provider before opening an inquiry path.'
+      return 'Choose a business before opening an inquiry path.'
     case 'no_provider':
-      return 'Find a listed provider before opening an inquiry path.'
+      return 'Find a listed business before opening an inquiry path.'
   }
 }
 
@@ -1379,9 +1379,9 @@ function inquiryPathLabel(resolution: ReturnType<typeof resolveInquiryHandoff>):
     case 'provider_unavailable':
       return 'Not published'
     case 'choose_provider':
-      return 'Needs provider selection'
+      return 'Needs business selection'
     case 'no_provider':
-      return 'Needs listed provider'
+      return 'Needs listed business'
   }
 }
 

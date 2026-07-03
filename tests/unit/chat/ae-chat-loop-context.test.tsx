@@ -27,10 +27,10 @@ describe('turn context line', () => {
     const artifacts: AnswerArtifact[] = [{ kind: 'provider-cards', providers: [provider()] }]
 
     expect(buildTurnContextLine({ intent: 'filter_known', seq: 2, artifacts })).toBe(
-      'Filtering 1 listed provider from this thread.',
+      'Filtering 1 listed business from this thread.',
     )
     expect(buildTurnContextLine({ intent: 'compare_known', seq: 2, artifacts })).toBe(
-      'Comparing 1 listed provider from this thread.',
+      'Comparing 1 listed business from this thread.',
     )
     expect(buildTurnContextLine({ intent: 'inquiry_handoff', seq: 2, artifacts })).toBe(
       'Preparing the qualified inquiry next step for Demo Plumber.',

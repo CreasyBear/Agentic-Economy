@@ -33,7 +33,7 @@ export function AeAnswerPromptInput({
   busy = false,
   compact: compactOverride,
   placeholder = 'What do you need done?',
-  ariaLabel = 'Find local service providers',
+  ariaLabel = 'Find local service businesses',
 }: AeAnswerPromptInputProps) {
   const inputId = useId()
   const counterId = `${inputId}-counter`

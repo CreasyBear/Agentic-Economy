@@ -294,7 +294,7 @@ function InquiryOriginCard({ detail }: { detail: OwnerInquiryDetailReadback }) {
           {origin.label}
         </Text>
         <Text as="p" type="supporting">
-          This inquiry started from a provider selection in chat. Review the original answer before replying.
+          This inquiry started from a business selection in chat. Review the original answer before replying.
         </Text>
       </div>
       <Button label="Open answer" href={origin.href} variant="secondary" size="sm" className="justify-self-start" />

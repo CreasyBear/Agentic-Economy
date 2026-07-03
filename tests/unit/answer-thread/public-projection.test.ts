@@ -142,7 +142,7 @@ describe('public thread projection', () => {
       snapshotHash: 'hash-secret',
       proseJson: JSON.stringify({
         oneLine: 'No listed businesses match.',
-        summary: 'No listed providers publish matching coverage yet.',
+        summary: 'No listed businesses publish matching coverage yet.',
         nextStep: 'Try a nearby suburb.',
       }),
       artifactKindsJson: '[]',

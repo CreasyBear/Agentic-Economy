@@ -31,7 +31,7 @@ describe('copy guard patterns', () => {
 
   it('detects overclaim language', () => {
     expect(hasOverclaim('Book now for instant service')).toBe(true)
-    expect(hasOverclaim('Open a listed provider page.')).toBe(false)
+    expect(hasOverclaim('Open a listed business page.')).toBe(false)
   })
 
   it('detects boundary copy', () => {

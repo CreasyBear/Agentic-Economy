@@ -84,7 +84,7 @@ export function buildInquiryHandoffNextStep(resolution: InquiryHandoffResolution
     case 'choose_provider':
       return 'Use Open inquiry form from the listed businesses in this answer, or name the business you want to contact. AE does not book, charge, or dispatch.'
     case 'no_provider':
-      return 'Ask for a service and place first, then send a qualified inquiry when a listed provider publishes that path.'
+      return 'Ask for a service and place first, then send a qualified inquiry when a listed business publishes that path.'
   }
 }
 

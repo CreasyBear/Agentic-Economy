@@ -97,12 +97,12 @@ export function AeGenerativeAnswer({
           <p
             className="min-w-0 flex-1 text-lg text-secondary"
             aria-live="polite"
-            aria-label="Finding listed providers"
+            aria-label="Finding listed businesses"
           >
-            <AeStreamingLabel as="span">Finding listed providers</AeStreamingLabel>
+            <AeStreamingLabel as="span">Finding listed businesses</AeStreamingLabel>
           </p>
         ) : (
-          <p className="min-w-0 flex-1 text-lg text-secondary">Finding listed providers</p>
+          <p className="min-w-0 flex-1 text-lg text-secondary">Finding listed businesses</p>
         )}
 
         {phase === 'reconnecting' ? (
@@ -452,10 +452,10 @@ function ProviderCardsRail({
   }
 
   return (
-    <section className={`${REVEAL_ENTER} grid gap-3`} aria-label="Provider shortlist">
+    <section className={`${REVEAL_ENTER} grid gap-3`} aria-label="Business shortlist">
       <header className="grid gap-1 rounded-md border border-border bg-surface px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="grid min-w-0 gap-0.5">
-          <AeKicker marker>Provider shortlist</AeKicker>
+          <AeKicker marker>Business shortlist</AeKicker>
           <p className="text-sm font-medium text-primary">These are the listed businesses AE found for this request.</p>
           <p className="text-xs leading-snug text-secondary">
             Compare area, response, and next step before opening a listing or inquiry form.
@@ -513,7 +513,7 @@ function ProviderCompareTable({
   return (
     <section
       className={`${REVEAL_ENTER} grid gap-0 overflow-hidden rounded-lg border border-border bg-surface`}
-      aria-label="Provider comparison"
+      aria-label="Business comparison"
     >
       <header className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="grid gap-1">
@@ -524,14 +524,14 @@ function ProviderCompareTable({
       </header>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[44rem] border-collapse text-sm">
-          <caption className="sr-only">Comparison based on published provider details.</caption>
+          <caption className="sr-only">Comparison based on published business details.</caption>
           <thead>
             <tr>
               <th
                 scope="col"
                 className="sticky left-0 z-10 w-[13.5rem] border-b border-border bg-surface px-4 py-3 text-left font-mono text-2xs font-medium uppercase tracking-wider text-secondary"
               >
-                Provider
+                Business
               </th>
               {fields.map((field) => (
                 <th
