@@ -7,7 +7,7 @@ import {
   initialOwnerActivationState,
   type FunnelEventContract,
 } from '@/modules/observability/internal/funnel'
-import type { FunnelEventType, OwnerActivationState } from '@/modules/observability/public'
+import { FunnelEventTypeValues, type FunnelEventType, type OwnerActivationState } from '@/modules/observability/public'
 
 describe('owner activation contract', () => {
   it('requires publish, status readback, capability health, share or interest, and attribution', () => {
@@ -66,6 +66,19 @@ describe('owner activation contract', () => {
       activated: false,
       blocked: false,
     })
+  })
+
+  it('registers answer journey funnel events', () => {
+    const answerEvents = [
+      'answer_query_started',
+      'answer_clarification_requested',
+      'answer_registry_searched',
+      'answer_follow_up_submitted',
+      'answer_provider_selected',
+      'inquiry_attempted',
+    ] as const satisfies readonly FunnelEventType[]
+
+    expect(FunnelEventTypeValues).toEqual(expect.arrayContaining([...answerEvents]))
   })
 
   it('uses P5 paid activation signals without adding paid-only metrics', () => {

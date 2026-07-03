@@ -40,6 +40,7 @@ const capabilityHealthEvents = new Set<FunnelEventType>([
 const ownerIntentEvents = new Set<FunnelEventType>([
   'share_url_copied',
   'owner_interest_submitted',
+  'inquiry_attempted',
   'inquiry_started',
   'inquiry_submitted',
   'owner_inquiry_replied',

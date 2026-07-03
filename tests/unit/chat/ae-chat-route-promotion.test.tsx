@@ -37,6 +37,10 @@ vi.mock('@/lib/observability/capture-client-events', () => ({
   captureClientProductEventOnClient: vi.fn(),
 }))
 
+vi.mock('@/lib/observability/funnel-client', () => ({
+  emitFunnelEvent: vi.fn(),
+}))
+
 vi.mock('@/components/ae/chat/AeAnswerModelContext', () => ({
   AeAnswerModelProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }))

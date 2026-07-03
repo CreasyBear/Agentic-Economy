@@ -7,6 +7,7 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@astryxdesign/core/Button'
 import { IconButton } from '@astryxdesign/core/IconButton'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
+import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
   aeSearchContextLocationLabel,
@@ -21,6 +22,11 @@ import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
 import { AeThreadTranscript } from './AeThreadTranscript'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
+import {
+  buildChatCompleteFunnelEvents,
+  buildChatSubmitFunnelEvents,
+  type ChatFunnelEvent,
+} from './chat-funnel'
 
 export type AeChatProps = {
   threadId?: string | null
@@ -167,6 +173,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       search_mode: searchContext.mode,
       search_location: aeSearchContextLocationLabel(searchContext) ?? 'none',
     })
+    emitChatFunnelEvents(buildChatSubmitFunnelEvents({ query, completedTurnCount }))
     startTurn(query, searchContext)
   }
 
@@ -189,6 +196,15 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   function handleTurnSettled(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
     if (outcome === 'complete') {
       captureClientProductEventOnClient('answer_completed', { query_length: liveTurn?.query.length ?? 0 })
+      if (liveTurn !== null) {
+        emitChatFunnelEvents(
+          buildChatCompleteFunnelEvents({
+            query: liveTurn.query,
+            completedTurnCount,
+            outcome,
+          }),
+        )
+      }
     }
 
     const pendingId = pendingThreadIdRef.current
@@ -327,6 +343,17 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       {isStructuredAnswerModeEnabled() ? <AeAnswerModelProvider>{shell}</AeAnswerModelProvider> : shell}
     </AePublicShell>
   )
+}
+
+function emitChatFunnelEvents(events: readonly ChatFunnelEvent[]): void {
+  for (const event of events) {
+    void emitFunnelEvent({
+      eventType: event.eventType,
+      stage: 'visitor',
+      correlationPrefix: event.eventType,
+      payload: event.payload,
+    })
+  }
 }
 
 function useStoredThreadRecords(): readonly AnswerThreadRecord[] {
