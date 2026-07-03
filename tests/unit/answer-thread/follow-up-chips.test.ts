@@ -67,8 +67,8 @@ describe('follow-up chips', () => {
   it('builds deterministic chips with inquiry, suburb, and compare', () => {
     const chips = buildDeterministicFollowUpChips(turn())
     expect(chips[0]).toEqual({
-      label: 'Start qualified inquiry',
-      submitQuery: 'Send a qualified inquiry to the first listed business',
+      label: 'Start qualified inquiry with Parramatta Emergency Plumbing',
+      submitQuery: 'Send a qualified inquiry to Parramatta Emergency Plumbing',
     })
     expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
     expect(chips.map((chip) => chip.submitQuery)).toContain('Compare the top two')
@@ -81,7 +81,10 @@ describe('follow-up chips', () => {
       turn: turn(),
       llmChips: ['Compare the top two', 'Which take inquiries?'],
     })
-    expect(chips[0]?.submitQuery).toBe('Send a qualified inquiry to the first listed business')
+    expect(chips[0]).toEqual({
+      label: 'Start qualified inquiry with Parramatta Emergency Plumbing',
+      submitQuery: 'Send a qualified inquiry to Parramatta Emergency Plumbing',
+    })
     expect(chips.map((chip) => chip.submitQuery)).toContain('Which take inquiries?')
   })
 
@@ -100,8 +103,8 @@ describe('follow-up chips', () => {
     }))
 
     expect(chips[0]).toEqual({
-      label: 'Start qualified inquiry',
-      submitQuery: 'Send a qualified inquiry to the first listed business',
+      label: 'Start qualified inquiry with Top Inquiry Ready',
+      submitQuery: 'Send a qualified inquiry to Top Inquiry Ready',
     })
     expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
   })
@@ -243,7 +246,7 @@ describe('follow-up chips', () => {
     }))
 
     expect(chips[0]).toEqual({
-      label: 'Start qualified inquiry',
+      label: 'Start qualified inquiry with Inquiry Ready Plumbing',
       submitQuery: 'Send a qualified inquiry to Inquiry Ready Plumbing',
     })
   })

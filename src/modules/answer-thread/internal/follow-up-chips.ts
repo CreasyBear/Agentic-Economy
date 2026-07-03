@@ -40,12 +40,9 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
   const inquiryReadyProviders = providers.filter(hasPublishedInquiryPath)
   const selectedProviderContext = hasSelectedProviderArtifact(turn.artifacts)
 
-  const inquiryHandoffQuery = buildInquiryHandoffQuery(providers, inquiryReadyProviders)
-  if (!selectedProviderContext && inquiryHandoffQuery !== undefined) {
-    chips.push({
-      label: 'Start qualified inquiry',
-      submitQuery: inquiryHandoffQuery,
-    })
+  const inquiryHandoffChip = buildInquiryHandoffChip(providers, inquiryReadyProviders)
+  if (!selectedProviderContext && inquiryHandoffChip !== undefined) {
+    chips.push(inquiryHandoffChip)
   }
 
   if (inquiryReadyProviders.length > 0) {
@@ -115,18 +112,24 @@ function providersForFollowUps(
   return [...providersBySlug.values()]
 }
 
-function buildInquiryHandoffQuery(
+function buildInquiryHandoffChip(
   providers: ReadonlyArray<{ name: string; inquiryUrl?: string }>,
   inquiryReadyProviders: ReadonlyArray<{ name: string; inquiryUrl?: string }>,
-): string | undefined {
+): FollowUpChip | undefined {
   const firstProvider = providers[0]
   if (firstProvider !== undefined && hasPublishedInquiryPath(firstProvider)) {
-    return 'Send a qualified inquiry to the first listed business'
+    return {
+      label: `Start qualified inquiry with ${firstProvider.name}`,
+      submitQuery: `Send a qualified inquiry to ${firstProvider.name}`,
+    }
   }
 
   const onlyInquiryReady = inquiryReadyProviders[0]
   if (inquiryReadyProviders.length === 1 && onlyInquiryReady !== undefined) {
-    return `Send a qualified inquiry to ${onlyInquiryReady.name}`
+    return {
+      label: `Start qualified inquiry with ${onlyInquiryReady.name}`,
+      submitQuery: `Send a qualified inquiry to ${onlyInquiryReady.name}`,
+    }
   }
 
   return undefined

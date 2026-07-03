@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 const QUERY = 'emergency plumber parramatta'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
 const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
-const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to the first listed business'
+const INQUIRY_HANDOFF_QUERY = 'Send a qualified inquiry to Demo Plumbing'
 const BOUNDARY_FOLLOW_UP_QUERY = 'Can AE book this for me?'
 const FILTER_FOLLOW_UP_QUERY = 'Show only businesses that accept inquiries'
 const FILTER_FOLLOW_UP_LABEL = /Inquiry-ready listings/
@@ -68,7 +68,7 @@ test.describe('chat discovery to inquiry loop', () => {
       /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
     )
 
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry/i })
+    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
@@ -134,6 +134,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
       /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
     )
+    await expect(page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })).toBeVisible()
     await assertPublicLanguage(page)
   })
 
@@ -185,7 +186,7 @@ test.describe('chat discovery to inquiry loop', () => {
       /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
     )
 
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry/i })
+    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
@@ -234,7 +235,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(continuePanel).toContainText(
       /Narrow, compare, or start a qualified inquiry from the businesses already found in this thread/i,
     )
-    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry/i })
+    const startInquiryButton = page.getByRole('button', { name: /start qualified inquiry with demo plumbing/i })
     await expect(startInquiryButton).toBeEnabled()
     await startInquiryButton.click()
 

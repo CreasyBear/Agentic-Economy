@@ -151,7 +151,7 @@ function followUpSummary(
   const hasInquiryReadyBusiness = providers.some((provider) =>
     typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0)
 
-  if (chips.some((chip) => chip.label === 'Start qualified inquiry')) {
+  if (chips.some(isInquiryHandoffChip)) {
     if (contextPlacement === 'carried') {
       return 'Narrow, compare, or start a qualified inquiry from the businesses already found in this thread.'
     }
@@ -174,6 +174,10 @@ function followUpSummary(
   }
 
   return 'Narrow or compare the listed businesses from this thread.'
+}
+
+function isInquiryHandoffChip(chip: FollowUpChip): boolean {
+  return /^send a qualified inquiry(?:\s+to\b|$)/i.test(chip.submitQuery.trim())
 }
 
 function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {
