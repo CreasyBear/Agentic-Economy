@@ -94,7 +94,7 @@ function InquirySubmittedCard({
         {answerHref === undefined ? null : (
           <div className="grid gap-2 rounded-md border border-border bg-card p-3">
             <Text as="p" type="supporting">
-              This receipt stays connected to the answer path you started from.
+              This receipt stays connected to the answer thread you started from.
             </Text>
             <Button label="Back to answer" href={answerHref} variant="secondary" size="sm" className="justify-self-start" />
           </div>

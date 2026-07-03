@@ -23,7 +23,7 @@ describe('AeActionResultCard', () => {
     )
 
     expect(screen.getByText('Inquiry recorded')).toBeTruthy()
-    expect(screen.getByText('This receipt stays connected to the answer path you started from.')).toBeTruthy()
+    expect(screen.getByText('This receipt stays connected to the answer thread you started from.')).toBeTruthy()
     expect(screen.getByText('Back to answer').closest('a')?.getAttribute('href')).toBe('/t/thread%3Aselected-provider')
   })
 
@@ -31,7 +31,7 @@ describe('AeActionResultCard', () => {
     render(<AeActionResultCard result={submittedResult()} businessName="Demo Plumbing" serviceName="Emergency plumbing" />)
 
     expect(screen.queryByText('Back to answer')).toBeNull()
-    expect(screen.queryByText('This receipt stays connected to the answer path you started from.')).toBeNull()
+    expect(screen.queryByText('This receipt stays connected to the answer thread you started from.')).toBeNull()
   })
 })
 
