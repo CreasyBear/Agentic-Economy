@@ -1199,7 +1199,7 @@ async function streamInquiryHandoffTurn(
     summary: describeInquiryHandoffResolution(resolution),
     detailRows: [
       { label: 'Listed businesses in thread', value: String(priorProviders.length) },
-      { label: 'Selected provider', value: selectedProvider?.name ?? 'Needs selection' },
+      { label: 'Selected business', value: selectedProvider?.name ?? 'Needs selection' },
     ],
     relatedProviderSlugs: providers.map((provider) => provider.slug),
     startedAtMs: routeStartedAt,

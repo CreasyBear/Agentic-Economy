@@ -216,6 +216,15 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
           .filter((event): event is Extract<AnswerEvent, { type: 'work-step' }> => event.type === 'work-step')
           .map((event) => event.step.title),
       ).toEqual(expect.arrayContaining(['Resolving provider', 'Checking inquiry path', 'Checking safe-action boundary']))
+      const resolveProviderStep = frames
+        .map((frame) => frame.event)
+        .filter((event): event is Extract<AnswerEvent, { type: 'work-step' }> => event.type === 'work-step')
+        .find((event) => event.step.title === 'Resolving provider' && event.step.status === 'complete')
+      expect(resolveProviderStep?.step.detailRows).toEqual(
+        expect.arrayContaining([
+          { label: 'Selected business', value: 'Parramatta Emergency Plumbing' },
+        ]),
+      )
       const eventTypes = frames.map((frame) => frame.event.type)
       const selectedProviderArtifactEvent = frames
         .map((frame) => frame.event)
