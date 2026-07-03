@@ -1,27 +1,11 @@
 import { z } from 'zod'
 
+import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
-  defineAction,
-  type ActionParameter,
-} from '@/modules/common/action'
-import {
-  ownerReplySchema,
-  ownerThreadSchema,
-  ownerVersionedSchema,
   publicInquirySubmitSchema,
-  closeCurrentOwnerInquiryThroughSource,
-  markCurrentOwnerInquiryReadThroughSource,
-  readCurrentOwnerInboxThroughSource,
-  readCurrentOwnerInquiryThreadThroughSource,
-  replyCurrentOwnerInquiryThroughSource,
   submitPublicInquiryThroughSource,
-  type OwnerInboxServerResult,
-  type OwnerInquiryMutationServerResult,
-  type OwnerInquiryThreadServerResult,
   type PublicInquirySubmitServerResult,
 } from '@/modules/inquiries/inquiry.functions'
-
-const emptyObjectSchema = z.object({}).default({})
 
 const serverErrorOutputSchema = z
   .object({
@@ -33,8 +17,6 @@ const serverErrorOutputSchema = z
     retryAfter: z.number().optional(),
   })
   .passthrough()
-
-const unknownRecordOutputSchema = z.record(z.string(), z.unknown())
 
 const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
   z
@@ -57,70 +39,13 @@ const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
   serverErrorOutputSchema,
 ]) as z.ZodType<PublicInquirySubmitServerResult>
 
-const ownerInboxOutputSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('ok'), inbox: unknownRecordOutputSchema }).passthrough(),
-  serverErrorOutputSchema,
-]) as z.ZodType<OwnerInboxServerResult>
-
-const ownerInquiryThreadOutputSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('ok'),
-      detail: unknownRecordOutputSchema,
-      delivery: unknownRecordOutputSchema,
-      tombstones: z.array(unknownRecordOutputSchema),
-    })
-    .passthrough(),
-  serverErrorOutputSchema,
-]) as z.ZodType<OwnerInquiryThreadServerResult>
-
-const ownerInquiryMutationOutputSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('ok'),
-      code: z.enum([
-        'inquiry_read_marked',
-        'inquiry_read_replayed',
-        'inquiry_replied',
-        'inquiry_reply_replayed',
-        'inquiry_closed',
-        'inquiry_close_replayed',
-      ]),
-      thread: z
-        .object({
-          threadId: z.string(),
-          status: z.string(),
-          version: z.number().int().nonnegative(),
-          updatedAt: z.number(),
-        })
-        .passthrough(),
-      message: z
-        .object({
-          messageId: z.string(),
-          sender: z.enum(['customer', 'owner']),
-          createdAt: z.number(),
-        })
-        .passthrough()
-        .optional(),
-      notification: z
-        .object({
-          notificationId: z.string(),
-          status: z.string(),
-          recipientRole: z.enum(['owner', 'customer']),
-        })
-        .passthrough()
-        .optional(),
-    })
-    .passthrough(),
-  serverErrorOutputSchema,
-]) as z.ZodType<OwnerInquiryMutationServerResult>
-
 /**
  * Public qualified inquiry — the first owned conversion event.
  *
- * Exposed to external assistants through the quiet agent-tools door so an
- * assistant can send a human inquiry on a person's behalf, within the same
- * refusal boundaries a human faces on the public form.
+ * This is the only current write in the quiet assistant action registry. Human
+ * inquiry and owner-inbox UI flows stay on authenticated TanStack server
+ * functions because they need route, owner, and source-write context rather
+ * than a generic action runner.
  */
 const submitParameters: readonly ActionParameter[] = [
   {
@@ -184,95 +109,7 @@ export const submitInquiryAction = defineAction({
   outputSchema: publicInquirySubmitOutputSchema,
   parameters: submitParameters,
   readOnly: false,
-  surfaces: ['ui', 'http', 'agentJson', 'agentTools'],
+  surfaces: ['agentJson', 'agentTools'],
   run: async ({ data, context }) =>
     submitPublicInquiryThroughSource(data, context) as Promise<PublicInquirySubmitServerResult>,
-})
-
-const ownerThreadParameters: readonly ActionParameter[] = [
-  { name: 'threadId', type: 'string', description: 'The inquiry thread to read.', required: true },
-]
-
-const ownerVersionedParameters: readonly ActionParameter[] = [
-  { name: 'threadId', type: 'string', description: 'The inquiry thread to mutate.', required: true },
-  {
-    name: 'expectedVersion',
-    type: 'number',
-    description: 'Optimistic concurrency version of the thread.',
-    required: true,
-  },
-]
-
-const ownerReplyParameters: readonly ActionParameter[] = [
-  ...ownerVersionedParameters,
-  { name: 'body', type: 'string', description: 'The owner reply text.', required: true },
-]
-
-export const readOwnerInboxAction = defineAction({
-  id: 'inquiry.readOwnerInbox',
-  name: 'Read owner inquiry inbox',
-  summary: 'List inquiry threads for the currently signed-in owner. Owner-authenticated.',
-  boundaries: ['Only callable by the authenticated owner.', 'Read-only.'],
-  schema: emptyObjectSchema,
-  outputSchema: ownerInboxOutputSchema,
-  parameters: [],
-  readOnly: true,
-  surfaces: ['ui', 'http'],
-  run: async () => readCurrentOwnerInboxThroughSource() as Promise<OwnerInboxServerResult>,
-})
-
-export const readOwnerInquiryThreadAction = defineAction({
-  id: 'inquiry.readOwnerThread',
-  name: 'Read one owner inquiry thread',
-  summary: 'Read one inquiry thread, its delivery readback, and privacy tombstones for the signed-in owner.',
-  boundaries: ['Only callable by the authenticated owner.', 'Read-only.'],
-  schema: ownerThreadSchema,
-  outputSchema: ownerInquiryThreadOutputSchema,
-  parameters: ownerThreadParameters,
-  readOnly: true,
-  surfaces: ['ui', 'http'],
-  run: async ({ data }) =>
-    readCurrentOwnerInquiryThreadThroughSource(data.threadId) as Promise<OwnerInquiryThreadServerResult>,
-})
-
-export const replyOwnerInquiryAction = defineAction({
-  id: 'inquiry.reply',
-  name: 'Reply to an inquiry',
-  summary: 'Record an owner reply to an inquiry thread. Owner-authenticated write.',
-  boundaries: ['Only callable by the authenticated owner.', 'Does not book or charge; it sends a message.'],
-  schema: ownerReplySchema,
-  outputSchema: ownerInquiryMutationOutputSchema,
-  parameters: ownerReplyParameters,
-  readOnly: false,
-  surfaces: ['ui', 'http'],
-  run: async ({ data, context }) =>
-    replyCurrentOwnerInquiryThroughSource(data, context) as Promise<OwnerInquiryMutationServerResult>,
-})
-
-export const markOwnerInquiryReadAction = defineAction({
-  id: 'inquiry.markRead',
-  name: 'Mark an inquiry read',
-  summary: 'Mark an inquiry thread as read by the owner. Owner-authenticated write.',
-  boundaries: ['Only callable by the authenticated owner.'],
-  schema: ownerVersionedSchema,
-  outputSchema: ownerInquiryMutationOutputSchema,
-  parameters: ownerVersionedParameters,
-  readOnly: false,
-  surfaces: ['ui', 'http'],
-  run: async ({ data, context }) =>
-    markCurrentOwnerInquiryReadThroughSource(data, context) as Promise<OwnerInquiryMutationServerResult>,
-})
-
-export const closeOwnerInquiryAction = defineAction({
-  id: 'inquiry.close',
-  name: 'Close an inquiry',
-  summary: 'Close an inquiry thread. Owner-authenticated write.',
-  boundaries: ['Only callable by the authenticated owner.', 'Closing is not a booking outcome.'],
-  schema: ownerVersionedSchema,
-  outputSchema: ownerInquiryMutationOutputSchema,
-  parameters: ownerVersionedParameters,
-  readOnly: false,
-  surfaces: ['ui', 'http'],
-  run: async ({ data, context }) =>
-    closeCurrentOwnerInquiryThroughSource(data, context) as Promise<OwnerInquiryMutationServerResult>,
 })

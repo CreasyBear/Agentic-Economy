@@ -1,7 +1,6 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
-  ChevronDownIcon,
   GitCompareIcon,
   MessageSquareIcon,
   PencilIcon,
@@ -10,13 +9,14 @@ import {
   StoreIcon,
 } from 'lucide-react'
 import { useState } from 'react'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Text } from '@astryxdesign/core/Text'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell, defaultHomeSearch } from '@/components/ae/layout/AePublicShell'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 
 export const Route = createFileRoute('/terms')({
   head: () => ({
@@ -72,54 +72,45 @@ function TermsRoute() {
         title="The deal in plain English."
         description="Use AE to find and contact businesses. The business confirms the work."
       />
-      <main className="ae-public-page mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 md:grid-cols-3">
           {canDoItems.map(({ icon: Icon, title, body }) => (
-            <Card key={title} className="h-full">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon className="size-4 text-[var(--ae-amber)]" aria-hidden="true" /> {title}
-                  </CardTitle>
-                  <Badge variant="outline">AE</Badge>
-                </div>
-                <CardDescription>{body}</CardDescription>
-              </CardHeader>
+            <Card key={title} padding={5} className="grid h-full gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
+                  <Icon className="size-4 text-primary" aria-hidden="true" /> {title}
+                </Text>
+                <Badge variant="neutral" label="AE" />
+              </div>
+              <Text color="secondary" display="block">{body}</Text>
             </Card>
           ))}
         </section>
 
-        <section className="grid gap-5 border-t border-[var(--ae-public-line)] pt-8 md:grid-cols-[0.72fr_1.28fr]">
+        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.72fr_1.28fr]">
           <div className="grid content-start gap-2">
-            <p className="font-mono text-xs font-medium tracking-[var(--ae-public-tracking-mono-label)] text-[var(--ae-muted)] uppercase">
+            <Text type="supporting" weight="medium" color="secondary" display="block">
               Ground rules
-            </p>
-            <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight">
+            </Text>
+            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Keep the handoff real.
-            </h2>
+            </Text>
           </div>
           <TermsAccordion />
         </section>
 
-        <section className="flex flex-col gap-4 border-t border-[var(--ae-public-line)] pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight">
+            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Start with what you need.
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            </Text>
+            <Text as="p" color="secondary" display="block" className="mt-2">
               Ask a question, browse services, or fix a business page.
-            </p>
+            </Text>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button asChild>
-              <Link to="/" search={defaultHomeSearch}>Ask a question</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link to="/privacy/remove-business">
-                Fix a page
-                <ArrowRightIcon data-icon="inline-end" />
-              </Link>
-            </Button>
+            <Button label="Ask a question" variant="primary" href="/" />
+            <Button label="Fix a page" variant="secondary" href="/privacy/remove-business" endContent={<ArrowRightIcon aria-hidden="true" />} />
           </div>
         </section>
       </main>
@@ -138,20 +129,17 @@ function TermsAccordion() {
         return (
           <Collapsible
             key={title}
-            className="rounded-[var(--ae-radius-sm)] border border-[var(--ae-public-line)] bg-[var(--ae-surface-raised)]"
-            open={isOpen}
+            className="rounded-sm border bg-card"
+            isOpen={isOpen}
             onOpenChange={(nextOpen) => setOpenItem(nextOpen ? title : '')}
+            trigger={(
+              <span className="flex min-h-12 items-center gap-3 text-left">
+                <Icon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <Text type="large" weight="medium" color="primary">{title}</Text>
+              </span>
+            )}
           >
-            <CollapsibleTrigger asChild>
-              <button className="group flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left" type="button">
-                <Icon className="size-4 shrink-0 text-[var(--ae-amber)]" aria-hidden="true" />
-                <span className="font-heading text-base leading-5 font-medium">{title}</span>
-                <ChevronDownIcon className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <p className="px-4 pb-4 pl-11 text-sm leading-6 text-muted-foreground">{body}</p>
-            </CollapsibleContent>
+            <Text as="p" color="secondary" display="block" className="px-4 pb-4 pl-11">{body}</Text>
           </Collapsible>
         )
       })}

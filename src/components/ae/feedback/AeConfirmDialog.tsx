@@ -1,22 +1,10 @@
-import type { MouseEvent, ReactNode } from 'react'
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Spinner } from '@/components/ui/spinner'
+import { AlertDialog } from '@astryxdesign/core/AlertDialog'
 
 type AeConfirmDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
-  description: ReactNode
+  description: string
   confirmLabel: string
   cancelLabel?: string
   confirmVariant?: 'default' | 'destructive'
@@ -35,7 +23,7 @@ export function AeConfirmDialog({
   pending = false,
   onConfirm,
 }: AeConfirmDialogProps) {
-  const destructive = confirmVariant === 'destructive'
+  const actionVariant = confirmVariant === 'destructive' ? 'destructive' : 'primary'
 
   function handleOpenChange(nextOpen: boolean) {
     if (pending && !nextOpen) {
@@ -45,41 +33,21 @@ export function AeConfirmDialog({
     onOpenChange(nextOpen)
   }
 
-  async function handleConfirm(event: MouseEvent<HTMLButtonElement>) {
-    event.preventDefault()
+  async function handleConfirm() {
     await onConfirm()
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent
-        aria-busy={pending || undefined}
-        data-destructive={destructive ? true : undefined}
-        data-pending={pending ? true : undefined}
-      >
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {description}
-            {destructive ? <span className="sr-only"> Destructive action.</span> : null}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <span className="sr-only" role="status" aria-live="polite">
-            {pending ? 'Action in progress.' : ''}
-          </span>
-          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction
-            variant={confirmVariant}
-            disabled={pending}
-            aria-busy={pending || undefined}
-            onClick={handleConfirm}
-          >
-            {pending ? <Spinner data-icon="inline-start" /> : null}
-            {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <AlertDialog
+      isOpen={open}
+      onOpenChange={handleOpenChange}
+      title={title}
+      description={description}
+      cancelLabel={cancelLabel}
+      actionLabel={confirmLabel}
+      actionVariant={actionVariant}
+      isActionLoading={pending}
+      onAction={handleConfirm}
+    />
   )
 }

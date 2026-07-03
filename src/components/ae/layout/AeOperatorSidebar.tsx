@@ -1,21 +1,8 @@
 'use client'
 
-import { LockKeyhole } from 'lucide-react'
+import { Badge } from '@astryxdesign/core/Badge'
+import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav'
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-} from '@/components/ui/sidebar'
 import {
   formatOperatorNavBadge,
   isOperatorPathActive,
@@ -28,103 +15,58 @@ import {
 } from '@/lib/operator/navigation'
 
 type AeOperatorSidebarProps = {
-  role: OperatorRole
+  operatorRole: OperatorRole
   currentPath: string
   navBadges?: OperatorNavBadges
 }
 
-export function AeOperatorSidebar({ role, currentPath, navBadges = {} }: AeOperatorSidebarProps) {
-  const navGroups = navGroupsForRole(role)
-  const utilityItems = operatorUtilityItemsForRole(role)
+const EMPTY_NAV_BADGES: OperatorNavBadges = {}
+
+export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
+  const navGroups = navGroupsForRole(operatorRole)
+  const utilityItems = operatorUtilityItemsForRole(operatorRole)
 
   return (
-    <Sidebar collapsible="icon" className="ae-operator-sidebar border-r border-sidebar-border">
-      <SidebarHeader className="ae-operator-sidebar__header gap-3 p-4">
-        <a
-          href={roleHomeHref[role]}
-          className="ae-operator-sidebar__brand-link flex min-h-10 items-center gap-2 px-2 font-heading text-sm font-semibold tracking-normal text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        >
-          <span className="ae-operator-sidebar__brand-mark flex size-8 shrink-0 items-center justify-center bg-sidebar-primary text-sidebar-primary-foreground">
-            <LockKeyhole aria-hidden="true" className="size-4" />
-          </span>
-          <span className="truncate group-data-[collapsible=icon]:hidden">
-            Agentic Economy · {roleLabel[role]}
-          </span>
-        </a>
-      </SidebarHeader>
-
-      <SidebarContent className="gap-0 px-2">
-        {navGroups.map((group) => (
-          <SidebarGroup key={group.id} className="py-2">
-            <SidebarGroupLabel className="px-2 text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">
-              {group.label}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const Icon = item.icon
-                  const current = isOperatorPathActive(currentPath, item.href)
-                  const badge = formatOperatorNavBadge(navBadges[item.href])
-
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={current}
-                        tooltip={item.label}
-                        className={`ae-operator-sidebar__nav-link min-h-10${badge === undefined ? '' : ' pr-8'}`}
-                      >
-                        <a href={item.href} aria-current={current ? 'page' : undefined}>
-                          <Icon aria-hidden="true" />
-                          <span>{item.label}</span>
-                        </a>
-                      </SidebarMenuButton>
-                      {badge === undefined ? null : (
-                        <SidebarMenuBadge aria-label={`${badge} ${item.label}`}>
-                          {badge}
-                        </SidebarMenuBadge>
-                      )}
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
-
-      <SidebarFooter className="border-t border-sidebar-border p-2">
-        <SidebarGroup className="p-0">
-          <SidebarGroupLabel className="px-2 text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">
-            Public
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {utilityItems.map((item) => {
-                const Icon = item.icon
-                const current = isOperatorPathActive(currentPath, item.href)
-
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={current}
-                      tooltip={item.label}
-                      className="ae-operator-sidebar__nav-link min-h-10"
-                    >
-                      <a href={item.href} aria-current={current ? 'page' : undefined}>
-                        <Icon aria-hidden="true" />
-                        <span>{item.label}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
+    <SideNav
+      collapsible={{ defaultIsCollapsed: false, hasButton: true, buttonLabel: 'Collapse navigation' }}
+      header={
+        <SideNavHeading
+          heading="Agentic Economy"
+          subheading={roleLabel[operatorRole]}
+          headingHref={roleHomeHref[operatorRole]}
+          icon={<span className="flex size-8 items-center justify-center rounded-md bg-card text-xs font-semibold text-primary">AE</span>}
+        />
+      }
+      footer={
+        <SideNavSection title="Public">
+          {utilityItems.map((item) => {
+            const current = isOperatorPathActive(currentPath, item.href)
+            const Icon = item.icon
+            return <SideNavItem key={item.href} label={item.label} href={item.href} icon={<Icon aria-hidden="true" />} isSelected={current} />
+          })}
+        </SideNavSection>
+      }
+    >
+      {navGroups.map((group) => (
+        <SideNavSection key={group.id} title={group.label}>
+          {group.items.map((item) => {
+            const current = isOperatorPathActive(currentPath, item.href)
+            const badge = formatOperatorNavBadge(navBadges[item.href])
+            const Icon = item.icon
+            return (
+              <SideNavItem
+                key={item.href}
+                label={item.label}
+                href={item.href}
+                icon={<Icon aria-hidden="true" />}
+                isSelected={current}
+                endContent={badge === undefined ? undefined : <Badge variant="neutral" label={badge} />}
+                aria-current={current ? 'page' : undefined}
+              />
+            )
+          })}
+        </SideNavSection>
+      ))}
+    </SideNav>
   )
 }

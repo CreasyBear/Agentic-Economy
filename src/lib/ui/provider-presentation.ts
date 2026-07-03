@@ -111,3 +111,25 @@ function readServiceChips(
     label: service.name,
   }))
 }
+
+export type AeStatusPillTone = 'available' | 'closed' | 'appointment' | 'attention'
+
+/**
+ * Maps a plain availability label (from {@link plainAvailabilityLabel}) to one
+ * of AeStatusPill's four tones. "Needs confirmation" (stale/degraded discovery
+ * data) is the only case that earns the attention tone; every other
+ * not-yet-actionable label reads as the neutral "closed" tone.
+ */
+export function pillToneForAvailabilityLabel(label: string): AeStatusPillTone {
+  const normalized = label.trim().toLowerCase()
+  if (normalized.includes('contact supplied') || normalized.includes('available')) {
+    return 'available'
+  }
+  if (normalized.includes('appointment')) {
+    return 'appointment'
+  }
+  if (normalized.includes('needs confirmation')) {
+    return 'attention'
+  }
+  return 'closed'
+}

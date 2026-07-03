@@ -1,7 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
-  ChevronDownIcon,
   CreditCardIcon,
   FileTextIcon,
   MessageSquareIcon,
@@ -10,14 +9,15 @@ import {
   StoreIcon,
 } from 'lucide-react'
 import { useState } from 'react'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Text } from '@astryxdesign/core/Text'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
-import { AePublicShell, defaultHomeSearch } from '@/components/ae/layout/AePublicShell'
+import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 export const Route = createFileRoute('/help')({
   head: () => ({
@@ -34,36 +34,32 @@ const helpTopics = [
     title: 'Contact a business',
     body: 'Send the job context a business needs for first contact.',
     label: 'Customer',
-    to: '/registry' as const,
+    href: '/registry?q=&limit=10',
     cta: 'Browse services',
-    search: { q: '', limit: 10 },
   },
   {
     icon: StoreIcon,
     title: 'List or claim',
     body: 'Publish business-supplied service details customers can compare.',
     label: 'Owner',
-    to: '/claim' as const,
+    href: '/claim',
     cta: 'Start claim',
-    search: undefined,
   },
   {
     icon: PencilIcon,
     title: 'Correct a page',
     body: 'Request a fix, ownership review, or removal.',
     label: 'Fix',
-    to: '/privacy/remove-business' as const,
+    href: '/privacy/remove-business',
     cta: 'Open corrections',
-    search: undefined,
   },
   {
     icon: ShieldCheckIcon,
     title: 'Privacy',
     body: 'See what is shared when you contact a business.',
     label: 'Details',
-    to: '/privacy' as const,
+    href: '/privacy',
     cta: 'Privacy notes',
-    search: undefined,
   },
 ] as const
 
@@ -104,59 +100,52 @@ function HelpRoute() {
         title="What do you need to do?"
         description="Find the right next step for contacting, listing, or correcting a business page."
       />
-      <main className="ae-public-page mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 md:grid-cols-2">
-          {helpTopics.map(({ icon: Icon, title, body, label, to, cta, search }) => (
-            <Card key={title} className="h-full">
-              <CardHeader>
+          {helpTopics.map(({ icon: Icon, title, body, label, href, cta }) => (
+            <Card key={title} padding={5} className="grid h-full gap-4">
+              <div className="grid gap-1.5">
                 <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon className="size-4 text-[var(--ae-amber)]" aria-hidden="true" /> {title}
-                  </CardTitle>
-                  <Badge variant="outline">{label}</Badge>
+                  <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
+                    <Icon className="size-4 text-primary" aria-hidden="true" /> {title}
+                  </Text>
+                  <Badge variant="neutral" label={label} />
                 </div>
-                <CardDescription>{body}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline" size="sm">
-                  <Link to={to} {...(search === undefined ? {} : { search })}>
-                    {cta}
-                    <ArrowRightIcon data-icon="inline-end" />
-                  </Link>
-                </Button>
-              </CardContent>
+                <Text color="secondary" display="block">{body}</Text>
+              </div>
+              <Button label={cta} variant="secondary" size="sm" href={href} endContent={<ArrowRightIcon aria-hidden="true" />} />
             </Card>
           ))}
         </section>
 
-        <section className="grid gap-5 border-t border-[var(--ae-public-line)] pt-8 md:grid-cols-[0.7fr_1.3fr]">
+        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.7fr_1.3fr]">
           <div className="grid content-start gap-2">
-            <p className="font-mono text-xs font-medium tracking-[var(--ae-public-tracking-mono-label)] text-[var(--ae-muted)] uppercase">
+            <Text type="supporting" weight="medium" color="secondary" display="block">
               Quick answers
-            </p>
-            <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight">
+            </Text>
+            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Short version first.
-            </h2>
+            </Text>
           </div>
           <HelpAccordion />
         </section>
 
-        <section className="flex flex-col gap-4 border-t border-[var(--ae-public-line)] pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight">
+            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Start with the job.
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            </Text>
+            <Text as="p" color="secondary" display="block" className="mt-2">
               Ask in plain language and compare the businesses that publish a fit.
-            </p>
+            </Text>
             <Suggestions wrap className="mt-4" aria-label="Example service questions">
               {helpPrompts.map((prompt) => (
                 <Suggestion
                   key={prompt}
                   asChild
-                  className="rounded-[var(--ae-radius-sm)]"
+                  className="rounded-sm"
                   suggestion={prompt}
-                  variant="outline"
+                  variant="secondary"
                 >
                   <Link to="/" search={{ q: prompt }}>{prompt}</Link>
                 </Suggestion>
@@ -164,12 +153,8 @@ function HelpRoute() {
             </Suggestions>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button asChild>
-              <Link to="/" search={defaultHomeSearch}>Ask a question</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link to="/registry" search={{ q: '', limit: 10 }}>Browse services</Link>
-            </Button>
+            <Button label="Ask a question" variant="primary" href="/" />
+            <Button label="Browse services" variant="secondary" href="/registry?q=&limit=10" />
           </div>
         </section>
       </main>
@@ -188,20 +173,17 @@ function HelpAccordion() {
         return (
           <Collapsible
             key={title}
-            className="rounded-[var(--ae-radius-sm)] border border-[var(--ae-public-line)] bg-[var(--ae-surface-raised)]"
-            open={isOpen}
+            className="rounded-sm border bg-card"
+            isOpen={isOpen}
             onOpenChange={(nextOpen) => setOpenItem(nextOpen ? title : '')}
+            trigger={(
+              <span className="flex min-h-12 items-center gap-3 text-left">
+                <Icon className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                <Text type="large" weight="medium" color="primary">{title}</Text>
+              </span>
+            )}
           >
-            <CollapsibleTrigger asChild>
-              <button className="group flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left" type="button">
-                <Icon className="size-4 shrink-0 text-[var(--ae-amber)]" aria-hidden="true" />
-                <span className="font-heading text-base leading-5 font-medium">{title}</span>
-                <ChevronDownIcon className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" aria-hidden="true" />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <p className="px-4 pb-4 pl-11 text-sm leading-6 text-muted-foreground">{body}</p>
-            </CollapsibleContent>
+            <Text as="p" color="secondary" display="block" className="px-4 pb-4 pl-11">{body}</Text>
           </Collapsible>
         )
       })}

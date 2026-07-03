@@ -1,0 +1,13 @@
+Rule: react-doctor/no-derived-state-effect
+Severity: warning
+Category: Bugs
+Count: 1
+
+You pay an extra render for state you can derive from other values.
+
+Suggestion: Work out derived values while rendering: `const x = fn(dep)`. To reset a component's state when a prop changes, give it a key prop: `<Component key={prop} />`. See https://react.dev/learn/you-might-not-need-an-effect
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/no-derived-state-effect
+
+Files:
+  src/routes/registry.tsx:113

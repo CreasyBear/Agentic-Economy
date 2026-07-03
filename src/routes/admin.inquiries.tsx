@@ -4,13 +4,14 @@ import { useMemo, useState } from 'react'
 
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
+import { AeOperatorQueueList, type AeOperatorQueueRow } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   readInquiryOperatorReconstructionServer,
   type InquiryOperatorReconstructionServerResult,
@@ -31,6 +32,7 @@ type AdminInquirySearch = {
 }
 
 export const Route = createFileRoute('/admin/inquiries')({
+  ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): AdminInquirySearch =>
     compactSearch(stringSearch(search.threadId), stringSearch(search.correlationId), stringSearch(search.dispatchId)),
   loaderDeps: ({ search }) => search,
@@ -51,7 +53,7 @@ function AdminInquiriesRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Inquiry reconstruction"
       description="Reconstruct customer inquiry, owner action, delivery, audit, funnel, and operation refs without exposing private content."
       currentPath="/admin/inquiries"
@@ -66,19 +68,16 @@ function AdminInquiriesRoute() {
 
 function OperatorAccess({ readback }: { readback: InquiryOperatorReconstructionServerResult }) {
   return (
-    <Alert variant={readback.kind === 'denied' ? 'destructive' : 'default'}>
-      {readback.kind === 'denied' ? (
-        <ShieldAlertIcon aria-hidden="true" className="size-4" />
-      ) : (
-        <ShieldCheckIcon aria-hidden="true" className="size-4" />
-      )}
-      <AlertTitle>{readback.kind === 'denied' ? 'Access denied' : 'Reconstruction available'}</AlertTitle>
-      <AlertDescription>
-        {readback.kind === 'denied'
+    <Banner
+      status={readback.kind === 'denied' ? 'error' : 'success'}
+      icon={readback.kind === 'denied' ? <ShieldAlertIcon aria-hidden="true" className="size-4" /> : <ShieldCheckIcon aria-hidden="true" className="size-4" />}
+      title={readback.kind === 'denied' ? 'Access denied' : 'Reconstruction available'}
+      description={
+        readback.kind === 'denied'
           ? `${readback.publicMessage} HTTP ${readback.httpStatus}.`
-          : `Source-backed inquiry reconstruction is available to ${readback.actorRef}. HTTP ${readback.httpStatus}.`}
-      </AlertDescription>
-    </Alert>
+          : `Source-backed inquiry reconstruction is available to ${readback.actorRef}. HTTP ${readback.httpStatus}.`
+      }
+    />
   )
 }
 
@@ -117,20 +116,20 @@ function FilterPanel({ search }: { search: AdminInquirySearch }) {
 
 function DeniedReadback({ readback }: { readback: Extract<InquiryOperatorReconstructionServerResult, { kind: 'denied' }> }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Private rows withheld</CardTitle>
-        <CardDescription>Denied inquiry reconstruction reads return no source rows.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Private rows withheld</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Denied inquiry reconstruction reads return no source rows.</Text>
+      </div>
+      <div className="grid gap-4">
         <AeOperatorFactGrid
           facts={[
             { label: 'Decision', value: readback.reason.replaceAll('_', ' ') },
             { label: 'Private rows returned', value: String(readback.rows.length) },
-            { label: 'Generated', value: new Date(readback.generatedAt).toISOString() },
+            { label: 'Generated', value: formatTimestamp(readback.generatedAt) },
           ]}
         />
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -150,15 +149,16 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
       (row) => row.operatorNextAction !== 'none' && row.operatorNextAction !== 'terminal'
     )
   }, [filter, readback.rows])
+  const queueRows = useMemo(() => filteredRows.map(toInquiryQueueRow), [filteredRows])
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Source summary</CardTitle>
-          <CardDescription>Counts are derived from inquiry, notification, audit, funnel, and operation refs.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">Source summary</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Counts are derived from inquiry, notification, audit, funnel, and operation refs.</Text>
+        </div>
+        <div className="grid gap-4">
           <AeOperatorFactGrid
             facts={[
               { label: 'Threads', value: readback.summary.threads },
@@ -169,91 +169,78 @@ function AllowedReadback({ readback }: { readback: Extract<InquiryOperatorRecons
               { label: 'Terminal', value: readback.summary.terminal },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
       {readback.rows.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No inquiry rows</CardTitle>
-            <CardDescription>No source-owned inquiry path matches the current filters.</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">No inquiry rows</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">No source-owned inquiry path matches the current filters.</Text>
+          </div>
         </Card>
       ) : (
         <div className="grid gap-4">
-          <Tabs value={filter} onValueChange={(value) => setFilter(value as typeof filter)}>
-            <TabsList variant="line" aria-label="Filter inquiry reconstruction rows">
-              <TabsTrigger value="all">All ({readback.rows.length})</TabsTrigger>
-              <TabsTrigger value="attention">Needs attention ({readback.summary.needsRepair})</TabsTrigger>
-              <TabsTrigger value="terminal">Terminal ({readback.summary.terminal})</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {filteredRows.length === 0 ? (
-            <AeEmptyState
-              title="Nothing in this bucket"
-              description="Try another filter to see inquiry reconstruction rows in a different state."
-            />
-          ) : (
-            <ScrollArea className="ae-operator-scroll-panel ae-operator-scroll-panel--tall border">
-              <div className="grid gap-4 p-4">
-                {filteredRows.map((row) => (
-                  <TimelineRow key={row.rowId} row={row} />
-                ))}
-              </div>
-            </ScrollArea>
-          )}
+          <TabList value={filter} onChange={(value) => setFilter(value as typeof filter)} hasDivider aria-label="Filter inquiry reconstruction rows">
+            <Tab value="all" label={`All (${readback.rows.length})`} />
+            <Tab value="attention" label={`Needs attention (${readback.summary.needsRepair})`} />
+            <Tab value="terminal" label={`Terminal (${readback.summary.terminal})`} />
+          </TabList>
+          <AeOperatorQueueList
+            rows={queueRows}
+            scroll
+            emptyTitle="Nothing in this bucket"
+            emptyDescription="Try another filter to see inquiry reconstruction rows in a different state."
+          />
         </div>
       )}
     </>
   )
 }
 
-function TimelineRow({ row }: { row: InquiryOperatorReconstructionRow }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={row.operatorNextAction === 'none' || row.operatorNextAction === 'terminal' ? 'secondary' : 'destructive'}>
-            {row.operatorNextAction.replaceAll('_', ' ')}
-          </Badge>
-          <Badge variant="outline">{row.status}</Badge>
-        </div>
-        <CardTitle className="break-words text-lg">Thread {row.threadId}</CardTitle>
-        <CardDescription>Source hash {row.sourceHash}</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        <AeOperatorFactGrid
-          facts={[
-            { label: 'Business', value: row.businessId },
-            { label: 'Service', value: row.serviceId },
-            { label: 'Updated', value: new Date(row.updatedAt).toISOString() },
-            { label: 'Correlation', value: row.correlationIds.join(', ') || 'none' },
-          ]}
-        />
+function toInquiryQueueRow(row: InquiryOperatorReconstructionRow): AeOperatorQueueRow {
+  const needsAttention = row.operatorNextAction !== 'none' && row.operatorNextAction !== 'terminal'
+  return {
+    id: row.rowId,
+    title: `Thread ${row.threadId}`,
+    description: `Source hash ${row.sourceHash}`,
+    badges: [
+      { label: row.operatorNextAction.replaceAll('_', ' '), variant: needsAttention ? 'destructive' : 'secondary' },
+      { label: row.status, variant: 'outline' },
+    ],
+    facts: [
+      { label: 'Business', value: row.businessId },
+      { label: 'Service', value: row.serviceId },
+      { label: 'Updated', value: formatTimestamp(row.updatedAt) },
+      { label: 'Correlation', value: row.correlationIds.join(', ') || 'none' },
+    ],
+    body: (
+      <div className="mt-2 grid gap-4">
         <RefSection title="Message hashes" refs={row.messageRefs} renderRef={messageRefLabel} />
-        <RefSection title="Notification refs" refs={row.notificationRefs} renderRef={(ref) => `${ref.notificationId} · ${ref.status} · ${ref.payloadHash}`} />
+        <RefSection
+          title="Notification refs"
+          refs={row.notificationRefs}
+          renderRef={(ref) => `${ref.notificationId} · ${ref.status} · ${ref.payloadHash}`}
+        />
         <RefSection title="Dispatch refs" refs={row.dispatchRefs} renderRef={dispatchRefLabel} />
         <RefSection title="Audit refs" refs={row.auditRefs} renderRef={auditRefLabel} />
         <RefSection title="Funnel refs" refs={row.funnelRefs} renderRef={funnelRefLabel} />
         <RefSection title="Operation refs" refs={row.operationRefs} renderRef={operationRefLabel} />
-      </CardContent>
-    </Card>
-  )
+      </div>
+    ),
+  }
 }
 
 function RefSection<T>({ title, refs, renderRef }: { title: string; refs: readonly T[]; renderRef: (ref: T) => string }) {
   return (
     <section className="grid gap-2">
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <h2 className="text-sm font-semibold text-primary">{title}</h2>
       {refs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No refs recorded.</p>
+        <p className="text-sm text-secondary">No refs recorded.</p>
       ) : (
-        <ul className="grid gap-2">
-          {refs.map((ref, index) => (
-            <li key={`${title}:${index}`} className="break-words rounded-md border bg-muted/30 p-3 font-mono text-xs leading-5 text-foreground">
-              {renderRef(ref)}
-            </li>
-          ))}
-        </ul>
+        <AeOperatorFactGrid
+          facts={refs.map((ref, index) => ({ label: `${title} ${index + 1}`, value: renderRef(ref) }))}
+          columns={2}
+        />
       )}
     </section>
   )

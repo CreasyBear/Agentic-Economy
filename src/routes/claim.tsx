@@ -1,25 +1,26 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Field } from '@astryxdesign/core/Field'
+import { FormLayout } from '@astryxdesign/core/FormLayout'
 
-import { emitFunnelEvent, emitFunnelEventOnce } from '@/lib/observability/funnel-client'
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
 import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
-import { AeSelectField } from '@/components/ae/forms/AeSelectField'
+import { AeFileUploadField } from '@/components/ae/forms/AeFileUploadField'
+import { AeRadioCardGroup } from '@/components/ae/forms/AeRadioCardGroup'
+import { AeRangeField } from '@/components/ae/forms/AeRangeField'
 import { AeReviewBlock } from '@/components/ae/forms/AeReviewBlock'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
+import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
 import { requireClaimOwnerSession } from '@/lib/server/claim-owner-session'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
+import { useClientMounted } from '@/hooks/use-client-mounted'
 
 type TextClaimField = Exclude<PublicOwnerClaimField, 'firstRequestMode'>
 
@@ -29,7 +30,6 @@ type FieldConfig = {
   description: string
   control: 'input' | 'textarea'
 }
-
 
 const emptyPublicOwnerClaimInput = {
   businessName: '',
@@ -50,6 +50,44 @@ const emptyPublicOwnerClaimInput = {
   publicDisclosure: '',
   noContactReason: '',
 } satisfies PublicOwnerClaimFlowInput
+
+function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowInput {
+  const data = new FormData(form)
+  const read = (field: TextClaimField) => {
+    const control = form.elements.namedItem(field)
+    if (
+      control instanceof HTMLInputElement ||
+      control instanceof HTMLTextAreaElement ||
+      control instanceof HTMLSelectElement
+    ) {
+      return control.value
+    }
+
+    const value = data.get(field)
+    return typeof value === 'string' ? value : fallback[field] ?? ''
+  }
+  const firstRequestModeValue = data.get('firstRequestMode')
+
+  return {
+    businessName: read('businessName'),
+    category: read('category'),
+    suburb: read('suburb'),
+    stateTerritory: read('stateTerritory'),
+    requestedSlug: read('requestedSlug'),
+    ownerMessage: read('ownerMessage'),
+    sourceLabel: read('sourceLabel'),
+    serviceName: read('serviceName'),
+    serviceCategory: read('serviceCategory'),
+    serviceSummary: read('serviceSummary'),
+    serviceArea: read('serviceArea'),
+    hoursOrUnknown: read('hoursOrUnknown'),
+    photoUrl: read('photoUrl'),
+    responseTimeMinutes: read('responseTimeMinutes'),
+    firstRequestMode: toFirstRequestMode(typeof firstRequestModeValue === 'string' ? firstRequestModeValue : fallback.firstRequestMode),
+    publicDisclosure: read('publicDisclosure'),
+    noContactReason: read('noContactReason'),
+  }
+}
 
 const submitClaimServer = submitOwnerClaimServer
 
@@ -129,18 +167,24 @@ const serviceFields = [
     description: 'Link to one real work, vehicle, or team photo you can publish.',
     control: 'input',
   },
-  {
-    field: 'responseTimeMinutes',
-    label: 'Typical response time in minutes (optional)',
-    description: 'Example: 22 for “Responds ~22m”. Leave blank if not sure.',
-    control: 'input',
-  },
 ] as const satisfies readonly FieldConfig[]
 
 const firstRequestModeOptions = [
-  { value: 'not_available_yet', label: 'First request not available yet' },
-  { value: 'inquiry_available', label: 'Public first-request instructions supplied' },
-  { value: 'quote_request_available', label: 'Public quote request instructions supplied' },
+  {
+    value: 'not_available_yet',
+    label: 'First request not available yet',
+    description: 'Use this when customers should view details but contact another way.',
+  },
+  {
+    value: 'inquiry_available',
+    label: 'Qualified inquiry is available',
+    description: 'AE may send a first-contact message for owner review.',
+  },
+  {
+    value: 'quote_request_available',
+    label: 'Quote request instructions supplied',
+    description: 'Show public instructions without implying booking or payment.',
+  },
 ] as const
 
 export const Route = createFileRoute('/claim')({
@@ -159,24 +203,15 @@ function ClaimRoute() {
   const location = useLocation()
   const navigate = useNavigate()
   const submitClaim = useServerFn(submitClaimServer)
-  const [hydrated, setHydrated] = useState(false)
+  const hydrated = useClientMounted()
   const [value, setValue] = useState<PublicOwnerClaimFlowInput>(emptyPublicOwnerClaimInput)
   const [errors, setErrors] = useState<readonly PublicOwnerClaimValidationError[]>([])
   const [message, setMessage] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
   const [factsConfirmed, setFactsConfirmed] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
-  const firstRequestModeInvalid = errorByField.has('firstRequestMode')
-  const firstRequestModeField = getFieldAccessibility({
-    id: 'firstRequestMode',
-    invalid: firstRequestModeInvalid,
-    hasDescription: true,
-    hasError: firstRequestModeInvalid,
-  })
-
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
+  const firstRequestModeError = errorByField.get('firstRequestMode')
+  const firstRequestModeInvalid = firstRequestModeError !== undefined
 
   if (location.pathname !== '/claim') {
     return <Outlet />
@@ -189,7 +224,9 @@ function ClaimRoute() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setMessage(undefined)
-    const validation = validatePublicOwnerClaimFlowInput(value)
+    const nextValue = readClaimInput(event.currentTarget, value)
+    setValue(nextValue)
+    const validation = validatePublicOwnerClaimFlowInput(nextValue)
     if (validation.kind === 'invalid') {
       setErrors(validation.errors)
       focusFirstError(validation.errors)
@@ -199,7 +236,7 @@ function ClaimRoute() {
     setErrors([])
     setPending(true)
     try {
-      const result = await submitClaim({ data: value })
+      const result = await submitClaim({ data: nextValue })
       if (result.kind === 'ok') {
         await navigate({ to: '/claim/success', search: { slug: result.catalog.slug } })
         return
@@ -220,33 +257,50 @@ function ClaimRoute() {
         title="Tell us what your service page should say"
         description="Add business identity, service details, first-request status, and a public note. ABN is not required for this first page."
       />
-      <form onSubmit={handleSubmit} noValidate className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+      {!hydrated ? (
+        <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-secondary md:px-6" aria-live="polite">
+          Preparing claim form.
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
         {message === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Publish did not complete</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
+          <Banner status="error" title="Publish did not complete" description={message} />
         )}
         <AeClaimFormSection title="Business identity" description="This is how customers recognize the business.">
-          <FieldGroup>{identityFields.map((field) => renderField(field, value, errorByField, updateTextField, !hydrated || pending))}</FieldGroup>
+          <FormLayout>{identityFields.map((field) => renderField(field, value, errorByField, updateTextField, pending))}</FormLayout>
         </AeClaimFormSection>
         <AeClaimFormSection title="Service details" description="Add one service people can understand quickly.">
-          <FieldGroup>{serviceFields.map((field) => renderField(field, value, errorByField, updateTextField, !hydrated || pending))}</FieldGroup>
+          <FormLayout>
+            {serviceFields.map((field) => renderField(field, value, errorByField, updateTextField, pending))}
+            <ResponseTimeField
+              value={value}
+              errorByField={errorByField}
+              disabled={pending}
+              updateTextField={updateTextField}
+            />
+            <AeFileUploadField
+              label="Supporting files"
+              description="Preview evidence files while preparing the claim. Use the Photo URL field for the image that should publish."
+              accept="image/*,.pdf"
+            />
+          </FormLayout>
         </AeClaimFormSection>
         <AeClaimFormSection title="First request" description="Say what this page can show today.">
-          <FieldGroup>
-            <Field {...firstRequestModeField.fieldProps}>
-              <FieldLabel htmlFor={firstRequestModeField.controlProps.id}>First request</FieldLabel>
-              <AeSelectField
-                id={firstRequestModeField.controlProps.id}
+          <FormLayout>
+            <Field
+              label="First request"
+              inputID="firstRequestMode"
+              description="Choose unavailable if you do not want a contact path on the page yet."
+              descriptionID="firstRequestMode-description"
+              {...(firstRequestModeInvalid ? { status: { type: 'error' as const, message: firstRequestModeError, messageID: 'firstRequestMode-error' } } : {})}
+            >
+              <AeRadioCardGroup
                 name="firstRequestMode"
                 value={value.firstRequestMode}
                 options={firstRequestModeOptions}
-                invalid={firstRequestModeInvalid}
-                {...(firstRequestModeField.controlProps['aria-describedby'] === undefined
-                  ? {}
-                  : { describedBy: firstRequestModeField.controlProps['aria-describedby'] })}
-                disabled={!hydrated || pending}
+                aria-describedby={firstRequestModeInvalid ? 'firstRequestMode-description firstRequestMode-error' : 'firstRequestMode-description'}
+                aria-invalid={firstRequestModeInvalid}
+                disabled={pending}
                 onValueChange={(nextValue) => {
                   setValue((current) => ({
                     ...current,
@@ -254,8 +308,6 @@ function ClaimRoute() {
                   }))
                 }}
               />
-              <FieldDescription {...firstRequestModeField.descriptionProps}>Choose unavailable if you do not want a contact path on the page yet.</FieldDescription>
-              {fieldError('firstRequestMode', errorByField, firstRequestModeField.errorProps.id)}
             </Field>
             {renderField(
               {
@@ -267,7 +319,7 @@ function ClaimRoute() {
               value,
               errorByField,
               updateTextField,
-              !hydrated || pending
+              pending
             )}
             {renderField(
               {
@@ -279,7 +331,7 @@ function ClaimRoute() {
               value,
               errorByField,
               updateTextField,
-              !hydrated || pending
+              pending
             )}
             {renderField(
               {
@@ -291,9 +343,9 @@ function ClaimRoute() {
               value,
               errorByField,
               updateTextField,
-              !hydrated || pending
+              pending
             )}
-          </FieldGroup>
+          </FormLayout>
         </AeClaimFormSection>
         <AeReviewBlock value={value} />
         <AeCheckboxField
@@ -301,18 +353,50 @@ function ClaimRoute() {
           label="I confirm these public facts are supplied by the business and ready to publish."
           description="Agentic Economy publishes what you submit. Review the summary above before continuing."
           checked={factsConfirmed}
-          disabled={!hydrated || pending}
+          disabled={pending}
           onCheckedChange={setFactsConfirmed}
         />
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="landingPrimary" disabled={pending || !hydrated || !factsConfirmed}>
-            {pending ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}
+          <AeActionButton
+            type="submit"
+            state={pending ? 'loading' : 'idle'}
+            leadingIcon={<ArrowRightIcon />}
+            disabled={pending || !factsConfirmed}
+          >
             Publish service page
-          </Button>
+          </AeActionButton>
           {previewButton(value.requestedSlug)}
         </div>
-      </form>
+        </form>
+      )}
     </AePublicShell>
+  )
+}
+
+function ResponseTimeField({
+  value,
+  errorByField,
+  updateTextField,
+  disabled,
+}: {
+  value: PublicOwnerClaimFlowInput
+  errorByField: ReadonlyMap<PublicOwnerClaimField, string>
+  updateTextField: (field: TextClaimField, nextValue: string) => void
+  disabled: boolean
+}) {
+  const field = 'responseTimeMinutes'
+  const error = errorByField.get(field)
+
+  return (
+    <AeRangeField
+      name={field}
+      label="Typical response time"
+      description="Optional public cue. Adjust it only if the business can stand behind it."
+      value={value.responseTimeMinutes ?? ''}
+      disabled={disabled}
+      {...(error === undefined ? {} : { errorMessage: error })}
+      onValueChange={(nextValue) => updateTextField(field, nextValue)}
+    />
   )
 }
 
@@ -325,38 +409,59 @@ function renderField(
 ) {
   const error = errorByField.get(config.field)
   const invalid = error !== undefined
-  const inputId = config.field
-  const fieldA11y = getFieldAccessibility({ id: inputId, invalid, hasDescription: true, hasError: invalid })
+  const descriptionId = `${config.field}-description`
+  const errorId = `${config.field}-error`
+  const describedBy = [
+    config.description === undefined ? undefined : descriptionId,
+    invalid ? errorId : undefined,
+  ].filter(Boolean).join(' ') || undefined
+  const status = error === undefined ? undefined : { type: 'error' as const, message: error, messageID: errorId }
+
+  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50'
+
+  const fieldInput = config.control === 'textarea' ? (
+    <textarea
+      id={config.field}
+      name={config.field}
+      value={value[config.field] ?? ''}
+      disabled={disabled}
+      aria-describedby={describedBy}
+      aria-invalid={invalid}
+      className={`${inputClassName} min-h-28 resize-y`}
+      onChange={(event) => {
+        const nextValue = event.currentTarget.value
+        updateTextField(config.field, nextValue)
+      }}
+    />
+  ) : (
+    <input
+      id={config.field}
+      name={config.field}
+      value={value[config.field] ?? ''}
+      disabled={disabled}
+      aria-describedby={describedBy}
+      aria-invalid={invalid}
+      className={inputClassName}
+      onChange={(event) => {
+        const nextValue = event.currentTarget.value
+        updateTextField(config.field, nextValue)
+      }}
+    />
+  )
+
+  if (status === undefined) {
+    return (
+      <Field key={config.field} label={config.label} inputID={config.field} description={config.description} descriptionID={descriptionId}>
+        {fieldInput}
+      </Field>
+    )
+  }
 
   return (
-    <Field key={config.field} {...fieldA11y.fieldProps}>
-      <FieldLabel htmlFor={fieldA11y.controlProps.id}>{config.label}</FieldLabel>
-      {config.control === 'textarea' ? (
-        <Textarea
-          {...fieldA11y.controlProps}
-          name={config.field}
-          value={value[config.field]}
-          disabled={disabled}
-          onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
-        />
-      ) : (
-        <Input
-          {...fieldA11y.controlProps}
-          name={config.field}
-          value={value[config.field]}
-          disabled={disabled}
-          onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
-        />
-      )}
-      <FieldDescription {...fieldA11y.descriptionProps}>{config.description}</FieldDescription>
-      {fieldError(config.field, errorByField, fieldA11y.errorProps.id)}
+    <Field key={config.field} label={config.label} inputID={config.field} description={config.description} descriptionID={descriptionId} status={status}>
+      {fieldInput}
     </Field>
   )
-}
-
-function fieldError(field: PublicOwnerClaimField, errorByField: ReadonlyMap<PublicOwnerClaimField, string>, errorId?: string) {
-  const error = errorByField.get(field)
-  return error === undefined ? null : <FieldError id={errorId}>{error}</FieldError>
 }
 
 function focusFirstError(errors: readonly PublicOwnerClaimValidationError[]) {
@@ -381,16 +486,8 @@ function toFirstRequestMode(value: string): PublicOwnerClaimFlowInput['firstRequ
 function previewButton(requestedSlug: string) {
   const slug = requestedSlug.trim()
   if (slug.length === 0) {
-    return (
-      <Button type="button" variant="outline" disabled>
-        Preview public page
-      </Button>
-    )
+    return <Button label="Preview public page" type="button" variant="secondary" isDisabled />
   }
 
-  return (
-    <Button asChild variant="outline">
-      <a href={`/${slug}`}>Preview public page</a>
-    </Button>
-  )
+  return <Button label="Preview public page" variant="secondary" href={`/${slug}`} />
 }

@@ -807,14 +807,20 @@ function buildReceipt(
 ): ActionReceipt {
   const outcome = receiptOutcome(checkpoint, resultArtifact)
   const reconstructionStatus = receiptReconstructionStatus(outcome, checkpoint, resultArtifact)
-  const externalEvidenceRefHashes = checkpoint === undefined || checkpoint.decision !== 'accepted'
-    ? []
-    : state.externalEvidenceEvents
-        .filter((event) => event.requestId === request.id && event.checkpointId === checkpoint.id && event.status === 'accepted')
-        .map((event) => event.payloadHash)
-  const guardrailEvidenceRefHashes = state.guardrailDecisions
-    .filter((decision) => decision.requestId === request.id)
-    .map((decision) => decision.decisionHash)
+  const externalEvidenceRefHashes: SourceHash[] = []
+  if (checkpoint !== undefined && checkpoint.decision === 'accepted') {
+    for (const event of state.externalEvidenceEvents) {
+      if (event.requestId === request.id && event.checkpointId === checkpoint.id && event.status === 'accepted') {
+        externalEvidenceRefHashes.push(event.payloadHash)
+      }
+    }
+  }
+  const guardrailEvidenceRefHashes: SourceHash[] = []
+  for (const decision of state.guardrailDecisions) {
+    if (decision.requestId === request.id) {
+      guardrailEvidenceRefHashes.push(decision.decisionHash)
+    }
+  }
   const signatureRefHash = stableHash({
     requestId: request.id,
     idempotencyKey: command.idempotencyKey,
@@ -944,7 +950,8 @@ function verifyReceiptStatus(
     }
   }
 
-  if (receipt.resultArtifactHash !== undefined && context.resultArtifact === undefined) {
+  const receiptResultArtifactHash = receipt.resultArtifactHash
+  if (!Object.is(receiptResultArtifactHash, undefined) && context.resultArtifact === undefined) {
     return 'evidence_mismatch'
   }
 
@@ -976,15 +983,15 @@ function verifyReceiptStatus(
   if (
     receipt.actionSlug !== BusinessActionSlug ||
     receipt.outcome !== expectedOutcome ||
-    receipt.cardHash !== context.request.cardHash ||
+    !safeEqualHash(receipt.cardHash, context.request.cardHash) ||
     receipt.cardVersion !== context.request.cardVersion ||
-    receipt.mandateHash !== context.request.mandateHash ||
-    receipt.requestHash !== context.request.requestHash ||
-    receipt.checkpointHash !== context.checkpoint?.checkpointHash ||
-    receipt.resultArtifactHash !== context.resultArtifact?.artifactHash ||
+    !safeEqualHash(receipt.mandateHash, context.request.mandateHash) ||
+    !safeEqualHash(receipt.requestHash, context.request.requestHash) ||
+    !safeEqualHash(receipt.checkpointHash, context.checkpoint?.checkpointHash) ||
+    !safeEqualHash(receipt.resultArtifactHash, context.resultArtifact?.artifactHash) ||
     receipt.reconstructionStatus !== expectedReconstructionStatus ||
-    receipt.signatureRefHash !== expectedSignatureRefHash ||
-    receipt.payloadHash !== expectedPayloadHash ||
+    !safeEqualHash(receipt.signatureRefHash, expectedSignatureRefHash) ||
+    !safeEqualHash(receipt.payloadHash, expectedPayloadHash) ||
     !sameStringSet(receipt.externalEvidenceRefHashes, expectedExternalEvidenceRefHashes) ||
     !sameStringSet(receipt.guardrailEvidenceRefHashes, expectedGuardrailEvidenceRefHashes)
   ) {
@@ -1038,6 +1045,19 @@ function hermesEventHashValue(
     providerRefHash: event.providerRefHash,
     payloadHash: event.payloadHash,
   }
+}
+
+function safeEqualHash(left: SourceHash | undefined, right: SourceHash | undefined): boolean {
+  if (typeof left !== 'string' || typeof right !== 'string') {
+    return left === undefined && right === undefined
+  }
+
+  const maxLength = Math.max(left.length, right.length)
+  let diff = left.length ^ right.length
+  for (let index = 0; index < maxLength; index += 1) {
+    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0)
+  }
+  return diff === 0
 }
 
 function sameStringSet(left: readonly string[], right: readonly string[]): boolean {

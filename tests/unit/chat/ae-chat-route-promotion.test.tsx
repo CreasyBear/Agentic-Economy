@@ -3,12 +3,15 @@
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { PublicThreadProjection } from '@/modules/answer-thread/public'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const testState = vi.hoisted(() => ({
   navigate: vi.fn(),
   latestTranscriptProps: undefined as
     | {
+        threadId?: string | null
+        projection?: { threadId: string } | null
         liveTurn?: { query: string; generation: number } | null
         onThreadCreated?: (threadId: string) => void
         onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
@@ -29,9 +32,6 @@ vi.mock('@/components/ae/feedback/AeEmptyState', () => ({
   AeEmptyState: () => <div data-testid="empty-state" />,
 }))
 
-vi.mock('@/components/ui/button', () => ({
-  Button: ({ children, ...props }: { children: ReactNode }) => <button {...props}>{children}</button>,
-}))
 
 vi.mock('@/lib/observability/capture-client-events', () => ({
   captureClientProductEventOnClient: vi.fn(),
@@ -81,10 +81,18 @@ vi.mock('@/components/ae/chat/AeThreadSidebar', () => ({
 vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
   AeThreadTranscript: (props: typeof testState.latestTranscriptProps) => {
     testState.latestTranscriptProps = props
-    return props?.liveTurn === null || props?.liveTurn === undefined ? (
-      <div data-testid="no-live-turn" />
-    ) : (
-      <div data-testid="live-turn">{props.liveTurn.query}</div>
+    return (
+      <div
+        data-testid="thread-transcript"
+        data-route-thread-id={props?.threadId ?? 'home'}
+        data-projection-thread-id={props?.projection?.threadId ?? 'none'}
+      >
+        {props?.liveTurn === null || props?.liveTurn === undefined ? (
+          <div data-testid="no-live-turn" />
+        ) : (
+          <div data-testid="live-turn">{props.liveTurn.query}</div>
+        )}
+      </div>
     )
   },
 }))
@@ -134,4 +142,36 @@ describe('AeChat route promotion', () => {
     expect(screen.queryByTestId('welcome-query-panel')).toBeNull()
     expect(screen.queryByTestId('live-turn')).not.toBeNull()
   })
+
+  it('does not paint the previous thread projection after the route thread changes', () => {
+    const firstProjection = buildProjection('thread-one', 'First answer')
+    const { rerender } = render(<AeChat threadId="thread-one" initialProjection={firstProjection} />)
+
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-one')
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('thread-one')
+
+    rerender(<AeChat threadId="thread-two" />)
+
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-two')
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
+  })
 })
+
+function buildProjection(threadId: string, title: string): PublicThreadProjection {
+  return {
+    threadId,
+    title,
+    turns: [
+      {
+        turnId: `${threadId}-turn-1`,
+        seq: 1,
+        query: 'emergency plumber in Perth',
+        intent: 'refine_search',
+        status: 'complete',
+        workLog: [],
+        artifacts: [],
+        oneLine: title,
+      },
+    ],
+  }
+}

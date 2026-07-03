@@ -6,7 +6,7 @@ function AeObservabilityErrorFallback() {
   return (
     <div className="mx-auto flex min-h-[40vh] max-w-lg flex-col justify-center gap-3 px-4 py-12">
       <h1 className="font-heading text-xl font-semibold">Something went wrong</h1>
-      <p className="text-sm leading-6 text-muted-foreground">
+      <p className="text-sm leading-6 text-secondary">
         This page hit an unexpected error. Refresh and try again. If it keeps happening, return to the registry or ask flow.
       </p>
     </div>

@@ -7,30 +7,16 @@ function readSource(path: string): string {
   return readFileSync(join(process.cwd(), path), 'utf8')
 }
 
-function readAnswerStyles(): string {
-  return [
-    readSource('src/styles/answer.css'),
-    readSource('src/styles/answer/index.css'),
-    readSource('src/styles/answer/shell.css'),
-    readSource('src/styles/answer/query.css'),
-    readSource('src/styles/answer/ai-elements.css'),
-    readSource('src/styles/answer/panel.css'),
-    readSource('src/styles/answer/source-card.css'),
-    readSource('src/styles/answer/affordances.css'),
-    readSource('src/styles/answer/chat-shell.css'),
-    readSource('src/styles/answer/model-selector.css'),
-    readSource('src/styles/answer/thread.css'),
-    readSource('src/styles/answer/map.css'),
-    readSource('src/styles/answer/listing.css'),
-    readSource('src/styles/answer/motion.css'),
-  ].join('\n')
-}
-
 describe('public chat layout contract', () => {
-  it('mounts the home page through the chat shell', () => {
+  it('splits the home landing from the query chat handoff', () => {
     const homeRoute = readSource('src/routes/index.tsx')
 
+    expect(homeRoute).toMatch(/q\.length > 0/)
     expect(homeRoute).toMatch(/<AeChat\s/)
+    expect(homeRoute).toMatch(/<AePublicShell>/)
+    expect(homeRoute).toMatch(/<AeAnswerPromptInput\b/)
+    expect(homeRoute).not.toMatch(/readPublicRegistryCatalogPage/)
+    expect(homeRoute).not.toMatch(/AeProviderCard/)
     expect(homeRoute).not.toMatch(/AePublicLanding/)
     expect(homeRoute).not.toMatch(/ae-public-detail-hero/)
   })
@@ -75,17 +61,19 @@ describe('public chat layout contract', () => {
     expect(transcript).toMatch(/scrollAnchor=\{anchorThisTurn\}/)
   })
 
-  it('uses daylight commerce button radius on public CTAs', () => {
-    const button = readSource('src/components/ui/button.tsx')
-    const globals = readSource('src/styles/globals.css')
-    const answerStyles = readAnswerStyles()
+  it('routes public CTAs directly through Astryx components', () => {
+    const shell = readSource('src/components/ae/layout/AePublicShell.tsx')
+    const answerPrompt = readSource('src/components/ae/chat/AeAnswerPromptInput.tsx')
+    const threadHeader = readSource('src/components/ae/chat/AeThreadHeader.tsx')
 
-    expect(button).toMatch(/rounded-\[var\(--ae-radius-md\)\]/)
-    expect(button).not.toMatch(/rounded-full/)
-    expect(globals).toMatch(/\.ae-button-landing-primary/)
-    expect(globals).toMatch(/var\(--ae-public-radius-button\)/)
-    expect(answerStyles).toMatch(/\.ae-thread-header\b[\s\S]*background: var\(--ae-public-field\)/)
-    expect(answerStyles).not.toMatch(/backdrop-filter: blur\(8px\)/)
+    expect(shell).toMatch(/@astryxdesign\/core\/Button/)
+    expect(answerPrompt).toMatch(/@astryxdesign\/core\/Chat/)
+    expect(shell).not.toMatch(/class-variance-authority|cva\(/)
+    expect(answerPrompt).not.toMatch(/@\/components\/ai-elements\/prompt-input/)
+    expect(threadHeader).toMatch(/sticky/)
+    expect(threadHeader).toMatch(/bg-body/)
+    expect(threadHeader).toMatch(/border-b border-border/)
+    expect(threadHeader).not.toMatch(/backdrop-blur|backdrop-filter/)
   })
 
   it('keeps the model selector out of the public query panel', () => {
@@ -97,16 +85,14 @@ describe('public chat layout contract', () => {
 
   it('keeps the public chat panel free of search-area chrome', () => {
     const chat = readSource('src/components/ae/chat/AeChat.tsx')
-    const answerStyles = readAnswerStyles()
 
     expect(chat).toMatch(/DEFAULT_AE_SEARCH_CONTEXT/)
     expect(chat).not.toMatch(/<AeSearchContextBar\b/)
-    expect(answerStyles).not.toMatch(/\.ae-search-context-bar\b/)
   })
 })
 
 describe('public listing layout contract', () => {
-  it('mounts business citation pages through the daylight listing component', () => {
+  it('mounts business citation pages through the Astryx-era listing component', () => {
     const listingRoute = readSource('src/routes/$slug.tsx')
 
     expect(listingRoute).toMatch(/<AeProviderListingPage\b/)
@@ -115,21 +101,21 @@ describe('public listing layout contract', () => {
     expect(listingRoute).not.toMatch(/AePublicRecordHero/)
   })
 
-  it('keeps listing citation layout in answer.css primitives', () => {
+  it('keeps listing citation layout on Astryx primitives', () => {
     const listingSource = readSource('src/components/ae/listing/AeProviderListingPage.tsx')
-    const answerStyles = readAnswerStyles()
 
-    expect(listingSource).toMatch(/ae-listing-page/)
-    expect(listingSource).toMatch(/ae-public-page/)
-    expect(listingSource).toMatch(/ae-listing-sticky-rail/)
+    expect(listingSource).toMatch(/@astryxdesign\/core\/Card/)
+    expect(listingSource).toMatch(/@astryxdesign\/core\/Button/)
+    expect(listingSource).toMatch(/@astryxdesign\/core\/Badge/)
+    expect(listingSource).toMatch(/AeProtectedByAe/)
+    expect(listingSource).toMatch(/AeAgentJsonAffordance/)
     expect(listingSource).not.toMatch(/AeStatusBadge/)
     expect(listingSource).not.toMatch(/ae-public-detail-hero/)
-    expect(answerStyles).toMatch(/\.ae-listing-page\b/)
-    expect(answerStyles).toMatch(/\.ae-listing-sticky-rail\b/)
+    expect(listingSource).not.toMatch(/ae-listing-page/)
   })
 
   it('surfaces trust on provider source cards', () => {
-    const sourceCard = readSource('src/components/ae/landing/AeProviderSourceCard.tsx')
+    const sourceCard = readSource('src/components/ae/primitives/AeProviderCard.tsx')
 
     expect(sourceCard).toMatch(/source\.trustCue/)
     expect(sourceCard).not.toMatch(/AeAgentJsonAffordance/)
@@ -166,11 +152,13 @@ describe('operator shell contract', () => {
     expect(source).not.toMatch(/<AeAdminShell\b/)
   })
 
-  it('uses the sidebar command layout in AeOperatorShell', () => {
+  it('uses the Astryx-era operator command layout in AeOperatorShell', () => {
     const shell = readSource('src/components/ae/layout/AeOperatorShell.tsx')
 
-    expect(shell).toMatch(/SidebarProvider/)
     expect(shell).toMatch(/AeOperatorSidebar/)
     expect(shell).toMatch(/AeOperatorSectionNav/)
+    expect(shell).toMatch(/AeOperatorCommandMenu/)
+    expect(shell).toMatch(/@astryxdesign\/core\/Divider/)
+    expect(shell).not.toMatch(/SidebarProvider/)
   })
 })

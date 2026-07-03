@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { AnswerEvent } from '@/modules/answer/public'
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
-import { setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import {
@@ -152,14 +152,14 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
       expect(evidence.workLog?.map((step) => step.id)).toEqual(
         expect.arrayContaining([
-          'interpret.request',
-          'search.registry.initial',
-          'read.providers',
-          'compare.fit',
-          'assemble.answer',
+          'step-1',
+          'step-2',
+          'step-3',
+          'step-4',
+          'step-5',
         ]),
       )
-      const searchStep = evidence.workLog?.find((step) => step.id === 'search.registry.initial')
+      const searchStep = evidence.workLog?.find((step) => step.id === 'step-2')
       expect(searchStep?.status).toBe('complete')
       expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '1')).toBe(true)
     })

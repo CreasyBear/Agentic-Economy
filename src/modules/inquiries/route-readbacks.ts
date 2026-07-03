@@ -355,6 +355,22 @@ function routeServiceFromState(
   state: InquirySourceState,
   service: InquirySourceState['businessServices'][number]
 ): PublicRouteServiceContract {
+  const capabilities: PublicRouteCapabilityContract[] = []
+  for (const capability of state.serviceCapabilities) {
+    if (capability.businessId !== service.businessId || capability.serviceId !== service.serviceId) {
+      continue
+    }
+    capabilities.push({
+      serviceId: capability.serviceId,
+      kind: capability.kind,
+      status: capability.status,
+      firstRequest: capability.firstRequest,
+      callable: capability.callable,
+      paymentRequired: capability.paymentRequired,
+      ...(capability.reason === undefined ? {} : { reason: capability.reason }),
+    })
+  }
+
   return {
     serviceId: service.serviceId,
     serviceSlug: service.serviceSlug,
@@ -366,17 +382,7 @@ function routeServiceFromState(
     hoursOrUnknown: service.hoursOrUnknown,
     firstRequest: firstRequestForService(state, service),
     status: 'published',
-    capabilities: state.serviceCapabilities
-      .filter((capability) => capability.businessId === service.businessId && capability.serviceId === service.serviceId)
-      .map((capability) => ({
-        serviceId: capability.serviceId,
-        kind: capability.kind,
-        status: capability.status,
-        firstRequest: capability.firstRequest,
-        callable: capability.callable,
-        paymentRequired: capability.paymentRequired,
-        ...(capability.reason === undefined ? {} : { reason: capability.reason }),
-      })),
+    capabilities,
   }
 }
 

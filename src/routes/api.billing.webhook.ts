@@ -23,8 +23,8 @@ export async function handleBillingWebhookRequest(
   options: BillingWebhookHandlerOptions = {}
 ): Promise<Response> {
   const env = options.env ?? process.env
-  const rawBody = await request.text()
-  const { readAutumnWebhookSecret, verifyAutumnWebhook } = await readBillingProviderModule()
+  const [rawBody, billingProviderModule] = await Promise.all([request.text(), readBillingProviderModule()])
+  const { readAutumnWebhookSecret, verifyAutumnWebhook } = billingProviderModule
   const secret = readAutumnWebhookSecret(env)
 
   try {

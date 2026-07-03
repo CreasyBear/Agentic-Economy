@@ -14,7 +14,7 @@ import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
-import { brandNonEmpty } from '../src/modules/common/ids'
+import { brandNonEmpty, type BusinessId } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { AuditEventContract } from '../src/modules/observability/public'
 import {
@@ -630,26 +630,22 @@ export const readCurrentOwnerBillingProjection = queryGeneric({
     const ownerId = brandNonEmpty(owner.ownerId, 'OwnerId')
     const publicActivation = readPublicPaidActivationProjectionDomain(state, businessId)
     const ownerProjection = readOwnerBillingProjection(state, businessId, ownerId)
-    const latestOperation = [...ownerProjection.operations].sort(
-      (left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt
-    )[0]
+    const latestOperation = ownerProjection.operations.reduce((latest: (typeof ownerProjection.operations)[number] | undefined, operation) => {
+      if (latest === undefined) {
+        return operation
+      }
+      if (operation.updatedAt !== latest.updatedAt) {
+        return operation.updatedAt > latest.updatedAt ? operation : latest
+      }
+      return operation.createdAt > latest.createdAt ? operation : latest
+    }, undefined)
     return {
       kind: 'ok' as const,
       ownerId,
       businessId,
       publicActivation,
       owner: ownerProjection,
-      ownerOffers: state.offers
-        .filter((offer) => offer.businessId === businessId && offer.status === 'active')
-        .map((offer) => ({
-          id: offer.id,
-          name: offer.publicName,
-          description: offer.publicDescription,
-          ctaLabel: offer.publicCtaLabel,
-          priceSummary: offer.priceSummary,
-          termsSummary: offer.termsSummary,
-          updatedAt: offer.updatedAt,
-        })),
+      ownerOffers: activeOwnerOffers(state.offers, businessId),
       ...(latestOperation === undefined ? {} : { latestOperation }),
     }
   },
@@ -684,8 +680,40 @@ async function readCurrentOwner(ctx: {
   return owner === null ? { kind: 'denied', reason: 'owner_not_found' } : { kind: 'allowed', ownerId: owner._id, actorRef: actor.clerkUserId }
 }
 
+function activeOwnerOffers(offers: readonly BillingOffer[], businessId: BusinessId) {
+  const result: {
+    id: BillingOffer['id']
+    name: string
+    description: string
+    ctaLabel: string
+    priceSummary: string
+    termsSummary: string
+    updatedAt: number
+  }[] = []
+  for (const offer of offers) {
+    if (offer.businessId !== businessId || offer.status !== 'active') {
+      continue
+    }
+    result.push({
+      id: offer.id,
+      name: offer.publicName,
+      description: offer.publicDescription,
+      ctaLabel: offer.publicCtaLabel,
+      priceSummary: offer.priceSummary,
+      termsSummary: offer.termsSummary,
+      updatedAt: offer.updatedAt,
+    })
+  }
+  return result
+}
+
 async function readPrimaryOwnerBusiness(db: RuntimeDb, ownerId: string): Promise<RuntimeDocument | null> {
-  return (await readOwnerBusinesses(db, ownerId)).sort((left, right) => numberField(right, 'updatedAt') - numberField(left, 'updatedAt'))[0] ?? null
+  return (await readOwnerBusinesses(db, ownerId)).reduce<RuntimeDocument | null>((latest, business) => {
+    if (latest === null) {
+      return business
+    }
+    return numberField(business, 'updatedAt') > numberField(latest, 'updatedAt') ? business : latest
+  }, null)
 }
 
 async function readOwnerBusinesses(db: RuntimeDb, ownerId: string): Promise<RuntimeDocument[]> {

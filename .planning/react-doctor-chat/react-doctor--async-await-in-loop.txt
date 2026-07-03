@@ -1,0 +1,13 @@
+Rule: react-doctor/async-await-in-loop
+Severity: warning
+Category: Performance
+Count: 1
+
+This makes the for-loop slow because each await runs one after another, so collect the independent calls & run them together with `await Promise.all(items.map(...))`
+
+Suggestion: Collect the items, then use `await Promise.all(items.map(...))` so independent work runs at the same time
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/async-await-in-loop
+
+Files:
+  answer-stream.ts:66

@@ -790,7 +790,38 @@ function selectOwnerOffer(state: BillingSourceState, businessId: string, offerId
 
 function ownerReadbackFromState(state: BillingSourceState, businessId: string, ownerId: string): OwnerBillingServerReadback {
   const owner = readOwnerBillingProjection(state, brandNonEmpty(businessId, 'BusinessId'), brandNonEmpty(ownerId, 'OwnerId'))
-  const latestOperation = [...owner.operations].sort((left, right) => right.updatedAt - left.updatedAt || right.createdAt - left.createdAt)[0]
+  const latestOperation = owner.operations.reduce<OwnerBillingProjection['operations'][number] | undefined>((latest, operation) => {
+    if (latest === undefined) {
+      return operation
+    }
+    if (operation.updatedAt !== latest.updatedAt) {
+      return operation.updatedAt > latest.updatedAt ? operation : latest
+    }
+    return operation.createdAt > latest.createdAt ? operation : latest
+  }, undefined)
+  const ownerOffers: {
+    id: BillingOffer['id']
+    name: string
+    description: string
+    ctaLabel: string
+    priceSummary: string
+    termsSummary: string
+    updatedAt: number
+  }[] = []
+  for (const offer of state.offers) {
+    if (offer.businessId !== businessId || offer.status !== 'active') {
+      continue
+    }
+    ownerOffers.push({
+      id: offer.id,
+      name: offer.publicName,
+      description: offer.publicDescription,
+      ctaLabel: offer.publicCtaLabel,
+      priceSummary: offer.priceSummary,
+      termsSummary: offer.termsSummary,
+      updatedAt: offer.updatedAt,
+    })
+  }
   return {
     publicActivation: {
       businessId: brandNonEmpty(businessId, 'BusinessId'),
@@ -799,17 +830,7 @@ function ownerReadbackFromState(state: BillingSourceState, businessId: string, o
       reason: 'degraded',
     },
     owner,
-    ownerOffers: state.offers
-      .filter((offer) => offer.businessId === businessId && offer.status === 'active')
-      .map((offer) => ({
-        id: offer.id,
-        name: offer.publicName,
-        description: offer.publicDescription,
-        ctaLabel: offer.publicCtaLabel,
-        priceSummary: offer.priceSummary,
-        termsSummary: offer.termsSummary,
-        updatedAt: offer.updatedAt,
-      })),
+    ownerOffers,
     ...(latestOperation === undefined ? {} : { latestOperation }),
   }
 }

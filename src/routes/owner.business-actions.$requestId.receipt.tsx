@@ -1,12 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
 import { readCurrentOwnerBusinessActionDetailServer } from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
-  FactGrid,
   ownerBusinessActionDetailServerToRouteReadback,
   readOwnerBusinessActionDetailRouteReadback,
   type OwnerBusinessActionDetailRouteInput,
@@ -41,17 +42,17 @@ function OwnerBusinessActionReceiptRoute() {
   if (readback.kind !== 'ok') {
     return (
       <AeOperatorShell
-        role="owner"
+        operatorRole="owner"
         eyebrow="Action Receipt"
         title="Business action receipt unavailable"
         description="Source-owned receipt readback is required before local proof can be inspected."
         currentPath="/owner/business-actions"
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>Receipt unavailable</CardTitle>
-            <CardDescription>{readback.reason}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Receipt unavailable</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.reason}</Text>
+          </div>
         </Card>
       </AeOperatorShell>
     )
@@ -60,23 +61,23 @@ function OwnerBusinessActionReceiptRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Action Receipt"
       title="Business action receipt reconstruction"
       description="source/local proof only. production proof not claimed."
       currentPath="/owner/business-actions"
     >
-      <Card>
-        <CardHeader>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{reconstruction.receipt?.outcome.replaceAll('_', ' ') ?? 'no receipt'}</Badge>
-            <Badge variant="outline">{reconstruction.receipt?.reconstructionStatus.replaceAll('_', ' ') ?? 'missing'}</Badge>
+            <Badge variant="neutral" label={reconstruction.receipt?.outcome.replaceAll('_', ' ') ?? 'no receipt'} />
+            <Badge variant="neutral" label={reconstruction.receipt?.reconstructionStatus.replaceAll('_', ' ') ?? 'missing'} />
           </div>
-          <CardTitle className="break-words text-lg">{reconstruction.receipt?.id ?? reconstruction.request.id}</CardTitle>
-          <CardDescription>Public-safe receipt readback only. Private endpoint refs remain redacted.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FactGrid
+          <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words text-lg">{reconstruction.receipt?.id ?? reconstruction.request.id}</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Public-safe receipt readback only. Private endpoint refs remain redacted.</Text>
+        </div>
+        <div className="grid gap-4">
+          <AeOperatorFactGrid
             facts={[
               { label: 'Request hash', value: reconstruction.publicReadback?.hashes.requestHash ?? reconstruction.request.requestHash },
               { label: 'Checkpoint hash', value: reconstruction.publicReadback?.hashes.checkpointHash ?? 'missing' },
@@ -85,7 +86,7 @@ function OwnerBusinessActionReceiptRoute() {
               { label: 'Guardrail evidence refs', value: String(reconstruction.receipt?.guardrailEvidenceRefHashes.length ?? 0) },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
     </AeOperatorShell>
   )

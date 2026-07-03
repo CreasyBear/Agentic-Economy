@@ -1,22 +1,22 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { CopyXIcon, FileWarningIcon, StoreIcon } from 'lucide-react'
-import { toast } from 'sonner'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Field } from '@astryxdesign/core/Field'
+import { FormLayout } from '@astryxdesign/core/FormLayout'
+import { Text } from '@astryxdesign/core/Text'
+import { toast } from '@/lib/ui/toast'
 import { z } from 'zod'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
 import { AeSelectField } from '@/components/ae/forms/AeSelectField'
-import { Input } from '@/components/ui/input'
-import { Spinner } from '@/components/ui/spinner'
-import { Textarea } from '@/components/ui/textarea'
 import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
+import { useClientMounted } from '@/hooks/use-client-mounted'
 
 const removalSchema = z.object({
   slug: z.string(),
@@ -72,7 +72,7 @@ const correctionPaths = [
 
 function RemoveBusinessRoute() {
   const openRemoval = useServerFn(openRemovalServer)
-  const [hydrated, setHydrated] = useState(false)
+  const hydrated = useClientMounted()
   const [value, setValue] = useState<RemovalInput>({
     slug: '',
     contactEmail: '',
@@ -84,31 +84,22 @@ function RemoveBusinessRoute() {
   const [pending, setPending] = useState(false)
   const contactInvalid = error?.includes('contact') === true
   const evidenceInvalid = error?.includes('Evidence') === true
-  const slugField = getFieldAccessibility({ id: 'slug', hasDescription: true })
-  const contactEmailField = getFieldAccessibility({ id: 'contactEmail', invalid: contactInvalid, hasDescription: true, hasError: contactInvalid })
-  const evidenceSummaryField = getFieldAccessibility({
-    id: 'evidenceSummary',
-    invalid: evidenceInvalid,
-    hasDescription: true,
-    hasError: evidenceInvalid,
-  })
-
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(undefined)
     setReceipt(undefined)
 
-    if (value.contactEmail.trim().length === 0) {
+    const nextValue = readRemovalInput(event.currentTarget, value)
+    setValue(nextValue)
+
+    if (nextValue.contactEmail.trim().length === 0) {
       setError('A contact email is required.')
       focusField('contactEmail')
       return
     }
 
-    if (value.evidenceSummary.trim().length === 0) {
+    if (nextValue.evidenceSummary.trim().length === 0) {
       setError('Evidence summary is required.')
       focusField('evidenceSummary')
       return
@@ -116,7 +107,7 @@ function RemoveBusinessRoute() {
 
     setPending(true)
     try {
-      const result = await openRemoval({ data: value })
+      const result = await openRemoval({ data: nextValue })
       if (result.kind === 'ok') {
         const message = `Request ${result.receipt.status}. Reference ${result.receipt.disputeId}.`
         setReceipt(message)
@@ -135,107 +126,120 @@ function RemoveBusinessRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow="Corrections"
-        title="Fix a business page"
+        title="Corrections"
         description="Send the page slug, your email, and what should change."
       />
-      <main className="ae-public-page mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
+      <main className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
         <section className="grid gap-4 md:grid-cols-3">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
-            <Card key={title} className="h-full">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon className="size-4 text-[var(--ae-amber)]" aria-hidden="true" /> {title}
-                  </CardTitle>
-                  <Badge variant="outline">{label}</Badge>
-                </div>
-                <CardDescription>{body}</CardDescription>
-              </CardHeader>
+            <Card key={title} padding={5} className="grid h-full gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
+                  <Icon className="size-4 text-primary" aria-hidden="true" /> {title}
+                </Text>
+                <Badge variant="neutral" label={label} />
+              </div>
+              <Text color="secondary" display="block">{body}</Text>
             </Card>
           ))}
         </section>
 
+        {!hydrated ? (
+          <div className="mx-auto w-full max-w-3xl text-sm text-secondary" aria-live="polite">Preparing correction form.</div>
+        ) : (
         <form onSubmit={handleSubmit} className="mx-auto grid w-full max-w-3xl gap-6" noValidate>
           {error === undefined ? null : (
-            <Alert variant="destructive">
-              <AlertTitle>Request needs attention</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <Banner status="error" title="Request needs attention" description={error} />
           )}
           {receipt === undefined ? null : (
-            <Alert>
-              <AlertTitle>Request recorded</AlertTitle>
-              <AlertDescription>{receipt}</AlertDescription>
-            </Alert>
+            <Banner status="success" title="Request recorded" description={receipt} />
           )}
-          <FieldGroup>
-            <Field {...slugField.fieldProps}>
-              <FieldLabel htmlFor={slugField.controlProps.id}>Page slug</FieldLabel>
-              <Input
-                {...slugField.controlProps}
+          <FormLayout>
+            <Field label="Page slug" inputID="slug" description="Shown in the page URL.">
+              <input
+                id="slug"
                 name="slug"
                 value={value.slug}
-                disabled={!hydrated || pending}
+                disabled={pending}
+                className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, slug: nextValue }))
                 }}
               />
-              <FieldDescription {...slugField.descriptionProps}>Shown in the page URL.</FieldDescription>
             </Field>
-            <Field {...contactEmailField.fieldProps}>
-              <FieldLabel htmlFor={contactEmailField.controlProps.id}>Your email</FieldLabel>
-              <Input
-                {...contactEmailField.controlProps}
+            <Field
+              label="Your email"
+              inputID="contactEmail"
+              description="Used only to follow up."
+              {...(contactInvalid ? { status: { type: 'error' as const, message: error ?? '' } } : {})}
+            >
+              <input
+                id="contactEmail"
                 name="contactEmail"
                 type="email"
                 value={value.contactEmail}
-                disabled={!hydrated || pending}
+                disabled={pending}
+                className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, contactEmail: nextValue }))
                 }}
               />
-              <FieldDescription {...contactEmailField.descriptionProps}>Used only to follow up.</FieldDescription>
-              {contactInvalid ? <FieldError id={contactEmailField.errorProps.id}>{error}</FieldError> : null}
             </Field>
-            <Field>
-              <FieldLabel htmlFor="reasonCode">Reason</FieldLabel>
+            <Field label="Reason" inputID="reasonCode">
               <AeSelectField
                 id="reasonCode"
                 name="reasonCode"
                 value={value.reasonCode}
                 options={removalReasonOptions}
-                disabled={!hydrated || pending}
+                disabled={pending}
                 onValueChange={(nextValue) => {
                   setValue((current) => ({ ...current, reasonCode: toRemovalReason(nextValue) }))
                 }}
               />
             </Field>
-            <Field {...evidenceSummaryField.fieldProps}>
-              <FieldLabel htmlFor={evidenceSummaryField.controlProps.id}>What should change?</FieldLabel>
-              <Textarea
-                {...evidenceSummaryField.controlProps}
+            <Field
+              label="What should change?"
+              inputID="evidenceSummary"
+              description="A short note is enough."
+              {...(evidenceInvalid ? { status: { type: 'error' as const, message: error ?? '' } } : {})}
+            >
+              <textarea
+                id="evidenceSummary"
                 name="evidenceSummary"
                 value={value.evidenceSummary}
-                disabled={!hydrated || pending}
+                disabled={pending}
+                className="min-h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value
                   setValue((current) => ({ ...current, evidenceSummary: nextValue }))
                 }}
               />
-              <FieldDescription {...evidenceSummaryField.descriptionProps}>A short note is enough.</FieldDescription>
-              {evidenceInvalid ? <FieldError id={evidenceSummaryField.errorProps.id}>{error}</FieldError> : null}
             </Field>
-          </FieldGroup>
-          <Button type="submit" disabled={pending || !hydrated}>
-            {pending ? <Spinner data-icon="inline-start" /> : null}
-            Send request
-          </Button>
+          </FormLayout>
+          <Button label="Send request" type="submit" variant="primary" isDisabled={pending} isLoading={pending} />
         </form>
+        )}
       </main>
     </AePublicShell>
   )
+}
+
+function readRemovalInput(form: HTMLFormElement, fallback: RemovalInput): RemovalInput {
+  const data = new FormData(form)
+  const read = (field: keyof Pick<RemovalInput, 'slug' | 'contactEmail' | 'evidenceSummary'>) => {
+    const value = data.get(field)
+    return typeof value === 'string' ? value : ''
+  }
+  const reasonCodeValue = data.get('reasonCode')
+
+  return {
+    slug: read('slug'),
+    contactEmail: read('contactEmail'),
+    reasonCode: toRemovalReason(typeof reasonCodeValue === 'string' ? reasonCodeValue : fallback.reasonCode),
+    evidenceSummary: read('evidenceSummary'),
+  }
 }
 
 function focusField(name: keyof Pick<RemovalInput, 'contactEmail' | 'evidenceSummary'>) {

@@ -22,18 +22,18 @@ export function AeThinkingRail({ step, label, visible }: AeThinkingRailProps) {
   const activeIndex = step === undefined ? 0 : STEPS.findIndex((item) => item.id === step)
 
   return (
-    <div className="ae-thinking-rail" aria-hidden={!visible}>
-      <ol className="ae-thinking-rail__ticks">
+    <div className="flex items-start gap-3" aria-hidden={!visible}>
+      <ol className="flex flex-col gap-1" aria-hidden="true">
         {STEPS.map((item, index) => (
           <li
             key={item.id}
-            className="ae-thinking-rail__tick"
             data-active={index <= activeIndex ? 'true' : 'false'}
+            className="size-1.5 rounded-full bg-border data-[active=true]:bg-primary"
             aria-hidden="true"
           />
         ))}
       </ol>
-      <p className="ae-thinking-rail__label" role="status">
+      <p className="font-mono text-xs text-secondary" role="status">
         <AeStreamingLabel as="span">{label}</AeStreamingLabel>
       </p>
     </div>

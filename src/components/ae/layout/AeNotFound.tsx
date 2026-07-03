@@ -1,27 +1,35 @@
-import { Link } from '@tanstack/react-router'
+import { ArrowLeftIcon, SearchIcon } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
+import { Heading, Text } from '@astryxdesign/core/Text'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
 
-import { AePublicShell, defaultHomeSearch } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@/components/ui/button'
+import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 
 export function AeNotFound() {
   return (
     <AePublicShell>
-      <section className="ae-public-page mx-auto grid w-full max-w-2xl gap-6 px-4 py-20 text-center md:px-6">
-        <div className="grid justify-center gap-3">
-          <p className="font-heading text-5xl font-semibold tracking-tight md:text-6xl">404</p>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">This page is not here</h1>
-          <p className="mx-auto max-w-md text-pretty leading-7 text-muted-foreground">
-            The page you were looking for does not exist, or it may have moved. Try a search, or browse listed services.
-          </p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-3">
-          <Button asChild>
-            <Link to="/" search={defaultHomeSearch}>Ask a question</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link to="/registry" search={{ q: '', limit: 10 }}>Browse services</Link>
-          </Button>
-        </div>
+      <section className="mx-auto grid w-full max-w-3xl gap-6 px-4 py-24 md:px-6">
+        <VStack gap={4}>
+          <Text type="supporting" weight="medium" color="secondary" display="block">
+            Route missing
+          </Text>
+          <Heading level={1} type="display-2" textWrap="balance">
+            This page is not here.
+          </Heading>
+          <Text type="large" color="secondary" display="block" textWrap="pretty">
+            The address moved, expired, or was never published. Try the service search, or browse listed
+            businesses from the registry.
+          </Text>
+          <HStack gap={3} wrap="wrap">
+            <Button label="Ask a question" variant="primary" href="/" icon={<SearchIcon aria-hidden="true" />} />
+            <Button
+              label="Browse services"
+              variant="secondary"
+              href="/registry?q=&limit=10"
+              icon={<ArrowLeftIcon aria-hidden="true" />}
+            />
+          </HStack>
+        </VStack>
       </section>
     </AePublicShell>
   )

@@ -3,22 +3,23 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerChecks } from './AeAnswerChecks'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
-import type { ThreadTurnViewModel } from './thread-turn-view'
+import { ANSWER_SECTION_CLASS, type ThreadTurnViewModel } from './thread-turn-view'
 
 export type AeThreadTurnReplaySectionProps = ThreadTurnViewModel & {
   scrollTargetId?: string
+  threadId?: string
 }
 
-export function AeThreadTurnReplaySection({ scrollTargetId, ...turn }: AeThreadTurnReplaySectionProps) {
+export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }: AeThreadTurnReplaySectionProps) {
   return (
-    <div className="ae-chat-section">
+    <div className="flex flex-col gap-2">
       <AeThreadTurnQueryHeader query={turn.query} intent={turn.intent} seq={turn.seq} />
       <Message
         from="assistant"
-        className="ae-chat-section__answer"
+        className={ANSWER_SECTION_CLASS}
         {...(scrollTargetId === undefined ? {} : { 'data-ae-scroll-target': scrollTargetId })}
       >
-        <MessageContent className="ae-chat-section__answer-content">
+        <MessageContent className="w-full">
           <AeAnswerThinkingTrace
             isStreaming={false}
             label="Ready"
@@ -32,6 +33,7 @@ export function AeThreadTurnReplaySection({ scrollTargetId, ...turn }: AeThreadT
             oneLineFallback={turn.oneLine}
             phase="complete"
             {...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile })}
+            {...(threadId === undefined ? {} : { threadId })}
           />
         </MessageContent>
       </Message>

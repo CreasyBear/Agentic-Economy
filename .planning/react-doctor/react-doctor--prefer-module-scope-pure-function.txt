@@ -1,0 +1,13 @@
+Rule: react-doctor/prefer-module-scope-pure-function
+Severity: warning
+Category: Maintainability
+Count: 1
+
+`syncComposerValue` inside `AIChatTemplate` uses no local state but is rebuilt on every render, so it wastes work & breaks memoized children. Move it to the top of the file, outside the component.
+
+Suggestion: Move the function above the component, at the top of the file. It doesn't use local state, so rebuilding it each update is wasted work.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/prefer-module-scope-pure-function
+
+Files:
+  src/app/ai-chat-landing/page.tsx:257

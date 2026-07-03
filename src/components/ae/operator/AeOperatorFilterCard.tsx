@@ -1,10 +1,9 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { SearchIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { TextInput } from '@astryxdesign/core/TextInput'
 
 export type AeOperatorFilterField = {
   id: string
@@ -39,45 +38,38 @@ export function AeOperatorFilterCard({
         : 'grid gap-4 md:grid-cols-[1fr_auto] md:items-end'
 
   return (
-    <Card className="ae-operator-filter">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <div className="text-lg font-semibold text-primary">{title}</div>
+        <div className="text-sm leading-6 text-secondary">{description}</div>
+      </div>
+      <div className="mt-4 grid gap-4">
         <form action={action} method="get" className={gridClass}>
-          <FieldGroup className={fields.length >= 3 ? 'contents' : undefined}>
-            {fields.map((field) => {
-              const fieldA11y = getFieldAccessibility({
-                id: field.id,
-                hasDescription: field.description !== undefined,
-              })
-
-              return (
-                <Field key={field.id} {...fieldA11y.fieldProps}>
-                  <FieldLabel htmlFor={fieldA11y.controlProps.id}>{field.label}</FieldLabel>
-                  <Input
-                    {...fieldA11y.controlProps}
-                    name={field.name}
-                    defaultValue={field.defaultValue ?? ''}
-                    autoComplete="off"
-                  />
-                  {field.description === undefined ? null : (
-                    <FieldDescription {...fieldA11y.descriptionProps}>{field.description}</FieldDescription>
-                  )}
-                </Field>
-              )
-            })}
-          </FieldGroup>
+          <div className={fields.length >= 3 ? 'contents' : undefined}>
+            {fields.map((field) => (
+              <OperatorFilterTextField key={field.id} field={field} />
+            ))}
+          </div>
           <div className="flex flex-wrap items-end gap-2">
-            <Button type="submit">
-              <SearchIcon data-icon="inline-start" aria-hidden="true" />
-              {submitLabel}
-            </Button>
+            <Button type="submit" label={submitLabel} icon={<SearchIcon data-icon="inline-start" aria-hidden="true" />} />
             {trailing}
           </div>
         </form>
-      </CardContent>
+      </div>
     </Card>
+  )
+}
+
+function OperatorFilterTextField({ field }: { field: AeOperatorFilterField }) {
+  const [value, setValue] = useState(field.defaultValue ?? '')
+
+  return (
+    <TextInput
+      label={field.label}
+      htmlName={field.name}
+      value={value}
+      onChange={setValue}
+      {...(field.description === undefined ? {} : { description: field.description })}
+    />
   )
 }

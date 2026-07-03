@@ -5,7 +5,7 @@ import {
   selectOwnerBillingReceiptState,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteContext,
-} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
+} from '@/modules/billing/owner-billing.readback'
 import {
   type BillingOperation,
   type BillingOperationStatus,
@@ -107,11 +107,12 @@ describe('owner billing route helpers', () => {
 
   it('loads every owner billing route surface module', async () => {
     const modules = await Promise.all([
-      import('@/future-phases/05-paid-activation-money-rails/routes/owner.billing.activate'),
-      import('@/future-phases/05-paid-activation-money-rails/routes/owner.billing.redirecting'),
-      import('@/future-phases/05-paid-activation-money-rails/routes/owner.billing.return'),
-      import('@/future-phases/05-paid-activation-money-rails/routes/owner.billing.cancel'),
-      import('@/future-phases/05-paid-activation-money-rails/routes/owner.billing.receipts.$receiptId'),
+      import('@/routes/owner.billing'),
+      import('@/routes/owner.billing.activate'),
+      import('@/routes/owner.billing.redirecting'),
+      import('@/routes/owner.billing.return.$operationId'),
+      import('@/routes/owner.billing.cancel.$operationId'),
+      import('@/routes/owner.billing.receipts.$receiptId'),
     ])
 
     expect(modules.every((module) => module.Route !== undefined)).toBe(true)

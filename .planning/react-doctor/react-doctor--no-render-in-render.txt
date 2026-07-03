@@ -1,0 +1,15 @@
+Rule: react-doctor/no-render-in-render
+Severity: warning
+Category: Maintainability
+Count: 3
+
+Your users lose state because "renderField()" builds UI from an inline call that React remounts, so pull it into its own component instead.
+
+Suggestion: Make it a named component so React preserves its identity and does not remount its state.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/no-render-in-render
+
+Files:
+  src/routes/claim.tsx:311
+  src/routes/claim.tsx:323
+  src/routes/claim.tsx:335

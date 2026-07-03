@@ -364,13 +364,15 @@ async function loadAuditEventsForState(db: RuntimeDb, state: ContactFollowUpSour
     )
   ).flat()
 
-  return uniqueBy(
-    rows
-      .map(toAuditEvent)
-      .filter(isDefined)
-      .filter((event) => targetRefs.has(event.targetRef)),
-    (event) => event.eventId
-  )
+  const matchingEvents: AuditEventContract[] = []
+  for (const row of rows) {
+    const event = toAuditEvent(row)
+    if (event !== undefined && targetRefs.has(event.targetRef)) {
+      matchingEvents.push(event)
+    }
+  }
+
+  return uniqueBy(matchingEvents, (event) => event.eventId)
 }
 
 async function upsertAuditEvent(db: RuntimeDb, auditEvent: AuditEventContract): Promise<void> {
@@ -821,8 +823,4 @@ function uniqueBy<T>(values: readonly T[], key: (value: T) => string): T[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined
 }

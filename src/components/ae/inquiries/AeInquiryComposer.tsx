@@ -1,9 +1,11 @@
-import type { KeyboardEvent, RefObject } from 'react'
+import { forwardRef, type ComponentPropsWithoutRef, type KeyboardEvent, type RefObject } from 'react'
 import { SendIcon } from 'lucide-react'
 
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from '@/components/ui/input-group'
-import { Spinner } from '@/components/ui/spinner'
+import { Button } from '@astryxdesign/core/Button'
+import { Field } from '@astryxdesign/core/Field'
+import { FormLayout } from '@astryxdesign/core/FormLayout'
+
+import { cn } from '@/lib/utils'
 
 export type AeInquiryComposerProps = {
   id?: string
@@ -20,6 +22,31 @@ export type AeInquiryComposerProps = {
   onChange: (value: string) => void
   onSubmit?: () => void
 }
+
+type ComposerInputGroupAddonAlign = 'inline-start' | 'inline-end' | 'block-start' | 'block-end'
+
+function ComposerInputGroup({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+  return (
+    <div
+      className={cn('flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3', className)}
+      {...props}
+    />
+  )
+}
+
+function ComposerInputGroupAddon({
+  className,
+  align: _align,
+  ...props
+}: ComponentPropsWithoutRef<'div'> & { align?: ComposerInputGroupAddonAlign }) {
+  return <div className={cn('flex items-center gap-1 text-secondary', className)} {...props} />
+}
+
+const ComposerInputGroupTextarea = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
+  function ComposerInputGroupTextarea({ className, ...props }, ref) {
+    return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
+  }
+)
 
 export function AeInquiryComposer({
   id = 'body',
@@ -46,20 +73,26 @@ export function AeInquiryComposer({
     }
   }
 
-  const fieldA11y = getFieldAccessibility({
-    id,
-    invalid,
-    hasDescription: description !== undefined,
-    hasError: invalid && errorMessage !== undefined,
-  })
+  const descriptionId = `${id}-desc`
+  const statusId = `${id}-error`
+  const describedBy = [
+    description === undefined ? undefined : descriptionId,
+    invalid && errorMessage !== undefined ? statusId : undefined,
+  ].filter(Boolean).join(' ') || undefined
 
   return (
-    <FieldGroup>
-      <Field {...fieldA11y.fieldProps}>
-        <FieldLabel htmlFor={fieldA11y.controlProps.id}>{label}</FieldLabel>
-        <InputGroup className="ae-inquiry-composer min-h-28 items-end">
-          <InputGroupTextarea
-            {...fieldA11y.controlProps}
+    <FormLayout>
+      <Field
+        label={label}
+        inputID={id}
+        {...(description === undefined ? {} : { description, descriptionID: descriptionId })}
+        {...(invalid && errorMessage !== undefined ? { status: { type: 'error' as const, message: errorMessage, messageID: statusId } } : {})}
+      >
+        <ComposerInputGroup className="min-h-28 items-end">
+          <ComposerInputGroupTextarea
+            id={id}
+            aria-describedby={describedBy}
+            aria-invalid={invalid || undefined}
             name={name}
             ref={textareaRef}
             value={value}
@@ -70,23 +103,22 @@ export function AeInquiryComposer({
             onKeyDown={handleKeyDown}
           />
           {onSubmit === undefined ? null : (
-            <InputGroupAddon align="inline-end" className="pb-2">
-              <InputGroupButton
+            <ComposerInputGroupAddon align="inline-end" className="pb-2">
+              <Button
                 type="button"
-                size="icon-sm"
-                variant="default"
-                disabled={disabled || pending}
-                aria-label="Submit inquiry"
+                size="sm"
+                variant="primary"
+                isIconOnly
+                label="Submit inquiry"
+                icon={<SendIcon aria-hidden="true" />}
+                isDisabled={disabled || pending}
+                isLoading={pending}
                 onClick={onSubmit}
-              >
-                {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
-              </InputGroupButton>
-            </InputGroupAddon>
+              />
+            </ComposerInputGroupAddon>
           )}
-        </InputGroup>
-        {description === undefined ? null : <FieldDescription {...fieldA11y.descriptionProps}>{description}</FieldDescription>}
-        {invalid && errorMessage !== undefined ? <FieldError {...fieldA11y.errorProps}>{errorMessage}</FieldError> : null}
+        </ComposerInputGroup>
       </Field>
-    </FieldGroup>
+    </FormLayout>
   )
 }

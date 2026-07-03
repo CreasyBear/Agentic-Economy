@@ -1,20 +1,21 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Banner } from '@astryxdesign/core/Banner'
 import {
   OwnerBillingReceiptList,
   OwnerBillingStatePanel,
-} from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
+} from '@/modules/billing/owner-billing.panels'
 import {
   readOwnerBillingRouteReadback,
   summarizeOwnerBillingRoute,
   type OwnerBillingRouteReadback,
-} from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
+} from '@/modules/billing/owner-billing.readback'
 import {
   readCurrentOwnerBillingServer,
   type OwnerBillingServerResult,
 } from '@/modules/billing/billing.functions'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 type OwnerBillingRouteReadbackWithError = OwnerBillingRouteReadback & {
   error?: {
@@ -24,6 +25,7 @@ type OwnerBillingRouteReadbackWithError = OwnerBillingRouteReadback & {
 }
 
 export const Route = createFileRoute('/owner/billing')({
+  ...operatorRouteOptions,
   loader: () => readCurrentOwnerBillingServer(),
   head: () => ({
     meta: [
@@ -60,19 +62,19 @@ function OwnerBillingRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Owner billing"
       title="Your billing"
       description="Your plan status, receipts, and what to do next."
       currentPath="/owner/billing"
-      breadcrumbs={[{ label: 'Billing', href: '/owner/billing' }]}
     >
       <div className="grid gap-6">
         {readback.error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Billing source needs attention</AlertTitle>
-            <AlertDescription>{readback.error.reason}</AlertDescription>
-          </Alert>
+          <Banner
+            status="error"
+            title="Billing source needs attention"
+            description={readback.error.reason}
+          />
         )}
         <OwnerBillingStatePanel summary={summary} />
         <OwnerBillingReceiptList receipts={readback.owner.receipts} />

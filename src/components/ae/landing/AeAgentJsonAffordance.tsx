@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { CheckIcon, CodeIcon } from 'lucide-react'
 
 export type AeAgentJsonAffordanceProps = {
   agentJsonUrl: string
@@ -22,19 +24,18 @@ export function AeAgentJsonAffordance({ agentJsonUrl, query }: AeAgentJsonAfford
   }
 
   return (
-    <div className="ae-agent-json">
+    <>
       <span className="sr-only" role="status" aria-live="polite">
-        {copied ? 'Agent JSON copied to clipboard' : ''}
+        {copied ? `Agent JSON for ${query} copied to clipboard` : ''}
       </span>
-      <button
+      <Button
         type="button"
-        className="ae-agent-json__button"
+        variant="secondary"
+        size="sm"
+        label={copied ? 'Copied to clipboard' : 'Get as agent JSON'}
+        icon={copied ? <CheckIcon aria-hidden="true" /> : <CodeIcon aria-hidden="true" />}
         onClick={handleCopy}
-        aria-label={`Get the agent JSON answer for ${query}`}
-      >
-        <span className="ae-agent-json__label">{copied ? 'Copied to clipboard' : 'Get as agent JSON'}</span>
-        <code className="ae-agent-json__url sr-only">{agentJsonUrl}</code>
-      </button>
-    </div>
+      />
+    </>
   )
 }

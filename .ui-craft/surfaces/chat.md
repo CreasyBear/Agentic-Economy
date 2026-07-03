@@ -1,6 +1,6 @@
-# Surface: Chat (AeChat) — Primary Product Shell
+# Surface: Chat — Primary Product Shell
 
-Governed by this file. Visual authority: `DESIGN.md` (Daylight Commerce Routing). UX reference: [Morphic](https://github.com/miurla/morphic) (chat-as-home, generative UI, shareable threads). When this spec and `DESIGN.md` disagree on **visuals**, `DESIGN.md` wins. When they disagree on **IA/journey**, this file wins until `DESIGN.md` is amended (see `.ui-craft/decisions.md` 2026-06-30).
+Governed by this file. Visual authority: `DESIGN.md` (Astryx Era). UX reference: Morphic-style chat-as-home, generative UI, and shareable threads. When this spec and `DESIGN.md` disagree on visuals, `DESIGN.md` wins. When they disagree on IA/journey, this file wins until `DESIGN.md` is amended.
 
 ## IA thesis (resolved)
 
@@ -8,9 +8,10 @@ Governed by this file. Visual authority: `DESIGN.md` (Daylight Commerce Routing)
 
 | Surface | Role | Priority |
 | --- | --- | --- |
-| **`/`** (`AeChat`) | Primary shell — ask, stream answer, act on cards | P0 |
-| **`/?q={query}`** | Shareable in-place answer (same shell; refresh/back safe) | P0 |
-| **`/q/$answerId`** | Legacy deep link → redirects to `/?q=` | Deprecated |
+| **`/`** | Primary shell — ask, stream answer, act on cards | P0 |
+| **`/t/$threadId`** | Shareable thread with frozen evidence and replay-stable profiles | P0 |
+| **`/?q={query}`** | Compatibility query entry that promotes into the same shell/thread model | P0 |
+| **`/q/$answerId`** | Legacy deep link → redirects into the current answer experience | Deprecated |
 | **`/$slug`** | Stable **business citation page** linked from cards | P1 |
 | `/$slug/inquiry` | Conversion — leaves chat | P1 |
 | `/registry` | Secondary browse when user prefers scanning | P2 |
@@ -21,23 +22,23 @@ Governed by this file. Visual authority: `DESIGN.md` (Daylight Commerce Routing)
 
 ### 1. What is the primary surface?
 
-**`/ ` is AeChat** — Morphic pattern: home renders the chat app, not a marketing funnel that redirects.
+**`/` is the chat shell** — home renders the query/answer product, not a marketing funnel that redirects.
 
-- **Idle:** compact welcome (hand-drawn mark + one-line kicker + boundary note) + sticky `AeQueryPanel`.
-- **Active:** welcome compresses to a single kicker row; message thread fills the viewport; `AeQueryPanel` stays pinned bottom.
+- **Idle:** Astryx public shell + compact welcome + boundary note + `ChatComposer`-style query panel.
+- **Active:** welcome compresses to a single kicker row; `ChatMessageList`-style thread fills the viewport; composer stays pinned near the bottom safe area.
 
 ### 2. When does the user leave chat?
 
 | Action | Leave chat? | Destination |
 | --- | --- | --- |
-| Submit query | No | Answer streams inline; URL syncs to `/?q=` |
+| Submit query | No | Answer streams inline; URL/thread state syncs |
 | Click provider card | Yes | Navigate to `/$slug` |
 | Send inquiry | Yes | `/$slug/inquiry` |
 | Claim business | Yes | `/claim` |
 | Browse all | Yes | `/registry` |
 | Get agent JSON | No | Fetch/copy in place |
 
-**No artifact side panel in v1.** Morphic's inspector works because artifacts are web results; AE's deep artifact **is** the business page. Adding a panel duplicates `/$slug` before we have preview-only content. Revisit when inline preview is designed.
+**No artifact side panel in v1.** AE's deep artifact is the business page. Adding a panel duplicates `/$slug` before preview-only content is designed.
 
 ### 3. What is `/$slug` for?
 
@@ -52,8 +53,8 @@ A **durable citation artifact**: SEO, sharing, agent grounding, owner correction
 | Chat answer, location-intent query | Yes | `location-map` artifact — Google Maps Embed, geocoded from parsed place in query |
 | Chat answer, non-location query | No | Provider cards + prose only |
 | `/$slug` listing | No default | Text service area only |
-| `/$slug` listing, `officeAddress` published | Optional | Google Maps Embed of **office** (schema follow-up PR) |
-| `/registry` | No | Text columns |
+| `/$slug` listing, `officeAddress` published | Optional | Google Maps Embed of **office** |
+| `/registry` | No | Text columns/cards |
 
 Location intent (deterministic v1): suburb, postcode, "near", "in {place}", "directions", AU postcodes 4-digit pattern.
 
@@ -76,22 +77,22 @@ Rendered v1 kinds: `one-line`, `provider-cards`, `provider-compare-table`, `loca
 
 Known schema/renderer kinds not emitted by the v1 budget: `service-area-fit`, `next-step-menu`, `confirmation-checklist`, `route-perspective`, `published-details-rail`, `provider-tradeoff-list`, `message-starter`.
 
-**Thread footer (once):** `AeProtectedByAe`, agent JSON from **need query**, copy link. Per-turn artifacts omit the footer trust strip and agent JSON.
+**Thread footer (once):** Protected-by-AE trust line, agent JSON from **need query**, copy link. Per-turn artifacts omit the footer trust strip and agent JSON.
 
 **Out of v1:** artifact side panel, inline inquiry forms, LLM-generated related questions, json-render spec blocks.
 
 ### 6. What is `/registry` for?
 
-**Secondary browse** — users who prefer scanning or agents linking humans to the index. Nav/footer placement; not the hero CTA. Column layout (`Provider | Services | Area | Status | Response`). Does not compete with query box on `/`.
+**Secondary browse** — users who prefer scanning or agents linking humans to the index. Nav/footer placement; not the hero CTA. Column/card layout (`Provider | Services | Area | Status | Response`). Does not compete with query box on `/`.
 
 ### 7. Where does conversion happen?
 
 **Preferred:** provider card in chat → user reads card → **View details** or inquiry path.
 
 1. **Fast path (future):** inquiry CTA on card in stream → `/$slug/inquiry`
-2. **Current path:** card → `/$slug` → sticky amber inquiry CTA → `/$slug/inquiry`
+2. **Current path:** card → `/$slug` → sticky primary inquiry CTA → `/$slug/inquiry`
 
-One primary action per viewport. Inquiry form includes consent + `AeProtectedByAe`. Never fake booking/payment/dispatch.
+One primary action per viewport. Inquiry form includes consent + Protected-by-AE. Never fake booking/payment/dispatch.
 
 ### 8. Assistants vs humans
 
@@ -109,11 +110,11 @@ Humans never see `KNOWN`/`UNKNOWN`/`NEXT_STEP` as labels. Assistants never see b
 
 ### 10. Follow-up questions?
 
-**Deterministic index-tab chips** after the last complete turn (`{ label, submitQuery }`). Chips refine the same thread — narrow, filter, compare, boundary. LLM chips only when eval flag is on. No bubble chat transcript.
+**Deterministic index-tab chips** after the last complete turn (`{ label, submitQuery }`). Chips refine the same thread — narrow, filter, compare, boundary. LLM chips only when eval flag is on. No bubble-chat transcript.
 
 ### 11. Generative layout profiles
 
-Each turn renders through **`AeGenerativeAnswer`** with an explicit **`AnswerLayoutProfile`** and the matching artifact budget:
+Each turn renders through the answer renderer with an explicit **`AnswerLayoutProfile`** and the matching artifact budget:
 
 | Profile | When | Stack |
 | --- | --- | --- |
@@ -124,7 +125,7 @@ Each turn renders through **`AeGenerativeAnswer`** with an explicit **`AnswerLay
 | `boundary_explain` | Boundary chip | One-line → prose → compact what-to-do-now; no providers |
 | `empty_state` | Zero providers | One-line → compact recovery prompts → empty-state copy |
 
-**Thread footer (once):** `AeProtectedByAe`, agent JSON from **need query**, copy link. Per-turn artifacts omit trust strip and agent JSON.
+**Thread footer (once):** Protected-by-AE trust line, agent JSON from **need query**, copy link. Per-turn artifacts omit trust strip and agent JSON.
 
 ---
 
@@ -134,19 +135,14 @@ Each turn renders through **`AeGenerativeAnswer`** with an explicit **`AnswerLay
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│ AePublicShell header                          [Browse][Claim]│
+│ Astryx AppShell + TopNav                  [Browse][Claim] │
 ├────────────────────────────────────────────────────────────┤
+│ Compact welcome: one-line value prop + boundary note       │
 │                                                            │
-│     [hand-drawn hero — compact]                            │
-│     kicker · boundary one-liner                            │
-│                                                            │
-│              (vertical center bias — editorial)             │
-│                                                            │
-├────────────────────────────────────────────────────────────┤
 │ ┌────────────────────────────────────────────────────────┐ │
-│ │ AeQueryPanel (sticky)                                    │ │
-│ │ [ What do you need done? .................... ] [Ask]   │ │
-│ │ examples: "no hot water Preston" · "electrician …"      │ │
+│ │ ChatComposer-style query panel                         │ │
+│ │ [ What do you need done? .................... ] [Ask]  │ │
+│ │ examples: "no hot water Preston" · "electrician …"   │ │
 │ └────────────────────────────────────────────────────────┘ │
 │ footer · Assistants: /llms.txt                             │
 └────────────────────────────────────────────────────────────┘
@@ -156,25 +152,25 @@ Each turn renders through **`AeGenerativeAnswer`** with an explicit **`AnswerLay
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│ header                                                     │
+│ Astryx AppShell header                                     │
 ├──────────┬─────────────────────────────────────────────────┤
 │ sidebar  │ [thread need title · copy link]            sticky │
 │ recent   ├─────────────────────────────────────────────────┤
-│ questions│ SCROLL transcript                               │
+│ questions│ ChatMessageList                                 │
 │          │   turn 1 (collapsed) · turn 2 (collapsed)         │
-│          │   turn 3 LIVE · thinking rail → generative panel│
+│          │   turn 3 LIVE · thinking rail → answer artifacts│
 │          │ [follow-up index tabs]                          │
 │          │ [thread footer: Protected · Agent JSON · Share] │
 ├──────────┴─────────────────────────────────────────────────┤
-│ AeQueryPanel (sticky)                                      │
+│ ChatComposer-style query panel                             │
 └────────────────────────────────────────────────────────────┘
 ```
 
 Older turns default **collapsed** (need + one-line); last complete turn expanded when idle. Mobile: sidebar drawer; compact turns use horizontal card scroll.
 
-URL: `/t/$threadId` after first turn completes. `/?q=` redirects compat only.
+URL: `/t/$threadId` after first turn completes. `/?q=` remains compatibility only.
 
-Mobile: single column; cards stack or scroll; query panel above safe-area inset.
+Mobile: single column; cards stack or scroll; query panel sits above safe-area inset.
 
 ---
 
@@ -198,21 +194,20 @@ Streaming rules from `ai-chat.md`: first pixel <400ms, stop always available, `a
 
 ## Scroll engineering (locked)
 
-Uses `@shadcn/react` `MessageScroller` via [`AeThreadScroller`](src/components/ae/chat/AeThreadScroller.tsx). Never hand-roll stick-to-bottom.
+Use the shared thread scroller already wired in the chat surface; do not hand-roll stick-to-bottom behavior. Presentation should align with Astryx chat primitives while preserving these behaviors.
 
 | Principle | AE behavior |
 | --- | --- |
 | Never move against intent | `autoScroll` defaults **off**; only on during a live turn |
-| Follow only while following | MessageScroller yields on wheel/touch/keyboard/select |
-| New turn near top | `scrollAnchor` on live turn; `scrollPreviousItemPeek` 72px keeps prior turn visible |
+| Follow only while following | Scroller yields on wheel/touch/keyboard/select |
+| New turn near top | Live turn is the scroll anchor; prior turn remains visible |
 | Stream offscreen when reading up | Growth does not scroll unless user is at live edge |
-| Out-of-view streaming | `AeThreadStreamingIndicator` when `streaming && !scrollable.end` |
-| Jump to latest | `MessageScrollerButton` — label "Jump to latest" |
-| Reopen saved thread | `defaultScrollPosition="last-anchor"`; last turn carries `scrollAnchor` |
-| Layout shifts | Spacer + prepend preservation built into MessageScroller |
-| Long threads | `messageId` per turn; `scrollToMessage` via `useMessageScroller` (future search) |
+| Out-of-view streaming | Show a streaming indicator when content arrives below the viewport |
+| Jump to latest | Label "Jump to latest" |
+| Reopen saved thread | Restore the last turn anchor |
+| Layout shifts | Preserve position during prepend/growth |
 
-TanStack Virtual is a future option if transcript DOM exceeds ~100 turns; MessageScroller already uses `content-visibility` on items.
+Virtualization is a future option if transcript DOM exceeds ~100 turns.
 
 ---
 
@@ -228,13 +223,13 @@ TanStack Virtual is a future option if transcript DOM exceeds ~100 turns; Messag
 
 ## Acceptance bar
 
-- [ ] `/` renders AeChat; submit stays on `/` with `/?q=` URL sync
-- [ ] `/q/$answerId` legacy links redirect to `/?q=`
+- [ ] `/` renders the chat shell; submit stays in-shell and preserves URL/thread state
+- [ ] `/q/$answerId` legacy links redirect into the current answer experience
 - [ ] Artifact budget v1 only; provider cards cap at 3; clarify/boundary turns are provider-free; map appears only on location-intent fixture queries
 - [ ] Card click → `/$slug`; no side panel
 - [ ] Registry reachable but not primary CTA on `/`
 - [ ] All ai-chat streaming contract items pass
-- [ ] Daylight Commerce Routing visuals; finish bar on public chat surface
+- [ ] Astryx Era visuals from `DESIGN.md`; finish bar on public chat surface
 
 ## Related specs
 

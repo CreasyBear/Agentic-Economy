@@ -1,0 +1,74 @@
+Rule: react-doctor/async-await-in-loop
+Severity: warning
+Category: Performance
+Count: 62
+
+This makes the for…of loop slow because each await runs one after another, so collect the independent calls & run them together with `await Promise.all(items.map(...))`
+
+Suggestion: Collect the items, then use `await Promise.all(items.map(...))` so independent work runs at the same time
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/async-await-in-loop
+
+Files:
+  convex/answerThreads.ts:166
+  convex/answerThreads.ts:260
+  convex/answerThreads.ts:301
+  convex/answerThreads.ts:509
+  convex/answerThreads.ts:514
+  convex/billingStore.ts:68
+  convex/billingStore.ts:85
+  convex/billingStore.ts:116
+  convex/billingStore.ts:139
+  convex/billingStore.ts:159
+  convex/billingStore.ts:178
+  convex/billingStore.ts:208
+  convex/businessActionStore.ts:420
+  convex/businessActionStore.ts:446
+  convex/businessActionStore.ts:480
+  convex/businessActionStore.ts:520
+  convex/businessActionStore.ts:555
+  convex/businessActionStore.ts:591
+  convex/businessActionStore.ts:627
+  convex/businessActionStore.ts:666
+  convex/businessActionStore.ts:707
+  convex/businessActionStore.ts:727
+  convex/businessActionStore.ts:751
+  convex/catalog.ts:634
+  convex/catalog.ts:665
+  convex/catalog.ts:911
+  convex/devSeedStore.ts:37
+  convex/devSeedStore.ts:53
+  convex/devSeedStore.ts:58
+  convex/devSeedStore.ts:88
+  convex/discovery.ts:274
+  convex/discovery.ts:298
+  convex/inquiries.ts:584
+  convex/inquiries.ts:1091
+  convex/inquiries.ts:1303
+  convex/inquiries.ts:1314
+  convex/inquiries.ts:1333
+  convex/inquiries.ts:1347
+  convex/inquiries.ts:1365
+  convex/inquiries.ts:1382
+  convex/inquiries.ts:1390
+  convex/inquiries.ts:1394
+  convex/notificationOutbox.ts:704
+  convex/notificationOutbox.ts:733
+  convex/notificationOutbox.ts:750
+  convex/protectedActionStore.ts:90
+  convex/protectedActionStore.ts:121
+  convex/protectedActionStore.ts:142
+  convex/protectedActionStore.ts:167
+  convex/protectedActionStore.ts:193
+  convex/protectedActionStore.ts:219
+  convex/protectedActionStore.ts:240
+  convex/protectedActionStore.ts:262
+  convex/protectedActionStore.ts:285
+  convex/security.ts:289
+  convex/source_state.ts:261
+  convex/source_state.ts:268
+  eval/answer/lib/suite.ts:122
+  eval/answer/lib/suite.ts:128
+  src/modules/answer-thread/internal/answer-turn-finalization.ts:311
+  src/modules/answer/internal/emit-snapshot-events.ts:82
+  src/modules/answer/internal/emit-snapshot-events.ts:90

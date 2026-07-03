@@ -439,11 +439,18 @@ function sourceRefsField(document: RuntimeDocument, field: string): SourceRefRec
   if (!Array.isArray(refs)) {
     return []
   }
-  return refs.filter(isRecord).map((ref) => ({
-    label: stringFromRecord(ref, 'label'),
-    evidenceRef: stringFromRecord(ref, 'evidenceRef'),
-    sourceHash: stringFromRecord(ref, 'sourceHash'),
-  }))
+  const sourceRefs: SourceRefRecord[] = []
+  for (const ref of refs) {
+    if (!isRecord(ref)) {
+      continue
+    }
+    sourceRefs.push({
+      label: stringFromRecord(ref, 'label'),
+      evidenceRef: stringFromRecord(ref, 'evidenceRef'),
+      sourceHash: stringFromRecord(ref, 'sourceHash'),
+    })
+  }
+  return sourceRefs
 }
 
 function stringField(document: RuntimeDocument, field: string): string {

@@ -199,11 +199,19 @@ const devSeedNow = 1_777_100_000_000
 
 function buildDevSeedBusinessFixtures(): readonly DevSeedBusinessFixture[] {
   const anchorSlugs = new Set(DEV_SEED_ANCHOR_BUSINESSES.map((fixture) => fixture.requestedSlug))
-  const broadFixtures = DEV_SEED_LOCALES.flatMap((locale, localeIndex) =>
-    DEV_SEED_INDUSTRIES.map((industry, industryIndex) =>
-      buildBroadSeedFixture(locale, industry, localeIndex, industryIndex),
-    ),
-  ).filter((fixture) => !anchorSlugs.has(fixture.requestedSlug))
+  const broadFixtures: DevSeedBusinessFixture[] = []
+  let localeIndex = 0
+  for (const locale of DEV_SEED_LOCALES) {
+    let industryIndex = 0
+    for (const industry of DEV_SEED_INDUSTRIES) {
+      const fixture = buildBroadSeedFixture(locale, industry, localeIndex, industryIndex)
+      if (!anchorSlugs.has(fixture.requestedSlug)) {
+        broadFixtures.push(fixture)
+      }
+      industryIndex += 1
+    }
+    localeIndex += 1
+  }
 
   return [
     ...DEV_SEED_ANCHOR_BUSINESSES,

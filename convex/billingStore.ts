@@ -50,13 +50,10 @@ export async function loadAdminBillingSlice(
   }
 
   const operations = await collect(db, 'billingOperations')
-  const businessIds = unique(operations.map((row) => stringField(row, 'businessId')).filter((value) => value.length > 0))
+  const businessIds = uniqueNonEmptyBusinessIds(operations)
   if (businessIds.length === 0) {
     const offers = await collect(db, 'billingOffers')
-    return loadBillingStateForBusinesses(
-      db,
-      unique(offers.map((row) => stringField(row, 'businessId')).filter((value) => value.length > 0))
-    )
+    return loadBillingStateForBusinesses(db, uniqueNonEmptyBusinessIds(offers))
   }
 
   return loadBillingStateForBusinesses(db, businessIds)
@@ -241,16 +238,7 @@ async function loadBillingStateForBusinesses(db: RuntimeDb, businessIds: readonl
     collect(db, 'capabilityLaunchSupportRecords'),
   ])
 
-  return createEmptyBillingSourceState({
-    offers: offers.filter((row) => businessIdSet.has(stringField(row, 'businessId'))).map(toBillingOffer),
-    operations: operations.filter((row) => businessIdSet.has(stringField(row, 'businessId'))).map(toBillingOperation),
-    providerEvents: providerEvents.filter((row) => businessIdSet.has(optionalStringField(row, 'businessId') ?? '')).map(toBillingProviderEvent),
-    receipts: receipts.filter((row) => businessIdSet.has(stringField(row, 'businessId'))).map(toBillingReceipt),
-    reconciliations: reconciliations.filter((row) => businessIdSet.has(stringField(row, 'businessId'))).map(toBillingReconciliation),
-    supportRecords: supportRecords
-      .filter((row) => businessIdSet.has(stringField(row, 'businessId')) && optionalStringField(row, 'capability') === 'paid_activation_money_rails')
-      .map(toBillingSupportRecord),
-  })
+  return createEmptyBillingSourceState(filterBillingStateRows({ offers, operations, providerEvents, receipts, reconciliations, supportRecords }, businessIdSet))
 }
 
 function toBillingOffer(row: RuntimeDocument): BillingOffer {
@@ -488,4 +476,60 @@ function readArray<Value>(value: unknown): Value[] {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)]
+}
+
+function uniqueNonEmptyBusinessIds(rows: readonly RuntimeDocument[]): string[] {
+  const ids: string[] = []
+  for (const row of rows) {
+    const businessId = stringField(row, 'businessId')
+    if (businessId.length > 0) {
+      ids.push(businessId)
+    }
+  }
+  return unique(ids)
+}
+
+function filterBillingStateRows(
+  rows: {
+    offers: readonly RuntimeDocument[]
+    operations: readonly RuntimeDocument[]
+    providerEvents: readonly RuntimeDocument[]
+    receipts: readonly RuntimeDocument[]
+    reconciliations: readonly RuntimeDocument[]
+    supportRecords: readonly RuntimeDocument[]
+  },
+  businessIdSet: ReadonlySet<string>
+): BillingSourceState {
+  const state = createEmptyBillingSourceState()
+  for (const row of rows.offers) {
+    if (businessIdSet.has(stringField(row, 'businessId'))) {
+      state.offers.push(toBillingOffer(row))
+    }
+  }
+  for (const row of rows.operations) {
+    if (businessIdSet.has(stringField(row, 'businessId'))) {
+      state.operations.push(toBillingOperation(row))
+    }
+  }
+  for (const row of rows.providerEvents) {
+    if (businessIdSet.has(optionalStringField(row, 'businessId') ?? '')) {
+      state.providerEvents.push(toBillingProviderEvent(row))
+    }
+  }
+  for (const row of rows.receipts) {
+    if (businessIdSet.has(stringField(row, 'businessId'))) {
+      state.receipts.push(toBillingReceipt(row))
+    }
+  }
+  for (const row of rows.reconciliations) {
+    if (businessIdSet.has(stringField(row, 'businessId'))) {
+      state.reconciliations.push(toBillingReconciliation(row))
+    }
+  }
+  for (const row of rows.supportRecords) {
+    if (businessIdSet.has(stringField(row, 'businessId')) && optionalStringField(row, 'capability') === 'paid_activation_money_rails') {
+      state.supportRecords.push(toBillingSupportRecord(row))
+    }
+  }
+  return state
 }

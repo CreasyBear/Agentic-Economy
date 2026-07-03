@@ -23,7 +23,7 @@ export const Route = createFileRoute('/owner/status')({
     if (result.kind === 'available') {
       const businessId = readPublicCatalogActivationRef(result.readback.catalog)
       const payload = { slug: result.readback.catalog.slug }
-      await recordServerFunnelEventServer({
+      void recordServerFunnelEventServer({
         data: {
           eventType: 'owner_status_viewed',
           source: 'owner-status-route',
@@ -35,7 +35,7 @@ export const Route = createFileRoute('/owner/status')({
           payload,
         },
       }).catch(() => undefined)
-      await recordServerFunnelEventServer({
+      void recordServerFunnelEventServer({
         data: {
           eventType: 'capability_status_viewed',
           source: 'owner-status-route',
@@ -65,7 +65,7 @@ function OwnerStatusRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       title="Service page status"
       description="See whether your page is published, searchable, and ready for inquiries. Copy the public URL to share with customers."
       currentPath="/owner/status"

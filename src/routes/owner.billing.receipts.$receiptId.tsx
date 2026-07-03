@@ -1,14 +1,19 @@
+import type { ReactNode } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
 import {
   readCurrentOwnerBillingReceiptServer,
   type OwnerBillingReceiptServerResult,
 } from '@/modules/billing/billing.functions'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 
 export const Route = createFileRoute('/owner/billing/receipts/$receiptId')({
+  ...operatorRouteOptions,
   loader: async ({ params }) => {
     const receipt = await readCurrentOwnerBillingReceiptServer({ data: { receiptId: params.receiptId } })
     return { receipt, receiptId: params.receiptId }
@@ -27,16 +32,11 @@ function OwnerBillingReceiptRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Billing receipt"
-      title="Receipt readback"
+      title="Receipt"
       description="The evidence recorded for this receipt."
-      currentPath="/owner/billing/receipts"
-      breadcrumbs={[
-        { label: 'Billing', href: '/owner/billing' },
-        { label: 'Receipt', href: '/owner/billing' },
-        { label: data.receiptId },
-      ]}
+      currentPath={`/owner/billing/receipts/${data.receiptId}`}
     >
       <ReceiptSourceStatus receipt={data.receipt as OwnerBillingReceiptServerResult} />
     </AeOperatorShell>
@@ -46,44 +46,53 @@ function OwnerBillingReceiptRoute() {
 function ReceiptSourceStatus({ receipt }: { receipt: OwnerBillingReceiptServerResult }) {
   if (receipt.kind === 'error') {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Receipt source unavailable</CardTitle>
-          <CardDescription>{receipt.reason}</CardDescription>
-        </CardHeader>
+      <Card padding={3}>
+        <div className="grid gap-1.5">
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">Receipt source unavailable</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">{receipt.reason}</Text>
+        </div>
       </Card>
     )
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Source receipt evidence</CardTitle>
-        <CardDescription>No raw provider payloads are shown.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-4">
+    <Card padding={3}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Source receipt evidence</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">No raw provider payloads are shown.</Text>
+      </div>
+      <div className="grid gap-4">
         <dl className="grid gap-3 text-sm md:grid-cols-2">
           <Fact label="Provider receipt" value={receipt.receipt.providerReceiptId} />
           <Fact label="Evidence refs" value={String(receipt.receipt.providerEvidenceRefs.length)} />
           <Fact label="Transition" value={receipt.receipt.paidStateTransition} />
-          <Fact label="Recorded" value={new Date(receipt.receipt.recordedAt).toISOString()} />
+          <Fact
+            label="Recorded"
+            value={
+              <time dateTime={timestampIso(receipt.receipt.recordedAt)} data-numeric>
+                {formatTimestamp(receipt.receipt.recordedAt)}
+              </time>
+            }
+          />
         </dl>
         {receipt.receipt.invoiceUrl === undefined ? null : (
-          <Button asChild className="w-fit">
-            <a href={receipt.receipt.invoiceUrl} target="_blank" rel="noopener noreferrer">
-              Open receipt
-            </a>
-          </Button>
+          <Button
+            href={receipt.receipt.invoiceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-fit"
+            label="Open receipt"
+          />
         )}
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-md bg-muted/40 p-3">
-      <dt className="text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">{label}</dt>
+      <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</dt>
       <dd className="mt-1 break-words text-foreground">{value}</dd>
     </div>
   )

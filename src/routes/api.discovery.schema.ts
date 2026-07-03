@@ -151,24 +151,26 @@ export async function buildDeveloperDiscoveryRouteSnapshot(
           expectedSchemaVersion: 'ae-ucp-fallback:v1',
           run: () => handleDurableUcpManifestRequest(new Request(`${origin}/${firstCatalog.slug}/ucp`), firstCatalog.slug),
         })
-  const llms = await executeTextRoute({
-    route: `${origin}/llms.txt`,
-    label: 'LLMs text discovery file',
-    checkedAt,
-    run: () => handleDurableLlmsTxtRequest(new Request(`${origin}/llms.txt`)),
-  })
-  const sitemap = await executeTextRoute({
-    route: `${origin}/sitemap.xml`,
-    label: 'Sitemap discovery file',
-    checkedAt,
-    run: () => handleDurableSitemapXmlRequest(new Request(`${origin}/sitemap.xml`)),
-  })
-  const robots = await executeTextRoute({
-    route: `${origin}/robots.txt`,
-    label: 'Robots discovery file',
-    checkedAt,
-    run: () => handleRobotsTxtRequest(new Request(`${origin}/robots.txt`)),
-  })
+  const [llms, sitemap, robots] = await Promise.all([
+    executeTextRoute({
+      route: `${origin}/llms.txt`,
+      label: 'LLMs text discovery file',
+      checkedAt,
+      run: () => handleDurableLlmsTxtRequest(new Request(`${origin}/llms.txt`)),
+    }),
+    executeTextRoute({
+      route: `${origin}/sitemap.xml`,
+      label: 'Sitemap discovery file',
+      checkedAt,
+      run: () => handleDurableSitemapXmlRequest(new Request(`${origin}/sitemap.xml`)),
+    }),
+    executeTextRoute({
+      route: `${origin}/robots.txt`,
+      label: 'Robots discovery file',
+      checkedAt,
+      run: () => handleRobotsTxtRequest(new Request(`${origin}/robots.txt`)),
+    }),
+  ])
 
   return {
     list,

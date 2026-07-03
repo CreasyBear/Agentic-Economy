@@ -3,16 +3,18 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
-import { summarizeOwnerBillingRoute } from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
+import { Banner } from '@astryxdesign/core/Banner'
+import { OwnerBillingStatePanel } from '@/modules/billing/owner-billing.panels'
+import { summarizeOwnerBillingRoute } from '@/modules/billing/owner-billing.readback'
 import {
   readCurrentOwnerBillingServer,
   recordCurrentOwnerBillingReturnServer,
 } from '@/modules/billing/billing.functions'
 import { ownerBillingServerToRouteReadback } from '@/routes/owner.billing'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/owner/billing/return/$operationId')({
+  ...operatorRouteOptions,
   loader: () => readCurrentOwnerBillingServer(),
   head: () => ({
     meta: [
@@ -58,7 +60,7 @@ function OwnerBillingReturnRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Provider return"
       title="Return recorded"
       description="Your return was recorded. Billing stays inactive until the payment provider confirms."
@@ -66,16 +68,18 @@ function OwnerBillingReturnRoute() {
     >
       <div className="grid gap-6">
         {message === undefined ? null : (
-          <Alert>
-            <AlertTitle>Return recorded</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
+          <Banner
+            status="success"
+            title="Return recorded"
+            description={message}
+          />
         )}
         {error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Return could not be recorded</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <Banner
+            status="error"
+            title="Return could not be recorded"
+            description={error}
+          />
         )}
         <OwnerBillingStatePanel summary={summary} />
       </div>

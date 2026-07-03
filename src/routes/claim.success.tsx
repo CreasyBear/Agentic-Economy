@@ -1,12 +1,14 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
-import { ArrowRightIcon, ExternalLinkIcon } from 'lucide-react'
+import { createFileRoute } from '@tanstack/react-router'
+import { ExternalLinkIcon } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Link } from '@astryxdesign/core/Link'
+import { Text } from '@astryxdesign/core/Text'
 
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
 
 type ClaimSuccessSearch = {
@@ -41,7 +43,7 @@ function ClaimSuccessRoute() {
           title="Service page status unavailable"
           description="We could not find a public service page for this request."
         />
-        <section className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+        <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
           <AeEmptyState
             title={result.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}
             description={
@@ -63,50 +65,38 @@ function ClaimSuccessRoute() {
         eyebrow="Published"
         title="Your service page is published"
         description="The public page is live. Manage it from your owner status page."
-        actions={
-          <Button asChild>
-            <Link to="/owner/status" search={{ slug: catalog.slug }}>
-              <ArrowRightIcon data-icon="inline-start" />
-              Manage your page
-            </Link>
-          </Button>
-        }
+        actions={(
+          <Button label="Manage your page" variant="primary" href={`/owner/status?slug=${encodeURIComponent(catalog.slug)}`} />
+        )}
       />
-      <section className="ae-public-page mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
-        <Card className="ae-public-route-card">
-          <CardHeader>
-            <CardTitle>What was published</CardTitle>
-            <CardDescription>Customers can now read this on the public service page.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="font-medium text-foreground">Business</dt>
-                <dd className="text-muted-foreground">{catalog.name}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Category</dt>
-                <dd className="text-muted-foreground">{catalog.category}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Location</dt>
-                <dd className="text-muted-foreground">{catalog.suburb}, {catalog.stateTerritory}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-foreground">Public page</dt>
-                <dd className="text-muted-foreground">/{catalog.slug}</dd>
-              </div>
-            </dl>
-            <div className="flex flex-wrap items-center gap-3">
-              <AeCopyPublicUrlButton slug={catalog.slug} />
-              <Button asChild variant="outline">
-                <a href={`/${catalog.slug}`}>
-                  <ExternalLinkIcon data-icon="inline-start" />
-                  View public page
-                </a>
-              </Button>
+      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+        <Card padding={5} className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Text type="large" weight="semibold" color="primary" display="block">What was published</Text>
+            <Text color="secondary" display="block">Customers can now read this on the public service page.</Text>
+          </div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="font-medium text-primary">Business</dt>
+              <dd className="text-secondary">{catalog.name}</dd>
             </div>
-          </CardContent>
+            <div>
+              <dt className="font-medium text-primary">Category</dt>
+              <dd className="text-secondary">{catalog.category}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-primary">Location</dt>
+              <dd className="text-secondary">{catalog.suburb}, {catalog.stateTerritory}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-primary">Public page</dt>
+              <dd className="text-secondary">/{catalog.slug}</dd>
+            </div>
+          </dl>
+          <div className="flex flex-wrap items-center gap-3">
+            <AeCopyPublicUrlButton slug={catalog.slug} />
+            <Button label="View public page" variant="secondary" href={`/${catalog.slug}`} icon={<ExternalLinkIcon aria-hidden="true" />} />
+          </div>
         </Card>
       </section>
     </AePublicShell>

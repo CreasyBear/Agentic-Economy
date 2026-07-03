@@ -1,4 +1,4 @@
-import { MessageScrollerItem } from '@/components/ui/message-scroller'
+import { MessageScrollerItem } from './AeThreadMessageScroller'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 import type { PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import { AeThreadTurnCollapsed } from './AeThreadTurnCollapsed'
@@ -31,6 +31,7 @@ export function AeThreadTranscript({
   onRetry,
 }: AeThreadTranscriptProps) {
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
+  const resolvedThreadId = resolveThreadId(threadId, projection?.threadId).threadId
 
   return (
     <>
@@ -47,11 +48,15 @@ export function AeThreadTranscript({
             messageId={turn.turnId}
             scrollAnchor={anchorThisTurn}
           >
-            <div className="ae-thread-transcript__turn">
+            <div className="flex flex-col gap-2">
               {expanded ? (
-                <AeThreadTurnReplaySection {...viewModel} scrollTargetId={turn.turnId} />
+                <AeThreadTurnReplaySection
+                  {...viewModel}
+                  scrollTargetId={turn.turnId}
+                  {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })}
+                />
               ) : (
-                <AeThreadTurnCollapsed {...viewModel} />
+                <AeThreadTurnCollapsed {...viewModel} {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })} />
               )}
               {isLastCompleted && liveTurn === null ? (
                 <AeFollowUpChips turn={turn} {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })} />
@@ -67,14 +72,14 @@ export function AeThreadTranscript({
           messageId={`live-${liveTurn.generation}`}
           scrollAnchor
         >
-          <div className="ae-thread-transcript__turn">
+          <div className="flex flex-col gap-2">
             <AeThreadTurnStreamSection
               query={liveTurn.query}
               searchContext={liveTurn.searchContext}
               generation={liveTurn.generation}
               seq={completedTurns.length + 1}
               intent="refine_search"
-              {...resolveThreadId(threadId, projection?.threadId)}
+              {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })}
               {...(onThreadCreated === undefined ? {} : { onThreadCreated })}
               {...(onStreamEnd === undefined ? {} : { onStreamEnd })}
               {...(onRetry === undefined ? {} : { onRetry: () => onRetry(liveTurn.query) })}

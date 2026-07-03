@@ -10,10 +10,16 @@ test.describe('developer discovery accessibility', () => {
     await expect(page.getByText(/read path status/i)).toBeVisible()
     await expect(page.getByText(/discovery support matrix/i)).toBeVisible()
 
+    const skipLink = page.getByRole('link', { name: /skip to content/i })
+    const mainContent = page.locator('#main-content')
+
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(mainContent).toHaveAttribute('tabindex', '-1')
+    await expect(skipLink).toHaveAttribute('href', '#main-content')
     await page.keyboard.press('Tab')
-    await expect(page.getByRole('link', { name: /skip to content/i })).toBeFocused()
+    await expect(skipLink).toBeFocused()
     await page.keyboard.press('Enter')
-    await expect(page.locator('#main-content')).toBeFocused()
+    await expect(mainContent).toBeFocused()
 
     await page.getByRole('link', { name: /download schema json/i }).focus()
     await expect(page.getByRole('link', { name: /download schema json/i })).toBeFocused()

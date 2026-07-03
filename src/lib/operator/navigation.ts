@@ -5,6 +5,7 @@ import {
   Contact,
   CreditCard,
   Inbox,
+  ListChecks,
   LockKeyhole,
   ScrollText,
   Search,
@@ -82,6 +83,7 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
       { href: '/admin/claims', label: 'Claims', icon: ClipboardList, tier: 'core' },
       { href: '/admin/audit-events', label: 'Audit events', icon: ScrollText, tier: 'advanced' },
       { href: '/admin/index-health', label: 'Index health', icon: Activity, tier: 'advanced' },
+      { href: '/admin/runs', label: 'Run evidence', icon: ListChecks, tier: 'advanced' },
     ],
   },
   {
@@ -96,7 +98,7 @@ const adminNavGroups: readonly OperatorNavGroup[] = [
   {
     id: 'monetization',
     label: 'Monetization',
-    items: [{ href: '/admin/monetization', label: 'Billing reconstruction', icon: CreditCard, tier: 'advanced' }],
+    items: [{ href: '/admin/monetization', label: 'Billing', icon: CreditCard, tier: 'advanced' }],
   },
 ] as const
 
@@ -119,7 +121,7 @@ const operatorUtilityItems: readonly OperatorUtilityItem[] = [
   { href: '/help', label: 'Help', icon: CircleHelp },
 ] as const
 
-export const billingSectionNav: readonly OperatorSectionNavItem[] = [
+const billingSectionNav: readonly OperatorSectionNavItem[] = [
   {
     href: '/owner/billing',
     label: 'Overview',
@@ -132,10 +134,10 @@ export const billingSectionNav: readonly OperatorSectionNavItem[] = [
   },
 ] as const
 
-export const monetizationSectionNav: readonly OperatorSectionNavItem[] = [
+const monetizationSectionNav: readonly OperatorSectionNavItem[] = [
   {
     href: '/admin/monetization',
-    label: 'Reconstruction',
+    label: 'Overview',
     description: 'Offers, evidence, and operation queue',
   },
 ] as const
@@ -152,7 +154,7 @@ export const roleLabel: Record<OperatorRole, string> = {
   developer: 'Builder',
 }
 
-export function showsAdvancedOperatorNav(): boolean {
+function showsAdvancedOperatorNav(): boolean {
   if (import.meta.env.DEV) {
     return true
   }
@@ -171,12 +173,14 @@ export function navGroupsForRole(
     return groups
   }
 
-  return groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => item.tier === 'core'),
-    }))
-    .filter((group) => group.items.length > 0)
+  const coreGroups: OperatorNavGroup[] = []
+  for (const group of groups) {
+    const items = group.items.filter((item) => item.tier === 'core')
+    if (items.length > 0) {
+      coreGroups.push({ ...group, items })
+    }
+  }
+  return coreGroups
 }
 
 function baseNavGroupsForRole(role: OperatorRole): readonly OperatorNavGroup[] {
@@ -282,10 +286,49 @@ export function sectionLabel(sectionId: OperatorSectionId): string {
     case 'billing':
       return 'Billing'
     case 'monetization':
-      return 'Monetization'
+      return 'Billing'
     default: {
       const exhaustive: never = sectionId
       return exhaustive
     }
   }
+}
+
+/**
+ * The "List" half of a shell-derived breadcrumb trail: the nearest sidebar
+ * destination that is a strict ancestor of `currentPath`. Returns undefined
+ * on a list page itself (top of its section, no trail needed) or when no
+ * nav item matches. AeOperatorShell appends the page's own title as the
+ * terminal "Detail" crumb, so no per-route breadcrumbs prop is needed.
+ */
+export function resolveOperatorListCrumb(
+  role: OperatorRole,
+  currentPath: string,
+): OperatorBreadcrumbItem | undefined {
+  for (const group of baseNavGroupsForRole(role)) {
+    for (const item of group.items) {
+      if (currentPath.startsWith(`${item.href}/`)) {
+        return { label: item.label, href: item.href }
+      }
+    }
+  }
+
+  return undefined
+}
+
+/** Derives the operator role from a pathname prefix, for chrome (404, pending, error) that renders before a route's own operatorRole is known. */
+export function operatorRoleForPath(pathname: string): OperatorRole | undefined {
+  if (pathname.startsWith('/owner')) {
+    return 'owner'
+  }
+
+  if (pathname.startsWith('/admin')) {
+    return 'admin'
+  }
+
+  if (pathname.startsWith('/developers')) {
+    return 'developer'
+  }
+
+  return undefined
 }

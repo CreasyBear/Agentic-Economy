@@ -1,20 +1,17 @@
 /*
- * Agentic Economy — Daylight Register tokens.
- * Source of truth: DESIGN.md §17. Coral/linen/Geist retired 2026-06-30.
- * One warm accent (amber). Sunlit drafting paper (not cream). Hairline rules
- * carry hierarchy, not shadows. KNOWN/UNKNOWN/UNAVAILABLE are agent-layer only.
+ * Agentic Economy legacy token shim.
+ * Retiring aliases for surfaces not yet re-skinned onto Astryx. New UI must use
+ * Astryx theme-neutral tokens through @astryxdesign/core/tailwind-theme.css.
  */
 :root {
   color-scheme: light;
 
-  /* Fonts — self-hosted via @fontsource-variable (no render-blocking Google
-   * Fonts request). Fraunces (display), Hanken Grotesk (body/UI), IBM Plex Mono (data). */
-  --ae-font-display: "Fraunces Variable", ui-serif, Georgia, "Times New Roman", serif;
-  --ae-font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --ae-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ae-font-display: var(--font-family-heading, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  --ae-font-sans: var(--font-family-body, ui-sans-serif, system-ui, -apple-system, sans-serif);
+  --ae-font-mono: var(--font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   --ae-font-body: var(--ae-font-sans);
 
-  /* Core palette — Daylight Register */
+  /* Legacy compatibility palette; retired as new surfaces move to Astryx. */
   --ae-bg: oklch(0.935 0.005 95);            /* paper #ECEAE1 */
   --ae-fg: oklch(0.21 0.012 250);            /* ink #14161A, cool near-black */
   --ae-muted-fg: oklch(0.50 0.012 130);      /* muted #6B6E63, sage grey */
@@ -75,10 +72,7 @@
   --ae-public-sage: var(--ae-success);
   --ae-public-gold: var(--ae-warning);
   --ae-public-blue: var(--ae-info);
-  /* Aliases for legacy component CSS (globals.css) that referenced these names. */
-  --ae-public-lime: var(--ae-success);       /* was a bright success accent → eucalyptus */
-  --ae-public-cobalt: var(--ae-info);        /* was a neutral info accent → slate */
-  --ae-public-cobalt-deep: oklch(0.36 0.08 250);
+  --ae-image-outline: rgba(0, 0, 0, 0.1);
 
   --ae-public-line: oklch(0.21 0.012 250 / 0.10);
   --ae-public-line-strong: oklch(0.21 0.012 250 / 0.18);
@@ -160,7 +154,6 @@
   --ae-public-radius-control: var(--ae-radius-md);
   --ae-public-radius-button: var(--ae-radius-md);
   --ae-public-radius-panel: var(--ae-radius-sm);
-  --ae-public-radius-button: var(--ae-radius-md);
   --ae-public-radius-card: var(--ae-radius-sm);
   --ae-public-radius-object: var(--ae-radius-lg);
   --ae-public-radius-pill: var(--ae-radius-pill);
@@ -178,8 +171,13 @@
   --ae-public-card-shadow: var(--ae-public-soft-shadow);
   --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
   --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
+  --ae-public-underline-offset: 0.2em;
 
-  /* Daylight Routing Object primitives */
+  /* Relative-color derivations kept for remaining compatibility adapters. */
+  --ae-bubble-tinted-bg: oklch(from var(--ae-primary) 0.93 calc(c * 0.4) h);
+  --ae-bubble-tinted-bg-hover: oklch(from var(--ae-primary) 0.88 calc(c * 0.5) h);
+
+  /* Routing object compatibility primitives. */
   --ae-public-routing-object-bg: color-mix(in oklch, var(--ae-public-surface) 72%, var(--ae-public-field));
   --ae-public-routing-object-border: color-mix(in oklch, var(--ae-public-line-strong) 78%, var(--ae-public-amber) 22%);
   --ae-public-routing-object-shadow: var(--ae-shadow-border), inset 0 1px 0 oklch(1 0 0 / 0.30);
@@ -223,7 +221,7 @@
   --ae-duration-state: 160ms;
   --ae-duration-route: 240ms;
 
-  /* shadcn bridge */
+  /* legacy Tailwind semantic bridge */
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
   --card: var(--ae-surface);
@@ -246,7 +244,7 @@
   --radius: var(--ae-radius-md);
 }
 
-.ae-operator-shell.dark {
+body[data-ae-surface='register'] {
   color-scheme: dark;
 
   --ae-bg: oklch(0.21 0.012 250);
@@ -295,9 +293,9 @@
   --ae-public-sage: var(--ae-success);
   --ae-public-gold: var(--ae-warning);
   --ae-public-blue: var(--ae-info);
-  --ae-public-lime: var(--ae-success);
-  --ae-public-cobalt: var(--ae-info);
-  --ae-public-cobalt-deep: oklch(0.78 0.10 250);
+  --ae-image-outline: rgba(255, 255, 255, 0.1);
+  --ae-bubble-tinted-bg: oklch(from var(--ae-primary) 0.3 calc(c * 0.4) h);
+  --ae-bubble-tinted-bg-hover: oklch(from var(--ae-primary) 0.35 calc(c * 0.5) h);
 
   --ae-public-line: oklch(1 0 0 / 0.12);
   --ae-public-line-strong: oklch(1 0 0 / 0.22);
@@ -328,7 +326,7 @@
   --ae-public-card-shadow-hover: var(--ae-public-float-shadow);
   --ae-public-border-soft: color-mix(in oklch, var(--ae-public-line) 55%, transparent);
 
-  /* shadcn bridge — operator dark shell */
+  /* legacy Tailwind semantic bridge — operator dark shell */
   --background: var(--ae-bg);
   --foreground: var(--ae-fg);
   --card: var(--ae-surface);

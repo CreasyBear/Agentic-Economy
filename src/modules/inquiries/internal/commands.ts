@@ -432,16 +432,23 @@ export function listOwnerInbox(
   state: InquirySourceState,
   input: { authority: InquiryOwnerAuthority; businessId?: BusinessId }
 ): OwnerInboxReadback {
-  const ownedBusinessIds = new Set(
-    state.businesses
-      .filter((business) => business.ownerId === input.authority.ownerId)
-      .filter((business) => input.businessId === undefined || business.businessId === input.businessId)
-      .map((business) => business.businessId)
-  )
-  const inquiries = state.threads
-    .filter((thread) => ownedBusinessIds.has(thread.businessId))
-    .map((thread) => projectInquiry(state, thread))
-    .sort((left, right) => right.updatedAt - left.updatedAt || String(left.threadId).localeCompare(String(right.threadId)))
+  const ownedBusinessIds = new Set<BusinessId>()
+  for (const business of state.businesses) {
+    if (business.ownerId !== input.authority.ownerId) {
+      continue
+    }
+    if (input.businessId !== undefined && business.businessId !== input.businessId) {
+      continue
+    }
+    ownedBusinessIds.add(business.businessId)
+  }
+  const inquiries: OwnerInboxInquiryProjection[] = []
+  for (const thread of state.threads) {
+    if (ownedBusinessIds.has(thread.businessId)) {
+      inquiries.push(projectInquiry(state, thread))
+    }
+  }
+  inquiries.sort((left, right) => right.updatedAt - left.updatedAt || String(left.threadId).localeCompare(String(right.threadId)))
   const buckets = { unread: 0, needs_reply: 0, resolved: 0 }
   const delivery: OwnerInboxDeliveryCounts = { queued: 0, sent: 0, failed: 0, held: 0 }
 
@@ -835,6 +842,13 @@ export function deleteInquiryPrivateContent(
   const redactedMessages = state.messages.map((message) =>
     message.threadId === thread.threadId ? redactPrivateMessage(message, command.now) : message
   )
+  const messageHashes: SourceHash[] = []
+  for (const message of state.messages) {
+    if (message.threadId === thread.threadId) {
+      messageHashes.push(message.bodyHash)
+    }
+  }
+
   const auditEvent = auditRecord({
     eventType: 'inquiry.private_content_deleted',
     actorKind: 'owner',
@@ -848,7 +862,7 @@ export function deleteInquiryPrivateContent(
     redactedPayload: {
       threadId: thread.threadId,
       reasonCode,
-      messageHashes: state.messages.filter((message) => message.threadId === thread.threadId).map((message) => message.bodyHash),
+      messageHashes,
     },
     now: command.now,
   })
@@ -1173,9 +1187,13 @@ function funnelTargetsThread(event: InquiryFunnelRecord, threadId: InquiryThread
 }
 
 function supportCorrelationIdsForBusiness(state: InquirySourceState, businessId: BusinessId): string[] {
-  return state.capabilityLaunchSupportRecords
-    .filter((record) => state.businesses.some((business) => business.businessId === businessId && business.ownerId === record.primaryOwnerRef))
-    .map((record) => record.correlationId)
+  const correlationIds: string[] = []
+  for (const record of state.capabilityLaunchSupportRecords) {
+    if (state.businesses.some((business) => business.businessId === businessId && business.ownerId === record.primaryOwnerRef)) {
+      correlationIds.push(record.correlationId)
+    }
+  }
+  return correlationIds
 }
 
 function redactedPayloadHasValue(value: StableHashValue, needle: string): boolean {

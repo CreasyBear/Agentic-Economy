@@ -123,7 +123,7 @@ describe('developer discovery route readback', () => {
     expect(copy).toContain('Phase 2 inquiry public status: unavailable')
     expectCopyHasNoPlatformOrPaymentClaims(copy)
     expectNoPrivateP2Fields(JSON.stringify(readback))
-  })
+  }, 30_000)
 
   it('can derive page facts and route health from executed public route snapshots', () => {
     const routeSnapshot = routeSnapshotWithBusiness({

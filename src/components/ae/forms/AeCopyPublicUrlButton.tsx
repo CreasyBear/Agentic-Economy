@@ -1,15 +1,34 @@
 import { CopyIcon } from 'lucide-react'
 import { useState } from 'react'
+import { Button, type ButtonProps } from '@astryxdesign/core/Button'
 
-import { Button } from '@/components/ui/button'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
+
+type AeCopyPublicUrlButtonVariant = 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'
+type AeCopyPublicUrlButtonSize = 'default' | 'sm' | 'lg' | 'icon'
 
 type AeCopyPublicUrlButtonProps = {
   slug: string
   businessId?: string
-  variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link'
-  size?: 'default' | 'sm' | 'lg' | 'icon'
+  variant?: AeCopyPublicUrlButtonVariant
+  size?: AeCopyPublicUrlButtonSize
 }
+
+const buttonVariantMap = {
+  default: 'primary',
+  outline: 'secondary',
+  secondary: 'secondary',
+  ghost: 'ghost',
+  destructive: 'destructive',
+  link: 'ghost',
+} satisfies Record<AeCopyPublicUrlButtonVariant, NonNullable<ButtonProps['variant']>>
+
+const buttonSizeMap = {
+  default: 'md',
+  sm: 'sm',
+  lg: 'lg',
+  icon: 'md',
+} satisfies Record<AeCopyPublicUrlButtonSize, NonNullable<ButtonProps['size']>>
 
 export function AeCopyPublicUrlButton({
   slug,
@@ -39,14 +58,13 @@ export function AeCopyPublicUrlButton({
   }
 
   return (
-    <Button type="button" variant={variant} size={size} onClick={handleCopy}>
-      <CopyIcon data-icon="inline-start" aria-hidden="true" />
-      {copied ? 'Copied public URL' : 'Copy public URL'}
-    </Button>
+    <Button
+      type="button"
+      label={copied ? 'Copied public URL' : 'Copy public URL'}
+      variant={buttonVariantMap[variant]}
+      size={buttonSizeMap[size]}
+      icon={<CopyIcon aria-hidden="true" />}
+      onClick={handleCopy}
+    />
   )
-}
-
-export function buildPublicPageUrl(slug: string): string {
-  const origin = typeof window === 'undefined' ? 'https://ae.example' : window.location.origin
-  return `${origin}/${slug}`
 }

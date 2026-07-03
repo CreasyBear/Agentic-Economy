@@ -1,0 +1,14 @@
+Rule: react-doctor/js-length-check-first
+Severity: warning
+Category: Performance
+Count: 2
+
+This is slow because .every() compares two arrays item by item, so check `a.length === b.length` first to bail out immediately when sizes differ
+
+Suggestion: Check `a.length === b.length && a.every((x, i) => x === b[i])` so arrays of different sizes stop right away
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/js-length-check-first
+
+Files:
+  src/modules/business-action/internal/business-action.ts:1070
+  src/modules/observability/public.ts:349

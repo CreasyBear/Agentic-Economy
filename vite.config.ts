@@ -17,9 +17,40 @@ const sentryPluginEnabled = sentryAuthToken !== undefined && sentryOrg !== undef
 export default defineConfig({
   server: {
     port: 3000,
+    watch: {
+      ignored: ['**/test-results/**', '**/playwright-report/**', '**/.output/**'],
+    },
+  },
+  optimizeDeps: {
+    include: [
+      '@clerk/backend',
+      '@clerk/backend/internal',
+      '@clerk/shared/apiUrlFromPublishableKey',
+      '@clerk/shared/keyless',
+      '@clerk/shared/keys',
+      '@clerk/shared/netlifyCacheHandler',
+      '@clerk/shared/proxy',
+      '@clerk/shared/utils',
+      '@clerk/react',
+      '@clerk/react/internal',
+      '@clerk/shared/error',
+      '@clerk/shared/getEnvVariable',
+      '@clerk/shared/getToken',
+      '@clerk/shared/underscore',
+      '@stylexjs/stylex',
+      '@tanstack/router-core',
+      '@tanstack/router-core/isServer',
+      '@tanstack/router-core/ssr/client',
+      'seroval',
+    ],
   },
   resolve: {
     tsconfigPaths: true,
+  },
+  ssr: {
+    // Astryx dist uses extensionless relative imports (bundler-style ESM);
+    // bundle it for SSR instead of letting Node resolve it natively.
+    noExternal: [/^@astryxdesign\//],
   },
   build: {
     sourcemap: sentryPluginEnabled,

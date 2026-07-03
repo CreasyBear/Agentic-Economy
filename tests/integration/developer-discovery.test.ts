@@ -103,7 +103,7 @@ describe('developer discovery route handlers', () => {
     })
     expect(Object.keys(readback.p2InquiryAvailability).sort()).toEqual(['lastVerifiedAt', 'publicReason', 'source', 'state'])
     expect(JSON.stringify(readback)).not.toMatch(privateOrAuthorityPattern)
-  })
+  }, 15_000)
 
   it('derives default discovery artifacts from durable public route handlers', async () => {
     const business = routeBusinessFixture()

@@ -27,18 +27,23 @@ export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedC
 
   const ownerId = await upsertOwner(db, owner)
   const businessIdsBySlug: Record<string, string> = {}
+  const contextByBusinessId = new Map(bundle.state.businessContexts.map((context) => [context.businessId, context] as const))
+  const claimByBusinessId = new Map(bundle.state.claims.map((claim) => [claim.businessId, claim] as const))
+  const capabilityByBusinessAndServiceId = new Map(
+    bundle.state.serviceCapabilities.map((capability) => [`${capability.businessId}:${capability.serviceId}`, capability] as const)
+  )
 
   for (const business of bundle.state.businesses) {
     const convexBusinessId = await upsertBusiness(db, ownerId, business)
     businessIdsBySlug[business.slug] = convexBusinessId
 
-    const context = bundle.state.businessContexts.find((candidate) => candidate.businessId === business.businessId)
+    const context = contextByBusinessId.get(business.businessId)
     if (context === undefined) {
       throw new Error(`Dev seed context missing for ${business.slug}.`)
     }
     await upsertBusinessContext(db, convexBusinessId, context)
 
-    const claim = bundle.state.claims.find((candidate) => candidate.businessId === business.businessId)
+    const claim = claimByBusinessId.get(business.businessId)
     if (claim === undefined) {
       throw new Error(`Dev seed claim missing for ${business.slug}.`)
     }
@@ -51,9 +56,7 @@ export async function persistDevSeedCatalogState(db: RuntimeDb, bundle: DevSeedC
     const services = bundle.state.businessServices.filter((service) => service.businessId === business.businessId)
     for (const service of services) {
       const convexServiceId = await upsertBusinessService(db, convexBusinessId, service)
-      const capability = bundle.state.serviceCapabilities.find(
-        (candidate) => candidate.businessId === business.businessId && candidate.serviceId === service.serviceId
-      )
+      const capability = capabilityByBusinessAndServiceId.get(`${business.businessId}:${service.serviceId}`)
       if (capability === undefined) {
         throw new Error(`Dev seed capability missing for ${business.slug}/${service.serviceSlug}.`)
       }

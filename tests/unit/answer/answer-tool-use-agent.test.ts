@@ -9,6 +9,7 @@ import {
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { actionToOpenRouterTool } from '@/modules/answer/internal/action-to-tool-spec'
 import { findAction } from '@/modules/actions'
+import { buildHarnessRunReport } from '@/modules/harness/public'
 import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import { withRegistrySourcePortForTest } from '../../helpers/source-ports'
 
@@ -61,8 +62,23 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         if (requests.length === 1) {
           return new Response(
             JSON.stringify({
+              id: 'chatcmpl-round-1',
+              model: 'test-model-resolved',
+              usage: {
+                prompt_tokens: 100,
+                completion_tokens: 25,
+                total_tokens: 125,
+                cost: 0.00000125,
+                prompt_tokens_details: {
+                  cached_tokens: 10,
+                },
+                completion_tokens_details: {
+                  reasoning_tokens: 3,
+                },
+              },
               choices: [
                 {
+                  finish_reason: 'tool_calls',
                   message: {
                     content: '',
                     tool_calls: [
@@ -85,8 +101,17 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
 
         return new Response(
           JSON.stringify({
+            id: 'chatcmpl-round-2',
+            model: 'test-model-resolved',
+            usage: {
+              prompt_tokens: 140,
+              completion_tokens: 42,
+              total_tokens: 182,
+              cost: 0.00000182,
+            },
             choices: [
               {
+                finish_reason: 'stop',
                 message: {
                   content: JSON.stringify({
                     oneLine: 'One listed business matches this need.',
@@ -114,6 +139,58 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       expect(result.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
+      expect(result.modelRequests).toHaveLength(2)
+      expect(result.modelRequests[0]).toMatchObject({
+        seq: 0,
+        provider: 'openrouter',
+        model: 'test-model-resolved',
+        status: 'ok',
+        responseId: 'chatcmpl-round-1',
+        stopReason: 'tool_calls',
+        usage: {
+          inputTokens: 100,
+          outputTokens: 25,
+          cachedInputTokens: 10,
+          reasoningOutputTokens: 3,
+          totalTokens: 125,
+        },
+        costUsd: 0.00000125,
+      })
+      expect(result.modelRequests[1]).toMatchObject({
+        seq: 1,
+        provider: 'openrouter',
+        model: 'test-model-resolved',
+        status: 'ok',
+        responseId: 'chatcmpl-round-2',
+        stopReason: 'stop',
+        usage: {
+          inputTokens: 140,
+          outputTokens: 42,
+          totalTokens: 182,
+        },
+        costUsd: 0.00000182,
+      })
+      const harnessReport = buildHarnessRunReport({ models: result.modelRequests })
+      expect(harnessReport.summary.models).toMatchObject({
+        total: 2,
+        ok: 2,
+        byProvider: {
+          openrouter: {
+            total: 2,
+            ok: 2,
+          },
+        },
+      })
+      expect(harnessReport.summary.usage).toMatchObject({
+        inputTokens: 240,
+        outputTokens: 67,
+        totalTokens: 307,
+      })
+      expect(harnessReport.summary.cost).toEqual({
+        estimatedUsd: 0.00000307,
+        unavailableReasons: [],
+      })
+      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(2)
     })
 
     expect(requests).toHaveLength(2)
@@ -148,6 +225,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       tool_choice?: unknown
       response_format?: { type?: string; json_schema?: { strict?: boolean } }
     }[] = []
+    const modelRequests: unknown[] = []
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(
       async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
@@ -155,6 +233,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         requests.push(body)
         return new Response(
           JSON.stringify({
+            id: 'chatcmpl-disabled-tools',
+            model: 'test-model',
             choices: [
               {
                 message: {
@@ -183,6 +263,7 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         query: 'compare the first two',
         disableTools: true,
         config: { apiKey: 'test-key', model: 'test-model' },
+        onModelRequest: (record) => modelRequests.push(record),
       }),
     ).rejects.toMatchObject({ code: 'tool_unavailable' })
 
@@ -190,6 +271,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     expect(requests[0]?.tool_choice).toBe('none')
     expect(requests[0]?.response_format?.type).toBe('json_schema')
     expect(requests[0]?.response_format?.json_schema?.strict).toBe(true)
+    expect(modelRequests).toEqual([
+      expect.objectContaining({
+        provider: 'openrouter',
+        model: 'test-model',
+        status: 'ok',
+        responseId: 'chatcmpl-disabled-tools',
+        stopReason: 'tool_calls',
+        costUnavailableReason: 'price_table_missing',
+      }),
+    ])
   })
 
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
@@ -212,6 +303,15 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         )
         expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
         expect(result.toolCalls).toHaveLength(1)
+        expect(result.modelRequests).toEqual([
+          expect.objectContaining({
+            provider: 'test',
+            model: 'planned-answer-tool-use-agent',
+            status: 'ok',
+            stopReason: 'planned_tool_calls',
+            costUnavailableReason: 'test_seam',
+          }),
+        ])
         expect(result.toolCalls[0]?.toolId).toBe('registry.search')
         expect(result.gate.ok).toBe(true)
         expect(result.snapshot.providers[0]?.slug).toBe(

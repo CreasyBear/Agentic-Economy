@@ -3,7 +3,9 @@ import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import type {
   BusinessActionPrivateEvidenceRef,
   BusinessActionSourceState,
@@ -95,6 +97,7 @@ export type AdminBusinessActionDetailRouteReadback =
     }
 
 export const Route = createFileRoute('/admin/business-actions')({
+  ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): AdminBusinessActionSearch => {
     const requestId = typeof search.requestId === 'string' && search.requestId.trim().length > 0 ? search.requestId.trim() : undefined
     return requestId === undefined ? {} : { requestId }
@@ -246,7 +249,7 @@ function AdminBusinessActionsRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Business action reconstruction"
       description="source/local proof only. production proof not claimed."
       currentPath="/admin/business-actions"
@@ -254,11 +257,11 @@ function AdminBusinessActionsRoute() {
     >
       {search.requestId === undefined ? <FilterPanel /> : <FilterPanel requestId={search.requestId} />}
       {readback.deniedReason === undefined ? null : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Business action reconstruction unavailable</CardTitle>
-            <CardDescription>{readback.deniedReason}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Business action reconstruction unavailable</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.deniedReason}</Text>
+          </div>
         </Card>
       )}
       {readback.rows.length === 0 ? <EmptyState /> : <AdminBusinessActionRows rows={readback.rows} />}
@@ -324,7 +327,7 @@ function AdminBusinessActionRows({ rows }: { rows: readonly AdminBusinessActionR
           {
             label: 'Open operation',
             href: `/admin/business-actions/${encodeURIComponent(row.request.id)}`,
-            variant: 'outline',
+            variant: 'secondary',
           },
         ],
       }))}

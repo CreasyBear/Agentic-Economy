@@ -1,5 +1,5 @@
 import { Shimmer } from '@/components/ai-elements/shimmer'
-import { useMessageScrollerScrollable } from '@/components/ui/message-scroller'
+import { useMessageScrollerScrollable } from './AeThreadMessageScroller'
 
 export type AeStreamingLabelProps = {
   children: string
@@ -8,11 +8,11 @@ export type AeStreamingLabelProps = {
   duration?: number
 }
 
-/** Daylight Commerce Routing shimmer for in-progress copy. */
+/** Astryx-era shimmer for in-progress copy. */
 export function AeStreamingLabel({
   children,
   as = 'span',
-  className = 'ae-streaming-label',
+  className = 'text-secondary',
   duration = 2,
 }: AeStreamingLabelProps) {
   return (
@@ -35,7 +35,7 @@ export function AeThreadStreamingIndicator({ streaming }: AeThreadStreamingIndic
   }
 
   return (
-    <p className="ae-chat-scroll__streaming-hint" role="status" aria-live="polite">
+    <p className="pointer-events-none absolute bottom-24 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-lg border border-border bg-surface px-3 py-1 font-mono text-xs text-secondary" role="status" aria-live="polite">
       <AeStreamingLabel as="span">Answer still streaming below.</AeStreamingLabel>
     </p>
   )

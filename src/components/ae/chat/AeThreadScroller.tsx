@@ -8,7 +8,7 @@ import {
   MessageScrollerViewport,
   useMessageScroller,
   type MessageScrollerDefaultScrollPosition,
-} from '@/components/ui/message-scroller'
+} from './AeThreadMessageScroller'
 import { cn } from '@/lib/utils'
 import { AeThreadStreamingIndicator } from './AeStreamingLabel'
 
@@ -52,9 +52,15 @@ export function AeThreadScroller({
       defaultScrollPosition={defaultScrollPosition}
       scrollPreviousItemPeek={AE_THREAD_SCROLL_PREVIOUS_PEEK_PX}
     >
-      <MessageScroller className={cn('ae-chat-scroll', className)} aria-label={ariaLabel}>
-        <MessageScrollerViewport className="ae-chat-scroll__viewport">
-          <MessageScrollerContent className={cn('ae-thread-transcript', contentClassName)}>
+      <MessageScroller className={className} aria-label={ariaLabel}>
+        <MessageScrollerViewport className="px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] md:px-6">
+          <MessageScrollerContent
+            role="log"
+            aria-label="Chat transcript"
+            aria-live="polite"
+            aria-relevant="additions text"
+            className={cn('mx-auto flex w-full max-w-[56rem] flex-col gap-6', contentClassName)}
+          >
             {children}
           </MessageScrollerContent>
         </MessageScrollerViewport>
@@ -62,10 +68,11 @@ export function AeThreadScroller({
         <AeThreadStreamingIndicator streaming={streaming} />
         {showJumpButton ? (
           <MessageScrollerButton
-            variant="outline"
+            variant="secondary"
             size="sm"
-            className="ae-chat-scroll__jump"
+            className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 font-mono text-xs uppercase tracking-wide"
             direction="end"
+            label="Jump to latest"
           >
             Jump to latest
           </MessageScrollerButton>

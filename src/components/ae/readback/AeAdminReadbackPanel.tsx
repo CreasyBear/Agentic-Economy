@@ -4,9 +4,9 @@ import type { ColumnDef } from '@tanstack/react-table'
 
 import { AeOperatorDataTable, AeOperatorSortableHeader } from '@/components/ae/operator/AeOperatorDataTable'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Card } from '@astryxdesign/core/Card'
 import type { AdminReadbackRow, AdminReadbackSurface, AdminShellReadback } from '@/modules/security/public'
 
 const surfaceLabels = {
@@ -47,28 +47,26 @@ export function AeAdminReadbackPanel({ title, description, readback }: AeAdminRe
 
   return (
     <>
-      <Alert data-readback-kind={readback.kind} variant={readback.kind === 'denied' ? 'destructive' : 'default'}>
-        {readback.kind === 'denied' ? (
-          <ShieldAlert aria-hidden="true" className="size-4" />
-        ) : (
-          <ShieldCheck aria-hidden="true" className="size-4" />
-        )}
-        <AlertTitle>{readback.kind === 'denied' ? 'Access denied' : 'Readback available'}</AlertTitle>
-        <AlertDescription>
-          {readback.kind === 'denied'
+      <Banner
+        data-readback-kind={readback.kind}
+        status={readback.kind === 'denied' ? 'error' : 'success'}
+        icon={readback.kind === 'denied' ? <ShieldAlert aria-hidden="true" className="size-4" /> : <ShieldCheck aria-hidden="true" className="size-4" />}
+        title={readback.kind === 'denied' ? 'Access denied' : 'Readback available'}
+        description={
+          readback.kind === 'denied'
             ? `${readback.publicMessage} ${accessLabel}.`
-            : `${surfaceLabels[readback.surface]} is available to ${readback.actorRef}. ${accessLabel}.`}
-        </AlertDescription>
-      </Alert>
+            : `${surfaceLabels[readback.surface]} is available to ${readback.actorRef}. ${accessLabel}.`
+        }
+      />
 
-      <Card className="ae-admin-readback-panel" aria-labelledby={titleId} aria-describedby={descriptionId}>
-        <CardHeader className="border-b">
-          <CardTitle id={titleId}>{title}</CardTitle>
-          <CardDescription id={descriptionId}>{description}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card aria-labelledby={titleId} aria-describedby={descriptionId} padding={5}>
+        <div className="border-b pb-4">
+          <div className="text-lg font-semibold text-primary" id={titleId}>{title}</div>
+          <div className="text-sm leading-6 text-secondary" id={descriptionId}>{description}</div>
+        </div>
+        <div className="pt-4">
           {readback.kind === 'denied' ? <DeniedReadback readback={readback} /> : <AllowedReadback readback={readback} />}
-        </CardContent>
+        </div>
       </Card>
     </>
   )
@@ -96,9 +94,9 @@ function AllowedReadback({ readback }: { readback: Extract<AdminShellReadback, {
         <ReadbackStat label="Suppressed" value={String(readback.summary.suppressed)} />
       </div>
       {readback.rows.length === 0 ? (
-        <div className="ae-operator-stat-cell ae-operator-stat-cell--lg">
+        <div className="rounded-md border border-border bg-muted/30 p-4">
           <AeStatusBadge status="not_queued" />
-          <p className="mt-3 text-sm text-muted-foreground">No source-owned operational rows exist for this surface yet.</p>
+          <p className="mt-3 text-sm text-secondary">No source-owned operational rows exist for this surface yet.</p>
         </div>
       ) : (
         <AeOperatorDataTable
@@ -121,8 +119,8 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
         header: ({ column }) => <AeOperatorSortableHeader label="Object" column={column} />,
         cell: ({ row }) => (
           <div className="grid max-w-[16rem] gap-1 whitespace-normal">
-            <span className="break-words font-medium text-foreground">{row.original.objectRef}</span>
-            <span className="text-xs text-muted-foreground">
+            <span className="break-words font-medium text-primary">{row.original.objectRef}</span>
+            <span className="text-xs text-secondary">
               {row.original.rowType.replaceAll('_', ' ')} · {surfaceLabels[surface]}
             </span>
           </div>
@@ -138,7 +136,7 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
         id: 'repair',
         accessorFn: (row) => repairLabels[row.repairAction],
         header: 'Repair',
-        cell: ({ row }) => <Badge variant="outline">{repairLabels[row.original.repairAction]}</Badge>,
+        cell: ({ row }) => <Badge variant="neutral" label={repairLabels[row.original.repairAction]} />,
       },
       {
         id: 'readback',
@@ -163,9 +161,9 @@ function useAdminReadbackColumns(surface: AdminReadbackSurface): ColumnDef<Admin
 
 function ReadbackStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="ae-operator-stat-cell">
-      <span className="block text-xs font-medium uppercase tracking-normal text-muted-foreground">{label}</span>
-      <span className="mt-1 block break-words text-sm font-medium text-foreground" data-numeric>{value}</span>
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <span className="block text-xs font-medium uppercase tracking-normal text-secondary">{label}</span>
+      <span className="mt-1 block break-words text-sm font-medium text-primary" data-numeric>{value}</span>
     </div>
   )
 }

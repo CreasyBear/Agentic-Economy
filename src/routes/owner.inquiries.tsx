@@ -1,8 +1,9 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Banner } from '@astryxdesign/core/Banner'
 
 import { AeInquiryInboxPanel } from '@/components/ae/inquiries/AeInquiryInboxPanel'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   readCurrentOwnerInboxServer,
   type OwnerInboxServerResult,
@@ -32,11 +33,12 @@ const emptyInquiryState = createEmptyInquirySourceState()
 const readOwnerInboxServer = readCurrentOwnerInboxServer
 
 export const Route = createFileRoute('/owner/inquiries')({
+  ...operatorRouteOptions,
   loader: async () => ownerInboxServerToRouteReadback(await readOwnerInboxServer()),
   head: () => ({
     meta: [
       { title: 'Owner messages | Agentic Economy' },
-      { name: 'description', content: 'Owner readback for human first-contact messages and dispatch state.' },
+      { name: 'description', content: 'Owner view of human first-contact messages and dispatch state.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -75,18 +77,19 @@ function OwnerInquiriesRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       title="Inquiries"
-      description="Read submitted messages, reply state, and delivery status from source-owned inbox readback."
+      description="Read submitted messages, reply state, and delivery status for every inquiry in your inbox."
       currentPath="/owner/inquiries"
       navBadges={{ '/owner/inquiries': readback.inbox.buckets.unread + readback.inbox.buckets.needs_reply }}
     >
       <div className="grid gap-6">
         {readback.error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Owner inbox needs sign-in</AlertTitle>
-            <AlertDescription>{readback.error.reason}</AlertDescription>
-          </Alert>
+          <Banner
+            status="error"
+            title="Owner inbox needs sign-in"
+            description={readback.error.reason}
+          />
         )}
         <OwnerInquiryList inbox={readback.inbox} />
       </div>

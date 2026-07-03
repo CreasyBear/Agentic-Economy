@@ -3,11 +3,13 @@ import { createServerFn } from '@tanstack/react-start'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAdminAuditEventsThroughSource } from '@/modules/security/admin-readback.functions'
 
 export const readAdminAuditEventsServer = createServerFn().handler(() => readAdminAuditEventsThroughSource())
 
 export const Route = createFileRoute('/admin/audit-events')({
+  ...operatorRouteOptions,
   loader: () => readAdminAuditEventsServer(),
   head: () => ({
     meta: [
@@ -27,7 +29,7 @@ function AdminAuditEventsRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Audit events"
       description="Inspect admin and recovery transitions with redacted payloads after source-owned membership is resolved."
       currentPath="/admin/audit-events"

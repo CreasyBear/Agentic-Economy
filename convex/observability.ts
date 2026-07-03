@@ -243,8 +243,10 @@ export const setOperatorControl = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
-    const adminMembership = await readCurrentActiveMembership(ctx)
+    const [source, adminMembership] = await Promise.all([
+      loadPhaseOneSourceState(db),
+      readCurrentActiveMembership(ctx),
+    ])
     const authority = requireAdminAuthority(adminMembership, 'set_operator_control')
     if (authority.kind === 'denied') {
       const denied = recordAdminActionDenied(adminAuthorityState(source), {
@@ -295,8 +297,10 @@ export const readOperatorControls = queryGeneric({
   returns: readOperatorControlsResult,
   handler: async (ctx) => {
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
-    const adminMembership = await readCurrentActiveMembership(ctx)
+    const [source, adminMembership] = await Promise.all([
+      loadPhaseOneSourceState(db),
+      readCurrentActiveMembership(ctx),
+    ])
     const authority = requireAdminAuthority(adminMembership, 'set_operator_control')
     if (authority.kind === 'denied') {
       return {

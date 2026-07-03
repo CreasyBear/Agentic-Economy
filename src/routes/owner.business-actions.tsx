@@ -1,9 +1,10 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Banner } from '@astryxdesign/core/Banner'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   createEmptyBusinessActionSourceState,
   verifyActionReceipt,
@@ -89,13 +90,14 @@ export type OwnerBusinessActionDetailRouteReadback =
     }
 
 export const Route = createFileRoute('/owner/business-actions')({
+  ...operatorRouteOptions,
   loader: () => readCurrentOwnerBusinessActionQueueServer(),
   head: () => ({
     meta: [
       { title: 'Business action requests | Agentic Economy' },
       {
         name: 'description',
-        content: 'Owner business-action checkpoint and receipt readbacks from source-owned request state.',
+        content: 'Owner business-action checkpoint and receipt status for your requests.',
       },
       { name: 'robots', content: 'noindex' },
     ],
@@ -224,25 +226,25 @@ function OwnerBusinessActionsRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Owner checkpoint"
-      title="Business action requests need source-owned authorization."
-      description="Every request stays proposal-only until the owner checkpoint records accepted, refused, clarification, proof-gap, or expired source state."
+      title="Business action requests need owner authorization."
+      description="Every request stays proposal-only until you record a decision — accepted, refused, needs clarification, evidence missing, or expired."
       currentPath="/owner/business-actions"
       navBadges={{ '/owner/business-actions': readback.queue.length }}
     >
       <div className="grid gap-6">
-        <Alert>
-          <AlertTitle>source/local proof only</AlertTitle>
-          <AlertDescription>
-            Production proof is not claimed. This queue is for local receipt inspection and owner review only.
-          </AlertDescription>
-        </Alert>
+        <Banner
+          status="info"
+          title="Local proof only"
+          description="Production proof is not claimed. This queue is for local receipt inspection and owner review only."
+        />
         {readback.unavailableReason === undefined ? null : (
-          <Alert>
-            <AlertTitle>Business action source unavailable</AlertTitle>
-            <AlertDescription>{readback.unavailableReason}</AlertDescription>
-          </Alert>
+          <Banner
+            status="warning"
+            title="Business action source unavailable"
+            description={readback.unavailableReason}
+          />
         )}
         <OwnerBusinessActionQueue queue={readback.queue} />
       </div>
@@ -258,35 +260,31 @@ function OwnerBusinessActionQueue({ queue }: { queue: readonly OwnerBusinessActi
         id: item.requestId,
         href: `/owner/business-actions/${encodeURIComponent(item.requestId)}`,
         badges: [
-          { label: item.requestStatus.replaceAll('_', ' ') },
-          { label: item.checkpointDecision.replaceAll('_', ' '), variant: 'outline' as const },
+          { label: humanizeStatusValue(item.requestStatus) },
+          { label: humanizeStatusValue(item.checkpointDecision), variant: 'outline' as const },
         ],
-        title: item.requestId,
-        description: item.actionSlug,
+        title: `${humanizeActionSlug(item.actionSlug)} — ${item.businessId}`,
         facts: [
+          { label: 'Request ID', value: item.requestId },
           { label: 'Requested by', value: item.requestedBy },
-          { label: 'Business', value: item.businessId },
-          { label: 'Receipt', value: item.receiptOutcome.replaceAll('_', ' ') },
-          { label: 'Reconstruction', value: item.reconstructionStatus.replaceAll('_', ' ') },
-          { label: 'Expires', value: new Date(item.expiresAt).toISOString() },
+          { label: 'Receipt', value: humanizeStatusValue(item.receiptOutcome) },
+          { label: 'Evidence status', value: humanizeStatusValue(item.reconstructionStatus) },
+          { label: 'Expires', value: formatTimestamp(item.expiresAt) },
         ],
         actions: [
           {
             label: 'Open receipt',
             href: `/owner/business-actions/${encodeURIComponent(item.requestId)}/receipt`,
-            variant: 'outline',
+            variant: 'secondary',
           },
         ],
       }))}
       emptyTitle="No business action requests"
-      emptyDescription="Source-owned capability requests appear here after a mandate and card produce a local request row."
+      emptyDescription="Capability requests appear here after a mandate and card produce a local request row."
     />
   )
 }
 
-export function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return <AeOperatorFactGrid facts={facts} columns={3} />
-}
 
 function ownerCanReadRequest(
   request: CapabilityRequest,
@@ -302,4 +300,18 @@ function ownerCanReadRequest(
 
 function latestByRecordedAt<T>(items: readonly T[], getTime: (item: T) => number): T | undefined {
   return [...items].sort((left, right) => getTime(left) - getTime(right)).at(-1)
+}
+
+function humanizeStatusValue(value: string): string {
+  return value
+    .replaceAll('_', ' ')
+    .replace(/\bproof gap\b/gi, 'evidence missing')
+    .replace(/\bgateway admitted\b/gi, 'approved')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function humanizeActionSlug(slug: string): string {
+  const spaced = slug.replaceAll(/[-_]/g, ' ')
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }

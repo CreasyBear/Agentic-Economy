@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useReducer, useRef } from 'react'
 import { Link } from '@tanstack/react-router'
-
 import type { AnswerEvent } from '@/modules/answer/public'
 import {
   stableAeSearchContextKey,
@@ -11,6 +10,7 @@ import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
+import { ANSWER_SECTION_CLASS } from './thread-turn-view'
 import type { StreamAnswerResult } from './answer-stream'
 import {
   initialAnswerTurnUiState,
@@ -164,10 +164,10 @@ export function AeThreadTurnStreamSection({
   const busy = state.phase === 'streaming'
 
   return (
-    <div className="ae-chat-section">
+    <div className="flex flex-col gap-2">
       <AeThreadTurnQueryHeader query={query} intent={intent} seq={seq} />
-      <Message from="assistant" className="ae-chat-section__answer">
-        <MessageContent className="ae-chat-section__answer-content">
+      <Message from="assistant" className={ANSWER_SECTION_CLASS}>
+        <MessageContent className="w-full">
           <AeAnswerThinkingTrace
             isStreaming={busy}
             label={state.thinkingLabel}
@@ -183,16 +183,17 @@ export function AeThreadTurnStreamSection({
             oneLineFallback={state.oneLineFallback}
             onStop={stop}
             phase={state.phase}
+            {...(threadId === undefined ? {} : { threadId })}
             errorMessage={
               state.phase === 'error' || state.phase === 'stopped' ? (
                 <>
                   {state.phase === 'stopped' ? 'Answer stopped.' : (state.errorMessage ?? STREAM_ERROR_COPY)}{' '}
                   {onRetry !== undefined ? (
-                    <button type="button" className="ae-answer__retry" onClick={onRetry}>
+                    <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-primary underline underline-offset-4 hover:text-primary" onClick={onRetry}>
                       Try again
                     </button>
                   ) : null}{' '}
-                  <Link to="/registry" search={{ q: '', limit: 10 }} className="ae-answer__error-link">
+                  <Link to="/registry" search={{ q: '', limit: 10 }} className="text-primary underline underline-offset-4">
                     Browse services
                   </Link>
                 </>

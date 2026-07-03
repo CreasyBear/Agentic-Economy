@@ -1,9 +1,11 @@
+import { forwardRef, type ComponentPropsWithoutRef, type KeyboardEvent, type RefObject } from 'react'
 import { SendIcon } from 'lucide-react'
-import type { KeyboardEvent, RefObject } from 'react'
 
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from '@/components/ui/input-group'
-import { Spinner } from '@/components/ui/spinner'
+import { Button } from '@astryxdesign/core/Button'
+import { Field } from '@astryxdesign/core/Field'
+import { FormLayout } from '@astryxdesign/core/FormLayout'
+
+import { cn } from '@/lib/utils'
 
 export type AeOwnerReplyComposerProps = {
   id?: string
@@ -15,6 +17,31 @@ export type AeOwnerReplyComposerProps = {
   onChange: (value: string) => void
   onSubmit: () => void
 }
+
+type OwnerReplyInputGroupAddonAlign = 'inline-start' | 'inline-end' | 'block-start' | 'block-end'
+
+function OwnerReplyInputGroup({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
+  return (
+    <div
+      className={cn('flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3', className)}
+      {...props}
+    />
+  )
+}
+
+function OwnerReplyInputGroupAddon({
+  className,
+  align: _align,
+  ...props
+}: ComponentPropsWithoutRef<'div'> & { align?: OwnerReplyInputGroupAddonAlign }) {
+  return <div className={cn('flex items-center gap-1 text-secondary', className)} {...props} />
+}
+
+const OwnerReplyInputGroupTextarea = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
+  function OwnerReplyInputGroupTextarea({ className, ...props }, ref) {
+    return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
+  }
+)
 
 export function AeOwnerReplyComposer({
   id = 'ownerReply',
@@ -33,15 +60,25 @@ export function AeOwnerReplyComposer({
     }
   }
 
-  const fieldA11y = getFieldAccessibility({ id, invalid, hasDescription: true, hasError: invalid })
+  const description = 'This message is private to the inquiry thread and the customer notification path. Press ⌘↵ or Ctrl↵ to send.'
+  const descriptionId = `${id}-desc`
+  const statusId = `${id}-error`
+  const describedBy = [descriptionId, invalid ? statusId : undefined].filter(Boolean).join(' ')
 
   return (
-    <FieldGroup>
-      <Field {...fieldA11y.fieldProps}>
-        <FieldLabel htmlFor={fieldA11y.controlProps.id}>Owner reply</FieldLabel>
-        <InputGroup className="ae-owner-reply min-h-24 items-end">
-          <InputGroupTextarea
-            {...fieldA11y.controlProps}
+    <FormLayout>
+      <Field
+        label="Owner reply"
+        inputID={id}
+        description={description}
+        descriptionID={descriptionId}
+        {...(invalid ? { status: { type: 'error' as const, message: 'Reply body is required.', messageID: statusId } } : {})}
+      >
+        <OwnerReplyInputGroup className="min-h-24 items-end">
+          <OwnerReplyInputGroupTextarea
+            id={id}
+            aria-describedby={describedBy}
+            aria-invalid={invalid || undefined}
             name="ownerReply"
             ref={textareaRef}
             value={value}
@@ -50,23 +87,21 @@ export function AeOwnerReplyComposer({
             onChange={(event) => onChange(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
           />
-          <InputGroupAddon align="inline-end" className="pb-2">
-            <InputGroupButton
-              size="icon-sm"
-              variant="default"
-              disabled={disabled || pending}
-              aria-label="Send owner reply"
+          <OwnerReplyInputGroupAddon align="inline-end" className="pb-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              isIconOnly
+              label="Send reply"
+              icon={<SendIcon aria-hidden="true" />}
+              isDisabled={disabled || pending}
+              isLoading={pending}
               onClick={onSubmit}
-            >
-              {pending ? <Spinner data-icon="inline-start" /> : <SendIcon data-icon="inline-start" />}
-            </InputGroupButton>
-          </InputGroupAddon>
-        </InputGroup>
-        <FieldDescription {...fieldA11y.descriptionProps}>
-          This message is private to the inquiry thread and the customer notification path. Press ⌘↵ or Ctrl↵ to send.
-        </FieldDescription>
-        {invalid ? <FieldError {...fieldA11y.errorProps}>Reply body is required.</FieldError> : null}
+            />
+          </OwnerReplyInputGroupAddon>
+        </OwnerReplyInputGroup>
       </Field>
-    </FieldGroup>
+    </FormLayout>
   )
 }

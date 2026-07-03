@@ -1,7 +1,7 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
 import { assertCsrf, requireAdminAuthority } from '@/modules/security/public'
-import { validateAuditEvent } from '@/modules/observability/public'
+import { validateAuditEvent } from './audit'
 import type {
   OperatorControlKey,
   OperatorControlReadback,

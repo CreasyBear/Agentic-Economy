@@ -6,8 +6,8 @@ import { AeAnswerSuggestions } from '@/components/ae/chat/AeSuggestionChips'
 import { AePublicSearchBar } from '@/components/ae/forms/AePublicSearchBar'
 
 const REGISTRY_EXAMPLES = [
-  'emergency plumber parramatta',
-  'locksmith sydney cbd',
+  'plumber parramatta',
+  'locksmith cbd',
   'electrician footscray',
 ] as const
 

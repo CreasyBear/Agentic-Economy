@@ -1,8 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAdminBusinessActionReconstructionServer } from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
@@ -11,9 +14,9 @@ import {
   type AdminBusinessActionDetailRouteReadback,
   type AdminBusinessActionsRouteInput,
 } from '@/routes/admin.business-actions'
-import { FactGrid } from '@/routes/owner.business-actions'
 
 export const Route = createFileRoute('/admin/business-actions/$requestId')({
+  ...operatorRouteOptions,
   loader: ({ params }) => readAdminBusinessActionReconstructionServer({ data: { requestId: params.requestId } }),
   head: () => ({
     meta: [
@@ -39,16 +42,16 @@ function AdminBusinessActionDetailRoute() {
   if (readback.kind !== 'ok') {
     return (
       <AeOperatorShell
-        role="admin"
+        operatorRole="admin"
         title="Business action detail"
         description="source/local proof only. production proof not claimed."
         currentPath="/admin/business-actions"
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>Business action not found</CardTitle>
-            <CardDescription>{readback.reason}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Business action not found</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.reason}</Text>
+          </div>
         </Card>
       </AeOperatorShell>
     )
@@ -58,22 +61,22 @@ function AdminBusinessActionDetailRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Business action detail"
       description="source/local proof only. production proof not claimed."
       currentPath="/admin/business-actions"
     >
-      <Card>
-        <CardHeader>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{reconstruction.receipt?.outcome.replaceAll('_', ' ') ?? 'no receipt'}</Badge>
-            <Badge variant="outline">{reconstruction.resultArtifactState.status.replaceAll('_', ' ')}</Badge>
+            <Badge variant="neutral" label={reconstruction.receipt?.outcome.replaceAll('_', ' ') ?? 'no receipt'} />
+            <Badge variant="neutral" label={reconstruction.resultArtifactState.status.replaceAll('_', ' ')} />
           </div>
-          <CardTitle className="break-words text-lg">{reconstruction.request.id}</CardTitle>
-          <CardDescription>Guardrail decision evidence is separate from post-checkpoint external evidence.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <FactGrid
+          <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words text-lg">{reconstruction.request.id}</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Guardrail decision evidence is separate from post-checkpoint external evidence.</Text>
+        </div>
+        <div className="grid gap-5">
+          <AeOperatorFactGrid
             facts={[
               { label: 'Action', value: reconstruction.request.actionSlug },
               { label: 'Request status', value: reconstruction.request.status.replaceAll('_', ' ') },
@@ -83,7 +86,7 @@ function AdminBusinessActionDetailRoute() {
               { label: 'Private evidence refs', value: String(reconstruction.privateEvidenceMetadata.count) },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
     </AeOperatorShell>
   )

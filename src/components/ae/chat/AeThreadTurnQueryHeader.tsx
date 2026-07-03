@@ -15,10 +15,10 @@ export function AeThreadTurnQueryHeader({ query, intent, seq, actions }: AeThrea
   const label = formatTurnQueryLabel({ query, intent, seq })
 
   return (
-    <header className={`ae-chat-section__query ae-chat-section__query--${label.role}`}>
-      <Message from="user" className="ae-chat-section__query-message">
-        <MessageContent className="ae-chat-section__query-bubble">
-          <p className="ae-chat-section__query-text">{label.text}</p>
+    <header className="flex justify-end">
+      <Message from="user" className="max-w-[min(36rem,92%)]">
+        <MessageContent>
+          <p className="font-heading text-base font-semibold text-primary">{label.text}</p>
           {actions}
         </MessageContent>
       </Message>

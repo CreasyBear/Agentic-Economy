@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from '@/lib/ui/toast'
 
 export function threadUrl(threadId: string): string {
   return `${window.location.origin}/t/${threadId}`

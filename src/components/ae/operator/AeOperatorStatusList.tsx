@@ -1,14 +1,7 @@
 import type { ReactNode } from 'react'
 
-import {
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemHeader,
-  ItemTitle,
-} from '@/components/ui/item'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Item } from '@astryxdesign/core/Item'
+import { List } from '@astryxdesign/core/List'
 
 export type AeOperatorStatusRow = {
   id: string
@@ -30,22 +23,25 @@ export function AeOperatorStatusList({
   maxHeight = 'min(24rem, 50vh)',
 }: AeOperatorStatusListProps) {
   const list = (
-    <ItemGroup className="ae-operator-status-list gap-2">
+    <List density="compact" className="gap-2">
       {rows.map((row) => (
-        <Item key={row.id} variant="outline" size="sm" className="ae-operator-status-row">
-          <ItemContent>
-            <ItemHeader>
-              <ItemTitle className="text-sm">{row.label}</ItemTitle>
-              <span className="text-xs font-medium text-muted-foreground">{row.state}</span>
-            </ItemHeader>
-            {row.description === undefined ? null : (
-              <ItemDescription className="text-xs">{row.description}</ItemDescription>
-            )}
-            {row.meta}
-          </ItemContent>
-        </Item>
+        <Item
+          key={row.id}
+          as="li"
+          density="compact"
+          label={<span className="text-sm">{row.label}</span>}
+          description={
+            row.description === undefined && row.meta === undefined ? undefined : (
+              <div className="grid gap-1 text-xs">
+                {row.description === undefined ? null : row.description}
+                {row.meta}
+              </div>
+            )
+          }
+          endContent={<span className="text-xs font-medium text-secondary">{row.state}</span>}
+        />
       ))}
-    </ItemGroup>
+    </List>
   )
 
   if (!scroll || rows.length <= 4) {
@@ -53,8 +49,8 @@ export function AeOperatorStatusList({
   }
 
   return (
-    <ScrollArea className="ae-operator-status-scroll" style={{ maxHeight }}>
+    <div className="overflow-auto" style={{ maxHeight }}>
       <div className="pr-3">{list}</div>
-    </ScrollArea>
+    </div>
   )
 }

@@ -3,12 +3,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   disableAdminPaidActivationServer,
   markAdminBillingNoRepairServer,
@@ -20,6 +21,7 @@ import type { AdminBillingOperationProjection, AdminBillingProjection, BillingRe
 import { adminBillingServerToRouteReadback } from '@/routes/admin.monetization'
 
 export const Route = createFileRoute('/admin/monetization/$operationId')({
+  ...operatorRouteOptions,
   loader: ({ params }) => readAdminBillingServer({ data: { operationId: params.operationId } }),
   head: () => ({
     meta: [
@@ -103,20 +105,16 @@ function AdminMonetizationDetailRoute() {
   if (operation === undefined) {
     return (
       <AeOperatorShell
-        role="admin"
+        operatorRole="admin"
         title="Billing operation detail"
         description="No source-owned billing operation matched this identifier."
         currentPath="/admin/monetization"
-        breadcrumbs={[
-          { label: 'Monetization', href: '/admin/monetization' },
-          { label: params.operationId },
-        ]}
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>Operation not found</CardTitle>
-            <CardDescription>{params.operationId}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Operation not found</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{params.operationId}</Text>
+          </div>
         </Card>
       </AeOperatorShell>
     )
@@ -126,37 +124,25 @@ function AdminMonetizationDetailRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Billing operation detail"
       description="Inspect provider refs, receipt refs, reconciliation state, support state, and operator next action without raw secrets."
       currentPath="/admin/monetization"
-      breadcrumbs={[
-        { label: 'Monetization', href: '/admin/monetization' },
-        { label: params.operationId },
-      ]}
     >
       <div className="grid gap-6">
         {message === undefined ? null : (
-          <Alert>
-            <AlertTitle>Billing source updated</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
+          <Banner status="success" title="Billing source updated" description={message} />
         )}
         {error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Billing operation needs attention</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <Banner status="error" title="Billing operation needs attention" description={error} />
         )}
         <OperationCard operation={operation} />
         <ReconciliationCard reconciliations={reconciliations} />
         <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={handleReconcile} aria-describedby="billing-reconcile-scope">Reconcile provider state</Button>
-          <Button asChild variant="outline">
-            <a href="/admin/monetization">Back to monetization</a>
-          </Button>
+          <Button type="button" onClick={handleReconcile} aria-describedby="billing-reconcile-scope" label="Reconcile provider state" />
+          <Button href="/admin/monetization" variant="secondary" label="Back to monetization" />
         </div>
-        <p id="billing-reconcile-scope" className="text-sm leading-6 text-muted-foreground">
+        <p id="billing-reconcile-scope" className="text-sm leading-6 text-secondary">
           Reconciliation records provider readback for this operation only. It does not start a plan or disable paid activation.
         </p>
         <OperatorControlForms onNoRepair={handleNoRepair} onDisable={handleDisable} />
@@ -167,16 +153,16 @@ function AdminMonetizationDetailRoute() {
 
 function OperationCard({ operation }: { operation: AdminBillingOperationProjection }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge>{operation.status.replaceAll('_', ' ')}</Badge>
-          <Badge variant="outline">{operation.providerRefs.length} provider refs</Badge>
+          <Badge variant="neutral" label={operation.status.replaceAll('_', ' ')} />
+          <Badge variant="neutral" label={`${operation.providerRefs.length} provider refs`} />
         </div>
-        <CardTitle className="break-words text-lg">{operation.id}</CardTitle>
-        <CardDescription>{operation.nextAction}</CardDescription>
-      </CardHeader>
-      <CardContent>
+        <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words text-lg">{operation.id}</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">{operation.nextAction}</Text>
+      </div>
+      <div className="grid gap-4">
         <dl className="grid gap-3 text-sm md:grid-cols-3">
           <Fact label="Offer" value={operation.offerId} />
           <Fact label="Evidence refs" value={String(operation.evidenceRefs.length)} />
@@ -185,7 +171,7 @@ function OperationCard({ operation }: { operation: AdminBillingOperationProjecti
           <Fact label="Created" value={new Date(operation.createdAt).toISOString()} />
           <Fact label="Updated" value={new Date(operation.updatedAt).toISOString()} />
         </dl>
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -193,11 +179,11 @@ function OperationCard({ operation }: { operation: AdminBillingOperationProjecti
 function ReconciliationCard({ reconciliations }: { reconciliations: readonly BillingReconciliation[] }) {
   if (reconciliations.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No reconciliation recorded</CardTitle>
-          <CardDescription>Run provider reconciliation after verified provider events are available.</CardDescription>
-        </CardHeader>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">No reconciliation recorded</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Run provider reconciliation after verified provider events are available.</Text>
+        </div>
       </Card>
     )
   }
@@ -205,22 +191,22 @@ function ReconciliationCard({ reconciliations }: { reconciliations: readonly Bil
   return (
     <div className="grid gap-4">
       {reconciliations.map((row) => (
-        <Card key={row.id}>
-          <CardHeader>
+        <Card padding={5} key={row.id}>
+          <div className="grid gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{row.status.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{row.provider}</Badge>
+              <Badge variant="neutral" label={row.status.replaceAll('_', ' ')} />
+              <Badge variant="neutral" label={row.provider} />
             </div>
-            <CardTitle className="break-words text-lg">{row.id}</CardTitle>
-            <CardDescription>{row.operatorNextAction}</CardDescription>
-          </CardHeader>
-          <CardContent>
+            <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words text-lg">{row.id}</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{row.operatorNextAction}</Text>
+          </div>
+          <div className="grid gap-4">
             <dl className="grid gap-3 text-sm md:grid-cols-3">
               <Fact label="Evidence refs" value={String(row.evidenceRefs.length)} />
               <Fact label="Provider refs" value={String(row.providerRefs.length)} />
               <Fact label="Reason" value={row.reason ?? 'none'} />
             </dl>
-          </CardContent>
+          </div>
         </Card>
       ))}
     </div>
@@ -236,37 +222,37 @@ function OperatorControlForms({
 }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Mark no repair</CardTitle>
-          <CardDescription>Use only after evidence shows this operation cannot be repaired automatically.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">Mark no repair</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Use only after evidence shows this operation cannot be repaired automatically.</Text>
+        </div>
+        <div className="grid gap-4">
           <form onSubmit={onNoRepair} className="grid gap-3" noValidate>
             <OperatorMutationTextField id="noRepairReason" name="reason" label="Reason" description="Explain why this operation cannot be repaired automatically." />
             <OperatorMutationTextField id="noRepairEvidenceRefs" name="evidenceRefs" label="Evidence refs" description="Comma-separated evidence refs that support the no-repair decision." />
-            <p className="text-sm leading-6 text-muted-foreground">
+            <p className="text-sm leading-6 text-secondary">
               Scope: marks this operation no-repair. Paid activation remains controlled by the business-level disable action.
             </p>
-            <Button type="submit" variant="outline">Mark no repair</Button>
+            <Button type="submit" variant="secondary" label="Mark no repair" />
           </form>
-        </CardContent>
+        </div>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Disable paid activation</CardTitle>
-          <CardDescription>Stops public paid-activation claims for the business until support repairs the source state.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">Disable paid activation</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Stops public paid-activation claims for the business until support repairs the source state.</Text>
+        </div>
+        <div className="grid gap-4">
           <form onSubmit={onDisable} className="grid gap-3" noValidate>
             <OperatorMutationTextField id="disableReason" name="reason" label="Reason" description="Explain why paid activation must be disabled for the whole business." />
             <OperatorMutationTextField id="disableEvidenceRefs" name="evidenceRefs" label="Evidence refs" description="Comma-separated evidence refs that justify disabling paid activation." />
-            <p className="text-sm leading-6 text-muted-foreground">
+            <p className="text-sm leading-6 text-secondary">
               Scope: disables paid activation for this business. It does not cancel existing provider-side objects or refund money.
             </p>
-            <Button type="submit" variant="destructive">Disable paid activation</Button>
+            <Button type="submit" variant="destructive" label="Disable paid activation" />
           </form>
-        </CardContent>
+        </div>
       </Card>
     </div>
   )
@@ -283,14 +269,10 @@ function OperatorMutationTextField({
   label: string
   description: string
 }) {
-  const fieldA11y = getFieldAccessibility({ id, hasDescription: true })
+  const [value, setValue] = useState('')
 
   return (
-    <Field {...fieldA11y.fieldProps}>
-      <FieldLabel htmlFor={fieldA11y.controlProps.id}>{label}</FieldLabel>
-      <Input {...fieldA11y.controlProps} name={name} />
-      <FieldDescription {...fieldA11y.descriptionProps}>{description}</FieldDescription>
-    </Field>
+    <TextInput label={label} description={description} htmlName={name} value={value} onChange={setValue} />
   )
 }
 
@@ -298,8 +280,8 @@ function OperatorMutationTextField({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md bg-muted/40 p-3">
-      <dt className="text-xs font-medium uppercase tracking-[var(--ae-public-tracking-mono-label)] text-muted-foreground">{label}</dt>
-      <dd className="mt-1 break-words text-foreground">{value}</dd>
+      <dt className="text-xs font-medium tracking-wide text-secondary uppercase">{label}</dt>
+      <dd className="mt-1 break-words text-primary">{value}</dd>
     </div>
   )
 }

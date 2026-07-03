@@ -1,9 +1,10 @@
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 
-import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Banner } from '@astryxdesign/core/Banner'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import type { BusinessId, OwnerId } from '@/modules/common/ids'
 import {
   createEmptyContactFollowUpSourceState,
@@ -33,13 +34,14 @@ export type OwnerContactFollowUpRouteReadback = {
 const defaultOwnerId = 'owner:contact-follow-up' as OwnerId
 
 export const Route = createFileRoute('/owner/actions')({
+  ...operatorRouteOptions,
   loader: () => readCurrentOwnerContactFollowUpQueueServer(),
   head: () => ({
     meta: [
       { title: 'Contact follow-up requests | Agentic Economy' },
       {
         name: 'description',
-        content: 'Owner-reviewed contact follow-up requests rendered from source-owned protected-action readbacks.',
+        content: 'Owner-reviewed contact follow-up requests and their approval status.',
       },
       { name: 'robots', content: 'noindex' },
     ],
@@ -70,25 +72,25 @@ function OwnerActionsRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Owner review"
       title="Contact follow-up requests need approval."
-      description="Every contact follow-up proposal waits for owner approval, one-use gateway admission, and source-owned receipt or proof-gap readback."
+      description="Every contact follow-up proposal waits for owner approval before AE records anything. Once approved, AE records either a receipt or a note that evidence is missing."
       currentPath="/owner/actions"
       navBadges={{ '/owner/actions': readback.queue.length }}
     >
       <div className="grid gap-6">
-        <Alert>
-          <AlertTitle>Approval required</AlertTitle>
-          <AlertDescription>
-            Contact follow-up is owner-pending. AE does not book work, charge money, or record a follow-up attempt until the owner approves this exact proposal.
-          </AlertDescription>
-        </Alert>
+        <Banner
+          status="info"
+          title="Approval required"
+          description="Contact follow-up is owner-pending. AE does not book work, charge money, or record a follow-up attempt until the owner approves this exact proposal."
+        />
         {readback.unavailableReason === undefined ? null : (
-          <Alert>
-            <AlertTitle>Source readback unavailable</AlertTitle>
-            <AlertDescription>{readback.unavailableReason}</AlertDescription>
-          </Alert>
+          <Banner
+            status="warning"
+            title="Requests unavailable"
+            description={readback.unavailableReason}
+          />
         )}
         <OwnerContactFollowUpQueue queue={readback.queue} />
       </div>
@@ -121,8 +123,8 @@ function OwnerContactFollowUpQueue({ queue }: { queue: readonly ContactFollowUpP
         id: item.proposal.id,
         href: `/owner/actions/${encodeURIComponent(item.proposal.id)}`,
         badges: [
-          { label: item.proposal.status.replaceAll('_', ' ') },
-          { label: (item.policy?.kind ?? 'not_checked').replaceAll('_', ' '), variant: 'outline' as const },
+          { label: humanizeStatusValue(item.proposal.status) },
+          { label: humanizeStatusValue(item.policy?.kind ?? 'not_checked'), variant: 'outline' as const },
         ],
         title: item.proposal.parameters.contactName,
         description: item.proposal.parameters.messageSummary,
@@ -131,11 +133,20 @@ function OwnerContactFollowUpQueue({ queue }: { queue: readonly ContactFollowUpP
           { label: 'Target message', value: item.proposal.parameters.sourceMessageRef },
           { label: 'Channel', value: item.proposal.parameters.contactChannel },
           { label: 'Owner decision', value: (item.ownerDecision?.decision ?? 'waiting').replaceAll('_', ' ') },
-          { label: 'Deadline', value: new Date(item.proposal.deadlineAt).toISOString() },
+          { label: 'Deadline', value: formatTimestamp(item.proposal.deadlineAt) },
         ],
       }))}
       emptyTitle="No contact follow-up requests"
-      emptyDescription="New proposals appear here only after the contact follow-up contract is source-owned and policy-checked."
+      emptyDescription="New proposals appear here once a contact follow-up request has been checked and is ready for your review."
     />
   )
+}
+
+function humanizeStatusValue(value: string): string {
+  return value
+    .replaceAll('_', ' ')
+    .replace(/\bproof gap\b/gi, 'evidence missing')
+    .replace(/\bgateway admitted\b/gi, 'approved')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

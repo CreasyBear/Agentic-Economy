@@ -252,11 +252,13 @@ export const publishBusinessCatalog = mutationGeneric({
       return catalogError('catalog_publish_wrong_owner', 'Only the source-bound owner can publish this catalog.')
     }
 
-    const business = await db.get(businessId)
-    const context = await db
-      .query('businessContexts')
-      .withIndex('by_business', (query) => query.eq('businessId', businessId))
-      .unique()
+    const [business, context] = await Promise.all([
+      db.get(businessId),
+      db
+        .query('businessContexts')
+        .withIndex('by_business', (query) => query.eq('businessId', businessId))
+        .unique(),
+    ])
     if (business === null || context === null) {
       return catalogError('catalog_publish_claim_not_found', 'Claim source state is incomplete.')
     }
@@ -617,11 +619,11 @@ function toServiceInput(service: ServiceInput): NormalizedServiceInput {
 }
 
 async function upsertServices(db: RuntimeDb, businessId: string, services: readonly ValidatedServiceCatalogInput[], now: number): Promise<PersistedService[]> {
-  const nextSlugs: string[] = []
+  const nextSlugs = new Set<string>()
   const persisted: PersistedService[] = []
   for (const [sortOrder, service] of services.entries()) {
     const serviceSlug = normalizeSlug(service.name)
-    nextSlugs.push(serviceSlug)
+    nextSlugs.add(serviceSlug)
     const sourceHash = stableHash({
       businessId,
       category: service.category,
@@ -659,7 +661,7 @@ async function upsertServices(db: RuntimeDb, businessId: string, services: reado
     .withIndex('by_business_status', (query) => query.eq('businessId', businessId).eq('status', 'published'))
     .collect()
   for (const service of currentServices) {
-    if (!nextSlugs.includes(stringField(service, 'serviceSlug'))) {
+    if (!nextSlugs.has(stringField(service, 'serviceSlug'))) {
       await db.patch(service._id, { status: 'draft', updatedAt: now })
     }
   }
@@ -725,12 +727,14 @@ async function publicCatalogForBusiness(db: RuntimeDb, businessId: string): Prom
   if (services.length === 0) {
     return undefined
   }
-  const capabilities = await db
-    .query('serviceCapabilities')
-    .withIndex('by_business_service_status', (query) => query.eq('businessId', businessId))
-    .collect()
-  const indexStatus = await indexStatusForBusiness(db, businessId)
-  const discoveryStatus = await discoveryStatusForBusiness(db, businessId, stringField(business, 'sourceHash'))
+  const [capabilities, indexStatus, discoveryStatus] = await Promise.all([
+    db
+      .query('serviceCapabilities')
+      .withIndex('by_business_service_status', (query) => query.eq('businessId', businessId))
+      .collect(),
+    indexStatusForBusiness(db, businessId),
+    discoveryStatusForBusiness(db, businessId, stringField(business, 'sourceHash')),
+  ])
   return {
     businessId,
     slug: stringField(business, 'slug'),
@@ -758,9 +762,12 @@ function catalogReadNotFound() {
 }
 
 function toPublicService(service: RuntimeDocument, capabilities: readonly RuntimeDocument[]): PublicService {
-  const serviceCapabilities = capabilities
-    .filter((capability) => stringField(capability, 'serviceId') === service._id)
-    .map(toPublicCapability)
+  const serviceCapabilities: PublicCapability[] = []
+  for (const capability of capabilities) {
+    if (stringField(capability, 'serviceId') === service._id) {
+      serviceCapabilities.push(toPublicCapability(capability))
+    }
+  }
   const firstRequest = serviceCapabilities.at(0)?.firstRequest ?? {
     mode: 'not_available_yet' as const,
     publicDisclosure: 'First request is not available yet.',

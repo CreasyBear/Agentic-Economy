@@ -10,9 +10,11 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByRole('search', { name: /find local service providers/i })).toBeVisible()
 
-    await submitLandingQuery(page, 'emergency plumber parramatta')
+    const query = 'emergency plumber parramatta'
+    await submitLandingQuery(page, query)
 
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, query)
 
     await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
     await expect(page.getByText(/publishes service coverage/i).first()).toBeVisible()
@@ -26,9 +28,11 @@ test.describe('landing query -> thread answer', () => {
   test('shows a listing nudge when no providers match', async ({ page }) => {
     await page.goto('/')
 
-    await submitLandingQuery(page, 'dentist parramatta')
+    const query = 'dentist parramatta'
+    await submitLandingQuery(page, query)
 
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
+    await expectQueryInTranscript(page, query)
 
     await expect(page.getByText(/No listed businesses match/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /Browse listed businesses/i })).toBeVisible()
@@ -38,10 +42,18 @@ test.describe('landing query -> thread answer', () => {
 
 async function submitLandingQuery(page: Page, query: string) {
   const searchbox = page.getByRole('searchbox', { name: /what do you need done/i })
-  await expect(searchbox).toBeEnabled()
+  await expect(searchbox).toBeEditable({ timeout: 30_000 })
   await searchbox.fill(query)
   await expect(searchbox).toHaveValue(query)
-  await page.getByRole('button', { name: /^ask$/i }).click()
+  const sendButton = page.getByRole('button', { name: /^send$/i })
+  await expect(sendButton).toBeEnabled()
+  await sendButton.click()
+}
+
+async function expectQueryInTranscript(page: Page, query: string) {
+  await expect(
+    page.getByRole('log', { name: /chat transcript/i }).getByText(query).first(),
+  ).toBeVisible({ timeout: 15_000 })
 }
 
 async function assertPublicLanguage(page: Page) {

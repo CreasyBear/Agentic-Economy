@@ -624,10 +624,14 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
   if (services.length === 0) {
     return undefined
   }
-  const capabilities = await db
-    .query('serviceCapabilities')
-    .withIndex('by_business_service_status', (query) => query.eq('businessId', business._id))
-    .collect()
+  const [capabilities, indexStatus, discoveryStatus] = await Promise.all([
+    db
+      .query('serviceCapabilities')
+      .withIndex('by_business_service_status', (query) => query.eq('businessId', business._id))
+      .collect(),
+    indexStatusForBusiness(db, business._id),
+    discoveryStatusForBusiness(db, business._id, stringField(business, 'sourceHash')),
+  ])
   return {
     businessId: business._id,
     slug: stringField(business, 'slug'),
@@ -638,8 +642,8 @@ async function publicCatalogForBusiness(db: RuntimeReader, business: RuntimeDocu
     ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
     publicStatus: 'published',
     trustTier: trustTier(business),
-    indexStatus: await indexStatusForBusiness(db, business._id),
-    discoveryStatus: await discoveryStatusForBusiness(db, business._id, stringField(business, 'sourceHash')),
+    indexStatus,
+    discoveryStatus,
     services: services
       .sort((left, right) => numberField(left, 'sortOrder') - numberField(right, 'sortOrder'))
       .map((service) => toPublicService(service, capabilities)),
@@ -653,9 +657,9 @@ async function publicCatalogsForDiscovery(db: RuntimeReader): Promise<PublicCata
     .query('businesses')
     .withIndex('by_publicStatus_slug', (query) => query.eq('publicStatus', 'published'))
     .collect()
+  const catalogResults = await Promise.all(businesses.map((business) => publicCatalogForBusiness(db, business)))
   const catalogs: PublicCatalog[] = []
-  for (const business of businesses) {
-    const catalog = await publicCatalogForBusiness(db, business)
+  for (const catalog of catalogResults) {
     if (catalog !== undefined) {
       catalogs.push(catalog)
     }
@@ -968,9 +972,11 @@ async function ensureDiscoveryAuditEvent(
 
 async function readDiscoveryHealthFromDb(db: RuntimeReader, businessId: string) {
   const business = await db.get(businessId)
-  const catalog = business === null ? undefined : await publicCatalogForBusiness(db, business)
-  const latestAttempt = await latestAttemptForBusiness(db, businessId)
-  const latestManifest = await latestManifestForBusiness(db, businessId)
+  const [catalog, latestAttempt, latestManifest] = await Promise.all([
+    business === null ? Promise.resolve<PublicCatalog | undefined>(undefined) : publicCatalogForBusiness(db, business),
+    latestAttemptForBusiness(db, businessId),
+    latestManifestForBusiness(db, businessId),
+  ])
   const sourceHash = catalog?.sourceHash
   const discoveryStatus = healthStatus(catalog !== undefined, latestAttempt, sourceHash)
   return {
@@ -1204,11 +1210,18 @@ function routesField(document: RuntimeDocument): DiscoveryManifest['routes'] {
   if (!Array.isArray(routes)) {
     return []
   }
-  return routes.filter(isRecord).map((route) => ({
-    kind: routeKind(stringFromRecord(route, 'kind')),
-    url: stringFromRecord(route, 'url'),
-    routeTested: true as const,
-  }))
+  const manifestRoutes: DiscoveryManifest['routes'] = []
+  for (const route of routes) {
+    if (!isRecord(route)) {
+      continue
+    }
+    manifestRoutes.push({
+      kind: routeKind(stringFromRecord(route, 'kind')),
+      url: stringFromRecord(route, 'url'),
+      routeTested: true as const,
+    })
+  }
+  return manifestRoutes
 }
 
 function servicesField(document: RuntimeDocument): ManifestService[] {
@@ -1216,16 +1229,23 @@ function servicesField(document: RuntimeDocument): ManifestService[] {
   if (!Array.isArray(services)) {
     return []
   }
-  return services.filter(isRecord).map((service) => ({
-    slug: stringFromRecord(service, 'slug'),
-    name: stringFromRecord(service, 'name'),
-    category: stringFromRecord(service, 'category'),
-    summary: stringFromRecord(service, 'summary'),
-    serviceArea: stringFromRecord(service, 'serviceArea'),
-    hoursOrUnknown: stringFromRecord(service, 'hoursOrUnknown'),
-    status: 'published' as const,
-    capabilities: capabilitiesFromRecord(service),
-  }))
+  const manifestServices: ManifestService[] = []
+  for (const service of services) {
+    if (!isRecord(service)) {
+      continue
+    }
+    manifestServices.push({
+      slug: stringFromRecord(service, 'slug'),
+      name: stringFromRecord(service, 'name'),
+      category: stringFromRecord(service, 'category'),
+      summary: stringFromRecord(service, 'summary'),
+      serviceArea: stringFromRecord(service, 'serviceArea'),
+      hoursOrUnknown: stringFromRecord(service, 'hoursOrUnknown'),
+      status: 'published' as const,
+      capabilities: capabilitiesFromRecord(service),
+    })
+  }
+  return manifestServices
 }
 
 function capabilitiesFromRecord(service: Record<string, unknown>): ManifestCapability[] {
@@ -1233,14 +1253,21 @@ function capabilitiesFromRecord(service: Record<string, unknown>): ManifestCapab
   if (!Array.isArray(capabilities)) {
     return []
   }
-  return capabilities.filter(isRecord).map((capability) => ({
-    kind: capabilityKindRecord(capability),
-    status: capabilityStatusRecord(capability),
-    firstRequest: firstRequestFromRecord(capability),
-    callable: false as const,
-    paymentRequired: false as const,
-    ...(stringFromRecord(capability, 'reason').length === 0 ? {} : { reason: stringFromRecord(capability, 'reason') }),
-  }))
+  const manifestCapabilities: ManifestCapability[] = []
+  for (const capability of capabilities) {
+    if (!isRecord(capability)) {
+      continue
+    }
+    manifestCapabilities.push({
+      kind: capabilityKindRecord(capability),
+      status: capabilityStatusRecord(capability),
+      firstRequest: firstRequestFromRecord(capability),
+      callable: false as const,
+      paymentRequired: false as const,
+      ...(stringFromRecord(capability, 'reason').length === 0 ? {} : { reason: stringFromRecord(capability, 'reason') }),
+    })
+  }
+  return manifestCapabilities
 }
 
 function firstRequestFromRecord(capability: Record<string, unknown>): FirstRequest {

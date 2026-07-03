@@ -2,10 +2,10 @@ import { BookOpenIcon, ChevronDownIcon } from 'lucide-react'
 import type { ComponentProps } from 'react'
 
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+  AeCollapsible as Collapsible,
+  AeCollapsibleContent as CollapsibleContent,
+  AeCollapsibleTrigger as CollapsibleTrigger,
+} from '@/components/ae/primitives/AeCollapsible'
 import { cn } from '@/lib/utils'
 
 export type SourcesProps = ComponentProps<typeof Collapsible>
@@ -14,7 +14,7 @@ export function Sources({ className, ...props }: SourcesProps) {
   return (
     <Collapsible
       data-slot="ai-sources"
-      className={cn('not-prose text-xs text-muted-foreground', className)}
+      className={cn('not-prose text-xs text-secondary', className)}
       {...props}
     />
   )
@@ -33,7 +33,7 @@ export function SourcesTrigger({
   return (
     <CollapsibleTrigger
       className={cn(
-        'ae-ai-sources-trigger group/ai-sources-trigger flex items-center gap-2 rounded-[var(--ae-radius-sm)] text-xs font-medium',
+        'group/ai-sources-trigger flex items-center gap-2 rounded-sm text-xs font-medium text-secondary transition-colors hover:text-primary',
         className,
       )}
       {...props}
@@ -58,7 +58,7 @@ export function SourcesContent({ className, ...props }: SourcesContentProps) {
   return (
     <CollapsibleContent
       className={cn(
-        'ae-ai-collapsible-content ae-ai-sources-content mt-2 flex w-full flex-col gap-2 outline-none',
+        'mt-2 flex w-full flex-col gap-2 text-secondary outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200',
         className,
       )}
       {...props}
@@ -74,7 +74,7 @@ export function Source({ className, href, title, children, ...props }: SourcePro
   return (
     <a
       className={cn(
-        'ae-ai-source-link flex min-w-0 items-center gap-2 rounded-[var(--ae-radius-sm)] px-3 py-2',
+        'flex min-w-0 items-center gap-2 rounded-sm border border-border bg-card px-3 py-2 text-primary transition-colors hover:border-border-strong hover:bg-muted',
         className,
       )}
       href={href}

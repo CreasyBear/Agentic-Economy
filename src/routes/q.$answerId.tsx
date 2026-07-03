@@ -10,7 +10,7 @@ export const Route = createFileRoute('/q/$answerId')({
   beforeLoad: ({ params }) => {
     const query = decodeAnswerId(params.answerId)
     if (query.length === 0) {
-      throw redirect({ to: '/', search: { q: '' } })
+      throw redirect({ to: '/' })
     }
     throw redirect({ to: '/', search: { q: query } })
   },

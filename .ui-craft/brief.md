@@ -1,20 +1,20 @@
 # Product purpose
 
-Agentic Economy is the home of agentic commerce: a daylight, local routing surface where a person or an assistant types a need and gets a tailored answer — real local providers, what they do, where they work, how fast they reply, and what to do now. The surface looks crafted by a human. Underneath, the same facts are machine-readable, so an agent can route the same query a human types.
+Agentic Economy is a query-first commerce-routing surface where a person or an assistant states a need and gets a tailored answer: real local providers, what they do, where they work, how fast they reply when known, and what to do now. The same published facts remain machine-readable so assistants can read, compare, and route qualified inquiries without implying booking, payment, dispatch, or autonomous fulfillment.
 
 # North star
 
 **The home of agentic commerce — commerce clarity, routable queries, generated answers, human handoff.**
 
-Brand thesis: **Drawn by hand. Read by agents.** Visceral local commerce on top of machine-readable business details.
+Brand thesis: **Human-readable answers over agent-readable facts.** The UI is calm, exact, and product-native; the data underside is structured enough for assistants.
 
 # Primary user
 
-A person with a real-world local need (often urgent, often on mobile). Second: an assistant reading the same facts as data and routing. Third: an owner/operator hosting and correcting their page.
+A person with a real-world local need, often urgent and often on mobile. Second: an assistant reading the same facts as data and routing. Third: an owner/operator hosting and correcting their page.
 
 # Design read
 
-A daylight commerce-routing surface for agentic commerce — Google-Maps-clean local discovery crossed with an agentic.market-style structured underside, with a hand-drawn craft surface and tangible provider evidence. Leaning Tailwind v4 + shadcn-owned primitives + AE token seams + Fraunces/Hanken Grotesk/IBM Plex Mono. Restrained motion. One warm accent.
+Astryx Era: Agentic Economy uses `DESIGN.md` as the visual authority, `@astryxdesign/core` with `@astryxdesign/theme-neutral` as the component layer, and Tailwind 4 CSS-first utilities only as layout glue. Public surfaces should feel like a clean local-discovery product with structured evidence, not a custom illustration brand, a dashboard, or a component-library demo.
 
 # Knobs
 
@@ -26,38 +26,35 @@ A daylight commerce-routing surface for agentic commerce — Google-Maps-clean l
 
 1. **Query in, generative answer out.** The hero interaction is a query box that produces a tailored answer panel, not a browse wall. Human and agent send the same intent.
 2. **Lead with fit, not caveat.** Show real services, real areas, real response cues, and a plain "Not offered" line where relevant. Do not lead public surfaces with defensive trust/safety/uncertainty copy. The agent epistemic vocabulary (`KNOWN`/`UNKNOWN`/`UNAVAILABLE`/`NEXT_STEP`) never appears as labels on human surfaces — only in the JSON API, `llms.txt`, "Get as agent JSON," and owner/admin surfaces.
-3. **Drawn by hand. Read by agents.** Hand-drawn line illustration is the signature brand asset — the human-craft counterpoint to the machine-readable underside.
-4. **One warm accent.** Signage amber is the only hot color. Warmth by rarity, not wash.
-5. **Local, not moody.** Daylight, real, grounded. No dark command terminals, no institutional cold, no Airbnb-coral.
-6. **Shared systems outrank route polish.**
-7. **One conversion action per public surface.**
+3. **Astryx first.** Use Astryx components and templates for presentation; AE-owned modules keep behavior, state, routing, and data contracts.
+4. **Theme-neutral, not route-local styling.** Typography, color, focus, elevation, and component states come from the Astryx theme bridge. Tailwind utilities arrange layout only.
+5. **Local, not theatrical.** Public pages are clean, grounded, and evidence-led. No dark command terminals, no AI-gradient spectacle, no custom illustration dependency, no stock-hero clutter.
+6. **Shared systems outrank route polish.** Improve reusable shells, cards, forms, and answer artifacts before one-off route styling.
+7. **One conversion action per public viewport.** Ask, view details, or submit an inquiry — never competing primary actions.
 
 # Color strategy
 
-Coral retired (wrong family + Airbnb-derivative). Cream/linen body bg retired (AI-default tell). Sunlit drafting paper `#ECEAE1` (cool, not cream). Ink `#14161A`. Single warm accent: signage amber `#E89B3C`. Eucalyptus `#3F5947` for available/checked. Oxide brick `#A8322A` for unavailable/error (not coral). Slate `#345A7A` for info/routable. Hairline rules `#C9C8BE` carry hierarchy, not shadows.
+Use the Astryx theme-neutral palette and semantic bridge classes from `DESIGN.md`: `text-primary`, `text-secondary`, `bg-surface`, `bg-card`, `bg-body`, `border-border`, `rounded-md`, and `shadow-sm`. Functional status color is reserved for real status states. Do not introduce raw hex/OKLCH literals, arbitrary Tailwind colors, route-local palettes, or retired brand accent language outside token definitions.
 
 # Typography
 
-- Display/Hero: **Fraunces** (variable serif) — wordmark, headlines, business names.
-- Body/UI: **Hanken Grotesk** — all body, UI, chips, sentences.
-- Data/mono: **IBM Plex Mono** (tabular-nums) — status bar, slugs, IDs, response times, breadcrumbs, "Get as agent JSON." Never for customer proof copy, never for epistemic labels.
-- Free/CDN stack. Licensed upgrades (Söhne, Berkeley Mono) noted for future.
+Typography comes from `@astryxdesign/theme-neutral`. Use the Astryx type scale and component defaults for headings, body, labels, data rows, and form controls. Do not add font packages, route-local `font-family`, or typeface-specific instructions to active specs.
 
 # Layout and shape
 
-Hybrid: creative-editorial public hero (query box + generated answer + hand-drawn asset), grid-disciplined owner/admin. 12-col desktop / 4-col mobile. 4px panel/card radius, 6px buttons, 999px status pills only. No bubble radius on everything. Hairline rules + type scale + amber carry hierarchy.
+Public surfaces use Astryx `AppShell` + `TopNav` with centered-hero, product-gallery, detail-page, and form templates as appropriate. Chat/answer surfaces use the Astryx `Chat*` family. Owner/admin surfaces use `AppShell` + `SideNav`, table-page/table-grouped patterns, settings/detail templates, and Astryx feedback primitives. Tailwind controls spacing, grid/flex, breakpoints, and viewport behavior only.
 
 # Motion
 
-Minimal-functional, leaning intentional. 80–400ms, GPU-only, no scroll-jacking. Signature: the generated answer panel assembles in short staggered steps (answer line → cards → map → what to do now). Honor `prefers-reduced-motion` (render instantly).
+Minimal-functional, leaning intentional. 80–400ms, GPU-only, no scroll-jacking. Signature: generated answers assemble in meaningful steps — answer line → cards/table/map when allowed → prose → what to do now. Honor `prefers-reduced-motion` by rendering instantly.
 
 # Imagery
 
-Two modes, contrasted: real Australian local-business photography (vehicles, teams, tools, service areas) AND hand-drawn pen-and-ink line illustration of local architecture (Victorian/Edwardian houses, shopfronts, service streets, faint skylines) as the signature brand asset. No generic stock, no robot imagery, no abstract gradients, no flat vector illustration.
+Use real provider evidence when the catalog publishes it. Otherwise prefer structured content, citations, maps only when data supports them, and Astryx empty/skeleton states. No generic stock, robot imagery, abstract gradients, or new custom illustration system.
 
 # Voice
 
-Plain, warm, exact, consequence-aware. "Ask for a local service. See who fits.", "What do you need done?", "Responds ~22m", "Available today", "Not offered: …", "Contact the business", "What to do now", "Get as agent JSON." Never `KNOWN`/`UNKNOWN`/`UNAVAILABLE`/`NEXT_STEP` as labels in public copy. Never protocol words (manifest, MCP, DTO, callable, etc.). Avoid "safe", "trusted", and uncertainty-first phrases as public positioning.
+Plain, warm, exact, consequence-aware. Use: "What do you need done?", "Here’s what’s listed for … near …", "Check hours", "What to do now", "Get as agent JSON", "Assistants can read these published details.", "The business handles timing, price, and availability." Never `KNOWN`/`UNKNOWN`/`UNAVAILABLE`/`NEXT_STEP` as labels in public copy. Never protocol words (manifest, MCP, DTO, callable, etc.). Avoid "safe", "trusted", and uncertainty-first phrases as public positioning.
 
 # Success metric for the surface
 
@@ -65,7 +62,7 @@ First-time visitor understands AE is the place to route a real-world need, see w
 
 # Out of scope
 
-No booking, payment, dispatch, autonomous fulfillment, fake ratings, or "verified" without a defined standard. No coral, cream, dark command terminals, or labeled epistemic ledger on human surfaces.
+No booking, payment, dispatch, autonomous fulfillment, fake ratings, or "verified" without a defined standard. No retired pre-Astryx visual cues, dark command terminals, labeled epistemic ledger on human surfaces, or public claims that imply AE performs the service.
 
 # References inform, not copy
 
@@ -73,4 +70,4 @@ Google Maps (clean info surfaces), agentic.market (plain structured catalog, llm
 
 # Authority
 
-Full token spec lives in `DESIGN.md` §17. `src/styles/tokens.css` is the implementation. When they disagree, DESIGN.md wins.
+`DESIGN.md` is the visual/UI authority. Active UI Craft docs record product, IA, and surface constraints only; when they disagree with `DESIGN.md` on visuals, `DESIGN.md` wins.

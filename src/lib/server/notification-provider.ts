@@ -333,7 +333,7 @@ export async function sendOwnerInquiryResendEmail(
   })
 }
 
-export async function sendResendNotificationEmail(
+async function sendResendNotificationEmail(
   input: SendResendNotificationEmailInput
 ): Promise<ResendProviderSendResult> {
   const to = normalizeEmail(input.to)
@@ -539,7 +539,7 @@ export function verifyResendWebhook(input: VerifyResendWebhookInput): ResendVeri
   return normalizeResendWebhookPayload(input.rawBody, svixId)
 }
 
-export function normalizeResendWebhookPayload(rawBody: string, svixId: string): ResendVerifiedWebhook {
+function normalizeResendWebhookPayload(rawBody: string, svixId: string): ResendVerifiedWebhook {
   const payload = parseJsonObject(rawBody)
   const data = isRecord(payload.data) ? payload.data : {}
   const eventType = readString(payload.type) ?? readString(payload.event) ?? 'email.unknown'

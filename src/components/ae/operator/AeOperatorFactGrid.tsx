@@ -17,11 +17,11 @@ export function AeOperatorFactGrid({ facts, columns = 3 }: AeOperatorFactGridPro
         : 'md:grid-cols-3'
 
   return (
-    <dl className={`ae-operator-fact-grid grid gap-3 ${columnClass}`}>
+    <dl className={`grid gap-3 ${columnClass}`}>
       {facts.map((fact) => (
-        <div key={fact.label} className="ae-operator-stat-cell">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm font-medium text-foreground" data-numeric>
+        <div key={fact.label} className="rounded-md border border-border bg-muted/30 p-3">
+          <dt className="text-xs font-medium uppercase tracking-normal text-secondary">{fact.label}</dt>
+          <dd className="mt-1 break-words text-sm font-medium text-primary" data-numeric>
             {fact.value}
           </dd>
         </div>

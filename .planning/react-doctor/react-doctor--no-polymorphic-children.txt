@@ -1,0 +1,15 @@
+Rule: react-doctor/no-polymorphic-children
+Severity: warning
+Category: Maintainability
+Count: 3
+
+Your users hit inconsistent behavior because `typeof children === "string"` makes this component switch on what callers pass, so add clear subcomponents like `<Button.Text>` instead.
+
+Suggestion: Add clear subcomponents like `<Button.Text>` and `<Button.Icon>` so callers don't have to check `typeof children`.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/no-polymorphic-children
+
+Files:
+  src/components/ae/chat/AeThreadMessageScroller.tsx:128
+  src/components/ae/motion/AeActionButton.tsx:37
+  src/components/ai-elements/suggestion.tsx:106

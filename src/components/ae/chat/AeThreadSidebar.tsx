@@ -1,20 +1,13 @@
 import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useRouter } from '@tanstack/react-router'
 import { CopyIcon, EllipsisVerticalIcon, PlusIcon, TrashIcon } from 'lucide-react'
 import { copyThreadLink } from './copy-thread-link'
 
 import type { AnswerThreadRecord } from '@/modules/answer-thread/public'
-import { defaultHomeSearch } from '@/components/ae/layout/AePublicShell'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@astryxdesign/core/Button'
+import { DropdownMenu } from '@astryxdesign/core/DropdownMenu'
 import { useClientMounted } from '@/hooks/use-client-mounted'
+import { formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import { AeModelSelector } from './AeModelSelector'
 
@@ -31,40 +24,37 @@ export function AeThreadSidebar({ threads, activeThreadId = null, visible, onDel
   }
 
   return (
-    <aside id="ae-thread-sidebar" className="ae-thread-sidebar" aria-label="Recent questions">
-      <div className="ae-thread-sidebar__header">
-        <div className="ae-thread-sidebar__heading-row">
-          <h2 className="ae-thread-sidebar__heading">Recent questions</h2>
-          <span className="ae-thread-sidebar__count" data-numeric>{threads.length}</span>
+    <aside id="ae-thread-sidebar" className="hidden h-full min-h-0 flex-col gap-3 border-r border-border bg-muted px-1 py-2 lg:flex" aria-label="Recent questions">
+      <div className="flex flex-col gap-3 p-1">
+        <div className="flex min-h-7 items-center justify-between gap-2">
+          <h2 className="truncate font-mono text-xs font-medium uppercase leading-tight text-secondary">Recent questions</h2>
+          <span className="inline-grid min-h-6 min-w-6 place-items-center rounded-sm border border-border bg-surface font-mono text-xs leading-none tabular-nums text-secondary" data-numeric>{threads.length}</span>
         </div>
-        <Button asChild variant="outline" size="sm" className="ae-thread-sidebar__new">
-          <Link to="/" search={defaultHomeSearch}>
-            <PlusIcon data-icon="inline-start" />
-            New question
-          </Link>
-        </Button>
+        <Button
+          label="New question"
+          href="/"
+          variant="secondary"
+          size="sm"
+          className="w-full"
+          icon={<PlusIcon aria-hidden="true" />}
+        />
       </div>
       {isStructuredAnswerModeEnabled() ? (
-        <div className="ae-thread-sidebar__model">
+        <div className="border-b border-border px-1 pb-3">
           <AeModelSelector />
         </div>
       ) : null}
-      <ScrollArea className="ae-thread-sidebar__scroll">
+      <div className="min-h-0 flex-1 px-0.5">
         {threads.length === 0 ? (
-          <p className="ae-thread-sidebar__empty">No recent questions yet.</p>
+          <p className="m-1 rounded-lg border border-dashed border-border p-3 text-sm leading-snug text-secondary">No recent questions yet.</p>
         ) : (
-          <ul className="ae-thread-sidebar__list">
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {threads.map((thread) => (
-              <AeThreadSidebarRow
-                key={thread.threadId}
-                thread={thread}
-                active={thread.threadId === activeThreadId}
-                {...(onDelete === undefined ? {} : { onDelete })}
-              />
+              <AeThreadSidebarRow key={thread.threadId} thread={thread} active={thread.threadId === activeThreadId} onDelete={onDelete} />
             ))}
           </ul>
         )}
-      </ScrollArea>
+      </div>
     </aside>
   )
 }
@@ -76,8 +66,9 @@ function AeThreadSidebarRow({
 }: {
   thread: AnswerThreadRecord
   active: boolean
-  onDelete?: (threadId: string) => void
+  onDelete: ((threadId: string) => void) | undefined
 }) {
+  const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
 
   async function copyLink() {
@@ -103,66 +94,68 @@ function AeThreadSidebarRow({
   }
 
   return (
-    <li className="ae-thread-sidebar__row">
+    <li className="group/row grid grid-cols-[minmax(0,1fr)_auto] items-stretch">
       <Link
         to="/t/$threadId"
         params={{ threadId: thread.threadId }}
-        className={`ae-thread-sidebar__item${active ? ' ae-thread-sidebar__item--active' : ''}`}
+        className={`flex min-h-[2.875rem] flex-col gap-1 rounded-lg border px-3 py-2 no-underline transition-colors hover:bg-surface${active ? ' border-border-strong bg-surface' : ' border-transparent hover:border-border-strong'}`}
         aria-current={active ? 'page' : undefined}
       >
-        <span className="ae-thread-sidebar__title">{thread.title}</span>
+        <span className="truncate text-sm leading-snug text-primary">{thread.title}</span>
         <ClientRelativeTime timestamp={thread.updatedAt} />
       </Link>
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="ae-thread-sidebar__menu"
-            aria-label={`Actions for ${thread.title}`}
-          >
-            <EllipsisVerticalIcon />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="ae-thread-sidebar__menu-panel">
-          <DropdownMenuItem asChild>
-            <Link to="/t/$threadId" params={{ threadId: thread.threadId }}>Open thread</Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void copyLink()}>
-            <CopyIcon data-icon="inline-start" />
-            Copy link
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild>
-            <Link to="/" search={defaultHomeSearch}>Start new question</Link>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="ae-thread-sidebar__delete-action" onSelect={() => void handleDelete()}>
-            <TrashIcon data-icon="inline-start" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <DropdownMenu
+        isMenuOpen={menuOpen}
+        onOpenChange={setMenuOpen}
+        hasChevron={false}
+        menuWidth="12rem"
+        button={{
+          label: `Actions for ${thread.title}`,
+          type: 'button',
+          variant: 'ghost',
+          size: 'sm',
+          isIconOnly: true,
+          className: 'self-center text-secondary opacity-0 transition-opacity hover:text-primary group-hover/row:opacity-100 group-focus-within/row:opacity-100',
+          icon: <EllipsisVerticalIcon aria-hidden="true" />,
+        }}
+        items={[
+          {
+            label: 'Open thread',
+            onClick: () => {
+              void router.navigate({ to: '/t/$threadId', params: { threadId: thread.threadId } })
+              setMenuOpen(false)
+            },
+          },
+          {
+            label: 'Copy link',
+            icon: <CopyIcon aria-hidden="true" />,
+            onClick: () => void copyLink(),
+          },
+          { type: 'divider' },
+          {
+            label: 'Start new question',
+            onClick: () => {
+              void router.navigate({ to: '/' })
+              setMenuOpen(false)
+            },
+          },
+          { type: 'divider' },
+          {
+            label: 'Delete',
+            icon: <TrashIcon aria-hidden="true" />,
+            onClick: () => void handleDelete(),
+          },
+        ]}
+      />
     </li>
   )
 }
 
 function ClientRelativeTime({ timestamp }: { timestamp: number }) {
   const mounted = useClientMounted()
-  return <time className="ae-thread-sidebar__time">{mounted ? formatRelativeTime(timestamp) : ''}</time>
-}
-
-function formatRelativeTime(timestamp: number): string {
-  const diffSeconds = Math.round((Date.now() - timestamp) / 1000)
-  if (diffSeconds < 60) {
-    return 'just now'
-  }
-  if (diffSeconds < 3600) {
-    return `${Math.floor(diffSeconds / 60)}m ago`
-  }
-  if (diffSeconds < 86400) {
-    return `${Math.floor(diffSeconds / 3600)}h ago`
-  }
-  return `${Math.floor(diffSeconds / 86400)}d ago`
+  return (
+    <time className="font-mono text-xs tabular-nums text-secondary" data-numeric dateTime={timestampIso(timestamp)}>
+      {mounted ? formatRelativeTime(timestamp) : ''}
+    </time>
+  )
 }

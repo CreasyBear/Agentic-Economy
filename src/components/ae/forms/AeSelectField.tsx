@@ -1,10 +1,4 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Selector } from '@astryxdesign/core/Selector'
 
 export type AeSelectOption = {
   value: string
@@ -37,18 +31,18 @@ export function AeSelectField({
   return (
     <>
       {name === undefined ? null : <input type="hidden" name={name} value={value} />}
-      <Select value={value} disabled={disabled} onValueChange={onValueChange}>
-        <SelectTrigger id={id} aria-describedby={describedBy} aria-invalid={invalid || undefined} className="ae-select-field">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent align="start">
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Selector
+        id={id}
+        label={placeholder}
+        isLabelHidden
+        value={value}
+        options={options.map((option) => ({ value: option.value, label: option.label }))}
+        isDisabled={disabled}
+        placeholder={placeholder}
+        onChange={onValueChange}
+        {...(invalid ? { status: { type: 'error' } as const, 'aria-invalid': true } : {})}
+        {...(describedBy === undefined ? {} : { 'aria-describedby': describedBy })}
+      />
     </>
   )
 }

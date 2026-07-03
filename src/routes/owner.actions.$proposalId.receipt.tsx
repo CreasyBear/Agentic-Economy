@@ -1,8 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   createEmptyContactFollowUpSourceState,
   readContactFollowUpReconstruction,
@@ -31,11 +34,12 @@ export type OwnerContactFollowUpReceiptRouteReadback =
     }
 
 export const Route = createFileRoute('/owner/actions/$proposalId/receipt')({
+  ...operatorRouteOptions,
   loader: ({ params }) => readCurrentOwnerContactFollowUpReceiptServer({ data: { proposalId: params.proposalId } }),
   head: () => ({
     meta: [
       { title: 'Contact follow-up receipt | Agentic Economy' },
-      { name: 'description', content: 'Receipt and proof-gap readback for one owner-approved contact follow-up.' },
+      { name: 'description', content: 'Receipt and evidence status for one owner-approved contact follow-up.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -54,17 +58,17 @@ function OwnerContactFollowUpReceiptRoute() {
   if (readback.kind === 'error') {
     return (
       <AeOperatorShell
-        role="owner"
-        eyebrow="Receipt readback"
-        title="Contact follow-up reconstruction"
-        description="The owner readback separates source-owned proposal, decision, gateway, attempt, and receipt state."
+        operatorRole="owner"
+        eyebrow="Receipt"
+        title="Contact follow-up history"
+        description="This page shows the proposal, decision, approval, attempt, and receipt for one contact follow-up request."
         currentPath="/owner/actions"
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>Receipt unavailable</CardTitle>
-            <CardDescription>{readback.reason}</CardDescription>
-          </CardHeader>
+        <Card padding={3}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Receipt unavailable</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.reason}</Text>
+          </div>
         </Card>
       </AeOperatorShell>
     )
@@ -73,33 +77,33 @@ function OwnerContactFollowUpReceiptRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
-      eyebrow="Receipt readback"
-      title="Contact follow-up reconstruction"
-      description="The owner readback separates proposal, policy, owner decision, gateway, attempt, receipt, proof gap, audit, and no-repair state."
+      operatorRole="owner"
+      eyebrow="Receipt"
+      title="Contact follow-up history"
+      description="This page shows the proposal, policy check, your decision, approval, attempt, receipt, and audit history for one contact follow-up request."
       currentPath="/owner/actions"
     >
-      <Card>
-        <CardHeader>
+      <Card padding={3}>
+        <div className="grid gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
-            <Badge variant="outline">{reconstruction.repairAction.replaceAll('_', ' ')}</Badge>
+            <Badge variant="neutral" label={humanizeStatusValue(reconstruction.readbackStatus)} />
+            <Badge variant="neutral" label={humanizeStatusValue(reconstruction.repairAction)} />
           </div>
-          <CardTitle>{reconstruction.proposal.parameters.contactName}</CardTitle>
-          <CardDescription>Source-owned receipt or proof-gap readback only. No raw provider payload is shown.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FactGrid
+          <Text as="div" type="large" weight="semibold" color="primary" display="block">{reconstruction.proposal.parameters.contactName}</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Receipt, or a note that evidence is missing — nothing else. No raw provider payload is shown.</Text>
+        </div>
+        <div className="grid gap-4">
+          <AeOperatorFactGrid
             facts={[
               { label: 'Proposal', value: reconstruction.proposal.id },
-              { label: 'Gateway', value: reconstruction.gatewayAdmission?.status ?? 'missing' },
-              { label: 'Attempt', value: reconstruction.attempt?.outcome ?? 'not attempted' },
-              { label: 'Receipt', value: reconstruction.receipt?.kind ?? 'none' },
+              { label: 'Approval', value: humanizeStatusValue(reconstruction.gatewayAdmission?.status ?? 'missing') },
+              { label: 'Attempt', value: humanizeStatusValue(reconstruction.attempt?.outcome ?? 'not attempted') },
+              { label: 'Receipt', value: humanizeStatusValue(reconstruction.receipt?.kind ?? 'none') },
               { label: 'Private evidence refs', value: String(reconstruction.privateEvidenceRefs.length) },
               { label: 'Audit events', value: String(reconstruction.auditEvents.length) },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
     </AeOperatorShell>
   )
@@ -115,15 +119,11 @@ export function ownerContactFollowUpReceiptServerToRouteReadback(
   return { kind: 'error', reason: result.reason }
 }
 
-function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-lg border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+function humanizeStatusValue(value: string): string {
+  return value
+    .replaceAll('_', ' ')
+    .replace(/\bproof gap\b/gi, 'evidence missing')
+    .replace(/\bgateway admitted\b/gi, 'approved')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

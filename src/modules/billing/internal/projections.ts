@@ -82,9 +82,12 @@ export function readPublicPaidActivationProjection(
     return { businessId, available: false, offers: [], reason: 'operator_disabled' }
   }
 
-  const offers = state.offers
-    .filter((offer) => offer.businessId === businessId && offer.status === 'active')
-    .map((offer) => ({
+  const offers: PublicPaidActivationOffer[] = []
+  for (const offer of state.offers) {
+    if (offer.businessId !== businessId || offer.status !== 'active') {
+      continue
+    }
+    offers.push({
       id: offer.id,
       name: offer.publicName,
       description: offer.publicDescription,
@@ -92,7 +95,8 @@ export function readPublicPaidActivationProjection(
       priceSummary: offer.priceSummary,
       termsSummary: offer.termsSummary,
       updatedAt: offer.updatedAt,
-    }))
+    })
+  }
 
   if (offers.length === 0) {
     return { businessId, available: false, offers: [], reason: 'no_active_offer' }
@@ -125,20 +129,30 @@ export function readOwnerBillingProjection(
   businessId: BusinessId,
   ownerId: OwnerId
 ): OwnerBillingProjection {
-  const operations = state.operations
-    .filter((operation) => operation.businessId === businessId && operation.ownerId === ownerId)
-    .map((operation) => ownerOperation(operation))
-  const operationIds = new Set(operations.map((operation) => operation.id))
-  const receipts = state.receipts
-    .filter((receipt) => receipt.businessId === businessId && operationIds.has(receipt.operationId))
-    .map((receipt) => ({
+  const operations: OwnerBillingOperationProjection[] = []
+  const operationIds = new Set<BillingOperationId>()
+  for (const operation of state.operations) {
+    if (operation.businessId !== businessId || operation.ownerId !== ownerId) {
+      continue
+    }
+    const projectedOperation = ownerOperation(operation)
+    operations.push(projectedOperation)
+    operationIds.add(projectedOperation.id)
+  }
+  const receipts: OwnerBillingReceiptProjection[] = []
+  for (const receipt of state.receipts) {
+    if (receipt.businessId !== businessId || !operationIds.has(receipt.operationId)) {
+      continue
+    }
+    receipts.push({
       id: receipt.id,
       operationId: receipt.operationId,
       status: receipt.status,
       issuedAt: receipt.issuedAt,
       ...(receipt.invoiceUrl === undefined ? {} : { invoiceUrl: receipt.invoiceUrl }),
       ...(receipt.amountSummary === undefined ? {} : { amountSummary: receipt.amountSummary }),
-    }))
+    })
+  }
 
   return { businessId, ownerId, operations, receipts }
 }
@@ -152,15 +166,19 @@ export function readAdminBillingProjection(
     return { businessId, operations: [], reconciliations: [] }
   }
 
-  const operations = state.operations
-    .filter((operation) => operation.businessId === businessId)
-    .map((operation) => ({
+  const operations: AdminBillingOperationProjection[] = []
+  for (const operation of state.operations) {
+    if (operation.businessId !== businessId) {
+      continue
+    }
+    operations.push({
       ...ownerOperation(operation),
       providerRefs: operation.providerRefs,
       evidenceRefs: operation.evidenceRefs,
       retryCount: operation.retryCount,
       supportRecordIds: operation.supportRecordIds,
-    }))
+    })
+  }
   const reconciliations = state.reconciliations.filter((reconciliation) => reconciliation.businessId === businessId)
 
   return { businessId, operations, reconciliations }

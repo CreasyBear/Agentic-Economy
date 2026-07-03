@@ -141,38 +141,49 @@ export function invalidateDiscoveryManifest(
   state: DiscoverySourceState,
   input: InvalidateDiscoveryManifestInput
 ): InvalidateDiscoveryManifestResult {
-  const manifests = state.discoveryManifests
-    .filter((manifest) => manifest.businessId === input.businessId)
-    .map((manifest) => {
-      const next: DiscoveryManifestContract = {
-        ...manifest,
-        status: 'stale',
-        degradedReason: input.reasonCode,
-        suppressedAt: input.now,
-      }
-      upsertManifest(state.discoveryManifests, next)
-      return next
-    })
+  const manifests: DiscoveryManifestContract[] = []
+  for (const manifest of state.discoveryManifests) {
+    if (manifest.businessId !== input.businessId) {
+      continue
+    }
+    const next: DiscoveryManifestContract = {
+      ...manifest,
+      status: 'stale',
+      degradedReason: input.reasonCode,
+      suppressedAt: input.now,
+    }
+    upsertManifest(state.discoveryManifests, next)
+    manifests.push(next)
+  }
 
-  const attempts = state.discoveryManifestAttempts
-    .filter((attempt) => attempt.businessId === input.businessId)
-    .map((attempt) =>
-      updateAttempt(state.discoveryManifestAttempts, {
-        ...attempt,
-        status: 'stale',
-        finishedAt: input.now,
-        staleThresholdAt: input.now,
-        failureCode: input.reasonCode,
-        repairAction: 'invalidate_manifest',
-        repairResult: 'succeeded',
-      })
-    )
+  const attempts: DiscoveryManifestAttemptContract[] = []
+  for (const attempt of state.discoveryManifestAttempts) {
+    if (attempt.businessId !== input.businessId) {
+      continue
+    }
+    attempts.push(updateAttempt(state.discoveryManifestAttempts, {
+      ...attempt,
+      status: 'stale',
+      finishedAt: input.now,
+      staleThresholdAt: input.now,
+      failureCode: input.reasonCode,
+      repairAction: 'invalidate_manifest',
+      repairResult: 'succeeded',
+    }))
+  }
 
   for (const intent of state.invalidationIntents) {
+    let includesDiscoveryManifest = false
+    for (const surface of intent.surfaces) {
+      if (surface === 'discovery_manifest') {
+        includesDiscoveryManifest = true
+        break
+      }
+    }
     if (
       intent.businessId === input.businessId &&
       intent.status === 'queued' &&
-      intent.surfaces.includes('discovery_manifest')
+      includesDiscoveryManifest
     ) {
       intent.status = 'applied'
     }

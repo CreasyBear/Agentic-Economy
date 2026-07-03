@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { setLlmFollowUpChipGeneratorForTests, type FollowUpChip } from '@/modules/answer-thread/public'
+import type { FollowUpChip } from '@/modules/answer-thread/public'
+import { setLlmFollowUpChipGeneratorForTests } from '@/modules/answer-thread/testing'
 import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 
 function submitQueries(chips: FollowUpChip[]): string[] {

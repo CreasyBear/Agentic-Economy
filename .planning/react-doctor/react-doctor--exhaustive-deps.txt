@@ -1,0 +1,28 @@
+Rule: react-doctor/exhaustive-deps
+Severity: warning
+Category: Bugs
+Count: 2
+
+`useLayoutEffect` can run with a stale `threadId` & show your users old data.
+
+Your cleanup may read the wrong node since the ref `generationRef.current` can change before it runs.
+
+Suggestion: Don't blindly add missing dependencies. Read the hook callback first.
+
+Bad:
+useEffect(() => {
+  setCount(count + 1);
+}, [count]);
+
+Better:
+useEffect(() => {
+  setCount((currentCount) => currentCount + 1);
+}, []);
+
+If the missing value is recreated every render, move it inside the hook or stabilize it before adding it to deps.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/exhaustive-deps
+
+Files:
+  src/components/ae/chat/AeThreadTurnStreamSection.tsx:69
+  src/components/ae/chat/AeThreadTurnStreamSection.tsx:78

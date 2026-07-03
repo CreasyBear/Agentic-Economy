@@ -41,6 +41,7 @@ import type {
   InquiryAuditRecord,
   InquiryExportReadback,
   InquiryFunnelRecord,
+  InquiryOperatorAuditRef,
   InquiryOperatorDispatchAttemptRef,
   InquiryMessageRecord,
   InquiryNotificationDispatchBinding,
@@ -50,6 +51,7 @@ import type {
   InquiryOperatorReconstructionAllowedReadback,
   InquiryOperatorReconstructionFilter,
   InquiryOperatorReconstructionRow,
+  InquiryOperatorFunnelRef,
   InquiryOperatorWebhookRef,
   InquiryOperatorOperationRef,
   InquiryOperationRecord,
@@ -1257,6 +1259,29 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     collect(db, 'capabilityLaunchSupportRecords'),
   ])
 
+  const inquiryAuditEvents: InquiryAuditRecord[] = []
+  for (const auditEvent of auditEvents) {
+    const record = toInquiryAuditRecord(auditEvent)
+    if (record !== undefined) {
+      inquiryAuditEvents.push(record)
+    }
+  }
+
+  const inquiryOperations: InquiryOperationRecord[] = []
+  for (const operationKey of operationKeys) {
+    if (stringField(operationKey, 'scope') === 'inquiry') {
+      inquiryOperations.push(toInquiryOperationRecord(operationKey))
+    }
+  }
+
+  const capabilityLaunchSupportRecords: CapabilityLaunchSupportRecord[] = []
+  for (const supportRecord of supportRecords) {
+    const record = toCapabilityLaunchSupportRecord(supportRecord)
+    if (record !== undefined) {
+      capabilityLaunchSupportRecords.push(record)
+    }
+  }
+
   return createEmptyInquirySourceState({
     businesses: businesses.map(toBusinessRecord),
     businessServices: businessServices.map(toBusinessServiceRecord),
@@ -1266,10 +1291,10 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     messages: messages.map(toInquiryMessageRecord),
     notifications: notifications.map(toInquiryNotificationRecord),
     privacyTombstones: privacyTombstones.map(toInquiryPrivacyTombstoneRecord),
-    auditEvents: auditEvents.map(toInquiryAuditRecord).filter(isDefined),
+    auditEvents: inquiryAuditEvents,
     abuseRateLimitBuckets: abuseBuckets.map(toAbuseRateLimitBucketRecord),
-    operations: operationKeys.filter((row) => stringField(row, 'scope') === 'inquiry').map(toInquiryOperationRecord),
-    capabilityLaunchSupportRecords: supportRecords.map(toCapabilityLaunchSupportRecord).filter(isDefined),
+    operations: inquiryOperations,
+    capabilityLaunchSupportRecords,
   })
 }
 
@@ -1349,11 +1374,15 @@ async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceStat
     })
   }
 
+  const auditEventsByOperationKey = new Map(
+    state.auditEvents.map((auditEvent) => [auditEvent.operationKey, auditEvent] as const)
+  )
+
   for (const operation of state.operations) {
     await upsertInquiryOperation(
       db,
       operation,
-      state.auditEvents.find((auditEvent) => auditEvent.operationKey === operation.operationKey)
+      auditEventsByOperationKey.get(operation.operationKey)
     )
   }
 
@@ -2220,21 +2249,74 @@ function serializeOperatorRow(
     ...row.correlationIds.map((correlationId) => String(correlationId)),
     ...webhookRefs.map((webhook) => stringField(webhook, 'correlationId')),
   ].filter(Boolean))
-  const notificationAuditRefs = refs.auditRows
-    .filter((audit) => stringField(audit, 'eventType').startsWith('notification.'))
-    .filter((audit) => dispatchIds.has(stringField(audit, 'targetRef')) || webhookIds.has(stringField(audit, 'targetRef')))
-    .map(operatorAuditRefFromRow)
-  const notificationFunnelRefs = refs.funnelRows
-    .filter((funnel) => stringField(funnel, 'eventType').startsWith('notification_'))
-    .filter((funnel) => notificationCorrelationIds.has(stringField(funnel, 'correlationId')))
-    .map(operatorFunnelRefFromRow)
-  const notificationOperationRefs = refs.operationRows
-    .filter((operation) => stringField(operation, 'scope') === 'notification')
-    .filter((operation) => {
-      const effects = stringArrayField(operation, 'effectRefs')
-      return effects.some((effect) => dispatchIds.has(effectValueFromRef(effect, 'dispatch') ?? '') || webhookIds.has(effectValueFromRef(effect, 'webhook') ?? ''))
+  const notificationAuditRefs: InquiryOperatorAuditRef[] = []
+  for (const audit of refs.auditRows) {
+    if (!stringField(audit, 'eventType').startsWith('notification.')) {
+      continue
+    }
+
+    const targetRef = stringField(audit, 'targetRef')
+    if (dispatchIds.has(targetRef) || webhookIds.has(targetRef)) {
+      notificationAuditRefs.push(operatorAuditRefFromRow(audit))
+    }
+  }
+
+  const notificationFunnelRefs: InquiryOperatorFunnelRef[] = []
+  for (const funnel of refs.funnelRows) {
+    if (
+      stringField(funnel, 'eventType').startsWith('notification_') &&
+      notificationCorrelationIds.has(stringField(funnel, 'correlationId'))
+    ) {
+      notificationFunnelRefs.push(operatorFunnelRefFromRow(funnel))
+    }
+  }
+
+  const notificationOperationRefs: InquiryOperatorOperationRef[] = []
+  for (const operation of refs.operationRows) {
+    if (stringField(operation, 'scope') !== 'notification') {
+      continue
+    }
+
+    const effects = stringArrayField(operation, 'effectRefs')
+    const hasMatchingEffect = effects.some((effect) => {
+      return (
+        dispatchIds.has(effectValueFromRef(effect, 'dispatch') ?? '') ||
+        webhookIds.has(effectValueFromRef(effect, 'webhook') ?? '')
+      )
     })
-    .map(operatorOperationRefFromRow)
+
+    if (hasMatchingEffect) {
+      notificationOperationRefs.push(operatorOperationRefFromRow(operation))
+    }
+  }
+  const attemptsByDispatchId = new Map<string, InquiryOperatorDispatchAttemptRef[]>()
+  const webhooksByDispatchId = new Map<string, InquiryOperatorWebhookRef[]>()
+  if (row.dispatchRefs.length > 0) {
+    for (const attempt of refs.attempts) {
+      const dispatchId = stringField(attempt, 'dispatchId')
+      const existing = attemptsByDispatchId.get(dispatchId)
+      const attemptRef = operatorAttemptRefFromRow(attempt)
+      if (existing === undefined) {
+        attemptsByDispatchId.set(dispatchId, [attemptRef])
+      } else {
+        existing.push(attemptRef)
+      }
+    }
+
+    for (const webhook of webhookRefs) {
+      const dispatchId = optionalStringField(webhook, 'dispatchId')
+      if (dispatchId === undefined) {
+        continue
+      }
+      const existing = webhooksByDispatchId.get(dispatchId)
+      const webhookRef = operatorWebhookRefFromRow(webhook)
+      if (existing === undefined) {
+        webhooksByDispatchId.set(dispatchId, [webhookRef])
+      } else {
+        existing.push(webhookRef)
+      }
+    }
+  }
 
   return {
     rowId: row.rowId,
@@ -2252,12 +2334,8 @@ function serializeOperatorRow(
     })),
     dispatchRefs: row.dispatchRefs.map((dispatch) => ({
       ...dispatch,
-      attemptRefs: refs.attempts
-        .filter((attempt) => stringField(attempt, 'dispatchId') === dispatch.dispatchId)
-        .map(operatorAttemptRefFromRow),
-      webhookRefs: webhookRefs
-        .filter((webhook) => optionalStringField(webhook, 'dispatchId') === dispatch.dispatchId)
-        .map(operatorWebhookRefFromRow),
+      attemptRefs: attemptsByDispatchId.get(dispatch.dispatchId) ?? [],
+      webhookRefs: webhooksByDispatchId.get(dispatch.dispatchId) ?? [],
     })),
     auditRefs: uniqueOperatorRefs([...row.auditRefs, ...notificationAuditRefs], (ref) => `${ref.eventType}:${ref.targetRef}:${ref.operationKey}`),
     funnelRefs: uniqueOperatorRefs([...row.funnelRefs, ...notificationFunnelRefs], (ref) => `${ref.eventType}:${ref.correlationId}:${ref.createdAt}`),

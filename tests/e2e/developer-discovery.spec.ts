@@ -9,11 +9,15 @@ test.describe('developer discovery', () => {
   test('page renders read-only discovery contracts without future authority copy', async ({ page }) => {
     await page.goto('/developers/discovery')
 
+    await expect(page.getByRole('main')).toBeVisible()
+    await expect(page.locator('#main-content')).toBeVisible()
+
     await expect(page.getByRole('heading', { name: /read-only public catalog files/i })).toBeVisible()
     await expect(page.getByRole('link', { name: /download schema json/i })).toHaveAttribute('href', '/api/discovery/schema')
     await expect(page.getByRole('link', { name: /download examples json/i })).toHaveAttribute('href', '/api/discovery/examples')
     await expect(page.getByRole('link', { name: /download fixture bundle/i })).toHaveAttribute('href', '/api/discovery/fixtures')
-    await expect(page.getByText(/phase 2 inquiry status/i)).toBeVisible()
+    await expect(page.getByText('Source-owned readback', { exact: true })).toBeVisible()
+    await expect(page.getByText(/current public catalog facts/i)).toBeVisible()
     await expect(page.getByText(/gated exclusions/i)).toBeVisible()
     await expect(page.getByText(/API keys/i)).toBeVisible()
     await expect(page.getByText(/read path status/i)).toBeVisible()

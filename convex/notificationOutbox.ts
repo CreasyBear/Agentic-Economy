@@ -550,8 +550,10 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadNotificationOutboxSourceState(db)
-    const authority = await readCurrentOperatorAuthority(ctx)
+    const [state, authority] = await Promise.all([
+      loadNotificationOutboxSourceState(db),
+      readCurrentOperatorAuthority(ctx),
+    ])
     const result = retryNotificationDispatchModule(state, {
       ...(authority === undefined ? {} : { authority }),
       dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),
@@ -598,8 +600,10 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
-    const state = await loadNotificationOutboxSourceState(db)
-    const authority = await readCurrentOperatorAuthority(ctx)
+    const [state, authority] = await Promise.all([
+      loadNotificationOutboxSourceState(db),
+      readCurrentOperatorAuthority(ctx),
+    ])
     const result = markNotificationNoRepairModule(state, {
       ...(authority === undefined ? {} : { authority }),
       dispatchId: brandNonEmpty(args.dispatchId, 'NotificationDispatchId'),

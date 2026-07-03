@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
-import { setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
+import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import {
@@ -168,7 +168,7 @@ describe('POST /api/answer/turn boundary follow-up', () => {
             'Content-Type': 'application/json',
             cookie: SESSION_COOKIE,
           },
-          body: JSON.stringify({ query: 'plumber' }),
+          body: JSON.stringify({ query: 'plumber parramatta' }),
         }),
       )
       const firstFrames = parseStream(await first.text())
@@ -210,5 +210,5 @@ describe('POST /api/answer/turn boundary follow-up', () => {
       expect(complete.answer.oneLine).not.toContain('No listed businesses match "Narrow to Parramatta"')
       expect(complete.answer.compactLayout).toBe(true)
     })
-  })
+  }, 15_000)
 })

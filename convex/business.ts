@@ -440,8 +440,10 @@ async function runVisibilityChange(
   }
 
   const db = runtimeDb(ctx.db)
-  const source = await loadPhaseOneSourceState(db)
-  const adminMembership = await readCurrentActiveMembership(ctx)
+  const [source, adminMembership] = await Promise.all([
+    loadPhaseOneSourceState(db),
+    readCurrentActiveMembership(ctx),
+  ])
   const authority = requireAdminAuthority(adminMembership, 'change_public_visibility')
   if (authority.kind === 'denied') {
     const denied = recordAdminActionDenied(adminAuthorityState(source), {

@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
 import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   readAdminIndexHealthThroughSource,
 } from '@/modules/security/admin-readback.functions'
@@ -10,6 +11,7 @@ import {
 const readAdminIndexHealthServer = createServerFn().handler(() => readAdminIndexHealthThroughSource())
 
 export const Route = createFileRoute('/admin/index-health')({
+  ...operatorRouteOptions,
   loader: async () => ({
     readback: await readAdminIndexHealthServer(),
   }),
@@ -31,7 +33,7 @@ function AdminIndexHealthRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Index health"
       description="Check catalog and projection readbacks before public discovery files are allowed to ship."
       currentPath="/admin/index-health"

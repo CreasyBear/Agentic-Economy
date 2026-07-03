@@ -73,13 +73,16 @@ shown through truthful content, not a labelled ledger.
 
 ## When you change AE
 
-- Read `DESIGN.md` before any visual or UI change. `src/styles/tokens.css` is
-  the token implementation; when they disagree, `DESIGN.md` wins.
-- No coral, pink, cream, linen, or beige. The single warm accent is signage
-  amber `#E89B3C`. Body field is sunlit drafting paper `#ECEAE1`.
-- Fonts: Fraunces (display), Hanken Grotesk (body/UI), IBM Plex Mono (data).
-- Keep the hand-drawn pen-and-ink line illustration as the signature brand
-  asset. Do not replace it with flat vector illustration.
+- Read `DESIGN.md` before any visual or UI change. `DESIGN.md` is the visual
+  authority; it now defines the Astryx-era system and supersedes the retired
+  Daylight Register identity.
+- Use Astryx (`@astryxdesign/core` plus `@astryxdesign/theme-neutral`) first for
+  components, templates, overlays, tables, forms, feedback, and navigation.
+  Tailwind 4 utilities are layout glue only.
+- Do not add or extend bespoke `Ae*` presentation components, shadcn/radix/cva
+  wrappers, handwritten CSS files, fontsource fonts, or Daylight
+  Fraunces/amber/paper/hand-drawn brand assets. Existing behavioral AE modules
+  may remain while they are re-skinned onto Astryx primitives.
 - No AI-slop: purple gradients, 3-column icon grids, centered-everything,
   bubble radius on everything, gradient CTA buttons, glassmorphism, blobs.
 - Add new operations as actions (`<module>/<module>.actions.ts`) and import

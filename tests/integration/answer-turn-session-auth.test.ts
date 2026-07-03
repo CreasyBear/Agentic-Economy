@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { resetAnswerTurnGuardForTests, setAnswerThreadPortForTests } from '@/modules/answer-thread/public'
+import { resetAnswerTurnGuardForTests, setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import {

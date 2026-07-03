@@ -1,0 +1,14 @@
+Rule: react-doctor/no-event-handler
+Severity: warning
+Category: Bugs
+Count: 2
+
+Faking an event handler with a prop plus a useEffect costs an extra render & runs late.
+
+Suggestion: Run the side effect in the event handler that triggers it, instead of watching its state from a useEffect. See https://react.dev/learn/you-might-not-need-an-effect#sharing-logic-between-event-handlers
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/no-event-handler
+
+Files:
+  src/components/ae/chat/AeThreadMessageScroller.tsx:82
+  src/components/ae/chat/AeThreadMessageScroller.tsx:82

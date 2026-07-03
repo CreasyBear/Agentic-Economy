@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { SearchIcon } from 'lucide-react'
+import { TextInput } from '@astryxdesign/core/TextInput'
 
-import { Button } from '@/components/ui/button'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
+import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 
 export type AePublicSearchBarProps = {
   id: string
@@ -15,8 +16,9 @@ export type AePublicSearchBarProps = {
   hiddenFields?: readonly { name: string; value: string }[]
 }
 
+const EMPTY_HIDDEN_FIELDS: NonNullable<AePublicSearchBarProps['hiddenFields']> = []
+
 export function AePublicSearchBar({
-  id,
   name,
   label,
   defaultValue = '',
@@ -24,34 +26,28 @@ export function AePublicSearchBar({
   submitLabel = 'Search',
   action,
   method = 'get',
-  hiddenFields = [],
+  hiddenFields = EMPTY_HIDDEN_FIELDS,
 }: AePublicSearchBarProps) {
+  const [query, setQuery] = useState(defaultValue)
+
   return (
-    <form action={action} method={method} className="ae-public-search-bar grid gap-2">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">
-        {label}
-      </label>
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-        <InputGroup className="ae-public-search-bar__group min-h-11">
-          <InputGroupAddon align="inline-start">
-            <SearchIcon aria-hidden="true" className="size-4 text-muted-foreground" />
-          </InputGroupAddon>
-          <InputGroupInput
-            id={id}
-            name={name}
-            type="search"
-            defaultValue={defaultValue}
-            placeholder={placeholder}
-            autoComplete="off"
-          />
-        </InputGroup>
+    <form action={action} method={method} className="grid gap-2">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <TextInput
+          label={label}
+          htmlName={name}
+          type={'search' as 'text'}
+          value={query}
+          startIcon={<SearchIcon aria-hidden="true" />}
+          {...(placeholder === undefined ? {} : { placeholder })}
+          onChange={setQuery}
+        />
         {hiddenFields.map((field) => (
           <input key={field.name} type="hidden" name={field.name} value={field.value} />
         ))}
-        <Button type="submit">
-          <SearchIcon data-icon="inline-start" aria-hidden="true" />
+        <AeActionButton type="submit" leadingIcon={<SearchIcon />}>
           {submitLabel}
-        </Button>
+        </AeActionButton>
       </div>
     </form>
   )

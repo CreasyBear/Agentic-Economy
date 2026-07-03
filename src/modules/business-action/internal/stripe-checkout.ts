@@ -373,10 +373,23 @@ function checkoutError(
 }
 
 function parseStripeSignatureHeader(value: string): { timestamp: number; signatures: readonly string[] } | undefined {
-  const parts = value.split(',').map((part) => part.trim())
-  const timestampPart = parts.find((part) => part.startsWith('t='))
-  const timestamp = timestampPart === undefined ? Number.NaN : Number(timestampPart.slice(2))
-  const signatures = parts.filter((part) => part.startsWith('v1=')).map((part) => part.slice(3))
+  const parts = value.split(',')
+  let timestamp = Number.NaN
+  let timestampSeen = false
+  const signatures: string[] = []
+  for (const part of parts) {
+    const trimmed = part.trim()
+    if (trimmed.startsWith('t=')) {
+      if (!timestampSeen) {
+        timestamp = Number(trimmed.slice(2))
+        timestampSeen = true
+      }
+      continue
+    }
+    if (trimmed.startsWith('v1=')) {
+      signatures.push(trimmed.slice(3))
+    }
+  }
 
   if (!Number.isSafeInteger(timestamp) || signatures.length === 0) {
     return undefined

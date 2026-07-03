@@ -1,12 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
 import { readCurrentOwnerBusinessActionDetailServer } from '@/modules/business-action/business-action.functions'
 import type { CapabilityRequestId } from '@/modules/common/ids'
 import {
-  FactGrid,
   ownerBusinessActionDetailServerToRouteReadback,
   readOwnerBusinessActionDetailRouteReadback as readOwnerBusinessActionDetailFromSource,
   type OwnerBusinessActionDetailRouteInput,
@@ -41,17 +42,17 @@ function OwnerBusinessActionDetailRoute() {
   if (readback.kind !== 'ok') {
     return (
       <AeOperatorShell
-        role="owner"
+        operatorRole="owner"
         eyebrow="Owner checkpoint"
         title="Business action request unavailable"
         description="Source-owned request readback is required before an owner checkpoint can be inspected."
         currentPath="/owner/business-actions"
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>Readback unavailable</CardTitle>
-            <CardDescription>{readback.reason}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Readback unavailable</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.reason}</Text>
+          </div>
         </Card>
       </AeOperatorShell>
     )
@@ -60,23 +61,23 @@ function OwnerBusinessActionDetailRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Owner checkpoint"
       title="Business action request checkpoint"
       description="source/local proof only. production proof not claimed."
       currentPath="/owner/business-actions"
     >
-      <Card>
-        <CardHeader>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{reconstruction.checkpoint?.decision.replaceAll('_', ' ') ?? 'missing checkpoint'}</Badge>
-            <Badge variant="outline">{reconstruction.resultArtifactState.status.replaceAll('_', ' ')}</Badge>
+            <Badge variant="neutral" label={reconstruction.checkpoint?.decision.replaceAll('_', ' ') ?? 'missing checkpoint'} />
+            <Badge variant="neutral" label={reconstruction.resultArtifactState.status.replaceAll('_', ' ')} />
           </div>
-          <CardTitle className="break-words text-lg">{reconstruction.request.id}</CardTitle>
-          <CardDescription>Owner-visible receipt hashes only. Raw provider payloads and private endpoint refs are excluded.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FactGrid
+          <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words text-lg">{reconstruction.request.id}</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">Owner-visible receipt hashes only. Raw provider payloads and private endpoint refs are excluded.</Text>
+        </div>
+        <div className="grid gap-4">
+          <AeOperatorFactGrid
             facts={[
               { label: 'Action', value: reconstruction.request.actionSlug },
               { label: 'Request status', value: reconstruction.request.status.replaceAll('_', ' ') },
@@ -85,7 +86,7 @@ function OwnerBusinessActionDetailRoute() {
               { label: 'Proof label', value: reconstruction.publicReadback?.labels.join(', ') ?? 'missing' },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
     </AeOperatorShell>
   )

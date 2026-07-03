@@ -1,0 +1,13 @@
+Rule: react-doctor/js-combine-iterations
+Severity: warning
+Category: Performance
+Count: 1
+
+This loops over your list twice because .map().filter() makes two passes, so do it in one pass with .reduce() or a for...of loop
+
+Suggestion: Combine `.map().filter()` style chains into one pass with `.reduce()` or a `for...of` loop, so you only loop over the list once
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/js-combine-iterations
+
+Files:
+  AeChat.tsx:350

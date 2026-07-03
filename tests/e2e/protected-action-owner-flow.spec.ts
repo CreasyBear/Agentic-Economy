@@ -34,7 +34,7 @@ test.describe('selected protected action routes', () => {
 
     await page.getByLabel(/I understand this approves one contact follow-up attempt/i).check()
     await page.getByRole('button', { name: /approve contact follow-up/i }).click()
-    await expect(page.getByText(/contact follow-up approved and source readback recorded/i)).toBeVisible()
+    await expect(page.getByText(/contact follow-up approved and recorded/i)).toBeVisible()
     await expect(page.getByText(/receipt recorded/i).first()).toBeVisible()
     expect(await page.locator('body').innerText()).not.toMatch(forbiddenFutureSurfaceCopy)
   })
@@ -56,13 +56,13 @@ test.describe('selected protected action routes', () => {
 
   test('owner receipt and admin reconstruction expose source-owned readback only', async ({ page }) => {
     await page.goto(`${approvedProposalPath}/receipt`)
-    await expect(page.getByRole('heading', { name: /contact follow-up reconstruction/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /contact follow-up history/i })).toBeVisible()
     await expect(page.getByText(/receipt recorded/i).first()).toBeVisible()
     await expect(page.getByText(/private evidence refs/i)).toBeVisible()
     await expect(page.getByText(/No raw provider payload is shown/i)).toBeVisible()
 
     await page.goto(`${failedProposalPath}/receipt`)
-    await expect(page.getByText(/proof gap/i).first()).toBeVisible()
+    await expect(page.getByText(/evidence missing/i).first()).toBeVisible()
     await expect(page.getByText(/retry available/i).first()).toBeVisible()
 
     await page.goto('/admin/protected-actions')

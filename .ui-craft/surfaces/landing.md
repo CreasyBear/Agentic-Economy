@@ -2,18 +2,19 @@
 
 ## Composition
 
-Single-viewport hero + trust bar + footer. No scroll required on desktop or mobile.
+Single-viewport query-first hero + trust line + footer. No scroll required on desktop or mobile. Visuals follow `DESIGN.md` Astryx Era: `AppShell` + `TopNav`, centered-hero composition, `ChatComposer`-style query input, and theme-neutral surfaces.
 
 ## Key decisions
 
-- Hero headline: "Find local service answers you can trust."
-- Lede states the source-verified, human-handoff boundary.
-- Primary action: Browse services. Secondary: List your business.
-- Trust signals: Source-owned, Owner-corrected, Human handoff.
+- Hero headline: "What do you need done?" or a route-specific equivalent that keeps query intent first.
+- Lede states the source-verified, human-handoff boundary in plain language.
+- Primary action: ask/submit the query. Secondary: browse services or list your business, visually subordinate.
+- Trust signals: published details, owner correction path, human handoff, agent-readable data.
+- One primary action per viewport.
 
-## Tokens used
+## Tokens and components used
 
-- `--ae-public-field` page background
-- `--ae-public-ink` text
-- `--ae-public-amber` primary CTA
-- `--ae-public-line` hairline rules
+- Astryx `AppShell` + `TopNav` for chrome.
+- Astryx centered-hero or form template for the query composition.
+- Astryx theme-neutral text/surface/border/focus roles.
+- Tailwind 4 utilities only for layout, viewport sizing, spacing, and responsive behavior.

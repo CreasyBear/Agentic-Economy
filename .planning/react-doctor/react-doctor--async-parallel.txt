@@ -1,0 +1,17 @@
+Rule: react-doctor/async-parallel
+Severity: warning
+Category: Performance
+Count: 3
+
+These 5 sequential await statements run one after another even though they look independent, so the page waits longer than it needs to. Run them together with Promise.all() instead
+
+These 3 sequential await statements run one after another even though they look independent, so the page waits longer than it needs to. Run them together with Promise.all() instead
+
+Suggestion: Use `const [a, b] = await Promise.all([fetchA(), fetchB()])` so independent calls run at the same time
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/async-parallel
+
+Files:
+  convex/catalog.ts:324
+  convex/discovery.ts:236
+  convex/inquiries.ts:1122

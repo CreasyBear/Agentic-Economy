@@ -1,17 +1,10 @@
 import { useMemo, useState } from 'react'
+import { Badge, type BadgeProps } from '@astryxdesign/core/Badge'
+import { Item } from '@astryxdesign/core/Item'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
-import { Badge } from '@/components/ui/badge'
-import {
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemFooter,
-  ItemGroup,
-  ItemHeader,
-  ItemTitle,
-} from '@/components/ui/item'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import type { InquiryNotificationStatus, OwnerInboxBucket, OwnerInboxInquiryProjection, OwnerInboxReadback } from '@/modules/inquiries/public'
 
 type InboxFilter = 'all' | OwnerInboxBucket
@@ -40,13 +33,13 @@ export function AeInquiryInboxPanel({ inbox }: AeInquiryInboxPanelProps) {
   }
 
   return (
-    <Tabs value={filter} onValueChange={(value) => setFilter(value as InboxFilter)} className="ae-inquiry-inbox">
-      <TabsList variant="line" aria-label="Filter messages by status">
-        <TabsTrigger value="all">All ({inbox.inquiries.length})</TabsTrigger>
-        <TabsTrigger value="unread">Unread ({inbox.buckets.unread})</TabsTrigger>
-        <TabsTrigger value="needs_reply">Needs reply ({inbox.buckets.needs_reply})</TabsTrigger>
-        <TabsTrigger value="resolved">Resolved ({inbox.buckets.resolved})</TabsTrigger>
-      </TabsList>
+    <div>
+      <TabList value={filter} onChange={(value) => setFilter(value as InboxFilter)} aria-label="Filter messages by status">
+        <Tab value="all" label={`All (${inbox.inquiries.length})`} />
+        <Tab value="unread" label={`Unread (${inbox.buckets.unread})`} />
+        <Tab value="needs_reply" label={`Needs reply (${inbox.buckets.needs_reply})`} />
+        <Tab value="resolved" label={`Resolved (${inbox.buckets.resolved})`} />
+      </TabList>
       <div className="mt-4">
         {filtered.length === 0 ? (
           <AeEmptyState
@@ -54,57 +47,65 @@ export function AeInquiryInboxPanel({ inbox }: AeInquiryInboxPanelProps) {
             description="Try another filter to see messages in a different state."
           />
         ) : (
-          <ItemGroup className="ae-inquiry-inbox__list gap-3">
+          <div className="grid gap-3">
             {filtered.map((inquiry) => (
               <AeInquiryInboxRow key={inquiry.threadId} inquiry={inquiry} />
             ))}
-          </ItemGroup>
+          </div>
         )}
       </div>
-    </Tabs>
+    </div>
   )
 }
 
 function AeInquiryInboxRow({ inquiry }: { inquiry: OwnerInboxInquiryProjection }) {
   const href = `/owner/inquiries/${encodeURIComponent(inquiry.threadId)}`
 
+  const labels = (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>{inquiry.serviceName}</span>
+        <Badge
+          variant={inquiry.bucket === 'resolved' ? 'info' : 'neutral'}
+          label={inquiry.bucket.replace('_', ' ')}
+        />
+        <Badge variant={notificationVariant(inquiry.notificationStatus)} label={inquiry.notificationLabel} />
+      </div>
+      <p className="line-clamp-2 text-sm text-primary">{inquiry.preview}</p>
+    </div>
+  )
+
+  const metadata = (
+    <div className="flex flex-wrap gap-2 text-xs text-secondary">
+      <span>{inquiry.messageCount} messages</span>
+      <span>{inquiry.status}</span>
+      <time dateTime={timestampIso(inquiry.updatedAt)} data-numeric>
+        {formatTimestamp(inquiry.updatedAt)}
+      </time>
+    </div>
+  )
+
   return (
-    <Item variant="outline" size="sm" className="ae-inquiry-inbox-row" asChild>
-      <a href={href}>
-        <ItemContent>
-          <ItemHeader>
-            <ItemTitle>{inquiry.serviceName}</ItemTitle>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={inquiry.bucket === 'resolved' ? 'secondary' : 'default'}>
-                {inquiry.bucket.replace('_', ' ')}
-              </Badge>
-              <Badge variant={notificationVariant(inquiry.notificationStatus)}>{inquiry.notificationLabel}</Badge>
-            </div>
-          </ItemHeader>
-          <ItemDescription>{inquiry.businessName}</ItemDescription>
-          <p className="line-clamp-2 text-sm text-foreground">{inquiry.preview}</p>
-          <ItemFooter className="text-xs text-muted-foreground">
-            <span>{inquiry.messageCount} messages</span>
-            <span>{inquiry.status}</span>
-            <time dateTime={new Date(inquiry.updatedAt).toISOString()}>
-              {new Date(inquiry.updatedAt).toISOString()}
-            </time>
-          </ItemFooter>
-        </ItemContent>
-      </a>
-    </Item>
+    <Item
+      href={href}
+      density="spacious"
+      align="start"
+      label={labels}
+      description={inquiry.businessName}
+      endContent={metadata}
+    />
   )
 }
 
-function notificationVariant(status: InquiryNotificationStatus): 'default' | 'secondary' | 'destructive' | 'outline' {
+function notificationVariant(status: InquiryNotificationStatus): NonNullable<BadgeProps['variant']> {
   switch (status) {
     case 'queued':
-      return 'outline'
+      return 'neutral'
     case 'sent':
-      return 'secondary'
+      return 'info'
     case 'failed':
-      return 'destructive'
+      return 'error'
     case 'held':
-      return 'outline'
+      return 'warning'
   }
 }

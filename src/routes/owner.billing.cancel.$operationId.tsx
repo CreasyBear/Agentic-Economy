@@ -3,16 +3,18 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { OwnerBillingStatePanel } from '@/future-phases/05-paid-activation-money-rails/owner-billing.panels'
-import { summarizeOwnerBillingRoute } from '@/future-phases/05-paid-activation-money-rails/owner-billing.readback'
+import { Banner } from '@astryxdesign/core/Banner'
+import { OwnerBillingStatePanel } from '@/modules/billing/owner-billing.panels'
+import { summarizeOwnerBillingRoute } from '@/modules/billing/owner-billing.readback'
 import {
   readCurrentOwnerBillingServer,
   recordCurrentOwnerBillingReturnServer,
 } from '@/modules/billing/billing.functions'
 import { ownerBillingServerToRouteReadback } from '@/routes/owner.billing'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 
 export const Route = createFileRoute('/owner/billing/cancel/$operationId')({
+  ...operatorRouteOptions,
   loader: () => readCurrentOwnerBillingServer(),
   head: () => ({
     meta: [
@@ -58,7 +60,7 @@ function OwnerBillingCancelRoute() {
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Canceled return"
       title="Return canceled"
       description="Your canceled return was recorded. No plan was started."
@@ -66,16 +68,18 @@ function OwnerBillingCancelRoute() {
     >
       <div className="grid gap-6">
         {message === undefined ? null : (
-          <Alert>
-            <AlertTitle>Cancel recorded</AlertTitle>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
+          <Banner
+            status="success"
+            title="Cancel recorded"
+            description={message}
+          />
         )}
         {error === undefined ? null : (
-          <Alert variant="destructive">
-            <AlertTitle>Cancel could not be recorded</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+          <Banner
+            status="error"
+            title="Cancel could not be recorded"
+            description={error}
+          />
         )}
         <OwnerBillingStatePanel summary={summary} />
       </div>

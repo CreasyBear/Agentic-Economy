@@ -10,8 +10,10 @@ const observabilityRequestMiddleware = createMiddleware().server(async (ctx) => 
     return ctx.next()
   }
 
-  const { flushPostHogServer } = await import('@/lib/observability/posthog.server')
-  const { captureServerException, initSentryServer, Sentry } = await import('@/lib/observability/sentry.server')
+  const [{ flushPostHogServer }, { captureServerException, initSentryServer, Sentry }] = await Promise.all([
+    import('@/lib/observability/posthog.server'),
+    import('@/lib/observability/sentry.server'),
+  ])
 
   initSentryServer()
   const url = new URL(ctx.request.url)

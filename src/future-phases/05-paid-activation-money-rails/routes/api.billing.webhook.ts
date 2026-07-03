@@ -1,7 +1,7 @@
-import { createParkedFileRoute } from '@/future-phases/route-helpers'
-import { handleBillingWebhookRequest } from '@/routes/api.billing.webhook'
+import { createParkedFileRoute } from '../../route-helpers'
+import { handleBillingWebhookRequest } from '../../../routes/api.billing.webhook'
 
-export { handleBillingWebhookRequest } from '@/routes/api.billing.webhook'
+export { handleBillingWebhookRequest } from '../../../routes/api.billing.webhook'
 
 export const Route = createParkedFileRoute<never>('/api/billing/webhook')({
   server: {

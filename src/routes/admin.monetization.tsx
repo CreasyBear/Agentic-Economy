@@ -1,19 +1,21 @@
 import { useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { toast } from 'sonner'
+import { toast } from '@/lib/ui/toast'
 
 import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeSelectField } from '@/components/ae/forms/AeSelectField'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Field, FieldDescription, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { Input } from '@/components/ui/input'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { Field } from '@astryxdesign/core/Field'
+import { TextInput } from '@astryxdesign/core/TextInput'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   publishAdminBillingOfferServer,
   readAdminBillingServer,
@@ -35,6 +37,7 @@ type AdminMonetizationReadback = {
 }
 
 export const Route = createFileRoute('/admin/monetization')({
+  ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): AdminMonetizationSearch => {
     const businessId = typeof search.businessId === 'string' && search.businessId.trim().length > 0 ? search.businessId.trim() : undefined
     const operationStatus =
@@ -82,6 +85,7 @@ function AdminMonetizationRoute() {
   const [error, setError] = useState<string | undefined>(readback.deniedReason)
   const publishOffer = useServerFn(publishAdminBillingOfferServer)
   const recordEvidence = useServerFn(recordAdminBillingEvidenceServer)
+  const [activeTab, setActiveTab] = useState('operations')
 
   if (location.pathname !== '/admin/monetization') {
     return <Outlet />
@@ -139,35 +143,28 @@ function AdminMonetizationRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
-      title="Billing operations"
+      operatorRole="admin"
+      title="Billing"
       description="Review billing operations. Public plans stay off until provider evidence is recorded."
       currentPath="/admin/monetization"
-      breadcrumbs={[{ label: 'Monetization', href: '/admin/monetization' }]}
     >
-      <Tabs defaultValue="operations">
-        <TabsList>
-          <TabsTrigger value="operations">Operations</TabsTrigger>
-          <TabsTrigger value="publish">Publish offer</TabsTrigger>
-          <TabsTrigger value="evidence">Record evidence</TabsTrigger>
-        </TabsList>
-        <TabsContent value="operations">
+      <div className="grid gap-4">
+        <TabList value={activeTab} onChange={setActiveTab} hasDivider aria-label="Billing admin sections">
+          <Tab value="operations" label="Operations" />
+          <Tab value="publish" label="Publish offer" />
+          <Tab value="evidence" label="Record evidence" />
+        </TabList>
+        {activeTab === 'operations' ? (
           <div className="grid gap-6">
             <FilterPanel
               {...(search.businessId === undefined ? {} : { businessId: search.businessId })}
               {...(search.operationStatus === undefined ? {} : { operationStatus: search.operationStatus })}
             />
             {message === undefined ? null : (
-              <Alert>
-                <AlertTitle>Billing source updated</AlertTitle>
-                <AlertDescription>{message}</AlertDescription>
-              </Alert>
+              <Banner status="success" title="Billing source updated" description={message} />
             )}
             {error === undefined ? null : (
-              <Alert variant="destructive">
-                <AlertTitle>Billing admin needs attention</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+              <Banner status="error" title="Billing admin needs attention" description={error} />
             )}
             <AdminBillingSummary projection={readback.projection} />
             <AdminBillingOperationRows
@@ -175,18 +172,18 @@ function AdminMonetizationRoute() {
               {...(search.operationStatus === undefined ? {} : { operationStatus: search.operationStatus })}
             />
           </div>
-        </TabsContent>
-        <TabsContent value="publish">
+        ) : null}
+        {activeTab === 'publish' ? (
           <div className="grid gap-6">
             <PublishOfferPanel onSubmit={handlePublishOffer} {...(search.businessId === undefined ? {} : { businessId: search.businessId })} />
           </div>
-        </TabsContent>
-        <TabsContent value="evidence">
+        ) : null}
+        {activeTab === 'evidence' ? (
           <div className="grid gap-6">
             <RecordEvidencePanel onSubmit={handleRecordEvidence} {...(search.businessId === undefined ? {} : { businessId: search.businessId })} />
           </div>
-        </TabsContent>
-      </Tabs>
+        ) : null}
+      </div>
     </AeOperatorShell>
   )
 }
@@ -219,12 +216,12 @@ function FilterPanel({ businessId, operationStatus }: { businessId?: string; ope
 
 function PublishOfferPanel({ businessId, onSubmit }: { businessId?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Publish sandbox offer</CardTitle>
-        <CardDescription>Offer publication does not create a public paid-activation claim by itself.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Publish sandbox offer</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Offer publication does not create a public paid-activation claim by itself.</Text>
+      </div>
+      <div className="grid gap-4">
         <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2" noValidate>
           <AdminBillingTextField
             id="publishBusinessId"
@@ -242,25 +239,24 @@ function PublishOfferPanel({ businessId, onSubmit }: { businessId?: string; onSu
           <p className="md:col-span-2 text-sm leading-6 text-muted-foreground">
             Publishing records sandbox offer state only. Public paid activation still requires provider evidence and an owner activation attempt.
           </p>
-          <Button type="submit" className="w-fit">Publish sandbox offer</Button>
+          <Button type="submit" className="w-fit" label="Publish sandbox offer" />
         </form>
-      </CardContent>
+      </div>
     </Card>
   )
 }
 
 function RecordEvidencePanel({ businessId, onSubmit }: { businessId?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const [connectionStatus, setConnectionStatus] = useState('unavailable')
-  const connectionStatusField = getFieldAccessibility({ id: 'connectionStatus', hasDescription: true })
-
+  const connectionStatusDescriptionId = 'connectionStatus-desc'
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Record provider support evidence</CardTitle>
-        <CardDescription>Ready evidence must come from provider readback, never env presence alone.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Record provider support evidence</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">Ready evidence must come from provider readback, never env presence alone.</Text>
+      </div>
+      <div className="grid gap-4">
         <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2" noValidate>
           <AdminBillingTextField
             id="evidenceBusinessId"
@@ -269,20 +265,23 @@ function RecordEvidencePanel({ businessId, onSubmit }: { businessId?: string; on
             description="Evidence is recorded against this business only."
             defaultValue={businessId ?? ''}
           />
-          <Field {...connectionStatusField.fieldProps}>
-            <FieldLabel htmlFor={connectionStatusField.controlProps.id}>Connection status</FieldLabel>
+          <Field
+            label="Connection status"
+            inputID="connectionStatus"
+            description="Ready must come from provider readback, not env presence alone."
+            descriptionID={connectionStatusDescriptionId}
+          >
             <AeSelectField
-              id={connectionStatusField.controlProps.id}
+              id="connectionStatus"
               name="connectionStatus"
               value={connectionStatus}
               options={[
                 { value: 'unavailable', label: 'Unavailable' },
                 { value: 'ready', label: 'Ready' },
               ]}
-              {...(connectionStatusField.controlProps['aria-describedby'] === undefined ? {} : { describedBy: connectionStatusField.controlProps['aria-describedby'] })}
+              describedBy={connectionStatusDescriptionId}
               onValueChange={setConnectionStatus}
             />
-            <FieldDescription {...connectionStatusField.descriptionProps}>Ready must come from provider readback, not env presence alone.</FieldDescription>
           </Field>
           <AdminBillingTextField id="evidenceProviderObjectId" name="providerObjectId" label="Provider object ID" description="Provider-side object or account reference." />
           <AdminBillingTextField id="evidenceRouteEvidenceRef" name="routeEvidenceRef" label="Route evidence ref" description="Internal evidence reference for the route readback." />
@@ -291,9 +290,9 @@ function RecordEvidencePanel({ businessId, onSubmit }: { businessId?: string; on
           <p className="md:col-span-2 text-sm leading-6 text-muted-foreground">
             Evidence changes support and operator state. It does not charge, subscribe, or publish a customer-facing paid claim.
           </p>
-          <Button type="submit" variant="outline" className="w-fit">Record provider evidence</Button>
+          <Button type="submit" variant="secondary" className="w-fit" label="Record provider evidence" />
         </form>
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -313,26 +312,24 @@ function AdminBillingTextField({
   defaultValue?: string
   className?: string
 }) {
-  const fieldA11y = getFieldAccessibility({ id, hasDescription: true })
+  const [value, setValue] = useState(defaultValue ?? '')
 
   return (
-    <Field {...fieldA11y.fieldProps} className={className}>
-      <FieldLabel htmlFor={fieldA11y.controlProps.id}>{label}</FieldLabel>
-      <Input {...fieldA11y.controlProps} name={name} defaultValue={defaultValue ?? ''} />
-      <FieldDescription {...fieldA11y.descriptionProps}>{description}</FieldDescription>
-    </Field>
+    <div className={className}>
+      <TextInput label={label} description={description} htmlName={name} value={value} onChange={setValue} />
+    </div>
   )
 }
 
 
 function AdminBillingSummary({ projection }: { projection: AdminBillingProjection }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Billing reconstruction</CardTitle>
-        <CardDescription>{projection.businessId}</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card padding={5}>
+      <div className="grid gap-1.5">
+        <Text as="div" type="large" weight="semibold" color="primary" display="block">Billing reconstruction</Text>
+        <Text as="div" type="supporting" color="secondary" display="block">{projection.businessId}</Text>
+      </div>
+      <div className="grid gap-4">
         <AeOperatorFactGrid
           facts={[
             { label: 'Operations', value: projection.operations.length },
@@ -343,7 +340,7 @@ function AdminBillingSummary({ projection }: { projection: AdminBillingProjectio
             },
           ]}
         />
-      </CardContent>
+      </div>
     </Card>
   )
 }
@@ -381,7 +378,7 @@ function AdminBillingOperationRows({
           {
             label: 'Open operation',
             href: `/admin/monetization/${encodeURIComponent(operation.id)}`,
-            variant: 'outline',
+            variant: 'secondary',
           },
         ],
       }))}

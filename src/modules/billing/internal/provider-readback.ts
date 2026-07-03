@@ -147,7 +147,7 @@ export function createAutumnHttpProvider(config: AutumnClientConfig): AutumnProv
   }
 }
 
-export function normalizeAttach(raw: Record<string, unknown>): AutumnAttachReadback {
+function normalizeAttach(raw: Record<string, unknown>): AutumnAttachReadback {
   const customerId = readString(raw.customer_id)
   if (customerId === undefined) {
     throw new Error('Autumn attach response missing customer_id')
@@ -164,7 +164,7 @@ export function normalizeAttach(raw: Record<string, unknown>): AutumnAttachReadb
   }
 }
 
-export function normalizeCustomer(raw: Record<string, unknown>): AutumnCustomerReadback {
+function normalizeCustomer(raw: Record<string, unknown>): AutumnCustomerReadback {
   const customerId = readString(raw.id) ?? readString(raw.customer_id)
   if (customerId === undefined) {
     throw new Error('Autumn customer response missing customer id')

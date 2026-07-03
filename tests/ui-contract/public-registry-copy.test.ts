@@ -6,7 +6,7 @@ describe('public registry copy contract', () => {
   it('keeps registry copy in customer-facing business-detail language', () => {
     const route = readFileSync('src/routes/registry.tsx', 'utf8')
     const searchPanel = readFileSync('src/components/ae/forms/AeRegistrySearchPanel.tsx', 'utf8')
-    const card = readFileSync('src/components/ae/registry/AeRegistryCard.tsx', 'utf8')
+    const card = readFileSync('src/components/ae/primitives/AeProviderCard.tsx', 'utf8')
 
     expect(route).toContain('Find local service details before you contact a business.')
     expect(searchPanel).toContain('Business, service, or place')

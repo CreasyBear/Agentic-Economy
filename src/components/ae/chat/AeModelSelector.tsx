@@ -1,15 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { ChevronDownIcon } from 'lucide-react'
 
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover } from '@astryxdesign/core/Popover'
 
 import { useAnswerModel } from './AeAnswerModelContext'
 
@@ -18,18 +10,36 @@ export function AeModelSelector() {
   const { enabled, loading, modelsByProvider, selectedModel, selectedModelId, setSelectedModelId } =
     useAnswerModel()
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
 
   const providerEntries = useMemo(
     () =>
       Object.entries(modelsByProvider).sort(([providerA], [providerB]) => providerA.localeCompare(providerB)),
     [modelsByProvider],
   )
+  const filteredProviderEntries = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (needle.length === 0) {
+      return providerEntries
+    }
+
+    return providerEntries
+      .map(([provider, models]) => {
+        const filteredModels = models.filter((model) =>
+          `${provider} ${model.name} ${model.id}`.toLowerCase().includes(needle),
+        )
+        return [provider, filteredModels] as const
+      })
+      .filter(([, models]) => models.length > 0)
+  }, [providerEntries, query])
 
   if (loading) {
     return (
-      <div className="ae-model-selector ae-model-selector--loading" aria-hidden="true">
-        <span className="ae-model-selector__label">Model</span>
-        <span className="ae-model-selector__trigger ae-model-selector__trigger--disabled">Loading…</span>
+      <div className="inline-flex items-center gap-2" aria-hidden="true">
+        <span className="font-mono text-xs uppercase tracking-wider text-secondary">Model</span>
+        <span className="inline-flex min-h-9 items-center rounded-md border border-border bg-surface px-3 text-xs text-secondary opacity-70">
+          Loading…
+        </span>
       </div>
     )
   }
@@ -43,60 +53,75 @@ export function AeModelSelector() {
   }
 
   return (
-    <div className="ae-model-selector">
-      <span className="ae-model-selector__label" id={`${listboxId}-label`}>
+    <div className="relative inline-flex items-center gap-2">
+      <span className="font-mono text-xs uppercase tracking-wider text-secondary" id={`${listboxId}-label`}>
         Model
       </span>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="ae-model-selector__trigger"
-            aria-haspopup="listbox"
-            aria-expanded={open}
-            aria-labelledby={`${listboxId}-label`}
-          >
-            <span className="ae-model-selector__provider" aria-hidden="true">
-              {selectedModel.provider.slice(0, 1)}
-            </span>
-            <span className="ae-model-selector__name">{selectedModel.name}</span>
-            <ChevronDownIcon aria-hidden="true" className="ae-model-selector__chevron size-3.5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          className="ae-model-selector__panel w-[min(18.75rem,calc(100vw-2*var(--ae-public-gutter)))] p-0"
-          side="top"
-          align="end"
-          sideOffset={8}
+      <Popover
+        isOpen={open}
+        onOpenChange={setOpen}
+        placement="above"
+        alignment="end"
+        label="Choose answer model"
+        className="w-[18.75rem] max-w-[calc(100vw-2rem)] p-2"
+        content={
+          <div id={listboxId} className="grid gap-2 bg-transparent">
+            <label className="flex min-h-10 items-center rounded-md border border-border bg-card px-3">
+              <span className="sr-only">Search models</span>
+              <input
+                aria-controls={`${listboxId}-options`}
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                onChange={(event) => setQuery(event.currentTarget.value)}
+                placeholder="Search models…"
+                type="search"
+                value={query}
+              />
+            </label>
+            <div id={`${listboxId}-options`} role="listbox" className="grid max-h-56 gap-1 overflow-auto">
+              {filteredProviderEntries.length === 0 ? (
+                <div className="px-3 py-2 text-sm text-secondary">No model found.</div>
+              ) : (
+                filteredProviderEntries.map(([provider, models]) => (
+                  <div key={provider} role="group" aria-label={provider} className="grid gap-1">
+                    <div className="px-2 py-1 text-xs font-medium text-secondary">{provider}</div>
+                    {models.map((model) => {
+                      const isSelected = model.id === selectedModelId
+                      return (
+                        <button
+                          key={model.id}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          data-selected={isSelected ? 'true' : undefined}
+                          className="flex min-h-9 items-center rounded-md px-2 text-left text-sm text-primary hover:bg-muted data-[selected=true]:bg-muted data-[selected=true]:font-medium"
+                          onClick={() => {
+                            setSelectedModelId(model.id)
+                            setOpen(false)
+                            setQuery('')
+                          }}
+                        >
+                          <span className="truncate">{model.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        }
+      >
+        <button
+          type="button"
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-3 text-xs font-medium text-primary transition-colors hover:bg-muted"
+          aria-labelledby={`${listboxId}-label`}
         >
-          <Command id={listboxId} className="ae-model-selector-command bg-transparent">
-            <CommandInput placeholder="Search models…" aria-controls={listboxId} />
-            <CommandList className="max-h-56">
-              <CommandEmpty className="ae-model-selector__empty">No model found.</CommandEmpty>
-              {providerEntries.map(([provider, models]) => (
-                <CommandGroup key={provider} heading={provider} className="ae-model-selector__group">
-                  {models.map((model) => {
-                    const isSelected = model.id === selectedModelId
-                    return (
-                      <CommandItem
-                        key={model.id}
-                        value={`${provider} ${model.name} ${model.id}`}
-                        data-checked={isSelected ? true : undefined}
-                        className="ae-model-selector__option"
-                        onSelect={() => {
-                          setSelectedModelId(model.id)
-                          setOpen(false)
-                        }}
-                      >
-                        <span className="ae-model-selector__option-name">{model.name}</span>
-                      </CommandItem>
-                    )
-                  })}
-                </CommandGroup>
-              ))}
-            </CommandList>
-          </Command>
-        </PopoverContent>
+          <span className="inline-flex size-5 items-center justify-center rounded-md bg-muted font-mono text-2xs font-semibold uppercase text-secondary" aria-hidden="true">
+            {selectedModel.provider.slice(0, 1)}
+          </span>
+          <span className="max-w-44 truncate">{selectedModel.name}</span>
+          <ChevronDownIcon aria-hidden="true" className={`size-3.5 text-secondary transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
       </Popover>
     </div>
   )

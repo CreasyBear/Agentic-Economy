@@ -1014,10 +1014,14 @@ export function listOwnerContactFollowUpQueue(
   ownerId: OwnerId,
   businessId?: BusinessId
 ): readonly ContactFollowUpProposalQueueItem[] {
-  return state.proposals
-    .filter((proposal) => proposal.ownerId === ownerId && (businessId === undefined || proposal.businessId === businessId))
-    .map((proposal) => buildQueueItem(state, proposal))
-    .sort((left, right) => right.proposal.createdAt - left.proposal.createdAt)
+  const queue: ContactFollowUpProposalQueueItem[] = []
+  for (const proposal of state.proposals) {
+    if (proposal.ownerId === ownerId && (businessId === undefined || proposal.businessId === businessId)) {
+      queue.push(buildQueueItem(state, proposal))
+    }
+  }
+  queue.sort((left, right) => right.proposal.createdAt - left.proposal.createdAt)
+  return queue
 }
 
 export function readContactFollowUpProposal(

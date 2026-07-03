@@ -268,6 +268,30 @@ describe('Convex business action source persistence', () => {
     expect(JSON.stringify(verification.publicReadback)).not.toContain('private-endpoint://')
   })
 
+  it('marks scalar receipt hash drift as tampered', () => {
+    const state = completeSourceState()
+    const receipt = state.receipts[0]
+    if (receipt === undefined) {
+      throw new Error('expected receipt')
+    }
+
+    const scalarHashOverrides = [
+      { field: 'cardHash', value: 'hash:tampered-card' as SourceHash },
+      { field: 'mandateHash', value: 'hash:tampered-mandate' as SourceHash },
+      { field: 'requestHash', value: 'hash:tampered-request' as SourceHash },
+      { field: 'checkpointHash', value: 'hash:tampered-checkpoint' as SourceHash },
+      { field: 'resultArtifactHash', value: 'hash:tampered-result-artifact' as SourceHash },
+      { field: 'signatureRefHash', value: 'hash:tampered-signature-ref' as SourceHash },
+      { field: 'payloadHash', value: 'hash:tampered-payload' as SourceHash },
+    ] as const
+
+    for (const { field, value } of scalarHashOverrides) {
+      const tamperedReceipt: ActionReceipt = { ...receipt }
+      tamperedReceipt[field] = value
+      expect(verifyActionReceipt(state, tamperedReceipt).reconstructionStatus).toBe('tampered')
+    }
+  })
+
   it('loads admin all-list business-action slices by status without hard-coded empty business ids', async () => {
     const db = new FakeDb({})
     await persistBusinessActionSlice(db, completeSourceState())

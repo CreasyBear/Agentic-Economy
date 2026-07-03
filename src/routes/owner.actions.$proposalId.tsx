@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
-import { Textarea } from '@/components/ui/textarea'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { TextArea } from '@astryxdesign/core/TextArea'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import { formatTimestamp } from '@/lib/ui/format-time'
 import {
   createEmptyContactFollowUpSourceState,
   readContactFollowUpReconstruction,
@@ -23,6 +27,7 @@ import {
   type OwnerContactFollowUpDetailServerResult,
   type OwnerContactFollowUpMutationServerResult,
 } from '@/modules/protected-action/contact-follow-up.functions'
+import { useClientMounted } from '@/hooks/use-client-mounted'
 
 export type OwnerContactFollowUpDetailRouteInput = {
   state?: ContactFollowUpSourceState
@@ -40,6 +45,7 @@ export type OwnerContactFollowUpDetailRouteReadback =
     }
 
 export const Route = createFileRoute('/owner/actions/$proposalId')({
+  ...operatorRouteOptions,
   loader: ({ params }) => readCurrentOwnerContactFollowUpDetailServer({ data: { proposalId: params.proposalId } }),
   head: () => ({
     meta: [
@@ -63,7 +69,7 @@ function OwnerContactFollowUpDetailRoute() {
   const approveContactFollowUp = useServerFn(approveCurrentOwnerContactFollowUpServer)
   const rejectContactFollowUp = useServerFn(rejectCurrentOwnerContactFollowUpServer)
   const [readback, setReadback] = useState(initialReadback)
-  const [hydrated, setHydrated] = useState(false)
+  const hydrated = useClientMounted()
   const [consequenceAccepted, setConsequenceAccepted] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [pendingAction, setPendingAction] = useState<'approve' | 'reject' | undefined>()
@@ -72,9 +78,6 @@ function OwnerContactFollowUpDetailRoute() {
   const consequenceRef = useRef<HTMLInputElement>(null)
   const rejectReasonRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
-    setHydrated(true)
-  }, [])
 
   if (location.pathname.endsWith('/receipt')) {
     return <Outlet />
@@ -106,7 +109,7 @@ function OwnerContactFollowUpDetailRoute() {
           consequenceAccepted,
         },
       })
-      handleMutationResult(result, 'Contact follow-up approved and source readback recorded.')
+      handleMutationResult(result, 'Contact follow-up approved and recorded.')
     } finally {
       setPendingAction(undefined)
     }
@@ -139,7 +142,7 @@ function OwnerContactFollowUpDetailRoute() {
           consequenceAccepted: false,
         },
       })
-      handleMutationResult(result, 'Contact follow-up rejected. No gateway or attempt was recorded.')
+      handleMutationResult(result, 'Contact follow-up rejected. No approval or attempt was recorded.')
       if (result.kind === 'ok') {
         setRejectReason('')
       }
@@ -161,16 +164,13 @@ function OwnerContactFollowUpDetailRoute() {
   if (readback.kind === 'error') {
     return (
       <AeOperatorShell
-        role="owner"
+        operatorRole="owner"
         eyebrow="Owner decision"
         title="Review contact follow-up"
-        description="Approve or reject one contact follow-up request after reviewing source-owned consequence details."
+        description="Approve or reject one contact follow-up request after reviewing the consequence details."
         currentPath="/owner/actions"
       >
-        <Alert>
-          <AlertTitle>Contact follow-up unavailable</AlertTitle>
-          <AlertDescription>{readback.reason}</AlertDescription>
-        </Alert>
+        <Banner status="warning" title="Contact follow-up unavailable" description={readback.reason} />
       </AeOperatorShell>
     )
   }
@@ -178,128 +178,92 @@ function OwnerContactFollowUpDetailRoute() {
   const decisionDisabledReason = ownerDecisionDisabledReason(reconstruction)
   const canDecide = decisionDisabledReason === undefined
   const consequenceInvalid = actionError === 'Consequence acknowledgement is required before approval.'
-  const consequenceField = getFieldAccessibility({
-    id: 'contact-follow-up-consequence',
-    invalid: consequenceInvalid,
-    hasDescription: true,
-    hasError: consequenceInvalid,
-  })
   const rejectInvalid = actionError === 'Reject reason is required.'
-  const rejectReasonField = getFieldAccessibility({
-    id: 'contact-follow-up-reject-reason',
-    invalid: rejectInvalid,
-    hasDescription: true,
-    hasError: rejectInvalid,
-  })
 
 
   return (
     <AeOperatorShell
-      role="owner"
+      operatorRole="owner"
       eyebrow="Owner decision"
       title="Review contact follow-up"
       description="Approve or reject one contact follow-up request after reviewing target, deadline, consequence, reversibility, and proof requirement."
       currentPath="/owner/actions"
     >
-      <Card>
-          <CardHeader>
+      <Card padding={3}>
+          <div className="grid gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
-              <Badge variant="outline">{reconstruction.proposal.selectedActionSlug}</Badge>
+              <Badge variant="neutral" label={humanizeStatusValue(reconstruction.readbackStatus)} />
+              <Badge variant="neutral" label={reconstruction.proposal.selectedActionSlug} />
             </div>
-            <CardTitle>{reconstruction.proposal.parameters.contactName}</CardTitle>
-            <CardDescription>{reconstruction.proposal.parameters.messageSummary}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-5">
-            <FactGrid
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">{reconstruction.proposal.parameters.contactName}</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{reconstruction.proposal.parameters.messageSummary}</Text>
+          </div>
+          <div className="grid gap-5">
+            <AeOperatorFactGrid
               facts={[
                 { label: 'Target source message', value: reconstruction.proposal.parameters.sourceMessageRef },
                 { label: 'Allowed channel', value: reconstruction.proposal.parameters.contactChannel },
-                { label: 'Deadline', value: new Date(reconstruction.proposal.deadlineAt).toISOString() },
-                { label: 'Proof expectation', value: reconstruction.proposal.proofExpectation.replaceAll('_', ' ') },
-                { label: 'Reversibility', value: reconstruction.proposal.reversibility.replaceAll('_', ' ') },
+                { label: 'Deadline', value: formatTimestamp(reconstruction.proposal.deadlineAt) },
+                { label: 'Proof expectation', value: humanizeStatusValue(reconstruction.proposal.proofExpectation) },
+                { label: 'Reversibility', value: humanizeStatusValue(reconstruction.proposal.reversibility) },
                 { label: 'Correlation', value: reconstruction.proposal.correlationId },
               ]}
             />
-            <Alert>
-              <AlertTitle>Consequence before approval</AlertTitle>
-              <AlertDescription>
-                Approval records one contact follow-up attempt through the source-owned follow-up outbox. It does not book work, charge money, guarantee response, or authorize future actions.
-              </AlertDescription>
-            </Alert>
+            <Banner
+              status="info"
+              title="Consequence before approval"
+              description="Approval records one contact follow-up attempt. It does not book work, charge money, guarantee response, or authorize future actions."
+            />
             {actionMessage === undefined ? null : (
-              <Alert>
-                <AlertTitle>Source state updated</AlertTitle>
-                <AlertDescription>{actionMessage}</AlertDescription>
-              </Alert>
+              <Banner status="success" title="Source state updated" description={actionMessage} />
             )}
             {actionError === undefined || consequenceInvalid || rejectInvalid ? null : (
-              <Alert>
-                <AlertTitle>Decision needs attention</AlertTitle>
-                <AlertDescription>{actionError}</AlertDescription>
-              </Alert>
+              <Banner status="error" title="Decision needs attention" description={actionError} />
             )}
             {decisionDisabledReason === undefined ? null : (
-              <Alert>
-                <AlertTitle>Owner decision disabled</AlertTitle>
-                <AlertDescription>{decisionDisabledReason}</AlertDescription>
-              </Alert>
+              <Banner status="warning" title="Owner decision disabled" description={decisionDisabledReason} />
             )}
             <div className="grid gap-4 lg:grid-cols-2">
               <form onSubmit={handleApprove} className="grid gap-3 rounded-md border bg-muted/20 p-4" noValidate>
-                <FieldGroup>
-                  <Field {...consequenceField.fieldProps}>
-                    <label className="flex items-start gap-3 text-sm" htmlFor={consequenceField.controlProps.id}>
-                      <input
-                        {...consequenceField.controlProps}
-                        ref={consequenceRef}
-                        type="checkbox"
-                        checked={consequenceAccepted}
-                        onChange={(event) => setConsequenceAccepted(event.currentTarget.checked)}
-                        className="mt-1 size-4"
-                      />
-                      <span>
-                        I understand this approves one contact follow-up attempt for this proposal only, with source-owned receipt or proof-gap readback.
-                      </span>
-                    </label>
-                    <FieldDescription {...consequenceField.descriptionProps}>No future action, booking, payment, or autonomous execution is authorized.</FieldDescription>
-                    {consequenceInvalid ? <FieldError {...consequenceField.errorProps}>{actionError}</FieldError> : null}
-                  </Field>
-                </FieldGroup>
+                <CheckboxInput
+                  ref={consequenceRef}
+                  label="I understand this approves one contact follow-up attempt for this proposal only. AE will record a receipt, or a note that evidence is missing."
+                  description="No future action, booking, payment, or autonomous execution is authorized."
+                  value={consequenceAccepted}
+                  onChange={setConsequenceAccepted}
+                  {...(consequenceInvalid ? { status: { type: 'error' as const, message: actionError } } : {})}
+                  isDisabled={!canDecide || pendingAction !== undefined}
+                />
                 <Button
-                  disabled={!hydrated || !canDecide || pendingAction !== undefined}
+                  isDisabled={!hydrated || !canDecide || pendingAction !== undefined}
                   type="submit"
-                >
-                  {pendingAction === 'approve' ? 'Approving...' : 'Approve contact follow-up'}
-                </Button>
+                  label={pendingAction === 'approve' ? 'Approving...' : 'Approve contact follow-up'}
+                />
               </form>
               <form onSubmit={handleReject} className="grid gap-3 rounded-md border bg-muted/20 p-4" noValidate>
-                <FieldGroup>
-                  <Field {...rejectReasonField.fieldProps}>
-                    <FieldLabel htmlFor={rejectReasonField.controlProps.id}>Reject reason</FieldLabel>
-                    <Textarea
-                      {...rejectReasonField.controlProps}
-                      ref={rejectReasonRef}
-                      value={rejectReason}
-                      onChange={(event) => setRejectReason(event.currentTarget.value)}
-                    />
-                    <FieldDescription {...rejectReasonField.descriptionProps}>Rejection records owner decision and audit state without creating a gateway or attempt.</FieldDescription>
-                    {rejectInvalid ? <FieldError {...rejectReasonField.errorProps}>{actionError}</FieldError> : null}
-                  </Field>
-                </FieldGroup>
+                <TextArea
+                  ref={rejectReasonRef}
+                  label="Reject reason"
+                  description="Rejection records the owner decision without creating an approval or an attempt."
+                  value={rejectReason}
+                  onChange={setRejectReason}
+                  {...(rejectInvalid ? { status: { type: 'error' as const, message: actionError } } : {})}
+                  isDisabled={!canDecide || pendingAction !== undefined}
+                />
                 <Button
-                  variant="outline"
-                  disabled={!hydrated || !canDecide || pendingAction !== undefined}
+                  variant="secondary"
+                  isDisabled={!hydrated || !canDecide || pendingAction !== undefined}
                   type="submit"
-                >
-                  {pendingAction === 'reject' ? 'Rejecting...' : 'Reject contact follow-up'}
-                </Button>
+                  label={pendingAction === 'reject' ? 'Rejecting...' : 'Reject contact follow-up'}
+                />
               </form>
             </div>
-            <Button asChild variant="outline">
-              <a href={`/owner/actions/${encodeURIComponent(reconstruction.proposal.id)}/receipt`}>Open receipt readback</a>
-            </Button>
-          </CardContent>
+            <Button
+              href={`/owner/actions/${encodeURIComponent(reconstruction.proposal.id)}/receipt`}
+              variant="secondary"
+              label="Open receipt"
+            />
+          </div>
         </Card>
     </AeOperatorShell>
   )
@@ -311,7 +275,7 @@ function ownerDecisionDisabledReason(reconstruction: ContactFollowUpReconstructi
   }
 
   if (reconstruction.policy === undefined) {
-    return 'Policy readback is required before an owner decision can be recorded.'
+    return 'Policy review is required before an owner decision can be recorded.'
   }
 
   if (reconstruction.policy.kind === 'expired') {
@@ -335,15 +299,15 @@ export function ownerContactFollowUpDetailServerToRouteReadback(
   return { kind: 'error', reason: result.reason }
 }
 
-function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-lg border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
+function humanizeStatusValue(value: string): string {
+  if (value === 'source_owned_receipt_or_gap') {
+    return 'receipt or evidence-missing note'
+  }
+
+  return value
+    .replaceAll('_', ' ')
+    .replace(/\bproof gap\b/gi, 'evidence missing')
+    .replace(/\bgateway admitted\b/gi, 'approved')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

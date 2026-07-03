@@ -1,4 +1,4 @@
-import { Link, Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
+import { Outlet, createFileRoute, useLocation } from '@tanstack/react-router'
 import {
   ArrowRightIcon,
   EyeOffIcon,
@@ -7,13 +7,15 @@ import {
   SearchIcon,
   StoreIcon,
 } from 'lucide-react'
+import { useState } from 'react'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
+import { Text } from '@astryxdesign/core/Text'
 
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export const Route = createFileRoute('/privacy')({
   head: () => ({
@@ -72,10 +74,14 @@ const moments = [
 
 function PrivacyRoute() {
   const location = useLocation()
+  const [selectedMoment, setSelectedMoment] = useState('contact')
 
   if (location.pathname !== '/privacy') {
     return <Outlet />
   }
+
+  const moment = moments.find((item) => item.value === selectedMoment) ?? moments[0]
+  const Icon = moment.icon
 
   return (
     <AePublicShell>
@@ -84,74 +90,59 @@ function PrivacyRoute() {
         title="Your details, at a glance."
         description="What is shared when you ask, compare, or contact a business."
       />
-      <main className="ae-public-page mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
+      <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-4 md:grid-cols-3">
-          {detailCards.map(({ icon: Icon, label, title, body }) => (
-            <Card key={title} className="h-full">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon className="size-4 text-[var(--ae-amber)]" aria-hidden="true" /> {title}
-                  </CardTitle>
-                  <Badge variant="outline">{label}</Badge>
-                </div>
-                <CardDescription>{body}</CardDescription>
-              </CardHeader>
+          {detailCards.map(({ icon: CardIcon, label, title, body }) => (
+            <Card key={title} padding={5} className="grid h-full gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
+                  <CardIcon className="size-4 text-primary" aria-hidden="true" /> {title}
+                </Text>
+                <Badge variant="neutral" label={label} />
+              </div>
+              <Text color="secondary" display="block">{body}</Text>
             </Card>
           ))}
         </section>
 
-        <section className="grid gap-5 border-t border-[var(--ae-public-line)] pt-8 md:grid-cols-[0.72fr_1.28fr]">
+        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.72fr_1.28fr]">
           <div className="grid content-start gap-2">
-            <p className="font-mono text-xs font-medium tracking-[var(--ae-public-tracking-mono-label)] text-[var(--ae-muted)] uppercase">
+            <Text type="supporting" weight="medium" color="secondary" display="block">
               Pick a moment
-            </p>
-            <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight">
+            </Text>
+            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               What happens where.
-            </h2>
+            </Text>
           </div>
-          <Tabs defaultValue="contact">
-            <TabsList className="grid w-full grid-cols-3 bg-[var(--ae-surface-sunken)]" aria-label="Privacy moments">
+          <div className="grid gap-3">
+            <TabList value={selectedMoment} onChange={setSelectedMoment} layout="fill" aria-label="Privacy moments">
               {moments.map(({ value, label }) => (
-                <TabsTrigger key={value} value={value}>{label}</TabsTrigger>
+                <Tab key={value} value={value} label={label} />
               ))}
-            </TabsList>
-            {moments.map(({ value, icon: Icon, title, points }) => (
-              <TabsContent key={value} value={value}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Icon className="size-4 text-[var(--ae-amber)]" aria-hidden="true" /> {title}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="grid gap-3 text-sm leading-6 text-muted-foreground">
-                      {points.map((point) => (
-                        <li key={point}>{point}</li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            ))}
-          </Tabs>
+            </TabList>
+            <Card padding={5} className="grid gap-4">
+              <Text type="large" weight="semibold" color="primary" className="flex items-center gap-2">
+                <Icon className="size-4 text-primary" aria-hidden="true" /> {moment.title}
+              </Text>
+              <ul className="grid gap-3 text-sm leading-6 text-secondary">
+                {moment.points.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </Card>
+          </div>
         </section>
 
-        <section className="flex flex-col gap-4 border-t border-[var(--ae-public-line)] pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <h2 className="font-heading text-2xl leading-tight font-semibold tracking-tight">
+            <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Need a page fixed?
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            </Text>
+            <Text as="p" color="secondary" display="block" className="mt-2">
               Send the page slug and what should change.
-            </p>
+            </Text>
           </div>
-          <Button asChild variant="outline">
-            <Link to="/privacy/remove-business">
-              Open corrections
-              <ArrowRightIcon data-icon="inline-end" />
-            </Link>
-          </Button>
+          <Button label="Open corrections" variant="secondary" href="/privacy/remove-business" endContent={<ArrowRightIcon aria-hidden="true" />} />
         </section>
       </main>
     </AePublicShell>

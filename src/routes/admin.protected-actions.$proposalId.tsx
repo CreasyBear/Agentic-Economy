@@ -1,8 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   createEmptyContactFollowUpSourceState,
   readContactFollowUpReconstruction,
@@ -19,7 +22,6 @@ export type AdminProtectedActionDetailRouteInput = {
   state?: ContactFollowUpSourceState
   proposalId: ContactFollowUpProposalId
 }
-
 export type AdminProtectedActionDetailRouteReadback =
   | {
       kind: 'ok'
@@ -35,6 +37,7 @@ export type AdminProtectedActionDetailRouteReadback =
     }
 
 export const Route = createFileRoute('/admin/protected-actions/$proposalId')({
+  ...operatorRouteOptions,
   loader: ({ params }) => readAdminContactFollowUpReconstructionServer({ data: { proposalId: params.proposalId } }),
   head: () => ({
     meta: [
@@ -58,16 +61,16 @@ function AdminProtectedActionDetailRoute() {
   if (readback.kind !== 'ok') {
     return (
       <AeOperatorShell
-        role="admin"
+        operatorRole="admin"
         title="Protected action detail"
         description="Operator reconstruction for one contact follow-up proposal, gateway, attempt, receipt, and no-repair path."
         currentPath="/admin/protected-actions"
       >
-        <Card>
-          <CardHeader>
-            <CardTitle>{readback.kind === 'not_found' ? 'Protected action not found' : 'Protected action unavailable'}</CardTitle>
-            <CardDescription>{readback.reason}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">{readback.kind === 'not_found' ? 'Protected action not found' : 'Protected action unavailable'}</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.reason}</Text>
+          </div>
         </Card>
       </AeOperatorShell>
     )
@@ -76,22 +79,22 @@ function AdminProtectedActionDetailRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Protected action detail"
       description="Operator reconstruction for one contact follow-up proposal, gateway, attempt, receipt, and no-repair path."
       currentPath="/admin/protected-actions"
     >
-      <Card>
-        <CardHeader>
+      <Card padding={5}>
+        <div className="grid gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{reconstruction.readbackStatus.replaceAll('_', ' ')}</Badge>
-            <Badge variant="outline">{reconstruction.proposal.selectedActionSlug}</Badge>
+            <Badge variant="neutral" label={reconstruction.readbackStatus.replaceAll('_', ' ')} />
+            <Badge variant="neutral" label={reconstruction.proposal.selectedActionSlug} />
           </div>
-          <CardTitle className="break-words">{reconstruction.proposal.id}</CardTitle>
-          <CardDescription>No raw provider payloads are exposed in this reconstruction.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <FactGrid
+          <Text as="div" type="large" weight="semibold" color="primary" display="block" className="break-words">{reconstruction.proposal.id}</Text>
+          <Text as="div" type="supporting" color="secondary" display="block">No raw provider payloads are exposed in this reconstruction.</Text>
+        </div>
+        <div className="grid gap-5">
+          <AeOperatorFactGrid
             facts={[
               { label: 'Proposal hash', value: reconstruction.proposal.proposalHash },
               { label: 'Policy hash', value: reconstruction.policy?.policyHash ?? 'missing' },
@@ -104,7 +107,7 @@ function AdminProtectedActionDetailRoute() {
               { label: 'No repair reason', value: reconstruction.noRepair?.reason ?? 'none' },
             ]}
           />
-        </CardContent>
+        </div>
       </Card>
     </AeOperatorShell>
   )
@@ -121,17 +124,4 @@ export function adminProtectedActionDetailServerToRouteReadback(
   }
 
   return { kind: 'error', reason: result.publicMessage }
-}
-
-function FactGrid({ facts }: { facts: readonly { label: string; value: string }[] }) {
-  return (
-    <dl className="grid gap-3 md:grid-cols-3">
-      {facts.map((fact) => (
-        <div key={`${fact.label}:${fact.value}`} className="rounded-md border bg-muted/30 p-3">
-          <dt className="text-xs font-medium uppercase tracking-normal text-muted-foreground">{fact.label}</dt>
-          <dd className="mt-1 break-words text-sm text-foreground">{fact.value}</dd>
-        </div>
-      ))}
-    </dl>
-  )
 }

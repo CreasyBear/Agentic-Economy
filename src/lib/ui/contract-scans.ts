@@ -495,6 +495,10 @@ function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): bool
     return true
   }
 
+  if (isUiPropBalanceFalsePositive(violation, rule)) {
+    return true
+  }
+
   if (isAllowedPhase3DiscoveryReadbackClaim(violation, rule)) {
     return true
   }
@@ -513,6 +517,19 @@ function isAllowedCopyClaim(violation: ScanViolation, rule: CopyClaimRule): bool
   }
 
   return rule.allowedPhases?.some((phase) => phases.includes(phase)) ?? false
+}
+
+function isUiPropBalanceFalsePositive(violation: ScanViolation, rule: CopyClaimRule): boolean {
+  if (rule.rule !== 'p5-money-rail-overclaim') {
+    return false
+  }
+
+  const withoutTextWrapProp = violation.excerpt.replace(/\btextWrap=["']balance["']/g, '')
+  if (withoutTextWrapProp === violation.excerpt) {
+    return false
+  }
+
+  return !cloneRegExp(rule.pattern).test(withoutTextWrapProp)
 }
 
 function isAllowedPhase3DiscoveryReadbackClaim(violation: ScanViolation, rule: CopyClaimRule): boolean {

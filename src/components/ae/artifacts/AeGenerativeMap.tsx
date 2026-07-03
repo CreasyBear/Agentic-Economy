@@ -12,14 +12,17 @@ export function AeGenerativeMap({ label, placeQuery }: AeGenerativeMapProps) {
   const src = `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(placeQuery)}`
 
   return (
-    <figure className="ae-generative-map">
-      <figcaption className="ae-generative-map__label">Area for this query: {label}</figcaption>
+    <figure className="overflow-hidden rounded-lg border border-border bg-surface">
+      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-secondary">
+        Area for this query: {label}
+      </figcaption>
       <iframe
         title={`Map for ${label}`}
-        className="ae-generative-map__frame"
+        className="block h-64 w-full border-0"
         src={src}
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"
+        sandbox="allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts"
         allowFullScreen
       />
     </figure>
@@ -40,14 +43,17 @@ export function AeOfficeMap({ address, businessName }: AeOfficeMapProps) {
   const src = `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(address)}`
 
   return (
-    <figure className="ae-generative-map ae-generative-map--office">
-      <figcaption className="ae-generative-map__label">Office — {businessName}</figcaption>
+    <figure className="overflow-hidden rounded-lg border border-border bg-surface">
+      <figcaption className="border-b border-border px-4 py-2 font-mono text-2xs uppercase tracking-wider text-secondary">
+        Office — {businessName}
+      </figcaption>
       <iframe
         title={`Office map for ${businessName}`}
-        className="ae-generative-map__frame"
+        className="block h-64 w-full border-0"
         src={src}
         loading="lazy"
         referrerPolicy="no-referrer-when-downgrade"
+        sandbox="allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts"
         allowFullScreen
       />
     </figure>

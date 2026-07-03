@@ -1,6 +1,6 @@
 import { brandNonEmpty } from '@/modules/common/ids'
-import type { AuditEventContract } from '@/modules/observability/public'
-import { validateAuditEvent } from '@/modules/observability/public'
+import type { AuditEventContract } from '@/modules/common/audit-events'
+import { validateAuditEvent } from '@/modules/common/audit-events'
 import { stableHash } from '@/modules/common/stable-hash'
 import { assertCsrf, rateLimitClaim } from './duplicates'
 import type {

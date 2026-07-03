@@ -5,7 +5,7 @@ import {
   ANSWER_STREAM_RATE_LIMIT,
   ANSWER_TURN_RATE_LIMIT,
   resetAnswerTurnGuardForTests,
-} from '@/modules/answer-thread/public'
+} from '@/modules/answer-thread/testing'
 import { handleAnswerRequest } from '@/routes/api.answer'
 import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'

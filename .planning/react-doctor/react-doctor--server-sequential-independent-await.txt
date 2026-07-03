@@ -1,0 +1,15 @@
+Rule: react-doctor/server-sequential-independent-await
+Severity: warning
+Category: Bugs
+Count: 3
+
+This await doesn't use the previous result, so your users wait twice as long for nothing.
+
+Suggestion: These two awaits don't depend on each other. Wrap them in `Promise.all([...])` so they run at the same time.
+
+Curl with no cache & follow the canonical fix and false positive check recipe before fixing: https://react.doctor/docs/rules/react-doctor/server-sequential-independent-await
+
+Files:
+  convex/business.ts:211
+  convex/catalog.ts:341
+  convex/discovery.ts:238

@@ -1,8 +1,9 @@
 import { CheckCircle2Icon, CircleAlertIcon } from 'lucide-react'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
 
 import type { PublicInquirySubmitServerResult } from '@/modules/inquiries/inquiry.functions'
 import type { InquiryNotificationStatus } from '@/modules/inquiries/public'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 /**
  * Typed result card. Renders an action result by discriminator
@@ -10,8 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
  * results as typed cards" pattern. Each supported result code gets its own renderer;
  * the error branch is always covered so new actions don't break the surface.
  *
- * Daylight Commerce Routing: hairline Card, one plain next-step, mono for receipt ids,
- * no epistemic-state labels, no badge cemetery (DESIGN.md §9.4, §12, §13).
+ * Astryx-era result card: one plain next step, mono receipt ids, no
+ * epistemic-state labels, no badge cemetery.
  */
 
 type AeActionResultCardProps = {
@@ -60,45 +61,50 @@ function InquirySubmittedCard({
 }) {
   const title = code === 'inquiry_replayed' ? 'Inquiry already received' : 'Inquiry recorded'
   const subject = businessName ?? 'the business'
-  const serviceLine = serviceName === undefined ? null : <CardDescription>{serviceName}</CardDescription>
 
   return (
-    <Card className="ae-action-result-card ae-action-result-card--inquiry-submitted" role="status">
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2">
+    <Card padding={5} role="status">
+      <div className="grid gap-1.5 border-b pb-4">
+        <Text as="div" type="large" weight="semibold" display="block" className="flex items-center gap-2">
           <CheckCircle2Icon aria-hidden="true" className="size-4" />
           {title}
-        </CardTitle>
-        {serviceLine}
-      </CardHeader>
-      <CardContent className="grid gap-4 pt-2">
-        <p className="text-sm leading-6">
+        </Text>
+        {serviceName === undefined ? null : (
+          <Text as="p" type="supporting">
+            {serviceName}
+          </Text>
+        )}
+      </div>
+      <div className="grid gap-4 pt-4">
+        <Text as="p" type="body">
           Message saved for {subject}. Delivery state: {deliveryLabel(notificationStatus)}.
-        </p>
-        <div className="grid gap-1 font-mono text-xs text-muted-foreground" aria-label="Receipt details">
+        </Text>
+        <div className="grid gap-1 font-mono text-xs text-secondary" aria-label="Receipt details">
           <span>Receipt {threadId}</span>
           {notificationId ? <span>Notification {notificationId}</span> : null}
         </div>
-        <p className="text-sm leading-6 text-muted-foreground">
+        <Text as="p" type="supporting">
           The business reviews your message and replies through your chosen contact detail. They handle timing, price, and availability.
-        </p>
-      </CardContent>
+        </Text>
+      </div>
     </Card>
   )
 }
 
 function ErrorCard({ reason }: { reason: string }) {
   return (
-    <Card className="ae-action-result-card ae-action-result-card--error" role="alert">
-      <CardHeader className="border-b">
-        <CardTitle className="flex items-center gap-2">
+    <Card variant="red" padding={5} role="alert">
+      <div className="grid gap-1.5 border-b pb-4">
+        <Text as="div" type="large" weight="semibold" display="block" className="flex items-center gap-2">
           <CircleAlertIcon aria-hidden="true" className="size-4" />
           Inquiry needs attention
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-2">
-        <p className="text-sm leading-6">{reason}</p>
-      </CardContent>
+        </Text>
+      </div>
+      <div className="pt-4">
+        <Text as="p" type="body">
+          {reason}
+        </Text>
+      </div>
     </Card>
   )
 }

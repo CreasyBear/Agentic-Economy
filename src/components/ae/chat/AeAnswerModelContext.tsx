@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, use, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import type { AnswerModel, AnswerModelSelectorData } from '@/modules/answer/public'
 import { readStoredAnswerModelId, writeStoredAnswerModelId } from '@/modules/answer/model-selection-storage'
@@ -94,7 +94,7 @@ export function AeAnswerModelProvider({ children }: AeAnswerModelProviderProps) 
 }
 
 export function useAnswerModel(): AeAnswerModelContextValue {
-  const context = useContext(AeAnswerModelContext)
+  const context = use(AeAnswerModelContext)
   if (context === null) {
     return {
       enabled: false,

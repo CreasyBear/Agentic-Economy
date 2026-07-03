@@ -4,7 +4,9 @@ import { AeOperatorFactGrid } from '@/components/ae/operator/AeOperatorFactGrid'
 import { AeOperatorFilterCard } from '@/components/ae/operator/AeOperatorFilterCard'
 import { AeOperatorQueueList } from '@/components/ae/operator/AeOperatorQueueList'
 import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
 import {
   createEmptyContactFollowUpSourceState,
   readContactFollowUpReconstruction,
@@ -32,6 +34,7 @@ export type AdminProtectedActionsRouteReadback = {
 }
 
 export const Route = createFileRoute('/admin/protected-actions')({
+  ...operatorRouteOptions,
   validateSearch: (search: Record<string, unknown>): AdminProtectedActionSearch => {
     const proposalId = typeof search.proposalId === 'string' && search.proposalId.trim().length > 0 ? search.proposalId.trim() : undefined
     return proposalId === undefined ? {} : { proposalId }
@@ -75,7 +78,7 @@ function AdminProtectedActionsRoute() {
 
   return (
     <AeOperatorShell
-      role="admin"
+      operatorRole="admin"
       title="Contact follow-up reconstruction"
       description="Reconstruct selected protected-action proposals, owner decisions, gateways, attempts, receipts, proof gaps, and no-repair state."
       currentPath="/admin/protected-actions"
@@ -87,11 +90,11 @@ function AdminProtectedActionsRoute() {
         <FilterPanel proposalId={search.proposalId} />
       )}
       {readback.deniedReason === undefined ? null : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Admin reconstruction unavailable</CardTitle>
-            <CardDescription>{readback.deniedReason}</CardDescription>
-          </CardHeader>
+        <Card padding={5}>
+          <div className="grid gap-1.5">
+            <Text as="div" type="large" weight="semibold" color="primary" display="block">Admin reconstruction unavailable</Text>
+            <Text as="div" type="supporting" color="secondary" display="block">{readback.deniedReason}</Text>
+          </div>
         </Card>
       )}
       {readback.rows.length === 0 ? <EmptyState /> : <ReconstructionRows rows={readback.rows} />}

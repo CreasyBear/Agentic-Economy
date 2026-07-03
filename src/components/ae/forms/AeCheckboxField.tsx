@@ -1,5 +1,4 @@
-import { Checkbox } from '@/components/ui/checkbox'
-import { Field, FieldDescription, FieldLabel, getFieldAccessibility } from '@/components/ui/field'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
 
 export type AeCheckboxFieldProps = {
   id: string
@@ -13,8 +12,6 @@ export type AeCheckboxFieldProps = {
 }
 
 export function AeCheckboxField({
-  id,
-  name,
   label,
   description,
   checked,
@@ -22,23 +19,14 @@ export function AeCheckboxField({
   invalid = false,
   onCheckedChange,
 }: AeCheckboxFieldProps) {
-  const fieldA11y = getFieldAccessibility({ id, invalid, hasDescription: description !== undefined })
-
   return (
-    <Field {...fieldA11y.fieldProps} className="ae-checkbox-field flex items-start gap-3">
-      <Checkbox
-        {...fieldA11y.controlProps}
-        name={name}
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={(next) => onCheckedChange(next === true)}
-      />
-      <div className="grid gap-1">
-        <FieldLabel htmlFor={id} className="font-normal">
-          {label}
-        </FieldLabel>
-        {description === undefined ? null : <FieldDescription {...fieldA11y.descriptionProps}>{description}</FieldDescription>}
-      </div>
-    </Field>
+    <CheckboxInput
+      label={label}
+      value={checked}
+      isDisabled={disabled}
+      onChange={onCheckedChange}
+      {...(description === undefined ? {} : { description })}
+      {...(invalid ? { status: { type: 'error' as const } } : {})}
+    />
   )
 }

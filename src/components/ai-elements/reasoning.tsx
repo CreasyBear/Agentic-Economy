@@ -1,8 +1,8 @@
 import {
   createContext,
   memo,
+  use,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -13,10 +13,10 @@ import {
 import { ChevronDownIcon, RouteIcon } from 'lucide-react'
 
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+  AeCollapsible as Collapsible,
+  AeCollapsibleContent as CollapsibleContent,
+  AeCollapsibleTrigger as CollapsibleTrigger,
+} from '@/components/ae/primitives/AeCollapsible'
 import { cn } from '@/lib/utils'
 import { Shimmer } from './shimmer'
 
@@ -29,7 +29,7 @@ type ReasoningContextValue = {
 const ReasoningContext = createContext<ReasoningContextValue | null>(null)
 
 function useReasoning() {
-  const context = useContext(ReasoningContext)
+  const context = use(ReasoningContext)
   if (context === null) {
     throw new Error('Reasoning components must be used inside Reasoning')
   }
@@ -57,9 +57,10 @@ export const Reasoning = memo(function Reasoning({
 }: ReasoningProps) {
   const controlled = open !== undefined
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen ?? isStreaming)
-  const [measuredDuration, setMeasuredDuration] = useState<number | undefined>(duration)
+  const [measuredDuration, setMeasuredDuration] = useState<number | undefined>(undefined)
   const startTimeRef = useRef<number | null>(isStreaming ? Date.now() : null)
   const isOpen = controlled ? open : uncontrolledOpen
+  const displayedDuration = duration ?? measuredDuration
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -71,11 +72,6 @@ export const Reasoning = memo(function Reasoning({
     [controlled, onOpenChange],
   )
 
-  useEffect(() => {
-    if (duration !== undefined) {
-      setMeasuredDuration(duration)
-    }
-  }, [duration])
 
   useEffect(() => {
     if (isStreaming) {
@@ -105,9 +101,9 @@ export const Reasoning = memo(function Reasoning({
     () => ({
       isOpen,
       isStreaming,
-      ...(measuredDuration === undefined ? {} : { duration: measuredDuration }),
+      ...(displayedDuration === undefined ? {} : { duration: displayedDuration }),
     }),
-    [isOpen, isStreaming, measuredDuration],
+    [isOpen, isStreaming, displayedDuration],
   )
 
   return (
@@ -146,7 +142,7 @@ export const ReasoningTrigger = memo(function ReasoningTrigger({
   return (
     <CollapsibleTrigger
         className={cn(
-        'ae-ai-reasoning-trigger flex w-full items-center gap-2 text-sm',
+        'flex w-full items-center gap-2 text-sm text-secondary transition-colors hover:text-primary',
         className,
       )}
       {...props}
@@ -175,7 +171,7 @@ export const ReasoningContent = memo(function ReasoningContent({
   return (
     <CollapsibleContent
       className={cn(
-        'ae-ai-collapsible-content ae-ai-reasoning-content mt-3 text-sm outline-none',
+        'mt-3 text-sm text-secondary outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 motion-safe:duration-200',
         className,
       )}
       {...props}

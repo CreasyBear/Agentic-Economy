@@ -2,11 +2,16 @@
 import { ClerkProvider } from '@clerk/tanstack-react-start'
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { Theme } from '@astryxdesign/core/theme'
+import { LinkProvider } from '@astryxdesign/core/Link'
+import { LayerProvider } from '@astryxdesign/core/Layer'
+import { neutralTheme } from '@astryxdesign/theme-neutral/built'
+
+import { RouterLink } from '@/components/astryx/RouterLink'
 
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { AeToaster } from '@/components/ae/feedback/AeToaster'
 import { AeObservabilityBoot } from '@/components/ae/layout/AeObservabilityBoot'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import appCss from '../styles/globals.css?url'
 
 export const Route = createRootRoute({
@@ -46,11 +51,15 @@ function RootDocument({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <TooltipProvider delayDuration={250}>
-          <AeObservabilityBoot />
-          <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
-          <AeToaster />
-        </TooltipProvider>
+        <Theme theme={neutralTheme} mode="light">
+          <LinkProvider component={RouterLink}>
+            <LayerProvider>
+              <AeObservabilityBoot />
+              <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
+              <AeToaster />
+            </LayerProvider>
+          </LinkProvider>
+        </Theme>
         <Scripts />
       </body>
     </html>

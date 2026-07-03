@@ -17,7 +17,6 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as ClaimRouteImport } from './routes/claim'
-import { Route as AskRouteImport } from './routes/ask'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
@@ -117,11 +116,6 @@ const HelpRoute = HelpRouteImport.update({
 const ClaimRoute = ClaimRouteImport.update({
   id: '/claim',
   path: '/claim',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AskRoute = AskRouteImport.update({
-  id: '/ask',
-  path: '/ask',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -443,7 +437,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/about': typeof AboutRoute
-  '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
@@ -514,7 +507,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/about': typeof AboutRoute
-  '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
@@ -586,7 +578,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
   '/about': typeof AboutRoute
-  '/ask': typeof AskRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
@@ -659,7 +650,6 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/about'
-    | '/ask'
     | '/claim'
     | '/help'
     | '/llms.txt'
@@ -730,7 +720,6 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/about'
-    | '/ask'
     | '/claim'
     | '/help'
     | '/llms.txt'
@@ -801,7 +790,6 @@ export interface FileRouteTypes {
     | '/'
     | '/$slug'
     | '/about'
-    | '/ask'
     | '/claim'
     | '/help'
     | '/llms.txt'
@@ -873,7 +861,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRouteWithChildren
   AboutRoute: typeof AboutRoute
-  AskRoute: typeof AskRoute
   ClaimRoute: typeof ClaimRouteWithChildren
   HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
@@ -971,13 +958,6 @@ declare module '@tanstack/react-router' {
       path: '/claim'
       fullPath: '/claim'
       preLoaderRoute: typeof ClaimRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ask': {
-      id: '/ask'
-      path: '/ask'
-      fullPath: '/ask'
-      preLoaderRoute: typeof AskRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -1626,7 +1606,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
   AboutRoute: AboutRoute,
-  AskRoute: AskRoute,
   ClaimRoute: ClaimRouteWithChildren,
   HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
