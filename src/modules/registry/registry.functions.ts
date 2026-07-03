@@ -2,6 +2,7 @@ import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
 import type { ActionTimingSink } from '@/modules/common/action'
 import {
   createDefaultRegistrySourceState,
+  createLocalE2eRegistrySourceState,
   getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
   searchPublicBusinessCatalog,
@@ -171,10 +172,14 @@ function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
 }
 
 function createLegacyRegistrySourcePort(): PublicRegistrySourcePort {
+  const state = usesLocalE2eBypass()
+    ? createLocalE2eRegistrySourceState()
+    : createDefaultRegistrySourceState()
+
   return {
-    list: (input) => Promise.resolve(legacyPublicRegistryList(input)),
-    search: (input) => Promise.resolve(legacyPublicRegistrySearch(input)),
-    detail: (input) => Promise.resolve(legacyPublicRegistryDetail(input)),
+    list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
+    search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
+    detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
   }
 }
 

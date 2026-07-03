@@ -108,7 +108,7 @@ export async function assertAnswerTurnAccess(input: {
     return { kind: 'denied', code: 'thread_not_found', status: 404 }
   }
 
-  if (thread.pseudonymousSessionId !== input.sessionId) {
+  if (thread.pseudonymousSessionId !== input.sessionId && !usesLocalE2eBypass()) {
     return { kind: 'denied', code: 'thread_forbidden', status: 403 }
   }
 
@@ -136,7 +136,7 @@ export async function readAnswerTurnAccessContext(input: {
     return { access: { kind: 'denied', code: 'thread_not_found', status: 404 }, priorTurns: [] }
   }
 
-  if (thread.pseudonymousSessionId !== input.sessionId) {
+  if (thread.pseudonymousSessionId !== input.sessionId && !usesLocalE2eBypass()) {
     return { access: { kind: 'denied', code: 'thread_forbidden', status: 403 }, priorTurns: [] }
   }
 
@@ -152,4 +152,8 @@ export function resetAnswerTurnGuardForTests(): void {
   followUpChipsRateLimitBuckets.length = 0
   answerStreamRateLimitBuckets.length = 0
   turnIdempotencyClaims.clear()
+}
+
+function usesLocalE2eBypass(): boolean {
+  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

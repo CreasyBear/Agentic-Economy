@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -12,10 +12,11 @@ const testState = vi.hoisted(() => ({
   latestTranscriptProps: undefined as
     | {
         threadId?: string | null
-        projection?: { threadId: string } | null
+        projection?: PublicThreadProjection | null
         liveTurn?: { query: string; generation: number; intent: string } | null
         onThreadCreated?: (threadId: string) => void
         onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
+        onFollowUp?: (query: string) => void
       }
     | undefined,
 }))
@@ -101,6 +102,7 @@ vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
         data-testid="thread-transcript"
         data-route-thread-id={props?.threadId ?? 'home'}
         data-projection-thread-id={props?.projection?.threadId ?? 'none'}
+        data-turn-count={String(props?.projection?.turns.length ?? 0)}
       >
         {props?.liveTurn === null || props?.liveTurn === undefined ? (
           <div data-testid="no-live-turn" />
@@ -191,6 +193,55 @@ describe('AeChat route promotion', () => {
     expect(panel.getAttribute('data-loop-hint')).toBe(
       'AE is carrying the selected business into inquiry review. The business still confirms timing, price, and availability.',
     )
+  })
+
+  it('uses the refreshed route projection after a completed follow-up turn', async () => {
+    const initialProjection = buildProjection('thread-one', 'First answer', [
+      { kind: 'provider-cards', providers: [provider()] },
+    ])
+    const refreshedProjection = {
+      ...initialProjection,
+      turns: [
+        ...initialProjection.turns,
+        {
+          turnId: 'thread-one-turn-2',
+          seq: 2,
+          query: 'Send a qualified inquiry to the first listed business',
+          intent: 'inquiry_handoff' as const,
+          status: 'complete' as const,
+          oneLine: 'Ready to send a qualified inquiry.',
+          workLog: [],
+          artifacts: [{ kind: 'selected-provider' as const, provider: provider() }],
+        },
+      ],
+    } satisfies PublicThreadProjection
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/answer/threads/thread-one')) {
+        return new Response(JSON.stringify(refreshedProjection))
+      }
+      if (url.includes('/api/answer/threads')) {
+        return new Response(JSON.stringify({ threads: [] }))
+      }
+      return new Response(JSON.stringify({}), { status: 404 })
+    }))
+
+    render(<AeChat threadId="thread-one" initialProjection={initialProjection} />)
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onFollowUp?.('Send a qualified inquiry to the first listed business')
+      await Promise.resolve()
+    })
+    expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onStreamEnd?.('complete')
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-transcript').getAttribute('data-turn-count')).toBe('2')
+    })
   })
 
   it('guides the composer toward refinement when no listed business is available', () => {

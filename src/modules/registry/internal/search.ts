@@ -260,6 +260,81 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
   return state
 }
 
+export function createLocalE2eRegistrySourceState(): RegistrySourceState {
+  const state = createDefaultRegistrySourceState()
+
+  const claim = claimBusiness(state, {
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: 'owner:plumbing-demo',
+      displayName: 'Demo Owner',
+    },
+    facts: {
+      name: 'Demo Plumbing',
+      category: 'Plumbing',
+      suburb: 'Parramatta',
+      stateTerritory: 'NSW',
+      requestedSlug: 'plumbing-demo',
+      ownerMessage: 'Local e2e inquiry-capable service facts.',
+      sourceRefs: [
+        {
+          label: 'Local e2e service facts',
+          evidenceRef: 'private:evidence:plumbing-demo',
+          sourceHash: brandNonEmpty('hash:source:plumbing-demo', 'SourceHash'),
+        },
+      ],
+    },
+    security: {
+      csrf: matchingCsrf('local-e2e-claim'),
+      rateLimit: {
+        scope: 'claim_submit',
+        key: 'registry:plumbing-demo',
+        now: 3_000,
+        limit: 5,
+        windowMs: 60_000,
+      },
+    },
+    operationKey: operationKey('local-e2e-claim:plumbing-demo'),
+    correlationId: correlationId('local-e2e-claim:plumbing-demo'),
+    now: 3_000,
+  })
+
+  if (claim.kind === 'error') {
+    throw new Error(`Local e2e registry claim failed: ${claim.reason}`)
+  }
+
+  const published = publishBusinessCatalog(state, {
+    actor: {
+      kind: 'authenticated_owner',
+      clerkUserId: 'owner:plumbing-demo',
+      displayName: 'Demo Owner',
+    },
+    claimId: claim.claim.claimId,
+    services: [
+      toServiceCatalogInput({
+        serviceName: 'Diagnostic plumbing',
+        serviceCategory: 'Plumbing',
+        serviceSummary: 'Diagnostic plumbing triage for first contact.',
+        serviceArea: 'Parramatta',
+        hoursOrUnknown: 'Hours supplied by owner',
+        firstRequestMode: 'inquiry_available',
+        publicDisclosure: 'Use the inquiry form for a first contact.',
+        noContactReason: '',
+      }),
+    ],
+    security: { csrf: matchingCsrf('local-e2e-publish') },
+    operationKey: operationKey('local-e2e-publish:plumbing-demo'),
+    correlationId: correlationId('local-e2e-publish:plumbing-demo'),
+    now: 4_000,
+  })
+
+  if (published.kind === 'error') {
+    throw new Error(`Local e2e registry publish failed: ${published.reason}`)
+  }
+
+  return state
+}
+
 function readPublicCatalogs(
   state: RegistrySourceState,
 ): readonly PublicCatalogContract[] {

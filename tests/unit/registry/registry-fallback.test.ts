@@ -44,6 +44,32 @@ describe('registry convex fallback', () => {
     expect(page.items).toEqual([])
   })
 
+  it('exposes an inquiry-ready listing only in the local e2e registry bypass', async () => {
+    const previous = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const demoPage = await readPublicRegistrySearchPage({
+        query: 'diagnostic plumbing parramatta',
+        limit: 10,
+      })
+      expect(demoPage.items.map((item) => item.slug)).toEqual(['plumbing-demo'])
+      expect(demoPage.items[0]?.services[0]?.firstRequest.mode).toBe('inquiry_available')
+
+      const genericPage = await readPublicRegistrySearchPage({
+        query: 'emergency plumber parramatta',
+        limit: 10,
+      })
+      expect(genericPage.items.map((item) => item.slug)).toEqual(['parramatta-emergency-plumbing'])
+    } finally {
+      if (previous === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previous
+      }
+    }
+  })
+
   it('hydrates Meili-ranked candidates from the public Convex catalog before returning them', async () => {
     setCatalogSearchBackendForTests('meilisearch')
     setCatalogSearchPortForTests(fakeCatalogSearchPort({

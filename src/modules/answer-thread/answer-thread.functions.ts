@@ -15,7 +15,11 @@ import type {
   FollowUpIntent,
   PublicThreadProjection,
 } from './answer-thread.schema'
-import type { AnswerToolCallInputRow } from './internal/commands'
+import {
+  appendAnswerToolCalls,
+  type AnswerToolCallInputRow,
+} from './internal/commands'
+import { buildPublicThreadProjection } from './internal/public-projection'
 
 export type CreateAnswerThreadArgs = {
   threadId: string
@@ -184,6 +188,7 @@ type AnswerThreadPort = {
 }
 
 let testPort: AnswerThreadPort | undefined
+let localE2ePort: AnswerThreadPort | undefined
 const missingConvexFunctions = new Set<string>()
 
 export function setAnswerThreadPortForTests(port: AnswerThreadPort | undefined): () => void {
@@ -195,15 +200,17 @@ export function setAnswerThreadPortForTests(port: AnswerThreadPort | undefined):
 }
 
 export async function createAnswerThread(args: CreateAnswerThreadArgs): Promise<{ threadId: string }> {
-  if (testPort !== undefined) {
-    return testPort.createThread(args)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    return port.createThread(args)
   }
   return callPublicSourceMutation(createAnswerThreadMutation, args)
 }
 
 export async function appendAnswerTurn(args: AppendAnswerTurnArgs): Promise<{ turnId: string }> {
-  if (testPort !== undefined) {
-    return testPort.appendTurn(args)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    return port.appendTurn(args)
   }
   return callPublicSourceMutation(appendAnswerTurnMutation, args)
 }
@@ -211,33 +218,52 @@ export async function appendAnswerTurn(args: AppendAnswerTurnArgs): Promise<{ tu
 export async function appendAnswerTurnWithToolCalls(
   args: AppendAnswerTurnWithToolCallsArgs,
 ): Promise<{ turnId: string; insertedToolCalls: number }> {
-  if (testPort !== undefined) {
-    if (testPort.appendTurnWithToolCalls !== undefined) {
-      return testPort.appendTurnWithToolCalls(args)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    if (port.appendTurnWithToolCalls !== undefined) {
+      return port.appendTurnWithToolCalls(args)
     }
-    const { turnId } = await testPort.appendTurn(args)
+    const { turnId } = await port.appendTurn(args)
     return { turnId, insertedToolCalls: args.toolCalls.length }
   }
-  return callPublicSourceMutation(appendAnswerTurnWithToolCallsMutation, args)
+  if (!missingConvexFunctions.has('answerThreads:appendAnswerTurnWithToolCalls')) {
+    try {
+      return await callPublicSourceMutation(appendAnswerTurnWithToolCallsMutation, args)
+    } catch (error) {
+      if (!isMissingConvexFunction(error, 'answerThreads:appendAnswerTurnWithToolCalls')) {
+        throw error
+      }
+      missingConvexFunctions.add('answerThreads:appendAnswerTurnWithToolCalls')
+    }
+  }
+
+  const { toolCalls, ...turnArgs } = args
+  const { turnId } = await appendAnswerTurn(turnArgs)
+  if (toolCalls.length === 0) {
+    return { turnId, insertedToolCalls: 0 }
+  }
+  const { inserted } = await appendAnswerToolCalls({ turnId, toolCalls })
+  return { turnId, insertedToolCalls: inserted }
 }
 
 export async function appendAnswerTurnWithThreadAndToolCalls(
   args: AppendAnswerTurnWithThreadAndToolCallsArgs,
 ): Promise<{ turnId: string; insertedToolCalls: number }> {
   const { title, ...appendArgs } = args
-  if (testPort !== undefined) {
-    if (testPort.appendTurnWithThreadAndToolCalls !== undefined) {
-      return testPort.appendTurnWithThreadAndToolCalls(args)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    if (port.appendTurnWithThreadAndToolCalls !== undefined) {
+      return port.appendTurnWithThreadAndToolCalls(args)
     }
-    await testPort.createThread({
+    await port.createThread({
       threadId: args.threadId,
       pseudonymousSessionId: args.pseudonymousSessionId,
       title,
     })
-    if (testPort.appendTurnWithToolCalls !== undefined) {
-      return testPort.appendTurnWithToolCalls(appendArgs)
+    if (port.appendTurnWithToolCalls !== undefined) {
+      return port.appendTurnWithToolCalls(appendArgs)
     }
-    const { turnId } = await testPort.appendTurn(appendArgs)
+    const { turnId } = await port.appendTurn(appendArgs)
     return { turnId, insertedToolCalls: args.toolCalls.length }
   }
   if (!missingConvexFunctions.has('answerThreads:appendAnswerTurnWithThreadAndToolCalls')) {
@@ -262,9 +288,10 @@ export async function finalizeAnswerTurnHarnessRunFromRequest(
   request: Request,
   args: FinalizeAnswerTurnHarnessRunArgs,
 ): Promise<AnswerHarnessFinalizationResult> {
-  if (testPort !== undefined) {
-    if (testPort.finalizeTurnHarnessRun !== undefined) {
-      return testPort.finalizeTurnHarnessRun(args)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    if (port.finalizeTurnHarnessRun !== undefined) {
+      return port.finalizeTurnHarnessRun(args)
     }
     const activeLeafEntryId = args.entries.at(-1)?.entryId
     return {
@@ -306,26 +333,29 @@ export async function listSessionThreads(
   pseudonymousSessionId: string,
   limit = 20,
 ): Promise<ListSessionThreadsResult> {
-  if (testPort !== undefined) {
-    return testPort.listSessionThreads(pseudonymousSessionId, limit)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    return port.listSessionThreads(pseudonymousSessionId, limit)
   }
   return callPublicSourceQuery(listSessionThreadsQuery, { pseudonymousSessionId, limit })
 }
 
 export async function getAnswerThread(threadId: string): Promise<AnswerThreadWithTurnCount | null> {
-  if (testPort !== undefined) {
-    if (testPort.getAnswerThread === undefined) {
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    if (port.getAnswerThread === undefined) {
       return null
     }
-    return testPort.getAnswerThread(threadId)
+    return port.getAnswerThread(threadId)
   }
   return callPublicSourceQuery(getAnswerThreadQuery, { threadId })
 }
 
 export async function getAnswerThreadWithTurns(threadId: string): Promise<AnswerThreadWithTurns | null> {
-  if (testPort !== undefined) {
-    const thread = await (testPort.getAnswerThread?.(threadId) ?? Promise.resolve(null))
-    const turns = await testPort.getThreadTurns(threadId).catch(() => ({ turns: [] as readonly AnswerTurnRecord[] }))
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    const thread = await (port.getAnswerThread?.(threadId) ?? Promise.resolve(null))
+    const turns = await port.getThreadTurns(threadId).catch(() => ({ turns: [] as readonly AnswerTurnRecord[] }))
     return thread === null
       ? null
       : {
@@ -357,24 +387,173 @@ export async function getAnswerThreadWithTurns(threadId: string): Promise<Answer
 }
 
 export async function getPublicThreadProjection(threadId: string): Promise<PublicThreadProjection | null> {
-  if (testPort !== undefined) {
-    return testPort.getPublicThreadProjection(threadId)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    return port.getPublicThreadProjection(threadId)
   }
   return callPublicSourceQuery(getPublicThreadProjectionQuery, { threadId })
 }
 
 export async function getThreadTurns(threadId: string): Promise<{ turns: readonly AnswerTurnRecord[] }> {
-  if (testPort !== undefined) {
-    return testPort.getThreadTurns(threadId)
+  const port = activeAnswerThreadPort()
+  if (port !== undefined) {
+    return port.getThreadTurns(threadId)
   }
   return callPublicSourceQuery(getThreadTurnsQuery, { threadId })
 }
 
 export async function deleteAnswerThread(args: DeleteAnswerThreadArgs): Promise<{ threadId: string }> {
-  if (testPort?.deleteThread !== undefined) {
-    return testPort.deleteThread(args)
+  const port = activeAnswerThreadPort()
+  if (port?.deleteThread !== undefined) {
+    return port.deleteThread(args)
   }
   return callPublicSourceMutation(deleteAnswerThreadMutation, args)
+}
+
+function activeAnswerThreadPort(): AnswerThreadPort | undefined {
+  if (testPort !== undefined) {
+    return testPort
+  }
+  if (!usesLocalE2eBypass()) {
+    return undefined
+  }
+  localE2ePort ??= createLocalE2eAnswerThreadPort()
+  return localE2ePort
+}
+
+function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
+  const threads = new Map<string, AnswerThreadRecord>()
+  const turns = new Map<string, AnswerTurnRecord>()
+
+  const turnsForThread = (threadId: string) =>
+    [...turns.values()]
+      .filter((turn) => turn.threadId === threadId)
+      .sort((left, right) => left.seq - right.seq)
+
+  const appendTurnRecord = async (args: AppendAnswerTurnArgs): Promise<{ turnId: string }> => {
+    const thread = threads.get(args.threadId)
+    if (thread === undefined) {
+      throw new Error('thread_not_found')
+    }
+    if (thread.pseudonymousSessionId !== args.pseudonymousSessionId && !usesLocalE2eBypass()) {
+      throw new Error('thread_forbidden')
+    }
+    if (turnsForThread(args.threadId).length >= 25) {
+      throw new Error('thread_turn_limit')
+    }
+    const timestamp = Date.now()
+    turns.set(args.turnId, {
+      ...args,
+      createdAt: timestamp,
+    })
+    threads.set(args.threadId, {
+      ...thread,
+      updatedAt: timestamp,
+    })
+    return { turnId: args.turnId }
+  }
+
+  return {
+    createThread: async (args) => {
+      const timestamp = Date.now()
+      const existing = threads.get(args.threadId)
+      if (existing !== undefined) {
+        if (existing.pseudonymousSessionId !== args.pseudonymousSessionId && !usesLocalE2eBypass()) {
+          throw new Error('thread_forbidden')
+        }
+        return { threadId: args.threadId }
+      }
+      threads.set(args.threadId, {
+        threadId: args.threadId,
+        pseudonymousSessionId: args.pseudonymousSessionId,
+        title: args.title,
+        sharePolicy: 'public',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      return { threadId: args.threadId }
+    },
+    appendTurn: appendTurnRecord,
+    appendTurnWithToolCalls: async (args) => {
+      const { toolCalls, ...turnArgs } = args
+      const { turnId } = await appendTurnRecord(turnArgs)
+      return { turnId, insertedToolCalls: toolCalls.length }
+    },
+    appendTurnWithThreadAndToolCalls: async (args) => {
+      if (!threads.has(args.threadId)) {
+        const timestamp = Date.now()
+        threads.set(args.threadId, {
+          threadId: args.threadId,
+          pseudonymousSessionId: args.pseudonymousSessionId,
+          title: args.title,
+          sharePolicy: 'public',
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+      }
+      const { title: _title, toolCalls, ...turnArgs } = args
+      const { turnId } = await appendTurnRecord(turnArgs)
+      return { turnId, insertedToolCalls: toolCalls.length }
+    },
+    listSessionThreads: async (pseudonymousSessionId, limit = 20) => ({
+      threads: [...threads.values()]
+        .filter((thread) => thread.pseudonymousSessionId === pseudonymousSessionId)
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .slice(0, limit),
+    }),
+    getPublicThreadProjection: async (threadId) => {
+      const thread = threads.get(threadId)
+      if (thread === undefined) {
+        return null
+      }
+      return buildPublicThreadProjection(thread, turnsForThread(threadId))
+    },
+    getThreadTurns: async (threadId) => ({ turns: turnsForThread(threadId) }),
+    getAnswerThread: async (threadId) => {
+      const thread = threads.get(threadId)
+      if (thread === undefined) {
+        return null
+      }
+      return { ...thread, turnCount: turnsForThread(threadId).length }
+    },
+    deleteThread: async (args) => {
+      const thread = threads.get(args.threadId)
+      if (thread === undefined) {
+        return { threadId: args.threadId }
+      }
+      if (thread.pseudonymousSessionId !== args.pseudonymousSessionId && !usesLocalE2eBypass()) {
+        throw new Error('thread_forbidden')
+      }
+      threads.delete(args.threadId)
+      for (const turn of turnsForThread(args.threadId)) {
+        turns.delete(turn.turnId)
+      }
+      return { threadId: args.threadId }
+    },
+    finalizeTurnHarnessRun: async (args) => {
+      const turn = turns.get(args.turnId)
+      if (turn === undefined) {
+        return {
+          status: 'conflict',
+          reason: 'turn_not_found',
+          message: `Answer turn ${args.turnId} does not exist.`,
+        }
+      }
+      turns.set(args.turnId, {
+        ...turn,
+        evidenceJson: args.evidenceJson,
+      })
+      const activeLeafEntryId = args.entries.at(-1)?.entryId
+      return {
+        status: 'accepted',
+        turnId: args.turnId,
+        finalizationHash: args.finalizationHash,
+        entriesAccepted: args.entries.length,
+        entriesReplayed: 0,
+        ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
+      }
+    },
+  }
 }
 
 function isMissingConvexFunction(error: unknown, functionName: string): boolean {
@@ -383,8 +562,13 @@ function isMissingConvexFunction(error: unknown, functionName: string): boolean 
 }
 
 function markOptimizedAnswerThreadFunctionsMissing(): void {
+  missingConvexFunctions.add('answerThreads:appendAnswerTurnWithToolCalls')
   missingConvexFunctions.add('answerThreads:appendAnswerTurnWithThreadAndToolCalls')
   missingConvexFunctions.add('answerThreads:getAnswerThreadWithTurns')
+}
+
+function usesLocalE2eBypass(): boolean {
+  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 function answerHarnessFinalizationOperationKey(args: Pick<

@@ -99,7 +99,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     routeThreadId !== null && initialProjection?.threadId === routeThreadId ? initialProjection : null
   const fetchedRouteProjection = fetchedProjection?.threadId === routeThreadId ? fetchedProjection : null
   const projection =
-    routeThreadId === null ? null : (initialRouteProjection ?? fetchedRouteProjection?.projection ?? null)
+    routeThreadId === null ? null : (fetchedRouteProjection?.projection ?? initialRouteProjection ?? null)
   const projectionUnavailable =
     routeThreadId !== null &&
     (initialProjection === null || (initialRouteProjection === null && fetchedRouteProjection?.unavailable === true))

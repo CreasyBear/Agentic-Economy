@@ -63,6 +63,7 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
   const stream = createAbortAwareSseStream({
     request,
     run: async (sendLine) => {
+      const sourceWriteRequest = usesLocalE2eBypass() ? undefined : request
       const send = (frame: { seq: number; event: AnswerEvent }) => {
         if (request.signal.aborted) {
           return
@@ -80,7 +81,7 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
             precheckedAccess: access,
             ...(preloadedPriorTurns === undefined ? {} : { preloadedPriorTurns }),
             signal: request.signal,
-            sourceWriteRequest: request,
+            ...(sourceWriteRequest === undefined ? {} : { sourceWriteRequest }),
           },
           send,
         )
@@ -119,4 +120,8 @@ function jsonError(code: string, status: number, retryAfter?: number): Response 
 
 function makeCopyId(): string {
   return `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function usesLocalE2eBypass(): boolean {
+  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

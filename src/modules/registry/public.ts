@@ -12,6 +12,7 @@ import {
 } from './internal/projection-attempts'
 import {
   createDefaultRegistrySourceState as createDefaultRegistrySourceStateImpl,
+  createLocalE2eRegistrySourceState as createLocalE2eRegistrySourceStateImpl,
   getPublicBusinessCatalogBySlug as getPublicBusinessCatalogBySlugImpl,
   listPublicBusinessCatalog as listPublicBusinessCatalogImpl,
   searchPublicBusinessCatalog as searchPublicBusinessCatalogImpl,
@@ -239,6 +240,7 @@ export type {
 }
 
 export const createDefaultRegistrySourceState = createDefaultRegistrySourceStateImpl
+export const createLocalE2eRegistrySourceState = createLocalE2eRegistrySourceStateImpl
 
 export const syncCatalogProjection = syncCatalogProjectionImpl
 
