@@ -32,9 +32,7 @@ export function buildFollowUpChips(input: FollowUpChipBuildInput): FollowUpChip[
 
 export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowUpChip[] {
   const chips: FollowUpChip[] = []
-  const providerCards = turn.artifacts.find((artifact) => artifact.kind === 'provider-cards')
-  const providers =
-    providerCards?.kind === 'provider-cards' ? providerCards.providers : []
+  const providers = providersForFollowUps(turn.artifacts)
   const inquiryReadyProviders = providers.filter(hasPublishedInquiryPath)
 
   const inquiryHandoffQuery = buildInquiryHandoffQuery(providers, inquiryReadyProviders)
@@ -69,6 +67,32 @@ export function buildDeterministicFollowUpChips(turn: PublicThreadTurn): FollowU
 
 
   return chips.slice(0, 4)
+}
+
+function providersForFollowUps(
+  artifacts: PublicThreadTurn['artifacts'],
+): Array<{ slug: string; name: string; suburb: string; inquiryUrl?: string }> {
+  const providersBySlug = new Map<string, { slug: string; name: string; suburb: string; inquiryUrl?: string }>()
+
+  for (const artifact of artifacts) {
+    if (artifact.kind !== 'provider-cards' && artifact.kind !== 'provider-compare-table') {
+      continue
+    }
+
+    for (const provider of artifact.providers) {
+      if (providersBySlug.has(provider.slug)) {
+        continue
+      }
+      providersBySlug.set(provider.slug, {
+        slug: provider.slug,
+        name: provider.name,
+        suburb: provider.suburb,
+        ...(provider.inquiryUrl === undefined ? {} : { inquiryUrl: provider.inquiryUrl }),
+      })
+    }
+  }
+
+  return [...providersBySlug.values()]
 }
 
 function buildInquiryHandoffQuery(

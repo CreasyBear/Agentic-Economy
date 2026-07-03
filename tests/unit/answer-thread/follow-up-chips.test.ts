@@ -85,6 +85,27 @@ describe('follow-up chips', () => {
     expect(chips.map((chip) => chip.submitQuery)).toContain('Which take inquiries?')
   })
 
+  it('keeps inquiry handoff available after compare-table turns', () => {
+    const chips = buildDeterministicFollowUpChips(turn({
+      intent: 'compare_known',
+      artifacts: [
+        {
+          kind: 'provider-compare-table',
+          providers: [
+            provider({ citationIndex: 1, slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+            providerWithoutInquiry({ citationIndex: 2, slug: 'review-only', name: 'Review Only Plumbing' }),
+          ],
+        },
+      ],
+    }))
+
+    expect(chips[0]).toEqual({
+      label: 'Start qualified inquiry',
+      submitQuery: 'Send a qualified inquiry to the first listed business',
+    })
+    expect(chips.map((chip) => chip.submitQuery)).toContain('Show only businesses that accept inquiries')
+  })
+
   it('rejects overclaim chips', () => {
     expect(validateFollowUpChip('Book now and pay today', 1)).toBe(false)
   })

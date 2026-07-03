@@ -137,9 +137,20 @@ export function AeFollowUpChips({ turn, onSelect }: AeFollowUpChipsProps) {
 }
 
 function extractProviders(turn: PublicThreadTurn): Record<string, unknown>[] {
-  const providerCards = turn.artifacts.find((artifact) => artifact.kind === 'provider-cards')
-  if (providerCards?.kind !== 'provider-cards') {
-    return []
+  const providersBySlug = new Map<string, Record<string, unknown>>()
+
+  for (const artifact of turn.artifacts) {
+    if (artifact.kind !== 'provider-cards' && artifact.kind !== 'provider-compare-table') {
+      continue
+    }
+
+    for (const provider of artifact.providers) {
+      if (providersBySlug.has(provider.slug)) {
+        continue
+      }
+      providersBySlug.set(provider.slug, { ...provider })
+    }
   }
-  return providerCards.providers.map((provider) => ({ ...provider }))
+
+  return [...providersBySlug.values()]
 }

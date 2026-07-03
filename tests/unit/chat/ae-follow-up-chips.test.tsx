@@ -29,6 +29,29 @@ describe('AeFollowUpChips', () => {
 
     expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
   })
+
+  it('keeps the inquiry loop available after a compare-table answer', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+    const onSelect = vi.fn()
+
+    render(<AeFollowUpChips turn={turn({
+      intent: 'compare_known',
+      artifacts: [
+        {
+          kind: 'provider-compare-table',
+          providers: [
+            provider({ citationIndex: 1, slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+            providerWithoutInquiry({ citationIndex: 2, slug: 'review-only', name: 'Review Only Plumbing' }),
+          ],
+        },
+      ],
+    })} onSelect={onSelect} />)
+
+    expect(screen.getByRole('region', { name: 'Continue this thread' })).toBeTruthy()
+    fireEvent.click(screen.getByText('Start qualified inquiry'))
+
+    expect(onSelect).toHaveBeenCalledWith('Send a qualified inquiry to the first listed business')
+  })
 })
 
 function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
@@ -84,4 +107,35 @@ function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
     ],
     ...overrides,
   }
+}
+
+function provider(
+  overrides: Partial<Extract<PublicThreadTurn['artifacts'][number], { kind: 'provider-cards' }>['providers'][number]> = {},
+) {
+  return {
+    citationIndex: 1,
+    slug: 'parramatta-emergency-plumbing',
+    name: 'Parramatta Emergency Plumbing',
+    category: 'Plumber',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    serviceArea: 'Parramatta',
+    hoursLabel: 'Hours supplied',
+    availabilityLabel: 'Published',
+    trustLabel: 'Checked',
+    responseTimeLabel: 'Responds ~22m',
+    trustCue: 'Responds ~22m - Checked',
+    nextStepLabel: 'Send inquiry',
+    detailUrl: '/parramatta-emergency-plumbing',
+    services: [],
+    inquiryUrl: '/parramatta-emergency-plumbing/inquiry',
+    ...overrides,
+  }
+}
+
+function providerWithoutInquiry(
+  overrides: Partial<Extract<PublicThreadTurn['artifacts'][number], { kind: 'provider-cards' }>['providers'][number]> = {},
+) {
+  const { inquiryUrl: _inquiryUrl, ...source } = provider(overrides)
+  return source
 }
