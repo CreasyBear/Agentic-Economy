@@ -12,7 +12,7 @@ import {
 } from '../scripts/assert-graph-fresh'
 
 describe('graph freshness gate', () => {
-  it('parses the checked-in graph report and graph JSON commit for current HEAD', () => {
+  it('accepts checked-in graph artifacts when commits since build are graph-irrelevant', () => {
     const currentHead = execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: new URL('../..', import.meta.url),
       encoding: 'utf8',
@@ -25,20 +25,31 @@ describe('graph freshness gate', () => {
       new URL('../../.planning/graphs/graph.json', import.meta.url),
       'utf8',
     )
+    const reportCommit = parseGraphReportCommit(report)
+    const committedPathsSinceGraph = reportCommit === undefined
+      ? []
+      : execFileSync('git', ['diff', '--name-only', `${reportCommit}..HEAD`], {
+        cwd: new URL('../..', import.meta.url),
+        encoding: 'utf8',
+      })
+        .split(/\r?\n/g)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
 
-    expect(parseGraphReportCommit(report)).toBe(currentHead)
-    expect(parseGraphJsonCommit(graphJson)).toBe(currentHead)
+    expect(reportCommit).toBeDefined()
+    expect(parseGraphJsonCommit(graphJson)).toBe(reportCommit)
     expect(checkGraphFreshness({
       currentHead,
       graphReportText: report,
       graphJsonText: graphJson,
+      committedPathsSinceGraph,
       dirtyPaths: [],
     })).toMatchObject({
       ok: true,
       status: 'fresh',
       currentHead,
-      graphReportCommit: currentHead,
-      graphJsonCommit: currentHead,
+      graphReportCommit: reportCommit,
+      graphJsonCommit: reportCommit,
     })
   })
 

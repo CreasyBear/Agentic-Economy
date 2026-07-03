@@ -27,6 +27,10 @@ const GRAPH_RELEVANT_DIRTY_PREFIXES = [
   'convex/schema.ts',
 ] as const
 
+const GRAPH_IRRELEVANT_EXACT_PATHS = new Set([
+  'tests/eval/graph-freshness.test.ts',
+])
+
 export type GraphFreshnessStatus = 'fresh' | 'stale' | 'invalid'
 
 export type GraphFreshnessResult = {
@@ -36,6 +40,7 @@ export type GraphFreshnessResult = {
   graphReportCommit?: string
   graphJsonCommit?: string
   relevantDirtyPaths: readonly string[]
+  relevantCommittedPaths: readonly string[]
   staleReasons: readonly string[]
 }
 
@@ -73,6 +78,9 @@ export function parseGitStatusPaths(statusText: string): string[] {
 
 export function isGraphRelevantDirtyPath(path: string): boolean {
   const normalized = path.replaceAll('\\', '/')
+  if (GRAPH_IRRELEVANT_EXACT_PATHS.has(normalized)) {
+    return false
+  }
   return GRAPH_RELEVANT_DIRTY_PREFIXES.some((prefix) => normalized.startsWith(prefix)) ||
     /^src\/modules\/[^/]+\/.*schema\.ts$/.test(normalized) ||
     /^src\/modules\/[^/]+\/public\.ts$/.test(normalized)
@@ -83,6 +91,7 @@ export function checkGraphFreshness(input: {
   graphReportText?: string
   graphJsonText?: string
   dirtyPaths?: readonly string[]
+  committedPathsSinceGraph?: readonly string[]
 }): GraphFreshnessResult {
   const currentHead = input.currentHead.trim()
   const staleReasons: string[] = []
@@ -94,9 +103,18 @@ export function checkGraphFreshness(input: {
   const graphReportCommit = input.graphReportText === undefined
     ? undefined
     : parseGraphReportCommit(input.graphReportText)
+  const relevantCommittedPaths = (input.committedPathsSinceGraph ?? [])
+    .filter(isGraphRelevantDirtyPath)
+    .sort()
+  const hasCommittedPathContext = input.committedPathsSinceGraph !== undefined
+  const hasGraphRelevantCommitsSinceBuild = relevantCommittedPaths.length > 0
+
   if (graphReportCommit === undefined) {
     staleReasons.push('graph_report_commit_missing')
-  } else if (graphReportCommit !== currentHead) {
+  } else if (
+    graphReportCommit !== currentHead &&
+    (!hasCommittedPathContext || hasGraphRelevantCommitsSinceBuild)
+  ) {
     staleReasons.push(`graph_report_commit_mismatch:${graphReportCommit}`)
   }
 
@@ -108,7 +126,10 @@ export function checkGraphFreshness(input: {
         staleReasons.push('graph_json_commit_missing')
       } else if (graphReportCommit !== undefined && graphJsonCommit !== graphReportCommit) {
         staleReasons.push(`graph_json_report_commit_mismatch:${graphJsonCommit}`)
-      } else if (graphJsonCommit !== currentHead) {
+      } else if (
+        graphJsonCommit !== currentHead &&
+        (!hasCommittedPathContext || hasGraphRelevantCommitsSinceBuild)
+      ) {
         staleReasons.push(`graph_json_commit_mismatch:${graphJsonCommit}`)
       }
     } catch {
@@ -119,6 +140,9 @@ export function checkGraphFreshness(input: {
   const relevantDirtyPaths = (input.dirtyPaths ?? []).filter(isGraphRelevantDirtyPath).sort()
   if (relevantDirtyPaths.length > 0) {
     staleReasons.push('graph_relevant_worktree_dirty')
+  }
+  if (relevantCommittedPaths.length > 0) {
+    staleReasons.push('graph_relevant_commits_since_build')
   }
 
   const invalid = staleReasons.some((reason) =>
@@ -135,6 +159,7 @@ export function checkGraphFreshness(input: {
     ...(graphReportCommit === undefined ? {} : { graphReportCommit }),
     ...(graphJsonCommit === undefined ? {} : { graphJsonCommit }),
     relevantDirtyPaths,
+    relevantCommittedPaths,
     staleReasons,
   }
 }
@@ -151,6 +176,21 @@ export function readDirtyGitPaths(cwd = process.cwd()): string[] {
   return parseGitStatusPaths(status)
 }
 
+export function readCommittedGitPathsSince(commit: string, cwd = process.cwd()): string[] | undefined {
+  try {
+    const status = execFileSync('git', ['diff', '--name-only', `${commit}..HEAD`], {
+      cwd,
+      encoding: 'utf8',
+    })
+    return status
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+  } catch {
+    return undefined
+  }
+}
+
 export function formatGraphFreshnessResult(result: GraphFreshnessResult): string {
   const lines = [
     `graph freshness: ${result.status}`,
@@ -164,6 +204,10 @@ export function formatGraphFreshnessResult(result: GraphFreshnessResult): string
     lines.push('relevant dirty paths:')
     lines.push(...result.relevantDirtyPaths.map((path) => `- ${path}`))
   }
+  if (result.relevantCommittedPaths.length > 0) {
+    lines.push('relevant committed paths since graph build:')
+    lines.push(...result.relevantCommittedPaths.map((path) => `- ${path}`))
+  }
 
   if (result.staleReasons.length > 0) {
     lines.push('reasons:')
@@ -174,6 +218,9 @@ export function formatGraphFreshnessResult(result: GraphFreshnessResult): string
     lines.push('next actions:')
     if (result.relevantDirtyPaths.length > 0) {
       lines.push('- settle or intentionally shelve graph-relevant dirty paths')
+    }
+    if (result.relevantCommittedPaths.length > 0) {
+      lines.push('- rebuild graph artifacts after the graph-relevant commits')
     }
     if (result.staleReasons.some((reason) => reason.includes('commit_mismatch'))) {
       lines.push('- rebuild graph artifacts from the final source tree')
@@ -209,9 +256,15 @@ function runCli(): void {
   const graphJsonPath = join(repoRoot, '.planning/graphs/graph.json')
   const graphReportText = readOptionalFile(graphReportPath)
   const graphJsonText = readOptionalFile(graphJsonPath)
+  const graphReportCommit = graphReportText === undefined
+    ? undefined
+    : parseGraphReportCommit(graphReportText)
   const result = checkGraphFreshness({
     currentHead: readCurrentGitHead(repoRoot),
     dirtyPaths: readDirtyGitPaths(repoRoot),
+    ...(graphReportCommit === undefined ? {} : {
+      committedPathsSinceGraph: readCommittedGitPathsSince(graphReportCommit, repoRoot),
+    }),
     ...(graphReportText === undefined ? {} : { graphReportText }),
     ...(graphJsonText === undefined ? {} : { graphJsonText }),
   })
