@@ -29,6 +29,8 @@ export const inquiryTables = {
     readAt: v.optional(v.number()),
     repliedAt: v.optional(v.number()),
     closedAt: v.optional(v.number()),
+    originKind: v.optional(v.literal('answer_thread')),
+    originThreadId: v.optional(v.string()),
   })
     .index('by_threadId', ['threadId'])
     .index('by_business_status', ['businessId', 'status'])

@@ -93,6 +93,11 @@ const inquiryTarget = v.object({
   capabilityKind: literalUnion(CapabilityKindValues),
 })
 
+const inquiryOrigin = v.object({
+  kind: v.literal('answer_thread'),
+  threadId: v.string(),
+})
+
 const csrfArgs = {
   csrfToken: v.optional(v.string()),
   csrfCookie: v.optional(v.string()),
@@ -154,6 +159,11 @@ const inboxInquiryProjection = v.object({
   version: v.number(),
   submittedAt: v.number(),
   updatedAt: v.number(),
+  origin: v.optional(v.object({
+    kind: v.literal('answer_thread'),
+    label: v.string(),
+    href: v.string(),
+  })),
 })
 
 const inboxReadback = v.object({
@@ -604,6 +614,7 @@ export const submitPublicInquiry = mutationGeneric({
     target: inquiryTarget,
     body: v.string(),
     contact: publicInquiryContact,
+    inquiryOrigin: v.optional(inquiryOrigin),
     pseudonymousSessionId: v.string(),
     abuseBucketKey: v.string(),
     ...csrfArgs,
@@ -627,6 +638,7 @@ export const submitPublicInquiry = mutationGeneric({
       },
       body: args.body,
       contact: args.contact,
+      ...(args.inquiryOrigin === undefined ? {} : { origin: args.inquiryOrigin }),
       operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
       pseudonymousSessionId: args.pseudonymousSessionId,
@@ -1327,6 +1339,10 @@ async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceStat
       ...(thread.readAt === undefined ? {} : { readAt: thread.readAt }),
       ...(thread.repliedAt === undefined ? {} : { repliedAt: thread.repliedAt }),
       ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
+      ...(thread.origin === undefined ? {} : {
+        originKind: thread.origin.kind,
+        originThreadId: thread.origin.threadId,
+      }),
     })
   }
 
@@ -1637,6 +1653,7 @@ function toSuppressionRuleRecord(row: RuntimeDocument): SuppressionRuleRecord {
 }
 
 function toInquiryThreadRecord(row: RuntimeDocument): InquiryThreadRecord {
+  const origin = inquiryOriginRef(row)
   return {
     threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
     businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
@@ -1652,7 +1669,17 @@ function toInquiryThreadRecord(row: RuntimeDocument): InquiryThreadRecord {
     ...(optionalNumberField(row, 'readAt') === undefined ? {} : { readAt: numberField(row, 'readAt') }),
     ...(optionalNumberField(row, 'repliedAt') === undefined ? {} : { repliedAt: numberField(row, 'repliedAt') }),
     ...(optionalNumberField(row, 'closedAt') === undefined ? {} : { closedAt: numberField(row, 'closedAt') }),
+    ...(origin === undefined ? {} : { origin }),
   }
+}
+
+function inquiryOriginRef(row: RuntimeDocument): InquiryThreadRecord['origin'] | undefined {
+  const kind = optionalStringField(row, 'originKind')
+  const threadId = optionalStringField(row, 'originThreadId')
+  if (kind !== 'answer_thread' || threadId === undefined) {
+    return undefined
+  }
+  return { kind, threadId }
 }
 
 function toInquiryMessageRecord(row: RuntimeDocument): InquiryMessageRecord {

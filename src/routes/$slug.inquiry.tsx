@@ -30,6 +30,7 @@ import {
   type PublicInquirySubmittedReceipt,
   type PublicInquiryValidationError,
 } from '@/modules/inquiries/route-readbacks'
+import type { InquiryOriginRef } from '@/modules/inquiries/public'
 
 const emptyInquiryFormInput = {
   body: '',
@@ -85,6 +86,7 @@ function PublicInquiryRoute() {
   const [result, setResult] = useState<PublicInquirySubmitServerResult | undefined>(initialResult)
   const [pending, setPending] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
+  const origin = inquiryOrigin(search)
 
   if (readback.kind === 'unavailable') {
     return <UnavailableInquiry readback={readback} />
@@ -116,6 +118,7 @@ function PublicInquiryRoute() {
           target: readback.target,
           body: validation.input.body,
           contact: validation.input.contact,
+          ...(origin === undefined ? {} : { inquiryOrigin: origin.submitOrigin }),
         },
       })
 
@@ -145,7 +148,6 @@ function PublicInquiryRoute() {
   const bodyError = errorByField.get('body')
   const emailError = errorByField.get('email')
   const phoneError = errorByField.get('phone')
-  const origin = inquiryOrigin(search)
 
   return (
     <AePublicShell>
@@ -235,11 +237,17 @@ function PublicInquiryRoute() {
   )
 }
 
-function inquiryOrigin(search: PublicInquirySearch): { backHref: string } | undefined {
+function inquiryOrigin(search: PublicInquirySearch): { backHref: string; submitOrigin: InquiryOriginRef } | undefined {
   if (search.from !== 'thread' || search.id === undefined) {
     return undefined
   }
-  return { backHref: `/t/${encodeURIComponent(search.id)}` }
+  return {
+    backHref: `/t/${encodeURIComponent(search.id)}`,
+    submitOrigin: {
+      kind: 'answer_thread',
+      threadId: search.id,
+    },
+  }
 }
 
 function focusFirstPublicInquiryError(errors: readonly PublicInquiryValidationError[]) {

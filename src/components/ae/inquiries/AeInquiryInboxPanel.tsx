@@ -164,6 +164,7 @@ function AeInquiryInboxRow({ inquiry }: { inquiry: OwnerInboxInquiryProjection }
           label={bucketLabel(inquiry.bucket)}
         />
         <Badge variant={notificationVariant(inquiry.notificationStatus)} label={inquiry.notificationLabel} />
+        {inquiry.origin === undefined ? null : <Badge variant="info" label={inquiry.origin.label} />}
         {needsDeliveryAttention ? <Badge variant="warning" label="Delivery attention" /> : null}
       </div>
       <p className="line-clamp-2 text-sm text-primary">{inquiry.preview}</p>
@@ -212,6 +213,7 @@ function inquiryMatchesQuery(inquiry: OwnerInboxInquiryProjection, query: string
     inquiry.businessName,
     inquiry.serviceName,
     inquiry.preview,
+    inquiry.origin?.label ?? '',
     inquiry.status,
     inquiry.notificationLabel,
     bucketLabel(inquiry.bucket),

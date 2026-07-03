@@ -58,6 +58,7 @@ type SubmitArgs = {
   abuseBucketKey: string
   operationKey: string
   correlationId: string
+  inquiryOrigin?: { kind: 'answer_thread'; threadId: string }
   csrfToken?: string
   csrfCookie?: string
   origin?: string
@@ -98,11 +99,16 @@ const tombstoneHandler = (readCurrentOwnerInquiryPrivacyTombstone as unknown as 
 describe('Convex inquiry runtime bridge', () => {
   it('persists public inquiry effects and exposes only source-owned owner readbacks', async () => {
     const db = seededInquiryDb()
+    const inquiryOrigin = { kind: 'answer_thread' as const, threadId: 'thread:selected-provider' }
 
-    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first')))
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first', { inquiryOrigin })))
 
     expect(submitted.code).toBe('inquiry_submitted')
     expect(db.dump('inquiryThreads')).toHaveLength(1)
+    expect(db.dump('inquiryThreads')[0]).toMatchObject({
+      originKind: 'answer_thread',
+      originThreadId: 'thread:selected-provider',
+    })
     expect(db.dump('inquiryMessages')).toHaveLength(1)
     expect(db.dump('inquiryNotifications')).toHaveLength(1)
     expect(db.dump('notificationDispatches')).toHaveLength(2)
@@ -126,7 +132,7 @@ describe('Convex inquiry runtime bridge', () => {
     )
     expect(JSON.stringify([db.dump('notificationDispatches'), db.dump('auditEvents')])).not.toContain('Pipe burst under the sink')
 
-    const replay = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first')))
+    const replay = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first', { inquiryOrigin })))
     expect(replay.code).toBe('inquiry_replayed')
     expect(replay.thread.threadId).toBe(submitted.thread.threadId)
     expect(db.dump('inquiryThreads')).toHaveLength(1)
@@ -153,7 +159,17 @@ describe('Convex inquiry runtime bridge', () => {
       kind: 'allowed',
       inbox: {
         buckets: { unread: 1, needs_reply: 0, resolved: 0 },
-        inquiries: [expect.objectContaining({ threadId: submitted.thread.threadId, notificationStatus: 'queued' })],
+        inquiries: [
+          expect.objectContaining({
+            threadId: submitted.thread.threadId,
+            notificationStatus: 'queued',
+            origin: {
+              kind: 'answer_thread',
+              label: 'From answer',
+              href: '/t/thread%3Aselected-provider',
+            },
+          }),
+        ],
       },
     })
 
@@ -164,6 +180,13 @@ describe('Convex inquiry runtime bridge', () => {
     expect(detail).toMatchObject({
       kind: 'ok',
       readback: {
+        inquiry: expect.objectContaining({
+          origin: {
+            kind: 'answer_thread',
+            label: 'From answer',
+            href: '/t/thread%3Aselected-provider',
+          },
+        }),
         messages: [expect.objectContaining({ body: 'Pipe burst under the sink. Please ask the owner to contact me.' })],
       },
     })

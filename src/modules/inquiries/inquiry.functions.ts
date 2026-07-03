@@ -52,6 +52,10 @@ export const publicInquirySubmitSchema = z.object({
     email: z.string().optional(),
     phone: z.string().optional(),
   }),
+  inquiryOrigin: z.object({
+    kind: z.literal('answer_thread'),
+    threadId: z.string().trim().min(1).max(200),
+  }).optional(),
 })
 
 export const ownerThreadSchema = z.object({
@@ -88,6 +92,10 @@ type PublicInquirySubmitArgs = {
   abuseBucketKey: string
   operationKey: string
   correlationId: string
+  inquiryOrigin?: {
+    kind: 'answer_thread'
+    threadId: string
+  }
   origin?: string
   sourceWrite?: SourceWriteAdmission
 }
@@ -288,6 +296,7 @@ export async function submitPublicInquiryThroughSource(
       target: data.target,
       body: data.body,
       contact: compactContact(data.contact),
+      ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
       pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
       abuseBucketKey: `public-inquiry:${normalizeOperationPart(data.target.businessId)}:${normalizeOperationPart(data.target.serviceId)}`,
       ...(await browserMutationAdmission(context, 'public_inquiry', operationKey, correlationId)),
@@ -496,6 +505,7 @@ function submitLocalE2ePublicInquiry(data: z.infer<typeof publicInquirySubmitSch
     },
     body: data.body,
     contact: compactContact(data.contact),
+    ...(data.inquiryOrigin === undefined ? {} : { origin: data.inquiryOrigin }),
     pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
     abuseBucketKey: `public-inquiry:${normalizeOperationPart(data.target.businessId)}:${normalizeOperationPart(data.target.serviceId)}`,
     operationKey: brandNonEmpty(`inquiry:${operationSuffix}`, 'OperationKey'),

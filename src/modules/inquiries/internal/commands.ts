@@ -39,6 +39,7 @@ import {
   type OwnerInboxBucket,
   type OwnerInboxDeliveryCounts,
   type OwnerInboxInquiryProjection,
+  type OwnerInboxOriginProjection,
   type OwnerInboxMessageProjection,
   type OwnerInboxNotificationProjection,
   type OwnerInboxReadback,
@@ -56,6 +57,7 @@ export type SubmitInquiryCommand = {
   pseudonymousSessionId: string
   abuseBucketKey: string
   now: number
+  origin?: InquiryThreadRecord['origin']
   notificationStatus?: InquiryNotificationStatus
   notificationFailureCode?: string
   unsafeClientFields?: Record<string, unknown>
@@ -307,6 +309,7 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
     body,
     contact: contact.hashInput,
     abuseBucketKey: command.abuseBucketKey,
+    ...(command.origin === undefined ? {} : { origin: command.origin }),
   })
   const existingOperation = findOperation(state, command.operationKey)
   if (existingOperation !== undefined) {
@@ -365,10 +368,16 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
     capabilityKind: target.capability.kind,
     status: 'unread',
     firstMessageId: messageId,
-    sourceHash: stableHash({ threadId, bodyHash, contactHash }),
+    sourceHash: stableHash({
+      threadId,
+      bodyHash,
+      contactHash,
+      ...(command.origin === undefined ? {} : { origin: command.origin }),
+    }),
     createdAt: command.now,
     updatedAt: command.now,
     version: 1,
+    ...(command.origin === undefined ? {} : { origin: { ...command.origin } }),
   }
   const message: InquiryMessageRecord = {
     messageId,
@@ -407,7 +416,11 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
     targetRef: threadId,
     beforeState: 'none',
     afterState: 'unread',
-    redactedPayload: { ...redactedPayload, notificationStatus },
+    redactedPayload: {
+      ...redactedPayload,
+      notificationStatus,
+      ...(command.origin === undefined ? {} : { originKind: command.origin.kind }),
+    },
     now: command.now,
   })
   const funnelEvent = funnelRecord({
@@ -415,7 +428,12 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
     businessId: target.business.businessId,
     correlationId: command.correlationId,
     pseudonymousSessionId: command.pseudonymousSessionId,
-    redactedPayload: { threadId, serviceId: target.service.serviceId, notificationStatus },
+    redactedPayload: {
+      threadId,
+      serviceId: target.service.serviceId,
+      notificationStatus,
+      ...(command.origin === undefined ? {} : { originKind: command.origin.kind }),
+    },
     now: command.now,
   })
   const operation = operationRecord(command.operationKey, requestHash, 'inquiry_submitted', command.now, {
@@ -1287,6 +1305,18 @@ function projectInquiry(state: InquirySourceState, thread: InquiryThreadRecord):
     version: thread.version,
     submittedAt: thread.createdAt,
     updatedAt: thread.updatedAt,
+    ...(thread.origin === undefined ? {} : { origin: ownerOriginProjection(thread.origin) }),
+  }
+}
+
+function ownerOriginProjection(origin: NonNullable<InquiryThreadRecord['origin']>): OwnerInboxOriginProjection {
+  switch (origin.kind) {
+    case 'answer_thread':
+      return {
+        kind: origin.kind,
+        label: 'From answer',
+        href: `/t/${encodeURIComponent(origin.threadId)}`,
+      }
   }
 }
 

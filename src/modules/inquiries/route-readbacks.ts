@@ -11,6 +11,7 @@ import {
   evaluateInquiryLaunchSupportReadiness,
   submitInquiry,
   type InquiryNotificationStatus,
+  type InquiryOriginRef,
   type InquirySourceState,
   type InquiryTargetRef,
   type PublicInquiryContactInput,
@@ -95,6 +96,7 @@ export type PublicInquiryRouteSubmitInput = PublicInquiryFormInput & {
   pseudonymousSessionId: string
   abuseBucketKey: string
   now: number
+  inquiryOrigin?: InquiryOriginRef
   notificationStatus?: InquiryNotificationStatus
   notificationFailureCode?: string
 }
@@ -263,6 +265,7 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
     pseudonymousSessionId: input.pseudonymousSessionId,
     abuseBucketKey: input.abuseBucketKey,
     now: input.now,
+    ...(input.inquiryOrigin === undefined ? {} : { origin: input.inquiryOrigin }),
     ...(input.notificationStatus === undefined ? {} : { notificationStatus: input.notificationStatus }),
     ...(input.notificationFailureCode === undefined ? {} : { notificationFailureCode: input.notificationFailureCode }),
   })

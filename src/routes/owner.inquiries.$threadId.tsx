@@ -272,11 +272,33 @@ function OwnerInquiryThreadRoute() {
           />
         </div>
         <aside className="grid content-start gap-4">
+          <InquiryOriginCard detail={readback.detail} />
           <InquiryNextStep detail={readback.detail} />
           <DeliveryReadback notifications={readback.notifications} />
         </aside>
       </div>
     </AeOperatorShell>
+  )
+}
+
+function InquiryOriginCard({ detail }: { detail: OwnerInquiryDetailReadback }) {
+  const origin = detail.inquiry.origin
+  if (origin === undefined) {
+    return null
+  }
+
+  return (
+    <Card padding={3} className="grid gap-3">
+      <div className="grid gap-1">
+        <Text as="h2" type="supporting" weight="semibold">
+          {origin.label}
+        </Text>
+        <Text as="p" type="supporting">
+          This inquiry started from a provider selection in chat. Review the original answer before replying.
+        </Text>
+      </div>
+      <Button label="Open answer" href={origin.href} variant="secondary" size="sm" className="justify-self-start" />
+    </Card>
   )
 }
 

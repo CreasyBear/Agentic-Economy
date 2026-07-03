@@ -201,6 +201,39 @@ describe('human inquiry owner inbox slice', () => {
     expect(JSON.stringify(submitted.receipt)).not.toContain('route.customer@example.test')
     expect(JSON.stringify(submitted.receipt)).not.toContain('contact me about this leak')
 
+    const contextualSubmit = submitPublicInquiryRouteReadback({
+      state: eligibleState,
+      slug: 'plumbing-demo',
+      body: 'Please ask a human owner to contact me about the provider I selected.',
+      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
+      inquiryOrigin: { kind: 'answer_thread', threadId: 'thread:selected-provider' },
+      operationKey: operationKey('public-route-contextual-submit'),
+      correlationId: correlationId('public-route-contextual-submit'),
+      pseudonymousSessionId: 'session:public-route-contextual',
+      abuseBucketKey: 'ip:public-route-contextual',
+      now,
+    })
+    expect(contextualSubmit.kind).toBe('submitted')
+    if (contextualSubmit.kind !== 'submitted') throw new Error(contextualSubmit.reason)
+    expect(contextualSubmit.state.threads[0]?.origin).toEqual({ kind: 'answer_thread', threadId: 'thread:selected-provider' })
+    const contextualInbox = readOwnerInquiriesRouteReadback({ state: contextualSubmit.state, ownerId })
+    expect(contextualInbox.inbox.inquiries[0]?.origin).toEqual({
+      kind: 'answer_thread',
+      label: 'From answer',
+      href: '/t/thread%3Aselected-provider',
+    })
+    const contextualThreadId = contextualSubmit.state.threads[0]?.threadId
+    expect(contextualThreadId).toBeDefined()
+    if (contextualThreadId === undefined) throw new Error('missing contextual thread')
+    const contextualThread = readOwnerInquiryThreadRouteReadback({
+      state: contextualSubmit.state,
+      ownerId,
+      threadId: contextualThreadId,
+    })
+    expect(contextualThread.kind).toBe('available')
+    if (contextualThread.kind !== 'available') throw new Error(contextualThread.reason)
+    expect(contextualThread.detail.inquiry.origin?.href).toBe('/t/thread%3Aselected-provider')
+
     const unsafeActionIntent = submitPublicInquiryRouteReadback({
       state: eligibleState,
       slug: 'plumbing-demo',

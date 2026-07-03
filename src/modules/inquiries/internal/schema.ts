@@ -25,6 +25,9 @@ export type InquiryThreadStatus = (typeof InquiryThreadStatusValues)[number]
 export const InquiryMessageSenderValues = ['customer', 'owner'] as const
 export type InquiryMessageSender = (typeof InquiryMessageSenderValues)[number]
 
+export const InquiryOriginKindValues = ['answer_thread'] as const
+export type InquiryOriginKind = (typeof InquiryOriginKindValues)[number]
+
 export const InquiryNotificationStatusValues = ['queued', 'sent', 'failed', 'held'] as const
 export type InquiryNotificationStatus = (typeof InquiryNotificationStatusValues)[number]
 
@@ -83,6 +86,11 @@ export type InquiryTargetRef = {
   businessId: BusinessId
   serviceId: ServiceId
   capabilityKind: CapabilityKind
+}
+
+export type InquiryOriginRef = {
+  kind: 'answer_thread'
+  threadId: string
 }
 
 export type PublicInquiryContactInput = {
@@ -165,6 +173,7 @@ export type InquiryThreadRecord = {
   readAt?: number
   repliedAt?: number
   closedAt?: number
+  origin?: InquiryOriginRef
 }
 
 export type InquiryMessageRecord = {
@@ -286,6 +295,13 @@ export type OwnerInboxInquiryProjection = {
   version: number
   submittedAt: number
   updatedAt: number
+  origin?: OwnerInboxOriginProjection
+}
+
+export type OwnerInboxOriginProjection = {
+  kind: 'answer_thread'
+  label: string
+  href: string
 }
 
 export type OwnerInboxMessageProjection = {
