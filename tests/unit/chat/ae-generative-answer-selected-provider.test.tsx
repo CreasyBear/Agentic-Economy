@@ -66,10 +66,11 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       />,
     )
 
-    expect(screen.getByText('Selected provider')).toBeTruthy()
+    expect(screen.getByText('Selected business')).toBeTruthy()
     expect(screen.getByText('Demo Plumbing')).toBeTruthy()
     expect(screen.getByText('Choice 1 in this answer · Plumber · Parramatta')).toBeTruthy()
     expect(screen.getByText('Inquiry form published')).toBeTruthy()
+    expect(screen.getByText(/AE can open this business's qualified inquiry form for owner review/)).toBeTruthy()
     expect(screen.getByText('Open inquiry form').closest('a')?.getAttribute('href')).toBe(
       '/demo-plumbing/inquiry?from=thread&id=thread-123',
     )

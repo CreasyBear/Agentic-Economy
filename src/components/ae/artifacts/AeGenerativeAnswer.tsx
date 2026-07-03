@@ -396,11 +396,11 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
   return (
     <section
       className={`${REVEAL_ENTER} grid gap-3 rounded-md border border-border bg-surface p-4`}
-      aria-label="Selected provider"
+      aria-label="Selected business"
     >
       <header className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
         <div className="grid min-w-0 gap-0.5">
-          <AeKicker marker>Selected provider</AeKicker>
+          <AeKicker marker>Selected business</AeKicker>
           <p className="font-heading text-base leading-snug text-primary">{provider.name}</p>
           <p className="text-sm leading-snug text-secondary">
             Choice {provider.citationIndex} in this answer · {provider.category} ·{' '}
@@ -415,11 +415,11 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
       <p className="text-sm leading-relaxed text-primary">
         {hasInquiryForm
           ? [
-              'AE can open this provider\'s qualified inquiry form for owner review.',
+              'AE can open this business\'s qualified inquiry form for owner review.',
               'The business still confirms timing, quote, and availability.',
             ].join(' ')
           : [
-              'This provider does not publish an AE inquiry form yet.',
+              'This business does not publish an AE inquiry form yet.',
               'Review the listing and use its published contact guidance.',
             ].join(' ')}
       </p>
