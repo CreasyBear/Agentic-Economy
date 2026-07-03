@@ -62,6 +62,26 @@ describe('session journey', () => {
 
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
   })
+
+  it('counts selected-provider handoff artifacts as provider and inquiry context', () => {
+    const selected = provider({ slug: 'northside-plumbing', name: 'Northside Plumbing' })
+    const journey = buildSessionJourney({
+      projection: projection([
+        turn({
+          intent: 'inquiry_handoff',
+          artifacts: [{ kind: 'selected-provider', provider: selected }],
+          oneLine: 'Ready to send a qualified inquiry to Northside Plumbing.',
+        }),
+      ]),
+      liveTurn: null,
+    })
+
+    expect(journey?.providerCount).toBe(1)
+    expect(journey?.hasInquiryReadyProvider).toBe(true)
+    expect(journey?.steps.find((step) => step.id === 'compare')?.detail).toBe('1 listed provider')
+    expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Qualified inquiry only')
+    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
+  })
 })
 
 function projection(turns: readonly PublicThreadTurn[]): PublicThreadProjection {

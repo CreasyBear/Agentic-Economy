@@ -120,6 +120,9 @@ function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {
 
   for (const artifact of artifacts) {
     switch (artifact.kind) {
+      case 'selected-provider':
+        slugs.add(artifact.provider.slug)
+        break
       case 'provider-cards':
       case 'provider-compare-table':
         for (const provider of artifact.providers) {
@@ -137,6 +140,8 @@ function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {
 function hasInquiryPath(artifacts: readonly AnswerArtifact[]): boolean {
   return artifacts.some((artifact) => {
     switch (artifact.kind) {
+      case 'selected-provider':
+        return artifact.provider.inquiryUrl !== undefined && artifact.provider.inquiryUrl.length > 0
       case 'provider-cards':
       case 'provider-compare-table':
         return artifact.providers.some((provider) => provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0)
