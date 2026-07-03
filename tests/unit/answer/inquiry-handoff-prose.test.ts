@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildInquiryHandoffNextStep,
   buildInquiryHandoffOneLine,
+  buildInquiryHandoffSummary,
   resolveInquiryHandoff,
 } from '@/modules/answer/internal/inquiry-handoff-prose'
 import type { AnswerSource } from '@/modules/answer/public'
@@ -42,6 +43,16 @@ describe('inquiry handoff prose', () => {
     expect(resolution.kind).toBe('provider_unavailable')
     expect(buildInquiryHandoffOneLine(resolution)).toBe('Demo Plumbing does not publish an AE inquiry form yet.')
     expect(buildInquiryHandoffNextStep(resolution)).toContain('published contact guidance')
+  })
+
+  it('routes no-provider inquiry requests back to choosing a listed business', () => {
+    const resolution = resolveInquiryHandoff({
+      query: 'send an inquiry',
+      providers: [],
+    })
+
+    expect(resolution.kind).toBe('no_provider')
+    expect(buildInquiryHandoffSummary(resolution)).toContain('choose a business that publishes an inquiry path')
   })
 })
 

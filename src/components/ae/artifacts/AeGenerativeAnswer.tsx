@@ -392,6 +392,7 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
   const hasInquiryForm = inquiryUrl !== undefined
   const detailHref = appendThreadOrigin(provider.detailUrl, threadId)
   const inquiryHref = inquiryUrl === undefined ? undefined : appendThreadOrigin(inquiryUrl, threadId)
+  const selectionScope = threadId === undefined ? 'in this answer' : 'from this thread'
 
   return (
     <section
@@ -403,7 +404,7 @@ function SelectedProviderConfirmation({ provider, threadId }: { provider: Answer
           <AeKicker marker>Selected business</AeKicker>
           <p className="font-heading text-base leading-snug text-primary">{provider.name}</p>
           <p className="text-sm leading-snug text-secondary">
-            Choice {provider.citationIndex} in this answer · {provider.category} ·{' '}
+            Choice {provider.citationIndex} {selectionScope} · {provider.category} ·{' '}
             {provider.serviceArea || provider.suburb}
           </p>
         </div>

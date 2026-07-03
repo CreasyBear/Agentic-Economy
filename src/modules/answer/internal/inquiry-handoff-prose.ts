@@ -70,7 +70,7 @@ export function buildInquiryHandoffSummary(resolution: InquiryHandoffResolution)
     case 'no_provider':
       return [
         'AE needs a listed business before it can route a qualified inquiry.',
-        'Search for a service and place, then choose a provider that publishes an inquiry path.',
+        'Search for a service and place, then choose a business that publishes an inquiry path.',
       ].join(' ')
   }
 }
