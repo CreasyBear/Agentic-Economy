@@ -3,6 +3,7 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerChecks } from './AeAnswerChecks'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
+import { AeTurnContextLine } from './AeTurnContextLine'
 import { ANSWER_SECTION_CLASS, type ThreadTurnViewModel } from './thread-turn-view'
 
 export type AeThreadTurnReplaySectionProps = ThreadTurnViewModel & {
@@ -20,6 +21,7 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
         {...(scrollTargetId === undefined ? {} : { 'data-ae-scroll-target': scrollTargetId })}
       >
         <MessageContent className="w-full">
+          <AeTurnContextLine intent={turn.intent} seq={turn.seq} artifacts={turn.artifacts} />
           <AeAnswerThinkingTrace
             isStreaming={false}
             label="Ready"

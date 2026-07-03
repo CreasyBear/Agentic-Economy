@@ -7,6 +7,7 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerChecks } from './AeAnswerChecks'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
+import { AeTurnContextLine } from './AeTurnContextLine'
 import { ANSWER_SECTION_CLASS, type ThreadTurnViewModel } from './thread-turn-view'
 
 export type AeThreadTurnCollapsedProps = ThreadTurnViewModel & {
@@ -36,6 +37,7 @@ export function AeThreadTurnCollapsed({ threadId, ...turn }: AeThreadTurnCollaps
         />
         <Message from="assistant" className={ANSWER_SECTION_CLASS}>
           <MessageContent className="w-full">
+            <AeTurnContextLine intent={turn.intent} seq={turn.seq} artifacts={turn.artifacts} />
             <AeAnswerThinkingTrace
               isStreaming={false}
               label="Ready"

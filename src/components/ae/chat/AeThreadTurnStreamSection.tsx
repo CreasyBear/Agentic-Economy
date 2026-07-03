@@ -10,6 +10,7 @@ import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
+import { AeTurnContextLine } from './AeTurnContextLine'
 import { ANSWER_SECTION_CLASS } from './thread-turn-view'
 import type { StreamAnswerResult } from './answer-stream'
 import {
@@ -168,6 +169,7 @@ export function AeThreadTurnStreamSection({
       <AeThreadTurnQueryHeader query={query} intent={intent} seq={seq} />
       <Message from="assistant" className={ANSWER_SECTION_CLASS}>
         <MessageContent className="w-full">
+          <AeTurnContextLine intent={intent} seq={seq} artifacts={state.artifacts} />
           <AeAnswerThinkingTrace
             isStreaming={busy}
             label={state.thinkingLabel}

@@ -18,21 +18,21 @@ export type AeResearchProcessProps = {
 }
 
 /**
- * Concise reasoning trace: one plain line per step (no internal search
- * parameters). Expands while the answer is being worked out, collapses once
- * it is ready. Full step evidence stays in the agent JSON / replay payload.
+ * Public check trace. This shows the sanitized work log AE already stores for
+ * replay, not hidden chain-of-thought.
  */
 export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps) {
   const needsReview = steps.some((step) => step.status === 'error' || step.status === 'stopped')
   const userManagedOpenRef = useRef(false)
-  const [open, setOpen] = useState(isStreaming || needsReview)
+  const defaultOpen = isStreaming || needsReview || steps.length > 0
+  const [open, setOpen] = useState(defaultOpen)
 
   useEffect(() => {
     if (userManagedOpenRef.current) {
       return
     }
-    setOpen(isStreaming || needsReview)
-  }, [isStreaming, needsReview])
+    setOpen(defaultOpen)
+  }, [defaultOpen])
 
   if (steps.length === 0) {
     return null
@@ -69,7 +69,9 @@ export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps
           <OverallStatusIcon status={overallStatus} />
         </span>
         <span className="grid min-w-0 gap-0.5">
-          <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">Reasoning</span>
+          <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
+            How AE checked this
+          </span>
           <span className="truncate text-xs text-secondary">{statusLabel}</span>
         </span>
         <ChevronDownIcon
@@ -78,30 +80,60 @@ export function AeResearchProcess({ isStreaming, steps }: AeResearchProcessProps
         />
       </CollapsibleTrigger>
       <CollapsibleContent className="p-3">
-        <ol className="grid gap-2" aria-label="Reasoning steps">
-          {steps.map((step) => (
-            <li
-              key={step.id}
-              className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 data-[status=skipped]:opacity-60"
-              data-status={step.status}
-            >
-              <span
-                className={cn(
-                  'mt-px inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-secondary',
-                  STATUS_TONE,
-                )}
+        <ol className="grid gap-3" aria-label="AE check steps">
+          {steps.map((step) => {
+            const detailRows = visibleDetailRows(step.detailRows)
+            const summary = step.summary?.trim()
+            const showSummary = summary !== undefined && summary.length > 0 && summary !== step.title
+
+            return (
+              <li
+                key={step.id}
+                className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 data-[status=skipped]:opacity-60"
                 data-status={step.status}
-                aria-hidden="true"
               >
-                <StepStatusIcon step={step} />
-              </span>
-              <span className="text-sm leading-snug text-secondary">{step.summary ?? step.title}</span>
-            </li>
-          ))}
+                <span
+                  className={cn(
+                    'mt-px inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-secondary',
+                    STATUS_TONE,
+                  )}
+                  data-status={step.status}
+                  aria-hidden="true"
+                >
+                  <StepStatusIcon step={step} />
+                </span>
+                <span className="grid min-w-0 gap-1">
+                  <span className="text-sm font-medium leading-snug text-primary">{step.title}</span>
+                  {showSummary ? <span className="text-sm leading-snug text-secondary">{summary}</span> : null}
+                  {detailRows.length > 0 ? (
+                    <span className="grid gap-1 pt-1">
+                      {detailRows.map((row) => (
+                        <span key={`${step.id}-${row.label}`} className="grid gap-0.5 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                          <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
+                            {row.label}
+                          </span>
+                          <span className="min-w-0 break-words text-xs leading-snug text-secondary">{row.value}</span>
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            )
+          })}
         </ol>
       </CollapsibleContent>
     </Collapsible>
   )
+}
+
+function visibleDetailRows(rows: AnswerWorkStep['detailRows']): NonNullable<AnswerWorkStep['detailRows']> {
+  if (rows === undefined) {
+    return []
+  }
+  return rows
+    .filter((row) => row.label.trim().length > 0 && row.value.trim().length > 0)
+    .slice(0, 4)
 }
 
 function StepStatusIcon({ step }: { step: AnswerWorkStep }) {
