@@ -1,4 +1,5 @@
 import { CheckCircle2Icon, CircleAlertIcon } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Text } from '@astryxdesign/core/Text'
 
@@ -19,9 +20,10 @@ type AeActionResultCardProps = {
   result: PublicInquirySubmitServerResult
   businessName?: string
   serviceName?: string
+  answerHref?: string
 }
 
-export function AeActionResultCard({ result, businessName, serviceName }: AeActionResultCardProps) {
+export function AeActionResultCard({ result, businessName, serviceName, answerHref }: AeActionResultCardProps) {
   if (result.kind === 'error') {
     return <ErrorCard reason={result.reason} />
   }
@@ -37,6 +39,7 @@ export function AeActionResultCard({ result, businessName, serviceName }: AeActi
       threadId={result.receipt.threadId}
       notificationId={result.receipt.notificationId}
       notificationStatus={result.receipt.notificationStatus}
+      {...(answerHref === undefined ? {} : { answerHref })}
       {...optionalLabels}
     />
   )
@@ -49,6 +52,7 @@ function InquirySubmittedCard({
   threadId,
   notificationId,
   notificationStatus,
+  answerHref,
   businessName,
   serviceName,
 }: {
@@ -56,6 +60,7 @@ function InquirySubmittedCard({
   threadId: string
   notificationId: string
   notificationStatus: InquiryNotificationStatus
+  answerHref?: string
   businessName?: string
   serviceName?: string
 }) {
@@ -86,6 +91,14 @@ function InquirySubmittedCard({
         <Text as="p" type="supporting">
           The business reviews your message and replies through your chosen contact detail. They handle timing, price, and availability.
         </Text>
+        {answerHref === undefined ? null : (
+          <div className="grid gap-2 rounded-md border border-border bg-card p-3">
+            <Text as="p" type="supporting">
+              This receipt stays connected to the answer path you started from.
+            </Text>
+            <Button label="Back to answer" href={answerHref} variant="secondary" size="sm" className="justify-self-start" />
+          </div>
+        )}
       </div>
     </Card>
   )

@@ -162,6 +162,7 @@ function PublicInquiryRoute() {
             result={result}
             businessName={readback.businessName}
             serviceName={readback.serviceName}
+            {...(origin === undefined ? {} : { answerHref: origin.backHref })}
           />
         )}
         {origin === undefined ? null : (
