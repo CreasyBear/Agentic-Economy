@@ -1,213 +1,288 @@
+---
+analysis_date: 2026-07-03
+---
+
 # Codebase Concerns
 
-**Analysis Date:** 2026-07-02
+**Analysis Date:** 2026-07-03
 
 ## Tech Debt
 
-**Whole-state source materialization:**
-- Issue: Several Convex flows load broad table snapshots into memory and then persist broad derived state. `convex/source_state.ts` loads many registry, discovery, owner, abuse, operation, audit, and funnel tables through `loadPhaseOneSourceState`, and `persistPhaseOneSourceState` writes the mapped state back through table-specific upserts.
-- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/billingStore.ts`, `convex/protectedActionStore.ts`, `convex/businessActionStore.ts`, `convex/notificationOutbox.ts`
-- Impact: Source writes become sensitive to table growth, Convex transaction limits, read/write contention, and accidental full-table scans. Large catalogs, inquiry history, or telemetry volume can make unrelated operations slower or fail under load.
-- Fix approach: Replace whole-state loaders with bounded module slices, indexed reads, and append-only events. Keep full-state reconstruction for explicit migrations/admin repair jobs only, and add pagination or cursors anywhere table growth is expected.
+**Debt is not marked in code comments:**
+- Issue: No `TODO`, `FIXME`, `HACK`, or `XXX` markers are present in the searched runtime/test roots; the active backlog is encoded in large modules, guardrail tests, and planning docs rather than inline comments.
+- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `convex/inquiries.ts`, `src/lib/ui/contract-scans.ts`, `tests/ui-contract/class-scan.test.ts`
+- Impact: Marker sweeps can report a clean repo while real concerns remain in source seams, overclaim scanners, and oversized workflow files.
+- Fix approach: Treat `CONCERNS.md`, guardrail tests, and large-file reviews as the debt ledger. Add explicit issue links or targeted comments only where a maintainer needs local context to avoid unsafe edits.
 
-**Large mixed-responsibility modules:**
-- Issue: Core flows combine admission, validation, source-state hydration, command handling, serialization, readbacks, and provider side effects in very large files.
-- Files: `convex/inquiries.ts`, `src/modules/inquiries/internal/commands.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/businessActionStore.ts`, `convex/notificationOutbox.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/billing/internal/operations.ts`
-- Impact: Trust-boundary changes are hard to audit, small updates carry broad regression risk, and review effort is concentrated in files that are already difficult to reason about.
-- Fix approach: Split by stable seams: route/API adapter, admission, command, persistence adapter, readback builder, provider adapter, and tests. Keep exported public actions thin and make each internal module own one reason to change.
+**Reference `src/app/*` subtree is compiled but not routed:**
+- Issue: The TanStack route layer is `src/routes/*`, but `src/app/ai-chat/page.tsx`, `src/app/ai-chat-landing/page.tsx`, and `src/app/library/page.tsx` remain under `src/` and are included by `tsconfig.json`. They contain template/demo UI and auth-example copy that is not part of the live route tree.
+- Files: `src/app/ai-chat/page.tsx`, `src/app/ai-chat-landing/page.tsx`, `src/app/library/page.tsx`, `src/routeTree.gen.ts`, `tsconfig.json`
+- Impact: Typecheck and scan noise can come from non-routed reference pages. Demo copy such as JWT-refresh examples in `src/app/ai-chat/page.tsx` can confuse future agents about product scope and live authentication behavior.
+- Fix approach: Move reference pages outside `src/`, convert useful pieces into routed AE components, or delete the subtree after extracting any Astryx patterns still in active use.
 
-**Future-phase code imported by active billing routes:**
-- Issue: Active owner billing routes import UI/readback code from `src/future-phases/05-paid-activation-money-rails`.
-- Files: `src/routes/owner.billing.tsx`, `src/routes/owner.billing.activate.tsx`, `src/routes/owner.billing.cancel.$operationId.tsx`, `src/routes/owner.billing.redirecting.tsx`, `src/routes/owner.billing.return.$operationId.tsx`, `src/future-phases/route-helpers.ts`
-- Impact: The boundary between shipped and parked work is blurred. Future money-rail language or dependencies can enter active bundles, and import-contract scans become harder to interpret.
-- Fix approach: Move any shipped billing panels, readbacks, and helpers into `src/modules/billing` or `src/components/ae/billing`. Keep `src/future-phases` limited to parked route modules that active routes never import.
+**Large workflow modules concentrate too many concerns:**
+- Issue: Several files exceed 1,000 lines and mix validators, source reads, write commands, projections, and UI orchestration.
+- Files: `convex/inquiries.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `src/modules/inquiries/internal/commands.ts`, `src/modules/discovery/developer-discovery.ts`, `convex/discovery.ts`, `convex/registry.ts`, `convex/businessActionStore.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `convex/notificationOutbox.ts`, `src/modules/billing/internal/operations.ts`, `src/styles/answer/panel.css`, `src/styles/answer/thread.css`
+- Impact: Small behavior changes carry wide blast radius, code review has to reason across unrelated invariants, and failure-mode tests become hard to target.
+- Fix approach: Split only along proved seams: validators, source queries, pure state transitions, route adapters, projections, provider adapters, and readback views. Move behavior with focused tests before removing the original branch.
 
-**Business-action writes reuse protected-action admission scope:**
-- Issue: Business-action browser and webhook writes are admitted under the `protected_action` source-write scope instead of a distinct business-action scope.
-- Files: `src/modules/security/source-write-admission.ts`, `src/modules/business-action/business-action.functions.ts`, `convex/businessActions.ts`, `tests/unit/convex/business-actions-runtime.test.ts`
-- Impact: Audit logs and rate policy cannot distinguish protected contact follow-up from business-action capability and payment-provider writes. Future policy changes for one surface can accidentally affect the other.
-- Fix approach: Add a dedicated `business_action` source-write scope, update browser mutation admission and Stripe webhook admission to sign it, and migrate Convex `requireSourceWrite` checks and tests to the distinct scope.
+**Answer harness is present but not the only execution spine:**
+- Issue: `streamAnswerTurn()` owns routing, tool execution, safety, persistence, SSE events, and harness reporting. The live harness operation wraps phases, but final persistence still builds the frozen answer row first and then appends harness-session journal entries after a successful write.
+- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/answer-thread/internal/answer-turn-finalization.ts`, `src/modules/answer-thread/internal/answer-harness-operation.ts`, `src/modules/harness/run-loop.ts`, `src/modules/harness/harness.functions.ts`, `convex/harnessSessions.ts`
+- Impact: Harness evidence is useful, but answer execution still has two places to understand: the answer orchestrator and the generic harness primitives. A persistence failure returns only `{ ok: false }`, so private root-cause detail is lost before admin review.
+- Fix approach: Keep the current post-persist journal path stable, then move one phase at a time behind `runHarnessRunLoop()` with structured persistence errors and explicit admin diagnostics.
 
-**Release script names can mislead contributors:**
-- Issue: `test:release` includes evaluation, e2e, accessibility, and build, while `test:all` omits `test:eval`, `test:e2e`, `test:a11y`, deploy smoke, and provider smoke scripts.
-- Files: `package.json`, `tests/e2e`, `tests/deploy-smoke`, `eval/answer/promptfooconfig.yaml`
-- Impact: A contributor can reasonably run `npm run test:all` and believe the full release gate passed even though browser, accessibility, live-like deployment, and provider checks were skipped.
-- Fix approach: Rename `test:all` to a narrower name or make it delegate to `test:release`. Document `test:release` as the only local pre-release gate and wire CI to the same command.
+**Public status metadata can still leak overclaim wording:**
+- Issue: `registry_verified` is public metadata with `label: 'Registry verified'` and `compactLabel: 'Verified'`; `AeStatusBadge` overrides only the badge label to `Checked` for public audience.
+- Files: `src/lib/ui/status-presentation.ts`, `src/components/ae/status/AeStatusBadge.tsx`, `src/lib/ui/provider-presentation.ts`, `tests/ui-contract/status-copy.test.ts`, `tests/ui-contract/public-language-copy.test.ts`
+- Impact: A caller using `getStatusPresentation()` directly can show `Verified` on a public surface even though AE does not have a named public verification standard.
+- Fix approach: Make the shared public metadata say `Checked`, or split public and operator status presentation types so public code cannot access `Verified` labels.
+
+**Developer discovery artifacts mix route readback with deterministic timestamps:**
+- Issue: Discovery schema/examples/fixtures default `now` to `0`, and `loadDeveloperDiscoveryRoute()` passes `now: 0` with `https://ae.example` while building readbacks.
+- Files: `src/routes/api.discovery.schema.ts`, `src/routes/api.discovery.examples.ts`, `src/routes/api.discovery.fixtures.ts`, `src/routes/developers.discovery.tsx`, `src/modules/discovery/developer-discovery.ts`
+- Impact: Machine-readable artifacts can report generated/readback times that are deterministic rather than wall-clock current. Operators may mistake deterministic timestamps for real freshness evidence.
+- Fix approach: Use deterministic `now` only in tests and fixture paths. Production handlers should pass a current timestamp and canonical origin while keeping route health derived from public endpoints.
+
+**Generated route tree sits inside scanned source:**
+- Issue: `src/routeTree.gen.ts` is generated by TanStack Router, uses `@ts-nocheck`, and imports every route including future/advanced surfaces.
+- Files: `src/routeTree.gen.ts`, `src/lib/ui/contract-scans.ts`, `tsconfig.json`
+- Impact: Manual edits are overwritten, and guardrails need special generated-file exceptions for future route names and Convex-generated imports.
+- Fix approach: Never edit `src/routeTree.gen.ts` directly. Regenerate it from route files and keep scanner exceptions narrow to generated references that source routes actually own.
 
 ## Known Bugs
 
-**Not detected from static mapping:**
-- Symptoms: No confirmed reproducible runtime bug was identified during this concerns pass.
-- Files: `src`, `convex`, `tests`, `package.json`
-- Trigger: Not applicable from the mapped static evidence.
-- Workaround: Treat the security, scaling, and fragile-area entries below as active engineering risks even though they are not all confirmed user-facing bugs.
+**Admin run viewer has no production source port:**
+- Symptoms: `/admin/runs` returns an allowed zero-row scaffold with `actorRef: 'admin-run-viewer-source-disabled'`; `/admin/runs/$turnId` returns a `not_found` result with disabled-source copy.
+- Files: `src/modules/harness/run-viewer.functions.ts`, `src/routes/admin.runs.tsx`, `src/routes/admin.runs.$turnId.tsx`, `src/components/ae/harness/AeHarnessRunViewer.tsx`, `tests/unit/harness/run-viewer-functions.test.ts`
+- Trigger: Load the run viewer without installing a `HarnessRunViewerSourcePort` test seam.
+- Workaround: Treat the viewer as a scaffold until an admin-authorized source port reads answer turns and harness sessions from Convex.
+
+**Legacy stateless answer endpoint is intentionally unavailable:**
+- Symptoms: `GET /api/answer` returns `{ kind: 'error', code: 'answer_unavailable', copyId: ... }` with HTTP 503, while the live thread-first flow uses `POST /api/answer/turn`.
+- Files: `src/routes/api.answer.ts`, `src/routes/api.answer.turn.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/components/ae/chat/AeChat.tsx`
+- Trigger: Any client, crawler, or test still calling `GET /api/answer` for generated prose.
+- Workaround: Route clients to `POST /api/answer/turn` and keep the legacy endpoint documented as a safe error or remove it once no callers remain.
+
+**Public thread URLs expose saved query text by ID:**
+- Symptoms: `GET /api/answer/threads/$threadId` and `/t/$threadId` return public projections without checking the current session; the projection includes `query` for each turn.
+- Files: `src/routes/api.answer.threads.$threadId.ts`, `src/routes/t.$threadId.tsx`, `src/modules/answer-thread/internal/public-projection.ts`, `src/modules/answer-thread/answer-thread.schema.ts`, `convex/answerThreads.ts`
+- Trigger: Anyone with a valid thread id opens the API route or thread route.
+- Workaround: Treat thread ids as unlisted share links. Do not store private contact details in answer queries; add explicit private/share policy enforcement before accepting sensitive query types.
 
 ## Security Considerations
 
-**Local E2E auth bypass is compiled into application code:**
-- Risk: The Clerk bypass flag is checked inside runtime route and server-function code. Production hard stops exist, but the bypass still depends on environment discipline and can affect non-production preview or staging deployments if enabled.
-- Files: `src/start.ts`, `src/routes/__root.tsx`, `src/lib/server/claim-owner-session.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/modules/discovery/discovery.functions.ts`, `src/modules/registry/registry.functions.ts`, `src/modules/business-action/business-action.functions.ts`, `src/modules/security/removal-dispute.functions.ts`
-- Current mitigation: `src/start.ts` and `src/routes/__root.tsx` throw when the bypass is enabled in production mode.
-- Recommendations: Centralize the bypass in one helper that only allows test/local hosts, make server behavior use a server-only env name, and fail closed outside explicit Playwright/local test execution.
+**Answer-thread writes do not use source-write admission:**
+- Risk: Public Convex mutations for answer threads accept caller-supplied `pseudonymousSessionId`, thread ids, frozen evidence JSON, and tool-call JSON. Route-level code owns normal access, but the Convex functions do not require `sourceWriteArgs`.
+- Files: `convex/answerThreads.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `src/routes/api.answer.turn.ts`, `src/modules/answer-thread/internal/session-cookie.ts`, `src/modules/security/source-write-admission.ts`
+- Current mitigation: `api.answer.turn.ts` issues `HttpOnly; SameSite=Lax` session cookies, validates input with `answerTurnRequestSchema`, rate-limits per session, and checks thread ownership before calling source mutations.
+- Recommendations: Add source-write admission to answer-thread mutations or convert server-only writes to internal mutations. Derive session/write authority server-side and keep direct public Convex calls from creating or mutating threads.
 
-**Owner/admin route protection is decentralized:**
-- Risk: Owner and admin routes rely on each loader/source function to return denied or empty readbacks instead of a shared route-group guard.
-- Files: `src/routes/owner.inquiries.tsx`, `src/routes/admin.inquiries.tsx`, `src/routes/owner.billing.tsx`, `src/lib/server/claim-owner-session.ts`, `src/modules/inquiries/inquiry.functions.ts`
-- Current mitigation: Server functions and Convex actions perform authorization checks before returning private data.
-- Recommendations: Add shared authenticated owner/admin route layouts or `beforeLoad` helpers, keep server-side authorization as the second layer, and require protected routes to opt out explicitly in tests.
+**Public observability funnel can update owner activation state:**
+- Risk: `/api/observability/funnel` accepts JSON and calls a public Convex mutation when `businessId` is present; the mutation updates `ownerActivationState` without source-write admission or durable abuse limits.
+- Files: `src/routes/api.observability.funnel.ts`, `src/modules/observability/funnel.source.ts`, `convex/observability.ts`, `src/modules/observability/public.ts`
+- Current mitigation: Zod caps field sizes, `businessId` is required for persistence, and the data is observability/readback state rather than direct commerce authority.
+- Recommendations: Keep funnel data non-authoritative for entitlement or public claims. Add source-write admission, durable rate limits, or PostHog-only ingestion before using these rows for operator decisions.
 
-**Anonymous funnel event write path can amplify source writes:**
-- Risk: The public funnel endpoint accepts JSON, validates shape, and writes through the public source mutation path without a visible route-level auth, source-admission token, or rate limit.
-- Files: `src/routes/api.observability.funnel.ts`, `src/modules/observability/funnel.functions.ts`, `convex/observability.ts`, `convex/source_state.ts`
-- Current mitigation: Input fields are validated and unknown business records are rejected.
-- Recommendations: Add origin/session/IP-aware throttling, consent-aware event dropping, and a bounded append-only telemetry write path that does not reconstruct broad source state for each event.
+**JSON request body limits are enforced after parsing:**
+- Risk: Multiple public POST routes call `request.json()` before any byte cap, so large bodies can allocate memory before Zod or schema validation rejects fields.
+- Files: `src/routes/api.answer.turn.ts`, `src/routes/api.agent.tools.ts`, `src/routes/api.answer.follow-up-chips.ts`, `src/routes/api.chat.ts`, `src/routes/api.observability.funnel.ts`, `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`
+- Current mitigation: Content-type checks exist on some routes, and schemas cap parsed fields such as answer query length.
+- Recommendations: Add a shared `readBoundedJsonRequest()` helper that checks `Content-Length`, streams with a byte limit where needed, and returns consistent safe errors.
 
-**Public and webhook routes parse request bodies before app-level size bounds:**
-- Risk: Several JSON and text endpoints call `request.json()` or `request.text()` before enforcing explicit application body limits.
-- Files: `src/routes/api.agent.tools.ts`, `src/routes/api.answer.turn.ts`, `src/routes/api.chat.ts`, `src/routes/api.observability.funnel.ts`, `src/routes/api.notification.resend-webhook.ts`, `src/routes/api.billing.webhook.ts`, `src/routes/api.business-actions.stripe-webhook.ts`
-- Current mitigation: Domain schemas and webhook signature checks reject invalid payloads after parsing.
-- Recommendations: Enforce `Content-Length` or streaming body caps before parsing, configure platform request-size limits, and mirror domain min/max string constraints at route boundaries.
+**Quiet agent write door depends on action registration discipline:**
+- Risk: `/api/agent/tools` invokes tools with `surface: 'agentTools'` and `allowWrites: true`. Current write exposure is intentionally narrow, but a future action with `agentTools` can gain public machine invocation.
+- Files: `src/routes/api.agent.tools.ts`, `src/modules/actions/index.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/harness/approval-policy.ts`, `src/modules/harness/tool-policy.ts`, `src/modules/common/action.ts`
+- Current mitigation: The registry exposes only actions with `agentTools`; current actions are `registry.list`, `registry.search`, `registry.detail`, and `inquiry.submit`, and `inquiry.submit` declares boundaries plus public-inquiry source-write expectations.
+- Recommendations: Keep a snapshot test for the exact agent-tool set, require boundaries on every exposed action, and fail any non-read-only action lacking source-write admission declarations.
 
-**Agent tools write path needs continued boundary tests:**
-- Risk: `/api/agent/tools` exposes assistant-callable actions, including the qualified inquiry write. The route has schema checks and action boundaries, but write safety depends on action registration and domain admission staying aligned with the AE trust contract.
-- Files: `src/routes/api.agent.tools.ts`, `src/modules/actions/index.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `tests/integration/agent-tools-api.test.ts`
-- Current mitigation: Integration tests cover tool listing, invalid content types, unknown tools, invalid input, and registry read actions.
-- Recommendations: Add a successful `inquiry.submit` agent-tools test with source-write admission and assertions that booking, payment, dispatch, or autonomous fulfillment requests are refused.
+**Source-write admission is now required for harness sessions but remains env-critical:**
+- Risk: `appendHarnessSessionEntry` rejects missing or invalid admissions, and server helpers sign admissions from `AE_SOURCE_WRITE_SECRET`. Missing crypto or missing server secret turns source writes into denied results.
+- Files: `convex/harnessSessions.ts`, `src/modules/harness/harness.functions.ts`, `convex/sourceWriteAdmission.ts`, `src/lib/server/source-write-admission.ts`, `src/modules/security/source-write-admission.ts`
+- Current mitigation: `requireSourceWrite(args, 'harness_session')` gates harness appends; `readRequiredSourceWriteSecret()` rejects a client-exposed `VITE_AE_SOURCE_WRITE_SECRET` name.
+- Recommendations: Keep the secret server-only, add deployment readback for admission health, and ensure journal failures surface privately instead of silently disappearing.
+
+**Provider webhooks are evidence, not authority:**
+- Risk: Autumn, Resend/Novu, and Stripe evidence paths ingest external payloads that can change billing, notification, or action readbacks if signature verification and source binding are bypassed.
+- Files: `src/lib/server/billing-provider.ts`, `src/lib/server/notification-provider.ts`, `src/modules/business-action/internal/stripe-checkout.ts`, `src/modules/business-action/internal/stripe-webhook-source.ts`, `src/routes/api.billing.webhook.ts`, `src/routes/api.business-actions.stripe-webhook.ts`
+- Current mitigation: Autumn webhook verification uses Svix signature/timestamp checks; Stripe business-action checkout rejects live keys and client authority fields; source modules persist redacted payload hashes and receipts.
+- Recommendations: Keep provider payloads redacted, bind every provider object to an AE operation key/correlation id, and require receipt/reconciliation rows before owner or public paid/action success claims.
 
 ## Performance Bottlenecks
 
-**Unbounded or high-cardinality Convex reads:**
-- Problem: Multiple helpers call `.collect()` or collect broad indexed sets, then filter in memory.
-- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/billingStore.ts`, `convex/protectedActionStore.ts`, `convex/businessActionStore.ts`, `convex/notificationOutbox.ts`
-- Cause: Source-state reconstruction and upsert helpers favor in-memory state maps over narrow indexed queries.
-- Improvement path: Add targeted indexes for every upsert identity, use `.first()`, `.unique()`, `.take()`, or `paginate()` for user-facing paths, and move large repair/reconciliation flows into explicit batch jobs.
+**Convex source-state and store adapters still use table-wide collection:**
+- Problem: Several Convex modules call `.collect()` on whole tables or broad indexed ranges, including generic `collect()` helpers.
+- Files: `convex/source_state.ts`, `convex/billingStore.ts`, `convex/protectedActionStore.ts`, `convex/businessActionStore.ts`, `convex/inquiries.ts`, `convex/notificationOutbox.ts`, `convex/observability.ts`, `convex/billing.ts`
+- Cause: Source reconstruction favors simple whole-state loading for parity and pure-domain reuse.
+- Improvement path: Replace route-facing reads with bounded indexed source ports and paginated admin projections. Keep whole-state reconstruction for tests, migrations, and explicit maintenance jobs.
 
-**Registry search fallback hydrates and filters catalogs in process:**
-- Problem: When search index matches are empty, registry search falls back to scanning published businesses up to a configured cap and filtering hydrated catalog DTOs in memory.
-- Files: `convex/registry.ts`
-- Cause: `readPublicSearchCatalogs` falls back from `registrySearchDocuments` to `readPublicCatalogsFromPublishedBusinessScan` and then `matchesCatalog`.
-- Improvement path: Keep fallback for small catalogs only, surface index-staleness health, and route larger catalogs through search documents, location/service indexes, or a paginated degraded result with clear lower-bound totals.
+**Registry search hydration fans out per business:**
+- Problem: Public search hydrates Meili hits by fetching details per unique slug, and Convex registry hydration reads contexts, services, capabilities, suppression, index status, and discovery attempts per business.
+- Files: `src/modules/registry/registry.functions.ts`, `src/modules/registry/internal/catalog-search-port.ts`, `convex/registry.ts`, `src/modules/registry/internal/search.ts`
+- Cause: The public DTO is assembled from normalized source tables while search results carry only document-level hit data.
+- Improvement path: Keep public limits low, prefer `registryProjectionItems` / `registrySearchDocuments` for public list/search, and cache hydrated DTOs by source hash.
 
-**Public answer/chat rate limiting is process-local:**
-- Problem: Answer and chat turn guards store rate buckets and idempotency keys in module-level maps.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts`, `src/modules/answer-thread/internal/session-cookie.ts`, `src/routes/api.answer.turn.ts`, `src/routes/api.chat.ts`
-- Cause: The limiter is scoped to the running process and a resettable anonymous session cookie.
-- Improvement path: Move rate limits and idempotency to a durable store, combine session with IP/origin signals, cap concurrent streams, and apply the same enforcement across every deployment instance.
+**Answer and thread reads use bounded-by-policy but unpaginated turn collections:**
+- Problem: `convex/answerThreads.ts` uses `.collect()` for thread turns and tool calls; thread size is capped at 25 turns, but each read loads all turns for replay/projection.
+- Files: `convex/answerThreads.ts`, `src/modules/answer-thread/internal/turn-guard.ts`, `src/modules/answer-thread/internal/public-projection.ts`, `src/components/ae/chat/AeChat.tsx`
+- Cause: Thread-first UX needs replay-stable context and public projections from frozen evidence.
+- Improvement path: Preserve the 25-turn cap, add pagination before raising it, and keep large tool traces out of public projections.
+
+**Large CSS files keep answer UI costly to reason about:**
+- Problem: Answer/thread CSS spans multiple large files with overlapping panel/thread/chat concerns.
+- Files: `src/styles/answer/panel.css`, `src/styles/answer/thread.css`, `src/styles/answer/chat-shell.css`, `src/styles/answer/index.css`, `src/components/ae/artifacts/AeGenerativeAnswer.tsx`
+- Cause: The answer UI has migrated through multiple visual systems while preserving thread replay and streaming states.
+- Improvement path: Collapse repeated selectors into tokenized Astryx-compatible component classes only after visual regression coverage exists for streaming, replay, empty, compare, and boundary profiles.
 
 ## Fragile Areas
 
-**Qualified inquiry command path:**
-- Files: `convex/inquiries.ts`, `src/modules/inquiries/internal/commands.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/routes/api.agent.tools.ts`
-- Why fragile: This is the only assistant-exposed write and it combines admission, abuse controls, privacy tombstones, owner inbox readbacks, notification intent, and agent-tool boundaries.
-- Safe modification: Change through the action definition first, then update route/API adapters, command tests, Convex persistence tests, and copy tests. Never add booking, payment, dispatch, or autonomous fulfillment semantics to this path.
-- Test coverage: Keep `tests/integration/agent-tools-api.test.ts`, inquiry unit tests, and copy scans updated with every inquiry behavior change.
+**Answer-turn persistence hides failure details:**
+- Files: `src/modules/answer-thread/internal/answer-turn-finalization.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/routes/api.answer.turn.ts`
+- Why fragile: `persistAnswerTurnWithResult()` catches all persistence errors and returns `{ ok: false }`; the stream can emit `answer_turn_persist_failed` without preserving the source error code.
+- Safe modification: Return a structured private diagnostic with safe public copy. Log or persist source error codes for admin run viewer use while keeping public SSE generic.
+- Test coverage: Current answer-thread tests cover happy-path persistence and harness reports; source failure diagnostics need explicit tests.
 
-**Source-write admission and operation keys:**
-- Files: `src/modules/security/source-write-admission.ts`, `convex/sourceWrite.ts`, `convex/businessActions.ts`, `convex/inquiries.ts`, `convex/observability.ts`
-- Why fragile: Source writes cross browser routes, webhooks, public telemetry, owner/admin flows, and Convex mutations. Scope reuse or missing admission checks can silently widen write access.
-- Safe modification: Add or change scopes in one place, update every `requireSourceWrite` caller, and add tests for denied, expired, replayed, and wrong-scope operation keys.
-- Test coverage: Existing unit tests cover several Convex runtime paths, but a scope-specific matrix should be required for every write surface.
+**Admin/source route guards are split across beforeLoad and readback branches:**
+- Files: `src/lib/operator/route-options.ts`, `src/lib/server/require-operator-session.ts`, `src/routes/admin.runs.tsx`, `src/routes/admin.monetization.tsx`, `src/routes/developers.discovery.tsx`, `src/routes/__root.tsx`
+- Why fragile: `operatorRouteOptions` establishes only that someone is signed in. Role/action authorization happens inside each source readback, so a route can look guarded while returning empty/denied data.
+- Safe modification: Keep shared sign-in guard lightweight, but every owner/admin/developer route must expose a denied readback state and tests for wrong-role access.
+- Test coverage: Admin runtime tests cover membership logic; browser route coverage for every operator surface is uneven.
 
-**Trust-boundary vocabulary and public copy:**
-- Files: `AGENTS.md`, `PRODUCT.md`, `DESIGN.md`, `tests/copy`, `src/routes/developers.discovery.tsx`, `src/lib/ui/status-presentation.ts`
-- Why fragile: Public human surfaces must avoid internal architecture terms and overclaims such as booking, dispatch, auto-fulfillment, or unqualified verification. Developer/admin/operator surfaces can legitimately show more internal terms, so scan failures need audience-aware review.
-- Safe modification: Route all public copy changes through `PRODUCT.md`, `DESIGN.md`, and `tests/copy`; keep machine/API payload terms out of public human UI unless the audience is explicitly owner/admin/operator.
-- Test coverage: Copy scans exist, but new routes should add fixtures that prove audience-specific vocabulary rules.
+**Public copy safety relies on target lists:**
+- Files: `src/lib/ui/contract-scans.ts`, `tests/copy/phase1-banned-copy.test.ts`, `tests/ui-contract/public-language-copy.test.ts`, `tests/ui-contract/status-copy.test.ts`, `src/lib/ui/status-presentation.ts`
+- Why fragile: Copy scans target selected roots. `public-language-copy.test.ts` omits routes such as `src/routes/about.tsx` and shared metadata such as `src/lib/ui/status-presentation.ts`; `status-copy.test.ts` checks presence of labels but not public-safe wording.
+- Safe modification: Add public-safe metadata tests and include every public route/shared presentation source when adding a new public surface.
+- Test coverage: Overclaim rules are strong for configured roots; status metadata and public-language target coverage are the gap.
 
-**Billing and provider integration surface:**
-- Files: `src/modules/billing/internal/operations.ts`, `src/routes/api.billing.webhook.ts`, `src/lib/server/billing-provider.ts`, `src/routes/api.business-actions.stripe-webhook.ts`, `tests/deploy-smoke/phase5-paid-activation-provider-smoke.spec.ts`, `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`
-- Why fragile: Billing, Autumn, Stripe, owner activation, and business actions touch money-related workflows while AE must not imply general booking or fulfillment.
-- Safe modification: Keep provider callbacks signature-verified, redact payloads before storage, keep copy boundary-honest, and run provider smoke tests before release.
-- Test coverage: Provider smoke scripts exist but are not part of `npm run test:all`.
+**Generated and generated-like artifacts are easy to edit in the wrong place:**
+- Files: `src/routeTree.gen.ts`, `convex/_generated/api.d.ts`, `convex/_generated/server.d.ts`, `convex/_generated/ai/guidelines.md`, `.planning/graphs/GRAPH_REPORT.md`, `.planning/graphs/graph.json`
+- Why fragile: Generated files are useful for route/API awareness but are not source-of-truth. Some are excluded from scanners while others are checked by TypeScript.
+- Safe modification: Edit route files, Convex schema/functions, or graph inputs; regenerate generated artifacts through their owning tools. Keep generated exceptions explicit in scans.
+- Test coverage: `tests/scripts/assert-graph-fresh.ts` and generated-file scanner exceptions exist, but they only help when run on a settled source set.
+
+**Provider proof rails are intentionally narrow:**
+- Files: `src/modules/business-action/internal/stripe-checkout.ts`, `src/modules/billing/internal/operations.ts`, `src/lib/server/billing-provider.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `src/lib/ui/contract-scans.ts`
+- Why fragile: Stripe business-action checkout rejects live mode and client authority fields; billing success depends on Autumn/Stripe readback and receipts; protected actions record receipt/proof-gap/no-repair states.
+- Safe modification: Do not broaden provider success wording or live-money behavior without source-owned receipt, reconciliation, and support/no-repair paths.
+- Test coverage: Unit and provider-smoke scripts exist, but production provider proof requires deploy-smoke evidence and current env readbacks.
 
 ## Scaling Limits
 
-**Convex transaction and document limits:**
-- Current capacity: Bounded only by current catalog, inquiry, audit, notification, and telemetry volume in source-state tables.
-- Limit: Broad `.collect()` and full-state persistence can hit Convex execution, read, write, or document-size limits as rows grow.
-- Scaling path: Partition source state by module and tenant/business, add pagination, avoid full-table upserts, and keep reconciliation jobs outside user-facing request paths.
+**In-memory answer rate limits do not coordinate across instances:**
+- Current capacity: `ANSWER_TURN_RATE_LIMIT` is 30 per session per hour outside development; development raises answer turns to 10,000.
+- Files: `src/modules/answer-thread/internal/turn-guard.ts`, `src/modules/security/public.ts`, `convex/security.ts`
+- Limit: Buckets and idempotency claims live in process memory and reset on restart or split across server instances.
+- Scaling path: Persist answer/follow-up/stream buckets in Convex using the existing security rate-limit domain, with in-memory checks only as a local fast path.
 
-**Anonymous AI answer traffic:**
-- Current capacity: One process-level limiter keyed by `ae_session` plus route-specific body validation.
-- Limit: Multi-instance deployments, cookie resets, and expensive streamed model calls reduce the effectiveness of module-level maps.
-- Scaling path: Store rate counters durably, include abuse signals beyond the session cookie, and gate production chat behind explicit rollout controls.
+**Public registry and discovery are seed-sized by default:**
+- Current capacity: Limits are small (`/registry` clamps to 20, public API helpers normalize to 50), and non-production registry calls can fall back to fixture state.
+- Files: `src/routes/registry.tsx`, `src/modules/registry/registry.functions.ts`, `src/modules/registry/internal/search.ts`, `src/modules/discovery/internal/source-state.ts`
+- Limit: A larger catalog stresses fanout hydration, stale generated artifacts, and source-state collection.
+- Scaling path: Use projection tables and indexed pagination for list/search/detail, and keep fixture fallback disabled in production.
 
-**Registry search fallback:**
-- Current capacity: The fallback path is safe while the number of published listings remains below the configured scan and hydration caps.
-- Limit: Once published listings exceed the fallback cap, search results become dependent on search-document freshness and can miss relevant listings.
-- Scaling path: Treat `registrySearchDocuments` freshness as operational health, expose rebuild tooling, and remove broad fallback from normal search when catalog size grows.
+**Harness sessions are bounded on reads but need retention policy:**
+- Current capacity: Public and admin harness-session reads use `.take(limit)` by session/run and normalize limits.
+- Files: `convex/harnessSessions.ts`, `src/modules/harness/harness.functions.ts`, `src/modules/harness/session-journal.ts`
+- Limit: A busy answer surface can create multiple entries per turn, and no retention/TTL policy is visible in the source seam.
+- Scaling path: Add retention/archival policy keyed by session/run age and keep private payloads minimized.
 
 ## Dependencies at Risk
 
-**Nitro nightly alias:**
-- Risk: The runtime dependency is pinned to a nightly package alias instead of a stable release line.
-- Impact: Framework/runtime behavior can change across installs within the semver-like nightly range, producing build or server behavior drift.
-- Migration plan: Move `nitro` in `package.json` to a stable release when TanStack Start supports it, and pin exact versions for release candidates.
+**Nightly Nitro runtime package:**
+- Risk: `package.json` uses `nitro` through `npm:nitro-nightly@^3.0.1-20260628-090458-3df69609`.
+- Files: `package.json`, `vite.config.ts`, `src/routes/api.answer.turn.ts`, `src/routes/api.agent.tools.ts`, `src/routes/api.billing.webhook.ts`
+- Impact: Server runtime, route handling, and streaming behavior can shift underneath TanStack Start.
+- Migration plan: Pin to stable Nitro when available or keep route-level smoke coverage around SSE, webhooks, server functions, and protected owner/admin routes.
 
-**Fast-moving TanStack Start and Router surface:**
-- Risk: The app depends on TanStack Start route server handlers, route generation, and Clerk integration patterns that are still sensitive to framework changes.
-- Impact: Protected-route behavior, server handlers, and generated route tree behavior can regress during upgrades.
-- Migration plan: Keep `@tanstack/react-start`, `@tanstack/react-router`, and `@clerk/tanstack-react-start` upgrades isolated, run `npm run test:release`, and include owner/admin auth regression tests.
+**Early Astryx packages and generated references:**
+- Risk: `@astryxdesign/core`, `@astryxdesign/theme-neutral`, and `@astryxdesign/cli` are `^0.1.2`, and reference pages under `src/app/*` still compile alongside product code.
+- Files: `package.json`, `src/app/ai-chat-landing/page.tsx`, `src/app/library/page.tsx`, `src/routes/registry.tsx`, `src/routes/__root.tsx`
+- Impact: Minor package updates or generated reference assumptions can break routed AE surfaces or introduce non-AE UI patterns.
+- Migration plan: Pin package versions during migration-heavy work, keep Astryx wrappers thin, and remove non-routed generated references after extracting patterns.
 
-**External provider smokes are optional commands:**
-- Risk: Resend, Novu, Autumn, and Stripe provider smokes exist as separate scripts and are not part of the broad `test:all` command.
-- Impact: Provider integration drift can escape ordinary local validation.
-- Migration plan: Make provider smokes required in release CI for environments with provider credentials, and keep local no-secret tests for signature and redaction behavior.
+**Client observability depends on third-party SDK posture:**
+- Risk: Sentry/PostHog initialize when public env keys are present; client SDK behavior affects privacy, bundle size, and supply-chain exposure.
+- Files: `package.json`, `src/components/ae/layout/AeObservabilityBoot.tsx`, `src/lib/observability/config.ts`, `src/lib/observability/sentry.client.ts`, `src/lib/observability/posthog.client.ts`
+- Impact: Public pages can send telemetry to third-party services if env enables it, and regressions may appear only in deployed/browser contexts.
+- Migration plan: Keep observability disabled unless configured, scrub sensitive fields, gate funnel use by consent, and include deploy-smoke checks for telemetry boot only when telemetry is part of the release.
 
 ## Missing Critical Features
 
-**Durable public rate limiting:**
-- Problem: Public answer/chat abuse controls are in memory, while public telemetry lacks a visible route-level limiter.
-- Blocks: Reliable abuse control across serverless or multi-instance deployments.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts`, `src/routes/api.answer.turn.ts`, `src/routes/api.chat.ts`, `src/routes/api.observability.funnel.ts`
+**Production admin run evidence source:**
+- Problem: `readConfiguredSource()` returns the disabled source unless a test source port is installed.
+- Files: `src/modules/harness/run-viewer.functions.ts`, `convex/answerThreads.ts`, `convex/harnessSessions.ts`, `src/components/ae/harness/AeHarnessRunViewer.tsx`
+- Blocks: Operator review of private run evidence, missing harness-run rows, projection diffs, timings, and persistence failures.
 
-**Central owner/admin auth boundary:**
-- Problem: Protected route access is enforced by individual loaders and server functions rather than a shared route-group guard.
-- Blocks: Simple proof that every owner/admin route fails closed before rendering protected route shells.
-- Files: `src/routes/owner.inquiries.tsx`, `src/routes/admin.inquiries.tsx`, `src/routes/owner.billing.tsx`, `src/lib/server/claim-owner-session.ts`
+**Shared bounded JSON parser for public POST routes:**
+- Problem: Public API routes parse JSON directly and enforce field limits after allocation.
+- Files: `src/routes/api.answer.turn.ts`, `src/routes/api.agent.tools.ts`, `src/routes/api.chat.ts`, `src/routes/api.observability.funnel.ts`, `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`
+- Blocks: Consistent abuse resistance and predictable error responses for oversized requests.
 
-**Bounded read models for source-backed workflows:**
-- Problem: Registry, inquiry, billing, notification, and observability workflows rely on broad source-state reads in multiple places.
-- Blocks: Predictable scaling and clean operational ownership of repair/rebuild jobs.
-- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/billingStore.ts`, `convex/notificationOutbox.ts`, `convex/observability.ts`
+**Source-write gate for answer and observability writes:**
+- Problem: Harness, billing, catalog, operator controls, and several protected writes use source-write admission, but answer-thread and public funnel writes still rely on route-level discipline or non-authoritative posture.
+- Files: `convex/answerThreads.ts`, `convex/observability.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `src/modules/observability/funnel.source.ts`, `src/modules/security/source-write-admission.ts`
+- Blocks: A uniform write-authority story for public server-origin source writes.
 
-**Clear release gate contract:**
-- Problem: The repository has both `test:release` and `test:all`, with different coverage.
-- Blocks: Consistent developer and CI understanding of what must pass before shipping.
-- Files: `package.json`, `tests/deploy-smoke`, `tests/e2e`, `eval/answer`
+**Public/private thread share controls:**
+- Problem: `sharePolicy` exists as `public | unlisted`, but public projection routes do not enforce private/owner-only variants and saved turn queries are included in public projection.
+- Files: `src/modules/answer-thread/answer-thread.schema.ts`, `convex/answerThreads.ts`, `src/routes/api.answer.threads.$threadId.ts`, `src/routes/t.$threadId.tsx`
+- Blocks: Safe support for sensitive follow-up queries, private saved threads, and explicit copy-link consent.
+
+**Live provider-proof cutover for business-action money:**
+- Problem: Business-action Stripe checkout evidence is test-mode only and rejects non-`sk_test_` keys; this is correct for current proof posture but not production money movement.
+- Files: `src/modules/business-action/internal/stripe-checkout.ts`, `src/routes/api.business-actions.stripe-webhook.ts`, `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`, `src/lib/ui/contract-scans.ts`
+- Blocks: Any claim that AE can perform production autonomous payment, checkout, settlement, custody, or marketplace payout.
 
 ## Test Coverage Gaps
 
-**Agent-tools qualified inquiry success path:**
-- What's not tested: A successful `inquiry.submit` invocation through `POST /api/agent/tools` with source-write admission, receipt assertions, and boundary refusals for booking/payment/dispatch language.
-- Files: `tests/integration/agent-tools-api.test.ts`, `src/routes/api.agent.tools.ts`, `src/modules/inquiries/inquiry.actions.ts`
-- Risk: The only assistant-exposed write can drift from action boundaries or route behavior without a failing integration test.
+**Direct Convex write denial for answer threads:**
+- What's not tested: Direct calls to `convex/answerThreads.ts` mutations without server admission being denied, because the mutations currently have no source-write arguments.
+- Files: `convex/answerThreads.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `tests/unit/answer-thread/answer-turn-grounding.test.ts`, `tests/unit/convex/source-write-admission.test.ts`
+- Risk: Route tests can pass while public Convex function calls remain a write surface.
 - Priority: High
 
-**Distributed rate-limit behavior:**
-- What's not tested: Multi-instance or durable limiter behavior for answer/chat turns and public telemetry writes.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts`, `src/routes/api.answer.turn.ts`, `src/routes/api.chat.ts`, `src/routes/api.observability.funnel.ts`
-- Risk: Abuse controls pass unit tests but fail under production topology.
+**Real-source admin run viewer:**
+- What's not tested: `/admin/runs` and `/admin/runs/$turnId` reading actual Convex answer turns and harness-session rows through an admin-authorized source port.
+- Files: `src/modules/harness/run-viewer.functions.ts`, `src/routes/admin.runs.tsx`, `src/routes/admin.runs.$turnId.tsx`, `tests/unit/harness/run-viewer-functions.test.ts`
+- Risk: The disabled scaffold stays green while production operators cannot inspect runs.
 - Priority: High
 
-**Owner/admin route-group protection:**
-- What's not tested: A route-level invariant that every `/owner` and `/admin` route has a shared guard or a documented exception.
-- Files: `src/routes/owner.inquiries.tsx`, `src/routes/admin.inquiries.tsx`, `src/routes/owner.billing.tsx`, `tests/imports/route-boundary.test.ts`
-- Risk: A new protected route can rely on loader discipline and accidentally render sensitive shell content or call an unguarded source function.
+**Request body size rejection:**
+- What's not tested: Oversized JSON bodies being rejected before full parsing on answer, agent-tools, chat, notification, and observability routes.
+- Files: `src/routes/api.answer.turn.ts`, `src/routes/api.agent.tools.ts`, `src/routes/api.chat.ts`, `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`, `src/routes/api.observability.funnel.ts`
+- Risk: Large request bodies can consume memory despite field-level schema caps.
+- Priority: High
+
+**Status metadata public wording:**
+- What's not tested: `getStatusPresentation('registry_verified')` being safe for public surfaces and never exposing `Verified` wording outside operator/admin contexts.
+- Files: `src/lib/ui/status-presentation.ts`, `src/components/ae/status/AeStatusBadge.tsx`, `tests/ui-contract/status-copy.test.ts`, `tests/ui-contract/public-language-copy.test.ts`
+- Risk: A new public caller bypasses `AeStatusBadge` and overclaims trust.
 - Priority: Medium
 
-**Future-phase import boundary for active routes:**
-- What's not tested: Active `src/routes` modules importing from `src/future-phases` should fail unless a route is explicitly parked.
-- Files: `src/routes/owner.billing.tsx`, `src/routes/owner.billing.activate.tsx`, `src/routes/owner.billing.cancel.$operationId.tsx`, `src/routes/owner.billing.redirecting.tsx`, `src/routes/owner.billing.return.$operationId.tsx`, `src/future-phases/route-helpers.ts`
-- Risk: Future money-rail code can leak into shipped routes without an obvious review signal.
+**Public thread privacy and share policy:**
+- What's not tested: Threads containing sensitive-looking queries being withheld, redacted, or explicitly marked unlisted/private before public projection.
+- Files: `src/routes/api.answer.threads.$threadId.ts`, `src/routes/t.$threadId.tsx`, `src/modules/answer-thread/internal/public-projection.ts`, `src/modules/answer-thread/answer-thread.schema.ts`
+- Risk: Saved public thread URLs expose raw user query text by id.
 - Priority: Medium
 
-**Body-size limits on public endpoints:**
-- What's not tested: Oversized JSON/text body rejection before parsing for agent tools, answer/chat, funnel telemetry, and webhooks.
-- Files: `src/routes/api.agent.tools.ts`, `src/routes/api.answer.turn.ts`, `src/routes/api.chat.ts`, `src/routes/api.observability.funnel.ts`, `src/routes/api.notification.resend-webhook.ts`, `src/routes/api.billing.webhook.ts`, `src/routes/api.business-actions.stripe-webhook.ts`
-- Risk: App-level validation rejects malformed payloads only after memory and parsing costs have already been paid.
+**Compact viewport sidebar behavior is skipped:**
+- What's not tested: Recent-question sidebar behavior on compact Playwright projects because the desktop sidebar test skips compact Chromium.
+- Files: `tests/e2e/thread-first.spec.ts`, `src/components/ae/chat/AeThreadSidebar.tsx`, `src/components/ae/chat/AeChat.tsx`
+- Risk: Mobile/compact thread navigation regressions can hide behind desktop-only coverage.
 - Priority: Medium
+
+**Developer discovery production freshness:**
+- What's not tested: Production discovery schema/examples/fixtures carrying wall-clock generated times and live public route snapshots instead of deterministic `0` timestamps.
+- Files: `src/routes/api.discovery.schema.ts`, `src/routes/api.discovery.examples.ts`, `src/routes/api.discovery.fixtures.ts`, `tests/e2e/developer-discovery.spec.ts`, `tests/integration/discovery-route-parity.test.ts`
+- Risk: Builder-facing artifacts can look current while freshness/readback is deterministic or fixture-derived.
+- Priority: Medium
+
+**Provider-proof deploy smokes are opt-in scripts:**
+- What's not tested by ordinary unit/integration runs: Resend, Novu, Autumn/Stripe, and business-action Stripe provider smokes require dedicated Playwright deploy-smoke commands.
+- Files: `package.json`, `tests/deploy-smoke/phase2-resend-dispatch-smoke.spec.ts`, `tests/deploy-smoke/phase2-novu-dispatch-smoke.spec.ts`, `tests/deploy-smoke/phase5-paid-activation-provider-smoke.spec.ts`, `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`
+- Risk: Source-owned provider code can pass local tests while environment, webhook, signature, or provider-readback wiring is broken.
+- Priority: High
 
 ---
 
-*Concerns audit: 2026-07-02*
+*Concerns audit: 2026-07-03*
