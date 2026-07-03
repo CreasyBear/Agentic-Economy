@@ -148,6 +148,7 @@ function PublicInquiryRoute() {
   const bodyError = errorByField.get('body')
   const emailError = errorByField.get('email')
   const phoneError = errorByField.get('phone')
+  const submittedOk = result?.kind === 'ok'
 
   return (
     <AePublicShell>
@@ -165,7 +166,12 @@ function PublicInquiryRoute() {
             {...(origin === undefined ? {} : { answerHref: origin.backHref })}
           />
         )}
-        {origin === undefined ? null : (
+        {submittedOk && origin === undefined ? (
+          <div>
+            <Button label="Back to service page" variant="secondary" size="sm" href={`/${readback.slug}`} />
+          </div>
+        ) : null}
+        {origin === undefined || submittedOk ? null : (
           <Card padding={4} className="grid gap-2" role="note" aria-label="Answer context">
             <Text type="supporting" color="secondary" weight="medium" display="block">From your answer</Text>
             <Text color="primary" display="block">
@@ -177,62 +183,66 @@ function PublicInquiryRoute() {
           </Card>
         )}
 
-        <Card padding={5} className="grid gap-4">
-          <div className="grid gap-1.5">
-            <Text type="large" weight="semibold" color="primary" display="block">{readback.serviceName} inquiry</Text>
-            <Text color="secondary" display="block">Write the message the business should review.</Text>
-          </div>
-          <FormLayout>
-            <TextInput
-              label="Name"
-              description="Optional, but helpful for the business reply."
-              htmlName="name"
-              value={value.contact.name ?? ''}
-              isDisabled={!hydrated || pending}
-              onChange={(nextValue) => updateContact('name', nextValue)}
-            />
-            <TextInput
-              label="Contact details for the business reply"
-              description="Email is kept private and is not shown on public pages."
-              htmlName="email"
-              type="email"
-              value={value.contact.email ?? ''}
-              isDisabled={!hydrated || pending}
-              {...(emailError === undefined ? {} : { status: { type: 'error' as const, message: emailError } })}
-              onChange={(nextValue) => updateContact('email', nextValue)}
-            />
-            <TextInput
-              label="Phone"
-              description="Use this instead of email if a phone reply is better."
-              htmlName="phone"
-              type={'tel' as 'text'}
-              value={value.contact.phone ?? ''}
-              isDisabled={!hydrated || pending}
-              {...(phoneError === undefined ? {} : { status: { type: 'error' as const, message: phoneError } })}
-              onChange={(nextValue) => updateContact('phone', nextValue)}
-            />
-            <AeInquiryComposer
-              label="Describe the inquiry"
-              description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know before replying.`}
-              value={value.body}
-              maxLength={readback.maxBodyLength}
-              invalid={bodyError !== undefined}
-              {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
-              disabled={!hydrated || pending}
-              pending={pending}
-              onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
-            />
-          </FormLayout>
-        </Card>
-        <p className="text-sm leading-6 text-secondary">
-          AE sends a qualified inquiry for owner review. The business replies with timing, quote, and availability; AE does not confirm them.
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <AeActionButton type="button" state={pending ? 'loading' : 'idle'} leadingIcon={<SendIcon />} disabled={!hydrated || pending} onClick={() => void submitFormValue()}>
-            Send inquiry
-          </AeActionButton>
-          <Button label={origin === undefined ? 'Back to service page' : 'Back to answer'} variant="secondary" href={origin?.backHref ?? `/${readback.slug}`} />
-        </div>
+        {submittedOk ? null : (
+          <>
+            <Card padding={5} className="grid gap-4">
+              <div className="grid gap-1.5">
+                <Text type="large" weight="semibold" color="primary" display="block">{readback.serviceName} inquiry</Text>
+                <Text color="secondary" display="block">Write the message the business should review.</Text>
+              </div>
+              <FormLayout>
+                <TextInput
+                  label="Name"
+                  description="Optional, but helpful for the business reply."
+                  htmlName="name"
+                  value={value.contact.name ?? ''}
+                  isDisabled={!hydrated || pending}
+                  onChange={(nextValue) => updateContact('name', nextValue)}
+                />
+                <TextInput
+                  label="Contact details for the business reply"
+                  description="Email is kept private and is not shown on public pages."
+                  htmlName="email"
+                  type="email"
+                  value={value.contact.email ?? ''}
+                  isDisabled={!hydrated || pending}
+                  {...(emailError === undefined ? {} : { status: { type: 'error' as const, message: emailError } })}
+                  onChange={(nextValue) => updateContact('email', nextValue)}
+                />
+                <TextInput
+                  label="Phone"
+                  description="Use this instead of email if a phone reply is better."
+                  htmlName="phone"
+                  type={'tel' as 'text'}
+                  value={value.contact.phone ?? ''}
+                  isDisabled={!hydrated || pending}
+                  {...(phoneError === undefined ? {} : { status: { type: 'error' as const, message: phoneError } })}
+                  onChange={(nextValue) => updateContact('phone', nextValue)}
+                />
+                <AeInquiryComposer
+                  label="Describe the inquiry"
+                  description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know before replying.`}
+                  value={value.body}
+                  maxLength={readback.maxBodyLength}
+                  invalid={bodyError !== undefined}
+                  {...(bodyError === undefined ? {} : { errorMessage: bodyError })}
+                  disabled={!hydrated || pending}
+                  pending={pending}
+                  onChange={(nextBody) => setValue((current) => ({ ...current, body: nextBody }))}
+                />
+              </FormLayout>
+            </Card>
+            <p className="text-sm leading-6 text-secondary">
+              AE sends a qualified inquiry for owner review. The business replies with timing, quote, and availability; AE does not confirm them.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <AeActionButton type="button" state={pending ? 'loading' : 'idle'} leadingIcon={<SendIcon />} disabled={!hydrated || pending} onClick={() => void submitFormValue()}>
+                Send inquiry
+              </AeActionButton>
+              <Button label={origin === undefined ? 'Back to service page' : 'Back to answer'} variant="secondary" href={origin?.backHref ?? `/${readback.slug}`} />
+            </div>
+          </>
+        )}
       </form>
     </AePublicShell>
   )
