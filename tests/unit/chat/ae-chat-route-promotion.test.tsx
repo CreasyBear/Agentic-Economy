@@ -55,15 +55,21 @@ vi.mock('@/components/ae/chat/AeQueryPanel', () => ({
     onSubmit,
     showExamples,
     busy,
+    placeholder,
+    loopHint,
   }: {
     onSubmit: (query: string) => void
     showExamples?: boolean
     busy?: boolean
+    placeholder?: string
+    loopHint?: string
   }) => (
     <button
       type="button"
       data-testid={showExamples === true ? 'welcome-query-panel' : 'active-query-panel'}
       data-busy={String(busy === true)}
+      data-placeholder={placeholder ?? ''}
+      data-loop-hint={loopHint ?? ''}
       onClick={() => onSubmit(testState.nextQuery)}
     >
       Ask
@@ -174,6 +180,17 @@ describe('AeChat route promotion', () => {
     fireEvent.click(screen.getByTestId('active-query-panel'))
 
     expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
+  })
+
+  it('guides the composer toward follow-up moves after a completed turn', () => {
+    const projection = buildProjection('thread-one', 'First answer')
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    const panel = screen.getByTestId('active-query-panel')
+    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or ask for an inquiry path')
+    expect(panel.getAttribute('data-loop-hint')).toBe(
+      'Continue by narrowing, comparing, or starting a qualified inquiry when a listing publishes that path.',
+    )
   })
 })
 

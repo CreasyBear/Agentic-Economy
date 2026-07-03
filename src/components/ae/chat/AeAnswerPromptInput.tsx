@@ -14,6 +14,8 @@ export type AeAnswerPromptInputProps = {
   examples?: readonly string[]
   busy?: boolean
   compact?: boolean
+  placeholder?: string
+  ariaLabel?: string
 }
 
 const DEFAULT_EXAMPLES: readonly string[] = [
@@ -30,6 +32,8 @@ export function AeAnswerPromptInput({
   examples = DEFAULT_EXAMPLES,
   busy = false,
   compact: compactOverride,
+  placeholder = 'What do you need done?',
+  ariaLabel = 'Find local service providers',
 }: AeAnswerPromptInputProps) {
   const inputId = useId()
   const counterId = `${inputId}-counter`
@@ -83,11 +87,11 @@ export function AeAnswerPromptInput({
       <ChatComposer
         className="w-full min-w-0"
         role="search"
-        aria-label="Find local service providers"
+        aria-label={ariaLabel}
         value={value}
         onChange={updateValue}
         onSubmit={submitQuery}
-        placeholder="What do you need done?"
+        placeholder={placeholder}
         isDisabled={busy || !hydrated}
         isStopShown={busy}
         density={compact ? 'compact' : 'balanced'}
@@ -120,7 +124,7 @@ export function AeAnswerPromptInput({
             ref={inputRef}
             name="q"
             className={`max-h-36 min-w-0 w-full flex-1 resize-none overflow-y-auto border-0 bg-transparent py-1 text-base leading-snug text-primary outline-none placeholder:text-secondary${compact ? ' min-h-9' : ' min-h-12'}`}
-            placeholder="What do you need done?"
+            placeholder={placeholder}
             value={value}
             maxLength={QUERY_MAX_LENGTH}
             onChange={(event) => updateValue(event.currentTarget.value)}
@@ -131,7 +135,7 @@ export function AeAnswerPromptInput({
             spellCheck={false}
             rows={1}
             aria-describedby={showCharacterLimit ? `${hintId} ${counterId}` : hintId}
-            aria-label="What do you need done?"
+            aria-label={placeholder}
             disabled={busy || !hydrated}
           />
         }

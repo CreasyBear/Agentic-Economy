@@ -272,6 +272,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     completedTurnCount > 0 && liveTurn === null ? ('last-anchor' as const) : ('end' as const)
   const settleMessageId =
     liveTurn === null && completedTurns.length > 0 ? (completedTurns[completedTurns.length - 1]?.turnId ?? null) : null
+  const followUpComposerPlaceholder =
+    completedTurnCount > 0 ? 'Narrow, compare, or ask for an inquiry path' : undefined
+  const followUpComposerHint =
+    completedTurnCount > 0
+      ? 'Continue by narrowing, comparing, or starting a qualified inquiry when a listing publishes that path.'
+      : undefined
 
   const shell = (
     <div className={`grid h-full min-h-0 w-full bg-body${sidebarVisible ? ' lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]' : ''}`}>
@@ -333,6 +339,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 busy={streamingBusy}
                 searchContext={searchContext}
                 showExamples={false}
+                {...(followUpComposerPlaceholder === undefined ? {} : { placeholder: followUpComposerPlaceholder })}
+                {...(followUpComposerHint === undefined ? {} : { loopHint: followUpComposerHint })}
               />
             </div>
           ) : null}

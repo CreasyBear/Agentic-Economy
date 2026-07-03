@@ -10,6 +10,8 @@ export type AeQueryPanelProps = {
   busy?: boolean
   searchContext?: AeSearchContext
   showExamples?: boolean
+  placeholder?: string
+  loopHint?: string
 }
 
 export function AeQueryPanel({
@@ -18,6 +20,8 @@ export function AeQueryPanel({
   busy = false,
   searchContext,
   showExamples = true,
+  placeholder,
+  loopHint,
 }: AeQueryPanelProps) {
   const examples = showExamples ? buildContextExamples(searchContext) : []
 
@@ -28,7 +32,11 @@ export function AeQueryPanel({
         defaultValue={defaultValue}
         busy={busy}
         examples={examples}
+        {...(placeholder === undefined ? {} : { placeholder })}
       />
+      {loopHint !== undefined && loopHint.length > 0 ? (
+        <p className="font-mono text-xs leading-snug text-secondary">{loopHint}</p>
+      ) : null}
       {showExamples ? (
         <p className="font-mono text-xs leading-snug text-secondary">Cited answers from published business details.</p>
       ) : null}
