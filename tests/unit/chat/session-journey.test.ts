@@ -27,7 +27,7 @@ describe('session journey', () => {
     expect(journey?.providerCount).toBe(2)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
     expect(journey?.guidance).toBe(
-      'Compare fit, then choose a business to contact. The business still confirms timing and price.',
+      'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.',
     )
     expect(journey?.steps.map((step) => [step.id, step.status])).toEqual([
       ['search', 'complete'],
@@ -44,7 +44,7 @@ describe('session journey', () => {
     })
 
     expect(journey?.guidance).toBe(
-      'AE is preparing the qualified inquiry next step. The business still confirms details.',
+      'AE is preparing the qualified inquiry next step. The business still confirms timing, quote, and availability.',
     )
     expect(journey?.steps.map((step) => [step.id, step.status])).toEqual([
       ['search', 'complete'],
@@ -61,6 +61,9 @@ describe('session journey', () => {
     })
 
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
+    expect(journey?.guidance).toBe(
+      'AE has selected the business for qualified inquiry review. The business still confirms timing, quote, and availability.',
+    )
   })
 
   it('counts selected-provider handoff artifacts as provider and inquiry context', () => {

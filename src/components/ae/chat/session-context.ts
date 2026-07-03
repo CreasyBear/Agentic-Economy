@@ -62,7 +62,7 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
       {
         id: 'boundary',
         label: 'Boundary',
-        value: 'Business confirms timing, price, and availability.',
+        value: 'Business confirms timing, quote, and availability.',
       },
     ],
   }

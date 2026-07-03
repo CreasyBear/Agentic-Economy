@@ -390,7 +390,7 @@ export function buildFollowUpComposerCopy(
   if (state.hasSelectedProvider) {
     return {
       placeholder: 'Ask limits, refine, or continue with the selected business',
-      loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, price, and availability.',
+      loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
     }
   }
 
@@ -429,7 +429,7 @@ function buildLiveComposerCopy(intent: FollowUpIntent, completedTurnCount: numbe
     case 'inquiry_handoff':
       return {
         placeholder: 'Preparing the qualified inquiry next step',
-        loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, price, and availability.',
+        loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
       }
     case 'explain_boundary':
       return {

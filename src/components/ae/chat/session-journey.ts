@@ -96,8 +96,12 @@ function buildSessionJourneyGuidance(input: {
   handoffComplete: boolean
   hasSearchCompleted: boolean
 }): string {
-  if (input.handoffActive || input.handoffComplete) {
-    return 'AE is preparing the qualified inquiry next step. The business still confirms details.'
+  if (input.handoffActive) {
+    return 'AE is preparing the qualified inquiry next step. The business still confirms timing, quote, and availability.'
+  }
+
+  if (input.handoffComplete) {
+    return 'AE has selected the business for qualified inquiry review. The business still confirms timing, quote, and availability.'
   }
 
   if (!input.hasSearchCompleted) {
@@ -109,10 +113,10 @@ function buildSessionJourneyGuidance(input: {
   }
 
   if (input.hasInquiryReadyProvider) {
-    return 'Compare fit, then choose a business to contact. The business still confirms timing and price.'
+    return 'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.'
   }
 
-  return 'Compare the published facts first; these listings need a confirmed inquiry path before contact.'
+  return 'Compare the published facts first; these listings need a published inquiry path before contact.'
 }
 
 function countSessionProviders(artifacts: readonly AnswerArtifact[]): number {

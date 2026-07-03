@@ -27,7 +27,7 @@ describe('chat composer loop copy', () => {
 
     expect(buildFollowUpComposerCopy([turn()], 'inquiry_handoff')).toEqual({
       placeholder: 'Preparing the qualified inquiry next step',
-      loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, price, and availability.',
+      loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
     })
   })
 

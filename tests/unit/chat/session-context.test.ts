@@ -17,7 +17,7 @@ describe('session context', () => {
     expect(context?.facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'businesses', value: 'Demo Plumber, Northside Plumbing' }),
       expect.objectContaining({ id: 'inquiry', value: '1 listed business publishes an inquiry path' }),
-      expect.objectContaining({ id: 'boundary', value: 'Business confirms timing, price, and availability.' }),
+      expect.objectContaining({ id: 'boundary', value: 'Business confirms timing, quote, and availability.' }),
     ]))
   })
 

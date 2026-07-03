@@ -191,7 +191,7 @@ describe('AeChat route promotion', () => {
     const panel = screen.getByTestId('active-query-panel')
     expect(panel.getAttribute('data-placeholder')).toBe('Preparing the qualified inquiry next step')
     expect(panel.getAttribute('data-loop-hint')).toBe(
-      'AE is carrying the selected business into inquiry review. The business still confirms timing, price, and availability.',
+      'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
     )
   })
 
@@ -290,7 +290,7 @@ describe('AeChat route promotion', () => {
     const panel = screen.getByTestId('active-query-panel')
     expect(panel.getAttribute('data-placeholder')).toBe('Ask limits, refine, or continue with the selected business')
     expect(panel.getAttribute('data-loop-hint')).toBe(
-      'AE keeps that business in context for qualified inquiry review. The business still confirms timing, price, and availability.',
+      'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
     )
   })
 })
