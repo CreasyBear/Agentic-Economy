@@ -171,6 +171,15 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(filteredShortlist).toContainText(/1 listing/i)
     await expect(filteredShortlist).toContainText(/Demo Plumbing/i)
     await expect(filteredShortlist).not.toContainText(/Parramatta Emergency Plumbing/i)
+    const sessionContext = page.getByRole('region', { name: /session context/i })
+    await expect(sessionContext).toContainText(
+      /This answer is narrowed to Demo Plumbing while AE keeps earlier listed businesses in the thread/i,
+      { timeout: 30_000 },
+    )
+    await expect(sessionContext).toContainText(/Current answer/i)
+    await expect(sessionContext).toContainText(/Demo Plumbing in this answer/i)
+    await expect(sessionContext).toContainText(/Listed businesses/i)
+    await expect(sessionContext).toContainText(/Parramatta Emergency Plumbing/i)
     await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
       /Narrow, compare, or start a qualified inquiry from the listed businesses above/i,
     )
