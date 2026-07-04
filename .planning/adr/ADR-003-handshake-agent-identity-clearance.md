@@ -297,6 +297,15 @@ mandate + one-use + idempotency. **Confidence: high.**
   one-way-closed (D9 — no public HSK surface/brand). No other door is touched; the P5 money-rail
   quarantine is strengthened, not relaxed (x402 subpath excluded by D1).
 
+## Implementation notes
+
+- **2026-07-04 — quiet agent inquiry rung lit.** `/api/agent/tools` now keeps unsigned
+  reads open, returns `403 + Accept-Signature` for unsigned `inquiry.submit`, refuses
+  signed-but-not-admitted writes, and permits only a signed caller with a separate
+  `public_inquiry` admission for `inquiry.submit`. The public answer/thread tool runner
+  remains read-only. Identity recording is still attribution/quota/audit only; admission
+  is checked separately before the harness receives `allowWrites:true`.
+
 ## Open questions -> tickets
 
 - Obtain handshake-protocol-kernel 0.4.x: npm resolves or vendor dist
@@ -313,9 +322,9 @@ mandate + one-use + idempotency. **Confidence: high.**
 - `local://research-ae-seams.md` (§orientation, §(a), §(b), §(c), §(d), divergences, risks)
 - `AGENTS.md` (trust contract, banned words, epistemic vocabulary)
 - `.planning/ROADMAP.md` (decision-door register: HSK posture; P5 money-rail quarantine; P6 door)
-- `.planning/PRODUCT-10-STAR.md` §237-244 (H4.5 convergence)
-- `.planning/phases/04-owner-pending-protected-actions/04-SPEC.md` (R5/R6, constraints §77-83)
-- `.planning/phases/06-agentic-business-action-receipts/06-ENGINEERING-REQUIREMENTS.md` (§52-72, seam)
+- `.planning/archive/root/PRODUCT-10-STAR.md` §237-244 (H4.5 convergence)
+- `.planning/archive/phases/04-owner-pending-protected-actions/04-SPEC.md` (R5/R6, constraints §77-83)
+- `.planning/archive/phases/06-agentic-business-action-receipts/06-ENGINEERING-REQUIREMENTS.md` (§52-72, seam)
 - `src/routes/api.agent.tools.ts:112-122`; `convex/authz.ts:35-48`;
   `src/modules/security/source-write-admission.ts:3-33`;
   `src/modules/business-action/internal/schema.ts:21-24,153-167`

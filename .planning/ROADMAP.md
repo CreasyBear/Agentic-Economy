@@ -21,7 +21,9 @@ A phase does not exist for narrative, protocol completeness, marketplace surface
 | Search adapter | Two-way | 1 | Convex first; external search only after evidence. |
 | Money rails | One-way later | 5 | Requires decision record before code. |
 | Handshake Protocol Kernel posture | One-way for public positioning | 4/6 | Future protected-action clearance should be HSK-shaped internally; do not expose HSK as a public AE surface or dependency until a phase gate needs it. |
-| Agentic business action receipts | One-way for Phase 6 spike | 6 | One source-owned receipt-backed business operation; no runtime/wallet/marketplace/provider authority. |
+| Agentic business action receipts | One-way for the Phase 6 spike; per-slug two-way within the admitted set | 6 | A closed, typed, schema-validated set of software-scoped receipt-backed business operations. Each slug is individually admitted through ADR-005 D1's per-slug checklist. No generic `executeAction`, no arbitrary/caller-supplied slugs, no runtime/wallet/marketplace/provider authority. |
+| 14-day bootstrap gate | One-way before public platform widening | Gate | No public shipment beyond the storefront prototype and qualified inquiry until `.planning/scopes/scope-14day-bootstrap-gate/` records 30–50 source-backed profiles, 10 recruited providers, 100 attributable sessions, ≥10 qualified inquiries, ≥5 voluntary provider corrections/listing requests, and zero boundary overclaim. |
+| Scope execution readiness map | One-way for current orchestration | Gate | `.planning/scopes/SCOPE-EXECUTION-READINESS.md` is the active routing table for Scopes 1-7. It separates source/local work from deployed/provider/live proof, names #5/#33/#36 and PM gates, and points Scopes 2-5 at active lightweight indexes before subagents execute archived plans. |
 
 ## Product capability ladder
 
@@ -38,6 +40,12 @@ The product ladder keeps the full ambition visible without letting later phases 
 | P6 | Receipt-backed business action proof | One software-scoped business operation can be reconstructed from request through checkpoint, evidence, result, and receipt/proof gap. | Action card, mandate, checkpoint, external evidence binding, artifact, receipt verifier, and no-repair path. |
 
 The ladder is not a public promise. Current public claims stop at the phase that has deployed proof and support posture.
+
+## Active bootstrap gate
+
+The current go/no-go gate is `.planning/scopes/scope-14day-bootstrap-gate/`. It blocks public shipment of later platform rungs beyond the storefront prototype and qualified-inquiry path until the 14-day evidence exists. Future quote, booking handoff, paid, protected, or autonomous action language stays future-worded and non-public unless a later decision record admits it from that evidence.
+
+Execution routing now starts from `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. Archived Scope 2-5 plans are historical/source-local inputs unless the active lightweight index for that scope names them as executable under current gates. This prevents source/local Phase 6 proof, archived demo plans, or unresolved deployed smokes from being mistaken for product readiness.
 
 ## Phase graph
 
@@ -107,7 +115,7 @@ Manifest/llms/sitemap checks are engineering readbacks, not owner-facing success
 
 **Cut:** payments, wallet, protected actions, request market, skills, expert profiles, hosted agents, voice, persona UI, benchmarks, native mobile, API keys, MCP/OpenAPI tools, developer platform.
 
-**Exit proof:** all Phase 1 plan checks green, GTM internal-alpha proof green, deployment/readback smoke green.
+**Exit proof:** all Phase 1 plan checks green, GTM internal-alpha proof green, deployment/readback smoke green. Agent-facing GTM claims additionally require the deployed ADR-006 agent-experience gate (issue #36) to pass against the real deployed surface.
 
 ## Phase 2 - Human Inquiry + Owner Inbox
 
@@ -167,7 +175,7 @@ public share/readback projection
 
 **Cut:** hidden typo-correction/search-rewrite preprocessors, open-web search claims, booking, payment, dispatch, generic assistant behavior, owner/private data, ungrounded provider slugs, and write/action execution from the human answer loop.
 
-**Exit proof:** a user can ask, compare providers, follow up, share the answer, and route into a listing or qualified inquiry while the transcript remains reconstructable from source-bounded evidence and tool-call records. Misspellings or vague suburb/service wording are handled by the answer agent choosing better `registry.search` arguments, not by the registry silently correcting queries.
+**Exit proof:** a user can ask, compare providers, follow up, share the answer, and route into a listing or qualified inquiry while the transcript remains reconstructable from source-bounded evidence and tool-call records. Misspellings or vague location/category/request wording are handled by the answer agent choosing better `registry.search` arguments, not by the registry silently correcting queries.
 
 ## Phase 4 - Owner-Pending Protected Actions
 

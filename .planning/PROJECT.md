@@ -123,8 +123,8 @@ Implementation must follow:
 - `FRONTEND-DESIGN-FRAMEWORK.md`
 - `../DESIGN.md`
 - `../.impeccable/design.json`
-- `phases/01-ten-star-spine-foundation/01-UI-SPEC.md`
-- `phases/01-ten-star-spine-foundation/PHASE.md`
+- `archive/phases/01-ten-star-spine-foundation/01-UI-SPEC.md`
+- `archive/phases/01-ten-star-spine-foundation/PHASE.md`
 
 If these conflict, prefer the more specific spec for that domain and update the docs to remove drift.
 

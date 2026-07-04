@@ -1,23 +1,23 @@
-# Graph Report - agentic-economy (2026-07-03)
+# Graph Report - agentic-economy (2026-07-04)
 
 ## Corpus Check
-- 907 files · ~863,598 words
+- 1108 files · ~1,081,881 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 17966 nodes · 17125 edges · 25 communities
+- 21332 nodes · 20289 edges · 27 communities
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 - Builder: project-local graphify compatibility executable
 
 ## Graph Freshness
-- Built from commit: `2d6205b984ba8c7176aea8ef7d63c9644f48b112`
+- Built from commit: `d5f33973506de162abb4c78b67a5076e5033cc3c`
 - Input path: `.`
 - Run `graphify update .` after code changes.
 
 ## Node Types
-- code: 10024
-- document: 7942
+- code: 11422
+- document: 9910
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_agents|.agents]] (0)
@@ -34,14 +34,16 @@
 - [[_COMMUNITY_convex|convex]] (11)
 - [[_COMMUNITY_doctor_config_ts|doctor.config.ts]] (12)
 - [[_COMMUNITY_eval|eval]] (13)
-- [[_COMMUNITY_package_lock_json|package-lock.json]] (14)
-- [[_COMMUNITY_package_json|package.json]] (15)
-- [[_COMMUNITY_playwright_config_ts|playwright.config.ts]] (16)
-- [[_COMMUNITY_playwright_deploy_smoke_config_ts|playwright.deploy-smoke.config.ts]] (17)
-- [[_COMMUNITY_skills_lock_json|skills-lock.json]] (18)
-- [[_COMMUNITY_src|src]] (19)
-- [[_COMMUNITY_tests|tests]] (20)
-- [[_COMMUNITY_tsconfig_json|tsconfig.json]] (21)
-- [[_COMMUNITY_vite_config_ts|vite.config.ts]] (22)
-- [[_COMMUNITY_vitest_config_ts|vitest.config.ts]] (23)
-- [[_COMMUNITY_workflows|workflows]] (24)
+- [[_COMMUNITY_examples|examples]] (14)
+- [[_COMMUNITY_package_lock_json|package-lock.json]] (15)
+- [[_COMMUNITY_package_json|package.json]] (16)
+- [[_COMMUNITY_playwright_config_ts|playwright.config.ts]] (17)
+- [[_COMMUNITY_playwright_deploy_smoke_config_ts|playwright.deploy-smoke.config.ts]] (18)
+- [[_COMMUNITY_skills_lock_json|skills-lock.json]] (19)
+- [[_COMMUNITY_src|src]] (20)
+- [[_COMMUNITY_tests|tests]] (21)
+- [[_COMMUNITY_tsconfig_json|tsconfig.json]] (22)
+- [[_COMMUNITY_vendor|vendor]] (23)
+- [[_COMMUNITY_vite_config_ts|vite.config.ts]] (24)
+- [[_COMMUNITY_vitest_config_ts|vitest.config.ts]] (25)
+- [[_COMMUNITY_workflows|workflows]] (26)

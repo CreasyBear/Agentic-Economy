@@ -1,6 +1,6 @@
 ---
 # ADR-005: Transactions + Receipts — Productize Phase 6 into the Receipt-Backed Action Loop
-Status: Proposed
+Status: Accepted (defer)
 Date: 2026-07-03
 Scope: 5 — Transactions + receipts (productize the Phase 6 spike into the hackathon-ready loop)
 
@@ -124,11 +124,11 @@ counterparty trust — the AE receipt chain is reputation for businesses no huma
   before code` (`ROADMAP.md:22`). `06-MONEY-EVIDENCE-DECISION.md` authorizes **test mode only** and
   states "live mode waits for a later production decision record" (`ROADMAP.md:226`,
   `06-MONEY-EVIDENCE-DECISION.md:34`). `local://five-scopes.md:38`: "Stripe live-mode only behind
-  money-evidence decision record + scope 1 deployed smoke discipline." Scope 1 = 5 deploy-smoke
-  suites incl. `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`
-  (`local://five-scopes.md:16`; smoke file present).
+  money-evidence decision record + scope 1 deployed smoke discipline." Current Scope 1 closeout is
+  the full deployed evidence suite, including `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts`
+  (`.planning/scopes/SCOPE-EXECUTION-READINESS.md`; smoke file present).
 - **Answer:** Scope 5 stays **Stripe test-mode only** and does **not** implement live mode. Live
-  mode is gated behind an explicit chain (D6): (1) scope 1's 5 deploy smokes green against a
+  mode is gated behind an explicit chain (D6): (1) scope 1's deployed evidence suite is green against a
   deployed env, incl. the phase-6 Stripe test-mode webhook smoke; (2) a new
   `06-LIVE-MONEY-EVIDENCE-DECISION.md` record whose required contents are enumerated in D6; (3)
   reconciliation/dispute/refund posture proven; (4) copy scans still forbid autonomous/production
@@ -201,12 +201,20 @@ Proposed replacement ROADMAP door row:
   [endpoint_descriptor, json_schema, private_endpoint_provisioning_payment_gate_ref]`;
   `allowedExternalEvidenceProviders = [hermes, stripe_test_mode, endpoint_host]`;
   `maxAdvertisedAmountCents` + `currency` present.
-- `publish-agent-intake-endpoint` (new, non-paid mirror): `resultArtifactRequirements =
-  [endpoint_descriptor, json_schema]`; `allowedExternalEvidenceProviders = [hermes, endpoint_host]`;
-  no amount/currency; `paymentRequired:false` (as always). This proves the receipt verifier
-  reconstructs a money-free chain and satisfies the ">=2 distinct slugs, success + refusal" exit
-  proof (`local://five-scopes.md:40`) without a second money surface. Both slugs preserve all D1
-  invariants. Exact non-paid card field lock-in against the demo business is T2.
+- `publish-agent-intake-endpoint` (new, non-paid mirror): card label `Publish agent intake endpoint`;
+  descriptor kind `action_card` with `{ actionSlug: 'publish-agent-intake-endpoint', cardRef }`;
+  `resultArtifactRequirements = [endpoint_descriptor, json_schema]`;
+  `allowedExternalEvidenceProviders = [hermes, endpoint_host]`; no amount/currency fields and no
+  Stripe/Link evidence. Posture stays `proposal_only`, `callable:false`, `paymentRequired:false`,
+  `ownerApprovalRequired:true`, and `receiptRequired:true`. Readiness/visibility: the capability
+  starts `business_supplied`, may be selected for the demo only when the D1 support record is
+  `resolved`, and becomes `checked` only from receipt reconstruction for a completed/refused run
+  (not from cron reachability alone). Demo TTL caps: mandate <= 24h; request/checkpoint <= 15m;
+  seeded CI fixtures may use shorter TTLs. Policy flags: `software_scoped`, `owner_approved`,
+  `receipt_required`, `no_money_rail`, `no_autonomous_claim`, `no_public_execution_claim`.
+  This proves the receipt verifier reconstructs a money-free chain and satisfies the ">=2 distinct
+  slugs, success + refusal" exit proof (`local://five-scopes.md:40`) without a second money surface.
+  Both slugs preserve all D1 invariants.
 
 **D3 — Define `businessAction.propose` as a proposal-only agent action; exposure gated on scope 3.**
 `defineAction` sketch:
@@ -238,6 +246,23 @@ is authored in scope 5 but NOT added to `src/modules/actions/index.ts` (nor expo
 `api.agent.tools.ts`) until scope 3 verifies an attributed principal and binds it to a mandate at
 the door — anonymous exposure is forbidden (`research-ae-seams.md` risk 6). `CommandOptions` may
 carry idempotency key + correlation id only, never caller-supplied owner/admin/business authority.
+Scope-3 binding shape: `api.agent.tools.ts` must derive the principal from the verified signed
+request identity, then read an active clearance mandate whose `actionRef` is a canonical
+business-action proposal ref (for example `businessAction.propose:<businessId>:<actionSlug>`) and
+whose `allowedScopes` include `protected_action`. The clearance layer validates principal,
+action class/ref, scope, TTL, and optional amount cap; the business-action `BuyerMandate` then
+validates the concrete business id, action slug, amount, currency, and request TTL before a
+Capability Request is created. Refusal codes are explicit and pass through as typed
+proposal refusals: identity layer `clearance_mandate_required`,
+`clearance_mandate_principal_mismatch`, `clearance_mandate_action_class_mismatch`,
+`clearance_mandate_action_ref_mismatch`, `clearance_mandate_scope_not_allowed`,
+`clearance_mandate_amount_cap_exceeded`, `clearance_mandate_expired`,
+`clearance_mandate_revoked`, `clearance_mandate_not_active`; business-action layer
+`mandate_not_found`, `mandate_revoked`, `mandate_not_active`, `mandate_expired`,
+`wrong_action`, `wrong_business`, `amount_over_max`, `wrong_currency`. Idempotency key and
+correlation id flow from the agent-tool request into the source-write admission and the resulting
+Capability Request; no caller-supplied owner/admin/business authority is accepted.
+
 
 **D4 — v1 checkpoint approval is owner-side only; buyer/principal side is the up-front mandate.**
 The consequence boundary is the owner-approved `AuthorizationCheckpoint` (`ownerDecisionRef`
@@ -249,16 +274,24 @@ silently add a buyer-approval verb.
 
 **D5 — Public read-only receipt verification, hash-only, non-enumerable.**
 Add `businessAction.verifyReceipt` (`readOnly:true`, surfaces `agentJson`+`agentTools`, no identity
-required) and a JSON HTTP route, both keyed on a `receiptId` the caller already holds. Output is
-the existing `PublicActionReceiptReadback` (hashes + outcome + reconstructionStatus + labels only).
-**No list/enumeration endpoint.** Public epistemic vocabulary (success/refusal/proof-gap/tamper/
-expired-mandate) appears only in JSON/agent surfaces, never as labels on a human page (AGENTS.md
-epistemic-vocabulary rule). Redaction is inherited from `PublicActionReceiptReadback`; no raw
-prompt/trace/provider payload/endpoint/key/secret is reachable.
+required) and a JSON HTTP route, both keyed on an unguessable receipt ref the caller already holds
+(`receiptId` or receipt hash; no sequential lookup, no list endpoint, rate-limited by IP/principal
+where available). Output is the existing `PublicActionReceiptReadback` and no more: receipt id,
+action slug, outcome, reconstruction status, card version, source hashes, labels, and recorded time.
+The readback reveals only that a named action receipt exists for a held reference and how the source
+hashes reconstruct; it does not reveal prompts, traces, raw provider payloads, endpoint refs, keys,
+contact details, payment data, owner/admin notes, or private evidence. Public epistemic vocabulary
+(success/refusal/proof-gap/tamper/expired-mandate) appears only in JSON/agent surfaces, never as
+labels on a human page (AGENTS.md epistemic-vocabulary rule). Human verify-page copy must use plain
+language such as "This receipt matches AE's recorded evidence", "The business refused the proposal",
+"AE cannot reconstruct enough evidence for this receipt", "This receipt has changed or no longer
+matches the recorded evidence", and "The approving mandate had expired"; no `KNOWN`/`UNKNOWN`,
+`proof_gap`, `tampered`, `MCP`, `callable`, `autonomous`, `agent-native`, or protocol vocabulary.
 
 **D6 — Scope 5 stays Stripe test-mode only; live mode is gated (and not implemented here).**
 Live-mode gate chain (ALL required, in order):
-1. **Scope 1 deployed-smoke discipline** — 5 deploy smokes green against a deployed env, incl.
+1. **Scope 1 deployed-smoke discipline** — the Scope-1 deployed evidence suite in
+   `.planning/scopes/SCOPE-EXECUTION-READINESS.md` is green against a deployed env, including
    `tests/deploy-smoke/phase6-business-action-stripe-smoke.spec.ts` in test mode, with non-secret
    evidence artifacts attached.
 2. **A new `06-LIVE-MONEY-EVIDENCE-DECISION.md`** record whose required contents are: named
@@ -273,6 +306,34 @@ Live-mode gate chain (ALL required, in order):
 4. **Copy scans** still forbid autonomous/production/marketplace payment claims.
 Scope 5 v1 implements none of live mode; it delivers the loop and demo kit in test mode. Drafting
 the full record contents = T3.
+
+**2026-07-04 live-money defer addendum.** The payment-security FIX-NOW foundation is landed, but
+live money remains **HORIZON**. The authoritative fix-wave evidence is `local://ae-wave-results.md`:
+SSRF in `storefront.importDraft` resolved; production dependency vulnerabilities resolved
+(`npm audit --omit=dev` now 0 vulnerabilities); `AE_SOURCE_WRITE_SECRET` split into scoped
+key families with `keyId`/rotation/fail-closed production posture; and quiet-door/WBA replay +
+request-binding debt resolved with body digest binding, durable Convex nonce consumption, expanded
+WBA covered components, and removal of operation/correlation self-attestation fallback. The
+orchestrator gate recorded `test:unit` 741 pass (133 files), `test:integration` 101 pass (27 files),
+`tsc --noEmit` 0 errors, `check:convex-codegen` exit 0, `test:copy` 109 pass, `test:seo` 23 pass,
+`test:source-mining` 2 pass, and `npm audit --omit=dev` 0 vulnerabilities; graph freshness is stale
+by design on the dirty worktree and remains gated on commit decision.
+
+This ADR accepts the **defer** decision: AE remains SAQ-A-compatible in architecture direction
+(PSP-hosted card entry, no AE PAN/CVC storage observed in the audited payment-adjacent paths), but
+AE does **not** claim independent certification and must not use compliance/verification wording for
+card-data posture. The live-money decision can be reversed only when ALL hold:
+1. the 14-day bootstrap gate in `.planning/scopes/scope-14day-bootstrap-gate/` passes;
+2. `.planning/scopes/scope-14day-bootstrap-gate/06-LIVE-MONEY-EVIDENCE-DECISION.md` is completed
+   with owner and date;
+3. the enumerated live-money controls are implemented: refunds, disputes, chargebacks,
+   reconciliation, support owner, kill switch, alerts, rollback, deployed test-mode payment smokes,
+   provider base-URL allowlist, webhook replay ledger, SAQ-A-compatible boundary enforcement,
+   payment-adjacent PII retention/redaction, and direct public mutation hardening.
+
+Until then, payment copy and product posture stay future-gated: AE does not book, charge, dispatch,
+custody funds, settle payouts, or auto-fulfil. The path-forward synthesis is
+`.planning/audits/redteam/2026-07-04-PAYMENT-SECURITY-PATH-FORWARD.md`.
 
 **D7 — Demo kit under `examples/`.**
 Structure (illustrative):
@@ -385,9 +446,9 @@ Exact copy rules for the demo kit + verify page: "receipt-backed business operat
 - `local://five-scopes.md` (scope 5 deficit, ship list, sequencing, deliberate cuts)
 - `AGENTS.md` (trust contract, epistemic vocabulary, banned human-surface words)
 - `.planning/ROADMAP.md` (decision-door register :11-24, P6 :205-226, P6 hackathon/production rule :73, bloat detector :228)
-- `.planning/phases/06-agentic-business-action-receipts/06-ENGINEERING-REQUIREMENTS.md` (module seam, data model, keep/reject lists)
-- `.planning/phases/06-agentic-business-action-receipts/06-VERIFICATION.md` (source/local proof boundary, 21 truths)
-- `.planning/phases/06-agentic-business-action-receipts/06-MONEY-EVIDENCE-DECISION.md` (test-mode Stripe record, live-mode deferral)
+- `.planning/archive/phases/06-agentic-business-action-receipts/06-ENGINEERING-REQUIREMENTS.md` (module seam, data model, keep/reject lists)
+- `.planning/archive/phases/06-agentic-business-action-receipts/06-VERIFICATION.md` (source/local proof boundary, 21 truths)
+- `.planning/archive/phases/06-agentic-business-action-receipts/06-MONEY-EVIDENCE-DECISION.md` (test-mode Stripe record, live-mode deferral)
 - `.planning/STATE.md` (Phase 6 decisions :142-162, blockers :163-171)
 - `src/modules/business-action/internal/schema.ts` (slug pin :21-24, card defaults/invariants :125-151, request/checkpoint/receipt/public readback :169-341)
 - `src/modules/business-action/internal/business-action.ts` (verifier :638/:910-1002, slug guards :254-256/:714/:984, owner checkpoint :340-352)

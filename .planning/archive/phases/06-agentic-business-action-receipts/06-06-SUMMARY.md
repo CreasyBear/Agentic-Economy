@@ -101,7 +101,7 @@ provider-smoke status is not external proof unless configured evidence passes
 ## Accomplishments
 
 - Added Phase 6 copy/source scanner coverage for business-action owned contexts and hard-forbidden autonomous payment, wallet, custody, settlement, product marketplace, and generic API marketplace claims.
-- Added Phase 6 SEO and closeout wording tests so demo copy can use `receipt-backed autonomous business operation` only with source-owned context and required disclaimers.
+- Added Phase 6 SEO and closeout wording tests so demo copy uses `receipt-backed local demo` / `receipt record` language with source-owned context and required no-production-proof disclaimers.
 - Added `npm run test:provider-smoke:business-action-stripe`, which fails loudly without deployed request/checkpoint/receipt/Stripe/support/kill-rule/operator evidence and explicitly says the failure is not external proof.
 
 ## Task Commits

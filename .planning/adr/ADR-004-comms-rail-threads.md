@@ -81,11 +81,14 @@ required attributed identity, anonymous humans — the primary loop — could ne
 read their own thread.
 **Answer.** **Both, by principal type.** An attributed agent (scope 3) reads
 back keyed to its verified principal (mirrors owner keying). An anonymous human
-initiator reads back via a high-entropy, single-thread, expirable **readback
-token** minted at submit — the honest analog of a "check your inquiry" link,
-patterned on the source-write nonce/expiry (source-write-admission.ts:25-33).
-Token lifetime/entropy/privacy-tombstone interaction is a design ticket (Q1
-ticket). Confidence: **medium** (token vs magic-link PII tradeoff open).
+initiator reads back via a high-entropy, single-thread **readback token** minted
+only at submit — the honest analog of a "check your inquiry" link without
+requiring email. Token contract after #22: 32 random bytes (256 bits), keyed
+hash-only storage, seven-day TTL, no refresh or reply-time reissue, denial on
+expiry/mismatch/privacy tombstone/owner close, and only the initiator's thread,
+messages, delivery state, cursor, next step, and redacted submitted contact are
+returned. Mandatory magic-link is rejected for v1 because contact may be
+phone-only/no-email. Confidence: **high**.
 
 ### Q4 — Business-side responder: signed webhook dispatch + admission path?
 **Evidence.** Outbox has the full machine (dispatch/attempt/webhook records,
@@ -100,19 +103,26 @@ closed enum gated hard (source-write-admission.ts:3-15).
 **Answer.** Reuse the outbox record shapes/patterns but add a distinct provider
 family `business_endpoint` with its own adapter enforcing the external-URL
 security envelope. **Outbound (AE→business):** AE is the signer — POST the
-message to the scope-2-registered, checked endpoint; header
-`Ae-Signature: v1,t=<ts>,sig=<hmac>` over `${ts}.${bodyHash}` with AE's
-per-business secret; idempotency via existing `providerIdempotencyKey`;
-retry/backoff via existing `retryCount`/`retryAfter`; dead-letter to
-`retry_exhausted`/`no_repair` (existing statuses). SSRF guard: URL must equal
-the scope-2 endpoint, no redirects to private ranges (Q2 ticket). **Inbound
+message only after a scope-2 preflight accepts a checked `business_endpoint`
+capability. Current scope-2 code exposes only `{originUrl, manifestUrl,
+schemaRef}` (`BusinessEndpointCapabilityDescriptor`), so 04-03 is blocked until
+scope 2 adds the missing private dispatch contract: a normalized HTTPS
+`dispatchUrl`, an AE-held outbound signing-key ref, and a business verification
+key/ref for inbound replies. `dispatchUrl` must be same-origin with the
+domain-control-proved `originUrl`, and the latest `ae-endpoint-check:v1` result
+must be `checked` + fresh. Header: `Ae-Signature: v1,t=<ts>,sig=<hmac>` over
+`${ts}.${bodyHash}` with AE's per-business secret; idempotency via existing
+`providerIdempotencyKey`; retry/backoff via existing `retryCount`/`retryAfter`;
+dead-letter to `retry_exhausted`/`no_repair` only for actual POST attempts. The
+preflight guard never POSTs, redirects, or creates a network attempt when
+endpoint trust is stale/contradicted/unsupported/missing. **Inbound
 (business→AE):** business POSTs its reply to `POST /api/inquiry/endpoint-webhook`
 (mirrors resend-webhook route); route verifies the business signature and
 dedupes via `providerEventId`; the reply is admitted through **source-write
 admission** under a scope (existing vs new `business_agent_reply` — Q3 ticket),
 validated + redacted, and written as an `InquiryMessageRecord` with
-`sender:'business_agent'`. Confidence: **high** on shape, **medium** on the
-scope/SSRF specifics (cross-scope).
+`sender:'business_agent'`. Confidence: **high** on adapter shape; **blocked** on
+the missing scope-2 dispatch/key fields.
 
 ### Q5 — Which omp IRC semantics transfer; which are rejected?
 **Evidence.** Transfer table + "do-not-transfer" list
@@ -197,28 +207,48 @@ paymentHandler fields. Confidence: **high**.
   No service/area/urgency fields — wedge-agnostic, generic commerce verbs only.
 - **D3.** Ship initiator readback both ways by principal type: attributed agents
   (scope 3) key to their verified principal; anonymous humans use a high-entropy,
-  single-thread, expirable readback token minted at submit. New read action
+  single-thread readback token minted only at submit. New read action
   `inquiry.readThread` — schema `{threadId, readToken?}`; surfaces `agentTools`
   (attributed) + a public route readback (token); read-only; returns
   `{thread, messages[], deliveryState, lastReadCursor, nextStep?}`; refuses
-  booking/payment/dispatch; token is single-thread, not a session.
+  booking/payment/dispatch. Token contract: 32 random bytes (256 bits),
+  store only a keyed cryptographic hash, scope to exactly one thread, expire after
+  seven days, do not refresh/re-mint from replies, and deny if expired, privacy-
+  tombstoned, owner-closed, or mismatched. The token never grants owner-only
+  projections or raw contact/provider evidence.
 - **D4.** Add outbox provider family `business_endpoint`: AE signs outbound POSTs
-  (`Ae-Signature` HMAC over `${ts}.${bodyHash}`, per-business secret,
-  idempotency + retry/backoff + dead-letter reusing existing dispatch fields) to
-  the scope-2 registered/checked endpoint only (SSRF-guarded). Reuse the
-  dispatch/attempt/webhook records; add `sender:'business_agent'` and (for the
-  initiator side) `operatedBy:'human'|'assistant'`.
+  (`Ae-Signature: v1,t=<ts>,sig=<hmac>` over `${ts}.${bodyHash}`, per-business
+  secret, idempotency + retry/backoff + dead-letter reusing existing dispatch
+  fields) only after a scope-2 `business_endpoint` preflight accepts a checked +
+  fresh endpoint. 04-03 is blocked until scope 2 exposes the missing dispatch
+  contract fields (normalized same-origin `dispatchUrl`, outbound signing-key ref,
+  inbound verification-key ref); current descriptor has only `originUrl`,
+  `manifestUrl`, and `schemaRef`. Preflight refusals for missing/stale/
+  contradicted/unsupported/unreachable endpoints suspend dispatch before any POST
+  or outbox network attempt; accepted POSTs use a 5s timeout, 16KiB serialized
+  body cap, and 64KiB response cap. Reuse dispatch/attempt/webhook records for
+  accepted POSTs; add
+  `sender:'business_agent'` and (for the initiator side)
+  `operatedBy:'human'|'assistant'`.
 - **D5.** Inbound business replies arrive at `POST /api/inquiry/endpoint-webhook`,
   route-verified (business signature) + deduped (`providerEventId`), admitted via
-  source-write admission, validated + redacted, written as `business_agent`
-  messages. AE NEVER auto-generates a business reply.
+  a new source-write scope `business_agent_reply`, validated + redacted, written
+  as `business_agent` messages. Implementation must add `business_agent_reply` to
+  `SourceWriteAdmissionScopeValues`; Convex `sourceWriteAdmissionArg` derives from
+  that literal union. Route signature proves the business endpoint; source-write
+  admission proves AE's webhook route verified it before any Convex write. AE
+  NEVER auto-generates a business reply.
 - **D6.** Transfer omp IRC semantics as: wake=webhook, receipt=attempt row (with
   retry/backoff), replyTo=inReplyTo/correlationId, inbox=durable rows + read
-  cursor. Reject: ephemerality, in-process trust, direct hand-off,
-  reply-on-behalf, sessionFile revival, sync `await` coupling.
-- **D7.** Read receipts claim `delivered` from attempt 2xx and `read` only from a
-  readback advancing a cursor; never infer read from email opens; business-agent
-  read is UNKNOWN absent an explicit ack event.
+  cursor, wait=bounded poll/long-poll through the read-only action
+  `inquiry.readThread`. Reject: ephemerality, in-process trust, direct hand-off,
+  callback webhooks, SSE as the v1 contract, reply-on-behalf, sessionFile revival,
+  and sync `await` coupling.
+- **D7.** `Delivered` means a dispatch attempt got a provider/business-endpoint
+  2xx or provider delivery webhook; it never means read. `Read` means an explicit
+  receiving-side signal only: owner/customer readback cursor advance, or an
+  optional signed `business_endpoint` ack event with status `read`. Without that
+  signal, business-agent read is UNKNOWN.
 - **D8.** Provenance: every message carries `sender` + `operatedBy`; human copy
   discloses "Automated reply from {business}" and "Sent via an assistant on
   behalf of a person" with no banned vocabulary.
@@ -227,6 +257,34 @@ paymentHandler fields. Confidence: **high**.
 - **D10.** A quote is communication, an acceptance records intent and emits a
   typed `nextStep` pointer into scope 5's checkpoint rail (or an external step);
   scope 4 never charges/books; no money-rail fields enter the schema.
+- **D11.** Do not widen thread status to `awaiting_*`. Keep source status
+  `unread|read|replied|closed`; add `expiresAt` and `closedReason` (including
+  `expired`) for terminal clarity. A scheduled source-owned expiry job marks
+  threads `closed` with `closedReason:'expired'` at the seven-day readback TTL;
+  no owner/business/initiator writes are accepted after expiry. Owner inbox
+  buckets stay derived: `unread` from unread incoming messages, `needs_reply`
+  from last message by initiator and not closed/expired, `resolved` from a
+  business-side reply or any closed/expired thread. Awaiting-business vs
+  awaiting-initiator is a derived read-model phase from last message sender +
+  delivery/readback state, with public copy "Waiting for business reply" /
+  "Waiting for customer reply." Expired copy: initiator token path returns "This
+  conversation link has expired. Start a new inquiry if you still need help";
+  owner side shows "Expired — replies are closed."
+- **D12.** Scope-4 demo proof must run against real networked developer/
+  business-owned demo endpoint(s) in dev/staging, not a local-only AE fixture.
+  Local fixtures may stay as deterministic CI smoke, but they do not satisfy
+  the demo criterion. Each endpoint is explicitly enrolled, domain/URL pinned,
+  scope-2 checked fresh, and labelled as a test/demo endpoint — not live
+  booking, dispatch, payment, fulfilment, availability, or marketplace
+  liquidity. AE verifies outbound and inbound signatures; inbound replies arrive
+  as signed `business_agent` `quote` messages through
+  `POST /api/inquiry/endpoint-webhook`, with the dispatch response used only as
+  ack/readback, never as the reply source of truth. The e2e verifier must
+  reconstruct: attributed submit, customer message, outbound dispatch+attempt,
+  endpoint ack/signature hash, inbound webhook event, business_agent quote
+  message, initiator `inquiry.readThread` cursor, delivery/read receipts, and
+  audit/operation hashes — no raw secrets, private contact, fake availability,
+  or fake-liquidity claim.
 
 ## Consequences
 
@@ -286,10 +344,11 @@ messaging, not booking/charging/dispatching. Exact copy rules:
   surfaces; assistant-submitted inquiries show "Sent via an assistant on behalf
   of a person."
 - No banned public vocabulary (source-owned/readback/manifest/capability/
-  gateway/operator/MCP/OpenAPI/callable/autonomous/agent-native) on human
+  gateway/operator/MCP/OpenAPI/callable/autonomous/agent-native/DTO) on human
   surfaces; those live only in JSON/owner/admin surfaces (AGENTS.md:67-72,90-92).
-- "Delivered" and "read" are distinct labels; absent a read signal, show
-  "Delivered, not yet read".
+- "Delivered" and "read" are distinct labels. Generic owner/customer delivery
+  with no read signal shows "Delivered, not yet read." Business endpoint delivery
+  with no signed ack shows "Delivered to business endpoint; read status unavailable."
 - No money/rail fields (autumn/stripe/wallet/credits/paymentHandler) enter the
   thread/message schema (money quarantine .planning/ROADMAP.md:201).
 - **Proposed decision-door note** (does not silently violate the register): "AE
@@ -301,13 +360,94 @@ messaging, not booking/charging/dispatching. Exact copy rules:
 
 ## Open questions → tickets
 
-- Decide initiator readback auth: bearer token vs magic-link vs attributed-only
-- Fix business_endpoint SSRF and endpoint-trust envelope from scope 2 model
-- Decide source-write scope for business-agent reply admission
-- Prototype initiator wait transport: poll vs SSE vs Convex subscription
-- Decide business-side read-receipt honesty: ack event vs unknown
-- Decide thread lifecycle/TTL state-machine widening
-- Prototype a seeded demo business-agent endpoint for the e2e loop
+- Decide initiator readback auth: bearer token vs magic-link vs attributed-only.
+  Resolution (#22): keep D3's dual path. Attributed agents read by verified
+  scope-3 principal. Anonymous humans read by a submit-time bearer readback token
+  only: 32 random bytes, hash-only storage, one thread, seven-day TTL, no refresh,
+  revoked/denied on privacy tombstone or owner close, and returns only the
+  initiator's thread with redacted submitted contact plus thread messages. A
+  mandatory magic-link is rejected because inquiry contact may be phone-only/no
+  email and would break the anonymous-first loop.
+- Fix business_endpoint SSRF and endpoint-trust envelope from scope 2 model.
+  Resolution (#23): dispatch source is not the current scope-2 descriptor; 04-03
+  must first add a private dispatch contract for `business_endpoint` capabilities:
+  normalized HTTPS same-origin `dispatchUrl`, AE-held outbound signing-key ref,
+  inbound business verification-key ref, and latest `ae-endpoint-check:v1` readback
+  showing `checked` + fresh. Preflight guard list: exact normalized URL match to
+  the registered dispatch URL, HTTPS only, no userinfo/query/fragment unless
+  explicitly registered, no redirects, block IP literals and DNS results in
+  loopback/private/link-local/multicast/reserved ranges (including IPv4-mapped
+  IPv6), pin DNS-to-connect or use a hardened egress helper, 5s timeout,
+  serialized POST body cap of 16KiB (body bytes only; headers excluded), and
+  64KiB response cap. Missing/stale/contradicted/unsupported/unreachable endpoint
+  trust suspends dispatch before POST and surfaces as owner/operator repair-readback
+  state; outbox retry/dead-letter statuses apply only after this preflight passes
+  and an actual POST attempt occurs.
+- Decide source-write scope for business-agent reply admission.
+  Resolution (#24): create new source-write scope `business_agent_reply`; do not
+  reuse `public_inquiry` (human/assistant first contact) or `owner_inquiry`
+  (owner-auth UI operations). Implementation must add the scope to
+  `SourceWriteAdmissionScopeValues` so the Convex `sourceWriteAdmissionArg`
+  validator accepts it. Bind operation keys as
+  `business_agent_reply:${threadId}:${providerEventId}` and correlation to the
+  original thread/dispatch correlation. Route verification and source-write are
+  separate proofs: the webhook verifies the business signature and stores only
+  hashed/redacted evidence; source-write admits the already-verified route into
+  Convex and prevents direct client mutation bypass.
+- Prototype initiator wait transport: poll vs SSE vs Convex subscription.
+  Resolution (#25): expose the wait path as the read-only action
+  `inquiry.readThread`, registered through the action registry rather than a
+  one-off route. Inputs: `{threadId, cursor?, waitMs?}` plus either a verified
+  scope-3 agent principal from request context or the anonymous readback token
+  from #22. V1 transport is poll with optional bounded long-poll
+  (`waitMs` clamped to 0-20s); no callback webhook and no SSE contract. The
+  token-bearing human page also uses this action-backed polled readback, not
+  Convex reactivity, so anonymous-token and external-agent semantics stay one
+  contract. A timeout returns `unchanged` with `cursor`, `expiresAt`, and
+  `retryAfterMs`; it creates no durable pending wait row. Expiry/denial comes
+  from the token TTL, thread close/tombstone, principal mismatch, or rate cap.
+- Decide business-side read-receipt honesty: ack event vs unknown.
+  Resolution (#26): 2xx from `business_endpoint` dispatch is claimable only as
+  "delivered to the business endpoint" / "endpoint accepted delivery"; it is not
+  human read, business read, or reply intent. Admit optional signed ack events on
+  the inbound webhook with kinds `received` and `read`, referencing thread,
+  message/dispatch, and provider event id, with no message body and the same
+  signature/dedupe/redaction rules as replies. If no ack exists, render "Delivered
+  to business endpoint; read status unavailable." If `received`, render
+  "Endpoint acknowledged receipt." If `read`, render "Business endpoint marked
+  the message read." Owner-human read remains separate copy: "Owner opened this
+  thread."
+- Decide thread lifecycle/TTL state-machine widening.
+  Resolution (#27): do not add `awaiting_business`/`awaiting_agent` statuses.
+  Keep source status `unread|read|replied|closed`; add `expiresAt` and
+  `closedReason` (`owner_closed|expired|privacy_tombstone`) so expiry is explicit
+  without creating a parallel lifecycle enum. A scheduled source-owned expiry job
+  closes threads at the seven-day readback TTL with `closedReason:'expired'`;
+  all reply/ack/acceptance/write paths refuse expired threads. Owner inbox buckets
+  remain projections: `unread` from unread incoming messages; `needs_reply` when
+  the last message is from the initiator and the thread is not closed/expired;
+  `resolved` after a business-side reply or any closed/expired state. Awaiting
+  endpoint vs human owner is private read-model detail from last sender +
+  dispatch target, rendered publicly as "Waiting for business reply" or "Waiting
+  for customer reply." Expired initiator copy: "This conversation link has
+  expired. Start a new inquiry if you still need help"; owner copy: "Expired —
+  replies are closed."
+- Prototype seeded demo business-agent endpoint(s) for the e2e loop.
+  Resolution (#28): real deployed demo proof is required in dev/staging against
+  networked developer/business-owned endpoint(s). A local AE fixture is allowed
+  only for deterministic CI smoke and cannot close the demo criterion. Each demo
+  endpoint must be explicitly enrolled, domain/URL pinned, scope-2 checked fresh,
+  and clearly labelled test/demo — not live booking, dispatch, payment,
+  fulfilment, availability, or marketplace liquidity. It verifies AE's outbound
+  `Ae-Signature` (timestamp/bodyHash, tolerance, constant-time compare), then
+  emits a signed inbound `business_agent` `quote` through the same
+  `/api/inquiry/endpoint-webhook` route as production endpoints. The dispatch
+  response may acknowledge receipt/readback, but is not the message source of
+  truth. The deployed e2e transcript/verifier must show: attributed agent
+  submit, customer message, outbound dispatch+attempt+delivery copy, endpoint
+  verification/ack hash, inbound webhook event, stored business_agent quote,
+  initiator `inquiry.readThread` cursor/read receipt, operation/audit hashes,
+  and no raw secrets/private contact/fake availability/fake-liquidity claim.
 
 ## References
 

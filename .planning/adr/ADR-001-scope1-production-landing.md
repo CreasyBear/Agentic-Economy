@@ -7,7 +7,7 @@ Scope: 1 — Production landing
 ## Context
 
 AE is deploy-unproven. Every load-bearing capability is validated by
-source/local checks; the five deployed provider smokes are open and the
+source/local checks; the Scope-1 deployed evidence suite remains open and the
 0/5 friendly-owner activation debt gates all launch claims
 (`.planning/STATE.md` Blockers §L163-171; `.planning/codebase/CONCERNS.md`
 §Tech Debt L7-11, §Missing Critical Features L187-210). The approved
@@ -32,7 +32,7 @@ stay test-mode/sandbox only (ROADMAP.md §Decision-door register L22, L24).
 Evidence: `tests/deploy-smoke/vercel-bypass.ts` reads
 `VERCEL_AUTOMATION_BYPASS_SECRET` and sends `x-vercel-protection-bypass`
 (L30-40); `vite.config.ts:13` falls back to `VERCEL_GIT_COMMIT_SHA` for the
-Sentry release; `.planning/phases/02-.../02-DEPLOY-SMOKE-BLOCKERS.md`
+Sentry release; `.planning/archive/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`
 probes `https://agentic-economy-phi.vercel.app` (L30-63). Stack is
 `@tanstack/react-start` + `nitro` (`nitro-nightly`) + `vite`
 (`package.json` deps). There is **no** `vercel.json`, `nitro.config.*`, or
@@ -45,7 +45,7 @@ the header middleware, and whether Vercel's runtime meets scope-3
 agent-signature verification (ticket T2). Confidence: **high** (target),
 medium (runtime pin).
 
-### Q2 — Exact ordered plan for the 5 deploy smokes; env graph; test-mode vs live; evidence format?
+### Q2 — Exact ordered plan for the Scope-1 deployed evidence suite; env graph; test-mode vs live; evidence format?
 Evidence — the `required` env blocks read directly from the specs:
 - **phase2-support** (`phase2-support-record-smoke.spec.ts:41-44`):
   `DEPLOY_BASE_URL`, `SMOKE_PHASE2_BUSINESS_SLUG`. No provider send — it
@@ -212,14 +212,14 @@ user accepted 2026-06-28). Confidence: **high**.
   server runtime so the header middleware behaves identically in dev and
   prod. This is a two-way door until scope 3 (revisit only if agent-signature
   verification needs an edge/runtime Vercel cannot serve — T2).
-- **D2.** Run the five smokes in this order once env is provisioned:
-  (1) `test:phase2-support-smoke` → (2) create a real inquiry via
-  `/{slug}/inquiry` to mint owner Resend + Novu dispatch IDs, proven through
-  `/admin/inquiries` → (3) `test:provider-smoke:resend` → (4)
-  `test:provider-smoke:novu` → (5) seed a P5 billing operation then
-  `test:provider-smoke:autumn-stripe` → (6) seed a P6
-  request→checkpoint→receipt + test-mode Stripe checkout/event then
-  `test:provider-smoke:business-action-stripe`. All run against
+- **D2.** Run the Scope-1 deployed evidence suite in this order once env is provisioned:
+  (1) `test:deploy-smoke` for phase1 headers/canonical URLs → (2)
+  `test:phase2-support-smoke` → (3) create a real inquiry via `/{slug}/inquiry`
+  to mint owner Resend + Novu dispatch IDs, proven through `/admin/inquiries`
+  → (4) `test:provider-smoke:resend` → (5) `test:provider-smoke:novu` →
+  (6) seed a P5 billing operation then `test:provider-smoke:autumn-stripe` →
+  (7) seed a P6 request→checkpoint→receipt + test-mode Stripe checkout/event
+  then `test:provider-smoke:business-action-stripe`. All run against
   sandbox/test-mode providers; **no live money** (ROADMAP.md L22, L226).
   Evidence artifacts follow the blocker-doc non-secret schema (L125).
 - **D3.** Implement browser security headers as a **source-owned TanStack
@@ -346,7 +346,7 @@ inside the AGENTS.md trust contract:
 - Prototype a CSP that survives TanStack Start SSR
 - Confirm Vercel runtime meets scope-3 agent-signature needs
 - Verify Convex rollout safety for tokenIdentifier authz migration
-- Stand up deployed env and capture five smoke evidence artifacts
+- Stand up deployed env and capture Scope-1 deployed evidence artifacts
 - Decide if P5/P6 live-mode money smokes stay out of scope 1
 - Set CI gate boundary: blocking PR suites vs nightly
 - Decide whether to delete the source-state collect() fallback
@@ -359,7 +359,7 @@ inside the AGENTS.md trust contract:
 - `.planning/STATE.md` §Blockers (L163-171), §Decisions (L122)
 - `.planning/codebase/CONCERNS.md` §Tech Debt, §Security, §Fragile Areas,
   §Test Coverage Gaps
-- `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`
+- `.planning/archive/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`
 - `tests/deploy-smoke/{phase1,phase2-support-record,phase2-resend-dispatch,phase2-novu-dispatch,phase5-paid-activation-provider,phase6-business-action-stripe}-*.spec.ts`
 - `tests/deploy-smoke/vercel-bypass.ts`
 - `src/start.ts`; `src/routes/__root.tsx`; `vite.config.ts`

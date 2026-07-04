@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-status: completed
-stopped_at: Completed 06-06-copy-source-smoke-gates-PLAN.md
-last_updated: "2026-06-29T15:25:41.336Z"
+current_phase: 14day-bootstrap-gate
+status: active_gate_with_open_blockers
+stopped_at: "Wayfinder map remains open: #5 deployed evidence suite, #33 receipt demo loop, #36 agent-experience deployed gate"
+last_updated: "2026-07-04"
 progress:
   total_phases: 6
   completed_phases: 4
@@ -17,12 +17,14 @@ progress:
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current phase:** 06
-**Status:** Phase 6 complete
-
+**Current execution state:** 14-day bootstrap gate active; production-build wayfinder map still open  
+**Last source/local phase closed:** Phase 6 source/local proof only  
+**Status:** active gate with open deployed/provider/demo blockers
 ## Active decision
 
 `Agentic-Economy-Backup` is frozen as a source mine. The fresh `agentic-economy` repo is the working product repo.
+
+Active go/no-go gate (2026-07-04): `.planning/scopes/scope-14day-bootstrap-gate/` blocks public shipment of later platform rungs beyond the storefront prototype and qualified-inquiry path until a 14-day evidence artifact records 30–50 source-backed profiles, 10 recruited providers, 100 attributable sessions, ≥10 qualified inquiries, ≥5 voluntary provider corrections/listing requests, and zero boundary overclaim.
 
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
@@ -51,7 +53,11 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Phase 6 is closed as source/local proof in `.planning/phases/06-agentic-business-action-receipts/06-VERIFICATION.md`; Round 4 code review passed with CR-01 through CR-06 and WR-01 resolved, and copy/language gates were explicitly waived by the user for this closeout only. Phase 3 local/source closeout is verified in `.planning/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md`, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-6 planning/execution progress when plans label the debt honestly. Phase 5 has Autumn/Stripe money-boundary hardening and a fail-loud `npm run test:provider-smoke:autumn-stripe`; do not claim deployed money proof until that smoke passes with source-owned provider evidence. Phase 6 production/deployed Stripe proof likewise remains a future provider-smoke/deployment evidence task.
+The active next action is the 14-day bootstrap gate in `.planning/scopes/scope-14day-bootstrap-gate/`: prepare the source-backed profile corpus, provider recruitment, attribution instrumentation, and day-14 GO/ADAPT/STOP evidence before any public platform widening.
+
+The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
+
+Phase 6 is closed as source/local proof in `.planning/archive/phases/06-agentic-business-action-receipts/06-VERIFICATION.md`; Round 4 code review passed with CR-01 through CR-06 and WR-01 resolved, and copy/language gates were explicitly waived by the user for this closeout only. Phase 3 local/source closeout is verified in `.planning/archive/phases/03-standard-agent-builder-discovery/03-VERIFICATION.md`, but deployed Phase 3 proof is not claimed until a real deployed route/readback smoke artifact exists. Final Phase 2 closeout remains blocked until deployed support/provider smoke inputs exist per `.planning/archive/phases/02-human-inquiry-owner-inbox/02-DEPLOY-SMOKE-BLOCKERS.md`: prove the deployed `human_inquiry_owner_inbox` support row, run `npm run test:phase2-support-smoke`, then run real inquiry-created owner Resend and Novu provider smokes with source-owned dispatch IDs. The five-owner Phase 1 evidence gate is explicit deferred debt and still blocks internal-alpha/public-launch claims, but it no longer blocks Phase 2-6 planning/execution progress when plans label the debt honestly. Phase 5 has Autumn/Stripe money-boundary hardening and a fail-loud `npm run test:provider-smoke:autumn-stripe`; do not claim deployed money proof until that smoke passes with source-owned provider evidence. Phase 6 production/deployed Stripe proof likewise remains a future provider-smoke/deployment evidence task.
 
 ## Verification expectation
 

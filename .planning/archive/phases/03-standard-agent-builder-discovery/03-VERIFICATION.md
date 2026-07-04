@@ -2,7 +2,7 @@
 phase: 03-standard-agent-builder-discovery
 verified: 2026-06-29T05:08:02Z
 status: passed
-score: "8/8 must-haves verified"
+score: "8/8 source/local must-haves verified"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -28,11 +28,12 @@ residual_risks:
 ## Goal Achievement
 
 ### Observable Truths
+Status labels in this table mean **source/local verified** for archived Phase 3 closeout; this report does not claim deployed proof.
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
 | 1 | P3-R1 discovery support matrix names candidate surfaces with shipped/unavailable/degraded/deferred state and evidence. | VERIFIED | `readDeveloperDiscoverySupportMatrix` emits base public discovery rows and optional OpenAPI/MCP rows only after `evaluateDiscoveryProjectionGate`; gated exclusions cover API keys, SDK, CLI, plugin, hosted MCP, Agent Router, gallery, payment, and protected-action descriptors. Unit coverage passed in this verifier run. |
-| 2 | P3-R2 docs, schemas, examples, fixtures, live public API responses, UCP/llms references, and optional projections share the same public catalog DTO or documented subsets. | VERIFIED | 03-02 closes the previous gap: `/api/discovery/{schema,examples,fixtures}` now builds a `DeveloperDiscoveryRouteSnapshot` by calling `handleDurableListBusinessesRequest`, `handleDurableSearchBusinessesRequest`, and `handleDurableBusinessDetailRequest`; tests compare non-default durable route bodies to generated artifacts. |
+| 2 | P3-R2 docs, schemas, examples, fixtures, executed public API route responses, UCP/llms references, and optional projections share the same public catalog DTO or documented subsets. | VERIFIED | 03-02 closes the previous gap: `/api/discovery/{schema,examples,fixtures}` now builds a `DeveloperDiscoveryRouteSnapshot` by calling `handleDurableListBusinessesRequest`, `handleDurableSearchBusinessesRequest`, and `handleDurableBusinessDetailRequest`; tests compare non-default durable route bodies to generated artifacts. |
 | 3 | P3-R3 developer/agent readback shows real route health, schema version, cache freshness, blockers, unsupported capabilities, examples, and operational readbacks. | VERIFIED | 03-02 closes the previous gap: `buildDeveloperDiscoveryRouteSnapshot` executes/readbacks `/api/businesses`, search, detail, UCP, llms, sitemap, and robots; `mapDeveloperDiscoveryRouteExecutions` maps HTTP status, schema version, cache control, checked time, stale, 404, outage, unavailable, and mismatch states into route-health rows. |
 | 4 | P3-R4 business-origin .well-known/standard UCP claims are absent unless merchant-origin readback proves them; AE-hosted fallback remains honest. | VERIFIED | Business-origin UCP remains unavailable/deferred in copy/support rows; AE-hosted UCP fallback is route-read back. SEO/copy scans passed and reject standard merchant-origin overclaims. |
 | 5 | P3-R5 optional MCP/OpenAPI artifacts, if shipped, contain only read-only list/search/detail behavior and non-authority metadata. | VERIFIED | Optional projection rows are withheld unless the projection gate accepts source-owned route parity and descriptor-scan evidence. No MCP/OpenAPI mutation endpoint shipped; descriptor/copy scans passed. |
@@ -46,7 +47,7 @@ residual_risks:
 
 | Previous Gap | Status | Closure Evidence |
 |---|---|---|
-| Live public API parity not wired to route-derived snapshots. | CLOSED | `src/routes/api.discovery.schema.ts` imports and calls durable list/search/detail handlers; `tests/integration/developer-discovery.test.ts` installs a non-default public registry client and verifies generated artifacts use that route body, not fixture defaults. |
+| Public API route parity was not wired to route-derived snapshots. | CLOSED | `src/routes/api.discovery.schema.ts` imports and calls durable list/search/detail handlers; `tests/integration/developer-discovery.test.ts` installs a non-default public registry client and verifies generated artifacts use that route body, not fixture defaults. |
 | Route health was synthetic. | CLOSED | `DeveloperDiscoveryRouteExecution`/`DeveloperDiscoveryRouteSnapshot` and `mapDeveloperDiscoveryRouteExecutions` now carry actual route, HTTP status, cache control, schema version, checked time, and public error code. Integration route-parity tests assert route health for public list/detail/UCP. |
 | Builder smoke did not prove current public facts. | CLOSED | `tests/e2e/developer-discovery.spec.ts` fetches `/api/businesses`, `/api/businesses/search`, `/api/businesses/{slug}`, `/api/discovery/schema`, `/api/discovery/examples`, and `/api/discovery/fixtures`, then compares route facts to discovery artifacts or requires explicit degraded/unavailable readback. |
 

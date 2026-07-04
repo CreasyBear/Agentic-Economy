@@ -6,11 +6,11 @@ updated: 2026-06-28
 source_files:
   - .planning/PROJECT.md
   - .planning/ROADMAP.md
-  - .planning/phases/01-ten-star-spine-foundation/01-SPEC.md
-  - .planning/phases/02-human-inquiry-owner-inbox/02-SPEC.md
-  - .planning/phases/03-standard-agent-builder-discovery/03-SPEC.md
-  - .planning/phases/04-owner-pending-protected-actions/04-SPEC.md
-  - .planning/phases/05-paid-activation-money-rails/05-SPEC.md
+  - .planning/archive/phases/01-ten-star-spine-foundation/01-SPEC.md
+  - .planning/archive/phases/02-human-inquiry-owner-inbox/02-SPEC.md
+  - .planning/archive/phases/03-standard-agent-builder-discovery/03-SPEC.md
+  - .planning/archive/phases/04-owner-pending-protected-actions/04-SPEC.md
+  - .planning/archive/phases/05-paid-activation-money-rails/05-SPEC.md
 ---
 
 # Requirements: Phase 1-5 Agentic Marketplace Closeout
@@ -25,7 +25,7 @@ This milestone is not complete until every phase has spec, discussion/context, p
 
 ## Phase 1: Ten-Star Spine Foundation
 
-Source: `.planning/phases/01-ten-star-spine-foundation/01-SPEC.md`
+Source: `.planning/archive/phases/01-ten-star-spine-foundation/01-SPEC.md`
 
 - [x] **P1-R1 Substrate and import guardrails:** runtime substrate, required scripts, import/source-mining scans, and banned future-surface checks exist and pass.
   - Evidence: `01-VERIFICATION.md` R1, command evidence, source-mining/import tests.
@@ -51,7 +51,7 @@ Source: `.planning/phases/01-ten-star-spine-foundation/01-SPEC.md`
 
 ## Phase 2: Human Inquiry And Owner Inbox
 
-Source: `.planning/phases/02-human-inquiry-owner-inbox/02-SPEC.md`
+Source: `.planning/archive/phases/02-human-inquiry-owner-inbox/02-SPEC.md`
 
 - [ ] **P2-R1 Inquiry availability gate:** inquiry availability appears only when published service eligibility, contact/consent policy, inquiry readiness, owner handling, and notification readback gates are true.
 - [ ] **P2-R2 Inquiry submit command:** valid public inquiry submission persists one durable thread/message/audit event and rejects invalid, ineligible, suppressed, duplicate, replayed, rate-limited, or malformed inputs.
@@ -64,7 +64,7 @@ Source: `.planning/phases/02-human-inquiry-owner-inbox/02-SPEC.md`
 
 ## Phase 3: Standard Agent And Builder Discovery
 
-Source: `.planning/phases/03-standard-agent-builder-discovery/03-SPEC.md`
+Source: `.planning/archive/phases/03-standard-agent-builder-discovery/03-SPEC.md`
 
 - [ ] **P3-R1 Discovery support matrix:** business-origin UCP, OpenAPI, MCP, API keys, SDK, CLI, and plugin surfaces have shipped/unavailable/degraded/deferred states with evidence.
 - [ ] **P3-R2 Read-only API docs and schemas:** docs, schemas, examples, fixtures, live API responses, UCP/llms references, and optional projections share the same public catalog DTO or documented subsets.
@@ -77,7 +77,7 @@ Source: `.planning/phases/03-standard-agent-builder-discovery/03-SPEC.md`
 
 ## Phase 4: Owner-Pending Protected Actions
 
-Source: `.planning/phases/04-owner-pending-protected-actions/04-SPEC.md`
+Source: `.planning/archive/phases/04-owner-pending-protected-actions/04-SPEC.md`
 
 - [ ] **P4-R1 Single action-class decision:** one non-money action class is selected from observed Phase 2/3 evidence and broad catalogs/autonomy are rejected.
 - [ ] **P4-R2 Selected proposal contract:** the selected-action-specific proposal command persists one candidate/audit with canonical hash, idempotency, correlation, actor principal, target, owner context, and parameter allowlist.
@@ -90,7 +90,7 @@ Source: `.planning/phases/04-owner-pending-protected-actions/04-SPEC.md`
 
 ## Phase 5: Paid Activation And Money Rails
 
-Source: `.planning/phases/05-paid-activation-money-rails/05-SPEC.md`
+Source: `.planning/archive/phases/05-paid-activation-money-rails/05-SPEC.md`
 
 - [ ] **P5-R1 Money-rail decision record:** one Autumn Cloud plus Stripe PSP paid-activation rail is selected with product/pricing object, charge model, controller responsibilities, boundaries, rollback/disable plan, and non-goals.
 - [ ] **P5-R2 Core money quarantine:** core business, catalog, registry, and discovery schemas remain free of unapproved Autumn refs, stripe refs, x402, wallet, credits, balance, payment handlers, provider IDs, and rail-specific fields.

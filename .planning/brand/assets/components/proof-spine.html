@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AE hero object — proof spine</title>
+  <style>
+    :root {
+      --ae-ink: #17201F;
+      --ae-bone: #F4EFE6;
+      --ae-paper: #FBF8F1;
+      --ae-stone: #D8CFC2;
+      --ae-slate: #5B6360;
+      --ae-eucalyptus: #40614F;
+      --ae-shadow: 0 16px 38px rgb(23 32 31 / 0.06), 0 1px 0 rgb(23 32 31 / 0.04);
+      --ae-radius-card: 6px;
+      --ae-font-grotesk: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ae-font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { color-scheme: light; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background: var(--ae-bone);
+      color: var(--ae-ink);
+      font-family: var(--ae-font-grotesk);
+      line-height: 1.45;
+    }
+
+    .stage { width: min(100%, 980px); }
+
+    /* Astryx: Card */
+    .spine-card {
+      padding: clamp(24px, 4vw, 38px);
+      background: var(--ae-paper);
+      border: 1px solid var(--ae-stone);
+      border-radius: var(--ae-radius-card);
+      box-shadow: var(--ae-shadow);
+    }
+
+    /* Astryx: Text */
+    .kicker,
+    .timestamp {
+      font-family: var(--ae-font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+
+    .kicker {
+      margin: 0 0 8px;
+      color: var(--ae-slate);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 18ch;
+      font-size: clamp(34px, 5vw, 56px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 650;
+    }
+
+    .lede {
+      max-width: 54ch;
+      margin: 14px 0 0;
+      color: var(--ae-slate);
+      font-size: 17px;
+    }
+
+    /* Astryx: Grid */
+    .spine {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 20px;
+      margin-top: clamp(36px, 8vw, 72px);
+      padding-top: 22px;
+    }
+
+    .spine::before {
+      content: "";
+      position: absolute;
+      top: 30px;
+      left: 10px;
+      right: 10px;
+      height: 1px;
+      background: var(--ae-stone);
+    }
+
+    /* Astryx: Card item */
+    .step {
+      position: relative;
+      min-height: 150px;
+      padding-top: 34px;
+    }
+
+    .node {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--ae-eucalyptus);
+      border-radius: 999px;
+      background: var(--ae-paper);
+      z-index: 1;
+    }
+
+    .step.is-complete .node {
+      border-color: var(--ae-eucalyptus);
+      background: var(--ae-eucalyptus);
+      box-shadow: 0 0 0 5px color-mix(in srgb, var(--ae-eucalyptus) 11%, transparent);
+    }
+
+    .step-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.05;
+      letter-spacing: -0.035em;
+      font-weight: 650;
+    }
+
+    .timestamp {
+      margin-top: 6px;
+      color: var(--ae-slate);
+      letter-spacing: 0.04em;
+    }
+
+    .step.is-complete .timestamp {
+      color: var(--ae-eucalyptus);
+      font-weight: 700;
+    }
+
+    .note {
+      margin: 12px 0 0;
+      max-width: 20ch;
+      color: var(--ae-slate);
+      font-size: 14px;
+    }
+
+    .reply-label {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 6px 9px;
+      border: 1px solid color-mix(in srgb, var(--ae-eucalyptus) 55%, var(--ae-stone));
+      border-radius: 5px;
+      color: var(--ae-eucalyptus);
+      font-family: var(--ae-font-mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    @media (max-width: 760px) {
+      body { padding: 16px; }
+      .spine {
+        grid-template-columns: 1fr;
+        gap: 0;
+        margin-top: 34px;
+        padding: 0 0 0 24px;
+      }
+      .spine::before {
+        top: 8px;
+        bottom: 18px;
+        left: 8px;
+        right: auto;
+        width: 1px;
+        height: auto;
+      }
+      .step {
+        min-height: 0;
+        padding: 0 0 28px 18px;
+      }
+      .node { left: -24px; top: 1px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" aria-labelledby="spine-title">
+    <!-- Astryx composition: Card + Grid + Text + Badge -->
+    <article class="spine-card">
+      <p class="kicker">Proof spine</p>
+      <h1 id="spine-title">The handoff is a record that travels, then returns.</h1>
+      <p class="lede">Each step is dated beside the fact it represents. The solid eucalyptus node means a business reply has been received.</p>
+
+      <ol class="spine" aria-label="Handoff proof spine">
+        <li class="step">
+          <span class="node" aria-hidden="true"></span>
+          <h2 class="step-title">Published</h2>
+          <div class="timestamp">12 Jun · business supplied</div>
+          <p class="note">The listing starts as published business information.</p>
+        </li>
+        <li class="step">
+          <span class="node" aria-hidden="true"></span>
+          <h2 class="step-title">Source checked</h2>
+          <div class="timestamp">14 Jun · freshness noted</div>
+          <p class="note">AE records when the source note was last checked.</p>
+        </li>
+        <li class="step">
+          <span class="node" aria-hidden="true"></span>
+          <h2 class="step-title">Inquiry sent</h2>
+          <div class="timestamp">14 Jun · receipt issued</div>
+          <p class="note">One bounded inquiry leaves with its receipt ID.</p>
+        </li>
+        <li class="step is-complete">
+          <span class="node" aria-hidden="true"></span>
+          <h2 class="step-title">Business reply</h2>
+          <div class="timestamp">15 Jun · reply received</div>
+          <span class="reply-label">reply received</span>
+        </li>
+      </ol>
+    </article>
+  </main>
+</body>
+</html>

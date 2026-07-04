@@ -42,7 +42,7 @@ gaps: []
 
 # Phase 6: Agentic Business Action Receipts Verification Report
 
-**Phase Goal:** Prove one Hermes-run, software-scoped autonomous business operation stayed inside mandate through source-owned action facts, buyer mandate, owner approval, checkpoint admission, external evidence, concrete result artifact, and reconstructable Action Receipt.
+**Phase Goal:** Prove one Hermes-run, software-scoped owner-reviewed business-action receipt chain stayed inside mandate through source-owned action facts, buyer mandate, owner approval, checkpoint admission, external evidence, concrete result artifact, and reconstructable Action Receipt. This is not public/demo copy and does not claim production autonomy.
 **Verified:** 2026-06-29T15:30:33Z
 **Status:** passed
 **Closeout Refresh:** Final Round 4 engineering/source-local verification.

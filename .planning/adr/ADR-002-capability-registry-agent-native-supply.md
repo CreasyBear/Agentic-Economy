@@ -122,7 +122,7 @@ operator admin (like `/admin/index-health`) — never public. Confidence: HIGH.
 Evidence: AGENTS.md:17-19 — "verified" requires a named standard;
 `checked` = "a defined check passed" (PRODUCT.md:51). Facets modeled on the
 Bazaar readback pattern the market study endorses as shape-only
-(`.planning/AGENTIC-MARKET-STUDY.md:81-88`).
+(`.planning/archive/root/AGENTIC-MARKET-STUDY.md:81-88`).
 Answer — **`ae-endpoint-check:v1`** (drafted in Decisions D6), four facets
 (reachability, schema conformance, freshness, contradiction), GET/HEAD only,
 read+describe, mapping to trust states `checked/stale/contradicted/unsupported`.
@@ -370,7 +370,7 @@ Risks:
 - `PRODUCT.md` (trust states :46-55, principles, anti-references :74-79)
 - `.planning/ROADMAP.md` (decision-door register :11-24, capability ladder,
   Phase 3 :132-149, money-rail quarantine :201, bloat detector :228-240)
-- `.planning/AGENTIC-MARKET-STUDY.md` (Bazaar readback pattern :77-98,
+- `.planning/archive/root/AGENTIC-MARKET-STUDY.md` (Bazaar readback pattern :77-98,
   copy/adapt/reject :127-157)
 - `local://research-ae-seams.md` (three clearance layers; agent door;
   reconstruction verifier; injection/redaction risk notes)

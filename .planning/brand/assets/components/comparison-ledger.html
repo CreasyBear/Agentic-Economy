@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AE hero object — comparison ledger</title>
+  <style>
+    :root {
+      --ae-ink: #17201F;
+      --ae-bone: #F4EFE6;
+      --ae-paper: #FBF8F1;
+      --ae-stone: #D8CFC2;
+      --ae-slate: #5B6360;
+      --ae-eucalyptus: #40614F;
+      --ae-shadow: 0 16px 38px rgb(23 32 31 / 0.06), 0 1px 0 rgb(23 32 31 / 0.04);
+      --ae-radius-card: 6px;
+      --ae-radius-inner: 5px;
+      --ae-font-grotesk: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ae-font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { color-scheme: light; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background: var(--ae-bone);
+      color: var(--ae-ink);
+      font-family: var(--ae-font-grotesk);
+      line-height: 1.45;
+    }
+
+    .stage { width: min(100%, 1100px); }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* Astryx: Card */
+    .ledger-card {
+      padding: clamp(24px, 4vw, 38px);
+      background: var(--ae-paper);
+      border: 1px solid var(--ae-stone);
+      border-radius: var(--ae-radius-card);
+      box-shadow: var(--ae-shadow);
+    }
+
+    /* Astryx: Grid */
+    .ledger-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+      gap: clamp(24px, 5vw, 44px);
+      align-items: start;
+    }
+
+    /* Astryx: Text */
+    .kicker,
+    th,
+    .source-note,
+    .stamp {
+      font-family: var(--ae-font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+
+    .kicker {
+      margin: 0 0 8px;
+      color: var(--ae-slate);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 22px;
+      max-width: 20ch;
+      font-size: clamp(34px, 5vw, 54px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 650;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--ae-stone);
+      border-radius: var(--ae-radius-inner);
+      background: color-mix(in srgb, var(--ae-paper) 92%, var(--ae-bone));
+    }
+
+    /* Astryx: Table */
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 16px 14px;
+      border-right: 1px solid var(--ae-stone);
+      border-bottom: 1px solid var(--ae-stone);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th:last-child,
+    td:last-child { border-right: 0; }
+    tbody tr:last-child td { border-bottom: 0; }
+
+    th {
+      color: var(--ae-slate);
+      font-weight: 700;
+      line-height: 1.1;
+      text-transform: uppercase;
+      background: color-mix(in srgb, var(--ae-bone) 45%, var(--ae-paper));
+    }
+
+    td {
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .provider {
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .source-note {
+      color: var(--ae-ink);
+      letter-spacing: 0.035em;
+    }
+
+    /* Astryx: Callout / Card */
+    .boundary {
+      padding-left: 18px;
+      border-left: 1px solid var(--ae-eucalyptus);
+    }
+
+    .boundary h2 {
+      margin: 0 0 10px;
+      color: var(--ae-slate);
+      font-family: var(--ae-font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .boundary p {
+      margin: 0;
+      font-size: clamp(22px, 3vw, 30px);
+      line-height: 1.08;
+      letter-spacing: -0.05em;
+      font-weight: 520;
+    }
+
+    /* Astryx: Badge */
+    .stamp {
+      display: inline-flex;
+      margin-top: 28px;
+      padding: 8px 12px;
+      border: 1px solid color-mix(in srgb, var(--ae-eucalyptus) 45%, var(--ae-stone));
+      border-radius: 999px;
+      color: var(--ae-eucalyptus);
+      letter-spacing: 0.035em;
+    }
+
+    @media (max-width: 860px) {
+      body { padding: 16px; }
+      .ledger-layout { grid-template-columns: 1fr; }
+      .boundary { padding: 18px 0 0; border-left: 0; border-top: 1px solid var(--ae-eucalyptus); }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" aria-labelledby="ledger-title">
+    <!-- Astryx composition: Card + Grid + Table + Text + Badge -->
+    <article class="ledger-card" aria-labelledby="ledger-title">
+      <div class="ledger-layout">
+        <div>
+          <p class="kicker">Comparison ledger</p>
+          <h1 id="ledger-title">Published facts only, across providers.</h1>
+
+          <div class="table-wrap">
+            <table>
+              <caption class="visually-hidden">Published facts across placeholder providers</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Provider</th>
+                  <th scope="col">Service area</th>
+                  <th scope="col">Published services</th>
+                  <th scope="col">Response window</th>
+                  <th scope="col">Source note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="provider">Harbour Electrical</td>
+                  <td>Inner west</td>
+                  <td>Switchboards, fault finding</td>
+                  <td>Business replies after inquiry</td>
+                  <td class="source-note">business supplied · 12 Jun</td>
+                </tr>
+                <tr>
+                  <td class="provider">Meadow Cleaning</td>
+                  <td>North shore</td>
+                  <td>Move-out, office cleaning</td>
+                  <td>Owner reply required</td>
+                  <td class="source-note">last checked · 14 Jun</td>
+                </tr>
+                <tr>
+                  <td class="provider">Banksia Plumbing</td>
+                  <td>Inner south</td>
+                  <td>Leaks, taps, hot water notes</td>
+                  <td>Receipt issued when sent</td>
+                  <td class="source-note">business supplied · 13 Jun</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="boundary" aria-labelledby="boundary-title">
+          <h2 id="boundary-title">Boundary line</h2>
+          <p>AE compares what is published. It does not invent price or availability.</p>
+          <span class="stamp">source checked · receipt-ready</span>
+        </aside>
+      </div>
+    </article>
+  </main>
+</body>
+</html>

@@ -82,3 +82,9 @@ Before coding a module:
 - every copied or adapted invariant has a ledger row,
 - Phase 1 routes import only public module seams,
 - no phase-numbered runtime names exist.
+
+## Scope 3 kernel acquisition ledger
+
+| Fresh module | External evidence | Keep | Cut | Fresh seam | Test to write | Banned imports/symbols |
+|---|---|---|---|---|---|---|
+| handshake runtime spike | `handshake-protocol-kernel@0.4.0` from npm registry, Apache-2.0, gitHead `93de6633338bf9d778c7e20edf76cece08a93b5f`, tarball integrity `sha512-Im98MnYbkANQOiwnfEyx8Vu2OR5J9jroP6RcHSks5miOtsu2zT74Z91+sT84NBu3TI2jC8ofdWa8m+3zGvLDyw==` | exact package provenance, root + `/adapter-sdk` quarantine, deterministic hash/crypto/CAS spike constraints | `x402`, MCP, HTTP, customer-edge, cloud, wallet, money-rail subpaths; no adapter scaffold | `convex/spikeHandshakeRuntime.ts` throwaway spike only; no `src/modules/clearance/` | `tests/spike/handshake-convex-runtime.spike.test.ts`; `npm run test:imports`; `npm run test:source-mining` | `handshake-protocol-kernel/x402-protected-tool`, `/mcp`, `/http`, `/agentic-endpoint-middleware`, `/customer-edge`, `/experimental`, `@x402/*`, `viem`, `@modelcontextprotocol/*` |

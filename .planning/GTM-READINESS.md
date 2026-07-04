@@ -279,7 +279,8 @@ No capability can be called launch-ready until:
 - copy scan covers route copy, SEO/AEO files, llms/UCP/discovery files, generated docs/schema/API assets, email/social/partner copy, API docs, launch assets, and the claim evidence register,
 - security/privacy acceptance for the capability has passed,
 - support owner and kill rule are explicit,
-- no banned claim for that capability appears anywhere public.
+- no banned claim for that capability appears anywhere public,
+- for any **agent-facing** capability (builder/agent discovery, agent tools, agent-submitted inquiry), the **ADR-006 agent-experience audit** passes against the deployed surface — grade ≥ B, zero convergent boundary-overreach, `docs_promise_met ≥ onboarding`, one-hop unsigned-write recovery (issue #36 / plan 01-05). A cold agent must be able to discover the door from `/llms.txt`, complete the qualified-inquiry path, and respect the safe contract (no booking/payment/dispatch) — proven by observed agent runs, not only producer-side copy/parity scans.
 
 ### Phase 6 selected claim row
 

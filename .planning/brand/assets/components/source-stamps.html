@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AE hero object — source stamps</title>
+  <style>
+    :root {
+      --ae-ink: #17201F;
+      --ae-bone: #F4EFE6;
+      --ae-paper: #FBF8F1;
+      --ae-stone: #D8CFC2;
+      --ae-slate: #5B6360;
+      --ae-eucalyptus: #40614F;
+      --ae-shadow: 0 14px 32px rgb(23 32 31 / 0.06), 0 1px 0 rgb(23 32 31 / 0.04);
+      --ae-radius-card: 6px;
+      --ae-radius-pill: 999px;
+      --ae-font-grotesk: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --ae-font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { color-scheme: light; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background: var(--ae-bone);
+      color: var(--ae-ink);
+      font-family: var(--ae-font-grotesk);
+      line-height: 1.45;
+    }
+
+    .stage { width: min(100%, 700px); }
+
+    /* Astryx: Card */
+    .stamp-card {
+      padding: clamp(24px, 4vw, 38px);
+      background: var(--ae-paper);
+      border: 1px solid var(--ae-stone);
+      border-radius: var(--ae-radius-card);
+      box-shadow: var(--ae-shadow);
+    }
+
+    /* Astryx: Text */
+    .kicker,
+    .stamp,
+    .microcopy {
+      font-family: var(--ae-font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+
+    .kicker {
+      margin: 0 0 10px;
+      color: var(--ae-slate);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 16ch;
+      font-size: clamp(34px, 5vw, 54px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 650;
+    }
+
+    .lede {
+      max-width: 44ch;
+      margin: 14px 0 0;
+      color: var(--ae-slate);
+      font-size: 16px;
+    }
+
+    /* Astryx: Grid */
+    .stamp-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 34px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* Astryx: Badge */
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid color-mix(in srgb, var(--ae-eucalyptus) 45%, var(--ae-stone));
+      border-radius: var(--ae-radius-pill);
+      background: color-mix(in srgb, var(--ae-paper) 86%, var(--ae-bone));
+      color: var(--ae-ink);
+      letter-spacing: 0.035em;
+      white-space: nowrap;
+    }
+
+    .stamp.emphasis {
+      color: var(--ae-eucalyptus);
+      border-color: var(--ae-eucalyptus);
+    }
+
+    .stamp .dot {
+      width: 5px;
+      height: 5px;
+      margin-right: 9px;
+      border-radius: 50%;
+      background: var(--ae-eucalyptus);
+    }
+
+    .microcopy {
+      margin: 28px 0 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--ae-stone);
+      color: var(--ae-slate);
+      letter-spacing: 0.035em;
+    }
+
+    .example-fact {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      margin-top: 34px;
+      padding: 18px 0;
+      border-top: 1px solid var(--ae-stone);
+      border-bottom: 1px solid var(--ae-stone);
+    }
+
+    .fact-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.1;
+      letter-spacing: -0.035em;
+      font-weight: 650;
+    }
+
+    .fact-note {
+      margin: 6px 0 0;
+      color: var(--ae-slate);
+    }
+
+    @media (max-width: 620px) {
+      body { padding: 16px; }
+      .stamp { white-space: normal; }
+      .example-fact { grid-template-columns: 1fr; align-items: start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage" aria-labelledby="stamps-title">
+    <!-- Astryx composition: Card + Grid + Text + Badge -->
+    <article class="stamp-card">
+      <p class="kicker">Source / freshness stamp cluster</p>
+      <h1 id="stamps-title">Mono marks sit beside facts.</h1>
+      <p class="lede">Stamps label where a fact came from and when AE handled it. They do not claim verification, price, or availability.</p>
+
+      <ul class="stamp-list" aria-label="Source and freshness stamps">
+        <li><span class="stamp">business supplied · 12 Jun</span></li>
+        <li><span class="stamp">last checked · 14 Jun</span></li>
+        <li><span class="stamp">owner reply required</span></li>
+        <li><span class="stamp emphasis"><span class="dot" aria-hidden="true"></span>receipt issued · 14 Jun</span></li>
+      </ul>
+
+      <section class="example-fact" aria-labelledby="fact-title">
+        <div>
+          <h2 class="fact-title" id="fact-title">Switchboards and fault finding</h2>
+          <p class="fact-note">Published service information for a placeholder provider.</p>
+        </div>
+        <span class="stamp">business supplied · 12 Jun</span>
+      </section>
+
+      <p class="microcopy">Never “Verified” without a named standard. Never star ratings.</p>
+    </article>
+  </main>
+</body>
+</html>

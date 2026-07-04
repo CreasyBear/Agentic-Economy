@@ -19,7 +19,7 @@ The application should feel like a source-owned civic command surface for local-
 | `DESIGN.md` | Machine-readable visual seed: colors, typography, spacing, radii, component token hints, and design director rules. |
 | `.impeccable/design.json` | Rich design sidecar for agents/panels: tonal ramps, shadows, motion, breakpoints, and canonical primitive previews. |
 | `.planning/FRONTEND-DESIGN-FRAMEWORK.md` | Engineering framework: seams, module ownership, route composition, class policy, checks, and implementation order. |
-| `.planning/phases/01-ten-star-spine-foundation/01-UI-SPEC.md` | Phase 1 route IA, copy, state, accessibility, and surface-specific contracts. |
+| `.planning/archive/phases/01-ten-star-spine-foundation/01-UI-SPEC.md` | Phase 1 route IA, copy, state, accessibility, and surface-specific contracts. |
 
 If any of these disagree, stop and update them together before implementation. Route files never become the source of truth for design decisions.
 
@@ -348,7 +348,7 @@ This is not a replacement for visual review. It prevents drift before review.
 
 ## Relationship to phase specs
 
-- `.planning/phases/01-ten-star-spine-foundation/01-UI-SPEC.md` narrows this framework to Phase 1 routes and copy.
+- `.planning/archive/phases/01-ten-star-spine-foundation/01-UI-SPEC.md` narrows this framework to Phase 1 routes and copy.
 - Phase 2-5 specs inherit the framework. They may add components only when their phase gate opens.
 - Future UI-SPEC files must reference this framework instead of redefining tokens or component primitives.
 - If a future product decision changes the design language, update this file, `DESIGN.md`, `.impeccable/design.json`, and phase UI specs in the same change.
