@@ -45,7 +45,7 @@ export function regenerateDiscoveryManifest(
   }
   const manifestResult = buildCatalogDiscoveryManifest({
     catalog: catalogForManifest,
-    ...(options.canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl: options.canonicalBaseUrl }),
+    canonicalBaseUrl: options.canonicalBaseUrl,
     now: options.now,
   })
   if (manifestResult.kind === 'hidden') {

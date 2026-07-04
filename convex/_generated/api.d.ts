@@ -10,12 +10,16 @@
 
 import type * as answerThreads from "../answerThreads.js";
 import type * as authz from "../authz.js";
+import type * as authzMigration from "../authzMigration.js";
 import type * as billing from "../billing.js";
 import type * as billingStore from "../billingStore.js";
 import type * as business from "../business.js";
 import type * as businessActionStore from "../businessActionStore.js";
 import type * as businessActions from "../businessActions.js";
+import type * as capabilities from "../capabilities.js";
+import type * as capabilityCheck from "../capabilityCheck.js";
 import type * as catalog from "../catalog.js";
+import type * as clearance from "../clearance.js";
 import type * as crons from "../crons.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
@@ -30,6 +34,7 @@ import type * as registry from "../registry.js";
 import type * as security from "../security.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
 import type * as source_state from "../source_state.js";
+import type * as spikeHandshakeRuntime from "../spikeHandshakeRuntime.js";
 
 import type {
   ApiFromModules,
@@ -40,12 +45,16 @@ import type {
 declare const fullApi: ApiFromModules<{
   answerThreads: typeof answerThreads;
   authz: typeof authz;
+  authzMigration: typeof authzMigration;
   billing: typeof billing;
   billingStore: typeof billingStore;
   business: typeof business;
   businessActionStore: typeof businessActionStore;
   businessActions: typeof businessActions;
+  capabilities: typeof capabilities;
+  capabilityCheck: typeof capabilityCheck;
   catalog: typeof catalog;
+  clearance: typeof clearance;
   crons: typeof crons;
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;
@@ -60,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   security: typeof security;
   sourceWriteAdmission: typeof sourceWriteAdmission;
   source_state: typeof source_state;
+  spikeHandshakeRuntime: typeof spikeHandshakeRuntime;
 }>;
 
 /**

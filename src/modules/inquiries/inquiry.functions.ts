@@ -15,6 +15,7 @@ import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } f
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
+import { resolvePublicRegistryInquiryTarget } from '@/modules/registry/registry.functions'
 import {
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesLocal,
   closeInquiry as closeInquiryLocal,
@@ -40,12 +41,26 @@ import {
   type PublicInquiryContactInput,
 } from '@/modules/inquiries/public'
 
+const inquiryCapabilityKindSchema = z.enum([
+  'phone_inquiry',
+  'quote_request',
+  'emergency_callout_interest',
+  'ae_hosted_discovery',
+])
+
 export const publicInquirySubmitSchema = z.object({
-  target: z.object({
-    businessId: z.string(),
-    serviceId: z.string(),
-    capabilityKind: z.enum(['phone_inquiry', 'quote_request', 'emergency_callout_interest', 'ae_hosted_discovery']),
-  }),
+  target: z.union([
+    z.object({
+      businessId: z.string(),
+      serviceId: z.string(),
+      capabilityKind: inquiryCapabilityKindSchema,
+    }),
+    z.object({
+      businessSlug: z.string(),
+      serviceSlug: z.string(),
+      capabilityKind: inquiryCapabilityKindSchema,
+    }),
+  ]),
   body: z.string(),
   contact: z.object({
     name: z.string().optional(),
@@ -284,21 +299,27 @@ export async function submitPublicInquiryThroughSource(
   data: z.infer<typeof publicInquirySubmitSchema>,
   context?: unknown
 ): Promise<PublicInquirySubmitServerResult> {
-  if (usesLocalE2eBypass()) {
-    return submitLocalE2ePublicInquiry(data)
-  }
-
   try {
-    const operationSuffix = `${normalizeOperationPart(data.target.businessId)}:${crypto.randomUUID()}`
+    const resolved = await resolvePublicInquiryTarget(data.target)
+    if (resolved.kind === 'error') {
+      return resolved
+    }
+    const target = resolved.target
+
+    if (usesLocalE2eBypass()) {
+      return submitLocalE2ePublicInquiry(data, target)
+    }
+
+    const operationSuffix = `${normalizeOperationPart(target.businessId)}:${crypto.randomUUID()}`
     const operationKey = `inquiry:${operationSuffix}`
     const correlationId = `correlation:${operationSuffix}`
     const result = await callPublicSourceMutation(submitPublicInquiryMutation, {
-      target: data.target,
+      target,
       body: data.body,
       contact: compactContact(data.contact),
       ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
       pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
-      abuseBucketKey: `public-inquiry:${normalizeOperationPart(data.target.businessId)}:${normalizeOperationPart(data.target.serviceId)}`,
+      abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
       ...(await browserMutationAdmission(context, 'public_inquiry', operationKey, correlationId)),
     })
 
@@ -321,6 +342,43 @@ export async function submitPublicInquiryThroughSource(
     }
   } catch (error) {
     return inquirySourceError(error)
+  }
+}
+
+async function resolvePublicInquiryTarget(
+  target: z.infer<typeof publicInquirySubmitSchema>['target'],
+): Promise<{ kind: 'ok'; target: PublicInquirySubmitArgs['target'] } | ServerErrorResult> {
+  if ('businessId' in target) {
+    return {
+      kind: 'ok',
+      target: {
+        businessId: target.businessId,
+        serviceId: target.serviceId,
+        capabilityKind: target.capabilityKind,
+      },
+    }
+  }
+
+  const resolution = await resolvePublicRegistryInquiryTarget({
+    businessSlug: target.businessSlug,
+    serviceSlug: target.serviceSlug,
+  })
+  if (resolution.kind === 'not_found') {
+    return {
+      kind: 'error',
+      code: 'inquiry_target_not_found',
+      retryable: false,
+      reason: resolution.reason,
+    }
+  }
+
+  return {
+    kind: 'ok',
+    target: {
+      businessId: resolution.businessId,
+      serviceId: resolution.serviceId,
+      capabilityKind: target.capabilityKind,
+    },
   }
 }
 
@@ -494,20 +552,23 @@ export async function closeCurrentOwnerInquiryThroughSource(
   }
 }
 
-function submitLocalE2ePublicInquiry(data: z.infer<typeof publicInquirySubmitSchema>): PublicInquirySubmitServerResult {
+function submitLocalE2ePublicInquiry(
+  data: z.infer<typeof publicInquirySubmitSchema>,
+  target: PublicInquirySubmitArgs['target'],
+): PublicInquirySubmitServerResult {
   const now = Date.now()
-  const operationSuffix = `${normalizeOperationPart(data.target.businessId)}:local-e2e:${now}`
+  const operationSuffix = `${normalizeOperationPart(target.businessId)}:local-e2e:${now}`
   const result = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
     target: {
-      businessId: brandNonEmpty(data.target.businessId, 'BusinessId'),
-      serviceId: brandNonEmpty(data.target.serviceId, 'ServiceId'),
-      capabilityKind: data.target.capabilityKind,
+      businessId: brandNonEmpty(target.businessId, 'BusinessId'),
+      serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
+      capabilityKind: target.capabilityKind,
     },
     body: data.body,
     contact: compactContact(data.contact),
     ...(data.inquiryOrigin === undefined ? {} : { origin: data.inquiryOrigin }),
     pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
-    abuseBucketKey: `public-inquiry:${normalizeOperationPart(data.target.businessId)}:${normalizeOperationPart(data.target.serviceId)}`,
+    abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
     operationKey: brandNonEmpty(`inquiry:${operationSuffix}`, 'OperationKey'),
     correlationId: brandNonEmpty(`correlation:${operationSuffix}`, 'CorrelationId'),
     now,

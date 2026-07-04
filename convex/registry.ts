@@ -114,6 +114,18 @@ const detailResult = v.union(
   }),
 )
 
+const inquiryTargetResolution = v.union(
+  v.object({
+    kind: v.literal('resolved'),
+    businessId: v.string(),
+    serviceId: v.string(),
+  }),
+  v.object({
+    kind: v.literal('not_found'),
+    reason: v.string(),
+  }),
+)
+
 const registryAttemptResult = v.object({
   businessId: v.string(),
   serviceId: v.optional(v.string()),
@@ -264,6 +276,22 @@ export const getPublicBusinessCatalogBySlug = queryGeneric({
   },
 })
 
+export const resolvePublishedInquiryTargetBySlug = queryGeneric({
+  args: {
+    businessSlug: v.string(),
+    serviceSlug: v.string(),
+  },
+  returns: inquiryTargetResolution,
+  handler: async (ctx, args) => {
+    const db = runtimeReader(ctx.db)
+    return resolvePublishedInquiryTargetFromDb(
+      db,
+      normalizeSlug(args.businessSlug),
+      normalizeSlug(args.serviceSlug),
+    )
+  },
+})
+
 export const readCatalogHealth = queryGeneric({
   args: {
     businessId: v.string(),
@@ -339,6 +367,26 @@ const CATALOG_TOTAL_COUNT_LIMIT = 1_000
 const SEARCH_DOCUMENT_CANDIDATE_LIMIT = 250
 const SEARCH_FALLBACK_BUSINESS_SCAN_LIMIT = 250
 const SEARCH_HYDRATION_BUSINESS_LIMIT = 100
+
+export type RegistrySearchFallbackMetric = {
+  name: 'registry.search.fallback_used'
+  query: string
+  tokenCount: number
+  locationScoped: boolean
+  scannedLimit: number
+}
+
+let registrySearchFallbackMetricSink: ((metric: RegistrySearchFallbackMetric) => void) | undefined
+
+export function setRegistrySearchFallbackMetricSinkForTests(
+  sink: ((metric: RegistrySearchFallbackMetric) => void) | undefined,
+): () => void {
+  const previous = registrySearchFallbackMetricSink
+  registrySearchFallbackMetricSink = sink
+  return () => {
+    registrySearchFallbackMetricSink = previous
+  }
+}
 
 function queryInput(args: { cursor?: string; limit?: number }): QueryInput {
   return {
@@ -504,6 +552,57 @@ async function readPublicCatalogBySlug(
   return catalogForBusinessFromLookup(lookup, business)
 }
 
+async function resolvePublishedInquiryTargetFromDb(
+  db: RuntimeDb,
+  businessSlug: string,
+  serviceSlug: string,
+): Promise<
+  | { kind: 'resolved'; businessId: string; serviceId: string }
+  | { kind: 'not_found'; reason: string }
+> {
+  const business = await db
+    .query('businesses')
+    .withIndex('by_slug', (query) => query.eq('slug', businessSlug))
+    .unique()
+  if (
+    business === null ||
+    stringField(business, 'publicStatus') !== 'published'
+  ) {
+    return {
+      kind: 'not_found',
+      reason: 'No published business is discoverable for this slug.',
+    }
+  }
+
+  const lookup = await readPublicCatalogLookup(db, [business._id])
+  if (
+    lookup.activeSuppressedBusinessIds.has(business._id) ||
+    catalogForBusinessFromLookup(lookup, business) === undefined
+  ) {
+    return {
+      kind: 'not_found',
+      reason: 'No published business is discoverable for this slug.',
+    }
+  }
+
+  const service = (lookup.servicesByBusinessId.get(business._id) ?? []).find(
+    (row) => stringField(row, 'serviceSlug') === serviceSlug,
+  )
+  if (service === undefined) {
+    return {
+      kind: 'not_found',
+      reason:
+        'No published service is discoverable for this slug on the business.',
+    }
+  }
+
+  return {
+    kind: 'resolved',
+    businessId: business._id,
+    serviceId: service._id,
+  }
+}
+
 async function readPublicSearchCatalogs(
   db: RuntimeDb,
   query: string,
@@ -526,6 +625,13 @@ async function readPublicSearchCatalogs(
     db,
     SEARCH_FALLBACK_BUSINESS_SCAN_LIMIT,
   )
+  registrySearchFallbackMetricSink?.({
+    name: 'registry.search.fallback_used',
+    query,
+    tokenCount: tokens.length,
+    locationScoped: locationKey !== undefined,
+    scannedLimit: SEARCH_FALLBACK_BUSINESS_SCAN_LIMIT,
+  })
   return fallbackCatalogs.filter((catalog) =>
     matchesCatalog(catalog, tokens, locationKey),
   )

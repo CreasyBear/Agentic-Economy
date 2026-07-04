@@ -32,9 +32,9 @@ const allowedCrawlerAgents = [
 
 export function buildLlmsTxt(
   state: DiscoverySourceState,
-  options: BuildDiscoveryFileOptions = {}
+  options: BuildDiscoveryFileOptions
 ): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl ?? 'https://ae.example')
+  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
   const catalogs = readEligibleCatalogs(state)
   const urls = [
     ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
@@ -54,6 +54,9 @@ export function buildLlmsTxt(
     'Public surfaces:',
     ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
     '',
+    'Agent tools (read + qualified inquiry):',
+    `- ${canonicalBaseUrl}/api/agent/tools`,
+    '',
     'Catalog entries:',
     ...(catalogLines.length === 0 ? ['- none'] : catalogLines),
     '',
@@ -71,9 +74,9 @@ export function buildLlmsTxt(
 
 export function buildSitemapXml(
   state: DiscoverySourceState,
-  options: BuildDiscoveryFileOptions = {}
+  options: BuildDiscoveryFileOptions
 ): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl ?? 'https://ae.example')
+  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
   const now = new Date(options.now ?? 0).toISOString()
   const urls = [
     ...staticSitemapPaths.map((path) => `${canonicalBaseUrl}${path}`),
@@ -90,8 +93,8 @@ export function buildSitemapXml(
   return { body, urls }
 }
 
-export function buildRobotsTxt(options: BuildDiscoveryFileOptions = {}): DiscoveryFileBuildResult {
-  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl ?? 'https://ae.example')
+export function buildRobotsTxt(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
+  const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
   const sitemapUrl = `${canonicalBaseUrl}/sitemap.xml`
   const body = [
     'User-agent: *',

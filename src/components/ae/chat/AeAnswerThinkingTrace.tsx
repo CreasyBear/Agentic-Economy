@@ -11,6 +11,9 @@ import type { PublicAnswerCheckSummary, ThinkingStep } from '@/modules/answer-th
 import { AeResearchProcess } from './AeResearchProcess'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 
+const EmptyThinkingSteps: readonly string[] = []
+const EmptyWorkLog: readonly AnswerWorkStep[] = []
+
 export type AeAnswerThinkingTraceProps = {
   isStreaming: boolean
   label: string
@@ -24,8 +27,8 @@ export function AeAnswerThinkingTrace({
   isStreaming,
   label,
   thinkingStep,
-  steps = [],
-  workLog = [],
+  steps = EmptyThinkingSteps,
+  workLog = EmptyWorkLog,
   checkSummary,
 }: AeAnswerThinkingTraceProps) {
   const structuredMode = isStructuredAnswerModeEnabled()
@@ -56,7 +59,7 @@ type AeAnswerReasoningCollapsibleProps = {
   steps?: readonly string[]
 }
 
-function AeAnswerReasoningCollapsible({ isStreaming, label, steps = [] }: AeAnswerReasoningCollapsibleProps) {
+function AeAnswerReasoningCollapsible({ isStreaming, label, steps = EmptyThinkingSteps }: AeAnswerReasoningCollapsibleProps) {
   const detail = steps.join('\n\n')
   const show = isStreaming || steps.length > 0
 

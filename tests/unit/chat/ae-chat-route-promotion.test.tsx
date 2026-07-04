@@ -6,20 +6,28 @@ import type { ReactNode } from 'react'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const testState = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  nextQuery: 'businesses in Perth',
-  latestTranscriptProps: undefined as
-    | {
-        threadId?: string | null
-        projection?: PublicThreadProjection | null
-        liveTurn?: { query: string; generation: number; intent: string } | null
-        onThreadCreated?: (threadId: string) => void
-        onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
-        onFollowUp?: (query: string) => void
-      }
-    | undefined,
-}))
+const testState = vi.hoisted(() => {
+  const state = {
+    navigateCalls: [] as unknown[],
+    navigateResult: undefined as unknown,
+    latestTranscriptProps: undefined as
+      | {
+          threadId?: string | null
+          projection?: PublicThreadProjection | null
+          liveTurn?: { query: string; generation: number; intent: string } | null
+          onThreadCreated?: (threadId: string) => void
+          onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
+          onFollowUp?: (query: string) => void
+        }
+      | undefined,
+    navigate(input: unknown) {
+      state.navigateCalls.push(input)
+      return state.navigateResult
+    },
+  }
+
+  return state
+})
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => testState.navigate,
@@ -30,56 +38,12 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
   AePublicShell: ({ children }: { children: ReactNode }) => <div data-testid="public-shell">{children}</div>,
 }))
 
-vi.mock('@/components/ae/feedback/AeEmptyState', () => ({
-  AeEmptyState: () => <div data-testid="empty-state" />,
-}))
-
-
 vi.mock('@/lib/observability/capture-client-events', () => ({
-  captureClientProductEventOnClient: vi.fn(),
+  captureClientProductEventOnClient: () => undefined,
 }))
 
 vi.mock('@/lib/observability/funnel-client', () => ({
-  emitFunnelEvent: vi.fn(),
-}))
-
-vi.mock('@/components/ae/chat/AeAnswerModelContext', () => ({
-  AeAnswerModelProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-}))
-
-vi.mock('@/components/ae/chat/AeChatWelcome', () => ({
-  AeChatWelcome: () => <div data-testid="welcome-copy">Welcome</div>,
-}))
-
-vi.mock('@/components/ae/chat/AeQueryPanel', () => ({
-  AeQueryPanel: ({
-    onSubmit,
-    showExamples,
-    busy,
-    placeholder,
-    loopHint,
-  }: {
-    onSubmit: (query: string) => void
-    showExamples?: boolean
-    busy?: boolean
-    placeholder?: string
-    loopHint?: string
-  }) => (
-    <button
-      type="button"
-      data-testid={showExamples === true ? 'welcome-query-panel' : 'active-query-panel'}
-      data-busy={String(busy === true)}
-      data-placeholder={placeholder ?? ''}
-      data-loop-hint={loopHint ?? ''}
-      onClick={() => onSubmit(testState.nextQuery)}
-    >
-      Ask
-    </button>
-  ),
-}))
-
-vi.mock('@/components/ae/chat/AeThreadHeader', () => ({
-  AeThreadHeader: () => <div data-testid="thread-header" />,
+  emitFunnelEvent: async () => undefined,
 }))
 
 vi.mock('@/components/ae/chat/AeThreadScroller', () => ({
@@ -88,10 +52,6 @@ vi.mock('@/components/ae/chat/AeThreadScroller', () => ({
 
 vi.mock('@/components/ae/chat/AeThreadSidebar', () => ({
   AeThreadSidebar: () => <aside data-testid="thread-sidebar" />,
-}))
-
-vi.mock('@/components/ae/chat/AeSessionJourney', () => ({
-  AeSessionJourney: () => <div data-testid="session-journey" />,
 }))
 
 vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
@@ -113,13 +73,6 @@ vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
     )
   },
 }))
-
-vi.mock('@/components/ae/chat/AeStreamingLabel', () => ({
-  AeThreadStreamingIndicator: ({ streaming }: { streaming: boolean }) => (
-    <div data-testid="streaming-indicator" data-streaming={String(streaming)} />
-  ),
-}))
-
 vi.mock('@/components/ae/chat/AeStructuredAnswerChat', () => ({
   isStructuredAnswerModeEnabled: () => false,
 }))
@@ -129,21 +82,21 @@ import { AeChat } from '@/components/ae/chat/AeChat'
 describe('AeChat route promotion', () => {
   afterEach(() => {
     cleanup()
-    testState.navigate.mockReset()
+    vi.unstubAllGlobals()
+    testState.navigateCalls.length = 0
+    testState.navigateResult = undefined
     testState.latestTranscriptProps = undefined
-    testState.nextQuery = 'businesses in Perth'
   })
 
   it('keeps the active answer shell mounted while promoting a new home turn to its thread route', async () => {
-    testState.navigate.mockReturnValue(new Promise(() => {}))
+    testState.navigateResult = Promise.withResolvers<void>().promise
 
     render(<AeChat />)
 
-    expect(screen.queryByTestId('welcome-query-panel')).not.toBeNull()
+    expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).not.toBeNull()
 
-    fireEvent.click(screen.getByTestId('welcome-query-panel'))
-
-    expect(screen.queryByTestId('welcome-query-panel')).toBeNull()
+    await submitQuery('businesses in Perth')
+    expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).toBeNull()
     expect(screen.queryByTestId('live-turn')).not.toBeNull()
 
     await act(async () => {
@@ -158,12 +111,14 @@ describe('AeChat route promotion', () => {
       await Promise.resolve()
     })
 
-    expect(testState.navigate).toHaveBeenCalledWith({
-      to: '/t/$threadId',
-      params: { threadId: 'thread-promoted-1' },
-      replace: true,
-    })
-    expect(screen.queryByTestId('welcome-query-panel')).toBeNull()
+    expect(testState.navigateCalls).toEqual([
+      {
+        to: '/t/$threadId',
+        params: { threadId: 'thread-promoted-1' },
+        replace: true,
+      },
+    ])
+    expect(screen.queryByRole('searchbox', { name: 'What do you need done?' })).toBeNull()
     expect(screen.queryByTestId('live-turn')).not.toBeNull()
   })
 
@@ -180,17 +135,15 @@ describe('AeChat route promotion', () => {
     expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
   })
 
-  it('passes the classified follow-up intent to live turns before replay catches up', () => {
+  it('passes the classified follow-up intent to live turns before replay catches up', async () => {
     const projection = buildProjection('thread-one', 'First answer')
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    testState.nextQuery = 'message the first one'
-    fireEvent.click(screen.getByTestId('active-query-panel'))
+    await submitQuery('message the first one', 'Refine the search or ask what AE can safely do')
 
     expect(testState.latestTranscriptProps?.liveTurn?.intent).toBe('inquiry_handoff')
-    const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Preparing the qualified inquiry next step')
-    expect(panel.getAttribute('data-loop-hint')).toBe(
+    expectComposerCopy(
+      'Preparing the qualified inquiry next step',
       'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
     )
   })
@@ -215,7 +168,7 @@ describe('AeChat route promotion', () => {
         },
       ],
     } satisfies PublicThreadProjection
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/answer/threads/thread-one')) {
         return new Response(JSON.stringify(refreshedProjection))
@@ -224,7 +177,7 @@ describe('AeChat route promotion', () => {
         return new Response(JSON.stringify({ threads: [] }))
       }
       return new Response(JSON.stringify({}), { status: 404 })
-    }))
+    })
 
     render(<AeChat threadId="thread-one" initialProjection={initialProjection} />)
 
@@ -248,9 +201,8 @@ describe('AeChat route promotion', () => {
     const projection = buildProjection('thread-one', 'First answer')
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Refine the search or ask what AE can safely do')
-    expect(panel.getAttribute('data-loop-hint')).toBe(
+    expectComposerCopy(
+      'Refine the search or ask what AE can safely do',
       'AE needs a listed business before it can compare options or route a qualified inquiry.',
     )
   })
@@ -261,9 +213,8 @@ describe('AeChat route promotion', () => {
     ])
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or prepare a qualified inquiry')
-    expect(panel.getAttribute('data-loop-hint')).toBe(
+    expectComposerCopy(
+      'Narrow, compare, or prepare a qualified inquiry',
       'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
     )
   })
@@ -274,9 +225,8 @@ describe('AeChat route promotion', () => {
     ])
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Narrow, compare, or ask for the contact step')
-    expect(panel.getAttribute('data-loop-hint')).toBe(
+    expectComposerCopy(
+      'Narrow, compare, or ask for the contact step',
       'These listings need a published inquiry path before AE can route contact.',
     )
   })
@@ -287,13 +237,26 @@ describe('AeChat route promotion', () => {
     ])
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
-    const panel = screen.getByTestId('active-query-panel')
-    expect(panel.getAttribute('data-placeholder')).toBe('Ask limits, refine, or continue with the selected business')
-    expect(panel.getAttribute('data-loop-hint')).toBe(
+    expectComposerCopy(
+      'Ask limits, refine, or continue with the selected business',
       'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
     )
   })
 })
+
+async function submitQuery(query: string, placeholder = 'What do you need done?') {
+  const input = screen.getByRole('searchbox', { name: placeholder }) as HTMLTextAreaElement
+  await waitFor(() => {
+    expect(input.disabled).toBe(false)
+  })
+  fireEvent.change(input, { target: { value: query } })
+  fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
+}
+
+function expectComposerCopy(placeholder: string, loopHint: string) {
+  expect(screen.getByRole('searchbox', { name: placeholder })).toBeTruthy()
+  expect(screen.getByText(loopHint)).toBeTruthy()
+}
 
 type TestArtifact = PublicThreadProjection['turns'][number]['artifacts'][number]
 

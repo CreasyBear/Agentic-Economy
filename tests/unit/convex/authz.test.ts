@@ -29,11 +29,13 @@ describe('Convex authz helpers', () => {
   it('fails closed by naming the missing Clerk JWT issuer', async () => {
     vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', '')
 
-    await expect(import('../../../convex/auth.config')).rejects.toThrow(
-      'CLERK_JWT_ISSUER_DOMAIN is required for Convex auth configuration'
-    )
-
-    vi.unstubAllEnvs()
+    try {
+      await expect(import('../../../convex/auth.config')).rejects.toThrow(
+        'CLERK_JWT_ISSUER_DOMAIN is required for Convex auth configuration'
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('derives business actors from Convex Clerk identity and never from browser authority payloads', async () => {
@@ -120,6 +122,86 @@ describe('Convex authz helpers', () => {
       },
     })
   })
+
+  it('accepts tokenIdentifier-keyed admin membership before subject fallback', async () => {
+    const db = new FakeDb()
+    db.seed('adminMemberships', {
+      _id: 'adminMemberships:token',
+      _creationTime: 1,
+      clerkUserId: 'legacy_subject',
+      tokenIdentifier: 'clerk|user_sam',
+      role: 'owner_admin',
+      state: 'active',
+      grantedBy: 'bootstrap:legacy_subject',
+      grantedAt: 1,
+    })
+
+    const allowed = await resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')
+
+    expect(allowed).toMatchObject({
+      kind: 'allowed',
+      membership: {
+        clerkUserId: 'legacy_subject',
+        tokenIdentifier: 'clerk|user_sam',
+        role: 'owner_admin',
+      },
+    })
+  })
+
+  it('preserves subject dual-read for one deployed window', async () => {
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.example.test')
+
+    try {
+      const db = new FakeDb()
+      db.seed('adminMemberships', {
+        _id: 'adminMemberships:legacy',
+        _creationTime: 1,
+        clerkUserId: 'user_sam',
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'bootstrap:user_sam',
+        grantedAt: 1,
+      })
+
+      const allowed = await resolveAdminAuthority(authCtx(db, sam()), 'set_operator_control')
+
+      expect(allowed).toMatchObject({
+        kind: 'allowed',
+        membership: {
+          clerkUserId: 'user_sam',
+          role: 'owner_admin',
+        },
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('rejects subject fallback when the issuer is not the pinned Clerk issuer', async () => {
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://clerk.example.test')
+
+    try {
+      const db = new FakeDb()
+      db.seed('adminMemberships', {
+        _id: 'adminMemberships:legacy',
+        _creationTime: 1,
+        clerkUserId: 'user_sam',
+        role: 'owner_admin',
+        state: 'active',
+        grantedBy: 'bootstrap:user_sam',
+        grantedAt: 1,
+      })
+
+      const denied = await resolveAdminAuthority(authCtx(db, wrongIssuerSam()), 'set_operator_control')
+
+      expect(denied).toEqual({
+        kind: 'denied',
+        reason: 'missing_membership',
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 class FakeIndexBuilder implements IndexBuilder {
@@ -185,6 +267,14 @@ function sam(): UserIdentity {
     issuer: 'https://clerk.example.test',
     name: 'Sam Owner',
     email: 'sam@example.test',
+  }
+}
+
+function wrongIssuerSam(): UserIdentity {
+  return {
+    tokenIdentifier: 'https://evil.example.test|user_sam',
+    subject: 'user_sam',
+    issuer: 'https://evil.example.test',
   }
 }
 

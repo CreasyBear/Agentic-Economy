@@ -232,7 +232,7 @@ export const setOperatorControl = mutationGeneric({
   },
   returns: setOperatorControlResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
     if (sourceWrite.kind === 'rejected') {
       return {
         kind: 'error' as const,
@@ -451,7 +451,7 @@ function adminAuthorityState(source: Awaited<ReturnType<typeof loadPhaseOneSourc
 
 async function readCurrentActiveMembership(ctx: RuntimeCtx): Promise<AdminMembership | undefined> {
   const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity.subject)
+  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity)
 }
 
 function summarizeSetOperatorControl(result: ReturnType<typeof setOperatorControlModule>) {

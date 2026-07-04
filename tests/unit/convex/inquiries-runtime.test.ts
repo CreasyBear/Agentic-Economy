@@ -13,7 +13,9 @@ import {
   requestCurrentOwnerInquiryExport,
   submitPublicInquiry,
 } from '../../../convex/inquiries'
+import { requireSourceWrite } from '../../../convex/sourceWriteAdmission'
 import {
+  sourceWriteAdmission,
   withSourceWrite,
   withoutSourceWrite,
 } from '../../helpers/source-write-admission'
@@ -190,6 +192,38 @@ describe('Convex inquiry runtime bridge', () => {
         messages: [expect.objectContaining({ body: 'Pipe burst under the sink. Please ask the owner to contact me.' })],
       },
     })
+  })
+
+  it('rejects raw source-write nonce replay before downstream inquiry idempotency', async () => {
+    const db = seededInquiryDb()
+    const args = submitArgs('nonce-replay')
+    const submitted = requireSubmitOk(await submitHandler(authCtx(db, null), args))
+    const replay = await submitHandler(authCtx(db, null), args)
+
+    expect(submitted.code).toBe('inquiry_submitted')
+    expect(replay).toMatchObject({
+      kind: 'error',
+      code: 'inquiry_csrf_rejected',
+      reason: 'source_write_nonce_replayed',
+    })
+    expect(db.dump('inquiryThreads')).toHaveLength(1)
+  })
+
+  it('requires independent operation and correlation arguments instead of source-write self-attestation', async () => {
+    const db = seededInquiryDb()
+    await expect(
+      requireSourceWrite(authCtx(db, null), { sourceWrite: sourceWriteAdmission('public_inquiry', 'op:inquiry', 'corr:inquiry') }, 'public_inquiry')
+    ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
+    await expect(
+      requireSourceWrite(authCtx(db, null), { sourceWrite: sourceWriteAdmission('billing', 'op:billing', 'corr:billing') }, 'billing')
+    ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
+    await expect(
+      requireSourceWrite(
+        authCtx(db, null),
+        { sourceWrite: sourceWriteAdmission('protected_action', 'op:protected', 'corr:protected') },
+        'protected_action'
+      )
+    ).resolves.toMatchObject({ kind: 'rejected', reason: 'source_write_operation_mismatch' })
   })
 
   it('lists equal-updated owner inquiries by thread id and denies no-longer-present owner readbacks without leaking rows', async () => {

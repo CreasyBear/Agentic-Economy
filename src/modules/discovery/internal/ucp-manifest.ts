@@ -20,7 +20,7 @@ export function buildCatalogDiscoveryManifest(
     return { kind: 'hidden', reason: 'not_public' }
   }
 
-  const canonicalBaseUrl = trimTrailingSlash(input.canonicalBaseUrl ?? 'https://ae.example')
+  const canonicalBaseUrl = trimTrailingSlash(input.canonicalBaseUrl)
   const publicUrl = `${canonicalBaseUrl}/${catalog.slug}`
   const manifestUrl = `${publicUrl}/ucp`
   const routes = buildRoutes(canonicalBaseUrl, publicUrl, manifestUrl, catalog.slug)
@@ -127,7 +127,7 @@ function degradedReason(status: DiscoveryManifestContract['status']): { degraded
   return { degradedReason: 'Discovery readback has not succeeded for the current source catalog.' }
 }
 
-function safePublicText(value: string): string {
+export function safePublicText(value: string): string {
   return value
     .normalize('NFKC')
     .replace(/[\u202a-\u202e\u2066-\u2069]/gu, '')
@@ -137,6 +137,7 @@ function safePublicText(value: string): string {
     .replace(/[`*_#>\[\]()]/gu, ' ')
     .replace(/\bendpoint\b/giu, 'untrusted claim')
     .replace(/\b(?:verified|callable|payable)\b/giu, 'untrusted claim')
+    .replace(/\b(?:checked|authority|price|booking|dispatch|action)\b/giu, 'untrusted claim')
     .replace(/paymentRequired\s*[:=]\s*true/giu, 'untrusted claim')
     .replaceAll('&', '\\u0026')
     .replaceAll('<', '\\u003c')

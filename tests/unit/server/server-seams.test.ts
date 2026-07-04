@@ -19,7 +19,13 @@ import {
   readRequiredSourceWriteSecret,
   sourceWriteAdmissionFromContext,
 } from '@/lib/server/source-write-admission'
-import { verifySourceWriteAdmission } from '@/modules/security/source-write-admission'
+import {
+  createSourceWriteAdmission,
+  sourceWriteBodyDigest,
+  sourceWriteSignature,
+  verifySourceWriteAdmission,
+  type SourceWriteAdmission,
+} from '@/modules/security/source-write-admission'
 import {
   readInquiryOperatorReconstructionThroughSource,
   readCurrentOwnerInboxThroughSource,
@@ -142,10 +148,11 @@ describe('server Convex source seam', () => {
     expect(getFunctionName(sourceConvexFunctions.catalog.publishBusinessCatalog)).toBe('catalog:publishBusinessCatalog')
   })
 
-  it('creates request-bound source write admission from a server-only secret', async () => {
+  it('creates request-bound source write admission from a scoped non-production derived key', async () => {
+    const env = { AE_SOURCE_WRITE_SECRET: 'server-only-source-write-secret' }
     const admission = await sourceWriteAdmissionFromContext({
       context: sourceWriteContext(),
-      env: { AE_SOURCE_WRITE_SECRET: 'server-only-source-write-secret' },
+      env,
       scope: 'public_inquiry',
       operationKey: 'op:inquiry:server-seam',
       correlationId: 'corr:inquiry:server-seam',
@@ -154,36 +161,142 @@ describe('server Convex source seam', () => {
     expect(admission).toMatchObject({
       version: 'source-write:v1',
       scope: 'public_inquiry',
+      keyId: 'dev-inquiry-v1',
       operationKey: 'op:inquiry:server-seam',
       correlationId: 'corr:inquiry:server-seam',
       method: 'POST',
       origin: 'https://ae.example',
       pathname: '/inquiries',
+      bodyDigest: 'none',
     })
 
-    await expect(
+    expect(
       verifySourceWriteAdmission({
         admission,
-        secret: 'server-only-source-write-secret',
+        env,
         expected: {
           scope: 'public_inquiry',
           operationKey: 'op:inquiry:server-seam',
           correlationId: 'corr:inquiry:server-seam',
+          request: sourceWriteContext().sourceWriteRequest,
         },
       })
-    ).resolves.toMatchObject({ kind: 'accepted' })
+    ).toMatchObject({ kind: 'accepted' })
   })
 
   it('requires source write secrets to stay server-only', () => {
-    expect(() => readRequiredSourceWriteSecret({})).toThrow(
+    expect(() => readRequiredSourceWriteSecret('public_inquiry', {})).toThrow(
       expect.objectContaining({ code: 'missing_source_write_secret' })
     )
     expect(() =>
-      readRequiredSourceWriteSecret({
+      readRequiredSourceWriteSecret('public_inquiry', {
         AE_SOURCE_WRITE_SECRET: 'server-secret',
         [`${publicEnvPrefix}AE_SOURCE_WRITE_SECRET`]: 'client-secret',
       })
     ).toThrow(expect.objectContaining({ code: 'client_exposed_source_write_secret' }))
+  })
+
+  it('rejects unknown, wrong-family, and retired source write key ids while accepting configured previous keys', async () => {
+    const request = sourceWriteContext().sourceWriteRequest
+    const previousEnv = { AE_SOURCE_WRITE_KEY_INQUIRY: 'previous-inquiry:previous-secret' }
+    const rotatedEnv = {
+      AE_SOURCE_WRITE_KEY_INQUIRY: 'active-inquiry:active-secret',
+      AE_SOURCE_WRITE_PREVIOUS_KEYS_INQUIRY: 'previous-inquiry:previous-secret',
+    }
+    const retiredEnv = { AE_SOURCE_WRITE_KEY_INQUIRY: 'active-inquiry:active-secret' }
+    const previousAdmission = createSourceWriteAdmission({
+      env: previousEnv,
+      request,
+      scope: 'public_inquiry',
+      operationKey: 'op:rotation',
+      correlationId: 'corr:rotation',
+    })
+
+    expect(verifySourceWriteAdmission({
+      admission: previousAdmission,
+      env: rotatedEnv,
+      expected: {
+        scope: 'public_inquiry',
+        operationKey: 'op:rotation',
+        correlationId: 'corr:rotation',
+        request,
+      },
+    })).toMatchObject({ kind: 'accepted' })
+    expect(verifySourceWriteAdmission({
+      admission: previousAdmission,
+      env: retiredEnv,
+      expected: {
+        scope: 'public_inquiry',
+        operationKey: 'op:rotation',
+        correlationId: 'corr:rotation',
+        request,
+      },
+    })).toMatchObject({ kind: 'rejected', reason: 'unknown_source_write_key_id' })
+
+    const unknownKeyAdmission: SourceWriteAdmission = {
+      ...previousAdmission,
+      keyId: 'unknown-inquiry',
+    }
+    expect(verifySourceWriteAdmission({
+      admission: unknownKeyAdmission,
+      env: rotatedEnv,
+      expected: {
+        scope: 'public_inquiry',
+        operationKey: 'op:rotation',
+        correlationId: 'corr:rotation',
+        request,
+      },
+    })).toMatchObject({ kind: 'rejected', reason: 'unknown_source_write_key_id' })
+
+    const wrongFamilyUnsigned: Omit<SourceWriteAdmission, 'signature'> = {
+      ...previousAdmission,
+      keyId: 'billing-active',
+    }
+    const wrongFamilyAdmission: SourceWriteAdmission = {
+      ...wrongFamilyUnsigned,
+      signature: sourceWriteSignature('billing-secret', wrongFamilyUnsigned),
+    }
+    expect(verifySourceWriteAdmission({
+      admission: wrongFamilyAdmission,
+      env: {
+        AE_SOURCE_WRITE_KEY_INQUIRY: 'inquiry-active:inquiry-secret',
+        AE_SOURCE_WRITE_KEY_BILLING: 'billing-active:billing-secret',
+      },
+      expected: {
+        scope: 'public_inquiry',
+        operationKey: 'op:rotation',
+        correlationId: 'corr:rotation',
+        request,
+      },
+    })).toMatchObject({ kind: 'rejected', reason: 'unknown_source_write_key_id' })
+  })
+
+  it('binds source write admissions to method, path, origin, and raw-body digest', async () => {
+    const env = { AE_SOURCE_WRITE_SECRET: 'server-only-source-write-secret' }
+    const request = {
+      method: 'POST',
+      origin: 'https://ae.example',
+      pathname: '/api/agent/tools',
+      bodyDigest: sourceWriteBodyDigest('{"tool":"registry.search"}'),
+    }
+    const admission = createSourceWriteAdmission({
+      env,
+      request,
+      scope: 'public_inquiry',
+      operationKey: 'op:body-bound',
+      correlationId: 'corr:body-bound',
+    })
+
+    expect(verifySourceWriteAdmission({
+      admission,
+      env,
+      expected: {
+        scope: 'public_inquiry',
+        operationKey: 'op:body-bound',
+        correlationId: 'corr:body-bound',
+        request: { ...request, bodyDigest: sourceWriteBodyDigest('{"tool":"tampered"}') },
+      },
+    })).toMatchObject({ kind: 'rejected', reason: 'source_write_request_mismatch' })
   })
 
   it('does not turn missing source write admission into local inquiry mutation fixtures', async () => {
@@ -1304,6 +1417,7 @@ function sourceWriteContext() {
       method: 'POST',
       origin: 'https://ae.example',
       pathname: '/inquiries',
+      bodyDigest: 'none',
     },
   }
 }

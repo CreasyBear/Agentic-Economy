@@ -58,6 +58,12 @@ const commerceShift = [
   },
 ]
 
+type OfferStep = {
+  number: string
+  title: string
+  body: string
+}
+
 const offerSteps = [
   {
     number: '1',
@@ -74,7 +80,7 @@ const offerSteps = [
     title: 'Interact with the business',
     body: 'Use contact instructions or send a qualified inquiry. The business takes it from there.',
   },
-]
+] satisfies readonly [OfferStep, ...OfferStep[]]
 
 function AboutRoute() {
   return (
@@ -279,7 +285,7 @@ function MobileAccordion({
 
 function MobileOfferTabs() {
   const [selectedStep, setSelectedStep] = useState('1')
-  const selected = offerSteps.find((step) => step.number === selectedStep) ?? offerSteps[0]!
+  const selected = offerSteps.find((step) => step.number === selectedStep) ?? offerSteps[0]
 
   return (
     <div className="grid gap-3 md:hidden">

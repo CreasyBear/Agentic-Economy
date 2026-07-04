@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useRef, useState, type CSSProperties} from 'react';
+import {useMemo, useRef, useState, type CSSProperties} from 'react';
 
 import {
   HStack,
@@ -270,6 +270,77 @@ function ArtifactCard({onOpen}: {onOpen: () => void}) {
   );
 }
 
+const userReviewTimestamp = (
+  <Timestamp value="2026-04-29T10:15:00" format="time" />
+);
+const assistantAuthFixTimestamp = (
+  <Timestamp value="2026-04-29T10:15:30" format="time" />
+);
+const userRefreshTimestamp = (
+  <Timestamp value="2026-04-29T10:16:00" format="time" />
+);
+const assistantTestTimestamp = (
+  <Timestamp value="2026-04-29T10:16:45" format="time" />
+);
+const userArtifactRequestTimestamp = (
+  <Timestamp value="2026-04-29T10:18:00" format="time" />
+);
+const assistantArtifactTimestamp = (
+  <Timestamp value="2026-04-29T10:18:40" format="time" />
+);
+const userRolloutTimestamp = (
+  <Timestamp value="2026-04-29T10:20:00" format="time" />
+);
+const assistantRunningTimestamp = (
+  <Timestamp value="2026-04-29T10:20:30" format="time" />
+);
+const assistantAuthFixFooter = (
+  <Text type="supporting" color="secondary">
+    Agent
+  </Text>
+);
+
+const userReviewMetadata = (
+  <ChatMessageMetadata timestamp={userReviewTimestamp} />
+);
+
+const assistantAuthFixMetadata = (
+  <ChatMessageMetadata
+    timestamp={assistantAuthFixTimestamp}
+    footer={assistantAuthFixFooter}
+  />
+);
+
+const userRefreshMetadata = (
+  <ChatMessageMetadata
+    timestamp={userRefreshTimestamp}
+    status="delivered"
+  />
+);
+
+const assistantTestMetadata = (
+  <ChatMessageMetadata timestamp={assistantTestTimestamp} />
+);
+
+const userArtifactRequestMetadata = (
+  <ChatMessageMetadata timestamp={userArtifactRequestTimestamp} />
+);
+
+const assistantArtifactMetadata = (
+  <ChatMessageMetadata timestamp={assistantArtifactTimestamp} />
+);
+
+const userRolloutMetadata = (
+  <ChatMessageMetadata
+    timestamp={userRolloutTimestamp}
+    status="delivered"
+  />
+);
+
+const assistantRunningMetadata = (
+  <ChatMessageMetadata timestamp={assistantRunningTimestamp} />
+);
+
 // Main component
 
 export default function AIChatConversationTemplate() {
@@ -295,6 +366,56 @@ export default function AIChatConversationTemplate() {
     }
   };
 
+  const composer = useMemo(
+    () => (
+      <ChatComposer
+        onSubmit={() => {}}
+        placeholder={
+          composerMode === 'ask' ? 'Ask anything...' : 'Describe your edit...'
+        }
+        input={<ChatComposerInput />}
+        headerActions={
+          <>
+            <Button
+              label="Mention"
+              variant="ghost"
+              size="sm"
+              icon={<Icon icon={AtSignIcon} size="sm" />}
+              isIconOnly
+            />
+            <Button
+              label="Attach"
+              variant="ghost"
+              size="sm"
+              icon={<Icon icon={PaperclipIcon} size="sm" />}
+              isIconOnly
+            />
+          </>
+        }
+        footerActions={
+          <DropdownMenu
+            button={{
+              label: composerMode === 'ask' ? 'Ask' : 'Edit',
+              variant: 'ghost',
+              size: 'sm',
+            }}
+            items={[
+              {
+                label: 'Ask',
+                onClick: () => setComposerMode('ask'),
+              },
+              {
+                label: 'Edit',
+                onClick: () => setComposerMode('edit'),
+              },
+            ]}
+          />
+        }
+      />
+    ),
+    [composerMode],
+  );
+
   return (
     <VStack ref={rootRef} style={root}>
       <style>{AI_CHAT_CSS}</style>
@@ -308,54 +429,7 @@ export default function AIChatConversationTemplate() {
                 <ChatLayout
                   density="spacious"
                   style={chatLayout}
-                  composer={
-                    <ChatComposer
-                      onSubmit={() => {}}
-                      placeholder={
-                        composerMode === 'ask'
-                          ? 'Ask anything...'
-                          : 'Describe your edit...'
-                      }
-                      input={<ChatComposerInput />}
-                      headerActions={
-                        <>
-                          <Button
-                            label="Mention"
-                            variant="ghost"
-                            size="sm"
-                            icon={<Icon icon={AtSignIcon} size="sm" />}
-                            isIconOnly
-                          />
-                          <Button
-                            label="Attach"
-                            variant="ghost"
-                            size="sm"
-                            icon={<Icon icon={PaperclipIcon} size="sm" />}
-                            isIconOnly
-                          />
-                        </>
-                      }
-                      footerActions={
-                        <DropdownMenu
-                          button={{
-                            label: composerMode === 'ask' ? 'Ask' : 'Edit',
-                            variant: 'ghost',
-                            size: 'sm',
-                          }}
-                          items={[
-                            {
-                              label: 'Ask',
-                              onClick: () => setComposerMode('ask'),
-                            },
-                            {
-                              label: 'Edit',
-                              onClick: () => setComposerMode('edit'),
-                            },
-                          ]}
-                        />
-                      }
-                    />
-                  }>
+                  composer={composer}>
                   <ChatMessageList>
                     {/* Date divider */}
                     <ChatSystemMessage variant="divider">
@@ -368,17 +442,7 @@ export default function AIChatConversationTemplate() {
                         <Token label="auth-service.ts" />
                         <Token label="middleware.ts" />
                       </HStack>
-                      <ChatMessageBubble
-                        metadata={
-                          <ChatMessageMetadata
-                            timestamp={
-                              <Timestamp
-                                value="2026-04-29T10:15:00"
-                                format="time"
-                              />
-                            }
-                          />
-                        }>
+                      <ChatMessageBubble metadata={userReviewMetadata}>
                         <ChatTokenizedText tokens={MENTION_TOKENS}>
                           @agent Can you review these auth files? The JWT
                           refresh logic seems broken — tokens expire but the
@@ -470,19 +534,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
                         ]}
                       />
 
-                      <ChatMessageMetadata
-                        timestamp={
-                          <Timestamp
-                            value="2026-04-29T10:15:30"
-                            format="time"
-                          />
-                        }
-                        footer={
-                          <Text type="supporting" color="secondary">
-                            Agent
-                          </Text>
-                        }
-                      />
+                      {assistantAuthFixMetadata}
                     </ChatMessage>
 
                     {/* User message: multi-bubble grouping */}
@@ -492,17 +544,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
                       </ChatMessageBubble>
                       <ChatMessageBubble
                         group="last"
-                        metadata={
-                          <ChatMessageMetadata
-                            timestamp={
-                              <Timestamp
-                                value="2026-04-29T10:16:00"
-                                format="time"
-                              />
-                            }
-                            status="delivered"
-                          />
-                        }>
+                        metadata={userRefreshMetadata}>
                         Can you also add a test for the refresh path?
                       </ChatMessageBubble>
                     </ChatMessage>
@@ -571,14 +613,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
 });`}
                         />
                       </ChatMessageBubble>
-                      <ChatMessageMetadata
-                        timestamp={
-                          <Timestamp
-                            value="2026-04-29T10:16:45"
-                            format="time"
-                          />
-                        }
-                      />
+                      {assistantTestMetadata}
                     </ChatMessage>
 
                     {/* Status message */}
@@ -588,17 +623,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
 
                     {/* User message: requests a document artifact */}
                     <ChatMessage sender="user">
-                      <ChatMessageBubble
-                        metadata={
-                          <ChatMessageMetadata
-                            timestamp={
-                              <Timestamp
-                                value="2026-04-29T10:18:00"
-                                format="time"
-                              />
-                            }
-                          />
-                        }>
+                      <ChatMessageBubble metadata={userArtifactRequestMetadata}>
                         Looks solid. Before I open the PR, can you write up a
                         short design doc explaining the token-refresh flow for
                         the team?
@@ -615,30 +640,12 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
                         </Markdown>
                       </ChatMessageBubble>
                       <ArtifactCard onOpen={openArtifact} />
-                      <ChatMessageMetadata
-                        timestamp={
-                          <Timestamp
-                            value="2026-04-29T10:18:40"
-                            format="time"
-                          />
-                        }
-                      />
+                      {assistantArtifactMetadata}
                     </ChatMessage>
 
                     {/* User follow-up */}
                     <ChatMessage sender="user">
-                      <ChatMessageBubble
-                        metadata={
-                          <ChatMessageMetadata
-                            timestamp={
-                              <Timestamp
-                                value="2026-04-29T10:20:00"
-                                format="time"
-                              />
-                            }
-                            status="delivered"
-                          />
-                        }>
+                      <ChatMessageBubble metadata={userRolloutMetadata}>
                         This is great. Can you add a section on rollout and
                         monitoring at the end?
                       </ChatMessageBubble>
@@ -663,14 +670,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
                           },
                         ]}
                       />
-                      <ChatMessageMetadata
-                        timestamp={
-                          <Timestamp
-                            value="2026-04-29T10:20:30"
-                            format="time"
-                          />
-                        }
-                      />
+                      {assistantRunningMetadata}
                     </ChatMessage>
                   </ChatMessageList>
                 </ChatLayout>

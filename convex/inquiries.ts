@@ -623,7 +623,7 @@ export const submitPublicInquiry = mutationGeneric({
   },
   returns: submitInquiryResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'public_inquiry')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'public_inquiry')
     if (sourceWrite.kind === 'rejected') {
       return inquiryCsrfError(sourceWrite.reason)
     }
@@ -833,7 +833,7 @@ export const markCurrentOwnerInquiryRead = mutationGeneric({
   },
   returns: ownerInquiryMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'owner_inquiry')
     if (sourceWrite.kind === 'rejected') {
       return ownerMutationCsrfError(sourceWrite.reason)
     }
@@ -872,7 +872,7 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
   },
   returns: deleteInquiryPrivateContentResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'owner_inquiry')
     if (sourceWrite.kind === 'rejected') {
       return inquiryPrivacyCsrfError(sourceWrite.reason)
     }
@@ -944,7 +944,7 @@ export const replyToCurrentOwnerInquiry = mutationGeneric({
   },
   returns: ownerInquiryMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'owner_inquiry')
     if (sourceWrite.kind === 'rejected') {
       return ownerMutationCsrfError(sourceWrite.reason)
     }
@@ -985,7 +985,7 @@ export const closeCurrentOwnerInquiry = mutationGeneric({
   },
   returns: ownerInquiryMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'owner_inquiry')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'owner_inquiry')
     if (sourceWrite.kind === 'rejected') {
       return ownerMutationCsrfError(sourceWrite.reason)
     }
@@ -2032,7 +2032,7 @@ function ownerMutationAuthError(code: 'missing_auth' | 'owner_not_found') {
   return ownerAuthError(code)
 }
 
-function inquiryCsrfError(reason: 'missing_csrf' | 'foreign_origin') {
+function inquiryCsrfError(reason: string) {
   return {
     kind: 'error' as const,
     code: 'inquiry_csrf_rejected' as const,
@@ -2041,11 +2041,11 @@ function inquiryCsrfError(reason: 'missing_csrf' | 'foreign_origin') {
   }
 }
 
-function ownerMutationCsrfError(reason: 'missing_csrf' | 'foreign_origin') {
+function ownerMutationCsrfError(reason: string) {
   return inquiryCsrfError(reason)
 }
 
-function inquiryPrivacyCsrfError(reason: 'missing_csrf' | 'foreign_origin') {
+function inquiryPrivacyCsrfError(reason: string) {
   return {
     kind: 'error' as const,
     code: 'inquiry_csrf_rejected' as const,

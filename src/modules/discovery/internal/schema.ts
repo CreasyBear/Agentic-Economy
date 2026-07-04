@@ -117,5 +117,7 @@ export const discoveryTables = {
     staleThresholdAt: v.optional(v.number()),
     repairAction: literalUnion(DiscoveryRepairActionValues),
     repairResult: literalUnion(DiscoveryRepairResultValues),
-  }).index('by_business_status', ['businessId', 'status']),
+  })
+    .index('by_attemptId', ['attemptId'])
+    .index('by_business_status', ['businessId', 'status']),
 } as const

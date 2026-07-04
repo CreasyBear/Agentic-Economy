@@ -22,7 +22,7 @@ export type SessionJourney = {
     hasInquiryPath: boolean
   }
   heading: string
-  status: string
+  statusText: string
   guidance: string
   steps: readonly SessionJourneyStep[]
 }
@@ -68,7 +68,7 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
           },
         }),
     heading: 'Inquiry path',
-    status: buildSessionJourneyStatus({ providerCount, selectedProvider }),
+    statusText: buildSessionJourneyStatusText({ providerCount, selectedProvider }),
     guidance: buildSessionJourneyGuidance({
       providerCount,
       hasInquiryReadyProvider,
@@ -145,7 +145,7 @@ function buildSessionJourneyGuidance(input: {
   return 'Compare the published facts first; these listings need a published inquiry path before contact.'
 }
 
-function buildSessionJourneyStatus(input: {
+function buildSessionJourneyStatusText(input: {
   providerCount: number
   selectedProvider: AnswerSource | undefined
 }): string {

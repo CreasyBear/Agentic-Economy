@@ -14,89 +14,118 @@ describe('AeFollowUpChips', () => {
   })
 
   it('frames follow-up choices as the next loop from the listed businesses', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
-    const onSelect = vi.fn()
+    stubDeterministicChips()
+    let selectedQuery: string | null = null
 
-    render(<AeFollowUpChips turn={turn()} onSelect={onSelect} />)
+    render(<AeFollowUpChips turn={turn()} onSelect={(query) => {
+      selectedQuery = query
+    }} />)
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
     expect(
-      panel.contains(screen.getByText('Narrow, compare, or prepare a qualified inquiry from the listed businesses above.')),
+      panel.contains(
+        screen.getByText('Narrow, compare, or prepare a qualified inquiry from the listed businesses above.'),
+      ),
     ).toBe(true)
 
     fireEvent.click(screen.getByText('Prepare qualified inquiry with Parramatta Emergency Plumbing'))
 
-    expect(onSelect).toHaveBeenCalledWith('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
+    expect(selectedQuery).toBe('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
   })
 
   it('submits compare chips as carried thread follow-ups', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
-    const onSelect = vi.fn()
+    stubDeterministicChips()
+    let selectedQuery: string | null = null
 
-    render(<AeFollowUpChips turn={turn()} onSelect={onSelect} />)
+    render(<AeFollowUpChips turn={turn()} onSelect={(query) => {
+      selectedQuery = query
+    }} />)
 
     fireEvent.click(screen.getByText('Compare the top two listings'))
 
-    expect(onSelect).toHaveBeenCalledWith('Compare the top two')
+    expect(selectedQuery).toBe('Compare the top two')
   })
 
   it('keeps the inquiry loop available after a compare-table answer', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
-    const onSelect = vi.fn()
+    stubDeterministicChips()
+    let selectedQuery: string | null = null
 
-    render(<AeFollowUpChips turn={turn({
-      intent: 'compare_known',
-      artifacts: [
-        {
-          kind: 'provider-compare-table',
-          providers: [
-            provider({ citationIndex: 1, slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
-            providerWithoutInquiry({ citationIndex: 2, slug: 'review-only', name: 'Review Only Plumbing' }),
+    render(
+      <AeFollowUpChips
+        turn={turn({
+          intent: 'compare_known',
+          artifacts: [
+            {
+              kind: 'provider-compare-table',
+              providers: [
+                provider({ citationIndex: 1, slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+                providerWithoutInquiry({ citationIndex: 2, slug: 'review-only', name: 'Review Only Plumbing' }),
+              ],
+            },
           ],
-        },
-      ],
-    })} onSelect={onSelect} />)
+        })}
+        onSelect={(query) => {
+          selectedQuery = query
+        }}
+      />,
+    )
 
     expect(screen.getByRole('region', { name: 'Continue this thread' })).toBeTruthy()
     fireEvent.click(screen.getByText('Prepare qualified inquiry with Top Inquiry Ready'))
 
-    expect(onSelect).toHaveBeenCalledWith('Prepare a qualified inquiry for Top Inquiry Ready')
+    expect(selectedQuery).toBe('Prepare a qualified inquiry for Top Inquiry Ready')
   })
 
   it('states the contact boundary when listed businesses lack an inquiry path', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
+    stubDeterministicChips()
 
-    render(<AeFollowUpChips turn={turn({
-      artifacts: [
-        {
-          kind: 'provider-cards',
-          providers: [providerWithoutInquiry()],
-        },
-      ],
-    })} onSelect={vi.fn()} />)
+    render(
+      <AeFollowUpChips
+        turn={turn({
+          artifacts: [
+            {
+              kind: 'provider-cards',
+              providers: [providerWithoutInquiry()],
+            },
+          ],
+        })}
+        onSelect={() => undefined}
+      />,
+    )
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(panel.contains(screen.getByText(
-      'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.',
-    ))).toBe(true)
+    expect(
+      panel.contains(
+        screen.getByText(
+          'These listings need a published inquiry path before AE can route contact. Narrow, compare, or review a listing.',
+        ),
+      ),
+    ).toBe(true)
     expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
   })
 
   it('keeps the follow-up panel available after a selected-provider handoff', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
-    const onSelect = vi.fn()
+    stubDeterministicChips()
+    let selectedQuery: string | null = null
 
-    render(<AeFollowUpChips turn={turn({
-      intent: 'inquiry_handoff',
-      query: 'Prepare a qualified inquiry for the first listed business',
-      artifacts: [
-        {
-          kind: 'selected-provider',
-          provider: provider({ slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
-        },
-      ],
-    })} onSelect={onSelect} />)
+    render(
+      <AeFollowUpChips
+        turn={turn({
+          intent: 'inquiry_handoff',
+          query: 'Prepare a qualified inquiry for the first listed business',
+          artifacts: [
+            {
+              kind: 'selected-provider',
+              provider: provider({ slug: 'top-inquiry-ready', name: 'Top Inquiry Ready' }),
+            },
+          ],
+        })}
+        onSelect={(query) => {
+          selectedQuery = query
+        }}
+      />,
+    )
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
@@ -104,9 +133,13 @@ describe('AeFollowUpChips', () => {
     expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
     fireEvent.click(screen.getByText('Only inquiry-ready listings'))
 
-    expect(onSelect).toHaveBeenCalledWith('Show only businesses that accept inquiries')
+    expect(selectedQuery).toBe('Show only businesses that accept inquiries')
   })
 })
+
+function stubDeterministicChips() {
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ llmChipsEnabled: false })))
+}
 
 function turn(overrides: Partial<PublicThreadTurn> = {}): PublicThreadTurn {
   return {

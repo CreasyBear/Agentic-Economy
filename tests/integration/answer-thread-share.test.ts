@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import { buildPublicThreadSeo } from '@/modules/seo/public'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { handleGetAnswerThreadRequest } from '@/routes/api.answer.threads.$threadId'
@@ -10,32 +8,35 @@ import {
   installAnswerThreadTestPort,
   readSessionCookieFromResponse,
 } from '../helpers/answer-thread-test-port'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../helpers/openrouter-contract-server'
 
 describe('public thread share route', () => {
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
+    delete process.env.AE_OPENROUTER_API_BASE_URL
     delete process.env.AE_ANSWER_SYNTHESIZER
-    setAnswerToolUseAgentForTests(undefined)
   })
 
   it('loads the public projection and OG tags without auth', async () => {
     const store = createAnswerThreadTestStore()
     const resetPort = installAnswerThreadTestPort(store)
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      prose: {
+        oneLine: 'One listed business matches this need.',
+        summary:
+          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
 
     try {
-      const state = createDefaultRegistrySourceState()
-      await withRegistrySourcePortForTest(state, async () => {
-        process.env.OPENROUTER_API_KEY = 'test-key'
-        setAnswerToolUseAgentForTests(async () => ({
-          toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-          prose: {
-            oneLine: 'One listed business matches this need.',
-            summary:
-              'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-            whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-          },
-        }))
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
         const turnResponse = await handleAnswerTurnRequest(
           new Request('https://ae.example/api/answer/turn', {
@@ -78,10 +79,17 @@ describe('public thread share route', () => {
         expect(seo.title).toContain('Agentic Economy')
         // Share copy must stay boundary-honest.
         expect(seo.description).not.toMatch(/book now|booking confirmed|pay now|payment required/i)
-      })
-    } finally {
-      resetPort()
-    }
+        expect(server.requests.length).toBeLessThanOrEqual(2)
+      } finally {
+        restoreOpenRouter()
+        await server.close()
+        if (previousLocalRegistry === undefined) {
+          delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+        } else {
+          process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+        }
+        resetPort()
+      }
   })
 
   it('returns 404 for an unknown thread without auth', async () => {

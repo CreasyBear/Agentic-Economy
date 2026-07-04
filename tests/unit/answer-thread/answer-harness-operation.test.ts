@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  setAnswerToolUseAgentForTests,
-  type AnswerEvent,
-  type AnswerSnapshot,
+import type {
+  AnswerEvent,
+  AnswerSnapshot,
 } from '@/modules/answer/public'
 import type { AnswerTurnRecord } from '@/modules/answer-thread/public'
 import { streamAnswerTurn } from '@/modules/answer-thread/public'
@@ -20,10 +19,12 @@ import {
   HarnessRunPhaseValues,
   type HarnessRuntimeEvent,
 } from '@/modules/harness/public'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import { runAnswerHarnessOperation } from '@/modules/answer-thread/internal/answer-harness-operation'
 import { persistAnswerTurn } from '@/modules/answer-thread/internal/answer-turn-finalization'
-import { withRegistrySourcePortForTest } from '../../helpers/source-ports'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../../helpers/openrouter-contract-server'
 
 const resets: (() => void)[] = []
 
@@ -289,7 +290,6 @@ describe('answer harness operation persistence bridge', () => {
   })
 
   it('streams answer turns through the live harness loop and journals runtime events directly', async () => {
-    const state = createDefaultRegistrySourceState()
     const turns = new Map<string, AnswerTurnRecord>()
     const finalizationWrites: AnswerHarnessFinalizerInput[] = []
     const events: AnswerEvent[] = []
@@ -336,7 +336,7 @@ describe('answer harness operation persistence bridge', () => {
         ...(activeLeafEntryId === undefined ? {} : { activeLeafEntryId }),
       }
     }))
-    resets.push(setAnswerToolUseAgentForTests(async () => ({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [
         { toolId: 'registry.search', input: { query: 'parramatta', limit: 3 } },
       ],
@@ -345,9 +345,12 @@ describe('answer harness operation persistence bridge', () => {
         summary: 'Parramatta Emergency Plumbing publishes service coverage. Agentic Economy does not book or take payment on this page.',
         whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
       },
-    })))
+    }))
+    const restoreOpenRouter = server.installEnv()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-    await withRegistrySourcePortForTest(state, async () => {
+    try {
       await streamAnswerTurn(
         {
           sessionId: 'session-stream-live',
@@ -358,7 +361,15 @@ describe('answer harness operation persistence bridge', () => {
         },
         ({ event }) => events.push(event),
       )
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
 
     expect(events.some((event) => event.type === 'complete')).toBe(true)
 
@@ -370,9 +381,9 @@ describe('answer harness operation persistence bridge', () => {
       total: 2,
       ok: 2,
     })
-    expect(evidence.harnessRun?.summary.models?.byModel['planned-answer-tool-use-agent']).toMatchObject({
-      total: 1,
-      ok: 1,
+    expect(evidence.harnessRun?.summary.models?.byProvider.openrouter).toMatchObject({
+      total: 2,
+      ok: 2,
     })
     expect(evidence.harnessRun?.coverage.phases).toEqual(
       expect.arrayContaining(['context', 'intent', 'route', 'retrieval', 'model', 'assemble', 'gate']),
@@ -407,7 +418,6 @@ describe('answer harness operation persistence bridge', () => {
   })
 
   it('does not complete a captured stream when final harness finalization fails', async () => {
-    const state = createDefaultRegistrySourceState()
     const turns = new Map<string, AnswerTurnRecord>()
     const events: AnswerEvent[] = []
 
@@ -431,7 +441,7 @@ describe('answer harness operation persistence bridge', () => {
       reason: 'source_write_failed',
       message: 'forced finalization failure',
     })))
-    resets.push(setAnswerToolUseAgentForTests(async () => ({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [
         { toolId: 'registry.search', input: { query: 'parramatta', limit: 3 } },
       ],
@@ -440,9 +450,12 @@ describe('answer harness operation persistence bridge', () => {
         summary: 'Parramatta Emergency Plumbing publishes service coverage. Agentic Economy does not book or take payment on this page.',
         whatToDoNow: 'Open the listed provider page and send an inquiry when that option is published.',
       },
-    })))
+    }))
+    const restoreOpenRouter = server.installEnv()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-    await withRegistrySourcePortForTest(state, async () => {
+    try {
       await streamAnswerTurn(
         {
           sessionId: 'session-stream-finalization-fail',
@@ -453,7 +466,15 @@ describe('answer harness operation persistence bridge', () => {
         },
         ({ event }) => events.push(event),
       )
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
 
     expect([...turns.values()]).toHaveLength(1)
     expect(events.some((event) => event.type === 'complete')).toBe(false)

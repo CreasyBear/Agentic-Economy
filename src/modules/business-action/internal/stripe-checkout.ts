@@ -15,12 +15,16 @@ import type {
   SourceHash,
 } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import { ProviderApiBaseUrlError, resolveProviderApiBaseUrl } from '@/modules/security/provider-api-base-url'
 import {
   admitSignedStripeWebhookEvent,
   type StripeWebhookAdmissionErrorCode,
   type StripeWebhookAdmissionEvidence,
   type StripeWebhookAdmissionResult,
 } from './stripe-webhook-source'
+
+const stripeApiBaseUrl = 'https://api.stripe.com'
+const stripeApiAllowedHosts = ['api.stripe.com'] as const
 
 export type StripeCheckoutSessionCreateRequest = {
   endpoint: string
@@ -159,14 +163,22 @@ export async function createStripeCheckoutSessionEvidence(
     return checkoutError('business_action_stripe_money_unbound', 'source_owned_amount_and_currency_required')
   }
 
-  const stripeRequest = buildCheckoutSessionCreateRequest({
-    request,
-    checkpoint,
-    stripeSecretKey: options.stripeSecretKey,
-    successUrl: options.successUrl,
-    cancelUrl: options.cancelUrl,
-    apiBaseUrl: options.apiBaseUrl,
-  })
+  let stripeRequest: StripeCheckoutSessionCreateRequest
+  try {
+    stripeRequest = buildCheckoutSessionCreateRequest({
+      request,
+      checkpoint,
+      stripeSecretKey: options.stripeSecretKey,
+      successUrl: options.successUrl,
+      cancelUrl: options.cancelUrl,
+      apiBaseUrl: options.apiBaseUrl,
+    })
+  } catch (error) {
+    if (error instanceof ProviderApiBaseUrlError) {
+      return checkoutError('business_action_stripe_config_invalid', `provider_api_base_url_${error.reason}`, 'apiBaseUrl')
+    }
+    throw error
+  }
   const response = await (options.createSession ?? createCheckoutSessionWithFetch)(stripeRequest)
   if (!response.id.startsWith('cs_test_')) {
     return checkoutError('business_action_stripe_provider_rejected', 'test_mode_checkout_session_required')
@@ -294,7 +306,11 @@ function buildCheckoutSessionCreateRequest(input: {
   }
 
   return {
-    endpoint: `${input.apiBaseUrl ?? 'https://api.stripe.com'}/v1/checkout/sessions`,
+    endpoint: `${resolveProviderApiBaseUrl(input.apiBaseUrl, {
+      defaultUrl: stripeApiBaseUrl,
+      allowedHosts: stripeApiAllowedHosts,
+      label: 'Stripe API',
+    })}/v1/checkout/sessions`,
     authorizationHeader: `Bearer ${input.stripeSecretKey}`,
     idempotencyKey: `business-action:stripe-checkout:${input.request.id}:${input.checkpoint.id}`,
     body,

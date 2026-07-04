@@ -118,18 +118,20 @@ describe('Convex harness session journal source', () => {
   it('replays duplicate idempotency keys with matching request hashes and rejects drift', async () => {
     const db = new FakeDb({})
     const args = admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
+    const replayArgs = admittedEntryArgs({ entryId: 'entry-1', idempotencyKey: 'same-key' })
+    const driftArgs = admittedEntryArgs({
+      entryId: 'entry-drift',
+      idempotencyKey: 'same-key',
+      payloadJson: '{"changed":true}',
+    })
 
     await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({ status: 'accepted' })
-    await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({
+    await expect(appendHandler(authCtx(db, null), replayArgs)).resolves.toMatchObject({
       status: 'replayed',
       entry: { entryId: 'entry-1', idempotencyKey: 'same-key' },
     })
 
-    const conflict = await appendHandler(authCtx(db, null), {
-      ...args,
-      entryId: 'entry-drift',
-      payloadJson: '{"changed":true}',
-    })
+    const conflict = await appendHandler(authCtx(db, null), driftArgs)
 
     expect(conflict).toMatchObject({
       status: 'conflict',
@@ -171,7 +173,7 @@ describe('Convex harness session journal source', () => {
 
     expect(denied).toMatchObject({
       status: 'denied',
-      reason: 'missing_csrf',
+      reason: 'missing_source_write_admission',
     })
     expect(db.dump('harnessSessions')).toHaveLength(0)
     expect(db.dump('harnessSessionEntries')).toHaveLength(0)
@@ -219,12 +221,17 @@ describe('Convex harness session journal source', () => {
       idempotencyKey: 'admitted-idempotent',
       payloadJson: '{"phase":"persist"}',
     })
+    const replayArgs = admittedEntryArgs({
+      entryId: 'entry-admitted',
+      idempotencyKey: 'admitted-idempotent',
+      payloadJson: '{"phase":"persist"}',
+    })
 
     await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({
       status: 'accepted',
       entry: { entryId: 'entry-admitted', idempotencyKey: 'admitted-idempotent' },
     })
-    await expect(appendHandler(authCtx(db, null), args)).resolves.toMatchObject({
+    await expect(appendHandler(authCtx(db, null), replayArgs)).resolves.toMatchObject({
       status: 'replayed',
       entry: { entryId: 'entry-admitted', idempotencyKey: 'admitted-idempotent' },
     })

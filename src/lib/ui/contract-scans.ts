@@ -42,6 +42,19 @@ const ignoredDirectories = new Set([
 ])
 
 const scannerUtilityPath = 'src/lib/ui/contract-scans.ts'
+const forbiddenHandshakeSpecifierPattern = [
+  String.raw`handshake-cloud(?:\/[^'"]*)?`,
+  String.raw`(?:customer-edge|agentic-endpoint-access|cloud-adapter|x402)(?:\/[^'"]*)?`,
+  String.raw`handshake-protocol-kernel\/(?:x402-protected-tool|mcp|http|agentic-endpoint-middleware|agentic-endpoint-access|cloud-adapter|customer-edge|experimental)`,
+  String.raw`@x402\/[^'"]+`,
+  String.raw`viem(?:\/[^'"]*)?`,
+  String.raw`@modelcontextprotocol\/[^'"]+`,
+].join('|')
+const forbiddenHandshakeImportPattern = new RegExp(
+  String.raw`from\s+['"](?:${forbiddenHandshakeSpecifierPattern})['"]|` +
+    String.raw`import\s*\(\s*['"](?:${forbiddenHandshakeSpecifierPattern})['"]\s*\)|` +
+    String.raw`import\s+['"](?:${forbiddenHandshakeSpecifierPattern})['"]`,
+)
 
 export function scanBackupImports(targets: readonly ScanTarget[]): readonly ScanViolation[] {
   return scanPatterns(targets, [
@@ -54,6 +67,11 @@ export function scanBackupImports(targets: readonly ScanTarget[]): readonly Scan
       rule: 'planning-runtime-import',
       message: 'Runtime source cannot import planning files.',
       pattern: /from\s+['"][^'"]*\.planning|import\s+['"][^'"]*\.planning/,
+    },
+    {
+      rule: 'forbidden-handshake-import',
+      message: 'Handshake kernel imports are quarantined to the root package and /adapter-sdk only.',
+      pattern: forbiddenHandshakeImportPattern,
     },
   ])
 }
@@ -84,6 +102,11 @@ export function scanRouteBoundaries(targets: readonly ScanTarget[]): readonly Sc
       rule: 'route-private-module-import',
       message: 'Routes must import module public seams only.',
       pattern: /from\s+['"][^'"]*(?:@\/|~\/|src\/)?modules\/[^'"]+\/internal\/[^'"]+['"]/,
+    },
+    {
+      rule: 'route-clearance-functions-import',
+      message: 'Routes must use the clearance public/server seams, not clearance source mutation implementation files.',
+      pattern: /from\s+['"][^'"]*(?:@\/|~\/|src\/)?modules\/clearance\/clearance\.functions['"]/,
     },
     {
       rule: 'route-future-provider-import',
@@ -146,6 +169,11 @@ export function scanSourceMining(targets: readonly ScanTarget[]): readonly ScanV
         message: 'The active route tree cannot expose future owner action routes before their owning phase.',
         pattern: /['"]\/(?:owner\/actions)['"]|OwnerActions/,
       },
+      {
+        rule: 'forbidden-handshake-import',
+        message: 'Handshake kernel imports are quarantined to the root package and /adapter-sdk only.',
+        pattern: forbiddenHandshakeImportPattern,
+      },
     ],
     [scannerUtilityPath]
   ).filter((violation) => !isAllowedSourceMiningViolation(violation))
@@ -153,6 +181,10 @@ export function scanSourceMining(targets: readonly ScanTarget[]): readonly ScanV
 
 function isAllowedSourceMiningViolation(violation: ScanViolation): boolean {
   if (violation.rule === 'business-action-route-local-fixture') {
+    return false
+  }
+
+  if (violation.rule === 'forbidden-handshake-import') {
     return false
   }
 
@@ -218,6 +250,8 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
   }
 
   return [
+    'src/modules/answer-thread/internal/public-worklog.ts',
+    'src/modules/common/audit-events.ts',
     'src/modules/inquiries/',
     'src/modules/discovery/',
     'src/modules/protected-action/',
@@ -357,6 +391,12 @@ export function scanCopyClaims(targets: readonly ScanTarget[]): readonly ScanVio
   })
 }
 
+const pm05TrustOverclaimPattern =
+  /\b(?:book(?:\s+now|ed|ing)?|schedule(?:d|s|ing)?|dispatch(?:ed|es|ing)?|auto[- ]?fulfil(?:l|led|ment)?|autonomous(?:ly)?|pay(?:ment|ments|ing)?|paid|checkout|charg(?:e|ed|ing)|wallet|settlement|live\s+(?:availability|payment|money|stripe)|real[- ]?time\s+availability|available\s+now|marketplace\s+(?:liquidity|ready|providers?)|ready providers?)\b/i
+const pm05InternalVocabularyPattern =
+  /\b(?:source-owned|readback|manifest|capabilit(?:y|ies)|gateway|operator|MCP|OpenAPI|callable|agent-native|DTO|fixture)\b/i
+const pm05UnqualifiedVerifiedPattern = /\bverified\b/i
+
 export function scanPublicLanguage(targets: readonly ScanTarget[]): readonly ScanViolation[] {
   return scanPatterns(
     targets,
@@ -383,6 +423,16 @@ export function scanPublicLanguage(targets: readonly ScanTarget[]): readonly Sca
           /\b(?:source-owned answer records?|source-owned service pages?|source truth|answer-record language|answer record assistants|public answer record|source-owned catalog state|source record|public data readback|source readback|route readback|registry search|registry results)\b/i,
       },
       {
+        rule: 'public-protocol-language',
+        message: 'Public human surfaces must not mention protocols or machine interfaces.',
+        pattern: /\b(?:MCP|OpenAPI|callable|protocol)\b/i,
+      },
+      {
+        rule: 'public-epistemic-ledger-label',
+        message: 'Public human surfaces must not show internal epistemic ledger labels.',
+        pattern: /\b(?:KNOWN|UNKNOWN|UNAVAILABLE|NEXT_STEP)\b/,
+      },
+      {
         rule: 'generic-registry-language',
         message: 'The public registry must use customer-facing business-detail language, not generic search/result/page wording.',
         pattern: /\b(?:Find public service pages|Public business pages|Registry search|No registry results|Open page)\b/,
@@ -397,10 +447,99 @@ export function scanPublicLanguage(targets: readonly ScanTarget[]): readonly Sca
         message: 'Public-facing copy cannot imply wallet, custody, checkout, or marketplace behavior.',
         pattern: /\b(?:wallet|custody|checkout|marketplace)\b/i,
       },
+      {
+        rule: 'handshake-internal-vocabulary',
+        message: 'Public and assistant-visible copy must not expose internal identity or clearance vocabulary.',
+        pattern: /\b(?:Handshake|HSK|kernel|greenlight|clearance|mandate|protocol|gateway|ActionContract)\b/i,
+      },
+      {
+        rule: 'pm05-trust-overclaim',
+        message: 'PM-05 public or assistant-visible language must not imply booking, payment, dispatch, autonomy, live availability, or marketplace liquidity.',
+        pattern: pm05TrustOverclaimPattern,
+      },
+      {
+        rule: 'pm05-internal-vocabulary',
+        message: 'PM-05 public or assistant-visible language must not expose internal architecture vocabulary.',
+        pattern: pm05InternalVocabularyPattern,
+      },
+      {
+        rule: 'pm05-unqualified-verified',
+        message: 'PM-05 public or assistant-visible language may use verified only with a named standard and evidence row.',
+        pattern: pm05UnqualifiedVerifiedPattern,
+      },
     ],
     [scannerUtilityPath]
+  ).filter((violation) => !isAllowedPublicLanguageViolation(violation))
+}
+
+function isAllowedPublicLanguageViolation(violation: ScanViolation): boolean {
+  const normalized = normalizedScanPath(violation.file)
+
+  if (isAllowedPm05PublicLanguageContext(normalized)) {
+    return [
+      'public-protocol-language',
+      'generic-money-language',
+      'handshake-internal-vocabulary',
+      'pm05-trust-overclaim',
+      'pm05-internal-vocabulary',
+      'pm05-unqualified-verified',
+    ].includes(violation.rule)
+  }
+
+  if (violation.rule === 'handshake-internal-vocabulary') {
+    return normalized.includes('src/modules/clearance/internal/')
+  }
+
+  if (violation.rule === 'pm05-trust-overclaim') {
+    return (
+      isUnavailableOrDeferredClaimContext(violation.excerpt, pm05TrustOverclaimPattern) ||
+      isPm05BoundaryRefusal(violation.excerpt)
+    )
+  }
+
+  if (violation.rule === 'pm05-unqualified-verified') {
+    return isNamedStandardVerifiedEvidence(violation.excerpt)
+  }
+
+  return false
+}
+
+function isAllowedPm05PublicLanguageContext(normalized: string): boolean {
+  return (
+    normalized.includes('.planning/') ||
+    normalized.includes('tests/copy/') ||
+    /src\/modules\/[^/]+\/internal\//.test(normalized)
   )
 }
+
+function isNamedStandardVerifiedEvidence(excerpt: string): boolean {
+  return /\bverified\s+against\b[^.;\n]{1,120}\bstandard\b[^.;\n]{0,120}\bevidence\s+(?:row|record)\b/i.test(excerpt)
+}
+
+function isPm05BoundaryRefusal(excerpt: string): boolean {
+  const capabilityInClause = cloneRegExp(pm05TrustOverclaimPattern)
+
+  return excerpt
+    .split(/[.;!?\n]/)
+    .filter((clause) => capabilityInClause.test(clause))
+    .every((clause) => {
+      const [boundarySegment = '', ...contrastSegments] = clause.split(/\bbut\b|\bwhile\b|\bwhereas\b/i)
+      const namesBoundary =
+        /\bdoes\s+not\b/i.test(boundarySegment) ||
+        /\bno\s+(?:booking|payment|dispatch|live payment|production payment)\b/i.test(boundarySegment)
+
+      return (
+        namesBoundary &&
+        !contrastSegments.some(
+          (segment) =>
+            pm05TrustOverclaimPattern.test(segment) &&
+            positiveClaimPattern.test(segment) &&
+            !unavailableOrDeferredPattern.test(segment),
+        )
+      )
+    })
+}
+
 
 const copyClaimRules: readonly CopyClaimRule[] = [
   {
@@ -552,11 +691,11 @@ function isAllowedPhase3DiscoveryReadbackClaim(violation: ScanViolation, rule: C
 function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
   const normalized = normalizedScanPath(file)
 
-  if (normalized.includes('.planning/phases/02-05-PRODUCTION-MATURITY-')) {
+  if (isPlanningPhasePath(normalized, '02-05-PRODUCTION-MATURITY-')) {
     return [2, 3, 4, 5]
   }
 
-  if (normalized.includes('.planning/phases/02-human-inquiry-owner-inbox/')) {
+  if (isPlanningPhasePath(normalized, '02-human-inquiry-owner-inbox/')) {
     return [2]
   }
 
@@ -564,11 +703,11 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
     return [2]
   }
 
-  if (normalized.includes('.planning/phases/03-standard-agent-builder-discovery/')) {
+  if (isPlanningPhasePath(normalized, '03-standard-agent-builder-discovery/')) {
     return [3]
   }
 
-  if (normalized.includes('.planning/phases/04-owner-pending-protected-actions/')) {
+  if (isPlanningPhasePath(normalized, '04-owner-pending-protected-actions/')) {
     return [4]
   }
 
@@ -576,7 +715,7 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
     return [4]
   }
 
-  if (normalized.includes('.planning/phases/05-paid-activation-money-rails/')) {
+  if (isPlanningPhasePath(normalized, '05-paid-activation-money-rails/')) {
     return [5]
   }
 
@@ -588,7 +727,7 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
     return [2, 3, 4, 5, 6]
   }
 
-  if (normalized.includes('.planning/phases/06-agentic-business-action-receipts/')) {
+  if (isPlanningPhasePath(normalized, '06-agentic-business-action-receipts/')) {
     return [6]
   }
 
@@ -597,6 +736,13 @@ function copyClaimContextPhases(file: string): readonly PhaseNumber[] {
   }
 
   return []
+}
+
+function isPlanningPhasePath(normalized: string, phasePath: string): boolean {
+  return (
+    normalized.includes(`.planning/phases/${phasePath}`) ||
+    normalized.includes(`.planning/archive/phases/${phasePath}`)
+  )
 }
 
 function isPhase2InquiryRuntimeContext(normalizedPath: string): boolean {

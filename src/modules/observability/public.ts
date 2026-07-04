@@ -346,7 +346,7 @@ function sameEvidenceSet(left: readonly string[], right: readonly string[]): boo
   const normalizedLeft = [...left].sort()
   const normalizedRight = [...right].sort()
 
-  return normalizedLeft.every((value, index) => value === normalizedRight[index])
+  return normalizedLeft.length === normalizedRight.length && normalizedLeft.every((value, index) => value === normalizedRight[index])
 }
 
 export const BusinessActionPrivateEvidenceRetentionClass = 'business_action_private_evidence' as const

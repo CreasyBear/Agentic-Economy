@@ -219,7 +219,7 @@ export const publishBusinessCatalog = mutationGeneric({
   },
   returns: v.union(catalogOkResult, catalogErrorResult),
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'catalog_publish')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'catalog_publish')
     if (sourceWrite.kind === 'rejected') {
       return catalogError('catalog_publish_csrf_rejected', sourceWrite.reason)
     }

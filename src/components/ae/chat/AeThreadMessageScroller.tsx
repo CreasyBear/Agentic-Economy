@@ -79,19 +79,25 @@ export function MessageScrollerProvider({
   React.useEffect(() => {
     const viewport = viewportRef.current
     if (viewport === null) return
-    if (autoScroll || defaultScrollPosition === 'end') {
-      viewport.scrollTop = viewport.scrollHeight
-      return
-    }
-    if (defaultScrollPosition === 'last-anchor') {
-      const anchor = viewport.querySelector<HTMLElement>('[data-scroll-anchor="true"]')
-      if (anchor !== null) {
-        const viewportRect = viewport.getBoundingClientRect()
-        const anchorRect = anchor.getBoundingClientRect()
-        viewport.scrollTop += anchorRect.top - viewportRect.top - scrollPreviousItemPeek
+
+    const scrollMode = autoScroll || defaultScrollPosition === 'end' ? 'end' : defaultScrollPosition
+    switch (scrollMode) {
+      case 'end':
+        viewport.scrollTop = viewport.scrollHeight
+        return
+      case 'last-anchor': {
+        const anchor = viewport.querySelector<HTMLElement>('[data-scroll-anchor="true"]')
+        if (anchor !== null) {
+          const viewportRect = viewport.getBoundingClientRect()
+          const anchorRect = anchor.getBoundingClientRect()
+          viewport.scrollTop += anchorRect.top - viewportRect.top - scrollPreviousItemPeek
+        }
+        return
       }
+      case 'start':
+        return
     }
-  }, [autoScroll, children, defaultScrollPosition, scrollPreviousItemPeek, updateScrollable])
+  }, [autoScroll, children, defaultScrollPosition, scrollPreviousItemPeek])
 
   const value = React.useMemo(() => ({ viewportRef, scrollToMessage, scrollable }), [scrollToMessage, scrollable])
   return <MessageScrollerContext.Provider value={value}>{children}</MessageScrollerContext.Provider>

@@ -188,51 +188,66 @@ export function buildAdminBusinessActionRouteReconstruction(
   const ownerSafe = buildOwnerBusinessActionRouteReconstruction(state, request)
   return {
     ...ownerSafe,
-    guardrailDecisions: state.guardrailDecisions
-      .filter((candidate) => candidate.requestId === request.id)
-      .map((decision) => ({
-        id: decision.id,
-        requestId: decision.requestId,
-        provider: decision.provider,
-        modelName: decision.modelName,
-        modelVersion: decision.modelVersion,
-        decision: decision.decision,
-        policyHash: decision.policyHash,
-        decisionHash: decision.decisionHash,
-        payloadHash: decision.payloadHash,
-        recordedAt: decision.recordedAt,
-      })),
-    externalEvidenceEvents: state.externalEvidenceEvents
-      .filter((candidate) => candidate.requestId === request.id)
-      .map((event) => ({
-        id: event.id,
-        requestId: event.requestId,
-        checkpointId: event.checkpointId,
-        provider: event.provider,
-        status: event.status,
-        providerRefHash: event.providerRefHash,
-        payloadHash: event.payloadHash,
-        idempotencyKey: event.idempotencyKey,
-        correlationId: event.correlationId,
-        receivedAt: event.receivedAt,
-        ...('amountCents' in event && event.amountCents === undefined ? {} : { amountCents: event.amountCents }),
-        ...('currency' in event && event.currency === undefined ? {} : { currency: event.currency }),
-        ...('reason' in event && event.reason === undefined ? {} : { reason: event.reason }),
-        ...('evidenceKind' in event && typeof event.evidenceKind === 'string' ? { evidenceKind: event.evidenceKind } : {}),
-      })),
+    guardrailDecisions: state.guardrailDecisions.flatMap((decision) => {
+      if (decision.requestId !== request.id) {
+        return []
+      }
+      return [
+        {
+          id: decision.id,
+          requestId: decision.requestId,
+          provider: decision.provider,
+          modelName: decision.modelName,
+          modelVersion: decision.modelVersion,
+          decision: decision.decision,
+          policyHash: decision.policyHash,
+          decisionHash: decision.decisionHash,
+          payloadHash: decision.payloadHash,
+          recordedAt: decision.recordedAt,
+        },
+      ]
+    }),
+    externalEvidenceEvents: state.externalEvidenceEvents.flatMap((event) => {
+      if (event.requestId !== request.id) {
+        return []
+      }
+      return [
+        {
+          id: event.id,
+          requestId: event.requestId,
+          checkpointId: event.checkpointId,
+          provider: event.provider,
+          status: event.status,
+          providerRefHash: event.providerRefHash,
+          payloadHash: event.payloadHash,
+          idempotencyKey: event.idempotencyKey,
+          correlationId: event.correlationId,
+          receivedAt: event.receivedAt,
+          ...('amountCents' in event && event.amountCents === undefined ? {} : { amountCents: event.amountCents }),
+          ...('currency' in event && event.currency === undefined ? {} : { currency: event.currency }),
+          ...('reason' in event && event.reason === undefined ? {} : { reason: event.reason }),
+          ...('evidenceKind' in event && typeof event.evidenceKind === 'string' ? { evidenceKind: event.evidenceKind } : {}),
+        },
+      ]
+    }),
     privateEvidenceMetadata: {
       count: state.privateEvidenceRefs.filter((candidate) => candidate.requestId === request.id).length,
-      refs: state.privateEvidenceRefs
-        .filter((candidate) => candidate.requestId === request.id)
-        .map((ref) => ({
-          id: ref.id,
-          requestId: ref.requestId,
-          retentionClass: ref.retentionClass,
-          accessPolicy: ref.accessPolicy,
-          payloadHash: ref.payloadHash,
-          ttlExpiresAt: ref.ttlExpiresAt,
-          ...(ref.redactedAt === undefined ? {} : { redactedAt: ref.redactedAt }),
-        })),
+      refs: state.privateEvidenceRefs.flatMap((ref) => {
+        if (ref.requestId !== request.id) {
+          return []
+        }
+        return [
+          {
+            id: ref.id,
+            requestId: ref.requestId,
+            retentionClass: ref.retentionClass,
+            accessPolicy: ref.accessPolicy,
+            payloadHash: ref.payloadHash,
+            ttlExpiresAt: ref.ttlExpiresAt,
+            ...(ref.redactedAt === undefined ? {} : { redactedAt: ref.redactedAt }),
+          },
+        ]
+      }),
     },
   }
 }

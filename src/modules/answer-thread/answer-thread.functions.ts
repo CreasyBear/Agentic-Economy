@@ -255,14 +255,16 @@ export async function appendAnswerTurnWithThreadAndToolCalls(
     if (port.appendTurnWithThreadAndToolCalls !== undefined) {
       return port.appendTurnWithThreadAndToolCalls(args)
     }
-    await port.createThread({
+    const threadArgs = {
       threadId: args.threadId,
       pseudonymousSessionId: args.pseudonymousSessionId,
       title,
-    })
+    }
     if (port.appendTurnWithToolCalls !== undefined) {
+      await port.createThread(threadArgs)
       return port.appendTurnWithToolCalls(appendArgs)
     }
+    await port.createThread(threadArgs)
     const { turnId } = await port.appendTurn(appendArgs)
     return { turnId, insertedToolCalls: args.toolCalls.length }
   }

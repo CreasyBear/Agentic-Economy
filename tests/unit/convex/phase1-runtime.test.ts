@@ -106,6 +106,8 @@ const regenerateHandler = (regenerateDiscoveryManifest as unknown as {
     csrfToken?: string
     csrfCookie?: string
     origin?: string
+    operationKey: string
+    correlationId: string
     sourceWrite?: SourceWriteAdmission
   }>
 })._handler
@@ -185,11 +187,15 @@ describe('Convex Phase 1 runtime bridge', () => {
       repairAction: 'regenerate_manifest',
     })
 
+    const discoveryOperationKey = `discovery:regenerate:${created.business.businessId}`
+    const discoveryCorrelationId = `${discoveryOperationKey}:phase1-runtime`
     const regenerated = await regenerateHandler(authCtx(db, sam()), {
       businessId: created.business.businessId,
+      operationKey: discoveryOperationKey,
+      correlationId: discoveryCorrelationId,
       csrfToken: 'csrf-discovery',
       csrfCookie: 'csrf-discovery',
-      sourceWrite: sourceWriteAdmission('discovery_repair', 'discovery:regenerate:sam'),
+      sourceWrite: sourceWriteAdmission('discovery_repair', discoveryOperationKey, discoveryCorrelationId),
     })
     expect(regenerated).toMatchObject({ kind: 'ok', code: 'discovery_manifest_generated' })
 

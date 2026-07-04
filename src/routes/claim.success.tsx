@@ -9,7 +9,7 @@ import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButt
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
-import { readOwnerStatusServer } from '@/modules/catalog/owner-claim.functions'
+import { readOwnerClaimSuccessServer } from '@/modules/catalog/owner-claim.functions'
 
 type ClaimSuccessSearch = {
   slug?: string
@@ -21,7 +21,7 @@ export const Route = createFileRoute('/claim/success')({
     return slug === undefined ? {} : { slug }
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => readOwnerStatusServer({ data: deps }),
+  loader: ({ deps }) => readOwnerClaimSuccessServer({ data: deps }),
   head: () => ({
     meta: [
       { title: 'Your service page is published | Agentic Economy' },
@@ -32,10 +32,9 @@ export const Route = createFileRoute('/claim/success')({
 })
 
 function ClaimSuccessRoute() {
-  const result = Route.useLoaderData()
-  const readback = result.kind === 'available' ? result.readback : undefined
+  const pageState = Route.useLoaderData()
 
-  if (readback === undefined) {
+  if (pageState.kind !== 'available') {
     return (
       <AePublicShell>
         <AePageHeader
@@ -45,9 +44,9 @@ function ClaimSuccessRoute() {
         />
         <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
           <AeEmptyState
-            title={result.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}
+            title={pageState.kind === 'not_found' ? 'Service page not found' : 'Service page status unavailable'}
             description={
-              result.kind === 'not_found'
+              pageState.kind === 'not_found'
                 ? 'No public service page matched that slug.'
                 : 'Status is unavailable right now. Try again in a moment.'
             }
@@ -57,7 +56,7 @@ function ClaimSuccessRoute() {
     )
   }
 
-  const catalog = readback.catalog
+  const catalog = pageState.catalog
 
   return (
     <AePublicShell>

@@ -24,7 +24,7 @@ export type RuntimeReader = RuntimeQueryable & {
 }
 
 export type RuntimeWriter = RuntimeQueryable & {
-  get?: (id: string) => Promise<RuntimeDocument | null>
+  get: (id: string) => Promise<RuntimeDocument | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
 }
@@ -230,7 +230,67 @@ export async function loadPhaseOneSourceState(db: Pick<RuntimeDb, 'query'>): Pro
 }
 
 export async function persistPhaseOneSourceState(db: RuntimeWriter, state: PhaseOneSourceState): Promise<void> {
-  const specs: UpsertSpec[] = [
+  const specs = phaseOneUpsertSpecs(state)
+
+  for (const spec of specs) {
+    await upsertRows(db, spec)
+  }
+}
+
+async function upsertRows(db: RuntimeWriter, spec: UpsertSpec): Promise<void> {
+  for (const row of spec.rows) {
+    const patch = spec.toPatch(row)
+    const existing = await findExistingUpsertRow(db, spec, row)
+    if (existing === null) {
+      await db.insert(spec.tableName, patch)
+    } else {
+      await db.patch(existing._id, patch)
+    }
+  }
+}
+
+async function findExistingUpsertRow(
+  db: RuntimeWriter,
+  spec: UpsertSpec,
+  row: Record<string, unknown>
+): Promise<RuntimeDocument | null> {
+  if (spec.lookup === undefined) {
+    throw new Error(`Missing indexed source-state upsert lookup for ${spec.tableName}`)
+  }
+
+  const lookup = spec.lookup
+  if (lookup.kind === 'documentId') {
+    return await db.get(stringRecordField(row, lookup.idField))
+  }
+
+  if (!lookup.fields.every((field) => row[field] !== undefined)) {
+    throw new Error(`Missing source-state upsert lookup field for ${spec.tableName}`)
+  }
+
+  return await db
+    .query(spec.tableName)
+    .withIndex(lookup.indexName, (builder) => lookup.fields.reduce((next, field) => next.eq(field, row[field]), builder))
+    .unique()
+}
+
+export type SourceStateUpsertLookupCoverage = {
+  tableName: string
+  fields: readonly string[]
+  lookupKind: UpsertLookup['kind'] | 'missing'
+  indexName?: string
+}
+
+export function sourceStateUpsertLookupCoverage(): readonly SourceStateUpsertLookupCoverage[] {
+  return phaseOneUpsertSpecs(emptyPhaseOneSourceState()).map((spec) => ({
+    tableName: spec.tableName,
+    fields: spec.lookup?.kind === 'documentId' ? [spec.lookup.idField] : spec.lookup?.fields ?? [],
+    lookupKind: spec.lookup?.kind ?? 'missing',
+    ...(spec.lookup?.kind === 'index' ? { indexName: spec.lookup.indexName } : {}),
+  }))
+}
+
+function phaseOneUpsertSpecs(state: PhaseOneSourceState): UpsertSpec[] {
+  return [
     byDomainId('owners', state.business.owners, 'ownerId'),
     byDomainId('businesses', state.business.businesses, 'businessId'),
     byFields('businessContexts', state.business.businessContexts, ['businessId']),
@@ -246,62 +306,70 @@ export async function persistPhaseOneSourceState(db: RuntimeWriter, state: Phase
     byFields('indexStatus', state.registry.indexStatus, ['targetType', 'targetRef']),
     byFields('discoveryManifests', state.discovery.discoveryManifests, ['businessId', 'ucpVersion']),
     byFields('discoveryManifestAttempts', state.discovery.discoveryManifestAttempts, ['attemptId']),
-    byFields('adminMemberships', state.security.adminMemberships, ['clerkUserId', 'state']),
+    byFields(
+      'adminMemberships',
+      state.security.adminMemberships.filter(hasTokenIdentifier),
+      ['tokenIdentifier', 'state'],
+    ),
+    byFields(
+      'adminMemberships',
+      state.security.adminMemberships.filter((row) => !hasTokenIdentifier(row)),
+      ['clerkUserId', 'state'],
+    ),
     byFields('adminMembershipAuditEvents', state.security.adminMembershipAuditEvents, ['auditEventId']),
     byDomainId('disputes', state.security.disputes, 'disputeId'),
     byFields('suppressionRules', state.security.suppressionRules, ['targetType', 'targetRef', 'status']),
     byFieldsWithout('operationKeys', state.observability.operationKeys, ['actorRef', 'operationName', 'key'], ['operationKey']),
     byFieldsWithPatch('auditEvents', state.observability.auditEvents, ['eventId'], auditEventPatch),
     byFields('operatorControls', state.observability.operatorControls, ['key']),
-    byFields('funnelEvents', state.observability.funnelEvents, ['eventId']),
+    byFields('funnelEvents', state.observability.funnelEvents, ['correlationId']),
     byFields('ownerActivationState', state.observability.ownerActivationState, ['businessId']),
   ]
+}
 
-  for (const spec of specs) {
-    await upsertRows(db, spec)
+function emptyPhaseOneSourceState(): PhaseOneSourceState {
+  return {
+    business: {
+      owners: [],
+      businesses: [],
+      businessContexts: [],
+      claims: [],
+      claimFingerprints: [],
+      abuseRateLimitBuckets: [],
+    },
+    catalog: {
+      businessServices: [],
+      serviceCapabilities: [],
+    },
+    registry: {
+      registryProjectionItems: [],
+      registryProjectionAttempts: [],
+      registrySearchDocuments: [],
+      registrySearchSyncAttempts: [],
+      indexStatus: [],
+    },
+    discovery: {
+      discoveryManifests: [],
+      discoveryManifestAttempts: [],
+    },
+    security: {
+      adminMemberships: [],
+      adminMembershipAuditEvents: [],
+      disputes: [],
+      suppressionRules: [],
+    },
+    observability: {
+      operationKeys: [],
+      auditEvents: [],
+      operatorControls: [],
+      funnelEvents: [],
+      ownerActivationState: [],
+    },
   }
 }
 
-async function upsertRows(db: RuntimeWriter, spec: UpsertSpec): Promise<void> {
-  for (const row of spec.rows) {
-    const patch = spec.toPatch(row)
-    const indexedExisting = await findExistingUpsertRow(db, spec, row)
-    const existing = indexedExisting === undefined
-      ? (await collect(db, spec.tableName)).find((document) => spec.matches(document, row))
-      : indexedExisting
-    if (existing === undefined || existing === null) {
-      await db.insert(spec.tableName, patch)
-    } else {
-      await db.patch(existing._id, patch)
-    }
-  }
-}
-
-async function findExistingUpsertRow(
-  db: RuntimeWriter,
-  spec: UpsertSpec,
-  row: Record<string, unknown>
-): Promise<RuntimeDocument | null | undefined> {
-  if (spec.lookup === undefined) {
-    return undefined
-  }
-
-  const lookup = spec.lookup
-  if (lookup.kind === 'documentId') {
-    if (db.get === undefined) {
-      return undefined
-    }
-    return await db.get(stringRecordField(row, lookup.idField))
-  }
-
-  if (!lookup.fields.every((field) => row[field] !== undefined)) {
-    return undefined
-  }
-
-  return await db
-    .query(spec.tableName)
-    .withIndex(lookup.indexName, (builder) => lookup.fields.reduce((next, field) => next.eq(field, row[field]), builder))
-    .unique()
+function hasTokenIdentifier(row: Record<string, unknown>): boolean {
+  return typeof row.tokenIdentifier === 'string' && row.tokenIdentifier.length > 0
 }
 
 function byDomainId(tableName: string, rows: readonly Record<string, unknown>[], idField: string): UpsertSpec {
@@ -363,16 +431,24 @@ const indexedUpsertLookups: readonly IndexedUpsertLookup[] = [
   { kind: 'index', tableName: 'businessContexts', fields: ['businessId'], indexName: 'by_business' },
   { kind: 'index', tableName: 'claimFingerprints', fields: ['fingerprint', 'status'], indexName: 'by_fingerprint_status' },
   { kind: 'index', tableName: 'abuseRateLimitBuckets', fields: ['scope', 'key', 'window'], indexName: 'by_scope_key_window' },
+  { kind: 'index', tableName: 'serviceCapabilities', fields: ['businessId', 'serviceId', 'kind'], indexName: 'by_business_service_kind' },
+  { kind: 'index', tableName: 'registryProjectionItems', fields: ['logicalKey'], indexName: 'by_logicalKey' },
   { kind: 'index', tableName: 'registryProjectionAttempts', fields: ['logicalKey'], indexName: 'by_logicalKey' },
   { kind: 'index', tableName: 'registrySearchDocuments', fields: ['documentId'], indexName: 'by_documentId' },
   { kind: 'index', tableName: 'registrySearchSyncAttempts', fields: ['attemptId'], indexName: 'by_attemptId' },
+  { kind: 'index', tableName: 'indexStatus', fields: ['targetType', 'targetRef'], indexName: 'by_target' },
   { kind: 'index', tableName: 'discoveryManifests', fields: ['businessId', 'ucpVersion'], indexName: 'by_business_version' },
+  { kind: 'index', tableName: 'discoveryManifestAttempts', fields: ['attemptId'], indexName: 'by_attemptId' },
   { kind: 'index', tableName: 'adminMemberships', fields: ['clerkUserId', 'state'], indexName: 'by_clerkUserId_state' },
+  { kind: 'index', tableName: 'adminMemberships', fields: ['tokenIdentifier', 'state'], indexName: 'by_tokenIdentifier_state' },
+  { kind: 'index', tableName: 'adminMembershipAuditEvents', fields: ['auditEventId'], indexName: 'by_auditEventId' },
   { kind: 'index', tableName: 'suppressionRules', fields: ['targetType', 'targetRef', 'status'], indexName: 'by_target_status' },
   { kind: 'index', tableName: 'operationKeys', fields: ['actorRef', 'operationName', 'key'], indexName: 'by_actor_operation_key' },
+  { kind: 'index', tableName: 'auditEvents', fields: ['eventId'], indexName: 'by_eventId' },
   { kind: 'index', tableName: 'operatorControls', fields: ['key'], indexName: 'by_key' },
+  { kind: 'index', tableName: 'funnelEvents', fields: ['correlationId'], indexName: 'by_correlationId' },
+  { kind: 'index', tableName: 'ownerActivationState', fields: ['businessId'], indexName: 'by_business' },
 ]
-
 function indexedUpsertLookup(tableName: string, fields: readonly string[]): UpsertLookup | undefined {
   return indexedUpsertLookups.find((lookup) => lookup.tableName === tableName && sameFields(lookup.fields, fields))
 }

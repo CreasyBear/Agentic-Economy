@@ -70,3 +70,45 @@
   --radius-3xl: var(--ae-radius-sm);
   --radius-4xl: var(--ae-radius-sm);
 }
+
+@layer astryx-theme {
+  @scope ([data-astryx-theme="neutral"]) to ([data-astryx-theme]) {
+    :scope {
+      /* AE Bible palette: Astryx semantic token overrides. */
+      --color-background-body: #F4EFE6;    /* Bone → bg-body */
+      --color-background-surface: #FBF8F1; /* Paper → bg-surface */
+      --color-background-card: #FBF8F1;    /* Paper → bg-card */
+      --color-background-popover: #FBF8F1;
+      --color-background-muted: #ECE6DC;   /* Mist → muted fills/chips */
+
+      --color-text-primary: #17201F;       /* Ink → text-primary */
+      --color-text-secondary: #5B6360;     /* Slate → text-secondary */
+      --color-text-disabled: #8AA396;      /* Dust only for disabled/muted marks, never body text */
+
+      --color-border: #D8CFC2;             /* Stone → border-border */
+      --color-border-emphasized: #8AA396;  /* Dust → hairline accent / active proof rule */
+      --color-skeleton: #D8CFC2;
+
+      --color-accent: #40614F;             /* Eucalyptus → accent / CTA fill */
+      --color-text-accent: #40614F;        /* text-accent / links / kickers */
+      --color-icon-accent: #40614F;
+      --color-on-accent: #F4EFE6;          /* Bone on Eucalyptus passes AA */
+      --color-accent-muted: color-mix(in oklch, #8AA396 24%, #FBF8F1);
+
+      --radius-inner: 4px;
+      --radius-element: 6px;
+      --radius-container: 6px;
+      --radius-page: 6px;
+      --radius-chat: 6px;
+
+      --shadow-low: 0 1px 2px oklch(23.44% 0.0131 187.94 / 0.04),
+        inset 0 0 0 1px oklch(23.44% 0.0131 187.94 / 0.06);
+      --shadow-med: 0 2px 8px oklch(23.44% 0.0131 187.94 / 0.06),
+        inset 0 0 0 1px oklch(23.44% 0.0131 187.94 / 0.08);
+      --shadow-high: 0 8px 24px oklch(23.44% 0.0131 187.94 / 0.08),
+        inset 0 0 0 1px oklch(23.44% 0.0131 187.94 / 0.10);
+      --shadow-inset-hover: inset 0 0 0 2px oklch(46.14% 0.0486 159.87 / 0.22);
+      --shadow-inset-selected: inset 0 0 0 2px oklch(46.14% 0.0486 159.87 / 0.40);
+    }
+  }
+}

@@ -263,7 +263,7 @@ function auditThreadCaseShape(
           covers: testCase.covers,
           query: turn.query,
           ...(turn.searchContext === undefined ? {} : { searchContext: turn.searchContext }),
-          ...(turn.plannedAgent === undefined ? {} : { plannedAgent: turn.plannedAgent }),
+          ...(turn.openRouterAgent === undefined ? {} : { openRouterAgent: turn.openRouterAgent }),
           expected: turn.expected,
         },
         testCase,
@@ -319,12 +319,14 @@ function auditHarnessCaseShape(
 
     auditHarnessCoverageAssertionMapping(testCase, issues)
 
-    if (testCase.source.kind === 'answer-turn') {
-      const turnCase = turnCaseById.get(testCase.source.caseId)
+    const source = testCase.source
+
+    if (source.kind === 'answer-turn') {
+      const turnCase = turnCaseById.get(source.caseId)
       if (turnCase === undefined) {
         issues.push({
           code: 'harness_case_unknown_turn_source',
-          message: `Harness eval case references unknown answer turn case "${testCase.source.caseId}".`,
+          message: `Harness eval case references unknown answer turn case "${source.caseId}".`,
           caseId: testCase.id,
         })
         continue
@@ -333,32 +335,32 @@ function auditHarnessCaseShape(
       continue
     }
 
-    if (testCase.source.kind === 'answer-thread') {
-      if (!threadCaseById.has(testCase.source.caseId)) {
+    if (source.kind === 'answer-thread') {
+      if (!threadCaseById.has(source.caseId)) {
         issues.push({
           code: 'harness_case_unknown_thread_source',
-          message: `Harness eval case references unknown answer thread case "${testCase.source.caseId}".`,
+          message: `Harness eval case references unknown answer thread case "${source.caseId}".`,
           caseId: testCase.id,
         })
       }
       continue
     }
 
-    if (testCase.source.kind === 'unit-test' && !testCase.source.file.startsWith('tests/unit/')) {
+    if (source.kind === 'unit-test' && !source.file.startsWith('tests/unit/')) {
       issues.push({
         code: 'harness_unit_case_outside_unit_tests',
         message: 'Harness unit-test metadata must point at tests/unit.',
         caseId: testCase.id,
       })
     }
-    if (testCase.source.kind === 'integration-test' && !testCase.source.file.startsWith('tests/integration/')) {
+    if (source.kind === 'integration-test' && !source.file.startsWith('tests/integration/')) {
       issues.push({
         code: 'harness_integration_case_outside_integration_tests',
         message: 'Harness integration-test metadata must point at tests/integration.',
         caseId: testCase.id,
       })
     }
-    if (!testCase.source.file.endsWith('.test.ts')) {
+    if (!source.file.endsWith('.test.ts')) {
       issues.push({
         code: 'harness_case_non_test_source',
         message: 'Harness structural metadata must point at a Vitest test file.',

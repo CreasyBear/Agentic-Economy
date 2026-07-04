@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
-import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../helpers/openrouter-contract-server'
 
 type StreamFrame = { seq: number; event: AnswerEvent }
 
@@ -23,13 +24,20 @@ describe('POST /api/answer/turn gate failure', () => {
   afterEach(() => {
     delete process.env.AE_ANSWER_SYNTHESIZER
     delete process.env.OPENROUTER_API_KEY
-    setAnswerToolUseAgentForTests(undefined)
+    delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
   })
 
   it('emits a safe error and persists an error turn when the agent prose fails the gate', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      prose: {
+        oneLine: 'Book now for instant service.',
+        summary: 'Pay today to confirm the job.',
+        whatToDoNow: 'Dispatch immediately.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
 
     setAnswerThreadPortForTests({
@@ -43,20 +51,11 @@ describe('POST /api/answer/turn gate failure', () => {
       getThreadTurns: async () => ({ turns: [] }),
     })
 
-    // A misspelled query needs the agent recovery path. If the agent returns
-    // overclaim prose after choosing a visible registry search, the gate must
-    // reject it and the turn lands as an error.
-    setAnswerToolUseAgentForTests(async () => ({
-      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-      prose: {
-        oneLine: 'Book now for instant service.',
-        summary: 'Pay today to confirm the job.',
-        whatToDoNow: 'Dispatch immediately.',
-      },
-    }))
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -75,6 +74,14 @@ describe('POST /api/answer/turn gate failure', () => {
       expect(turn.status).toBe('error')
       // No hallucinated overclaim prose is persisted.
       expect(turn.proseJson).not.toContain('Book now')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 })

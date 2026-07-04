@@ -12,6 +12,7 @@ import {
   DisputeStatusValues,
   SuppressionRuleStatusValues,
 } from '@/modules/security/public'
+import { SourceWriteAdmissionScopeValues } from '@/modules/security/source-write-admission'
 
 export const securityTables = {
   disputes: defineTable({
@@ -53,6 +54,7 @@ export const securityTables = {
 
   adminMemberships: defineTable({
     clerkUserId: v.string(),
+    tokenIdentifier: v.optional(v.string()),
     role: literalUnion(AdminRoleValues),
     state: literalUnion(AdminMembershipStateValues),
     grantedBy: v.string(),
@@ -60,7 +62,9 @@ export const securityTables = {
     revokedBy: v.optional(v.string()),
     revokedAt: v.optional(v.number()),
     evidenceRef: v.optional(v.string()),
-  }).index('by_clerkUserId_state', ['clerkUserId', 'state']),
+  })
+    .index('by_clerkUserId_state', ['clerkUserId', 'state'])
+    .index('by_tokenIdentifier_state', ['tokenIdentifier', 'state']),
 
   adminMembershipAuditEvents: defineTable({
     auditEventId: v.string(),
@@ -72,7 +76,7 @@ export const securityTables = {
     operationKey: v.string(),
     correlationId: v.string(),
     createdAt: v.number(),
-  }),
+  }).index('by_auditEventId', ['auditEventId']),
 
   abuseRateLimitBuckets: defineTable({
     scope: v.string(),
@@ -95,4 +99,21 @@ export const securityTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index('by_fingerprint_status', ['fingerprint', 'status']),
+  // Replay ledger rows are retained only until `expiresAt`; schedule/batch purge uses
+  // `by_expiresAt` so replay storage stays bounded without weakening first-use checks.
+
+  sourceWriteNonces: defineTable({
+    keyId: v.string(),
+    nonce: v.string(),
+    family: v.string(),
+    scope: literalUnion(SourceWriteAdmissionScopeValues),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    bodyDigest: v.string(),
+    issuedAt: v.number(),
+    consumedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_keyId_and_nonce', ['keyId', 'nonce'])
+    .index('by_expiresAt', ['expiresAt']),
 } as const

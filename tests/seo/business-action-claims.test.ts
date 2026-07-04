@@ -32,7 +32,7 @@ describe('Phase 6 business-action SEO claim safety', () => {
       'source/local proof only; production proof not claimed.',
     ].join(' ')
 
-    expect(scanCopyFixture('.planning/phases/06-agentic-business-action-receipts/seo.fixture', copy)).toEqual([])
+    expect(scanCopyFixture('.planning/archive/phases/06-agentic-business-action-receipts/seo.fixture', copy)).toEqual([])
   })
 
   it('rejects production autonomous payment SEO phrasing outside Phase 6 proof context', () => {

@@ -79,7 +79,7 @@ describe('business-action owner route readbacks', () => {
       reconstruction: {
         receipt: { outcome: 'success', reconstructionStatus: 'complete' },
         publicReadback: {
-          labels: ['source/local proof only', 'production proof not claimed'],
+          labels: ['checked evidence'],
         },
       },
     })

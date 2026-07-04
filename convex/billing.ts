@@ -355,7 +355,7 @@ export const persistCurrentOwnerBillingState = mutationGeneric({
     correlationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'billing')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
     if (sourceWrite.kind === 'rejected') {
       return mutationError('billing_csrf_rejected', sourceWrite.reason, false)
     }
@@ -385,7 +385,7 @@ export const persistAdminBillingState = mutationGeneric({
     correlationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'billing')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
     if (sourceWrite.kind === 'rejected') {
       return mutationError('billing_csrf_rejected', sourceWrite.reason, false)
     }
@@ -414,7 +414,7 @@ export const publishBillingOffer = mutationGeneric({
     correlationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'billing')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
     if (sourceWrite.kind === 'rejected') {
       return mutationError('billing_csrf_rejected', sourceWrite.reason, false)
     }
@@ -471,7 +471,7 @@ export const recordBillingProviderEvidence = mutationGeneric({
     correlationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'billing')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
     if (sourceWrite.kind === 'rejected') {
       return mutationError('billing_csrf_rejected', sourceWrite.reason, false)
     }
@@ -514,7 +514,7 @@ export const recordCurrentOwnerBillingReturn = mutationGeneric({
     correlationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'billing')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
     if (sourceWrite.kind === 'rejected') {
       return mutationError('billing_csrf_rejected', sourceWrite.reason, false)
     }
@@ -577,7 +577,7 @@ export const ingestAutumnBillingProviderEvent = mutationGeneric({
     correlationId: v.string(),
   },
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'billing')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'billing')
     if (sourceWrite.kind === 'rejected') {
       return mutationError('billing_csrf_rejected', sourceWrite.reason, false)
     }

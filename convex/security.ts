@@ -313,7 +313,7 @@ export const bootstrapOwnerAdmin = mutationGeneric({
   },
   returns: adminMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
     if (sourceWrite.kind === 'rejected') {
       return adminSourceWriteDenied(sourceWrite.reason)
     }
@@ -326,6 +326,7 @@ export const bootstrapOwnerAdmin = mutationGeneric({
     const state = adminAuthorityState(source)
     const result = bootstrapOwnerAdminModule(state, {
       clerkUserId: identity?.subject ?? 'anonymous',
+      ...(identity === null ? {} : { tokenIdentifier: identity.tokenIdentifier }),
       authorizedClerkUserIds: bootstrapPrincipalIds(),
       reasonCode: args.reasonCode,
       evidenceRefs: args.evidenceRefs,
@@ -342,6 +343,7 @@ export const bootstrapOwnerAdmin = mutationGeneric({
 export const grantAdminMembership = mutationGeneric({
   args: {
     targetClerkUserId: v.string(),
+    targetTokenIdentifier: v.optional(v.string()),
     role: adminRole,
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
@@ -351,7 +353,7 @@ export const grantAdminMembership = mutationGeneric({
   },
   returns: adminMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
     if (sourceWrite.kind === 'rejected') {
       return adminSourceWriteDenied(sourceWrite.reason)
     }
@@ -364,6 +366,7 @@ export const grantAdminMembership = mutationGeneric({
     const result = grantAdminMembershipModule(adminAuthorityState(source), {
       actorMembership,
       targetClerkUserId: args.targetClerkUserId,
+      ...(args.targetTokenIdentifier === undefined ? {} : { targetTokenIdentifier: args.targetTokenIdentifier }),
       role: args.role,
       reasonCode: args.reasonCode,
       evidenceRefs: args.evidenceRefs,
@@ -380,6 +383,7 @@ export const grantAdminMembership = mutationGeneric({
 export const revokeAdminMembership = mutationGeneric({
   args: {
     targetClerkUserId: v.string(),
+    targetTokenIdentifier: v.optional(v.string()),
     reasonCode: v.string(),
     evidenceRefs: v.array(v.string()),
     ...sourceWriteArgs,
@@ -388,7 +392,7 @@ export const revokeAdminMembership = mutationGeneric({
   },
   returns: adminMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
     if (sourceWrite.kind === 'rejected') {
       return adminSourceWriteDenied(sourceWrite.reason)
     }
@@ -401,6 +405,7 @@ export const revokeAdminMembership = mutationGeneric({
     const result = revokeAdminMembershipModule(adminAuthorityState(source), {
       actorMembership,
       targetClerkUserId: args.targetClerkUserId,
+      ...(args.targetTokenIdentifier === undefined ? {} : { targetTokenIdentifier: args.targetTokenIdentifier }),
       reasonCode: args.reasonCode,
       evidenceRefs: args.evidenceRefs,
       operationKey: args.operationKey,
@@ -463,7 +468,7 @@ export const openRemovalDispute = mutationGeneric({
   },
   returns: openDisputeResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'removal_dispute')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'removal_dispute')
     if (sourceWrite.kind === 'rejected') {
       return {
         kind: 'error' as const,
@@ -523,7 +528,7 @@ export const closeRemovalDispute = mutationGeneric({
   },
   returns: closeDisputeResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
     if (sourceWrite.kind === 'rejected') {
       return {
         kind: 'error' as const,
@@ -744,7 +749,7 @@ function disputeSourceState(source: Awaited<ReturnType<typeof loadPhaseOneSource
 
 async function readCurrentActiveMembership(ctx: RuntimeMutationCtx): Promise<AdminMembership | undefined> {
   const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity.subject)
+  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity)
 }
 
 function summarizeAdminMutation(
@@ -906,7 +911,7 @@ function bootstrapPrincipalIds(): readonly string[] {
   return envList('ADMIN_BOOTSTRAP_PRINCIPAL_IDS')
 }
 
-function adminSourceWriteDenied(reason: 'missing_csrf' | 'foreign_origin') {
+function adminSourceWriteDenied(reason: string) {
   return {
     kind: 'error' as const,
     code: 'admin_action_denied' as const,

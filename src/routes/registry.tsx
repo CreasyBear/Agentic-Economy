@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
@@ -91,7 +91,6 @@ function RegistryRoute() {
   const { result, query, limit } = Route.useLoaderData()
   const hasQuery = query.length > 0
   const isEmpty = result.items.length === 0
-  const [search, setSearch] = useState(query)
   const [activeCategory, setActiveCategory] = useState('All')
   const [sortOrder, setSortOrder] = useState('A-Z')
   const categories = useMemo(() => ['All', ...Array.from(new Set(result.items.map((item) => item.category))).sort()], [result.items])
@@ -109,10 +108,6 @@ function RegistryRoute() {
     }
     return sorted
   }, [effectiveCategory, result.items, sortOrder])
-
-  useEffect(() => {
-    setSearch(query)
-  }, [query])
 
   return (
     <AePublicShell>
@@ -137,8 +132,8 @@ function RegistryRoute() {
           <LayoutContent padding={6}>
             <VStack gap={6}>
               <RegistrySearchControls
-                search={search}
-                setSearch={setSearch}
+                key={query}
+                initialSearch={query}
                 limit={limit}
                 categories={categories}
                 activeCategory={effectiveCategory}
@@ -204,8 +199,7 @@ function RegistryRoute() {
 }
 
 function RegistrySearchControls({
-  search,
-  setSearch,
+  initialSearch,
   limit,
   categories,
   activeCategory,
@@ -213,8 +207,7 @@ function RegistrySearchControls({
   sortOrder,
   setSortOrder,
 }: {
-  search: string
-  setSearch: (value: string) => void
+  initialSearch: string
   limit: number
   categories: string[]
   activeCategory: string
@@ -222,6 +215,8 @@ function RegistrySearchControls({
   sortOrder: string
   setSortOrder: (value: string) => void
 }) {
+  const [search, setSearch] = useState(() => initialSearch)
+
   return (
     <Card padding={5} aria-label="Search published business details">
       <VStack gap={4}>

@@ -115,6 +115,7 @@ describe('graph freshness gate', () => {
     expect(isGraphRelevantDirtyPath('src/modules/harness/run-loop.ts')).toBe(true)
     expect(isGraphRelevantDirtyPath('src/modules/catalog/public.ts')).toBe(true)
     expect(isGraphRelevantDirtyPath('.planning/audits/notes.md')).toBe(false)
+    expect(isGraphRelevantDirtyPath('.planning/archive/phases/01-ten-star-spine-foundation/01-SPEC.md')).toBe(false)
 
     expect(checkGraphFreshness({
       currentHead: 'f614a82075365c016da70fe7024e30b2d2885d85',

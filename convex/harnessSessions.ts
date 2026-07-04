@@ -113,7 +113,7 @@ const appendHarnessSessionEntryResult = v.union(
   }),
   v.object({
     status: v.literal('denied'),
-    reason: v.union(v.literal('missing_csrf'), v.literal('foreign_origin')),
+    reason: v.string(),
     message: v.string(),
   }),
 )
@@ -150,7 +150,7 @@ const finalizeAnswerTurnHarnessRunResult = v.union(
   }),
   v.object({
     status: v.literal('denied'),
-    reason: v.union(v.literal('missing_csrf'), v.literal('foreign_origin')),
+    reason: v.string(),
     message: v.string(),
   }),
 )
@@ -214,7 +214,7 @@ export const appendHarnessSessionEntry = mutationGeneric({
   },
   returns: appendHarnessSessionEntryResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'harness_session')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'harness_session')
     if (sourceWrite.kind === 'rejected') {
       return {
         status: 'denied' as const,
@@ -375,7 +375,7 @@ export const finalizeAnswerTurnHarnessRun = mutationGeneric({
   },
   returns: finalizeAnswerTurnHarnessRunResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'harness_session')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'harness_session')
     if (sourceWrite.kind === 'rejected') {
       return {
         status: 'denied' as const,

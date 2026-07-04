@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useReducedMotion } from 'motion/react'
+
+const defaultNumberFormatter = new Intl.NumberFormat('en-AU')
+
+function formatDefaultNumber(value: number): string {
+  return defaultNumberFormatter.format(value)
+}
 
 export function AeAnimatedNumber({
   value,
@@ -11,20 +17,28 @@ export function AeAnimatedNumber({
   format?: (value: number) => string
 }) {
   const reduce = useReducedMotion()
-  const [displayValue, setDisplayValue] = useState(value)
+  const outputRef = useRef<HTMLSpanElement>(null)
   const lastValueRef = useRef(value)
-  const formatter = useMemo(() => format ?? ((next: number) => new Intl.NumberFormat('en-AU').format(next)), [format])
+  const currentValueRef = useRef(value)
+  const formatter = useMemo(() => format ?? formatDefaultNumber, [format])
 
   useEffect(() => {
+    const output = outputRef.current
+    if (output === null) {
+      return
+    }
+
     if (reduce) {
-      setDisplayValue(value)
+      currentValueRef.current = value
       lastValueRef.current = value
+      output.textContent = formatter(currentValueRef.current)
       return
     }
 
     const startValue = lastValueRef.current
     const delta = value - startValue
     if (delta === 0) {
+      output.textContent = formatter(currentValueRef.current)
       return
     }
 
@@ -34,7 +48,8 @@ export function AeAnimatedNumber({
       const elapsed = now - startedAt
       const progress = Math.min(elapsed / duration, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      setDisplayValue(Math.round(startValue + delta * eased))
+      currentValueRef.current = Math.round(startValue + delta * eased)
+      output.textContent = formatter(currentValueRef.current)
       if (progress < 1) {
         raf = requestAnimationFrame(tick)
       } else {
@@ -44,7 +59,7 @@ export function AeAnimatedNumber({
 
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [duration, reduce, value])
+  }, [duration, formatter, reduce, value])
 
-  return <span data-numeric>{formatter(displayValue)}</span>
+  return <span ref={outputRef} data-numeric>{formatter(currentValueRef.current)}</span>
 }

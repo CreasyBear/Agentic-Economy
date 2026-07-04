@@ -210,6 +210,12 @@ function sourceWriteContext() {
       method: 'POST',
       origin: 'https://ae.example',
       pathname: '/api/agent/tools',
+      bodyDigest: 'none',
+    },
+    agentToolAdmission: {
+      toolId: 'inquiry.submit',
+      scope: 'public_inquiry' as const,
+      principalId: 'agent:test-principal',
     },
   }
 }

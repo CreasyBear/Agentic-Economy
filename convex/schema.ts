@@ -3,6 +3,8 @@ import { defineSchema } from 'convex/server'
 import { businessActionTables } from './businessActionStore'
 import { businessTables } from '../src/modules/business/internal/schema'
 import { billingTables } from '../src/modules/billing/internal/schema'
+import { clearanceTables } from '../src/modules/clearance/internal/schema'
+import { capabilityTables } from '../src/modules/capabilities/internal/schema'
 import { catalogTables } from '../src/modules/catalog/internal/schema'
 import { discoveryTables } from '../src/modules/discovery/internal/schema'
 import { harnessTables } from '../src/modules/harness/internal/convex-schema'
@@ -19,6 +21,8 @@ export default defineSchema({
   ...billingTables,
   ...businessActionTables,
   ...businessTables,
+  ...capabilityTables,
+  ...clearanceTables,
   ...catalogTables,
   ...registryTables,
   ...discoveryTables,

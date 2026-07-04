@@ -544,7 +544,7 @@ export const retryNotificationDispatchAsOperator = mutationGeneric({
   },
   returns: notificationRepairResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'notification_repair')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'notification_repair')
     if (sourceWrite.kind === 'rejected') {
       return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
     }
@@ -594,7 +594,7 @@ export const markNotificationDispatchNoRepairAsOperator = mutationGeneric({
   },
   returns: notificationRepairResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'notification_repair')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'notification_repair')
     if (sourceWrite.kind === 'rejected') {
       return notificationRuntimeError('notification_csrf_rejected', sourceWrite.reason)
     }
@@ -657,7 +657,7 @@ async function readCurrentOperatorAuthority(ctx: RuntimeCtx): Promise<Notificati
     return undefined
   }
 
-  const membership = await readActiveAdminMembership(runtimeDb(ctx.db), identity.subject)
+  const membership = await readActiveAdminMembership(runtimeDb(ctx.db), identity)
   if (membership === undefined) {
     return undefined
   }

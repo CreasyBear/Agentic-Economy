@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryJsonResponse } from '@/lib/http/discovery-response'
 import { readPublicCatalogDiscoveryManifest } from '@/modules/discovery/discovery.functions'
 import {
@@ -22,7 +23,7 @@ export const Route = createFileRoute('/$slug/ucp')({
 export async function handleDurableUcpManifestRequest(request: Request, slug: string): Promise<Response> {
   const result = await readPublicCatalogDiscoveryManifest({
     slug,
-    canonicalBaseUrl: requestOrigin(request),
+    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     now: Date.now(),
   })
 
@@ -43,7 +44,7 @@ export async function handleDurableUcpManifestRequest(request: Request, slug: st
 export function handleUcpManifestRequest(request: Request, slug: string): Response {
   const result = readFixtureCatalogDiscoveryManifest({
     slug,
-    canonicalBaseUrl: requestOrigin(request),
+    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     now: Date.now(),
   })
 
@@ -66,10 +67,3 @@ function toPublicUcpManifest(manifest: DiscoveryManifestContract): PublicUcpMani
   return publicManifest
 }
 
-function requestOrigin(request: Request): string {
-  try {
-    return new URL(request.url).origin
-  } catch {
-    return 'https://ae.example'
-  }
-}

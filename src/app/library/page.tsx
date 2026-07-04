@@ -415,9 +415,10 @@ export default function LibraryPage() {
       }
       group.push(item);
     }
-    return order
-      .filter(cat => map.has(cat))
-      .map(cat => ({category: cat, items: map.get(cat) ?? []}));
+    return order.flatMap(cat => {
+      const items = map.get(cat);
+      return items === undefined ? [] : [{category: cat, items}];
+    });
   }, [activeTab, filtered]);
 
   return (

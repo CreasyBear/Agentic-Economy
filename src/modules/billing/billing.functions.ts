@@ -109,7 +109,7 @@ const providerEventSchema = z.object({
   receipt: z
     .object({
       providerReceiptId: z.string().min(1),
-      invoiceUrl: z.string().url().optional(),
+      invoiceUrl: z.url().optional(),
       amountSummary: z.string().min(1).optional(),
       issuedAt: z.number(),
       status: z.enum(['paid', 'refunded', 'disputed', 'chargeback']),

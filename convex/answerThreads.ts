@@ -438,10 +438,14 @@ export const listAdminHarnessRunTurns = queryGeneric({
     } else {
       rows = await ctx.db.query('answerTurns').order('desc').take(limit)
     }
-    const filtered = rows
-      .map(toTurnRecord)
-      .filter((turn) => adminHarnessTurnMatchesFilters(turn, args))
-      .sort((left, right) => right.createdAt - left.createdAt || right.seq - left.seq)
+    const filtered: AnswerTurnRecord[] = []
+    for (const row of rows) {
+      const turn = toTurnRecord(row)
+      if (adminHarnessTurnMatchesFilters(turn, args)) {
+        filtered.push(turn)
+      }
+    }
+    filtered.sort((left, right) => right.createdAt - left.createdAt || right.seq - left.seq)
 
     return {
       kind: 'allowed' as const,

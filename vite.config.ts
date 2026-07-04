@@ -57,7 +57,17 @@ export default defineConfig({
   },
   plugins: [
     tanstackStart(),
-    nitro(),
+    nitro({
+      // Scope 1 pins Vercel Node serverless, not edge: existing webhook routes
+      // use raw Request bodies plus Node/WebCrypto signature verification.
+      preset: 'vercel',
+      vercel: {
+        entryFormat: 'node',
+        functions: {
+          runtime: 'nodejs20.x',
+        },
+      },
+    }),
     viteReact(),
     tailwindcss(),
     ...(sentryPluginEnabled

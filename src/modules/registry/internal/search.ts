@@ -20,6 +20,7 @@ import type {
   BusinessId,
   CorrelationId,
   OperationKey,
+  ServiceId,
   Slug,
 } from '@/modules/common/ids'
 import type {
@@ -170,6 +171,44 @@ export function getPublicBusinessCatalogBySlug(
     kind: 'found',
     schemaVersion: apiSchemaVersion,
     business: toPublicApiDto(catalog),
+  }
+}
+
+export type PublishedInquiryTargetResolution =
+  | { kind: 'resolved'; businessId: BusinessId; serviceId: ServiceId }
+  | { kind: 'not_found'; reason: string }
+
+export function resolvePublishedInquiryTarget(
+  state: RegistrySourceState,
+  input: { businessSlug: Slug | string; serviceSlug: Slug | string },
+): PublishedInquiryTargetResolution {
+  const businessSlug = String(input.businessSlug)
+  const serviceSlug = String(input.serviceSlug)
+  const catalog = readPublicCatalogs(state).find(
+    (candidate) => candidate.slug === businessSlug,
+  )
+  if (catalog === undefined) {
+    return {
+      kind: 'not_found',
+      reason: 'No published business is discoverable for this slug.',
+    }
+  }
+
+  const service = catalog.services.find(
+    (candidate) => candidate.serviceSlug === serviceSlug,
+  )
+  if (service === undefined) {
+    return {
+      kind: 'not_found',
+      reason:
+        'No published service is discoverable for this slug on the business.',
+    }
+  }
+
+  return {
+    kind: 'resolved',
+    businessId: catalog.businessId,
+    serviceId: service.serviceId,
   }
 }
 
@@ -339,13 +378,15 @@ function readPublicCatalogs(
   state: RegistrySourceState,
 ): readonly PublicCatalogContract[] {
   const catalogs: PublicCatalogContract[] = []
+  const contextByBusinessId = new Map(
+    state.businessContexts.map((context) => [context.businessId, context] as const)
+  )
+
   for (const business of state.businesses) {
     if (!isPubliclyDiscoverable(business, state.suppressionRules)) {
       continue
     }
-    const context = state.businessContexts.find(
-      (candidate) => candidate.businessId === business.businessId,
-    )
+    const context = contextByBusinessId.get(business.businessId)
     if (context === undefined) {
       continue
     }

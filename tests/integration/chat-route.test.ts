@@ -2,8 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import { handleChatRequest } from '@/routes/api.chat'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
 
 type StreamFrame = { seq: number; event: AnswerEvent }
 
@@ -40,8 +38,10 @@ describe('POST /api/chat (deprecated, dev-only)', () => {
     process.env.OPENROUTER_API_KEY = 'test-key'
     process.env.AE_ALLOW_CHAT_API = '1'
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleChatRequest(
         new Request('https://ae.example/api/chat', {
           method: 'POST',
@@ -58,6 +58,12 @@ describe('POST /api/chat (deprecated, dev-only)', () => {
         throw new Error('expected error event')
       }
       expect(lastEvent.code).toBe('chat_unavailable')
-    })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 })

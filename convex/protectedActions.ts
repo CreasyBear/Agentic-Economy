@@ -14,6 +14,18 @@ import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
+import {
+  ClearanceSigningKeyIdEnvName,
+  ClearanceSigningSecretEnvName,
+  buildClearanceGreenlightSigningPayload,
+  boundClearanceEvidenceRefHashes,
+  boundClearanceRecordEvidence,
+  consumeClearanceGreenlight,
+  putClearanceRecordIfAbsentOrSame,
+  recordClearanceProofGap,
+  signClearanceRecord,
+  type ClearanceProtocolRecord,
+} from '../src/modules/clearance/public'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import type { BusinessId, OwnerId, SourceHash } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
@@ -179,6 +191,7 @@ const contactFollowUpAttempt = v.object({
   gatewayAdmissionId: v.string(),
   outcome: attemptOutcome,
   attemptHash: v.string(),
+  boundEvidenceRefHashes: v.array(v.string()),
   receiptId: v.optional(v.string()),
   reason: v.optional(v.string()),
   idempotencyKey: v.string(),
@@ -193,6 +206,7 @@ const contactFollowUpReceipt = v.object({
   kind: v.union(v.literal('receipt'), v.literal('proof_gap')),
   providerBoundary: v.literal('source_owned_follow_up_outbox'),
   payloadHash: v.string(),
+  boundEvidenceRefHashes: v.array(v.string()),
   redactedReadback: v.object({
     targetRef: v.string(),
     resultRef: v.optional(v.string()),
@@ -403,7 +417,7 @@ export const proposeCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerDetailResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
@@ -492,7 +506,7 @@ export const approveCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
@@ -522,7 +536,7 @@ export const rejectCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
@@ -550,7 +564,7 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
@@ -581,6 +595,18 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
       return moduleError(gateway)
     }
 
+
+    const clearance = await recordAndConsumeContactFollowUpClearance(db, {
+      authority,
+      proposalId: reconstruction.proposal.id,
+      gatewayAdmission: gateway.gatewayAdmission,
+      operationKey: args.operationKey,
+      now,
+    })
+    if (clearance.kind === 'error') {
+      return protectedActionError(clearance.code, clearance.reason)
+    }
+
     const attempted = recordContactFollowUpProviderAttempt(gateway.state, {
       authority,
       selectedActionSlug: ContactFollowUpActionSlug,
@@ -590,6 +616,7 @@ export const retryCurrentOwnerContactFollowUp = mutationGeneric({
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
       now,
       readback: readbackForKind(args.readbackKind, args.proposalId),
+      boundEvidenceRefHashes: clearance.boundEvidenceRefHashes,
     })
     if (attempted.kind === 'error') {
       if (attempted.code === 'contact_follow_up_retry_exhausted') {
@@ -621,7 +648,7 @@ export const markCurrentOwnerContactFollowUpNoRepair = mutationGeneric({
   },
   returns: ownerMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return protectedActionError('contact_follow_up_csrf_rejected', sourceWrite.reason)
     }
@@ -777,6 +804,18 @@ async function decideAndAttempt(
     return moduleError(gateway)
   }
 
+
+  const clearance = await recordAndConsumeContactFollowUpClearance(db, {
+    authority,
+    proposalId: proposal.id,
+    gatewayAdmission: gateway.gatewayAdmission,
+    operationKey: input.operationKey,
+    now,
+  })
+  if (clearance.kind === 'error') {
+    return protectedActionError(clearance.code, clearance.reason)
+  }
+
   const attempted = recordContactFollowUpProviderAttempt(gateway.state, {
     authority,
     selectedActionSlug: ContactFollowUpActionSlug,
@@ -786,6 +825,7 @@ async function decideAndAttempt(
     correlationId: brandNonEmpty(input.correlationId, 'CorrelationId'),
     now,
     readback: input.readback ?? { kind: 'receipt', resultRef: `source-receipt:${proposal.id}`, payloadHash: stableHash({ proposalId: proposal.id, receipt: true }) as SourceHash },
+    boundEvidenceRefHashes: clearance.boundEvidenceRefHashes,
   })
   if (attempted.kind === 'error') {
     return moduleError(attempted)
@@ -806,6 +846,114 @@ function evaluateOrReturnState(
 ): ContactFollowUpSourceState {
   const policy = evaluateContactFollowUpPolicy(state, { proposalId, now })
   return policy.kind === 'ok' ? policy.state : state
+}
+
+
+type ContactFollowUpClearanceResult =
+  | { kind: 'ok'; boundEvidenceRefHashes: readonly SourceHash[] }
+  | {
+      kind: 'error'
+      code:
+        | 'contact_follow_up_gateway_required'
+        | 'contact_follow_up_gateway_expired'
+        | 'contact_follow_up_gateway_replay_rejected'
+      reason: string
+    }
+
+async function recordAndConsumeContactFollowUpClearance(
+  db: RuntimeDb,
+  input: {
+    authority: ContactFollowUpOwnerAuthority
+    proposalId: ContactFollowUpProposalId
+    gatewayAdmission: ContactFollowUpGatewayAdmission
+    operationKey: string
+    now: number
+  }
+): Promise<ContactFollowUpClearanceResult> {
+  const recordId = `clearance:greenlight:${input.gatewayAdmission.id}`
+  const payloadHash = stableHash({
+    actionRef: ContactFollowUpActionSlug,
+    admissionHash: input.gatewayAdmission.admissionHash,
+    contractHash: input.gatewayAdmission.contractHash,
+    ownerDecisionHash: input.gatewayAdmission.ownerDecisionHash,
+    proposalHash: input.gatewayAdmission.proposalHash,
+    proposalId: input.proposalId,
+  })
+  const signingPayload = buildClearanceGreenlightSigningPayload({
+    principalId: input.authority.actorRef,
+    actionClass: 'contact_follow_up',
+    actionRef: ContactFollowUpActionSlug,
+    mandateId: input.gatewayAdmission.ownerDecisionHash,
+    requestRef: input.proposalId,
+    idempotencyKey: input.gatewayAdmission.idempotencyKey,
+    issuedAt: input.now,
+    expiresAt: input.gatewayAdmission.expiresAt,
+    payloadHash,
+  })
+  const signed = signClearanceRecord({
+    kind: 'greenlight',
+    payload: signingPayload,
+    secret: readOptionalEnv(ClearanceSigningSecretEnvName),
+    keyIdentityRef: readOptionalEnv(ClearanceSigningKeyIdEnvName) ?? '',
+    signedAt: new Date(input.now).toISOString(),
+  })
+  const record: ClearanceProtocolRecord = {
+    recordId,
+    recordKind: 'greenlight',
+    principalId: input.authority.actorRef,
+    actionClass: 'contact_follow_up',
+    actionRef: ContactFollowUpActionSlug,
+    mandateId: input.gatewayAdmission.ownerDecisionHash,
+    requestRef: input.proposalId,
+    idempotencyKey: input.gatewayAdmission.idempotencyKey,
+    payloadHash,
+    signaturePosture: 'local_hmac',
+    keyIdentityRef: signed.keyIdentityRef,
+    status: signed.kind === 'signed' ? 'accepted' : 'proof_gap',
+    createdAt: input.now,
+    expiresAt: input.gatewayAdmission.expiresAt,
+    ...(signed.kind === 'signed'
+      ? { signature: signed.signature, signedAt: signed.signedAt }
+      : { proofGapReason: signed.reason }),
+  }
+
+  const put = signed.kind === 'signed'
+    ? await putClearanceRecordIfAbsentOrSame(db, record)
+    : await recordClearanceProofGap(db, record)
+  if (put.kind === 'rejected') {
+    return { kind: 'error', code: 'contact_follow_up_gateway_replay_rejected', reason: put.reason }
+  }
+  if (signed.kind !== 'signed') {
+    return { kind: 'error', code: 'contact_follow_up_gateway_required', reason: signed.reason }
+  }
+
+  const consumed = await consumeClearanceGreenlight(db, {
+    greenlightRef: recordId,
+    principalId: input.authority.actorRef,
+    actionClass: 'contact_follow_up',
+    actionRef: ContactFollowUpActionSlug,
+    now: input.now,
+    consumedByRef: `${input.operationKey}:clearance-consume`,
+  })
+  if (consumed.kind === 'consumed') {
+    return { kind: 'ok', boundEvidenceRefHashes: boundClearanceEvidenceRefHashes([boundClearanceRecordEvidence(consumed.record)]) }
+  }
+
+  return {
+    kind: 'error',
+    code: consumed.reason === 'clearance_greenlight_expired'
+      ? 'contact_follow_up_gateway_expired'
+      : consumed.reason === 'clearance_greenlight_required'
+        ? 'contact_follow_up_gateway_required'
+        : 'contact_follow_up_gateway_replay_rejected',
+    reason: consumed.reason,
+  }
+}
+
+function readOptionalEnv(name: string): string | undefined {
+  const value = typeof process === 'undefined' ? undefined : process.env[name]
+  const trimmed = value?.trim()
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed
 }
 
 type CurrentOwnerIdentity = {
@@ -941,11 +1089,11 @@ function serializeGateway(gateway: ContactFollowUpGatewayAdmission) {
 }
 
 function serializeAttempt(attempt: ContactFollowUpAttempt) {
-  return { ...attempt }
+  return { ...attempt, boundEvidenceRefHashes: [...attempt.boundEvidenceRefHashes] }
 }
 
 function serializeReceipt(receipt: ContactFollowUpReceipt) {
-  return { ...receipt, redactedReadback: { ...receipt.redactedReadback } }
+  return { ...receipt, boundEvidenceRefHashes: [...receipt.boundEvidenceRefHashes], redactedReadback: { ...receipt.redactedReadback } }
 }
 
 function serializePrivateEvidenceRef(ref: ContactFollowUpPrivateEvidenceRef) {

@@ -213,6 +213,8 @@ export const regenerateDiscoveryManifest = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    operationKey: v.string(),
+    correlationId: v.string(),
     ...sourceWriteArgs,
   },
   returns: regenerateResult,
@@ -253,6 +255,8 @@ export const invalidateDiscoveryManifest = mutationGeneric({
     csrfToken: v.optional(v.string()),
     csrfCookie: v.optional(v.string()),
     origin: v.optional(v.string()),
+    operationKey: v.string(),
+    correlationId: v.string(),
     ...sourceWriteArgs,
   },
   returns: invalidateResult,
@@ -388,6 +392,8 @@ type OwnerMutationArgs = {
   csrfCookie?: string
   origin?: string
   sourceWrite?: SourceWriteArgs['sourceWrite']
+  operationKey?: string
+  correlationId?: string
 }
 
 type OwnerMutationAuth =
@@ -559,7 +565,7 @@ type DiscoveryAuditEvent = {
 }
 
 async function requireOwnerMutation(ctx: RuntimeMutationCtx, args: OwnerMutationArgs): Promise<OwnerMutationAuth> {
-  const sourceWrite = await requireSourceWrite(args, 'discovery_repair')
+  const sourceWrite = await requireSourceWrite(ctx, args, 'discovery_repair')
   if (sourceWrite.kind === 'rejected') {
     return { kind: 'error', error: discoveryError('discovery_manifest_csrf_rejected', sourceWrite.reason) }
   }
@@ -763,6 +769,9 @@ function buildLlmsTxtFromCatalogs(
     '',
     'Public surfaces:',
     ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
+    '',
+    'Agent tools (read + qualified inquiry):',
+    `- ${canonicalBaseUrl}/api/agent/tools`,
     '',
     'Catalog entries:',
     ...(catalogLines.length === 0 ? ['- none'] : catalogLines),

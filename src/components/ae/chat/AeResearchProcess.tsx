@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { AlertCircleIcon, CheckIcon, ChevronDownIcon, CircleIcon, Loader2Icon, SquareIcon } from 'lucide-react'
 
 import {
@@ -25,16 +25,9 @@ export type AeResearchProcessProps = {
  */
 export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResearchProcessProps) {
   const needsReview = steps.some((step) => step.status === 'error' || step.status === 'stopped')
-  const userManagedOpenRef = useRef(false)
   const defaultOpen = isStreaming || needsReview || steps.length > 0 || checkSummary !== undefined
-  const [open, setOpen] = useState(defaultOpen)
-
-  useEffect(() => {
-    if (userManagedOpenRef.current) {
-      return
-    }
-    setOpen(defaultOpen)
-  }, [defaultOpen])
+  const [managedOpen, setManagedOpen] = useState<boolean | null>(null)
+  const open = managedOpen ?? defaultOpen
 
   if (steps.length === 0 && checkSummary === undefined) {
     return null
@@ -46,8 +39,7 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResear
   const statusLabel = checkSummary === undefined ? getOverallStatusLabel(overallStatus, latest, steps) : answerCheckSummaryLine(checkSummary)
 
   function handleOpenChange(nextOpen: boolean) {
-    userManagedOpenRef.current = true
-    setOpen(nextOpen)
+    setManagedOpen(nextOpen)
   }
 
   return (

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
-import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../helpers/openrouter-contract-server'
 
 type StreamFrame = { seq: number; event: AnswerEvent }
 
@@ -100,31 +101,27 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
   afterEach(() => {
     delete process.env.AE_ANSWER_SYNTHESIZER
     delete process.env.OPENROUTER_API_KEY
-    setAnswerToolUseAgentForTests(undefined)
+    delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
   })
 
   it('refine_search: runs the agent with registry tools and records the tool call', async () => {
-    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let receivedPriorProviders: unknown = 'unset'
-    setAnswerToolUseAgentForTests(async ({ query, priorProviders }) => {
-      receivedPriorProviders = priorProviders ?? 'none'
-      return {
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-        prose: {
-          oneLine: 'One listed business matches this need.',
-          summary:
-            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-        },
-      }
-    })
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      prose: {
+        oneLine: 'One listed business matches this need.',
+        summary:
+          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       // First turn (no threadId) → refine_search.
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
@@ -140,31 +137,37 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       const frames = parseStream(await response.text())
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(receivedPriorProviders).toBe('none')
-    })
+      expect(server.requests).toHaveLength(2)
+      const firstPrompt = server.requests[0]?.messages.find((message) => message.role === 'user')?.content ?? ''
+      expect(firstPrompt).toContain('User query: paramata')
+      expect(firstPrompt).not.toContain('<catalog_data>')
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('filter_known: reuses frozen prior providers and calls no registry tool', async () => {
-    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let receivedPriorProviders: unknown = 'unset'
-    setAnswerToolUseAgentForTests(async ({ priorProviders }) => {
-      receivedPriorProviders = priorProviders ?? 'none'
-      return {
-        toolCalls: [],
-        prose: {
-          oneLine: 'One listing accepts inquiries.',
-          summary:
-            'The earlier provider publishes an inquiry option. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-        },
-      }
-    })
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      prose: {
+        oneLine: 'One listing accepts inquiries.',
+        summary:
+          'The earlier provider publishes an inquiry option. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(turnRequest('which ones accept inquiries'))
 
       const frames = parseStream(await response.text())
@@ -173,33 +176,37 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
-      // Frozen provider reused; no tool call.
-      expect(receivedPriorProviders).not.toBe('none')
+      // Frozen provider reused deterministically; no model request and no fresh registry tool.
+      expect(server.requests).toEqual([])
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
         'parramatta-emergency-plumbing',
       ])
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('inquiry_handoff: resolves a prior provider without calling the agent', async () => {
-    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let agentCalled = false
-    setAnswerToolUseAgentForTests(async () => {
-      agentCalled = true
-      return { toolCalls: [], prose: { oneLine: 'x', summary: 'y', whatToDoNow: 'z' } }
-    })
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(turnRequest('message the first one'))
 
       const frames = parseStream(await response.text())
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(agentCalled).toBe(false)
+      expect(server.requests).toEqual([])
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
@@ -237,58 +244,74 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
       }
       expect(selectedProviderArtifactEvent.artifact.provider.slug).toBe('parramatta-emergency-plumbing')
       expect(eventTypes.indexOf('artifact')).toBeLessThan(eventTypes.indexOf('next-step'))
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('explain_boundary: answers from boundary-prose directly without calling the agent', async () => {
-    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let agentCalled = false
-    setAnswerToolUseAgentForTests(async () => {
-      agentCalled = true
-      return { toolCalls: [], prose: { oneLine: 'x', summary: 'y', whatToDoNow: 'z' } }
-    })
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(turnRequest('what can agentic economy do'))
 
       const frames = parseStream(await response.text())
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(agentCalled).toBe(false)
+      expect(server.requests).toEqual([])
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toContain('does not book')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('unsupported: answers from unsupported-prose directly without calling the agent', async () => {
-    process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let agentCalled = false
-    setAnswerToolUseAgentForTests(async () => {
-      agentCalled = true
-      return { toolCalls: [], prose: { oneLine: 'x', summary: 'y', whatToDoNow: 'z' } }
-    })
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
 
     priorThreadPort()
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(turnRequest('book now and pay today'))
 
       const frames = parseStream(await response.text())
       const complete = frames.at(-1)?.event
       expect(complete?.type).toBe('complete')
-      expect(agentCalled).toBe(false)
+      expect(server.requests).toEqual([])
       if (complete?.type !== 'complete') {
         throw new Error('expected complete event')
       }
       expect(complete.answer.oneLine).toContain('cannot book')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 })

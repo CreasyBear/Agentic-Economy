@@ -159,6 +159,7 @@ function RemoveBusinessRoute() {
               <input
                 id="slug"
                 name="slug"
+                aria-label="Page slug"
                 value={value.slug}
                 disabled={pending}
                 className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
@@ -178,6 +179,7 @@ function RemoveBusinessRoute() {
                 id="contactEmail"
                 name="contactEmail"
                 type="email"
+                aria-label="Your email"
                 value={value.contactEmail}
                 disabled={pending}
                 className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
@@ -208,6 +210,7 @@ function RemoveBusinessRoute() {
               <textarea
                 id="evidenceSummary"
                 name="evidenceSummary"
+                aria-label="What should change?"
                 value={value.evidenceSummary}
                 disabled={pending}
                 className="min-h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"

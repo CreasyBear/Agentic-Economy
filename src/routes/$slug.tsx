@@ -4,9 +4,11 @@ import { Button } from '@astryxdesign/core/Button'
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListingPage'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
+import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import { buildPublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
-import { buildPublicBusinessSeo, serializeJsonLd } from '@/modules/seo/public'
+import { serializeJsonLd } from '@/modules/seo/public'
+import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 
 type ProviderListingSearch = {
   from?: 'thread' | 'registry'
@@ -27,10 +29,8 @@ export const Route = createFileRoute('/$slug')({
     if (page.kind === 'not_found') {
       return { page, seo: undefined }
     }
-    return {
-      page,
-      seo: buildPublicBusinessSeo({ catalog: page.catalog, options: { canonicalBaseUrl: 'https://ae.example' } }),
-    }
+    const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
+    return { page, seo }
   },
   head: ({ loaderData }) => {
     if (loaderData?.seo === undefined) {
@@ -59,6 +59,7 @@ export const Route = createFileRoute('/$slug')({
   },
   component: PublicBusinessRoute,
 })
+
 
 function PublicBusinessRoute() {
   const { slug } = Route.useParams()

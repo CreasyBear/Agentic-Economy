@@ -16,7 +16,7 @@ import {
   buildSitemapXml as buildSitemapXmlImpl,
 } from './internal/discovery-files'
 import { createFixtureDiscoverySourceState as createDefaultDiscoverySourceStateImpl } from './internal/source-state'
-import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl } from './internal/ucp-manifest'
+import { buildCatalogDiscoveryManifest as buildCatalogDiscoveryManifestImpl, safePublicText } from './internal/ucp-manifest'
 
 export const DiscoveryStatusValues = ['unavailable', 'degraded', 'available', 'stale'] as const
 export type DiscoveryStatus = (typeof DiscoveryStatusValues)[number]
@@ -123,8 +123,8 @@ export type DiscoveryManifestReadback = {
 
 export type BuildCatalogDiscoveryManifestInput = {
   catalog: PublicCatalogContract | undefined
+  canonicalBaseUrl: string
   now: number
-  canonicalBaseUrl?: string
 }
 
 export type BuildCatalogDiscoveryManifestResult =
@@ -171,8 +171,8 @@ export type RegenerateDiscoveryManifestInput =
   | { slug: Slug | string }
 
 export type RegenerateDiscoveryManifestOptions = {
+  canonicalBaseUrl: string
   now: number
-  canonicalBaseUrl?: string
   staleAfterMs?: number
   adapter?: DiscoveryManifestAdapter
 }
@@ -219,7 +219,7 @@ export type DiscoveryHealthReadback = {
 }
 
 export type BuildDiscoveryFileOptions = {
-  canonicalBaseUrl?: string
+  canonicalBaseUrl: string
   now?: number
 }
 
@@ -230,7 +230,7 @@ export type DiscoveryFileBuildResult = {
 
 export type ReadCatalogDiscoveryManifestInput = {
   slug: string
-  canonicalBaseUrl?: string
+  canonicalBaseUrl: string
   now: number
 }
 
@@ -244,7 +244,7 @@ export function readFixtureCatalogDiscoveryManifest(
     state,
     { slug: input.slug },
     {
-      ...(input.canonicalBaseUrl === undefined ? {} : { canonicalBaseUrl: input.canonicalBaseUrl }),
+      canonicalBaseUrl: input.canonicalBaseUrl,
       now: input.now,
     }
   )
@@ -256,15 +256,16 @@ export function readFixtureCatalogDiscoveryManifest(
   return { kind: 'hidden', reason: 'not_public' }
 }
 
-export function readFixtureLlmsTxt(options: BuildDiscoveryFileOptions = {}): DiscoveryFileBuildResult {
+export function readFixtureLlmsTxt(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
   return buildLlmsTxtImpl(createDefaultDiscoverySourceStateImpl(), options)
 }
 
-export function readFixtureSitemapXml(options: BuildDiscoveryFileOptions = {}): DiscoveryFileBuildResult {
+export function readFixtureSitemapXml(options: BuildDiscoveryFileOptions): DiscoveryFileBuildResult {
   return buildSitemapXmlImpl(createDefaultDiscoverySourceStateImpl(), options)
 }
 
 export const buildCatalogDiscoveryManifest = buildCatalogDiscoveryManifestImpl
+export { safePublicText }
 
 export const regenerateDiscoveryManifest = regenerateDiscoveryManifestImpl
 

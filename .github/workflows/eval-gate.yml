@@ -35,13 +35,19 @@ jobs:
       - name: Unit + integration tests
         run: npm run test:unit && npm run test:integration
 
-      - name: Copy + UI contract + import boundary scans
+      - name: Type-level contract tests
+        run: npm run test:types
+
+      - name: Copy + SEO + UI contract + import/source scans
         env:
           AE_SCAN_MODE: clean
         run: |
           npm run test:copy
+          npm run test:seo
           npm run test:ui-contract
           npm run test:imports
+          npm run test:source-mining
+          npm run test:ts-standards
 
       - name: Answer eval gate (promptfoo + tests/eval)
         run: npm run test:eval

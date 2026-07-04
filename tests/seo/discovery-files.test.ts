@@ -10,13 +10,12 @@ import {
   createDefaultDiscoverySourceState,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import { withDiscoverySourcePortForTest } from '../helpers/source-ports'
-import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
-import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
+import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 
 describe('discovery files', () => {
-  it('serves llms and sitemap files from durable eligible source rows without private fields or positive capabilities', async () => {
+  it('builds llms and sitemap files from durable eligible source rows without private fields or positive capabilities', async () => {
     const state = createDurablePublishedDiscoveryState({
       businessName: 'Fremantle Heat Pump Repairs',
       requestedSlug: 'fremantle-heat-pump-repairs',
@@ -24,23 +23,18 @@ describe('discovery files', () => {
       serviceQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
     })
+    const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'http://localhost:3000' })
+    const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'http://localhost:3000', now: 0 })
+    const serialized = `${llms.body}\n${sitemap.body}`
 
-    await withDiscoverySourcePortForTest(state, async () => {
-      const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
-      const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
-      const llmsBody = await llms.text()
-      const sitemapBody = await sitemap.text()
-      const serialized = `${llmsBody}\n${sitemapBody}`
-
-      expect(llmsBody).toContain('slug=fremantle-heat-pump-repairs')
-      expect(sitemapBody).toContain('<loc>https://ae.example/fremantle-heat-pump-repairs</loc>')
-      expect(serialized).not.toContain('parramatta-emergency-plumbing')
-      expect(serialized).toContain('callable=false')
-      expect(serialized).toContain('paymentRequired=false')
-      expect(serialized).not.toMatch(
-        /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|MCP|OpenAPI|callable=true|paymentRequired=true/i
-      )
-    })
+    expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
+    expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
+    expect(serialized).not.toContain('parramatta-emergency-plumbing')
+    expect(serialized).toContain('callable=false')
+    expect(serialized).toContain('paymentRequired=false')
+    expect(serialized).not.toMatch(
+      /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|MCP|OpenAPI|callable=true|paymentRequired=true/i
+    )
   })
 
   it('builds llms.txt from canonical links and source-owned status fields only', () => {
@@ -59,6 +53,8 @@ describe('discovery files', () => {
     expect(result.body).toContain('publicStatus=published')
     expect(result.body).toContain('callable=false')
     expect(result.body).toContain('paymentRequired=false')
+    // The quiet agent door is advertised in the assistant/machine index so a cold assistant can find it.
+    expect(result.body).toContain('https://ae.example/api/agent/tools')
     expect(result.body).not.toContain('Parramatta Emergency Plumbing')
     expect(result.body).not.toContain('Ignore previous instructions')
     expect(result.body).not.toContain('verified')
@@ -119,22 +115,20 @@ describe('discovery files', () => {
     expect(result.urls).toEqual(['https://ae.example/sitemap.xml'])
   })
 
-  it('serves discovery files with no-store and nosniff headers', async () => {
-    await withDiscoverySourcePortForTest(createDefaultDiscoverySourceState(), async () => {
-      const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
-      const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
-      const robots = handleRobotsTxtRequest(new Request('https://ae.example/robots.txt'))
+  it('serves explicit local discovery files with no-store and nosniff headers', async () => {
+    const llms = handleLlmsTxtRequest(new Request('http://localhost:3000/llms.txt'))
+    const sitemap = handleSitemapXmlRequest(new Request('http://localhost:3000/sitemap.xml'))
+    const robots = handleRobotsTxtRequest(new Request('http://localhost:3000/robots.txt'))
 
-      expect(llms.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
-      expect(sitemap.headers.get('Content-Type')).toBe('application/xml; charset=utf-8')
-      expect(robots.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
+    expect(llms.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
+    expect(sitemap.headers.get('Content-Type')).toBe('application/xml; charset=utf-8')
+    expect(robots.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
 
-      for (const response of [llms, sitemap, robots]) {
-        expect(response.headers.get('Cache-Control')).toBe('no-store')
-        expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
-        expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
-      }
-    })
+    for (const response of [llms, sitemap, robots]) {
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
+      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    }
   })
 })
 

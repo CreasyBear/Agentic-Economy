@@ -9,7 +9,7 @@ import { scanCopyClaims, scanSourceMining } from '@/lib/ui/contract-scans'
 const phase6OwnedCopyExamples = [
   {
     label: 'planning context',
-    relativeFile: '.planning/phases/06-agentic-business-action-receipts/06-demo.fixture',
+    relativeFile: '.planning/archive/phases/06-agentic-business-action-receipts/06-demo.fixture',
     copy: 'Phase 6 Business Action Card and Capability Request copy names the authorization checkpoint, GuardrailDecisionEvidence, ExternalEvidenceEvent, Action Receipt, receipt-backed software operation, receipt-backed autonomous business operation, and Hermes-run paid intake provisioning as source-owned proof only.',
   },
   {
@@ -57,7 +57,7 @@ describe('Phase 6 business-action copy guardrail', () => {
 
   it('rejects Phase 6 business-action claims in the wrong phase context', () => {
     const violations = scanCopyFixture(
-      '.planning/phases/05-paid-activation-money-rails/wrong-phase.fixture',
+      '.planning/archive/phases/05-paid-activation-money-rails/wrong-phase.fixture',
       'Phase 5 page says Business Action Card and receipt-backed autonomous business operation are ready.',
     )
 

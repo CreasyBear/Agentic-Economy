@@ -51,6 +51,7 @@ export const observabilityTables = {
     failureCode: v.optional(v.string()),
     createdAt: v.number(),
   })
+    .index('by_eventId', ['eventId'])
     .index('by_business_createdAt', ['businessId', 'createdAt'])
     .index('by_correlationId', ['correlationId']),
 
@@ -82,6 +83,7 @@ export const observabilityTables = {
     correlationId: v.string(),
     createdAt: v.number(),
   })
+    .index('by_correlationId', ['correlationId'])
     .index('by_session_createdAt', ['pseudonymousSessionId', 'createdAt'])
     .index('by_business_createdAt', ['businessId', 'createdAt'])
     .index('by_source_stage', ['source', 'stage']),
@@ -97,5 +99,7 @@ export const observabilityTables = {
     frictionCode: v.optional(v.string()),
     failureCode: v.optional(v.string()),
     lastEventAt: v.number(),
-  }).index('by_business_stage', ['businessId', 'stage']),
+  })
+    .index('by_business', ['businessId'])
+    .index('by_business_stage', ['businessId', 'stage']),
 } as const

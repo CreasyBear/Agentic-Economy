@@ -31,6 +31,8 @@ type AuthzCtx = {
 type AdminAuthorityResult = ReturnType<typeof requireAdminAuthority>
 
 type IgnoredBrowserAuthorityPayload = Readonly<Record<string, unknown>>
+type AdminIdentityLookup = Pick<UserIdentity, 'issuer' | 'subject' | 'tokenIdentifier'>
+
 
 export async function resolveBusinessActor(
   ctx: Pick<AuthzCtx, 'auth'>,
@@ -53,17 +55,36 @@ export async function resolveAdminAuthority(ctx: AuthzCtx, action: AdminAction):
     return requireAdminAuthority(undefined, action)
   }
 
-  const membership = await readActiveAdminMembership(ctx.db, identity.subject)
+  const membership = await readActiveAdminMembership(ctx.db, identity)
   return requireAdminAuthority(membership, action)
 }
 
-export async function readActiveAdminMembership(db: RuntimeDb, clerkUserId: string): Promise<AdminMembership | undefined> {
-  const row = await db
+export async function readActiveAdminMembership(db: RuntimeDb, identity: AdminIdentityLookup): Promise<AdminMembership | undefined> {
+  const tokenRow = await db
     .query('adminMemberships')
-    .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', clerkUserId).eq('state', 'active'))
+    .withIndex('by_tokenIdentifier_state', (query) => query.eq('tokenIdentifier', identity.tokenIdentifier).eq('state', 'active'))
     .unique()
+  const tokenMembership = tokenRow === null ? undefined : adminMembershipFromDoc(tokenRow)
+  if (tokenMembership !== undefined) {
+    return tokenMembership
+  }
 
-  return row === null ? undefined : adminMembershipFromDoc(row)
+  if (!allowsLegacySubjectFallback(identity)) {
+    return undefined
+  }
+
+  const subjectRow = await db
+    .query('adminMemberships')
+    .withIndex('by_clerkUserId_state', (query) => query.eq('clerkUserId', identity.subject).eq('state', 'active'))
+    .unique()
+  const subjectMembership = subjectRow === null ? undefined : adminMembershipFromDoc(subjectRow)
+  if (
+    subjectMembership?.tokenIdentifier !== undefined &&
+    subjectMembership.tokenIdentifier !== identity.tokenIdentifier
+  ) {
+    return undefined
+  }
+  return subjectMembership
 }
 
 export function actorFromIdentity(identity: UserIdentity): BusinessMutationActor {
@@ -90,6 +111,7 @@ function adminMembershipFromDoc(document: RuntimeDocument): AdminMembership | un
 
   return {
     clerkUserId,
+    ...(optionalStringField(document, 'tokenIdentifier') === undefined ? {} : { tokenIdentifier: stringField(document, 'tokenIdentifier') }),
     role,
     state,
     grantedBy,
@@ -114,6 +136,11 @@ function adminMembershipState(document: RuntimeDocument): AdminMembership['state
     return value
   }
   return undefined
+}
+
+function allowsLegacySubjectFallback(identity: AdminIdentityLookup): boolean {
+  const expectedIssuer = typeof process === 'undefined' ? undefined : process.env.CLERK_JWT_ISSUER_DOMAIN
+  return expectedIssuer === undefined || expectedIssuer.length === 0 || identity.issuer === expectedIssuer
 }
 
 function optionalIdentityText(value: string | undefined): string | undefined {

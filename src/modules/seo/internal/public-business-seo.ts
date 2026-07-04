@@ -11,7 +11,7 @@ export function buildPublicBusinessSeo(input: BuildPublicBusinessSeoInput): Publ
   return {
     slug: input.catalog.slug,
     title: `${input.catalog.name} | ${servicePhrase} in ${location}`,
-    description: `${input.catalog.name} publishes ${servicePhrase} service facts for ${location}. Bookings, payments, and automated actions are not live.`,
+    description: `${input.catalog.name} publishes ${servicePhrase} service facts for ${location}. Compare details and send a qualified inquiry where available.`,
     h1: input.catalog.name,
     canonicalUrl,
     indexDirective: 'index',

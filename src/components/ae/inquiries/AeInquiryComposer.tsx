@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentPropsWithoutRef, type KeyboardEvent, type RefObject } from 'react'
+import { type ComponentPropsWithoutRef, type KeyboardEvent, type Ref, type RefObject } from 'react'
 import { SendIcon } from 'lucide-react'
 
 import { Button } from '@astryxdesign/core/Button'
@@ -42,11 +42,13 @@ function ComposerInputGroupAddon({
   return <div className={cn('flex items-center gap-1 text-secondary', className)} {...props} />
 }
 
-const ComposerInputGroupTextarea = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
-  function ComposerInputGroupTextarea({ className, ...props }, ref) {
-    return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
-  }
-)
+type ComposerInputGroupTextareaProps = ComponentPropsWithoutRef<'textarea'> & {
+  ref?: Ref<HTMLTextAreaElement> | undefined
+}
+
+function ComposerInputGroupTextarea({ className, ref, ...props }: ComposerInputGroupTextareaProps) {
+  return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
+}
 
 export function AeInquiryComposer({
   id = 'body',
@@ -94,7 +96,7 @@ export function AeInquiryComposer({
             aria-describedby={describedBy}
             aria-invalid={invalid || undefined}
             name={name}
-            ref={textareaRef}
+            {...(textareaRef === undefined ? {} : { ref: textareaRef })}
             value={value}
             rows={5}
             maxLength={maxLength}

@@ -25,14 +25,10 @@ export {
 } from './internal/evidence-assembler'
 export {
   runAnswerToolUseAgent,
-  setAnswerToolUseAgentForTests,
   isAnswerToolUseAgentError,
   AnswerToolUseAgentError,
   type AnswerToolUseAgentInput,
   type AnswerToolUseAgentResult,
-  type AnswerToolUseAgentPlan,
-  type AgentPlannedToolCall,
-  type AnswerToolUseAgentGenerator,
 } from './internal/answer-tool-use-agent'
 export {
   AnswerProseSchema,

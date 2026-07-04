@@ -14,8 +14,14 @@ describe('source-mining guardrail', () => {
 
     if (isFixtureMode()) {
       expect(violations.map((violation) => violation.rule)).toEqual(
-        expect.arrayContaining(['backup-source-reference', 'future-surface-symbol', 'future-protocol-symbol'])
+        expect.arrayContaining([
+          'backup-source-reference',
+          'future-surface-symbol',
+          'future-protocol-symbol',
+          'forbidden-handshake-import',
+        ])
       )
+      expect(violations.filter((violation) => violation.rule === 'forbidden-handshake-import')).toHaveLength(13)
       return
     }
 

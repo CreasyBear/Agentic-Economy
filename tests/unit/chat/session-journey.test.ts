@@ -26,7 +26,7 @@ describe('session journey', () => {
 
     expect(journey?.providerCount).toBe(2)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
-    expect(journey?.status).toBe('2 listed businesses ready to compare')
+    expect(journey?.statusText).toBe('2 listed businesses ready to compare')
     expect(journey?.guidance).toBe(
       'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.',
     )
@@ -70,7 +70,7 @@ describe('session journey', () => {
     })
 
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
-    expect(journey?.status).toBe('Demo Plumber selected for inquiry review')
+    expect(journey?.statusText).toBe('Demo Plumber selected for inquiry review')
     expect(journey?.guidance).toBe(
       'Demo Plumber is selected for qualified inquiry review. The business still confirms timing, quote, and availability.',
     )
@@ -92,7 +92,7 @@ describe('session journey', () => {
     expect(journey?.providerCount).toBe(1)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
     expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing', hasInquiryPath: true })
-    expect(journey?.status).toBe('Northside Plumbing selected for inquiry review')
+    expect(journey?.statusText).toBe('Northside Plumbing selected for inquiry review')
     expect(journey?.steps.find((step) => step.id === 'compare')?.detail).toBe('1 listed business')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.detail).toBe('Qualified inquiry only')
     expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('complete')
@@ -116,7 +116,7 @@ describe('session journey', () => {
     expect(journey?.providerCount).toBe(3)
     expect(journey?.hasInquiryReadyProvider).toBe(true)
     expect(journey?.selectedProvider).toEqual({ name: 'Review Only Plumbing', hasInquiryPath: false })
-    expect(journey?.status).toBe('Review Only Plumbing selected for listing review')
+    expect(journey?.statusText).toBe('Review Only Plumbing selected for listing review')
     expect(journey?.guidance).toBe(
       'Review Only Plumbing is selected for listing review. This business needs a published inquiry path before AE can route contact.',
     )
@@ -154,7 +154,7 @@ describe('session journey', () => {
     })
 
     expect(journey?.selectedProvider).toEqual({ name: 'Northside Plumbing', hasInquiryPath: true })
-    expect(journey?.status).toBe('Northside Plumbing selected for inquiry review')
+    expect(journey?.statusText).toBe('Northside Plumbing selected for inquiry review')
     expect(journey?.guidance).toBe(
       'Northside Plumbing is selected for qualified inquiry review. The business still confirms timing, quote, and availability.',
     )
@@ -183,7 +183,7 @@ describe('session journey', () => {
     })
 
     expect(journey?.selectedProvider).toBeUndefined()
-    expect(journey?.status).toBe('2 listed businesses ready to compare')
+    expect(journey?.statusText).toBe('2 listed businesses ready to compare')
     expect(journey?.guidance).toBe(
       'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.',
     )

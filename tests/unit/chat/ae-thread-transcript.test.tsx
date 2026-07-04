@@ -15,10 +15,17 @@ describe('AeThreadTranscript', () => {
   })
 
   it('keeps follow-up chips connected after a providerless boundary turn', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
-    const onFollowUp = vi.fn()
+    stubDeterministicChips()
+    let selectedQuery: string | null = null
 
-    render(<AeThreadTranscript projection={projectionWithBoundaryTurn()} onFollowUp={onFollowUp} />)
+    render(
+      <AeThreadTranscript
+        projection={projectionWithBoundaryTurn()}
+        onFollowUp={(query) => {
+          selectedQuery = query
+        }}
+      />,
+    )
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
     expect(panel.contains(screen.getByText('Continue with these listings'))).toBe(true)
@@ -32,24 +39,39 @@ describe('AeThreadTranscript', () => {
 
     fireEvent.click(screen.getByText('Prepare qualified inquiry with Parramatta Emergency Plumbing'))
 
-    expect(onFollowUp).toHaveBeenCalledWith('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
+    expect(selectedQuery).toBe('Prepare a qualified inquiry for Parramatta Emergency Plumbing')
   })
 
   it('labels selected-provider follow-ups as carried from the thread after a boundary turn', () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ llmChipsEnabled: false }))))
-    const onFollowUp = vi.fn()
+    stubDeterministicChips()
+    let selectedQuery: string | null = null
 
-    render(<AeThreadTranscript projection={projectionWithSelectedProviderBoundaryTurn()} onFollowUp={onFollowUp} />)
+    render(
+      <AeThreadTranscript
+        projection={projectionWithSelectedProviderBoundaryTurn()}
+        onFollowUp={(query) => {
+          selectedQuery = query
+        }}
+      />,
+    )
 
     const panel = screen.getByRole('region', { name: 'Continue this thread' })
-    expect(panel.contains(screen.getByText('Use the selected inquiry path from this thread, or keep narrowing this thread.'))).toBe(true)
+    expect(
+      panel.contains(
+        screen.getByText('Use the selected inquiry path from this thread, or keep narrowing this thread.'),
+      ),
+    ).toBe(true)
     expect(screen.queryByText(/Prepare qualified inquiry/)).toBeNull()
 
     fireEvent.click(screen.getByText('Only inquiry-ready listings'))
 
-    expect(onFollowUp).toHaveBeenCalledWith('Show only businesses that accept inquiries')
+    expect(selectedQuery).toBe('Show only businesses that accept inquiries')
   })
 })
+
+function stubDeterministicChips() {
+  vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ llmChipsEnabled: false })))
+}
 
 function projectionWithBoundaryTurn(): PublicThreadProjection {
   const source = provider()

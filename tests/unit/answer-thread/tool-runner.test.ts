@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import {
   runAnswerToolCall,
   toolCallRecordsToGateInput,
 } from '@/modules/answer-thread/internal/tool-runner'
 import type { AnswerToolCallRecord } from '@/modules/answer-thread/tooling'
-import { withRegistrySourcePortForTest } from '../../helpers/source-ports'
 
 const TURN_ID = 'turn-1'
 const BASE_SEQ = 0
@@ -17,8 +15,10 @@ afterEach(() => {
 
 describe('runAnswerToolCall', () => {
   it('runs registry.search and records a complete tool-call with slugs and a stable hash', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const result = await runAnswerToolCall({
         toolId: 'registry.search',
         input: { query: 'parramatta' },
@@ -40,12 +40,20 @@ describe('runAnswerToolCall', () => {
         'parramatta-emergency-plumbing',
       )
       expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
-    })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('keeps the registry literal: a misspelled suburb yields an empty complete result', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const result = await runAnswerToolCall({
         toolId: 'registry.search',
         input: { query: 'paramata' },
@@ -59,7 +67,13 @@ describe('runAnswerToolCall', () => {
       expect(summary.count).toBe(0)
       expect(result.providers).toEqual([])
       expect(result.allowedSlugs.size).toBe(0)
-    })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('records an error when the input does not match the action schema', async () => {
@@ -105,8 +119,10 @@ describe('runAnswerToolCall', () => {
   })
 
   it('runs registry.detail and records a found business, or an empty complete result for not_found', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const found = await runAnswerToolCall({
         toolId: 'registry.detail',
         input: { slug: 'parramatta-emergency-plumbing' },
@@ -128,7 +144,13 @@ describe('runAnswerToolCall', () => {
       const missingSummary = JSON.parse(missing.record.resultSummaryJson)
       expect(missingSummary.slugs).toEqual([])
       expect(missingSummary.count).toBe(0)
-    })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 })
 

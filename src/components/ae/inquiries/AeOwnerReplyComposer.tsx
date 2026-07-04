@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentPropsWithoutRef, type KeyboardEvent, type RefObject } from 'react'
+import { type ComponentPropsWithoutRef, type KeyboardEvent, type Ref, type RefObject } from 'react'
 import { SendIcon } from 'lucide-react'
 
 import { Button } from '@astryxdesign/core/Button'
@@ -37,11 +37,13 @@ function OwnerReplyInputGroupAddon({
   return <div className={cn('flex items-center gap-1 text-secondary', className)} {...props} />
 }
 
-const OwnerReplyInputGroupTextarea = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<'textarea'>>(
-  function OwnerReplyInputGroupTextarea({ className, ...props }, ref) {
-    return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
-  }
-)
+type OwnerReplyInputGroupTextareaProps = ComponentPropsWithoutRef<'textarea'> & {
+  ref?: Ref<HTMLTextAreaElement> | undefined
+}
+
+function OwnerReplyInputGroupTextarea({ className, ref, ...props }: OwnerReplyInputGroupTextareaProps) {
+  return <textarea ref={ref} className={cn('min-h-20 flex-1 bg-transparent text-sm outline-none', className)} {...props} />
+}
 
 export function AeOwnerReplyComposer({
   id = 'ownerReply',
@@ -80,7 +82,7 @@ export function AeOwnerReplyComposer({
             aria-describedby={describedBy}
             aria-invalid={invalid || undefined}
             name="ownerReply"
-            ref={textareaRef}
+            {...(textareaRef === undefined ? {} : { ref: textareaRef })}
             value={value}
             rows={4}
             disabled={disabled}

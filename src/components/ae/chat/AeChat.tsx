@@ -458,7 +458,7 @@ function buildLiveComposerCopy(intent: FollowUpIntent, completedTurnCount: numbe
     case 'unsupported':
       return {
         placeholder: 'Routing back to published listings',
-        loopHint: 'AE can read, compare, and route qualified inquiries, but it does not book, charge, or dispatch.',
+        loopHint: 'AE does not book, charge, or dispatch; it reads, compares, and routes qualified inquiries.',
       }
     case 'refine_search':
       return {
@@ -577,7 +577,10 @@ function mergeThreadRecords(
 ): AnswerThreadRecord[] {
   const normalizedIncoming = incoming.map(sanitizeThreadRecord)
   const incomingIds = new Set(normalizedIncoming.map((thread) => thread.threadId))
-  const optimistic = current.map(sanitizeThreadRecord).filter((thread) => !incomingIds.has(thread.threadId))
+  const optimistic = current.flatMap((thread) => {
+    const sanitized = sanitizeThreadRecord(thread)
+    return incomingIds.has(sanitized.threadId) ? [] : [sanitized]
+  })
   return [...normalizedIncoming, ...optimistic]
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, RECENT_THREADS_LIMIT)

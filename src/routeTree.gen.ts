@@ -50,6 +50,7 @@ import { Route as OwnerBusinessActionsRequestIdRouteImport } from './routes/owne
 import { Route as OwnerBillingRedirectingRouteImport } from './routes/owner.billing.redirecting'
 import { Route as OwnerBillingActivateRouteImport } from './routes/owner.billing.activate'
 import { Route as OwnerActionsProposalIdRouteImport } from './routes/owner.actions.$proposalId'
+import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
 import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
 import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
@@ -284,6 +285,12 @@ const OwnerActionsProposalIdRoute = OwnerActionsProposalIdRouteImport.update({
   path: '/$proposalId',
   getParentRoute: () => OwnerActionsRoute,
 } as any)
+const ApiStorefrontImportDraftRoute =
+  ApiStorefrontImportDraftRouteImport.update({
+    id: '/api/storefront/import-draft',
+    path: '/api/storefront/import-draft',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiObservabilityFunnelRoute = ApiObservabilityFunnelRouteImport.update({
   id: '/api/observability/funnel',
   path: '/api/observability/funnel',
@@ -491,6 +498,7 @@ export interface FileRoutesByFullPath {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
   '/owner/billing/activate': typeof OwnerBillingActivateRoute
   '/owner/billing/redirecting': typeof OwnerBillingRedirectingRoute
@@ -561,6 +569,7 @@ export interface FileRoutesByTo {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
   '/owner/billing/activate': typeof OwnerBillingActivateRoute
   '/owner/billing/redirecting': typeof OwnerBillingRedirectingRoute
@@ -632,6 +641,7 @@ export interface FileRoutesById {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
   '/owner/billing/activate': typeof OwnerBillingActivateRoute
   '/owner/billing/redirecting': typeof OwnerBillingRedirectingRoute
@@ -704,6 +714,7 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/storefront/import-draft'
     | '/owner/actions/$proposalId'
     | '/owner/billing/activate'
     | '/owner/billing/redirecting'
@@ -774,6 +785,7 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/storefront/import-draft'
     | '/owner/actions/$proposalId'
     | '/owner/billing/activate'
     | '/owner/billing/redirecting'
@@ -844,6 +856,7 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/storefront/import-draft'
     | '/owner/actions/$proposalId'
     | '/owner/billing/activate'
     | '/owner/billing/redirecting'
@@ -900,6 +913,7 @@ export interface RootRouteChildren {
   ApiNotificationResendDispatchRoute: typeof ApiNotificationResendDispatchRoute
   ApiNotificationResendWebhookRoute: typeof ApiNotificationResendWebhookRoute
   ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
+  ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1190,6 +1204,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/owner/actions/$proposalId'
       preLoaderRoute: typeof OwnerActionsProposalIdRouteImport
       parentRoute: typeof OwnerActionsRoute
+    }
+    '/api/storefront/import-draft': {
+      id: '/api/storefront/import-draft'
+      path: '/api/storefront/import-draft'
+      fullPath: '/api/storefront/import-draft'
+      preLoaderRoute: typeof ApiStorefrontImportDraftRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/observability/funnel': {
       id: '/api/observability/funnel'
@@ -1645,6 +1666,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNotificationResendDispatchRoute: ApiNotificationResendDispatchRoute,
   ApiNotificationResendWebhookRoute: ApiNotificationResendWebhookRoute,
   ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
+  ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

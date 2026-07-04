@@ -2,7 +2,10 @@ import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { CheckIcon, SearchIcon } from 'lucide-react'
 
+import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Text } from '@astryxdesign/core/Text'
 
 import {
   artifactsToMessageParts,
@@ -122,16 +125,14 @@ export function AeGenerativeAnswer({
         </div>
       ) : null}
 
-      {phase !== 'complete' ? (
-        <AeAnswerJourney
-          phase={phase}
-          profile={profile}
-          hasHeadline={headline.length > 0}
-          hasProviderEvidence={hasProviderEvidence}
-          hasSummary={hasSummary}
-          hasNextStep={hasNextStep}
-        />
-      ) : null}
+      <AeAnswerJourney
+        phase={phase}
+        profile={profile}
+        hasHeadline={headline.length > 0}
+        hasProviderEvidence={hasProviderEvidence}
+        hasSummary={hasSummary}
+        hasNextStep={hasNextStep}
+      />
 
       {parts.map((part, index) => (
         <AnswerPartView key={`${part.kind}-${index}`} part={part} query={query} empty={empty} phase={phase} threadId={threadId} />
@@ -176,12 +177,27 @@ function AeAnswerJourney({
 }) {
   const empty = profile === 'empty_state'
   const steps = [
-    { label: 'Understand need', detail: 'Read the request and place.' },
-    { label: 'Check listings', detail: 'Search published business details.' },
-    { label: 'Compare fit', detail: 'Weigh service area and response.' },
     {
-      label: empty ? 'Refine search' : 'Choose next step',
-      detail: empty ? 'Try a sharper route.' : 'Confirm facts before contact.',
+      label: 'Understand need',
+      detail: 'AE reads the request, place, and service intent.',
+      record: 'need read',
+    },
+    {
+      label: 'Check listings',
+      detail: 'Published business details are checked for this turn.',
+      record: 'published facts',
+    },
+    {
+      label: 'Compare published facts',
+      detail: 'Published area, response, and next-step details are compared.',
+      record: 'facts compared',
+    },
+    {
+      label: 'Hand off next step',
+      detail: empty
+        ? 'AE offers a sharper route when no listed fit is clear.'
+        : 'Open a listing or send a qualified inquiry for owner review.',
+      record: 'handoff ready',
     },
   ] as const
 
@@ -199,49 +215,82 @@ function AeAnswerJourney({
       : Math.max(0, Math.min(completedIndex, steps.length - 1))
   const guidance =
     phase === 'streaming'
-      ? 'The answer updates as each check finishes.'
+      ? 'AE is assembling the proof spine as the answer arrives.'
       : empty
         ? 'No clear published match yet; use the route below to sharpen the search.'
-        : 'Use the evidence below to compare fit, then choose the next step.'
+        : 'AE reads, checks, compares, and routes. The business still confirms timing, quote, and availability.'
 
   return (
-    <section
-      className={`${REVEAL_ENTER} grid gap-4 rounded-lg border border-border bg-surface p-4 sm:grid-cols-[minmax(10rem,0.7fr)_minmax(0,1.5fr)]`}
-      aria-label="Answer journey"
+    <Card
+      padding={4}
+      className={`${REVEAL_ENTER} grid gap-5 border border-border bg-surface`}
+      aria-label="AE proof spine"
       data-phase={phase}
     >
-      <div className="flex flex-col justify-center gap-1">
-        <AeKicker>Process</AeKicker>
-        <p className="font-heading text-base text-primary">From need to next step</p>
-        <p className="text-pretty text-sm text-secondary">{guidance}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <img
+            src="/brand/logo/ae-seal.svg"
+            alt=""
+            aria-hidden="true"
+            className="mt-0.5 size-8 shrink-0"
+            loading="lazy"
+          />
+          <div className="grid min-w-0 gap-1">
+            <Badge variant="neutral" className="w-fit" label="Proof spine" />
+            <Text type="large" weight="semibold" color="primary" display="block">
+              The handoff is a record.
+            </Text>
+            <Text color="secondary" className="max-w-[58ch] text-pretty" display="block">
+              {guidance}
+            </Text>
+          </div>
+        </div>
+        <Text type="supporting" color="secondary" className="font-mono tabular-nums" display="block">
+          {phase === 'complete' ? 'record ready' : phase === 'streaming' ? 'assembling' : 'handoff record'}
+        </Text>
       </div>
-      <ol className="grid gap-2 sm:grid-cols-2" aria-live={phase === 'streaming' ? 'polite' : 'off'}>
+
+      <ol
+        className="grid gap-4 border-l border-border pl-5 sm:grid-cols-4 sm:gap-5 sm:border-l-0 sm:border-t sm:pl-0 sm:pt-5"
+        aria-live={phase === 'streaming' ? 'polite' : 'off'}
+        aria-label="Answer handoff proof spine"
+      >
         {steps.map((step, index) => {
           const state = getJourneyState({ index, activeIndex, completedIndex, phase })
+          const nodeClassName = [
+            'absolute -left-[1.85rem] top-0 inline-flex size-5 items-center justify-center rounded-full border font-mono text-2xs font-semibold tabular-nums sm:-top-[1.9rem] sm:left-0',
+            state === 'complete' ? 'border-accent bg-accent text-on-accent' : '',
+            state === 'active' ? 'border-accent bg-surface text-accent' : '',
+            state === 'pending' ? 'border-border bg-surface text-secondary' : '',
+            state === 'error' || state === 'stopped' ? 'border-red-ring bg-red-subtle text-red-vivid' : '',
+          ].join(' ')
+
           return (
             <li
               key={step.label}
               data-state={state}
               aria-current={state === 'active' ? 'step' : undefined}
-              className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-md border border-border bg-card p-2 transition-colors data-[state=active]:border-border-strong data-[state=active]:bg-muted data-[state=complete]:border-green-ring data-[state=complete]:bg-green-subtle data-[state=error]:border-red-ring data-[state=error]:bg-red-subtle data-[state=stopped]:border-red-ring data-[state=stopped]:bg-red-subtle data-[state=pending]:opacity-70"
+              className="relative grid min-w-0 gap-1 data-[state=pending]:opacity-70"
             >
-              <span
-                data-state={state}
-                className="inline-flex size-5 items-center justify-center rounded-full border border-border bg-surface font-mono text-2xs font-semibold text-secondary data-[state=complete]:border-green-ring data-[state=complete]:text-green-vivid"
-                aria-hidden="true"
-              >
+              <span className={nodeClassName} aria-hidden="true">
                 {state === 'complete' ? <CheckIcon className="size-3" /> : index + 1}
               </span>
-              <span className="grid min-w-0 gap-0.5">
-                <span className="sr-only">{journeyStateLabel(state)}: </span>
-                <span className="text-sm font-medium leading-snug text-primary">{step.label}</span>
-                <span className="text-xs leading-snug text-secondary">{step.detail}</span>
-              </span>
+              <span className="sr-only">{journeyStateLabel(state)}: </span>
+              <Text type="supporting" weight="semibold" color="primary" display="block">
+                {step.label}
+              </Text>
+              <Text type="supporting" color="secondary" className="text-pretty" display="block">
+                {step.detail}
+              </Text>
+              <Text type="supporting" color="secondary" className="font-mono text-2xs tabular-nums" display="block">
+                {step.record}
+              </Text>
             </li>
           )
         })}
       </ol>
-    </section>
+    </Card>
   )
 }
 
@@ -519,7 +568,7 @@ function ProviderCompareTable({
       <header className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="grid gap-1">
           <AeKicker marker>Compare</AeKicker>
-          <p className="font-heading text-base text-primary">Published fit, side by side</p>
+          <p className="font-heading text-base text-primary">Published facts, side by side</p>
         </div>
         <p className="shrink-0 font-mono text-2xs text-secondary">{listingCountLabel(providers.length)}</p>
       </header>
@@ -578,7 +627,10 @@ function ProviderCompareRow({
         </span>
       </th>
       {fields.map((field) => (
-        <td key={`${provider.slug}-${field}`} className="border-t border-border px-4 py-3 align-top tabular-nums text-secondary">
+        <td
+          key={`${provider.slug}-${field}`}
+          className={`border-t border-border px-4 py-3 align-top tabular-nums text-secondary ${field === 'freshness' ? 'font-mono text-2xs tracking-wide' : ''}`}
+        >
           {compareFieldValue(provider, field)}
         </td>
       ))}

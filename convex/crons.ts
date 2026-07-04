@@ -18,4 +18,11 @@ crons.interval(
   {}
 )
 
+crons.interval(
+  'recheck due business capabilities',
+  { hours: 1 },
+  internal.capabilities.recheckDueBusinessCapabilities,
+  {}
+)
+
 export default crons

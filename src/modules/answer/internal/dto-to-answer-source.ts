@@ -48,7 +48,7 @@ export function toAnswerSource(
     stateTerritory: dto.stateTerritory,
     serviceArea:
       primaryService?.serviceArea ??
-      dto.services.map((s) => s.serviceArea).filter(Boolean)[0] ??
+      dto.services.flatMap((service) => (service.serviceArea ? [service.serviceArea] : []))[0] ??
       '',
     hoursLabel: plainHoursLabel(primaryService?.hoursOrUnknown),
     availabilityLabel: plainAvailabilityLabel({

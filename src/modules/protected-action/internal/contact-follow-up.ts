@@ -174,6 +174,7 @@ export type ContactFollowUpAttempt = {
   gatewayAdmissionId: ContactFollowUpGatewayAdmissionId
   outcome: ContactFollowUpAttemptOutcome
   attemptHash: SourceHash
+  boundEvidenceRefHashes: readonly SourceHash[]
   receiptId?: ContactFollowUpReceiptId
   reason?: string
   idempotencyKey: OperationKey
@@ -190,6 +191,7 @@ export type ContactFollowUpReceipt = {
   kind: 'receipt' | 'proof_gap'
   providerBoundary: 'source_owned_follow_up_outbox'
   payloadHash: SourceHash
+  boundEvidenceRefHashes: readonly SourceHash[]
   redactedReadback: {
     targetRef: string
     resultRef?: string
@@ -337,6 +339,7 @@ export type RecordContactFollowUpProviderAttemptCommand = {
   now: number
   executionMode?: 'owner_approved' | 'direct' | 'autonomous'
   readback: ContactFollowUpAttemptReadback
+  boundEvidenceRefHashes?: readonly SourceHash[]
 }
 
 export type ContactFollowUpErrorCode =
@@ -874,6 +877,7 @@ export function recordContactFollowUpProviderAttempt(
     return error('contact_follow_up_gateway_expired', false, { reason: 'gateway_expired', proposalId: proposal.id })
   }
 
+  const boundEvidenceRefHashes = [...(command.boundEvidenceRefHashes ?? [])].sort()
   const attemptHash = stableHash({
     proposalId: proposal.id,
     proposalHash: proposal.proposalHash,
@@ -882,6 +886,7 @@ export function recordContactFollowUpProviderAttempt(
     gatewayAdmissionHash: gatewayAdmission.admissionHash,
     selectedActionSlug: ContactFollowUpActionSlug,
     readback: readbackHashValue(command.readback),
+    boundEvidenceRefHashes,
   })
   const existingByIdempotencyKey = state.attempts.find(
     (attempt) => attempt.proposalId === proposal.id && attempt.idempotencyKey === command.idempotencyKey
@@ -930,6 +935,7 @@ export function recordContactFollowUpProviderAttempt(
     gatewayAdmissionId: gatewayAdmission.id,
     outcome: attemptOutcome(command.readback),
     attemptHash,
+    boundEvidenceRefHashes,
     idempotencyKey: command.idempotencyKey,
     correlationId: command.correlationId,
     attemptedAt: command.now,
@@ -937,7 +943,7 @@ export function recordContactFollowUpProviderAttempt(
     ...(command.readback.kind === 'proof_gap' ? { reason: command.readback.gapReason } : {}),
     ...(command.readback.kind === 'failed' ? { reason: command.readback.failureReason } : {}),
   }
-  const receipt = receiptForAttempt(proposal, attempt, command.readback, command.now)
+  const receipt = receiptForAttempt(proposal, attempt, command.readback, command.now, boundEvidenceRefHashes)
   const privateEvidenceRef = privateEvidenceRefForAttempt(proposal, attempt, command.readback, command.now)
   const nextProposal = proposalWithStatus(state, proposal, 'attempted', command.now)
   const consumedGateway: ContactFollowUpGatewayAdmission = {
@@ -1486,6 +1492,14 @@ function reconstructionStatus(
     return 'retry_exhausted'
   }
 
+  if (
+    item.receipt !== undefined &&
+    item.attempt !== undefined &&
+    !sameSourceHashSet(item.receipt.boundEvidenceRefHashes, item.attempt.boundEvidenceRefHashes)
+  ) {
+    return 'disputed'
+  }
+
   if (item.receipt?.kind === 'receipt') {
     return 'receipt_recorded'
   }
@@ -1572,6 +1586,16 @@ function auditedReadbackStatus(auditEvents: readonly AuditEventContract[]): Cont
   return undefined
 }
 
+function sameSourceHashSet(left: readonly SourceHash[], right: readonly SourceHash[]): boolean {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  const sortedLeft = [...left].sort()
+  const sortedRight = [...right].sort()
+  return sortedLeft.length === sortedRight.length && sortedLeft.every((value, index) => value === sortedRight[index])
+}
+
 function isRetryExhausted(attempts: readonly ContactFollowUpAttempt[]): boolean {
   const latestAttempt = attempts.at(-1)
   return latestAttempt !== undefined && isRetryableAttempt(latestAttempt) && attempts.length >= ContactFollowUpMaxAttemptCount
@@ -1641,7 +1665,8 @@ function receiptForAttempt(
   proposal: ContactFollowUpProposal,
   attempt: ContactFollowUpAttempt,
   readback: ContactFollowUpAttemptReadback,
-  recordedAt: number
+  recordedAt: number,
+  boundEvidenceRefHashes: readonly SourceHash[]
 ): ContactFollowUpReceipt | undefined {
   if (readback.kind === 'failed') {
     return undefined
@@ -1654,7 +1679,13 @@ function receiptForAttempt(
     attemptId: attempt.id,
     kind: readback.kind === 'receipt' ? 'receipt' : 'proof_gap',
     providerBoundary: 'source_owned_follow_up_outbox',
-    payloadHash: readback.payloadHash,
+    payloadHash: stableHash({
+      attemptHash: attempt.attemptHash,
+      gatewayAdmissionHash: attempt.gatewayAdmissionId,
+      readback: readbackHashValue(readback),
+      boundEvidenceRefHashes: [...boundEvidenceRefHashes].sort(),
+    }),
+    boundEvidenceRefHashes: [...boundEvidenceRefHashes].sort(),
     redactedReadback:
       readback.kind === 'receipt'
         ? { targetRef: proposal.parameters.sourceMessageRef, resultRef: readback.resultRef }

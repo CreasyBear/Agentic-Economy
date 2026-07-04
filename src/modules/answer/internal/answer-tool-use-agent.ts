@@ -81,7 +81,7 @@ const ANSWER_PROSE_RESPONSE_FORMAT = {
 
 export type AnswerToolUseAgentInput = {
   query: string
-  /** OpenRouter config; required for the real loop, ignored by the test seam. */
+  /** OpenRouter config; required when env-backed config is unavailable. */
   config?: AnswerLlmConfig
   model?: string
   signal?: AbortSignal
@@ -103,30 +103,6 @@ export type AnswerToolUseAgentInput = {
   disableTools?: boolean
 }
 
-export type AgentPlannedToolCall = {
-  toolId: string
-  input: unknown
-}
-
-export type AnswerToolUseAgentPlan = {
-  toolCalls: readonly AgentPlannedToolCall[]
-  prose: AnswerProse
-}
-
-/**
- * Test seam: fakes the model's tool-argument choice and final prose. The
- * runner still executes the planned tool calls against the real registry
- * (via `runAnswerToolCall`) and runs the real gate, so tests prove that a
- * chosen `registry.search` input recovers a misspelled query and that an
- * ungrounded prose slug is rejected.
- */
-export type AnswerToolUseAgentGenerator = (input: {
-  query: string
-  priorProviders?: readonly AnswerSource[]
-  followUpIntent?: FollowUpIntent
-  searchContext?: AeSearchContext | undefined
-}) => Promise<AnswerToolUseAgentPlan>
-
 export type AnswerToolUseAgentResult = {
   prose: AnswerProse
   providers: readonly AnswerSource[]
@@ -138,88 +114,15 @@ export type AnswerToolUseAgentResult = {
   gate: AnswerGateResult
 }
 
-let testGenerator: AnswerToolUseAgentGenerator | undefined
-
-export function setAnswerToolUseAgentForTests(
-  generator: AnswerToolUseAgentGenerator | undefined,
-): () => void {
-  const previous = testGenerator
-  testGenerator = generator
-  return () => {
-    testGenerator = previous
-  }
-}
-
 export async function runAnswerToolUseAgent(
   input: AnswerToolUseAgentInput,
 ): Promise<AnswerToolUseAgentResult> {
-  if (testGenerator !== undefined) {
-    return runPlannedAgent(input, await testGenerator(input))
-  }
-
   const config = input.config ?? readAnswerLlmConfig()
   if (config === undefined) {
     throw new AnswerToolUseAgentError('unavailable')
   }
 
   return runRealToolUseAgent(input, config)
-}
-
-async function runPlannedAgent(
-  input: AnswerToolUseAgentInput,
-  plan: AnswerToolUseAgentPlan,
-): Promise<AnswerToolUseAgentResult> {
-  const toolCalls: AnswerToolCallRecord[] = []
-  const timings: AnswerTurnTimingEntry[] = []
-  const modelRequests: HarnessModelRequestRecord[] = []
-  const providers: AnswerSource[] = []
-  const slugSeen = new Set<string>()
-  let seq = 0
-
-  const plannedModelRecord: HarnessModelRequestRecord = {
-    seq: 0,
-    provider: 'test',
-    model: 'planned-answer-tool-use-agent',
-    status: 'ok',
-    durationMs: 0,
-    stopReason: plan.toolCalls.length > 0 ? 'planned_tool_calls' : 'planned_prose',
-    costUnavailableReason: 'test_seam',
-  }
-  if (input.harnessLoop !== undefined) {
-    await input.harnessLoop.runModel<void>({
-      seq: 0,
-      provider: 'test',
-      model: 'planned-answer-tool-use-agent',
-      costUnavailableReason: 'test_seam',
-      summarize: () => plannedModelRecord,
-    }, () => undefined)
-  }
-  recordModelRequest(input, modelRequests, plannedModelRecord)
-
-  for (const planned of plan.toolCalls) {
-    const toolInput = applySearchContextToRegistrySearchInput(
-      input,
-      planned.toolId,
-      planned.input,
-    )
-    const result = await runAnswerToolCall({
-      toolId: planned.toolId,
-      input: toolInput,
-      turnId: 'pending',
-      seq,
-      ...(input.harnessLoop === undefined ? {} : { harnessLoop: input.harnessLoop }),
-    })
-    toolCalls.push(result.record)
-    appendTimings(timings, result.timings, {
-      phase: 'planned_agent',
-      toolId: result.record.toolId,
-      toolSeq: result.record.seq,
-    })
-    seq += 1
-    appendProvidersFromToolResult(providers, slugSeen, result.providers)
-  }
-
-  return buildAgentResult(input, plan.prose, toolCalls, providers, timings, modelRequests)
 }
 
 function buildAgentResult(
@@ -667,7 +570,7 @@ async function postChatCompletion(input: {
   messages: readonly OpenRouterMessage[]
   signal?: AbortSignal
 }): Promise<OpenRouterResponse> {
-  const response = await fetch(OPENROUTER_URL, {
+  const response = await fetch(`${input.config.apiBaseUrl ?? OPENROUTER_URL}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${input.config.apiKey}`,

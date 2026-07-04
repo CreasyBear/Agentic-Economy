@@ -23,14 +23,12 @@ export function AeModelSelector() {
       return providerEntries
     }
 
-    return providerEntries
-      .map(([provider, models]) => {
-        const filteredModels = models.filter((model) =>
-          `${provider} ${model.name} ${model.id}`.toLowerCase().includes(needle),
-        )
-        return [provider, filteredModels] as const
-      })
-      .filter(([, models]) => models.length > 0)
+    return providerEntries.flatMap(([provider, models]) => {
+      const filteredModels = models.filter((model) =>
+        `${provider} ${model.name} ${model.id}`.toLowerCase().includes(needle),
+      )
+      return filteredModels.length === 0 ? [] : [[provider, filteredModels] as const]
+    })
   }, [providerEntries, query])
 
   if (loading) {

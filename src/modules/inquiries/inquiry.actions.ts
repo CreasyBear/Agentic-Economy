@@ -7,35 +7,29 @@ import {
   type PublicInquirySubmitServerResult,
 } from '@/modules/inquiries/inquiry.functions'
 
-const serverErrorOutputSchema = z
-  .object({
-    kind: z.literal('error'),
-    code: z.string(),
-    retryable: z.boolean(),
-    reason: z.string(),
-    field: z.string().optional(),
-    retryAfter: z.number().optional(),
-  })
-  .passthrough()
+const serverErrorOutputSchema = z.looseObject({
+  kind: z.literal('error'),
+  code: z.string(),
+  retryable: z.boolean(),
+  reason: z.string(),
+  field: z.string().optional(),
+  retryAfter: z.number().optional(),
+})
 
 const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('ok'),
-      code: z.enum(['inquiry_submitted', 'inquiry_replayed']),
-      receipt: z
-        .object({
-          threadId: z.string(),
-          businessId: z.string(),
-          serviceId: z.string(),
-          status: z.string(),
-          version: z.number().int().nonnegative(),
-          notificationId: z.string(),
-          notificationStatus: z.string(),
-        })
-        .passthrough(),
-    })
-    .passthrough(),
+  z.looseObject({
+    kind: z.literal('ok'),
+    code: z.enum(['inquiry_submitted', 'inquiry_replayed']),
+    receipt: z.looseObject({
+      threadId: z.string(),
+      businessId: z.string(),
+      serviceId: z.string(),
+      status: z.string(),
+      version: z.number().int().nonnegative(),
+      notificationId: z.string(),
+      notificationStatus: z.string(),
+    }),
+  }),
   serverErrorOutputSchema,
 ]) as z.ZodType<PublicInquirySubmitServerResult>
 
@@ -51,14 +45,30 @@ const submitParameters: readonly ActionParameter[] = [
   {
     name: 'target.businessId',
     type: 'string',
-    description: 'The published business the inquiry is for.',
-    required: true,
+    description:
+      'Identifier of the published business the inquiry is for. Provide with target.serviceId, or use target.businessSlug + target.serviceSlug instead.',
+    required: false,
   },
   {
     name: 'target.serviceId',
     type: 'string',
-    description: 'The published service the inquiry is about.',
-    required: true,
+    description:
+      'Identifier of the published service the inquiry is about. Pairs with target.businessId.',
+    required: false,
+  },
+  {
+    name: 'target.businessSlug',
+    type: 'string',
+    description:
+      'Public slug of the business, as read from a listing. Provide with target.serviceSlug when you do not have identifiers.',
+    required: false,
+  },
+  {
+    name: 'target.serviceSlug',
+    type: 'string',
+    description:
+      'Public slug of the service on that business, as read from a listing. Pairs with target.businessSlug.',
+    required: false,
   },
   {
     name: 'target.capabilityKind',

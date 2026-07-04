@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { createDefaultDiscoverySourceState } from '@/modules/discovery/public'
 import {
   generateDeveloperDiscoverySchema,
@@ -68,9 +69,10 @@ export function readDeveloperDiscoveryRequestOptions(
   request: Request,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): ReadDeveloperDiscoveryRouteOptions {
+  const canonicalBaseUrl = options.canonicalBaseUrl ?? resolveCanonicalBaseUrl(request).baseUrl
   return {
     ...options,
-    canonicalBaseUrl: options.canonicalBaseUrl ?? requestOrigin(request),
+    canonicalBaseUrl,
     now: options.now ?? 0,
   }
 }
@@ -95,7 +97,7 @@ export async function buildDeveloperDiscoveryRouteSnapshot(
   request: Request,
   options: ReadDeveloperDiscoveryRouteOptions = {}
 ): Promise<DeveloperDiscoveryRouteSnapshot> {
-  const origin = options.canonicalBaseUrl ?? requestOrigin(request)
+  const origin = options.canonicalBaseUrl ?? resolveCanonicalBaseUrl(request).baseUrl
   const checkedAt = options.now ?? 0
   const listRoute = `${origin}/api/businesses`
   const list = await executeJsonRoute<PublicBusinessCatalogApiPage>({
@@ -200,13 +202,6 @@ export function readDeveloperDiscoveryFetchReadback(
   })
 }
 
-export function requestOrigin(request: Request): string {
-  try {
-    return new URL(request.url).origin
-  } catch {
-    return 'https://ae.example'
-  }
-}
 
 function fetchStatusForArtifact(artifact: DeveloperDiscoveryArtifact): DeveloperDiscoveryFetchStatus {
   if (artifact.state === 'available') {

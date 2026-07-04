@@ -3,7 +3,7 @@ import {
   hasInjectionUpgrade,
   hasOverclaim,
   type AnswerWorkStep,
-} from '@/modules/answer/public'
+} from '@/modules/answer/projection'
 
 /**
  * Internal architecture words that must never reach a public human surface

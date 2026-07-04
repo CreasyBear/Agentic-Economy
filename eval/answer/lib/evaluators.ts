@@ -8,7 +8,6 @@ import {
   hasInjectionUpgrade,
   hasOverclaim,
   runAnswerToolUseAgent,
-  setAnswerToolUseAgentForTests,
 } from '../../../src/modules/answer/public'
 import type { AnswerEvent, AnswerSnapshot, AnswerWorkStep } from '../../../src/modules/answer/public'
 import { validateFollowUpChip } from '../../../src/modules/answer-thread/public'
@@ -20,7 +19,6 @@ import {
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../../../tests/helpers/answer-thread-test-port'
-import { withRegistrySourcePortForTest } from '../../../tests/helpers/source-ports'
 import {
   findAnswerThreadEvalCase,
   findAnswerTurnEvalCase,
@@ -28,7 +26,10 @@ import {
   type AnswerThreadEvalTurn,
   type AnswerTurnEvalCase,
 } from './cases'
-import { createAnswerEvalRegistrySourceState } from './registry-seed'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../../../tests/helpers/openrouter-contract-server'
 
 type GateVars = {
   snapshot: string
@@ -136,22 +137,34 @@ function evaluateChipCase(vars: ChipVars): { ok: boolean } {
 }
 
 async function evaluateParityCase(vars: ParityVars): Promise<{ ok: boolean; detail?: string }> {
-  const state = createAnswerEvalRegistrySourceState()
   let result: { ok: boolean; detail?: string } = { ok: false, detail: 'not_run' }
+  const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+  process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+  process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
 
-  await withRegistrySourcePortForTest(state, async () => {
+  try {
     const evidence = await assembleAnswerEvidence({ query: vars.query, limit: 10 })
     if (evidence === undefined) {
-      result = { ok: false, detail: 'evidence_missing' }
-      return
+      return { ok: false, detail: 'evidence_missing' }
     }
     const slugs = evidence.providers.map((provider) => provider.slug).sort()
     if (slugs.length === 0 || !slugs.includes('parramatta-emergency-plumbing')) {
-      result = { ok: false, detail: `unexpected_slugs:${slugs.join(',')}` }
-      return
+      return { ok: false, detail: `unexpected_slugs:${slugs.join(',')}` }
     }
     result = { ok: true }
-  })
+  } finally {
+    if (previousLocalRegistry === undefined) {
+      delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    } else {
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+    }
+    if (previousEvalSeed === undefined) {
+      delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    } else {
+      process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+    }
+  }
 
   return result
 }
@@ -186,7 +199,8 @@ async function evaluateAnswerTurnCase(vars: AnswerTurnVars): Promise<AnswerTurnE
 }
 
 export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promise<AnswerTurnEvalResult> {
-  const state = createAnswerEvalRegistrySourceState(testCase.registrySeed ?? 'default')
+  const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
   const store = createAnswerThreadTestStore()
   const resetThreadPort = installAnswerThreadTestPort(store)
   const previousApiKey = process.env.OPENROUTER_API_KEY
@@ -194,6 +208,8 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
   resetAnswerTurnGuardForTests()
 
   try {
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = testCase.registrySeed ?? 'default'
     let result: AnswerTurnEvalResult = {
       ok: false,
       caseId: testCase.id,
@@ -212,13 +228,11 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
       diagnostics: {},
     }
 
-    await withRegistrySourcePortForTest(state, async () => {
-      result = await runAnswerTurnInStore({
-        testCase,
-        store,
-        sessionId: `eval-${testCase.id}`,
-        turnKey: `eval-${testCase.id}`,
-      })
+    result = await runAnswerTurnInStore({
+      testCase,
+      store,
+      sessionId: `eval-${testCase.id}`,
+      turnKey: `eval-${testCase.id}`,
     })
 
     return result
@@ -226,6 +240,16 @@ export async function runAnswerTurnEvalCase(testCase: AnswerTurnEvalCase): Promi
     resetThreadPort()
     setAnswerThreadPortForTests(undefined)
     resetAnswerTurnGuardForTests()
+    if (previousLocalRegistry === undefined) {
+      delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    } else {
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+    }
+    if (previousEvalSeed === undefined) {
+      delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    } else {
+      process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+    }
     if (previousApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY
     } else {
@@ -249,7 +273,8 @@ async function evaluateAnswerThreadCase(vars: AnswerThreadVars): Promise<AnswerT
 }
 
 export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): Promise<AnswerThreadEvalResult> {
-  const state = createAnswerEvalRegistrySourceState(testCase.registrySeed ?? 'default')
+  const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
   const store = createAnswerThreadTestStore()
   const resetThreadPort = installAnswerThreadTestPort(store)
   const previousApiKey = process.env.OPENROUTER_API_KEY
@@ -257,21 +282,21 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
   resetAnswerTurnGuardForTests()
 
   try {
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = testCase.registrySeed ?? 'default'
     const turns: AnswerTurnEvalResult[] = []
-    await withRegistrySourcePortForTest(state, async () => {
-      let threadId: string | undefined
-      for (const [index, turn] of testCase.turns.entries()) {
-        const result = await runAnswerTurnInStore({
-          testCase: turnToSingleCase(testCase, turn, index),
-          store,
-          sessionId: `eval-${testCase.id}`,
-          turnKey: `eval-${testCase.id}-${index + 1}`,
-          ...(threadId === undefined ? {} : { threadId }),
-        })
-        turns.push(result)
-        threadId = readLatestThreadId(store, threadId)
-      }
-    })
+    let threadId: string | undefined
+    for (const [index, turn] of testCase.turns.entries()) {
+      const result = await runAnswerTurnInStore({
+        testCase: turnToSingleCase(testCase, turn, index),
+        store,
+        sessionId: `eval-${testCase.id}`,
+        turnKey: `eval-${testCase.id}-${index + 1}`,
+        ...(threadId === undefined ? {} : { threadId }),
+      })
+      turns.push(result)
+      threadId = readLatestThreadId(store, threadId)
+    }
 
     const problems = turns.flatMap((turn, index) =>
       turn.problems.map((problem) => `turn ${index + 1}: ${problem}`),
@@ -286,6 +311,16 @@ export async function runAnswerThreadEvalCase(testCase: AnswerThreadEvalCase): P
     resetThreadPort()
     setAnswerThreadPortForTests(undefined)
     resetAnswerTurnGuardForTests()
+    if (previousLocalRegistry === undefined) {
+      delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    } else {
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+    }
+    if (previousEvalSeed === undefined) {
+      delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    } else {
+      process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+    }
     if (previousApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY
     } else {
@@ -301,17 +336,10 @@ async function runAnswerTurnInStore(input: {
   turnKey: string
   threadId?: string
 }): Promise<AnswerTurnEvalResult> {
-  const resetAgent = input.testCase.plannedAgent === undefined
+  const server = input.testCase.openRouterAgent === undefined
     ? undefined
-    : setAnswerToolUseAgentForTests(async () => input.testCase.plannedAgent ?? {
-        toolCalls: [],
-        prose: {
-          oneLine: '',
-          summary: '',
-          whatToDoNow: '',
-        },
-      })
-
+    : await startOpenRouterContractServer(openRouterToolThenProseResponses(input.testCase.openRouterAgent))
+  const restoreOpenRouter = server?.installEnv()
   try {
     const response = await handleAnswerTurnRequest(
       new Request('https://ae.example/api/answer/turn', {
@@ -413,7 +441,10 @@ async function runAnswerTurnInStore(input: {
       diagnostics,
     }
   } finally {
-    resetAgent?.()
+    restoreOpenRouter?.()
+    if (server !== undefined) {
+      await server.close()
+    }
   }
 }
 
@@ -429,7 +460,7 @@ function turnToSingleCase(
     ...(testCase.registrySeed === undefined ? {} : { registrySeed: testCase.registrySeed }),
     query: turn.query,
     ...(turn.searchContext === undefined ? {} : { searchContext: turn.searchContext }),
-    ...(turn.plannedAgent === undefined ? {} : { plannedAgent: turn.plannedAgent }),
+    ...(turn.openRouterAgent === undefined ? {} : { openRouterAgent: turn.openRouterAgent }),
     expected: turn.expected,
   }
 }
@@ -732,7 +763,7 @@ async function evaluateToolUseCase(
   model?: string
   detail?: string
 }> {
-  const state = createAnswerEvalRegistrySourceState()
+  const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
   let result: {
     ok: boolean
     toolInput?: string
@@ -746,58 +777,65 @@ async function evaluateToolUseCase(
     detail: 'not_run',
   }
 
-  await withRegistrySourcePortForTest(state, async () => {
-    const plannedInput = JSON.parse(vars.plannedInput) as Record<string, unknown>
-    const reset = setAnswerToolUseAgentForTests(async () => ({
-      toolCalls: [{ toolId: vars.plannedTool, input: plannedInput }],
-      prose: {
-        oneLine: vars.proseOneLine,
-        summary: vars.proseSummary,
-        whatToDoNow: vars.proseNextStep,
-      },
-    }))
+  process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
+  const plannedInput = JSON.parse(vars.plannedInput) as Record<string, unknown>
+  const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+    toolCalls: [{ toolId: vars.plannedTool, input: plannedInput }],
+    prose: {
+      oneLine: vars.proseOneLine,
+      summary: vars.proseSummary,
+      whatToDoNow: vars.proseNextStep,
+    },
+  }))
+  const restoreOpenRouter = server.installEnv()
+
+  try {
+    const agentResult = await runAnswerToolUseAgent({ query: vars.query })
+    const firstCall = agentResult.toolCalls[0]
+    const toolInput = firstCall?.inputJson ?? ''
+    const slugs = [...agentResult.allowedSlugs]
+    const gateOk = agentResult.gate.ok
+    const firstModel = agentResult.modelRequests[0]
+    const expectedGate = vars.expectPass === 'true'
+    const slugOk = vars.expectedSlug.length === 0 || slugs.includes(vars.expectedSlug)
+    const modelAccountingOk =
+      firstModel !== undefined &&
+      firstModel.status === 'ok' &&
+      firstModel.provider === (vars.expectedModelProvider ?? 'openrouter') &&
+      firstModel.model === (vars.expectedModel ?? 'test-model') &&
+      firstModel.costUnavailableReason === 'price_table_missing'
+
+    let parsedChosen: { query?: string } = {}
     try {
-      const agentResult = await runAnswerToolUseAgent({ query: vars.query })
-      const firstCall = agentResult.toolCalls[0]
-      const toolInput = firstCall?.inputJson ?? ''
-      const slugs = [...agentResult.allowedSlugs]
-      const gateOk = agentResult.gate.ok
-      const firstModel = agentResult.modelRequests[0]
-      const expectedGate = vars.expectPass === 'true'
-      const slugOk = vars.expectedSlug.length === 0 || slugs.includes(vars.expectedSlug)
-      const modelAccountingOk =
-        firstModel !== undefined &&
-        firstModel.status === 'ok' &&
-        firstModel.provider === (vars.expectedModelProvider ?? 'test') &&
-        firstModel.model === (vars.expectedModel ?? 'planned-answer-tool-use-agent') &&
-        firstModel.costUnavailableReason === 'test_seam'
-
-      let parsedChosen: { query?: string } = {}
-      try {
-        parsedChosen = JSON.parse(toolInput) as { query?: string }
-      } catch {
-        // leave parsedChosen empty
-      }
-      const inputOk = parsedChosen.query === plannedInput.query
-
-      result = {
-        ok: gateOk === expectedGate && slugOk && inputOk && modelAccountingOk,
-        toolInput,
-        slug: slugs.join(','),
-        gateOk,
-        ...(firstModel?.provider === undefined ? {} : { modelProvider: firstModel.provider }),
-        ...(firstModel?.model === undefined ? {} : { model: firstModel.model }),
-        ...(slugOk && inputOk && modelAccountingOk
-          ? {}
-          : { detail: `slug_ok=${slugOk} input_ok=${inputOk} model_accounting_ok=${modelAccountingOk}` }),
-      }
-    } catch (error) {
-      result = { ok: false, detail: `agent_error:${String(error)}` }
-    } finally {
-      reset()
+      parsedChosen = JSON.parse(toolInput) as { query?: string }
+    } catch {
+      // leave parsedChosen empty
     }
-  })
+    const inputOk = parsedChosen.query === plannedInput.query
+
+    result = {
+      ok: gateOk === expectedGate && slugOk && inputOk && modelAccountingOk,
+      toolInput,
+      slug: slugs.join(','),
+      gateOk,
+      ...(firstModel?.provider === undefined ? {} : { modelProvider: firstModel.provider }),
+      ...(firstModel?.model === undefined ? {} : { model: firstModel.model }),
+      ...(slugOk && inputOk && modelAccountingOk
+        ? {}
+        : { detail: `slug_ok=${slugOk} input_ok=${inputOk} model_accounting_ok=${modelAccountingOk}` }),
+    }
+  } catch (error) {
+    result = { ok: false, detail: `agent_error:${String(error)}` }
+  } finally {
+    restoreOpenRouter()
+    await server.close()
+    if (previousLocalRegistry === undefined) {
+      delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    } else {
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+    }
+  }
 
   return result
 }

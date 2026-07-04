@@ -55,6 +55,11 @@ const ownerStatusInputSchema = z.object({
   slug: z.string().optional(),
 })
 
+type ClaimSuccessPageResult =
+  | { kind: 'available'; catalog: PublicRouteCatalogContract }
+  | { kind: 'not_found'; reason: 'not_public' }
+  | { kind: 'unavailable'; reason: 'source_unavailable'; retryable: true }
+
 const publicPageInputSchema = z.object({
   slug: z.string(),
 })
@@ -152,6 +157,10 @@ export const readOwnerStatusServer = createServerFn()
   .validator((data) => ownerStatusInputSchema.parse(data ?? {}))
   .handler(async ({ data }) => readOwnerStatusThroughSource(data.slug))
 
+export const readOwnerClaimSuccessServer = createServerFn()
+  .validator((data) => ownerStatusInputSchema.parse(data ?? {}))
+  .handler(async ({ data }) => readOwnerClaimSuccessThroughSource(data.slug))
+
 export const readPublicBusinessPageServer = createServerFn()
   .validator((data) => publicPageInputSchema.parse(data))
   .handler(async ({ data }) => readPublicBusinessPageThroughSource(data.slug))
@@ -237,6 +246,11 @@ export async function submitOwnerClaimThroughSource(
   } catch (error) {
     return ownerClaimSourceWriteError(error)
   }
+}
+
+export async function readOwnerClaimSuccessThroughSource(slug: string | undefined): Promise<ClaimSuccessPageResult> {
+  const result = await readOwnerStatusThroughSource(slug)
+  return result.kind === 'available' ? { kind: 'available', catalog: result.readback.catalog } : result
 }
 
 export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {

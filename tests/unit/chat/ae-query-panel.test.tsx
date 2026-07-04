@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeQueryPanel } from '@/components/ae/chat/AeQueryPanel'
 
@@ -14,7 +14,7 @@ describe('AeQueryPanel', () => {
   it('can render session-aware follow-up guidance in the compact composer', () => {
     render(
       <AeQueryPanel
-        onSubmit={vi.fn()}
+        onSubmit={() => undefined}
         showExamples={false}
         placeholder="Narrow, compare, or ask for an inquiry path"
         loopHint="Continue by narrowing, comparing, or starting a qualified inquiry when a listing publishes that path."

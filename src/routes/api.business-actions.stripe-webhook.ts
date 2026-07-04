@@ -186,7 +186,7 @@ function parseStripeSignatureHeader(value: string): { timestamp: number; signatu
   const parts = value.split(',').map((part) => part.trim())
   const timestampPart = parts.find((part) => part.startsWith('t='))
   const timestamp = timestampPart === undefined ? Number.NaN : Number(timestampPart.slice(2))
-  const signatures = parts.filter((part) => part.startsWith('v1=')).map((part) => part.slice(3))
+  const signatures = parts.flatMap((part) => (part.startsWith('v1=') ? [part.slice(3)] : []))
 
   if (!Number.isSafeInteger(timestamp) || signatures.length === 0) {
     return undefined

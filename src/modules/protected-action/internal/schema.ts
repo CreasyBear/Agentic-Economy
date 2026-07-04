@@ -100,6 +100,7 @@ export const protectedActionTables = {
     gatewayAdmissionId: v.string(),
     outcome: literalUnion(ContactFollowUpAttemptOutcomeValues),
     attemptHash: v.string(),
+    boundEvidenceRefHashes: v.array(v.string()),
     receiptId: v.optional(v.string()),
     reason: v.optional(v.string()),
     idempotencyKey: v.string(),
@@ -119,6 +120,7 @@ export const protectedActionTables = {
     kind: v.union(v.literal('receipt'), v.literal('proof_gap')),
     providerBoundary: v.literal('source_owned_follow_up_outbox'),
     payloadHash: v.string(),
+    boundEvidenceRefHashes: v.array(v.string()),
     redactedReadbackJson: v.string(),
     recordedAt: v.number(),
   })

@@ -85,7 +85,7 @@ function availableDiscoveryState(): DiscoverySourceState {
     throw new Error('Expected default discovery source state to include a business.')
   }
 
-  const generated = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { now: 3_000 })
+  const generated = regenerateDiscoveryManifest(state, { businessId: business.businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_000 })
   if (generated.kind !== 'ok') {
     throw new Error(`Expected discovery manifest generation to succeed: ${generated.reason}`)
   }

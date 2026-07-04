@@ -65,83 +65,67 @@ const registryDetailInputSchema = z.object({
   slug: z.string().min(1).max(200).describe('Published business slug'),
 })
 
-const publicBusinessCatalogApiDtoOutputSchema = z
-  .object({
-    slug: z.string(),
-    name: z.string(),
-    category: z.string(),
-    suburb: z.string(),
-    stateTerritory: z.string(),
-    postcode: z.string().optional(),
-    publicUrl: z.string(),
-    trustTier: z.string(),
-    publicStatus: z.literal('published'),
-    indexStatus: z.string(),
-    discoveryStatus: z.string(),
-    schemaVersion: z.string(),
-    updatedAt: z.number(),
-    photos: z.array(z.object({ url: z.string(), alt: z.string() }).passthrough()),
-    responseTimeMinutes: z.number().optional(),
-    services: z.array(
-      z
-        .object({
-          slug: z.string(),
-          name: z.string(),
-          category: z.string(),
-          summary: z.string(),
-          serviceArea: z.string(),
-          hoursOrUnknown: z.string(),
-          firstRequest: z
-            .object({
-              mode: z.string(),
-              publicDisclosure: z.string(),
-              publicChannel: z.string(),
-              noContactReason: z.string().optional(),
-            })
-            .passthrough(),
-          status: z.literal('published'),
-          capabilities: z.array(
-            z.object({ kind: z.string(), status: z.string() }).passthrough()
-          ),
-        })
-        .passthrough()
-    ),
-  })
-  .passthrough() as z.ZodType<PublicBusinessCatalogApiDto>
+const publicBusinessCatalogApiDtoOutputSchema = z.looseObject({
+  slug: z.string(),
+  name: z.string(),
+  category: z.string(),
+  suburb: z.string(),
+  stateTerritory: z.string(),
+  postcode: z.string().optional(),
+  publicUrl: z.string(),
+  trustTier: z.string(),
+  publicStatus: z.literal('published'),
+  indexStatus: z.string(),
+  discoveryStatus: z.string(),
+  schemaVersion: z.string(),
+  updatedAt: z.number(),
+  photos: z.array(z.looseObject({ url: z.string(), alt: z.string() })),
+  responseTimeMinutes: z.number().optional(),
+  services: z.array(
+    z.looseObject({
+      slug: z.string(),
+      name: z.string(),
+      category: z.string(),
+      summary: z.string(),
+      serviceArea: z.string(),
+      hoursOrUnknown: z.string(),
+      firstRequest: z.looseObject({
+        mode: z.string(),
+        publicDisclosure: z.string(),
+        publicChannel: z.string(),
+        noContactReason: z.string().optional(),
+      }),
+      status: z.literal('published'),
+      capabilities: z.array(z.looseObject({ kind: z.string(), status: z.string() })),
+    })
+  ),
+}) as z.ZodType<PublicBusinessCatalogApiDto>
 
-const registryPageOutputSchema = z
-  .object({
-    kind: z.literal('ok'),
-    schemaVersion: z.string(),
-    query: z.string().optional(),
-    items: z.array(publicBusinessCatalogApiDtoOutputSchema),
-    pagination: z
-      .object({
-        cursor: z.string().optional(),
-        nextCursor: z.string().optional(),
-        limit: z.number().int().nonnegative(),
-        total: z.number().int().nonnegative(),
-        hasMore: z.boolean(),
-      })
-      .passthrough(),
-  })
-  .passthrough() as z.ZodType<PublicBusinessCatalogApiPage>
+const registryPageOutputSchema = z.looseObject({
+  kind: z.literal('ok'),
+  schemaVersion: z.string(),
+  query: z.string().optional(),
+  items: z.array(publicBusinessCatalogApiDtoOutputSchema),
+  pagination: z.looseObject({
+    cursor: z.string().optional(),
+    nextCursor: z.string().optional(),
+    limit: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    hasMore: z.boolean(),
+  }),
+}) as z.ZodType<PublicBusinessCatalogApiPage>
 
 const registryDetailOutputSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('found'),
-      schemaVersion: z.string(),
-      business: publicBusinessCatalogApiDtoOutputSchema,
-    })
-    .passthrough(),
-  z
-    .object({
-      kind: z.literal('not_found'),
-      code: z.literal('business_not_found'),
-      reason: z.string(),
-    })
-    .passthrough(),
+  z.looseObject({
+    kind: z.literal('found'),
+    schemaVersion: z.string(),
+    business: publicBusinessCatalogApiDtoOutputSchema,
+  }),
+  z.looseObject({
+    kind: z.literal('not_found'),
+    code: z.literal('business_not_found'),
+    reason: z.string(),
+  }),
 ]) as z.ZodType<PublicBusinessCatalogDetailResult>
 
 const listParameters: readonly ActionParameter[] = [

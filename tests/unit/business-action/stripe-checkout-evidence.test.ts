@@ -1,8 +1,9 @@
 import { createHmac } from 'node:crypto'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { admitBusinessActionStripeWebhookThroughSource } from '@/modules/business-action/business-action.functions'
 import {
   BusinessActionSlug,
   createCapabilityRequest,
@@ -12,7 +13,6 @@ import {
 import {
   admitStripeWebhookEvent,
   createStripeCheckoutSessionEvidence,
-  type StripeCheckoutSessionCreateRequest,
 } from '@/modules/business-action/internal/stripe-checkout'
 import { handleBusinessActionStripeWebhookRequest } from '@/routes/api.business-actions.stripe-webhook'
 import type {
@@ -28,9 +28,12 @@ import type {
 } from '@/modules/common/ids'
 import type { BusinessActionCard, BuyerMandate, BusinessActionSourceState } from '@/modules/business-action/public'
 
-vi.mock('@/modules/business-action/business-action.functions', () => ({
-  admitBusinessActionStripeWebhookThroughSource: vi.fn(),
-}))
+type StripeCheckoutHttpRequest = {
+  path: string
+  authorization: string | null
+  idempotencyKey: string | null
+  form: URLSearchParams
+}
 
 const now = 4_000
 const businessId = 'business:plumbing-demo' as BusinessId
@@ -38,67 +41,64 @@ const ownerId = 'owner:plumbing-demo' as OwnerId
 const request = 'capability_request:operation:request' as CapabilityRequestId
 const checkpoint =
   'authorization_checkpoint:capability_request:operation:request:operation:checkpoint' as AuthorizationCheckpointId
-const mockedAdmitBusinessActionStripeWebhookThroughSource = vi.mocked(admitBusinessActionStripeWebhookThroughSource)
 
-beforeEach(() => {
-  mockedAdmitBusinessActionStripeWebhookThroughSource.mockReset()
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('Stripe Checkout Session evidence binding', () => {
   it('creates a test-mode Checkout Session bound to AE source refs and hashes', async () => {
-    const createdRequests: StripeCheckoutSessionCreateRequest[] = []
-    const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
-      requestId: request,
-      checkpointId: checkpoint,
-      clientPayload: {},
-      now,
-    }, {
-      stripeSecretKey: 'sk_test_paid_intake',
-      successUrl: 'https://agentic.test/business-actions/stripe/success',
-      cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
-      createSession: async (stripeRequest) => {
-        createdRequests.push(stripeRequest)
-        return {
-          id: 'cs_test_paid_intake',
-          url: 'https://checkout.stripe.test/cs_test_paid_intake',
-          payment_intent: 'pi_test_paid_intake',
-        }
-      },
-    })
+    const server = await startStripeCheckoutServer()
+    try {
+      const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
+        requestId: request,
+        checkpointId: checkpoint,
+        clientPayload: {},
+        now,
+      }, {
+        stripeSecretKey: 'sk_test_paid_intake',
+        successUrl: 'https://agentic.test/business-actions/stripe/success',
+        cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
+        apiBaseUrl: server.baseUrl,
+      })
 
-    expect(result.kind).toBe('ok')
-    if (result.kind !== 'ok') {
-      throw new Error(result.error.reason)
-    }
-    expect(result.session.testMode).toBe(true)
-    expect(result.session.checkoutSessionId).toBe('cs_test_paid_intake')
-    expect(result.session.paymentIntentId).toBe('pi_test_paid_intake')
-    expect(result.session.payloadHash).toMatch(/^hash:/)
-    expect(result.session.providerRefHash).toMatch(/^hash:/)
+      expect(result.kind).toBe('ok')
+      if (result.kind !== 'ok') {
+        throw new Error(result.error.reason)
+      }
+      expect(result.session.testMode).toBe(true)
+      expect(result.session.checkoutSessionId).toBe('cs_test_paid_intake')
+      expect(result.session.paymentIntentId).toBe('pi_test_paid_intake')
+      expect(result.session.payloadHash).toMatch(/^hash:/)
+      expect(result.session.providerRefHash).toMatch(/^hash:/)
 
-    expect(createdRequests).toHaveLength(1)
-    const [stripeRequest] = createdRequests
-    if (stripeRequest === undefined) {
-      throw new Error('expected Stripe create request')
+      expect(server.requests).toHaveLength(1)
+      const [stripeRequest] = server.requests
+      if (stripeRequest === undefined) {
+        throw new Error('expected Stripe create request')
+      }
+      expect(stripeRequest.path).toBe('/v1/checkout/sessions')
+      expect(stripeRequest.idempotencyKey).toBe(`business-action:stripe-checkout:${request}:${checkpoint}`)
+      expect(stripeRequest.authorization).toBe('Bearer sk_test_paid_intake')
+      expect(stripeRequest.form.get('mode')).toBe('payment')
+      expect(stripeRequest.form.get('client_reference_id')).toBe(request)
+      expect(stripeRequest.form.get('line_items[0][price_data][currency]')).toBe('aud')
+      expect(stripeRequest.form.get('line_items[0][price_data][unit_amount]')).toBe('4500')
+      expect(stripeRequest.form.get('success_url')).toBe('https://agentic.test/business-actions/stripe/success')
+      expect(stripeRequest.form.get('cancel_url')).toBe('https://agentic.test/business-actions/stripe/cancel')
+      expect(stripeRequest.form.get('metadata[ae_action_slug]')).toBe(BusinessActionSlug)
+      expect(stripeRequest.form.get('metadata[ae_business_action_request_id]')).toBe(request)
+      expect(stripeRequest.form.get('metadata[ae_authorization_checkpoint_id]')).toBe(checkpoint)
+      expect(stripeRequest.form.get('metadata[ae_mandate_hash]')).toBe('hash:mandate')
+      expect(stripeRequest.form.get('metadata[ae_request_hash]')).toMatch(/^hash:/)
+      expect(stripeRequest.form.get('metadata[ae_card_hash]')).toBe('hash:card')
+      expect(stripeRequest.form.get('metadata[ae_amount_cents]')).toBe('4500')
+      expect(stripeRequest.form.get('metadata[ae_currency]')).toBe('aud')
+      expect(stripeRequest.form.get('metadata[ae_idempotency_key]')).toBe('operation:request')
+      expect(stripeRequest.form.get('metadata[ae_correlation_id]')).toBe('correlation:request')
+    } finally {
+      await server.close()
     }
-    expect(stripeRequest.idempotencyKey).toBe(`business-action:stripe-checkout:${request}:${checkpoint}`)
-    expect(stripeRequest.authorizationHeader).toBe('Bearer sk_test_paid_intake')
-    expect(stripeRequest.body.get('mode')).toBe('payment')
-    expect(stripeRequest.body.get('client_reference_id')).toBe(request)
-    expect(stripeRequest.body.get('line_items[0][price_data][currency]')).toBe('aud')
-    expect(stripeRequest.body.get('line_items[0][price_data][unit_amount]')).toBe('4500')
-    expect(stripeRequest.body.get('success_url')).toBe('https://agentic.test/business-actions/stripe/success')
-    expect(stripeRequest.body.get('cancel_url')).toBe('https://agentic.test/business-actions/stripe/cancel')
-    expect(stripeRequest.body.get('metadata[ae_action_slug]')).toBe(BusinessActionSlug)
-    expect(stripeRequest.body.get('metadata[ae_business_action_request_id]')).toBe(request)
-    expect(stripeRequest.body.get('metadata[ae_authorization_checkpoint_id]')).toBe(checkpoint)
-    expect(stripeRequest.body.get('metadata[ae_mandate_hash]')).toBe('hash:mandate')
-    expect(stripeRequest.body.get('metadata[ae_request_hash]')).toMatch(/^hash:/)
-    expect(stripeRequest.body.get('metadata[ae_card_hash]')).toBe('hash:card')
-    expect(stripeRequest.body.get('metadata[ae_amount_cents]')).toBe('4500')
-    expect(stripeRequest.body.get('metadata[ae_currency]')).toBe('aud')
-    expect(stripeRequest.body.get('metadata[ae_idempotency_key]')).toBe('operation:request')
-    expect(stripeRequest.body.get('metadata[ae_correlation_id]')).toBe('correlation:request')
   })
 
   it('rejects client-supplied money provider URL or authority fields before Stripe calls', async () => {
@@ -117,58 +117,141 @@ describe('Stripe Checkout Session evidence binding', () => {
       'receiptStatus',
     ]
 
-    for (const field of forbiddenFields) {
-      let called = false
-      const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
-        requestId: request,
-        checkpointId: checkpoint,
-        clientPayload: { [field]: 'client-controlled' },
-        now,
-      }, {
-        stripeSecretKey: 'sk_test_paid_intake',
-        successUrl: 'https://agentic.test/business-actions/stripe/success',
-        cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
-        createSession: async () => {
-          called = true
-          return { id: 'cs_test_unreachable' }
-        },
-      })
+    const server = await startStripeCheckoutServer()
+    try {
+      for (const field of forbiddenFields) {
+        const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
+          requestId: request,
+          checkpointId: checkpoint,
+          clientPayload: { [field]: 'client-controlled' },
+          now,
+        }, {
+          stripeSecretKey: 'sk_test_paid_intake',
+          successUrl: 'https://agentic.test/business-actions/stripe/success',
+          cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
+          apiBaseUrl: server.baseUrl,
+        })
 
-      expect(result).toMatchObject({
-        kind: 'error',
-        error: {
-          code: 'business_action_stripe_client_field_rejected',
-          field,
-        },
-      })
-      expect(called).toBe(false)
+        expect(result, field).toMatchObject({
+          kind: 'error',
+          error: {
+            code: 'business_action_stripe_client_field_rejected',
+            field,
+          },
+        })
+      }
+      expect(server.requests).toEqual([])
+    } finally {
+      await server.close()
     }
   })
 
-  it('rejects live Stripe keys because Phase 6 evidence is test-mode only', async () => {
-    let called = false
+  it('fails closed for a non-allowlisted Stripe API host in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    let calledProvider = false
+
     const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
       requestId: request,
       checkpointId: checkpoint,
       clientPayload: {},
       now,
     }, {
-      stripeSecretKey: 'sk_live_forbidden',
+      stripeSecretKey: 'sk_test_paid_intake',
       successUrl: 'https://agentic.test/business-actions/stripe/success',
       cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
+      apiBaseUrl: 'https://stripe.attacker.test',
       createSession: async () => {
-        called = true
-        return { id: 'cs_live_forbidden' }
+        calledProvider = true
+        return { id: 'cs_test_should_not_call' }
       },
     })
 
     expect(result).toMatchObject({
       kind: 'error',
       error: {
-        code: 'business_action_stripe_live_mode_rejected',
+        code: 'business_action_stripe_config_invalid',
+        reason: 'provider_api_base_url_host_not_allowed',
+        field: 'apiBaseUrl',
       },
     })
-    expect(called).toBe(false)
+    expect(calledProvider).toBe(false)
+  })
+
+  it('accepts the Stripe production API host in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+
+    const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
+      requestId: request,
+      checkpointId: checkpoint,
+      clientPayload: {},
+      now,
+    }, {
+      stripeSecretKey: 'sk_test_paid_intake',
+      successUrl: 'https://agentic.test/business-actions/stripe/success',
+      cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
+      apiBaseUrl: 'https://api.stripe.com',
+      createSession: async (request) => {
+        expect(request.endpoint).toBe('https://api.stripe.com/v1/checkout/sessions')
+        return { id: 'cs_test_paid_intake', payment_intent: 'pi_test_paid_intake' }
+      },
+    })
+
+    expect(result).toMatchObject({
+      kind: 'ok',
+      code: 'business_action_stripe_checkout_session_created',
+    })
+  })
+
+  it('permits a localhost Stripe API override outside production', async () => {
+    vi.stubEnv('NODE_ENV', 'test')
+
+    const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
+      requestId: request,
+      checkpointId: checkpoint,
+      clientPayload: {},
+      now,
+    }, {
+      stripeSecretKey: 'sk_test_paid_intake',
+      successUrl: 'https://agentic.test/business-actions/stripe/success',
+      cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
+      apiBaseUrl: 'http://localhost:32002',
+      createSession: async (request) => {
+        expect(request.endpoint).toBe('http://localhost:32002/v1/checkout/sessions')
+        return { id: 'cs_test_paid_intake' }
+      },
+    })
+
+    expect(result).toMatchObject({
+      kind: 'ok',
+      code: 'business_action_stripe_checkout_session_created',
+    })
+  })
+
+  it('rejects live Stripe keys because Phase 6 evidence is test-mode only', async () => {
+    const server = await startStripeCheckoutServer()
+    try {
+      const result = await createStripeCheckoutSessionEvidence(createAcceptedState(), {
+        requestId: request,
+        checkpointId: checkpoint,
+        clientPayload: {},
+        now,
+      }, {
+        stripeSecretKey: 'sk_live_forbidden',
+        successUrl: 'https://agentic.test/business-actions/stripe/success',
+        cancelUrl: 'https://agentic.test/business-actions/stripe/cancel',
+        apiBaseUrl: server.baseUrl,
+      })
+
+      expect(result).toMatchObject({
+        kind: 'error',
+        error: {
+          code: 'business_action_stripe_live_mode_rejected',
+        },
+      })
+      expect(server.requests).toEqual([])
+    } finally {
+      await server.close()
+    }
   })
 })
 
@@ -246,54 +329,31 @@ describe('Stripe webhook event admission', () => {
     expect(forwarded).toBe(false)
   })
 
-  it('forwards valid signed route webhooks to default source admission', async () => {
+  it('fails loudly through real default source admission when source-write prerequisites are absent', async () => {
     const state = createAcceptedState()
     const rawBody = stripeEventBody(state, { id: 'evt_test_route_default' })
-    mockedAdmitBusinessActionStripeWebhookThroughSource.mockResolvedValueOnce({
-      kind: 'ok',
-      code: 'business_action_stripe_webhook_received',
-      evidence: {
-        provider: 'stripe_test_mode',
-        status: 'accepted',
-        providerRefHash: 'hash:stripe-ref',
-        payloadHash: 'hash:stripe-payload',
-        requestId: request,
-        checkpointId: checkpoint,
-        amountCents: 4_500,
-        currency: 'aud',
-      },
-    })
 
-    const env = {
-      STRIPE_WEBHOOK_SECRET: webhookSecret,
-      AE_SOURCE_WRITE_SECRET: 'source-write-secret',
-      CONVEX_URL: 'https://convex.test',
-    }
     const response = await handleBusinessActionStripeWebhookRequest(
       new Request('https://agentic.test/api/business-actions/stripe-webhook', {
         method: 'POST',
         body: rawBody,
         headers: signedStripeHeaders(webhookSecret, rawBody),
       }),
-      { env, now }
+      {
+        env: {
+          STRIPE_WEBHOOK_SECRET: webhookSecret,
+        },
+        now,
+      }
     )
 
-    await expect(response.json()).resolves.toEqual({
-      kind: 'ok',
-      code: 'business_action_stripe_webhook_received',
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'business_action_source_unavailable',
+      reason: expect.stringContaining('AE_SOURCE_WRITE_SECRET'),
     })
-    expect(response.status).toBe(200)
-    expect(mockedAdmitBusinessActionStripeWebhookThroughSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        rawBody,
-        payloadHash: expect.stringMatching(/^hash:/),
-        receivedAt: now,
-      }),
-      expect.objectContaining({
-        request: expect.any(Request),
-        env,
-      })
-    )
+    expect(response.status).toBe(503)
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
   it('dedupes exact repeats and holds same-event conflicts for operator review', () => {
@@ -594,3 +654,56 @@ function signedStripeHeaders(secret: string, rawBody: string, timestamp = Math.f
     'stripe-signature': `t=${timestamp},v1=${signature}`,
   })
 }
+
+async function startStripeCheckoutServer() {
+  const requests: StripeCheckoutHttpRequest[] = []
+  const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+    const rawBody = await readRequestBody(request)
+    requests.push({
+      path: request.url ?? '/',
+      authorization: request.headers.authorization ?? null,
+      idempotencyKey: Array.isArray(request.headers['idempotency-key'])
+        ? request.headers['idempotency-key'][0] ?? null
+        : request.headers['idempotency-key'] ?? null,
+      form: new URLSearchParams(rawBody),
+    })
+
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify({
+      id: 'cs_test_paid_intake',
+      url: 'https://checkout.stripe.test/cs_test_paid_intake',
+      payment_intent: 'pi_test_paid_intake',
+    }))
+  })
+
+  const listening = Promise.withResolvers<void>()
+  server.once('error', listening.reject)
+  server.listen(0, '127.0.0.1', listening.resolve)
+  await listening.promise
+
+  const address = server.address() as AddressInfo
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: async () => {
+      const closed = Promise.withResolvers<void>()
+      server.close((error) => {
+        if (error === undefined) {
+          closed.resolve()
+          return
+        }
+        closed.reject(error)
+      })
+      await closed.promise
+    },
+  }
+}
+
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  let raw = ''
+  for await (const chunk of request) {
+    raw += String(chunk)
+  }
+  return raw
+}
+

@@ -18,12 +18,14 @@ import {
   registryListAction,
   registrySearchAction,
 } from '@/modules/registry/registry.actions'
+import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
   submitInquiryAction,
   registryListAction,
   registrySearchAction,
   registryDetailAction,
+  storefrontImportDraftAction,
 ]
 
 assertUniqueActionIds(actions)

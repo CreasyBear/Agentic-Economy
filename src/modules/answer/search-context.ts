@@ -127,7 +127,10 @@ export function stableAeSearchContextKey(context: AeSearchContext | undefined): 
 }
 
 function parseAustralianPlaceLabel(label: string): { suburb?: string; stateTerritory?: string } {
-  const parts = label.split(',').map((part) => part.trim()).filter(Boolean)
+  const parts = label.split(',').flatMap((part) => {
+    const trimmed = part.trim()
+    return trimmed ? [trimmed] : []
+  })
   const suburb = parts[0]
   const stateCandidate = parts[1]?.toUpperCase()
   const stateTerritory =

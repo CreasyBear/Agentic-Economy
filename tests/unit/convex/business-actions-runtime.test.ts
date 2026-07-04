@@ -1,5 +1,5 @@
 import type { UserIdentity } from 'convex/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import schema from '../../../convex/schema'
 import {
@@ -45,6 +45,7 @@ import {
   verifyActionReceipt,
 } from '../../../src/modules/business-action/public'
 import type {
+
   AuthorizationCheckpointId,
   BusinessActionCardId,
   BusinessActionNoRepairId,
@@ -61,6 +62,15 @@ import type {
 import type { SourceWriteAdmission } from '../../../src/modules/security/source-write-admission'
 import { stableHash } from '../../../src/modules/common/stable-hash'
 import { withSourceWrite, withoutSourceWrite } from '../../helpers/source-write-admission'
+
+beforeEach(() => {
+  vi.stubEnv('AE_CLEARANCE_SIGNING_SECRET', 'test-clearance-secret')
+  vi.stubEnv('AE_CLEARANCE_SIGNING_KEY_ID', 'clearance-key:test')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -408,11 +418,52 @@ describe('Convex business action runtime bridge', () => {
     const accepted = requireRuntimeOk(await checkpointHandler(authCtx(db, sam()), checkpointArgs(requestId, 'accepted')))
     expect(accepted.checkpoint).toMatchObject({ decision: 'accepted', ownerId })
     expect(db.dump('businessActionAuthorizationCheckpoints')).toHaveLength(1)
+    const checkpointGreenlightRef = `clearance:greenlight:${requestId}:${accepted.checkpoint.id}`
+    expect(db.dump('handshakeRecords')).toEqual([
+      expect.objectContaining({
+        recordId: checkpointGreenlightRef,
+        recordKind: 'greenlight',
+        principalId: 'user_owner',
+        actionClass: 'business_action',
+        actionRef: BusinessActionSlug,
+        requestRef: requestId,
+        status: 'consumed',
+        keyIdentityRef: 'clearance-key:test',
+      }),
+    ])
+    expect(db.dump('handshakeRecords')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: 'proof_gap' })]),
+    )
+
 
     const receipt = requireRuntimeOk(await receiptHandler(authCtx(db, sam()), receiptArgs(requestId, 'receipt')))
-    expect(receipt.publicReadback.labels).toEqual(['source/local proof only', 'production proof not claimed'])
+    expect(receipt.publicReadback.labels).toEqual(['checked evidence'])
     expect(JSON.stringify(receipt.publicReadback)).not.toContain('private-endpoint://')
 
+    expect(db.dump('handshakeRecords')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          recordId: checkpointGreenlightRef,
+          recordKind: 'greenlight',
+          principalId: 'user_owner',
+          status: 'consumed',
+        }),
+        expect.objectContaining({
+          recordId: `clearance:receipt:${receipt.receipt.id}`,
+          recordKind: 'receipt',
+          principalId: 'user_owner',
+          actionClass: 'business_action',
+          actionRef: BusinessActionSlug,
+          requestRef: requestId,
+          greenlightRef: checkpointGreenlightRef,
+          status: 'accepted',
+          keyIdentityRef: 'clearance-key:test',
+        }),
+      ]),
+    )
+    expect(db.dump('handshakeRecords')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: 'proof_gap' })]),
+    )
     const ownerReadback = requireRuntimeOk(await ownerReceiptHandler(authCtx(db, sam()), { requestId }))
     expect(ownerReadback.publicReadback).toMatchObject({ receiptId: receipt.receipt.id })
     expect(JSON.stringify(ownerReadback)).not.toContain('privatePayloadRef')

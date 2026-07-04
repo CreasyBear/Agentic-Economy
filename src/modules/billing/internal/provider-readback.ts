@@ -1,5 +1,9 @@
 import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
 import type { SourceHash } from '@/modules/common/ids'
+import { resolveProviderApiBaseUrl } from '@/modules/security/provider-api-base-url'
+
+const autumnApiBaseUrl = 'https://api.useautumn.com'
+const autumnApiAllowedHosts = ['api.useautumn.com'] as const
 
 export type AutumnClientConfig = {
   secretKey: string
@@ -79,7 +83,11 @@ export type AutumnProvider = {
 }
 
 export function createAutumnHttpProvider(config: AutumnClientConfig): AutumnProvider {
-  const apiBaseUrl = (config.apiBaseUrl ?? 'https://api.useautumn.com').replace(/\/$/, '')
+  const apiBaseUrl = resolveProviderApiBaseUrl(config.apiBaseUrl, {
+    defaultUrl: autumnApiBaseUrl,
+    allowedHosts: autumnApiAllowedHosts,
+    label: 'Autumn API',
+  })
   const apiVersion = config.apiVersion ?? '2.3.0'
 
   async function request(path: string, body: StableHashValue): Promise<Record<string, unknown>> {

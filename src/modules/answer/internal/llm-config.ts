@@ -3,6 +3,7 @@ export const DEFAULT_OPENROUTER_MODEL = 'deepseek/deepseek-v4-flash'
 export type AnswerLlmConfig = {
   apiKey: string
   model: string
+  apiBaseUrl?: string
 }
 
 export function readAnswerLlmConfig(): AnswerLlmConfig | undefined {
@@ -12,7 +13,12 @@ export function readAnswerLlmConfig(): AnswerLlmConfig | undefined {
   }
 
   const model = process.env.AE_LLM_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL
-  return { apiKey, model }
+  const apiBaseUrl = process.env.AE_OPENROUTER_API_BASE_URL?.trim()
+  return {
+    apiKey,
+    model,
+    ...(apiBaseUrl === undefined || apiBaseUrl.length === 0 ? {} : { apiBaseUrl }),
+  }
 }
 
 /** Set to 1 in CI after `npm run test:eval` passes. Unlocks LLM follow-up chips. */

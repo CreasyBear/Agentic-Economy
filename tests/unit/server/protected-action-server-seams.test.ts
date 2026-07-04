@@ -237,6 +237,7 @@ function sourceWriteContext() {
       method: 'POST',
       origin: 'https://ae.example',
       pathname: '/protected-actions',
+      bodyDigest: 'none',
     },
   }
 }

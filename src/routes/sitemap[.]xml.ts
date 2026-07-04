@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
 import { readPublicSitemapXml } from '@/modules/discovery/discovery.functions'
 import {
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/sitemap.xml')({
 
 export async function handleDurableSitemapXmlRequest(request: Request): Promise<Response> {
   const result = await readPublicSitemapXml({
-    canonicalBaseUrl: requestOrigin(request),
+    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     now: Date.now(),
   })
 
@@ -25,17 +26,10 @@ export async function handleDurableSitemapXmlRequest(request: Request): Promise<
 
 export function handleSitemapXmlRequest(request: Request): Response {
   const result = readFixtureSitemapXml({
-    canonicalBaseUrl: requestOrigin(request),
+    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
     now: Date.now(),
   })
 
   return discoveryTextResponse(result.body, 'application/xml; charset=utf-8')
 }
 
-function requestOrigin(request: Request): string {
-  try {
-    return new URL(request.url).origin
-  } catch {
-    return 'https://ae.example'
-  }
-}

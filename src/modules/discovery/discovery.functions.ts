@@ -26,15 +26,6 @@ const readSitemapXmlQuery = sourceQuery<BuildDiscoveryFileOptions, DiscoveryFile
   'discovery:readSitemapXml'
 )
 
-let publicDiscoverySourcePortForTests: PublicDiscoverySourcePort | undefined
-
-export function setPublicDiscoverySourcePortForTests(port: PublicDiscoverySourcePort): () => void {
-  const previous = publicDiscoverySourcePortForTests
-  publicDiscoverySourcePortForTests = port
-  return () => {
-    publicDiscoverySourcePortForTests = previous
-  }
-}
 
 export async function readPublicCatalogDiscoveryManifest(
   input: ReadCatalogDiscoveryManifestInput
@@ -51,9 +42,6 @@ export async function readPublicSitemapXml(options: BuildDiscoveryFileOptions): 
 }
 
 function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
-  if (publicDiscoverySourcePortForTests !== undefined) {
-    return publicDiscoverySourcePortForTests
-  }
 
   if (usesLocalE2eBypass()) {
     return {

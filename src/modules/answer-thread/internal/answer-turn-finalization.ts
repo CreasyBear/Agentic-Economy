@@ -351,7 +351,7 @@ function buildAnswerHarnessFinalizationHash(input: {
 }
 
 function stableHashValue(value: unknown): StableHashValue {
-  return JSON.parse(JSON.stringify(value)) as StableHashValue
+  return structuredClone(value) as StableHashValue
 }
 
 

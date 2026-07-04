@@ -35,10 +35,11 @@ import {
   BusinessActionGuardrailProviderValues,
   BusinessActionOperatorControlKeyValues,
   BusinessActionResultArtifactStatusValues,
-  BusinessActionSlug,
+  BusinessActionSlugValues,
   BusinessActionSupportStatusValues,
   BuyerMandateStatusValues,
   CapabilityRequestStatusValues,
+  CheckedEvidenceStatusValues,
   HermesEvidenceKindValues,
   ReceiptReconstructionStatusValues,
   createEmptyBusinessActionSourceState,
@@ -47,6 +48,7 @@ import type {
   ActionReceipt,
   AuthorizationCheckpoint,
   BusinessActionCard,
+  BusinessActionSlug,
   BusinessActionCurrency,
   BusinessActionNoRepairRecord,
   BusinessActionPrivateEvidenceRef,
@@ -75,7 +77,7 @@ type RedactedPrivateEvidenceExport = {
   tombstoneBehavior: 'lawful_audit_hashes_retained'
 }
 
-const actionSlug = v.literal(BusinessActionSlug)
+const actionSlug = literalUnion(BusinessActionSlugValues)
 const currency = v.union(v.literal('aud'), v.literal('usd'))
 const cardStatus = literalUnion(BusinessActionCardStatusValues)
 const mandateStatus = literalUnion(BuyerMandateStatusValues)
@@ -260,10 +262,12 @@ export const businessActionTables = {
     policyHash: v.optional(v.string()),
     externalEvidenceRefHashes: v.array(v.string()),
     guardrailEvidenceRefHashes: v.array(v.string()),
+    boundEvidenceRefHashes: v.array(v.string()),
     resultArtifactHash: v.optional(v.string()),
     previousReceiptHash: v.optional(v.string()),
     signatureRefHash: v.string(),
     reconstructionStatus: receiptReconstructionStatus,
+    checkedEvidenceStatus: v.union(v.literal('complete'), v.literal('needs_review'), v.literal('proof_gap')),
     payloadHash: v.string(),
     idempotencyKey: v.string(),
     correlationId: v.string(),
@@ -425,7 +429,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
       (row) => stringField(row, 'cardId') === card.id,
       {
         cardId: card.id,
-        actionSlug: BusinessActionSlug,
+        actionSlug: card.actionSlug,
         version: card.version,
         ...(card.ownerId === undefined ? {} : { ownerId: card.ownerId }),
         sourceHash: card.sourceHash,
@@ -453,7 +457,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
         mandateId: mandate.id,
         buyerRef: mandate.buyerRef,
         allowedBusinessId: mandate.allowedBusinessId,
-        allowedActionSlug: BusinessActionSlug,
+        allowedActionSlug: mandate.allowedActionSlug,
         ...(mandate.maxAmountCents === undefined ? {} : { maxAmountCents: mandate.maxAmountCents }),
         ...(mandate.currency === undefined ? {} : { currency: mandate.currency }),
         status: mandate.status,
@@ -490,7 +494,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
         cardHash: request.cardHash,
         mandateId: request.mandateId,
         mandateHash: request.mandateHash,
-        actionSlug: BusinessActionSlug,
+        actionSlug: request.actionSlug,
         businessId: request.businessId,
         ...(request.ownerId === undefined ? {} : { ownerId: request.ownerId }),
         ...(request.serviceId === undefined ? {} : { serviceId: request.serviceId }),
@@ -526,7 +530,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
       {
         checkpointId: checkpoint.id,
         requestId: checkpoint.requestId,
-        actionSlug: BusinessActionSlug,
+        actionSlug: checkpoint.actionSlug,
         businessId: checkpoint.businessId,
         decision: checkpoint.decision,
         reasonCode: checkpoint.reasonCode,
@@ -561,7 +565,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
       {
         evidenceId: evidence.id,
         requestId: evidence.requestId,
-        actionSlug: BusinessActionSlug,
+        actionSlug: evidence.actionSlug,
         policyHash: evidence.policyHash,
         requestHash: evidence.requestHash,
         provider: evidence.provider,
@@ -598,7 +602,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
         evidenceId: event.id,
         requestId: event.requestId,
         checkpointId: event.checkpointId,
-        actionSlug: BusinessActionSlug,
+        actionSlug: event.actionSlug,
         provider: event.provider,
         status: event.status,
         providerRefHash: event.providerRefHash,
@@ -634,7 +638,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
         artifactId: artifact.id,
         requestId: artifact.requestId,
         checkpointId: artifact.checkpointId,
-        actionSlug: BusinessActionSlug,
+        actionSlug: artifact.actionSlug,
         status: artifact.status,
         ...(artifact.endpointDescriptorHash === undefined ? {} : { endpointDescriptorHash: artifact.endpointDescriptorHash }),
         ...(artifact.jsonSchemaHash === undefined ? {} : { jsonSchemaHash: artifact.jsonSchemaHash }),
@@ -672,7 +676,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
       {
         receiptId: receipt.id,
         requestId: receipt.requestId,
-        actionSlug: BusinessActionSlug,
+        actionSlug: receipt.actionSlug,
         outcome: receipt.outcome,
         cardHash: receipt.cardHash,
         cardVersion: receipt.cardVersion,
@@ -682,10 +686,12 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
         ...(receipt.policyHash === undefined ? {} : { policyHash: receipt.policyHash }),
         externalEvidenceRefHashes: [...receipt.externalEvidenceRefHashes],
         guardrailEvidenceRefHashes: [...receipt.guardrailEvidenceRefHashes],
+        boundEvidenceRefHashes: [...receipt.boundEvidenceRefHashes],
         ...(receipt.resultArtifactHash === undefined ? {} : { resultArtifactHash: receipt.resultArtifactHash }),
         ...(receipt.previousReceiptHash === undefined ? {} : { previousReceiptHash: receipt.previousReceiptHash }),
         signatureRefHash: receipt.signatureRefHash,
         reconstructionStatus: receipt.reconstructionStatus,
+        checkedEvidenceStatus: receipt.checkedEvidenceStatus,
         payloadHash: receipt.payloadHash,
         idempotencyKey: receipt.idempotencyKey,
         correlationId: receipt.correlationId,
@@ -732,7 +738,7 @@ export async function persistBusinessActionSlice(db: RuntimeDb, state: BusinessA
       (row) => stringField(row, 'supportRecordId') === support.id,
       {
         supportRecordId: support.id,
-        actionSlug: BusinessActionSlug,
+        actionSlug: support.actionSlug,
         businessId: support.businessId,
         status: support.status,
         reason: support.reason,
@@ -991,7 +997,7 @@ function toCard(row: RuntimeDocument): BusinessActionCard {
   const serviceId = optionalStringField(row, 'serviceId')
   return {
     id: stringField(row, 'cardId') as BusinessActionCardId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     version: numberField(row, 'version'),
     ...(ownerId === undefined ? {} : { ownerId: brandNonEmpty(ownerId, 'OwnerId') }),
     sourceHash: brandNonEmpty(stringField(row, 'sourceHash'), 'SourceHash'),
@@ -1015,7 +1021,7 @@ function toMandate(row: RuntimeDocument): BuyerMandate {
     id: stringField(row, 'mandateId') as BuyerMandateId,
     buyerRef: stringField(row, 'buyerRef'),
     allowedBusinessId: brandNonEmpty(stringField(row, 'allowedBusinessId'), 'BusinessId'),
-    allowedActionSlug: BusinessActionSlug,
+    allowedActionSlug: actionSlugField(row),
     ...(maxAmountCents === undefined ? {} : { maxAmountCents }),
     ...(currencyValue === undefined ? {} : { currency: currencyValue }),
     status: mandateStatusField(row),
@@ -1040,7 +1046,7 @@ function toRequest(row: RuntimeDocument): CapabilityRequest {
     cardHash: brandNonEmpty(stringField(row, 'cardHash'), 'SourceHash'),
     mandateId: stringField(row, 'mandateId') as BuyerMandateId,
     mandateHash: brandNonEmpty(stringField(row, 'mandateHash'), 'SourceHash'),
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
     ...(ownerId === undefined ? {} : { ownerId: brandNonEmpty(ownerId, 'OwnerId') }),
     ...(serviceId === undefined ? {} : { serviceId: brandNonEmpty(serviceId, 'ServiceId') }),
@@ -1062,7 +1068,7 @@ function toCheckpoint(row: RuntimeDocument): AuthorizationCheckpoint {
   return {
     id: stringField(row, 'checkpointId') as AuthorizationCheckpointId,
     requestId: stringField(row, 'requestId') as CapabilityRequestId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
     decision: checkpointDecisionField(row),
     reasonCode: stringField(row, 'reasonCode'),
@@ -1081,7 +1087,7 @@ function toGuardrailEvidence(row: RuntimeDocument): GuardrailDecisionEvidence {
   return {
     id: stringField(row, 'evidenceId') as GuardrailDecisionEvidenceId,
     requestId: stringField(row, 'requestId') as CapabilityRequestId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     policyHash: brandNonEmpty(stringField(row, 'policyHash'), 'SourceHash'),
     requestHash: brandNonEmpty(stringField(row, 'requestHash'), 'SourceHash'),
     provider: guardrailProviderField(row),
@@ -1105,7 +1111,7 @@ function toExternalEvidenceEvent(row: RuntimeDocument): ExternalEvidenceEvent {
     id: stringField(row, 'evidenceId') as ExternalEvidenceEventId,
     requestId: stringField(row, 'requestId') as CapabilityRequestId,
     checkpointId: stringField(row, 'checkpointId') as AuthorizationCheckpointId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     provider: evidenceProviderField(row),
     status: evidenceStatusField(row),
     providerRefHash: brandNonEmpty(stringField(row, 'providerRefHash'), 'SourceHash'),
@@ -1139,7 +1145,7 @@ function toResultArtifact(row: RuntimeDocument): BusinessActionResultArtifact {
     id: stringField(row, 'artifactId') as BusinessActionResultArtifactId,
     requestId: stringField(row, 'requestId') as CapabilityRequestId,
     checkpointId: stringField(row, 'checkpointId') as AuthorizationCheckpointId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     status: resultArtifactStatusField(row),
     ...(endpointDescriptorHash === undefined ? {} : { endpointDescriptorHash: brandNonEmpty(endpointDescriptorHash, 'SourceHash') }),
     ...(jsonSchemaHash === undefined ? {} : { jsonSchemaHash: brandNonEmpty(jsonSchemaHash, 'SourceHash') }),
@@ -1163,7 +1169,7 @@ function toReceipt(row: RuntimeDocument): ActionReceipt {
   return {
     id: stringField(row, 'receiptId') as ActionReceiptId,
     requestId: stringField(row, 'requestId') as CapabilityRequestId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     outcome: receiptOutcomeField(row),
     cardHash: brandNonEmpty(stringField(row, 'cardHash'), 'SourceHash'),
     cardVersion: numberField(row, 'cardVersion'),
@@ -1173,10 +1179,12 @@ function toReceipt(row: RuntimeDocument): ActionReceipt {
     ...(policyHash === undefined ? {} : { policyHash: brandNonEmpty(policyHash, 'SourceHash') }),
     externalEvidenceRefHashes: stringArrayField(row, 'externalEvidenceRefHashes').map((value) => brandNonEmpty(value, 'SourceHash')),
     guardrailEvidenceRefHashes: stringArrayField(row, 'guardrailEvidenceRefHashes').map((value) => brandNonEmpty(value, 'SourceHash')),
+    boundEvidenceRefHashes: stringArrayField(row, 'boundEvidenceRefHashes').map((value) => brandNonEmpty(value, 'SourceHash')),
     ...(resultArtifactHash === undefined ? {} : { resultArtifactHash: brandNonEmpty(resultArtifactHash, 'SourceHash') }),
     ...(previousReceiptHash === undefined ? {} : { previousReceiptHash: brandNonEmpty(previousReceiptHash, 'SourceHash') }),
     signatureRefHash: brandNonEmpty(stringField(row, 'signatureRefHash'), 'SourceHash'),
     reconstructionStatus: receiptReconstructionStatusField(row),
+    checkedEvidenceStatus: checkedEvidenceStatusField(row),
     payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
     idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
     correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
@@ -1202,7 +1210,7 @@ function toPrivateEvidenceRef(row: RuntimeDocument): BusinessActionPrivateEviden
 function toSupportRecord(row: RuntimeDocument): BusinessActionSupportRecord {
   return {
     id: stringField(row, 'supportRecordId') as BusinessActionSupportRecordId,
-    actionSlug: BusinessActionSlug,
+    actionSlug: actionSlugField(row),
     businessId: brandNonEmpty(stringField(row, 'businessId'), 'BusinessId'),
     status: supportStatusField(row),
     reason: stringField(row, 'reason'),
@@ -1228,6 +1236,13 @@ function toNoRepairRecord(row: RuntimeDocument): BusinessActionNoRepairRecord {
     markedBy: stringField(row, 'markedBy'),
     markedAt: numberField(row, 'markedAt'),
   }
+}
+
+function actionSlugField(row: RuntimeDocument): BusinessActionSlug {
+  const value = stringField(row, 'actionSlug')
+  return BusinessActionSlugValues.includes(value as BusinessActionSlug)
+    ? (value as BusinessActionSlug)
+    : BusinessActionSlugValues[0]
 }
 
 function cardStatusField(row: RuntimeDocument): BusinessActionCard['status'] {
@@ -1305,6 +1320,13 @@ function receiptReconstructionStatusField(row: RuntimeDocument): ActionReceipt['
   return ReceiptReconstructionStatusValues.includes(value as ActionReceipt['reconstructionStatus'])
     ? (value as ActionReceipt['reconstructionStatus'])
     : 'proof_gap'
+}
+
+function checkedEvidenceStatusField(row: RuntimeDocument): ActionReceipt['checkedEvidenceStatus'] {
+  const value = stringField(row, 'checkedEvidenceStatus')
+  return CheckedEvidenceStatusValues.includes(value as ActionReceipt['checkedEvidenceStatus'])
+    ? (value as ActionReceipt['checkedEvidenceStatus'])
+    : 'needs_review'
 }
 
 function supportStatusField(row: RuntimeDocument): BusinessActionSupportRecord['status'] {

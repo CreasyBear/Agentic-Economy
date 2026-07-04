@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   ANSWER_THREAD_EVAL_CASES,
@@ -12,7 +12,6 @@ import {
   assembleAnswerEvidence,
   runAnswerToolUseAgent,
   runAnswerGate,
-  setAnswerToolUseAgentForTests,
 } from '@/modules/answer/public'
 import {
   runAnswerThreadEvalCase,
@@ -23,14 +22,13 @@ import {
   auditAnswerEvalCoverage,
   auditPromptfooAnswerConfig,
 } from '../../eval/answer/lib/coverage'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
+import {
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../helpers/openrouter-contract-server'
 
 const QUERY = 'emergency plumber parramatta'
 
-afterEach(() => {
-  setAnswerToolUseAgentForTests(undefined)
-})
 
 describe('answer pipeline eval', () => {
   it('has unique answer eval case ids', () => {
@@ -99,38 +97,66 @@ describe('answer pipeline eval', () => {
   })
 
   it('returns grounded evidence for the default registry fixture', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
+
+    try {
       const evidence = await assembleAnswerEvidence({ query: QUERY, limit: 10 })
       expect(evidence).toBeDefined()
       expect(evidence?.providers.map((provider) => provider.slug)).toEqual(['parramatta-emergency-plumbing'])
-    })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      if (previousEvalSeed === undefined) {
+        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+      } else {
+        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+      }
+    }
   })
 
   it('passes runAnswerGate for tool-use agent output grounded on tool-result slugs', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-        prose: {
-          oneLine: 'One listed business matches this need.',
-          summary:
-            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow:
-            'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-        },
-      }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousEvalSeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      prose: {
+        oneLine: 'One listed business matches this need.',
+        summary:
+          'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow:
+          'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+    const restoreOpenRouter = server.installEnv()
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    process.env.AE_ANSWER_EVAL_REGISTRY_SEED = 'default'
 
-      try {
-        const result = await runAnswerToolUseAgent({ query: QUERY })
-        const gate = runAnswerGate({
-          snapshot: result.snapshot,
-          allowedSlugs: result.allowedSlugs,
-        })
-        expect(gate.ok).toBe(true)
-      } finally {
-        reset()
+    try {
+      const result = await runAnswerToolUseAgent({ query: QUERY })
+      const gate = runAnswerGate({
+        snapshot: result.snapshot,
+        allowedSlugs: result.allowedSlugs,
+      })
+      expect(gate.ok).toBe(true)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      if (previousEvalSeed === undefined) {
+        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+      } else {
+        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousEvalSeed
+      }
+    }
   })
 })

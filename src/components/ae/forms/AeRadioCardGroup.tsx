@@ -12,7 +12,7 @@ export function AeRadioCardGroup({ value, options, disabled = false, name, 'aria
       {options.map((option) => {
         const selected = option.value === value
         return (
-          <label key={option.value} htmlFor={option.value} className={cn('flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 text-left text-sm hover:bg-muted has-disabled:cursor-not-allowed has-disabled:opacity-50', selected && 'border-primary bg-muted')} onClick={() => { if (!disabled) onValueChange(option.value) }}>
+          <label key={option.value} htmlFor={option.value} className={cn('flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-md border border-border bg-card p-3 text-left text-sm hover:bg-muted has-disabled:cursor-not-allowed has-disabled:opacity-50', selected && 'border-primary bg-muted')}>
             <input
               id={option.value}
               name={name}

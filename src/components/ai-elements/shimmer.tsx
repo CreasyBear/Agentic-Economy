@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { MotionProps } from "motion/react";
-import { motion } from "motion/react";
+import { LazyMotion, domAnimation, m } from "motion/react";
 import type { ElementType, JSX } from "react";
 import { memo, useMemo } from "react";
 import type { MotionStyle } from "motion/react";
@@ -18,7 +18,7 @@ const motionComponentCache = new Map<
 const getMotionComponent = (element: keyof JSX.IntrinsicElements) => {
   let component = motionComponentCache.get(element);
   if (!component) {
-    component = motion.create(element);
+    component = m.create(element);
     motionComponentCache.set(element, component);
   }
   return component;
@@ -49,29 +49,31 @@ const ShimmerComponent = ({
   );
 
   return (
-    <MotionComponent
-      animate={{ backgroundPosition: "0% center" }}
-      className={cn(
-        "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
-        "[--bg:linear-gradient(90deg,transparent_calc(50%-var(--spread)),var(--color-body),transparent_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
-        className
-      )}
-      initial={{ backgroundPosition: "100% center" }}
-      style={
-        {
-          "--spread": `${dynamicSpread}px`,
-          backgroundImage:
-            "var(--bg), linear-gradient(var(--color-secondary), var(--color-secondary))",
-        } as MotionStyle
-      }
-      transition={{
-        duration,
-        ease: "linear",
-        repeat: Number.POSITIVE_INFINITY,
-      }}
-    >
-      {children}
-    </MotionComponent>
+    <LazyMotion features={domAnimation}>
+      <MotionComponent
+        animate={{ backgroundPosition: "0% center" }}
+        className={cn(
+          "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
+          "[--bg:linear-gradient(90deg,transparent_calc(50%-var(--spread)),var(--color-body),transparent_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
+          className
+        )}
+        initial={{ backgroundPosition: "100% center" }}
+        style={
+          {
+            "--spread": `${dynamicSpread}px`,
+            backgroundImage:
+              "var(--bg), linear-gradient(var(--color-secondary), var(--color-secondary))",
+          } as MotionStyle
+        }
+        transition={{
+          duration,
+          ease: "linear",
+          repeat: Number.POSITIVE_INFINITY,
+        }}
+      >
+        {children}
+      </MotionComponent>
+    </LazyMotion>
   );
 };
 

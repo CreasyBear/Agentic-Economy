@@ -100,6 +100,12 @@ describe('harness action tool adapter', () => {
           method: 'POST',
           origin: 'https://example.test',
           pathname: '/api/agent/tools',
+          bodyDigest: 'none',
+        },
+        agentToolAdmission: {
+          toolId: 'inquiry.submit',
+          scope: 'public_inquiry',
+          principalId: 'agent:test-principal',
         },
       },
     })

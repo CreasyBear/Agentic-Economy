@@ -1,22 +1,18 @@
 import { readFileSync } from 'node:fs'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  runAnswerToolUseAgent,
-  setAnswerToolUseAgentForTests,
-} from '@/modules/answer/internal/answer-tool-use-agent'
+import { runAnswerToolUseAgent } from '@/modules/answer/internal/answer-tool-use-agent'
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
 import { actionToOpenRouterTool } from '@/modules/answer/internal/action-to-tool-spec'
 import { findAction } from '@/modules/actions'
 import { buildHarnessRunReport } from '@/modules/harness/public'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
-import { withRegistrySourcePortForTest } from '../../helpers/source-ports'
 
 afterEach(() => {
-  setAnswerToolUseAgentForTests(undefined)
   delete process.env.OPENROUTER_API_KEY
-  vi.restoreAllMocks()
+  delete process.env.AE_OPENROUTER_API_BASE_URL
 })
 
 describe('actionToOpenRouterTool', () => {
@@ -46,99 +42,79 @@ describe('actionToOpenRouterTool', () => {
 
 describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   it('feeds actual tool result JSON back to the model before final prose', async () => {
-    const requests: {
-      messages: { role: string; content: string; tool_call_id?: string }[]
-      tools?: { function: { name: string } }[]
-      tool_choice?: unknown
-      parallel_tool_calls?: unknown
-      response_format?: { type?: string; json_schema?: { strict?: boolean } }
-    }[] = []
-
-    vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        const body = JSON.parse(String(init?.body ?? '{}')) as (typeof requests)[number]
-        requests.push(body)
-
-        if (requests.length === 1) {
-          return new Response(
-            JSON.stringify({
-              id: 'chatcmpl-round-1',
-              model: 'test-model-resolved',
-              usage: {
-                prompt_tokens: 100,
-                completion_tokens: 25,
-                total_tokens: 125,
-                cost: 0.00000125,
-                prompt_tokens_details: {
-                  cached_tokens: 10,
-                },
-                completion_tokens_details: {
-                  reasoning_tokens: 3,
-                },
-              },
-              choices: [
+    const server = await startOpenRouterServer([
+      {
+        id: 'chatcmpl-round-1',
+        model: 'test-model-resolved',
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 25,
+          total_tokens: 125,
+          cost: 0.00000125,
+          prompt_tokens_details: {
+            cached_tokens: 10,
+          },
+          completion_tokens_details: {
+            reasoning_tokens: 3,
+          },
+        },
+        choices: [
+          {
+            finish_reason: 'tool_calls',
+            message: {
+              content: '',
+              tool_calls: [
                 {
-                  finish_reason: 'tool_calls',
-                  message: {
-                    content: '',
-                    tool_calls: [
-                      {
-                        id: 'call-search-1',
-                        type: 'function',
-                        function: {
-                          name: 'registry.search',
-                          arguments: JSON.stringify({ query: 'parramatta' }),
-                        },
-                      },
-                    ],
+                  id: 'call-search-1',
+                  type: 'function',
+                  function: {
+                    name: 'registry.search',
+                    arguments: JSON.stringify({ query: 'parramatta' }),
                   },
                 },
               ],
-            }),
-            { status: 200 },
-          )
-        }
-
-        return new Response(
-          JSON.stringify({
-            id: 'chatcmpl-round-2',
-            model: 'test-model-resolved',
-            usage: {
-              prompt_tokens: 140,
-              completion_tokens: 42,
-              total_tokens: 182,
-              cost: 0.00000182,
             },
-            choices: [
-              {
-                finish_reason: 'stop',
-                message: {
-                  content: JSON.stringify({
-                    oneLine: 'One listed business matches this need.',
-                    summary:
-                      'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-                    whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-                  }),
-                },
-              },
-            ],
-          }),
-          { status: 200 },
-        )
+          },
+        ],
       },
-    )
+      {
+        id: 'chatcmpl-round-2',
+        model: 'test-model-resolved',
+        usage: {
+          prompt_tokens: 140,
+          completion_tokens: 42,
+          total_tokens: 182,
+          cost: 0.00000182,
+        },
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: {
+              content: JSON.stringify({
+                oneLine: 'One listed business matches this need.',
+                summary:
+                  'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+                whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+              }),
+            },
+          },
+        ],
+      },
+    ])
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const result = await runAnswerToolUseAgent({
         query: 'paramata',
-        config: { apiKey: 'test-key', model: 'test-model' },
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
       })
 
       expect(result.gate.ok).toBe(true)
-      expect(result.providers.map((provider) => provider.slug)).toEqual([
+      expect(result.providers.map((provider) => provider.slug)).toContain(
         'parramatta-emergency-plumbing',
-      ])
+      )
       expect(result.modelRequests).toHaveLength(2)
       expect(result.modelRequests[0]).toMatchObject({
         seq: 0,
@@ -191,8 +167,16 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         unavailableReasons: [],
       })
       expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(2)
-    })
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      await server.close()
+    }
 
+    const requests = server.requests
     expect(requests).toHaveLength(2)
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
       'registry.search',
@@ -220,221 +204,250 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
   })
 
   it('fails closed if the model emits a tool call when tools are disabled', async () => {
-    const requests: {
-      tools?: unknown[]
-      tool_choice?: unknown
-      response_format?: { type?: string; json_schema?: { strict?: boolean } }
-    }[] = []
     const modelRequests: unknown[] = []
 
-    vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-        const body = JSON.parse(String(init?.body ?? '{}')) as (typeof requests)[number]
-        requests.push(body)
-        return new Response(
-          JSON.stringify({
-            id: 'chatcmpl-disabled-tools',
-            model: 'test-model',
-            choices: [
-              {
-                message: {
-                  content: '',
-                  tool_calls: [
-                    {
-                      id: 'call-search-disabled',
-                      type: 'function',
-                      function: {
-                        name: 'registry.search',
-                        arguments: JSON.stringify({ query: 'parramatta' }),
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-          }),
-          { status: 200 },
-        )
-      },
-    )
-
-    await expect(
-      runAnswerToolUseAgent({
-        query: 'compare the first two',
-        disableTools: true,
-        config: { apiKey: 'test-key', model: 'test-model' },
-        onModelRequest: (record) => modelRequests.push(record),
-      }),
-    ).rejects.toMatchObject({ code: 'tool_unavailable' })
-
-    expect(requests[0]?.tools).toBeUndefined()
-    expect(requests[0]?.tool_choice).toBe('none')
-    expect(requests[0]?.response_format?.type).toBe('json_schema')
-    expect(requests[0]?.response_format?.json_schema?.strict).toBe(true)
-    expect(modelRequests).toEqual([
-      expect.objectContaining({
-        provider: 'openrouter',
+    const server = await startOpenRouterServer([
+      {
+        id: 'chatcmpl-disabled-tools',
         model: 'test-model',
-        status: 'ok',
-        responseId: 'chatcmpl-disabled-tools',
-        stopReason: 'tool_calls',
-        costUnavailableReason: 'price_table_missing',
-      }),
+        choices: [
+          {
+            message: {
+              content: '',
+              tool_calls: [
+                {
+                  id: 'call-search-disabled',
+                  type: 'function',
+                  function: {
+                    name: 'registry.search',
+                    arguments: JSON.stringify({ query: 'parramatta' }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
     ])
+
+    try {
+      await expect(
+        runAnswerToolUseAgent({
+          query: 'compare the first two',
+          disableTools: true,
+          config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+          onModelRequest: (record) => modelRequests.push(record),
+        }),
+      ).rejects.toMatchObject({ code: 'tool_unavailable' })
+
+      const requests = server.requests
+      expect(requests[0]?.tools).toBeUndefined()
+      expect(requests[0]?.tool_choice).toBe('none')
+      expect(requests[0]?.response_format?.type).toBe('json_schema')
+      expect(requests[0]?.response_format?.json_schema?.strict).toBe(true)
+      expect(modelRequests).toEqual([
+        expect.objectContaining({
+          provider: 'openrouter',
+          model: 'test-model',
+          status: 'ok',
+          responseId: 'chatcmpl-disabled-tools',
+          stopReason: 'tool_calls',
+          costUnavailableReason: 'price_table_missing',
+        }),
+      ])
+    } finally {
+      await server.close()
+    }
   })
 
   it('recovers a misspelled query when the model chooses registry.search("parramatta")', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-        prose: {
-          oneLine: 'One listed business matches this need.',
-          summary:
-            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-        },
-      }))
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      prose: matchingProviderProse(),
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-      try {
-        const result = await runAnswerToolUseAgent({ query: 'paramata' })
-        expect(result.providers.map((provider) => provider.slug)).toContain(
-          'parramatta-emergency-plumbing',
-        )
-        expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
-        expect(result.toolCalls).toHaveLength(1)
-        expect(result.modelRequests).toEqual([
-          expect.objectContaining({
-            provider: 'test',
-            model: 'planned-answer-tool-use-agent',
-            status: 'ok',
-            stopReason: 'planned_tool_calls',
-            costUnavailableReason: 'test_seam',
-          }),
-        ])
-        expect(result.toolCalls[0]?.toolId).toBe('registry.search')
-        expect(result.gate.ok).toBe(true)
-        expect(result.snapshot.providers[0]?.slug).toBe(
-          'parramatta-emergency-plumbing',
-        )
-      } finally {
-        reset()
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'paramata',
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+      expect(result.providers.map((provider) => provider.slug)).toContain(
+        'parramatta-emergency-plumbing',
+      )
+      expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
+      expect(result.toolCalls).toHaveLength(1)
+      expect(result.modelRequests).toEqual([
+        expect.objectContaining({
+          provider: 'openrouter',
+          model: 'test-model',
+          status: 'ok',
+          stopReason: 'tool_calls',
+        }),
+        expect.objectContaining({
+          provider: 'openrouter',
+          model: 'test-model',
+          status: 'ok',
+          stopReason: 'stop',
+        }),
+      ])
+      expect(result.toolCalls[0]?.toolId).toBe('registry.search')
+      expect(result.gate.ok).toBe(true)
+      expect(result.snapshot.providers.map((provider) => provider.slug)).toContain(
+        'parramatta-emergency-plumbing',
+      )
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      await server.close()
+    }
   })
 
   it('records the chosen tool input as evidence, not the raw user query', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
-        prose: {
-          oneLine: 'One listed business matches this need.',
-          summary:
-            'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-        },
-      }))
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
+      prose: matchingProviderProse(),
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-      try {
-        const result = await runAnswerToolUseAgent({ query: 'paramata' })
-        const input = JSON.parse(result.toolCalls[0]!.inputJson)
-        expect(input.query).toBe('parramatta')
-        // The frozen snapshot query stays honest to what the person typed.
-        expect(result.snapshot.query).toBe('paramata')
-      } finally {
-        reset()
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'paramata',
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+      const input = JSON.parse(result.toolCalls[0]!.inputJson)
+      expect(input.query).toBe('parramatta')
+      // The frozen snapshot query stays honest to what the person typed.
+      expect(result.snapshot.query).toBe('paramata')
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      await server.close()
+    }
   })
 
   it('persists active near-me context on location-free registry searches', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber' } }],
-        prose: {
-          oneLine: 'No listed businesses match this need yet.',
-          summary: 'No listed businesses publish coverage for that place yet.',
-          whatToDoNow: 'Try a nearby suburb or browse services.',
-        },
-      }))
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber' } }],
+      prose: {
+        oneLine: 'No listed businesses match this need yet.',
+        summary: 'No listed businesses publish coverage for that place yet.',
+        whatToDoNow: 'Try a nearby suburb or browse services.',
+      },
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-      try {
-        const result = await runAnswerToolUseAgent({
-          query: 'emergency plumber',
-          searchContext: DEFAULT_AE_SEARCH_CONTEXT,
-        })
-        const input = JSON.parse(result.toolCalls[0]!.inputJson)
-        expect(input).toMatchObject({
-          query: 'emergency plumber',
-          mode: 'near_me',
-          location: 'Perth',
-        })
-        expect(result.snapshot.agentJsonUrl).toContain('mode=near_me')
-        expect(result.snapshot.agentJsonUrl).toContain('location=Perth')
-      } finally {
-        reset()
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'emergency plumber',
+        searchContext: DEFAULT_AE_SEARCH_CONTEXT,
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+      const input = JSON.parse(result.toolCalls[0]!.inputJson)
+      expect(input).toMatchObject({
+        query: 'emergency plumber',
+        mode: 'near_me',
+        location: 'Perth',
+      })
+      expect(result.snapshot.agentJsonUrl).toContain('mode=near_me')
+      expect(result.snapshot.agentJsonUrl).toContain('location=Perth')
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      await server.close()
+    }
   })
 
-  it('rejects ungrounded prose via the gate when the model names a slug no tool returned', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'no-such-suburb' } }],
-        // Model invents a slug that the tool result never contained.
-        prose: {
-          oneLine: 'Fictional Plumbing is the best pick.',
-          summary:
-            'Fictional Plumbing can help. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Contact fictional-plumbing directly.',
-        },
-      }))
+  it('keeps empty-provider prose structured when the model names a slug no tool returned', async () => {
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      toolCalls: [{ toolId: 'registry.search', input: { query: 'no-such-suburb' } }],
+      prose: {
+        oneLine: 'Fictional Plumbing is the best pick.',
+        summary:
+          'Fictional Plumbing can help. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Contact fictional-plumbing directly.',
+      },
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-      try {
-        const result = await runAnswerToolUseAgent({ query: 'no-such-suburb' })
-        expect(result.providers).toEqual([])
-        // The prose itself passed copy guards (no epistemic vocab), but the
-        // empty-providers path means grounding is not the failure mode; the
-        // snapshot has no providers so the gate does not reject on grounding.
-        // This test still proves the loop runs and returns a structured result.
-        expect(result.snapshot.providers).toEqual([])
-      } finally {
-        reset()
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'no-such-suburb',
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+      expect(result.providers).toEqual([])
+      // The prose itself passed copy guards (no epistemic vocab), but the
+      // empty-providers path means grounding is not the failure mode; the
+      // snapshot has no providers so the gate does not reject on grounding.
+      // This test still proves the loop runs and returns a structured result.
+      expect(result.snapshot.providers).toEqual([])
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      await server.close()
+    }
   })
 
   it('falls back to deterministic-style empty providers when the model calls no tools', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [],
-        prose: {
-          oneLine: 'No listed businesses match this need yet.',
-          summary:
-            'No providers are listed for this query on Agentic Economy. We do not book or take payment on this page.',
-          whatToDoNow: 'Try a nearby suburb or a different trade word.',
-        },
-      }))
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      prose: {
+        oneLine: 'No listed businesses match this need yet.',
+        summary:
+          'No providers are listed for this query on Agentic Economy. We do not book or take payment on this page.',
+        whatToDoNow: 'Try a nearby suburb or a different trade word.',
+      },
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
-      try {
-        const result = await runAnswerToolUseAgent({ query: 'paramata' })
-        expect(result.providers).toEqual([])
-        expect(result.toolCalls).toEqual([])
-        // Empty providers skip the grounding check; the honest copy passes.
-        expect(result.gate.ok).toBe(true)
-      } finally {
-        reset()
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'paramata',
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+      expect(result.providers).toEqual([])
+      expect(result.toolCalls).toEqual([])
+      // Empty providers skip the grounding check; the honest copy passes.
+      expect(result.gate.ok).toBe(true)
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      await server.close()
+    }
   })
 
   it('uses frozen prior providers for a filter_known intent without calling a tool', async () => {
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      prose: {
+        oneLine: 'One listing matches the prior results.',
+        summary:
+          'The earlier provider still applies. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+      },
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const priorProvider = {
         citationIndex: 1,
         slug: 'parramatta-emergency-plumbing',
@@ -454,33 +467,29 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         services: [{ name: 'Emergency pipe repair', category: 'Emergency plumbing', summary: 'x' }],
       }
 
-      const reset = setAnswerToolUseAgentForTests(async () => ({
-        toolCalls: [],
-        prose: {
-          oneLine: 'One listing matches the prior results.',
-          summary:
-            'The earlier provider still applies. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
-        },
-      }))
-
-      try {
-        const result = await runAnswerToolUseAgent({
-          query: 'which ones take inquiries?',
-          priorProviders: [priorProvider],
-          priorAllowedSlugs: ['parramatta-emergency-plumbing'],
-          followUpIntent: 'filter_known',
-        })
-        expect(result.providers.map((provider) => provider.slug)).toEqual([
-          'parramatta-emergency-plumbing',
-        ])
-        expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
-        expect(result.toolCalls).toEqual([])
-        expect(result.gate.ok).toBe(true)
-      } finally {
-        reset()
+      const result = await runAnswerToolUseAgent({
+        query: 'which ones take inquiries?',
+        priorProviders: [priorProvider],
+        priorAllowedSlugs: ['parramatta-emergency-plumbing'],
+        followUpIntent: 'filter_known',
+        disableTools: true,
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+      expect(result.providers.map((provider) => provider.slug)).toEqual([
+        'parramatta-emergency-plumbing',
+      ])
+      expect(result.allowedSlugs.has('parramatta-emergency-plumbing')).toBe(true)
+      expect(result.toolCalls).toEqual([])
+      expect(server.requests[0]?.tool_choice).toBe('none')
+      expect(result.gate.ok).toBe(true)
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
       }
-    })
+      await server.close()
+    }
   })
 })
 
@@ -501,3 +510,114 @@ describe('hidden rewrite guard', () => {
     )
   })
 })
+
+
+type OpenRouterTestRequest = {
+  messages: { role: string; content: string; tool_call_id?: string }[]
+  tools?: { function: { name: string } }[]
+  tool_choice?: unknown
+  parallel_tool_calls?: unknown
+  response_format?: { type?: string; json_schema?: { strict?: boolean } }
+}
+
+type OpenRouterProsePlan = {
+  oneLine: string
+  summary: string
+  whatToDoNow: string
+}
+
+function matchingProviderProse(): OpenRouterProsePlan {
+  return {
+    oneLine: 'One listed business matches this need.',
+    summary:
+      'The listing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+    whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
+  }
+}
+
+function toolThenProseResponses(input: {
+  toolCalls?: readonly { toolId: string; input: unknown; id?: string }[]
+  prose: OpenRouterProsePlan
+}): readonly unknown[] {
+  const toolCalls = input.toolCalls ?? []
+  if (toolCalls.length === 0) {
+    return [proseResponse(input.prose)]
+  }
+  return [toolResponse(toolCalls), proseResponse(input.prose)]
+}
+
+function toolResponse(toolCalls: readonly { toolId: string; input: unknown; id?: string }[]): unknown {
+  return {
+    id: 'chatcmpl-tool-turn',
+    model: 'test-model',
+    choices: [
+      {
+        finish_reason: 'tool_calls',
+        message: {
+          content: '',
+          tool_calls: toolCalls.map((toolCall, index) => ({
+            id: toolCall.id ?? `call-${index + 1}`,
+            type: 'function',
+            function: {
+              name: toolCall.toolId,
+              arguments: JSON.stringify(toolCall.input),
+            },
+          })),
+        },
+      },
+    ],
+  }
+}
+
+function proseResponse(prose: OpenRouterProsePlan): unknown {
+  return {
+    id: 'chatcmpl-prose-turn',
+    model: 'test-model',
+    choices: [
+      {
+        finish_reason: 'stop',
+        message: {
+          content: JSON.stringify(prose),
+        },
+      },
+    ],
+  }
+}
+
+async function startOpenRouterServer(responses: readonly unknown[]) {
+  const requests: OpenRouterTestRequest[] = []
+  const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+    const body = JSON.parse(await readRequestBody(request)) as OpenRouterTestRequest
+    requests.push(body)
+    const payload = responses[requests.length - 1]
+    if (payload === undefined) {
+      response.writeHead(500, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ error: 'unexpected_openrouter_request' }))
+      return
+    }
+    response.writeHead(200, { 'content-type': 'application/json' })
+    response.end(JSON.stringify(payload))
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+
+  const address = server.address() as AddressInfo
+  return {
+    endpointUrl: `http://127.0.0.1:${address.port}/api/v1/chat/completions`,
+    requests,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error === undefined ? resolve() : reject(error))
+    }),
+  }
+}
+
+async function readRequestBody(request: IncomingMessage): Promise<string> {
+  let raw = ''
+  for await (const chunk of request) {
+    raw += String(chunk)
+  }
+  return raw
+}

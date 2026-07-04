@@ -96,6 +96,7 @@ export type ClaimFingerprintStatus = (typeof ClaimFingerprintStatusValues)[numbe
 
 export type AdminMembership = {
   clerkUserId: string
+  tokenIdentifier?: string
   role: AdminRole
   state: AdminMembershipState
   grantedBy: string

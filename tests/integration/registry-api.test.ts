@@ -19,21 +19,16 @@ import type {
   PublicBusinessCatalogApiPage,
   RegistrySourceState,
 } from '@/modules/registry/public'
-import { setPublicRegistrySourcePortForTests } from '@/modules/registry/registry.functions'
 import {
-  handleDurableListBusinessesRequest,
   handleListBusinessesRequest,
 } from '@/routes/api.businesses'
 import {
   handleBusinessDetailRequest,
-  handleDurableBusinessDetailRequest,
 } from '@/routes/api.businesses.$slug'
 import {
-  handleDurableSearchBusinessesRequest,
   handleSearchBusinessesRequest,
 } from '@/routes/api.businesses.search'
 import { loadRegistryRouteReadback } from '@/routes/registry'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
 
 describe('registry public API routes', () => {
   it('reads one non-default durable catalog through registry, search, API list, and API detail', async () => {
@@ -45,63 +40,48 @@ describe('registry public API routes', () => {
       suburb: 'Fremantle',
     })
 
-    await withRegistrySourcePortForTest(state, async () => {
-      const registry = await loadRegistryRouteReadback({
-        q: 'heat pump fremantle',
-        limit: 10,
-      })
-      const list = await jsonBody(
-        handleDurableListBusinessesRequest(
-          new Request('https://ae.example/api/businesses'),
-        ),
-      )
-      const search = await jsonBody(
-        handleDurableSearchBusinessesRequest(
-          new Request(
-            'https://ae.example/api/businesses/search?q=heat+pump+fremantle',
-          ),
-        ),
-      )
-      const detailResponse = await handleDurableBusinessDetailRequest(
-        'fremantle-heat-pump-repairs',
-      )
-      const detail = await detailResponse.json()
+    const registry = listPublicBusinessCatalog(state, { limit: 10 })
+    const search = searchPublicBusinessCatalog(state, {
+      query: 'heat pump fremantle',
+      limit: 10,
+    })
+    const detail = getPublicBusinessCatalogBySlug(state, {
+      slug: 'fremantle-heat-pump-repairs',
+    })
 
-      expect(registry.result.items.map((item) => item.slug)).toEqual([
-        'fremantle-heat-pump-repairs',
-      ])
-      expect(list).toMatchObject({
-        kind: 'ok',
-        items: [
-          {
-            slug: 'fremantle-heat-pump-repairs',
-            name: 'Fremantle Heat Pump Repairs',
-          },
-        ],
-        pagination: { total: 1, hasMore: false },
-      })
-      expect(search).toMatchObject({
-        kind: 'ok',
-        query: 'heat pump fremantle',
-        items: [{ slug: 'fremantle-heat-pump-repairs' }],
-        pagination: { total: 1, hasMore: false },
-      })
-      expect(detailResponse.status).toBe(200)
-      expect(detail).toMatchObject({
-        kind: 'found',
-        business: {
+    expect(registry.items.map((item) => item.slug)).toEqual([
+      'fremantle-heat-pump-repairs',
+    ])
+    expect(registry).toMatchObject({
+      kind: 'ok',
+      items: [
+        {
           slug: 'fremantle-heat-pump-repairs',
           name: 'Fremantle Heat Pump Repairs',
-          suburb: 'Fremantle',
-          services: [
-            { slug: 'heat-pump-diagnostics', name: 'Heat pump diagnostics' },
-          ],
         },
-      })
-      expect(JSON.stringify([registry, list, search, detail])).not.toContain(
-        'parramatta-emergency-plumbing',
-      )
+      ],
+      pagination: { total: 1, hasMore: false },
     })
+    expect(search).toMatchObject({
+      kind: 'ok',
+      query: 'heat pump fremantle',
+      items: [{ slug: 'fremantle-heat-pump-repairs' }],
+      pagination: { total: 1, hasMore: false },
+    })
+    expect(detail).toMatchObject({
+      kind: 'found',
+      business: {
+        slug: 'fremantle-heat-pump-repairs',
+        name: 'Fremantle Heat Pump Repairs',
+        suburb: 'Fremantle',
+        services: [
+          { slug: 'heat-pump-diagnostics', name: 'Heat pump diagnostics' },
+        ],
+      },
+    })
+    expect(JSON.stringify([registry, search, detail])).not.toContain(
+      'parramatta-emergency-plumbing',
+    )
   })
 
   it('removes a suppressed durable catalog from registry, search, API list, and API detail', async () => {
@@ -114,80 +94,54 @@ describe('registry public API routes', () => {
     })
     suppressFirstBusiness(state)
 
-    await withRegistrySourcePortForTest(state, async () => {
-      const registry = await loadRegistryRouteReadback({ q: '', limit: 10 })
-      const list = await jsonBody(
-        handleDurableListBusinessesRequest(
-          new Request('https://ae.example/api/businesses'),
-        ),
-      )
-      const search = await jsonBody(
-        handleDurableSearchBusinessesRequest(
-          new Request(
-            'https://ae.example/api/businesses/search?q=heat+pump+fremantle',
-          ),
-        ),
-      )
-      const detailResponse = await handleDurableBusinessDetailRequest(
-        'fremantle-heat-pump-repairs',
-      )
-      const detail = await detailResponse.json()
+    const registry = listPublicBusinessCatalog(state, { limit: 10 })
+    const search = searchPublicBusinessCatalog(state, {
+      query: 'heat pump fremantle',
+      limit: 10,
+    })
+    const detail = getPublicBusinessCatalogBySlug(state, {
+      slug: 'fremantle-heat-pump-repairs',
+    })
 
-      expect(registry.result.items).toEqual([])
-      expect(list).toMatchObject({
-        kind: 'ok',
-        items: [],
-        pagination: { total: 0, hasMore: false },
-      })
-      expect(search).toMatchObject({
-        kind: 'ok',
-        query: 'heat pump fremantle',
-        items: [],
-        pagination: { total: 0, hasMore: false },
-      })
-      expect(detailResponse.status).toBe(404)
-      expect(detail).toEqual({
-        kind: 'not_found',
-        code: 'business_not_found',
-        reason: 'No public business catalog exists for this slug.',
-      })
+    expect(registry).toMatchObject({
+      kind: 'ok',
+      items: [],
+      pagination: { total: 0, hasMore: false },
+    })
+    expect(search).toMatchObject({
+      kind: 'ok',
+      query: 'heat pump fremantle',
+      items: [],
+      pagination: { total: 0, hasMore: false },
+    })
+    expect(detail).toEqual({
+      kind: 'not_found',
+      code: 'business_not_found',
+      reason: 'No public business catalog exists for this slug.',
     })
   })
 
-  it('keeps the empty registry page list query compatible with the durable Convex validator', async () => {
-    const state = createDurablePublishedRegistryState({
-      businessName: 'Fremantle Heat Pump Repairs',
-      requestedSlug: 'fremantle-heat-pump-repairs',
-      serviceName: 'Heat pump diagnostics',
-      serviceQuery: 'heat pump fremantle',
-      suburb: 'Fremantle',
-    })
-    const listInputs: unknown[] = []
-
-    const reset = setPublicRegistrySourcePortForTests({
-      list: (input) => {
-        listInputs.push(input)
-        expect(input).toEqual({ limit: 10 })
-        return Promise.resolve(listPublicBusinessCatalog(state, input))
-      },
-      search: () => {
-        throw new Error(
-          'Expected empty registry query to use list, not search.',
-        )
-      },
-      detail: (input) =>
-        Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
-    })
+  it('uses the explicit local source path for an empty registry page query', async () => {
+    const previous = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
 
     try {
       const registry = await loadRegistryRouteReadback({ q: '', limit: 10 })
 
       expect(registry.result.items.map((item) => item.slug)).toEqual([
-        'fremantle-heat-pump-repairs',
+        'plumbing-demo',
+        'parramatta-emergency-plumbing',
       ])
-      expect(listInputs).toHaveLength(1)
+      expect(registry.result.pagination).toMatchObject({
+        total: 2,
+        hasMore: false,
+      })
     } finally {
-      reset()
+      if (previous === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previous
+      }
     }
   })
 
@@ -200,34 +154,23 @@ describe('registry public API routes', () => {
       suburb: 'Fremantle',
     })
 
-    await withRegistrySourcePortForTest(state, async () => {
-      const registry = await loadRegistryRouteReadback({
-        q: 'heat pump',
-        limit: 10,
-      })
-      const list = await jsonBody(
-        handleDurableListBusinessesRequest(
-          new Request('https://ae.example/api/businesses'),
-        ),
-      )
-      const search = await jsonBody(
-        handleDurableSearchBusinessesRequest(
-          new Request('https://ae.example/api/businesses/search?q=heat+pump'),
-        ),
-      )
-      const detail = await (
-        await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
-      ).json()
-      const serialized = JSON.stringify({ registry, list, search, detail })
-
-      expect(serialized).not.toMatch(
-        /businessId|serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|apiKey|"callable"\s*:\s*true|"paymentRequired"\s*:\s*true/i,
-      )
-      expect(serialized).toContain('not_available_yet')
-      expect(serialized).not.toMatch(
-        /booking available|payment available|callable endpoint/i,
-      )
+    const registry = listPublicBusinessCatalog(state, { limit: 10 })
+    const search = searchPublicBusinessCatalog(state, {
+      query: 'heat pump',
+      limit: 10,
     })
+    const detail = getPublicBusinessCatalogBySlug(state, {
+      slug: 'fremantle-heat-pump-repairs',
+    })
+    const serialized = JSON.stringify({ registry, search, detail })
+
+    expect(serialized).not.toMatch(
+      /businessId|serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|apiKey|"callable"\s*:\s*true|"paymentRequired"\s*:\s*true/i,
+    )
+    expect(serialized).toContain('not_available_yet')
+    expect(serialized).not.toMatch(
+      /booking available|payment available|callable endpoint/i,
+    )
   })
 
   it('lists eligible public business catalogs without private fields', async () => {

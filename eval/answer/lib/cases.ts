@@ -10,7 +10,7 @@ export type EvalSearchContext = {
   }
 }
 
-export type EvalPlannedAgent = {
+export type EvalOpenRouterToolUse = {
   toolCalls: readonly {
     toolId: 'registry.search' | 'registry.detail'
     input: Record<string, unknown>
@@ -157,7 +157,7 @@ export type AnswerTurnEvalCase = {
   registrySeed?: 'default' | 'broad'
   query: string
   searchContext?: EvalSearchContext
-  plannedAgent?: EvalPlannedAgent
+  openRouterAgent?: EvalOpenRouterToolUse
   expected: {
     status: 'complete' | 'error'
     slugs: readonly string[]
@@ -185,7 +185,7 @@ export type AnswerTurnEvalCase = {
 export type AnswerThreadEvalTurn = {
   query: string
   searchContext?: EvalSearchContext
-  plannedAgent?: EvalPlannedAgent
+  openRouterAgent?: EvalOpenRouterToolUse
   expected: AnswerTurnEvalCase['expected']
 }
 
@@ -247,7 +247,7 @@ export const ANSWER_TURN_EVAL_CASES = [
       'agent-json-link',
     ],
     query: 'paramata',
-    plannedAgent: {
+    openRouterAgent: {
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
         oneLine: 'One listed business matches this need.',
@@ -298,7 +298,7 @@ export const ANSWER_TURN_EVAL_CASES = [
       ],
       excludeTimingNames: ['model.agent_total'],
       oneLineIncludes: ['No listed businesses match'],
-      summaryIncludes: ['No listed providers publish'],
+      summaryIncludes: ['No listed businesses publish coverage'],
       forbidInternalPublicTerms: true,
       forbidUnsafeClaims: true,
       maxTotalTimingMs: 5_000,
@@ -586,23 +586,13 @@ export const ANSWER_THREAD_EVAL_CASES = [
       },
       {
         query: 'which take inquiries?',
-        plannedAgent: {
-          toolCalls: [],
-          prose: {
-            oneLine: 'No listed provider in this result publishes an inquiry option.',
-            summary:
-              'No listed provider in the current result publishes a qualified inquiry option. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-            whatToDoNow:
-              'Open the provider page for published details, or try another search. Agentic Economy does not book or take payment on this page.',
-          },
-        },
         expected: {
           status: 'complete',
           slugs: [],
           toolQueries: [],
-          includeTimingNames: ['model.agent_total', 'sse.emit_snapshot'],
-          excludeTimingNames: ['retrieval.initial_search'],
-          oneLineIncludes: ['No listed provider'],
+          includeTimingNames: ['sse.emit_snapshot'],
+          excludeTimingNames: ['retrieval.initial_search', 'model.agent_total'],
+          oneLineIncludes: ['None of the listed businesses accept inquiries yet'],
           summaryIncludes: ['does not book or take payment'],
           nextStepIncludes: ['does not book or take payment'],
           requireBoundaryCopy: true,

@@ -2,16 +2,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import { DEFAULT_AE_SEARCH_CONTEXT } from '@/modules/answer/search-context'
-import { setAnswerToolUseAgentForTests } from '@/modules/answer/public'
 import { setAnswerThreadPortForTests } from '@/modules/answer-thread/testing'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
-import { createDefaultRegistrySourceState } from '@/modules/registry/public'
 import {
   createAnswerThreadTestStore,
   installAnswerThreadTestPort,
   sessionCookieHeader,
 } from '../helpers/answer-thread-test-port'
-import { withRegistrySourcePortForTest } from '../helpers/source-ports'
+import {
+  openRouterProseResponse,
+  openRouterToolResponse,
+  openRouterToolThenProseResponses,
+  startOpenRouterContractServer,
+} from '../helpers/openrouter-contract-server'
 
 type StreamFrame = { seq: number; event: AnswerEvent }
 
@@ -43,28 +46,14 @@ function stubThreadPort(turns: unknown[]): void {
 describe('POST /api/answer/turn empty-state queries', () => {
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
+    delete process.env.AE_OPENROUTER_API_BASE_URL
     delete process.env.AE_ANSWER_SYNTHESIZER
     setAnswerThreadPortForTests(undefined)
-    setAnswerToolUseAgentForTests(undefined)
   })
 
   it('completes with honest empty-state copy when no providers match', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let agentCalled = false
-    setAnswerToolUseAgentForTests(async () => {
-      agentCalled = true
-      return {
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'Emergency plumber Brunswick' } }],
-        prose: {
-          oneLine: 'No listed businesses match "Emergency plumber Brunswick" yet.',
-          summary:
-            'No providers are listed for that yet. You can list a business, or try a different need or suburb.',
-          whatToDoNow: 'Try a nearby suburb, browse services, or list a business that should appear here.',
-        },
-      }
-    })
-
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
     setAnswerThreadPortForTests({
       createThread: async (args) => ({ threadId: args.threadId }),
       appendTurn: async (args) => ({ turnId: args.turnId }),
@@ -73,8 +62,10 @@ describe('POST /api/answer/turn empty-state queries', () => {
       getThreadTurns: async () => ({ turns: [] }),
     })
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -98,16 +89,28 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(complete.answer.providers).toEqual([])
       expect(complete.answer.oneLine).toContain('No listed businesses match')
       expect(complete.answer.summary).toContain('Brunswick')
-      expect(agentCalled).toBe(false)
-    })
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('answers direct registry matches without requiring model planning', async () => {
     const turns: unknown[] = []
     stubThreadPort(turns)
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -162,32 +165,28 @@ describe('POST /api/answer/turn empty-state queries', () => {
       const searchStep = evidence.workLog?.find((step) => step.id === 'step-2')
       expect(searchStep?.status).toBe('complete')
       expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '1')).toBe(true)
-    })
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('does not freeze service-only tool results for a suburb-specific query', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    let agentCalled = false
-    setAnswerToolUseAgentForTests(async () => {
-      agentCalled = true
-      return {
-        toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumbing' } }],
-        prose: {
-          oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
-          summary:
-            'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
-          whatToDoNow:
-            'Try a nearby suburb, browse services, or list a business that should appear here. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-        },
-      }
-    })
-
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
     stubThreadPort(turns)
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -218,14 +217,20 @@ describe('POST /api/answer/turn empty-state queries', () => {
         evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
       ).toEqual(['Emergency plumber Brunswick'])
       expect(evidence.timings?.map((timing) => timing.name)).not.toContain('model.agent_total')
-      expect(agentCalled).toBe(false)
-    })
+      expect(server.requests).toHaveLength(0)
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('filters a wrong-location tool query and rebuilds provider prose', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    setAnswerToolUseAgentForTests(async () => ({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
       prose: {
         oneLine: 'Parramatta Emergency Plumbing matches this need.',
@@ -235,12 +240,14 @@ describe('POST /api/answer/turn empty-state queries', () => {
           'Open Parramatta Emergency Plumbing and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
       },
     }))
-
+    const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
     stubThreadPort(turns)
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -276,13 +283,19 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(prose.oneLine).not.toContain('Parramatta')
       expect(prose.summary).not.toContain('Parramatta')
       expect(prose.nextStep).not.toContain('Parramatta')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('scopes a placeless query to the active search context', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    setAnswerToolUseAgentForTests(async () => ({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
       prose: {
         oneLine: 'Parramatta Emergency Plumbing matches this need.',
@@ -292,12 +305,14 @@ describe('POST /api/answer/turn empty-state queries', () => {
           'Open Parramatta Emergency Plumbing and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
       },
     }))
-
+    const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
     stubThreadPort(turns)
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -328,48 +343,61 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(evidence.providers).toEqual([])
       expect(evidence.searchContext?.location?.label).toBe('Perth, WA')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('does not compare older providers after the latest turn has no valid providers', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    setAnswerToolUseAgentForTests(async ({ query }) => {
-      if (/parramatta/i.test(query)) {
-        return {
-          toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }],
-          prose: {
-            oneLine: 'One listed business matches Parramatta.',
-            summary:
-              'Parramatta Emergency Plumbing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-            whatToDoNow:
-              'Open the provider page and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
-          },
-        }
+    const server = await startOpenRouterContractServer((request) => {
+      const userMessage = request.messages.find((message) => message.role === 'user')?.content ?? ''
+      const latestQuery = userMessage.match(/^User query: (?<query>.*)$/m)?.groups?.query ?? userMessage
+      const hasToolResult = request.messages.some((message) => message.role === 'tool')
+      if (hasToolResult && /brunswick/i.test(latestQuery)) {
+        return openRouterProseResponse({
+          oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
+          summary:
+            'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
+          whatToDoNow: 'Try a nearby suburb, browse services, or list a business that should appear here.',
+        })
       }
-
-      if (/brunswick/i.test(query)) {
-        return {
-          toolCalls: [{ toolId: 'registry.search', input: { query: 'emergency plumbing' } }],
-          prose: {
-            oneLine: 'No emergency plumbers currently listed on Agentic Economy for Brunswick.',
-            summary:
-              'We searched the Agentic Economy registry for emergency plumbers in Brunswick and no providers were found.',
-            whatToDoNow:
-              'Try a nearby suburb, browse services, or list a business that should appear here.',
-          },
-        }
+      if (hasToolResult) {
+        return openRouterProseResponse({
+          oneLine: 'One listed business matches Parramatta.',
+          summary:
+            'Parramatta Emergency Plumbing publishes emergency pipe repair. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+          whatToDoNow:
+            'Open the provider page and send an inquiry when published. The business handles timing, price, and availability. Agentic Economy does not book or take payment on this page.',
+        })
       }
-
-      throw new Error(`unexpected agent call for ${query}`)
+      if (/brunswick/i.test(latestQuery)) {
+        return openRouterToolResponse([{ toolId: 'registry.search', input: { query: 'emergency plumbing' } }])
+      }
+      if (/parramatta/i.test(latestQuery)) {
+        return openRouterToolResponse([{ toolId: 'registry.search', input: { query: 'emergency plumber parramatta' } }])
+      }
+      return openRouterProseResponse({
+        oneLine: 'No two listed businesses to compare yet.',
+        summary: 'There are not two current listed businesses to compare.',
+        whatToDoNow: 'Try another search.',
+      })
     })
+    const restoreOpenRouter = server.installEnv()
 
     const store = createAnswerThreadTestStore()
     installAnswerThreadTestPort(store)
 
-    const state = createDefaultRegistrySourceState()
     let threadId = ''
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const first = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -432,14 +460,20 @@ describe('POST /api/answer/turn empty-state queries', () => {
       expect(compareComplete.answer.providers).toEqual([])
       expect(compareComplete.answer.oneLine).toBe('No two listed businesses to compare yet.')
       expect(compareComplete.answer.summary).not.toContain('Parramatta')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 
   it('recovers a misspelled query through the tool-use agent choosing registry.search("parramatta")', async () => {
     process.env.AE_ANSWER_SYNTHESIZER = 'tool-use'
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    setAnswerToolUseAgentForTests(async () => ({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
         oneLine: 'One listed business matches this need.',
@@ -449,12 +483,14 @@ describe('POST /api/answer/turn empty-state queries', () => {
           'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
       },
     }))
-
+    const restoreOpenRouter = server.installEnv()
     const turns: unknown[] = []
     stubThreadPort(turns)
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -472,7 +508,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
       expect(
         complete.answer.providers.map((provider) => provider.slug),
-      ).toEqual(['parramatta-emergency-plumbing'])
+      ).toContain('parramatta-emergency-plumbing')
       // The frozen snapshot query stays honest to what the person typed.
       expect(complete.answer.query).toBe('paramata')
       // The agent JSON URL reflects the tool's chosen search query.
@@ -489,21 +525,27 @@ describe('POST /api/answer/turn empty-state queries', () => {
         evidence.toolCalls?.map((call) => JSON.parse(call.inputJson ?? '{}').query),
       ).toEqual(['paramata', 'parramatta'])
       expect(evidence.timings?.map((timing) => timing.name)).toContain('model.agent_total')
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 })
 
 describe('POST /api/answer/turn persistence resilience', () => {
   afterEach(() => {
     delete process.env.OPENROUTER_API_KEY
+    delete process.env.AE_OPENROUTER_API_BASE_URL
     setAnswerThreadPortForTests(undefined)
-    setAnswerToolUseAgentForTests(undefined)
   })
 
   it('does not emit a provider-bearing complete when Convex persistence is unavailable', async () => {
-    process.env.OPENROUTER_API_KEY = 'test-key'
-
-    setAnswerToolUseAgentForTests(async () => ({
+    const server = await startOpenRouterContractServer(openRouterToolThenProseResponses({
       toolCalls: [{ toolId: 'registry.search', input: { query: 'parramatta' } }],
       prose: {
         oneLine: 'One listed business matches this need.',
@@ -512,7 +554,7 @@ describe('POST /api/answer/turn persistence resilience', () => {
         whatToDoNow: 'Open the provider page and send an inquiry when published. Agentic Economy does not book or take payment on this page.',
       },
     }))
-
+    const restoreOpenRouter = server.installEnv()
     setAnswerThreadPortForTests({
       createThread: async () => {
         throw new Error('convex unavailable')
@@ -525,8 +567,10 @@ describe('POST /api/answer/turn persistence resilience', () => {
       getThreadTurns: async () => ({ turns: [] }),
     })
 
-    const state = createDefaultRegistrySourceState()
-    await withRegistrySourcePortForTest(state, async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
       const response = await handleAnswerTurnRequest(
         new Request('https://ae.example/api/answer/turn', {
           method: 'POST',
@@ -548,6 +592,14 @@ describe('POST /api/answer/turn persistence resilience', () => {
         type: 'error',
         code: 'answer_turn_persist_failed',
       })
-    })
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
   })
 })

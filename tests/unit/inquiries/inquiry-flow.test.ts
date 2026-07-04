@@ -888,7 +888,7 @@ function supportRecord(overrides: Partial<CapabilityLaunchSupportRecord> = {}): 
         action: 'Hold delivery status separately from the saved message.',
       },
     ],
-    evidenceRefs: ['tests/unit/inquiries/inquiry-flow.test.ts', '.planning/phases/02-human-inquiry-owner-inbox/02-EXECUTION-EVIDENCE.md'],
+    evidenceRefs: ['tests/unit/inquiries/inquiry-flow.test.ts', '.planning/archive/phases/02-human-inquiry-owner-inbox/02-EXECUTION-EVIDENCE.md'],
     sourceHash: stableHash({ supportRecord: 'human_inquiry_owner_inbox' }),
     correlationId: correlationId('support-record'),
     lastReviewedAt: now + 1_000,

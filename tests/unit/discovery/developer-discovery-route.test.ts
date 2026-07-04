@@ -50,11 +50,7 @@ const privateP2FieldNames = [
 describe('developer discovery route readback', () => {
   it('renders available public catalog facts with schema, example, download, and unsupported labels', async () => {
     const state = createDefaultDiscoverySourceState()
-    const generated = regenerateDiscoveryManifest(
-      state,
-      { businessId: firstBusiness(state).businessId },
-      { now: 3_000 }
-    )
+    const generated = regenerateDiscoveryManifest(state, { businessId: firstBusiness(state).businessId }, { canonicalBaseUrl: 'https://agentic.test', now: 3_000 })
 
     expect(generated.kind).toBe('ok')
 

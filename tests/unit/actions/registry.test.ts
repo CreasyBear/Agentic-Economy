@@ -25,6 +25,14 @@ describe('action registry', () => {
     expect(ids).toContain('registry.detail')
   })
 
+  it('registers storefront import for owner UI and HTTP but not quiet agent tools', () => {
+    const action = findAction('storefront.importDraft')
+    expect(action).toBeDefined()
+    expect(action?.readOnly).toBe(true)
+    expect(action?.surfaces).toEqual(['ui', 'http'])
+    expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['websiteUrl', 'abn'])
+  })
+
   it('exposes only qualified inquiry submit plus registry search/detail as quiet agent tools', () => {
     const exposed = listAgentToolActions().map((action) => action.id)
     expect(exposed).toEqual(['inquiry.submit', 'registry.search', 'registry.detail'])
@@ -49,6 +57,7 @@ describe('action registry', () => {
     const submit = describeActionForAgent(findAction('inquiry.submit')!)
     expect(submit.hasOutputSchema).toBe(true)
     expect(submit.outputJsonSchema).toBeDefined()
+    expect(submit.inputJsonSchema).toBeDefined()
   })
 
   it('marks the registry actions as read-only with honest boundaries', () => {
@@ -92,6 +101,9 @@ describe('action registry', () => {
     expect(descriptor.boundaries.length).toBeGreaterThan(0)
     expect(descriptor.summary).toMatch(/inquiry/i)
     expect(descriptor.parameters.map((p) => p.name)).toContain('target.businessId')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('target.serviceId')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('target.businessSlug')
+    expect(descriptor.parameters.map((p) => p.name)).toContain('target.serviceSlug')
     expect(descriptor.parameters.map((p) => p.name)).toContain('body')
   })
 

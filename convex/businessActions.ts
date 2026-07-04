@@ -14,8 +14,25 @@ import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
 import type { RuntimeDb, RuntimeDocument } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
+import { stableHash } from '../src/modules/common/stable-hash'
+import {
+  ClearanceSigningKeyIdEnvName,
+  ClearanceSigningSecretEnvName,
+  buildClearanceGreenlightSigningPayload,
+  buildClearanceReceiptSigningPayload,
+  boundClearanceEvidenceRefHashes,
+  boundClearanceRecordEvidence,
+  consumeClearanceGreenlight,
+  createClearanceMandate,
+  evaluateClearanceMandate,
+  putClearanceRecordIfAbsentOrSame,
+  recordClearanceProofGap,
+  readClearanceRecord,
+  signClearanceRecord,
+  type ClearanceProtocolRecord,
+} from '../src/modules/clearance/public'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import type { BusinessId, CapabilityRequestId, OperationKey, OwnerId } from '../src/modules/common/ids'
+import type { BusinessId, CapabilityRequestId, OperationKey, OwnerId, SourceHash } from '../src/modules/common/ids'
 import {
   ActionReceiptOutcomeValues,
   AuthorizationCheckpointDecisionValues,
@@ -26,7 +43,7 @@ import {
   BusinessActionGuardrailProviderValues,
   BusinessActionOperatorControlKeyValues,
   BusinessActionResultArtifactStatusValues,
-  BusinessActionSlug,
+  BusinessActionSlugValues,
   BusinessActionSupportStatusValues,
   BuyerMandateStatusValues,
   CapabilityRequestStatusValues,
@@ -77,7 +94,7 @@ const sourceWriteProtectedActionArgs = {
 } as const
 
 const currency = v.union(v.literal('aud'), v.literal('usd'))
-const actionSlug = v.literal(BusinessActionSlug)
+const actionSlug = literalUnion(BusinessActionSlugValues)
 const cardStatus = literalUnion(BusinessActionCardStatusValues)
 const mandateStatus = literalUnion(BuyerMandateStatusValues)
 const requestStatus = literalUnion(CapabilityRequestStatusValues)
@@ -145,10 +162,12 @@ const businessActionReceipt = v.object({
   policyHash: v.optional(v.string()),
   externalEvidenceRefHashes: v.array(v.string()),
   guardrailEvidenceRefHashes: v.array(v.string()),
+  boundEvidenceRefHashes: v.array(v.string()),
   resultArtifactHash: v.optional(v.string()),
   previousReceiptHash: v.optional(v.string()),
   signatureRefHash: v.string(),
   reconstructionStatus: receiptReconstructionStatus,
+  checkedEvidenceStatus: v.union(v.literal('complete'), v.literal('needs_review'), v.literal('proof_gap')),
   payloadHash: v.string(),
   idempotencyKey: v.string(),
   correlationId: v.string(),
@@ -433,6 +452,287 @@ const adminSourceStateResult = v.union(
   })
 )
 
+
+type BusinessActionClearanceResult =
+  | { kind: 'ok' }
+  | {
+      kind: 'error'
+      code:
+        | 'business_action_owner_decision_required'
+        | 'business_action_checkpoint_expired'
+        | 'business_action_idempotency_conflict'
+        | 'business_action_evidence_unbound'
+      reason: string
+    }
+
+async function recordAndConsumeBusinessActionCheckpointClearance(
+  db: RuntimeDb,
+  state: BusinessActionSourceState,
+  input: {
+    authority: BusinessActionOwnerAuthority | undefined
+    request: CapabilityRequest
+    checkpoint: AuthorizationCheckpoint
+    operationKey: string
+    now: number
+  }
+): Promise<BusinessActionClearanceResult> {
+  if (input.authority === undefined) {
+    return { kind: 'error', code: 'business_action_owner_decision_required', reason: 'owner_authority_required' }
+  }
+
+  const buyerMandate = state.mandates.find((candidate) => candidate.id === input.request.mandateId)
+  if (buyerMandate === undefined) {
+    return { kind: 'error', code: 'business_action_owner_decision_required', reason: 'mandate_not_found' }
+  }
+
+  const mandate = createClearanceMandate({
+    mandateId: buyerMandate.id,
+    principalId: input.authority.actorRef,
+    actionClass: 'business_action',
+    actionRef: input.request.actionSlug,
+    allowedScopes: ['business_action.owner_checkpoint'],
+    status: buyerMandate.status,
+    createdAt: buyerMandate.createdAt,
+    expiresAt: buyerMandate.expiresAt,
+    revokedAt: buyerMandate.revokedAt,
+    maxAmountCents: buyerMandate.maxAmountCents,
+  })
+  const mandateEvaluation = evaluateClearanceMandate({
+    mandate,
+    principalId: input.authority.actorRef,
+    actionClass: 'business_action',
+    actionRef: input.request.actionSlug,
+    scope: 'business_action.owner_checkpoint',
+    amountCents: input.request.amountCents,
+    now: input.now,
+  })
+  if (mandateEvaluation.kind === 'rejected') {
+    return { kind: 'error', code: 'business_action_owner_decision_required', reason: mandateEvaluation.reason }
+  }
+
+  const recordId = businessActionCheckpointGreenlightRecordId(input.request.id, input.checkpoint.id)
+  const payloadHash = stableHash({
+    requestId: input.request.id,
+    requestHash: input.request.requestHash,
+    checkpointId: input.checkpoint.id,
+    checkpointHash: input.checkpoint.checkpointHash,
+    decision: input.checkpoint.decision,
+    ownerDecisionRef: input.checkpoint.ownerDecisionRef ?? null,
+    reasonCode: input.checkpoint.reasonCode,
+    expiresAt: input.checkpoint.expiresAt,
+  })
+  const signingPayload = buildClearanceGreenlightSigningPayload({
+    principalId: input.authority.actorRef,
+    actionClass: 'business_action',
+    actionRef: input.request.actionSlug,
+    mandateId: input.request.mandateId,
+    requestRef: input.request.id,
+    idempotencyKey: `${input.operationKey}:checkpoint-clearance`,
+    issuedAt: input.now,
+    expiresAt: input.checkpoint.expiresAt,
+    payloadHash,
+  })
+  const signed = signClearanceRecord({
+    kind: 'greenlight',
+    payload: signingPayload,
+    secret: readBusinessActionEnv(ClearanceSigningSecretEnvName),
+    keyIdentityRef: readBusinessActionEnv(ClearanceSigningKeyIdEnvName) ?? '',
+    signedAt: new Date(input.now).toISOString(),
+  })
+  const record: ClearanceProtocolRecord = {
+    recordId,
+    recordKind: 'greenlight',
+    principalId: input.authority.actorRef,
+    actionClass: 'business_action',
+    actionRef: input.request.actionSlug,
+    mandateId: input.request.mandateId,
+    requestRef: input.request.id,
+    idempotencyKey: `${input.operationKey}:checkpoint-clearance`,
+    payloadHash,
+    signaturePosture: 'local_hmac',
+    keyIdentityRef: signed.keyIdentityRef,
+    status: signed.kind === 'signed' ? 'accepted' : 'proof_gap',
+    createdAt: input.now,
+    expiresAt: input.checkpoint.expiresAt,
+    ...(signed.kind === 'signed'
+      ? { signature: signed.signature, signedAt: signed.signedAt }
+      : { proofGapReason: signed.reason }),
+  }
+
+  const put = signed.kind === 'signed'
+    ? await putClearanceRecordIfAbsentOrSame(db, record)
+    : await recordClearanceProofGap(db, record)
+  if (put.kind === 'rejected') {
+    return { kind: 'error', code: 'business_action_idempotency_conflict', reason: put.reason }
+  }
+  if (signed.kind !== 'signed') {
+    return { kind: 'error', code: 'business_action_owner_decision_required', reason: signed.reason }
+  }
+
+  const consumed = await consumeClearanceGreenlight(db, {
+    greenlightRef: recordId,
+    principalId: input.authority.actorRef,
+    actionClass: 'business_action',
+    actionRef: input.request.actionSlug,
+    now: input.now,
+    consumedByRef: `${input.operationKey}:checkpoint-clearance-consume`,
+  })
+  if (consumed.kind === 'consumed') {
+    return { kind: 'ok' }
+  }
+
+  return {
+    kind: 'error',
+    code: consumed.reason === 'clearance_greenlight_expired'
+      ? 'business_action_checkpoint_expired'
+      : consumed.reason === 'clearance_greenlight_required'
+        ? 'business_action_owner_decision_required'
+        : 'business_action_idempotency_conflict',
+    reason: consumed.reason,
+  }
+}
+
+function businessActionCheckpointGreenlightRecordId(requestId: string, checkpointId: string): string {
+  return `clearance:greenlight:${requestId}:${checkpointId}`
+}
+
+async function recordBusinessActionReceiptClearance(
+  db: RuntimeDb,
+  state: BusinessActionSourceState,
+  receipt: ActionReceipt,
+  input: { operationKey: string; recordedAt: number }
+): Promise<BusinessActionClearanceResult> {
+  const request = state.requests.find((candidate) => candidate.id === receipt.requestId)
+  const checkpoint = receipt.checkpointHash === undefined
+    ? undefined
+    : state.checkpoints.find(
+      (candidate) =>
+        candidate.requestId === receipt.requestId && candidate.checkpointHash === receipt.checkpointHash,
+    )
+  if (request === undefined || checkpoint === undefined) {
+    return { kind: 'error', code: 'business_action_evidence_unbound', reason: 'receipt_clearance_source_missing' }
+  }
+
+  const greenlightRef = businessActionCheckpointGreenlightRecordId(request.id, checkpoint.id)
+  const greenlight = await readClearanceRecord(db, greenlightRef)
+  if (
+    greenlight === undefined ||
+    greenlight.recordKind !== 'greenlight' ||
+    greenlight.status !== 'consumed' ||
+    greenlight.actionClass !== 'business_action' ||
+    greenlight.actionRef !== request.actionSlug ||
+    greenlight.requestRef !== request.id ||
+    greenlight.mandateId !== request.mandateId
+  ) {
+    return { kind: 'error', code: 'business_action_evidence_unbound', reason: 'receipt_clearance_greenlight_unbound' }
+  }
+
+  const principalId = greenlight.principalId
+  const payloadHash = stableHash({
+    receiptId: receipt.id,
+    receiptPayloadHash: receipt.payloadHash,
+    requestId: request.id,
+    requestHash: request.requestHash,
+    checkpointId: checkpoint.id,
+    checkpointHash: checkpoint.checkpointHash,
+    outcome: receipt.outcome,
+  })
+  const signingPayload = buildClearanceReceiptSigningPayload({
+    principalId,
+    actionClass: 'business_action',
+    actionRef: request.actionSlug,
+    mandateId: request.mandateId,
+    requestRef: request.id,
+    greenlightRef,
+    receiptRef: receipt.id,
+    idempotencyKey: `${input.operationKey}:receipt-clearance`,
+    outcome: clearanceReceiptOutcomeFor(receipt.outcome),
+    issuedAt: input.recordedAt,
+    payloadHash,
+  })
+  const signed = signClearanceRecord({
+    kind: 'receipt',
+    payload: signingPayload,
+    secret: readBusinessActionEnv(ClearanceSigningSecretEnvName),
+    keyIdentityRef: readBusinessActionEnv(ClearanceSigningKeyIdEnvName) ?? '',
+    signedAt: new Date(input.recordedAt).toISOString(),
+  })
+  const record: ClearanceProtocolRecord = {
+    recordId: `clearance:receipt:${receipt.id}`,
+    recordKind: 'receipt',
+    principalId,
+    actionClass: 'business_action',
+    actionRef: request.actionSlug,
+    mandateId: request.mandateId,
+    requestRef: request.id,
+    greenlightRef,
+    idempotencyKey: `${input.operationKey}:receipt-clearance`,
+    payloadHash,
+    signaturePosture: 'local_hmac',
+    keyIdentityRef: signed.keyIdentityRef,
+    status: signed.kind === 'signed' ? 'accepted' : 'proof_gap',
+    createdAt: input.recordedAt,
+    ...(signed.kind === 'signed'
+      ? { signature: signed.signature, signedAt: signed.signedAt }
+      : { proofGapReason: signed.reason }),
+  }
+  const put = signed.kind === 'signed'
+    ? await putClearanceRecordIfAbsentOrSame(db, record)
+    : await recordClearanceProofGap(db, record)
+  if (put.kind === 'rejected') {
+    return { kind: 'error', code: 'business_action_idempotency_conflict', reason: put.reason }
+  }
+  if (signed.kind !== 'signed') {
+    return { kind: 'error', code: 'business_action_evidence_unbound', reason: signed.reason }
+  }
+
+
+  return { kind: 'ok' }
+}
+
+function greenlightMatchesBusinessActionReceipt(
+  greenlight: ClearanceProtocolRecord | undefined,
+  request: BusinessActionSourceState['requests'][number],
+  checkpoint: AuthorizationCheckpoint
+): greenlight is ClearanceProtocolRecord {
+  return (
+    greenlight !== undefined &&
+    greenlight.recordKind === 'greenlight' &&
+    greenlight.status === 'consumed' &&
+    greenlight.actionClass === 'business_action' &&
+    greenlight.actionRef === request.actionSlug &&
+    greenlight.requestRef === request.id &&
+    greenlight.mandateId === request.mandateId &&
+    greenlight.recordId === businessActionCheckpointGreenlightRecordId(request.id, checkpoint.id)
+  )
+}
+
+function clearanceReceiptOutcomeFor(
+  outcome: ActionReceipt['outcome'],
+): 'accepted' | 'refused' | 'proof_gap' | 'expired' {
+  switch (outcome) {
+    case 'success':
+      return 'accepted'
+    case 'refused':
+      return 'refused'
+    case 'expired':
+    case 'stale_card':
+      return 'expired'
+    case 'clarification_required':
+    case 'evidence_mismatch':
+    case 'tampered':
+    case 'unbound_provider_event':
+    case 'proof_gap':
+      return 'proof_gap'
+  }
+}
+
+function readBusinessActionEnv(name: string): string | undefined {
+  const value = typeof process === 'undefined' ? undefined : process.env[name]
+  const trimmed = value?.trim()
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed
+}
+
 type RuntimeCtx = {
   db: object
   auth: {
@@ -568,7 +868,7 @@ export const createBusinessActionCapabilityRequest = mutationGeneric({
       return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
     }
 
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return adapterError('business_action_source_write_rejected', sourceWrite.reason)
     }
@@ -580,9 +880,10 @@ export const createBusinessActionCapabilityRequest = mutationGeneric({
       operationKey: args.operationKey,
     })
     const mandate = state.mandates.find((candidate) => candidate.id === args.mandateId)
+    const card = state.cards.find((candidate) => candidate.id === args.cardId)
     const now = Date.now()
     const result = createCapabilityRequest(state, {
-      actionSlug: BusinessActionSlug,
+      actionSlug: card?.actionSlug ?? mandate?.allowedActionSlug ?? BusinessActionSlugValues[0],
       cardId: args.cardId as never,
       mandateId: args.mandateId as never,
       businessId: brandNonEmpty(args.businessId, 'BusinessId'),
@@ -625,7 +926,7 @@ export const recordBusinessActionOwnerCheckpoint = mutationGeneric({
       return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
     }
 
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return adapterError('business_action_source_write_rejected', sourceWrite.reason)
     }
@@ -639,6 +940,8 @@ export const recordBusinessActionOwnerCheckpoint = mutationGeneric({
 
     const owner = await readCurrentOwnerIdentity(ctx)
     const authority = owner.kind === 'denied' ? undefined : await ownerAuthorityForRequest(db, owner.identity, request)
+
+    const now = Date.now()
     const result = recordAuthorizationCheckpoint(state, {
       requestId: request.id,
       decision: args.decision,
@@ -647,11 +950,22 @@ export const recordBusinessActionOwnerCheckpoint = mutationGeneric({
       reasonCode: args.reasonCode,
       idempotencyKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
-      now: Date.now(),
+      now,
       expiresAt: args.expiresAt,
     })
     if (result.kind === 'error') {
       return moduleError(result)
+    }
+
+    const clearance = await recordAndConsumeBusinessActionCheckpointClearance(db, state, {
+      authority,
+      request,
+      checkpoint: result.checkpoint,
+      operationKey: args.operationKey,
+      now,
+    })
+    if (clearance.kind === 'error') {
+      return adapterError(clearance.code, clearance.reason)
     }
 
     await persistBusinessActionSlice(db, result.state)
@@ -678,21 +992,41 @@ export const recordBusinessActionReceipt = mutationGeneric({
       return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
     }
 
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return adapterError('business_action_source_write_rejected', sourceWrite.reason)
     }
 
     const db = runtimeDb(ctx.db)
     const state = await loadBusinessActionRequestSlice(db, args.requestId)
+    const request = state.requests.find((candidate) => candidate.id === args.requestId)
+    const checkpoint = request === undefined ? undefined : state.checkpoints.filter((candidate) => candidate.requestId === request.id).at(-1)
+    if (request === undefined || checkpoint === undefined) {
+      return adapterError('business_action_evidence_unbound', 'receipt_clearance_source_missing')
+    }
+    const greenlightRef = businessActionCheckpointGreenlightRecordId(request.id, checkpoint.id)
+    const greenlight = await readClearanceRecord(db, greenlightRef)
+    if (!greenlightMatchesBusinessActionReceipt(greenlight, request, checkpoint)) {
+      return adapterError('business_action_evidence_unbound', 'receipt_clearance_greenlight_unbound')
+    }
+    const boundEvidenceRefHashes = boundClearanceEvidenceRefHashes([boundClearanceRecordEvidence(greenlight)])
     const result = recordActionReceipt(state, {
       requestId: args.requestId as CapabilityRequestId,
       idempotencyKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
       recordedAt: Date.now(),
+      boundEvidenceRefHashes,
     })
     if (result.kind === 'error') {
       return moduleError(result)
+    }
+
+    const clearance = await recordBusinessActionReceiptClearance(db, result.state, result.receipt, {
+      operationKey: args.operationKey,
+      recordedAt: result.receipt.recordedAt,
+    })
+    if (clearance.kind === 'error') {
+      return adapterError(clearance.code, clearance.reason)
     }
 
     await persistBusinessActionSlice(db, result.state)
@@ -727,7 +1061,7 @@ export const recordBusinessActionGuardrailDecision = mutationGeneric({
       return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
     }
 
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return adapterError('business_action_source_write_rejected', sourceWrite.reason)
     }
@@ -778,7 +1112,7 @@ export const recordBusinessActionHermesEvidence = mutationGeneric({
       return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
     }
 
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return adapterError('business_action_source_write_rejected', sourceWrite.reason)
     }
@@ -819,7 +1153,7 @@ export const recordBusinessActionStripeWebhook = mutationGeneric({
   },
   returns: stripeWebhookMutationResult,
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'protected_action')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
     if (sourceWrite.kind === 'rejected') {
       return {
         kind: 'error' as const,
@@ -1061,6 +1395,7 @@ function serializeReceipt(receipt: ActionReceipt) {
     ...receipt,
     externalEvidenceRefHashes: [...receipt.externalEvidenceRefHashes],
     guardrailEvidenceRefHashes: [...receipt.guardrailEvidenceRefHashes],
+    boundEvidenceRefHashes: [...receipt.boundEvidenceRefHashes],
   }
 }
 

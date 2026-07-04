@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest'
 import { scanCopyClaims } from '@/lib/ui/contract-scans'
 
 const phase4Files = [
-  '.planning/phases/04-owner-pending-protected-actions/04-ACTION-SELECTION.md',
-  '.planning/phases/04-owner-pending-protected-actions/04-UI-SPEC.md',
+  '.planning/archive/phases/04-owner-pending-protected-actions/04-ACTION-SELECTION.md',
+  '.planning/archive/phases/04-owner-pending-protected-actions/04-UI-SPEC.md',
   'convex/protectedActions.ts',
   'src/modules/protected-action/contact-follow-up.functions.ts',
   'src/modules/protected-action/internal/contact-follow-up.ts',
@@ -27,7 +27,7 @@ describe('phase 4 protected-action copy contract', () => {
   })
 
   it('keeps the action-selection record boring, non-money, and evidence-backed', () => {
-    const selection = readFileSync('.planning/phases/04-owner-pending-protected-actions/04-ACTION-SELECTION.md', 'utf8')
+    const selection = readFileSync('.planning/archive/phases/04-owner-pending-protected-actions/04-ACTION-SELECTION.md', 'utf8')
 
     expect(selection).toContain('selectedActionSlug: contact-follow-up')
     expect(selection).toContain('source_owned_follow_up_outbox')
@@ -38,7 +38,7 @@ describe('phase 4 protected-action copy contract', () => {
   })
 
   it('keeps selected-action UI copy explicit about owner approval and unavailable future surfaces', () => {
-    const uiSpec = readFileSync('.planning/phases/04-owner-pending-protected-actions/04-UI-SPEC.md', 'utf8')
+    const uiSpec = readFileSync('.planning/archive/phases/04-owner-pending-protected-actions/04-UI-SPEC.md', 'utf8')
 
     expect(uiSpec).toContain('Owner-approved customer contact follow-up request')
     expect(uiSpec).toContain('contact-follow-up')

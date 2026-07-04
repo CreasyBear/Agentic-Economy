@@ -1,6 +1,7 @@
 import { clerkMiddleware } from '@clerk/tanstack-react-start/server'
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 
+import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/http/security-headers'
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
 
 const observabilityRequestMiddleware = createMiddleware().server(async (ctx) => {
@@ -35,6 +36,14 @@ const csrfMiddleware = createCsrfMiddleware({
   filter: (ctx) => ctx.handlerType === 'serverFn',
 })
 const sourceWriteAdmissionMiddleware = createSourceWriteAdmissionMiddleware()
+const securityHeadersRequestMiddleware = createMiddleware().server(async (ctx) => {
+  const result = await ctx.next()
+  return {
+    ...result,
+    response: applySecurityHeadersToResponse(result.response, { cspMode: resolveCspModeFromEnv() }),
+  }
+})
+
 const clerkRequestMiddleware = usesClerkBypass() ? [] : [clerkMiddleware()]
 
 function usesClerkBypass(): boolean {
@@ -52,6 +61,7 @@ function usesClerkBypass(): boolean {
 export const startInstance = createStart(() => ({
   requestMiddleware: [
     observabilityRequestMiddleware,
+    securityHeadersRequestMiddleware,
     csrfMiddleware,
     sourceWriteAdmissionMiddleware,
     ...clerkRequestMiddleware,

@@ -27,7 +27,8 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+      { rel: 'icon', href: '/brand/logo/ae-favicon.svg', type: 'image/svg+xml' },
+      { rel: 'apple-touch-icon', href: '/brand/logo/ae-app-icon.svg' },
     ],
   }),
   component: RootComponent,

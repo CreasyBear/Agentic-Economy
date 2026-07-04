@@ -25,8 +25,7 @@ export function AeInquiryInboxPanel({ inbox }: AeInquiryInboxPanelProps) {
   const filtered = useMemo(() => {
     const normalizedQuery = normalizeQuery(query)
     return inbox.inquiries
-      .filter((inquiry) => inquiryMatchesFilter(inquiry, filter))
-      .filter((inquiry) => inquiryMatchesQuery(inquiry, normalizedQuery))
+      .filter((inquiry) => inquiryMatchesFilter(inquiry, filter) && inquiryMatchesQuery(inquiry, normalizedQuery))
       .sort(compareInboxPriority)
   }, [filter, inbox.inquiries, query])
 

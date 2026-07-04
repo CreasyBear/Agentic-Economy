@@ -3,10 +3,12 @@ import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/rea
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
 import { Banner } from '@astryxdesign/core/Banner'
+import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
 import { Field } from '@astryxdesign/core/Field'
 import { FormLayout } from '@astryxdesign/core/FormLayout'
-
+import { Text } from '@astryxdesign/core/Text'
 import { AeClaimFormSection } from '@/components/ae/forms/AeClaimFormSection'
 import { AeCheckboxField } from '@/components/ae/forms/AeCheckboxField'
 import { AeFileUploadField } from '@/components/ae/forms/AeFileUploadField'
@@ -17,9 +19,11 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
+import { importStorefrontDraftServer } from '@/modules/storefront/storefront.functions'
 import { requireClaimOwnerSession } from '@/lib/server/claim-owner-session'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaimValidationError } from '@/modules/catalog/public'
+import type { StorefrontImportDraft } from '@/modules/storefront/public'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 
 type TextClaimField = Exclude<PublicOwnerClaimField, 'firstRequestMode'>
@@ -90,6 +94,7 @@ function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInp
 }
 
 const submitClaimServer = submitOwnerClaimServer
+const importDraftServer = importStorefrontDraftServer
 
 const identityFields = [
   {
@@ -183,7 +188,7 @@ const firstRequestModeOptions = [
   {
     value: 'quote_request_available',
     label: 'Quote request instructions supplied',
-    description: 'Show public instructions without implying booking or payment.',
+    description: 'Show public instructions and keep price and timing with the business.',
   },
 ] as const
 
@@ -208,7 +213,13 @@ function ClaimRoute() {
   const [errors, setErrors] = useState<readonly PublicOwnerClaimValidationError[]>([])
   const [message, setMessage] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
+  const importDraft = useServerFn(importDraftServer)
   const [factsConfirmed, setFactsConfirmed] = useState(false)
+  const [importWebsiteUrl, setImportWebsiteUrl] = useState('')
+  const [importAbn, setImportAbn] = useState('')
+  const [importPending, setImportPending] = useState(false)
+  const [importDraftResult, setImportDraftResult] = useState<StorefrontImportDraft | undefined>()
+  const [importMessage, setImportMessage] = useState<string | undefined>()
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
   const firstRequestModeError = errorByField.get('firstRequestMode')
   const firstRequestModeInvalid = firstRequestModeError !== undefined
@@ -219,6 +230,30 @@ function ClaimRoute() {
 
   function updateTextField(field: TextClaimField, nextValue: string) {
     setValue((current) => ({ ...current, [field]: nextValue }))
+  }
+
+  async function handleImportDraft() {
+    setImportMessage(undefined)
+    setImportPending(true)
+    try {
+      const result = await importDraft({
+        data: {
+          websiteUrl: importWebsiteUrl,
+          ...(importAbn.trim().length === 0 ? {} : { abn: importAbn }),
+        },
+      })
+      if (result.kind === 'ok') {
+        setImportDraftResult(result.draft)
+        setValue(result.draft.profile)
+        setFactsConfirmed(false)
+        setImportMessage('Review the imported draft below. Nothing publishes until you confirm and submit.')
+        return
+      }
+
+      setImportMessage(result.reason)
+    } finally {
+      setImportPending(false)
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -266,12 +301,42 @@ function ClaimRoute() {
         {message === undefined ? null : (
           <Banner status="error" title="Publish did not complete" description={message} />
         )}
+        <ImportDraftSection
+          websiteUrl={importWebsiteUrl}
+          abn={importAbn}
+          draft={importDraftResult}
+          message={importMessage}
+          pending={importPending}
+          onWebsiteUrlChange={setImportWebsiteUrl}
+          onAbnChange={setImportAbn}
+          onImport={handleImportDraft}
+        />
         <AeClaimFormSection title="Business identity" description="This is how customers recognize the business.">
-          <FormLayout>{identityFields.map((field) => renderField(field, value, errorByField, updateTextField, pending))}</FormLayout>
+          <FormLayout>
+            {identityFields.map((field) => (
+              <ClaimTextField
+                key={field.field}
+                config={field}
+                value={value}
+                errorByField={errorByField}
+                updateTextField={updateTextField}
+                disabled={pending}
+              />
+            ))}
+          </FormLayout>
         </AeClaimFormSection>
         <AeClaimFormSection title="Service details" description="Add one service people can understand quickly.">
           <FormLayout>
-            {serviceFields.map((field) => renderField(field, value, errorByField, updateTextField, pending))}
+            {serviceFields.map((field) => (
+              <ClaimTextField
+                key={field.field}
+                config={field}
+                value={value}
+                errorByField={errorByField}
+                updateTextField={updateTextField}
+                disabled={pending}
+              />
+            ))}
             <ResponseTimeField
               value={value}
               errorByField={errorByField}
@@ -309,42 +374,42 @@ function ClaimRoute() {
                 }}
               />
             </Field>
-            {renderField(
-              {
+            <ClaimTextField
+              config={{
                 field: 'publicDisclosure',
                 label: 'Public first-request note',
                 description: 'This note appears on the public service page.',
                 control: 'textarea',
-              },
-              value,
-              errorByField,
-              updateTextField,
-              pending
-            )}
-            {renderField(
-              {
+              }}
+              value={value}
+              errorByField={errorByField}
+              updateTextField={updateTextField}
+              disabled={pending}
+            />
+            <ClaimTextField
+              config={{
                 field: 'noContactReason',
                 label: 'Unavailable reason',
                 description: 'Required when the first request is not available yet.',
                 control: 'textarea',
-              },
-              value,
-              errorByField,
-              updateTextField,
-              pending
-            )}
-            {renderField(
-              {
+              }}
+              value={value}
+              errorByField={errorByField}
+              updateTextField={updateTextField}
+              disabled={pending}
+            />
+            <ClaimTextField
+              config={{
                 field: 'ownerMessage',
                 label: 'Owner message',
                 description: 'Optional context. Avoid private contact details here.',
                 control: 'textarea',
-              },
-              value,
-              errorByField,
-              updateTextField,
-              pending
-            )}
+              }}
+              value={value}
+              errorByField={errorByField}
+              updateTextField={updateTextField}
+              disabled={pending}
+            />
           </FormLayout>
         </AeClaimFormSection>
         <AeReviewBlock value={value} />
@@ -370,6 +435,126 @@ function ClaimRoute() {
         </form>
       )}
     </AePublicShell>
+  )
+}
+
+function ImportDraftSection({
+  websiteUrl,
+  abn,
+  draft,
+  message,
+  pending,
+  onWebsiteUrlChange,
+  onAbnChange,
+  onImport,
+}: {
+  websiteUrl: string
+  abn: string
+  draft: StorefrontImportDraft | undefined
+  message: string | undefined
+  pending: boolean
+  onWebsiteUrlChange: (value: string) => void
+  onAbnChange: (value: string) => void
+  onImport: () => void
+}) {
+  const websiteDescriptionId = 'storefront-import-url-description'
+  const abnDescriptionId = 'storefront-import-abn-description'
+  const inputClassName = 'min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50'
+
+  return (
+    <AeClaimFormSection
+      title="Start from a website"
+      description="Import a draft from a business website, then review and edit every public fact before publishing."
+    >
+      <div className="grid gap-4">
+        {message === undefined ? null : (
+          <Banner
+            status={draft === undefined ? 'error' : 'success'}
+            title={draft === undefined ? 'Draft import needs attention' : 'Draft imported for review'}
+            description={message}
+          />
+        )}
+        <FormLayout>
+          <Field
+            label="Business website URL"
+            inputID="storefront-import-url"
+            description="We read title, description, service, and contact cues into an unpublished draft."
+            descriptionID={websiteDescriptionId}
+          >
+            <input
+              id="storefront-import-url"
+              name="storefront-import-url"
+              type="url"
+              aria-label="Business website URL"
+              value={websiteUrl}
+              disabled={pending}
+              aria-describedby={websiteDescriptionId}
+              className={inputClassName}
+              onChange={(event) => onWebsiteUrlChange(event.currentTarget.value)}
+            />
+          </Field>
+          <Field
+            label="ABN (optional)"
+            inputID="storefront-import-abn"
+            description="Stored only in the draft review. It is not published by the import."
+            descriptionID={abnDescriptionId}
+          >
+            <input
+              id="storefront-import-abn"
+              name="storefront-import-abn"
+              aria-label="ABN (optional)"
+              value={abn}
+              disabled={pending}
+              aria-describedby={abnDescriptionId}
+              className={inputClassName}
+              onChange={(event) => onAbnChange(event.currentTarget.value)}
+            />
+          </Field>
+        </FormLayout>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            label={pending ? 'Importing draft' : 'Import draft'}
+            type="button"
+            variant="secondary"
+            isDisabled={pending || websiteUrl.trim().length === 0}
+            onClick={onImport}
+          />
+          <Text type="supporting" color="secondary">
+            The draft stays unpublished until you confirm the reviewed form.
+          </Text>
+        </div>
+        {draft === undefined ? null : <ImportedDraftReview draft={draft} />}
+      </div>
+    </AeClaimFormSection>
+  )
+}
+
+function ImportedDraftReview({ draft }: { draft: StorefrontImportDraft }) {
+  return (
+    <Card padding={4} className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid gap-1">
+          <Text type="large" weight="semibold" color="primary" display="block">Review imported draft</Text>
+          <Text type="supporting" color="secondary" display="block">{draft.boundaryStatement}</Text>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="neutral" label={draft.source.label} />
+          <Badge variant="warning" label={draft.source.confirmation} />
+        </div>
+      </div>
+      <dl className="grid gap-3 sm:grid-cols-2">
+        {draft.facts.map((fact) => (
+          <div key={`${fact.field}:${fact.value}`} className="rounded-md border border-border bg-surface p-3">
+            <dt className="flex flex-wrap items-center gap-2 text-sm font-medium text-primary">
+              <span>{fact.label}</span>
+              <Badge variant="neutral" label={fact.sourceLabel} />
+              <Badge variant="warning" label={fact.confirmation} />
+            </dt>
+            <dd className="mt-1 break-words text-sm text-secondary">{fact.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
   )
 }
 
@@ -400,13 +585,19 @@ function ResponseTimeField({
   )
 }
 
-function renderField(
-  config: FieldConfig,
-  value: PublicOwnerClaimFlowInput,
-  errorByField: ReadonlyMap<PublicOwnerClaimField, string>,
-  updateTextField: (field: TextClaimField, nextValue: string) => void,
+function ClaimTextField({
+  config,
+  value,
+  errorByField,
+  updateTextField,
+  disabled,
+}: {
+  config: FieldConfig
+  value: PublicOwnerClaimFlowInput
+  errorByField: ReadonlyMap<PublicOwnerClaimField, string>
+  updateTextField: (field: TextClaimField, nextValue: string) => void
   disabled: boolean
-) {
+}) {
   const error = errorByField.get(config.field)
   const invalid = error !== undefined
   const descriptionId = `${config.field}-description`
@@ -423,6 +614,7 @@ function renderField(
     <textarea
       id={config.field}
       name={config.field}
+      aria-label={config.label}
       value={value[config.field] ?? ''}
       disabled={disabled}
       aria-describedby={describedBy}
@@ -437,6 +629,7 @@ function renderField(
     <input
       id={config.field}
       name={config.field}
+      aria-label={config.label}
       value={value[config.field] ?? ''}
       disabled={disabled}
       aria-describedby={describedBy}

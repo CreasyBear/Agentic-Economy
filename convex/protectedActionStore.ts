@@ -206,6 +206,7 @@ export async function persistContactFollowUpSlice(db: RuntimeDb, state: ContactF
         gatewayAdmissionId: attempt.gatewayAdmissionId,
         outcome: attempt.outcome,
         attemptHash: attempt.attemptHash,
+        boundEvidenceRefHashes: [...attempt.boundEvidenceRefHashes],
         ...(attempt.receiptId === undefined ? {} : { receiptId: attempt.receiptId }),
         ...(attempt.reason === undefined ? {} : { reason: attempt.reason }),
         idempotencyKey: attempt.idempotencyKey,
@@ -230,6 +231,7 @@ export async function persistContactFollowUpSlice(db: RuntimeDb, state: ContactF
         kind: receipt.kind,
         providerBoundary: receipt.providerBoundary,
         payloadHash: receipt.payloadHash,
+        boundEvidenceRefHashes: [...receipt.boundEvidenceRefHashes],
         redactedReadbackJson: JSON.stringify(receipt.redactedReadback),
         recordedAt: receipt.recordedAt,
       }
@@ -568,6 +570,7 @@ function toAttempt(row: RuntimeDocument): ContactFollowUpAttempt {
     gatewayAdmissionId: stringField(row, 'gatewayAdmissionId') as ContactFollowUpGatewayAdmissionId,
     outcome: attemptOutcomeField(row),
     attemptHash: brandNonEmpty(stringField(row, 'attemptHash'), 'SourceHash'),
+    boundEvidenceRefHashes: stringArrayField(row, 'boundEvidenceRefHashes').map((value) => brandNonEmpty(value, 'SourceHash')),
     ...(optionalStringField(row, 'receiptId') === undefined ? {} : { receiptId: stringField(row, 'receiptId') as ContactFollowUpReceiptId }),
     ...(optionalStringField(row, 'reason') === undefined ? {} : { reason: stringField(row, 'reason') }),
     idempotencyKey: brandNonEmpty(stringField(row, 'idempotencyKey'), 'OperationKey'),
@@ -584,6 +587,7 @@ function toReceipt(row: RuntimeDocument): ContactFollowUpReceipt {
     kind: receiptKind(row),
     providerBoundary: 'source_owned_follow_up_outbox',
     payloadHash: brandNonEmpty(stringField(row, 'payloadHash'), 'SourceHash'),
+    boundEvidenceRefHashes: stringArrayField(row, 'boundEvidenceRefHashes').map((value) => brandNonEmpty(value, 'SourceHash')),
     redactedReadback: redactedReadbackFromJson(stringField(row, 'redactedReadbackJson')),
     recordedAt: numberField(row, 'recordedAt'),
   }

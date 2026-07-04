@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
+import { resolveCanonicalBaseUrl } from '@/lib/server/canonical-url'
 import { discoveryTextResponse } from '@/lib/http/discovery-response'
 import { readPublicLlmsTxt } from '@/modules/discovery/discovery.functions'
 import {
@@ -16,7 +17,7 @@ export const Route = createFileRoute('/llms.txt')({
 
 export async function handleDurableLlmsTxtRequest(request: Request): Promise<Response> {
   const result = await readPublicLlmsTxt({
-    canonicalBaseUrl: requestOrigin(request),
+    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
   })
 
   return discoveryTextResponse(result.body, 'text/plain; charset=utf-8')
@@ -24,16 +25,9 @@ export async function handleDurableLlmsTxtRequest(request: Request): Promise<Res
 
 export function handleLlmsTxtRequest(request: Request): Response {
   const result = readFixtureLlmsTxt({
-    canonicalBaseUrl: requestOrigin(request),
+    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
   })
 
   return discoveryTextResponse(result.body, 'text/plain; charset=utf-8')
 }
 
-function requestOrigin(request: Request): string {
-  try {
-    return new URL(request.url).origin
-  } catch {
-    return 'https://ae.example'
-  }
-}

@@ -1,10 +1,12 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { buildDevSeedCatalogState } from '@/modules/dev/public'
 import type { ActionTimingSink } from '@/modules/common/action'
 import {
   createDefaultRegistrySourceState,
   createLocalE2eRegistrySourceState,
   getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
+  resolvePublishedInquiryTarget,
   searchPublicBusinessCatalog,
 } from '@/modules/registry/public'
 import type {
@@ -13,6 +15,7 @@ import type {
   PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
+  PublishedInquiryTargetResolution,
 } from '@/modules/registry/public'
 import {
   createConfiguredMeiliCatalogSearchPort,
@@ -27,6 +30,10 @@ export type PublicRegistrySourcePort = {
   list: (input: PublicBusinessCatalogQueryInput) => Promise<PublicBusinessCatalogApiPage>
   search: (input: PublicBusinessCatalogSearchInput) => Promise<PublicBusinessCatalogApiPage>
   detail: (input: { slug: string }) => Promise<PublicBusinessCatalogDetailResult>
+  resolveInquiryTarget: (input: {
+    businessSlug: string
+    serviceSlug: string
+  }) => Promise<PublishedInquiryTargetResolution>
 }
 
 export type PublicRegistryReadOptions = {
@@ -42,18 +49,13 @@ const searchPublicBusinessCatalogQuery = sourceQuery<PublicBusinessCatalogSearch
 const getPublicBusinessCatalogBySlugQuery = sourceQuery<{ slug: string }, PublicBusinessCatalogDetailResult>(
   'registry:getPublicBusinessCatalogBySlug'
 )
+const resolvePublishedInquiryTargetQuery = sourceQuery<
+  { businessSlug: string; serviceSlug: string },
+  PublishedInquiryTargetResolution
+>('registry:resolvePublishedInquiryTargetBySlug')
 
-let publicRegistrySourcePortForTests: PublicRegistrySourcePort | undefined
 let catalogSearchPortForTests: CatalogSearchPort | undefined
 let catalogSearchBackendForTests: CatalogSearchBackend | undefined
-
-export function setPublicRegistrySourcePortForTests(port: PublicRegistrySourcePort): () => void {
-  const previous = publicRegistrySourcePortForTests
-  publicRegistrySourcePortForTests = port
-  return () => {
-    publicRegistrySourcePortForTests = previous
-  }
-}
 
 export function setCatalogSearchPortForTests(port: CatalogSearchPort | undefined): () => void {
   const previous = catalogSearchPortForTests
@@ -135,6 +137,13 @@ export async function readPublicRegistryBusinessDetail(input: {
   return filterPublicRegistryDetail(getPublicRegistrySourcePort().detail(input))
 }
 
+export async function resolvePublicRegistryInquiryTarget(input: {
+  businessSlug: string
+  serviceSlug: string
+}): Promise<PublishedInquiryTargetResolution> {
+  return getPublicRegistrySourcePort().resolveInquiryTarget(input)
+}
+
 export function legacyPublicRegistryList(
   input: PublicBusinessCatalogQueryInput = {}
 ): PublicBusinessCatalogApiPage {
@@ -150,9 +159,6 @@ export function legacyPublicRegistryDetail(input: { slug: string }): PublicBusin
 }
 
 function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
-  if (publicRegistrySourcePortForTests !== undefined) {
-    return publicRegistrySourcePortForTests
-  }
 
   if (usesLocalE2eBypass()) {
     return createLegacyRegistrySourcePort()
@@ -168,19 +174,35 @@ function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
       queryRegistryWithLegacyFallback(() => callPublicSourceQuery(getPublicBusinessCatalogBySlugQuery, input), () =>
         legacyPublicRegistryDetail(input),
       ),
+    resolveInquiryTarget: (input) =>
+      queryRegistryWithLegacyFallback(
+        () => callPublicSourceQuery(resolvePublishedInquiryTargetQuery, input),
+        () => resolvePublishedInquiryTarget(createDefaultRegistrySourceState(), input),
+      ),
   }
 }
 
 function createLegacyRegistrySourcePort(): PublicRegistrySourcePort {
-  const state = usesLocalE2eBypass()
-    ? createLocalE2eRegistrySourceState()
-    : createDefaultRegistrySourceState()
+  const state = createLocalRegistrySourceState()
 
   return {
     list: (input) => Promise.resolve(listPublicBusinessCatalog(state, input)),
     search: (input) => Promise.resolve(searchPublicBusinessCatalog(state, input)),
     detail: (input) => Promise.resolve(getPublicBusinessCatalogBySlug(state, input)),
+    resolveInquiryTarget: (input) =>
+      Promise.resolve(resolvePublishedInquiryTarget(state, input)),
   }
+}
+
+function createLocalRegistrySourceState() {
+  const seed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+  if (seed === 'default') {
+    return createDefaultRegistrySourceState()
+  }
+  if (seed === 'broad') {
+    return buildDevSeedCatalogState().state
+  }
+  return createLocalE2eRegistrySourceState()
 }
 
 async function hydrateCatalogSearchResult(
@@ -249,7 +271,7 @@ function normalizePublicLimit(limit: number | undefined): number {
   return Math.min(Math.max(Math.trunc(limit), 1), 50)
 }
 
-async function filterPublicRegistryPage(
+export async function filterPublicRegistryPage(
   pagePromise: Promise<PublicBusinessCatalogApiPage>,
 ): Promise<PublicBusinessCatalogApiPage> {
   const page = await pagePromise
@@ -271,7 +293,7 @@ async function filterPublicRegistryPage(
   }
 }
 
-async function filterPublicRegistryDetail(
+export async function filterPublicRegistryDetail(
   detailPromise: Promise<PublicBusinessCatalogDetailResult>,
 ): Promise<PublicBusinessCatalogDetailResult> {
   const detail = await detailPromise
@@ -317,16 +339,12 @@ function isAgenticEconomySmokeCatalog(item: PublicBusinessCatalogApiDto): boolea
 async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallback: () => T): Promise<T> {
   try {
     return await query()
-  } catch {
-    if (shouldFallbackToLegacyRegistry()) {
+  } catch (error) {
+    if (usesLocalE2eBypass()) {
       return fallback()
     }
-    throw new Error('registry_query_failed')
+    throw new Error('registry_source_query_failed', { cause: error })
   }
-}
-
-function shouldFallbackToLegacyRegistry(): boolean {
-  return usesLocalE2eBypass() || process.env.NODE_ENV !== 'production'
 }
 
 function usesLocalE2eBypass(): boolean {

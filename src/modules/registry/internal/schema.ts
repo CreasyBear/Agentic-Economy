@@ -50,6 +50,7 @@ export const registryTables = {
     serviceCount: v.number(),
     updatedAt: v.number(),
   })
+    .index('by_logicalKey', ['logicalKey'])
     .index('by_business', ['businessId'])
     .index('by_service', ['serviceId']),
 
@@ -142,6 +143,7 @@ export const registryTables = {
     sourceVersion: v.literal(RegistryProjectionSourceVersion),
     staleReason: v.optional(v.string()),
   })
+    .index('by_target', ['targetType', 'targetRef'])
     .index('by_target_status', ['targetType', 'targetRef', 'status'])
     .index('by_status_lastAttempt', ['status', 'lastAttemptAt']),
 } as const

@@ -1,5 +1,5 @@
 import type { UserIdentity } from 'convex/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   approveCurrentOwnerContactFollowUp,
@@ -26,6 +26,15 @@ import {
 } from '../../../src/modules/protected-action/public'
 import { withSourceWrite, withoutSourceWrite } from '../../helpers/source-write-admission'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
+
+beforeEach(() => {
+  vi.stubEnv('AE_CLEARANCE_SIGNING_SECRET', 'test-clearance-secret')
+  vi.stubEnv('AE_CLEARANCE_SIGNING_KEY_ID', 'clearance-key:test')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type EqFilter = { field: string; value: unknown }
@@ -178,6 +187,20 @@ describe('Convex protected action runtime bridge', () => {
     expect(db.dump('protectedActionAttempts')).toHaveLength(1)
     expect(db.dump('protectedActionReceipts')).toHaveLength(1)
     expect(db.dump('protectedActionPrivateEvidenceRefs')).toHaveLength(1)
+    expect(db.dump('handshakeRecords')).toEqual([
+      expect.objectContaining({
+        recordKind: 'greenlight',
+        principalId: 'user_sam',
+        actionClass: 'contact_follow_up',
+        actionRef: ContactFollowUpActionSlug,
+        requestRef: proposalId,
+        status: 'consumed',
+        keyIdentityRef: 'clearance-key:test',
+      }),
+    ])
+    expect(db.dump('handshakeRecords')).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: 'proof_gap' })]),
+    )
     expect(db.dump('auditEvents').map((row) => row.eventType)).toEqual(
       expect.arrayContaining([
         'protected_action.proposed',

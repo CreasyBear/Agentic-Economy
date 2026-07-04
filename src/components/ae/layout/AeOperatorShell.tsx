@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, use, useEffect, useId, useRef } from 'react'
+import { createContext, use, useEffect, useId, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { AppShell } from '@astryxdesign/core/AppShell'
 import { Divider } from '@astryxdesign/core/Divider'
@@ -89,9 +89,10 @@ export function AeOperatorShell({
     }
   }, [mainContentId])
 
-  const listCrumb = resolveOperatorListCrumb(operatorRole, currentPath)
-  const breadcrumbs: readonly OperatorBreadcrumbItem[] =
-    providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }])
+  const breadcrumbs = useMemo<readonly OperatorBreadcrumbItem[]>(() => {
+    const listCrumb = resolveOperatorListCrumb(operatorRole, currentPath)
+    return providedBreadcrumbs ?? (listCrumb === undefined ? [] : [listCrumb, { label: title }])
+  }, [currentPath, operatorRole, providedBreadcrumbs, title])
   const sidebar =
     isCompact ? undefined : (
       <div className="hidden md:contents">
@@ -99,18 +100,20 @@ export function AeOperatorShell({
       </div>
     )
 
-
-  const topNav = (
-    <div className="flex h-14 items-center gap-3 px-4 md:px-6">
-      {breadcrumbs.length === 0 ? null : (
-        <div className="hidden min-w-0 flex-1 md:block">
-          <AeOperatorBreadcrumbs items={breadcrumbs} />
+  const topNav = useMemo(
+    () => (
+      <div className="flex h-14 items-center gap-3 px-4 md:px-6">
+        {breadcrumbs.length === 0 ? null : (
+          <div className="hidden min-w-0 flex-1 md:block">
+            <AeOperatorBreadcrumbs items={breadcrumbs} />
+          </div>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <AeOperatorCommandMenu operatorRole={operatorRole} />
         </div>
-      )}
-      <div className="ml-auto flex items-center gap-2">
-        <AeOperatorCommandMenu operatorRole={operatorRole} />
       </div>
-    </div>
+    ),
+    [breadcrumbs, operatorRole],
   )
 
   return (

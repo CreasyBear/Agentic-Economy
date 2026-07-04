@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BusinessId, CorrelationId, OperationKey, OwnerId, ServiceId, SourceHash } from '@/modules/common/ids'
+import { brandNonEmpty } from '@/modules/common/ids'
 import { consumeContactFollowUpGatewayAdmission } from '@/modules/protected-action/internal/gateway'
 import {
   ContactFollowUpActionSlug,
@@ -80,6 +81,74 @@ describe('contact follow-up gateway admission', () => {
       expect.arrayContaining(['protected_action.gateway_consumed', 'protected_action.receipt_recorded'])
     )
   })
+
+  it('reconstructs reply, owner refusal, proof gap, expired gateway, and bound-evidence tamper as typed states', () => {
+    const replyFlow = approvedFlow('typed-reply')
+    const replied = expectOk(
+      recordContactFollowUpProviderAttempt(replyFlow.state, {
+        ...attemptCommand(replyFlow.proposal, replyFlow.gateway, 'typed-reply'),
+        boundEvidenceRefHashes: ['hash:p4-greenlight', 'hash:p4-gateway-check'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+      })
+    )
+    const replyReconstruction = readContactFollowUpReconstruction(replied.state, replyFlow.proposal.id)
+
+    expect(replied.attempt).toMatchObject({
+      outcome: 'receipt_recorded',
+      boundEvidenceRefHashes: ['hash:p4-gateway-check', 'hash:p4-greenlight'],
+    })
+    expect(replied.receipt).toMatchObject({
+      kind: 'receipt',
+      boundEvidenceRefHashes: ['hash:p4-gateway-check', 'hash:p4-greenlight'],
+    })
+    expect(replyReconstruction.readbackStatus).toBe('receipt_recorded')
+
+    const refused = rejectedFlow('typed-refusal')
+    expect(readContactFollowUpReconstruction(refused.state, refused.proposal.id)).toMatchObject({
+      readbackStatus: 'owner_rejected',
+      ownerDecision: { decision: 'rejected' },
+    })
+
+    const proofGapFlow = approvedFlow('typed-proof-gap')
+    const proofGap = expectOk(
+      recordContactFollowUpProviderAttempt(proofGapFlow.state, {
+        ...attemptCommand(proofGapFlow.proposal, proofGapFlow.gateway, 'typed-proof-gap'),
+        boundEvidenceRefHashes: ['hash:p4-proof-gap'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+        readback: { kind: 'proof_gap', gapReason: 'mismatch', payloadHash },
+      })
+    )
+    expect(readContactFollowUpReconstruction(proofGap.state, proofGapFlow.proposal.id)).toMatchObject({
+      readbackStatus: 'proof_gap',
+      receipt: { kind: 'proof_gap' },
+    })
+
+    expect(
+      recordContactFollowUpProviderAttempt(replyFlow.state, {
+        ...attemptCommand(replyFlow.proposal, replyFlow.gateway, 'typed-expired'),
+        boundEvidenceRefHashes: ['hash:p4-expired'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+        now: 901,
+      })
+    ).toMatchObject({ kind: 'error', code: 'contact_follow_up_gateway_expired' })
+
+    const tamperedState: ContactFollowUpSourceState = {
+      ...replied.state,
+      receipts: replied.state.receipts.map((receipt) =>
+        receipt.id === replied.receipt?.id
+          ? {
+              ...receipt,
+              boundEvidenceRefHashes: ['hash:p4-greenlight-tampered'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+            }
+          : receipt
+      ),
+    }
+    const tampered = readContactFollowUpReconstruction(tamperedState, replyFlow.proposal.id)
+    expect(tampered.readbackStatus).toBe('disputed')
+
+    const serialized = JSON.stringify([replyReconstruction, tampered])
+    expect(serialized).not.toContain('raw-local-hmac')
+    expect(serialized).not.toContain('AE_CLEARANCE_SIGNING_SECRET')
+    expect(serialized).not.toContain('whsec_')
+    expect(serialized).not.toContain('sk_test_')
+  })
 })
 
 type ApprovedFlow = {
@@ -116,6 +185,26 @@ function approvedFlow(suffix: string): ApprovedFlow {
   )
 
   return { state: gateway.state, proposal: decided.proposal, gateway: gateway.gatewayAdmission }
+}
+
+function rejectedFlow(suffix: string): Pick<ApprovedFlow, 'state' | 'proposal'> {
+  const proposed = expectOk(proposeContactFollowUpRequest(createEmptyContactFollowUpSourceState(), proposalCommand(suffix)))
+  const policy = expectOk(evaluateContactFollowUpPolicy(proposed.state, { proposalId: proposed.proposal.id, now: 20 }))
+  const decided = expectOk(
+    decideContactFollowUpProposal(policy.state, {
+      authority: authority(),
+      proposalId: proposed.proposal.id,
+      decision: 'rejected',
+      reason: `rejected:${suffix}`,
+      evidenceRefs: [`owner-review:${suffix}`],
+      consequenceAccepted: false,
+      idempotencyKey: operationKey(`decision:${suffix}`),
+      correlationId: correlationId(`decision:${suffix}`),
+      now: 30,
+    })
+  )
+
+  return { state: decided.state, proposal: decided.proposal }
 }
 
 function proposalCommand(suffix: string): ProposeContactFollowUpRequestCommand {

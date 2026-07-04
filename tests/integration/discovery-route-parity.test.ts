@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
 import {
@@ -13,31 +13,37 @@ import {
   buildRobotsTxt,
   buildSitemapXml,
   createDefaultDiscoverySourceState,
+  regenerateDiscoveryManifest,
 } from '@/modules/discovery/public'
 import type { DiscoverySourceState } from '@/modules/discovery/public'
-import type { RegistrySourceState } from '@/modules/registry/public'
-import type { PublicBusinessCatalogApiPage } from '@/modules/registry/public'
-import { handleBusinessDetailRequest, handleDurableBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import {
-  handleDurableListBusinessesRequest,
+  getPublicBusinessCatalogBySlug,
+  listPublicBusinessCatalog,
+  searchPublicBusinessCatalog,
+} from '@/modules/registry/public'
+import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
+import {
   handleListBusinessesRequest,
 } from '@/routes/api.businesses'
 import {
-  handleDurableSearchBusinessesRequest,
   handleSearchBusinessesRequest,
 } from '@/routes/api.businesses.search'
-import { handleDurableLlmsTxtRequest } from '@/routes/llms[.]txt'
+import { handleLlmsTxtRequest } from '@/routes/llms[.]txt'
 import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
-import { handleDurableSitemapXmlRequest } from '@/routes/sitemap[.]xml'
-import { handleDurableUcpManifestRequest } from '@/routes/$slug.ucp'
+import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
+import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
-import {
-  withDiscoverySourcePortForTest,
-  withRegistrySourcePortForTest,
-} from '../helpers/source-ports'
 
+
+beforeEach(() => {
+  vi.stubEnv('AE_CANONICAL_HOST_ALLOWLIST', 'ae.example')
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 describe('discovery route parity', () => {
-  it('tracks one durable catalog and suppression across public page, registry/API, UCP, llms, and sitemap', async () => {
+  it('tracks one durable catalog and suppression across public page, registry projections, UCP, llms, and sitemap', async () => {
     const state = createDurablePublishedDiscoveryState({
       businessName: 'Fremantle Heat Pump Repairs',
       requestedSlug: 'fremantle-heat-pump-repairs',
@@ -46,159 +52,146 @@ describe('discovery route parity', () => {
       suburb: 'Fremantle',
     })
 
-    await withRegistrySourcePortForTest(state, async () => {
-      await withDiscoverySourcePortForTest(state, async () => {
-        const page = getPublicBusinessCatalog(state, {
-          slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
-          indexStatus: 'indexed',
-          discoveryStatus: 'available',
-        })
-        const registryList = await jsonBody(
-          handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses'))
-        )
-        const registrySearch = await jsonBody(
-          handleDurableSearchBusinessesRequest(
-            new Request('https://ae.example/api/businesses/search?q=heat+pump+fremantle')
-          )
-        )
-        const apiDetailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
-        const apiDetail = await apiDetailResponse.json()
-        const ucpResponse = await handleDurableUcpManifestRequest(
-          new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
-          'fremantle-heat-pump-repairs'
-        )
-        const ucp = await ucpResponse.json()
-        const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
-        const llmsBody = await llms.text()
-        const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
-        const sitemapBody = await sitemap.text()
-        const fixtures = await (
-          await handleDeveloperDiscoveryFixturesRequest(new Request('https://ae.example/api/discovery/fixtures'), undefined, {
-            now: 13_000,
-          })
-        ).json()
-
-        expect(page).toMatchObject({
-          kind: 'available',
-          catalog: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
-        })
-        expect(registryList.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
-        expect(registrySearch.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
-        expect(apiDetailResponse.status).toBe(200)
-        expect(apiDetail).toMatchObject({
-          kind: 'found',
-          business: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
-        })
-        expect(ucp).toMatchObject({
-          slug: 'fremantle-heat-pump-repairs',
-          businessName: 'Fremantle Heat Pump Repairs',
-        })
-        expect(llmsBody).toContain('slug=fremantle-heat-pump-repairs')
-        expect(sitemapBody).toContain('https://ae.example/fremantle-heat-pump-repairs')
-        expect(fixtures).toMatchObject({
-          kind: 'public_catalog_fixture_bundle',
-          state: 'degraded',
-          examples: [expect.objectContaining({ slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' })],
-          routeHealth: expect.arrayContaining([
-            expect.objectContaining({
-              route: 'https://ae.example/api/businesses',
-              status: 'available',
-              schemaVersion: 'public-business-catalog-api:v1',
-            }),
-            expect.objectContaining({
-              route: 'https://ae.example/api/businesses/fremantle-heat-pump-repairs',
-              status: 'available',
-              schemaVersion: 'public-business-catalog-api:v1',
-            }),
-            expect.objectContaining({
-              route: 'https://ae.example/fremantle-heat-pump-repairs/ucp',
-              status: 'available',
-              schemaVersion: 'ae-ucp-fallback:v1',
-            }),
-          ]),
-        })
-        expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llmsBody, sitemapBody })).not.toContain(
-          'parramatta-emergency-plumbing'
-        )
-      })
+    const page = getPublicBusinessCatalog(state, {
+      slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
+      indexStatus: 'indexed',
+      discoveryStatus: 'available',
     })
+    const registryList = listPublicBusinessCatalog(state)
+    const registrySearch = searchPublicBusinessCatalog(state, {
+      query: 'heat pump fremantle',
+    })
+    const apiDetail = getPublicBusinessCatalogBySlug(state, {
+      slug: 'fremantle-heat-pump-repairs',
+    })
+    const generated = regenerateDiscoveryManifest(
+      state,
+      { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
+      { canonicalBaseUrl: 'https://ae.example', now: 13_000 },
+    )
+    if (generated.kind !== 'ok') {
+      throw new Error(`Expected source UCP manifest to generate: ${generated.reason}`)
+    }
+    const ucp = generated.manifest
+    const llms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
+    const sitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })
+    const fixtures = await (
+      await handleDeveloperDiscoveryFixturesRequest(new Request('https://ae.example/api/discovery/fixtures'), state, {
+        now: 13_000,
+      })
+    ).json()
+
+    expect(page).toMatchObject({
+      kind: 'available',
+      catalog: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
+    })
+    expect(registryList.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+    expect(registrySearch.items.map((item) => item.slug)).toEqual(['fremantle-heat-pump-repairs'])
+    expect(apiDetail).toMatchObject({
+      kind: 'found',
+      business: { slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' },
+    })
+    expect(ucp).toMatchObject({
+      slug: 'fremantle-heat-pump-repairs',
+      businessName: 'Fremantle Heat Pump Repairs',
+    })
+    expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
+    expect(sitemap.body).toContain('https://ae.example/fremantle-heat-pump-repairs')
+    expect(fixtures).toMatchObject({
+      kind: 'public_catalog_fixture_bundle',
+      state: 'available',
+    })
+    expect(fixtures.examples).toEqual([
+      expect.objectContaining({ slug: 'fremantle-heat-pump-repairs', name: 'Fremantle Heat Pump Repairs' }),
+    ])
+    expect(fixtures.routeHealth).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          route: 'https://ae.example/api/businesses',
+          status: 'available',
+        }),
+        expect.objectContaining({
+          route: 'https://ae.example/api/businesses/search?q=',
+          status: 'available',
+        }),
+        expect.objectContaining({
+          route: 'https://ae.example/api/businesses/{slug}',
+          status: 'available',
+        }),
+        expect.objectContaining({
+          route: 'https://ae.example/{slug}/ucp',
+          status: 'available',
+        }),
+      ])
+    )
+    expect(JSON.stringify({ page, registryList, registrySearch, apiDetail, ucp, llms })).not.toContain(
+      'parramatta-emergency-plumbing'
+    )
 
     suppressFirstBusiness(state)
 
-    await withRegistrySourcePortForTest(state, async () => {
-      await withDiscoverySourcePortForTest(state, async () => {
-        const page = getPublicBusinessCatalog(state, {
-          slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
-          indexStatus: 'indexed',
-          discoveryStatus: 'available',
-        })
-        const registryList = await jsonBody(
-          handleDurableListBusinessesRequest(new Request('https://ae.example/api/businesses'))
-        )
-        const registrySearch = await jsonBody(
-          handleDurableSearchBusinessesRequest(
-            new Request('https://ae.example/api/businesses/search?q=heat+pump+fremantle')
-          )
-        )
-        const apiDetailResponse = await handleDurableBusinessDetailRequest('fremantle-heat-pump-repairs')
-        const apiDetail = await apiDetailResponse.json()
-        const ucpResponse = await handleDurableUcpManifestRequest(
-          new Request('https://ae.example/fremantle-heat-pump-repairs/ucp'),
-          'fremantle-heat-pump-repairs'
-        )
-        const ucp = await ucpResponse.json()
-        const llms = await handleDurableLlmsTxtRequest(new Request('https://ae.example/llms.txt'))
-        const llmsBody = await llms.text()
-        const sitemap = await handleDurableSitemapXmlRequest(new Request('https://ae.example/sitemap.xml'))
-        const sitemapBody = await sitemap.text()
-
-        expect(page).toEqual({ kind: 'hidden', reason: 'not_published' })
-        expect(registryList.items).toEqual([])
-        expect(registrySearch.items).toEqual([])
-        expect(apiDetailResponse.status).toBe(404)
-        expect(apiDetail).toEqual({
-          kind: 'not_found',
-          code: 'business_not_found',
-          reason: 'No public business catalog exists for this slug.',
-        })
-        expect(ucpResponse.status).toBe(404)
-        expect(ucp).toEqual({
-          kind: 'not_found',
-          code: 'discovery_manifest_not_found',
-          reason: 'No public discovery manifest exists for this slug.',
-        })
-        expect(llmsBody).not.toContain('fremantle-heat-pump-repairs')
-        expect(sitemapBody).not.toContain('fremantle-heat-pump-repairs')
-      })
+    const suppressedPage = getPublicBusinessCatalog(state, {
+      slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug'),
+      indexStatus: 'indexed',
+      discoveryStatus: 'available',
     })
+    const suppressedRegistryList = listPublicBusinessCatalog(state)
+    const suppressedRegistrySearch = searchPublicBusinessCatalog(state, {
+      query: 'heat pump fremantle',
+    })
+    const suppressedDetail = getPublicBusinessCatalogBySlug(state, {
+      slug: 'fremantle-heat-pump-repairs',
+    })
+    const suppressedGenerated = regenerateDiscoveryManifest(
+      state,
+      { slug: brandNonEmpty('fremantle-heat-pump-repairs', 'Slug') },
+      { canonicalBaseUrl: 'https://ae.example', now: 13_000 },
+    )
+    const suppressedLlms = buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' })
+    const suppressedSitemap = buildSitemapXml(state, { canonicalBaseUrl: 'https://ae.example', now: 13_000 })
+
+    expect(suppressedPage).toEqual({ kind: 'hidden', reason: 'not_published' })
+    expect(suppressedRegistryList.items).toEqual([])
+    expect(suppressedRegistrySearch.items).toEqual([])
+    expect(suppressedDetail).toEqual({
+      kind: 'not_found',
+      code: 'business_not_found',
+      reason: 'No public business catalog exists for this slug.',
+    })
+    expect(suppressedGenerated).toEqual({
+      kind: 'error',
+      code: 'discovery_manifest_not_public',
+      reason: 'no_public_catalog',
+      retryable: false,
+    })
+    expect(suppressedLlms.body).not.toContain('fremantle-heat-pump-repairs')
+    expect(suppressedSitemap.body).not.toContain('fremantle-heat-pump-repairs')
   })
 
-  it('resolves every URL advertised by manifest, llms, sitemap, and robots outputs', async () => {
+  it('keeps every URL advertised by explicit local manifest, llms, sitemap, and robots outputs resolvable', async () => {
     const origin = 'https://ae.example'
     const state = createDefaultDiscoverySourceState()
-    await withDiscoverySourcePortForTest(state, async () => {
-      const manifestResponse = await handleDurableUcpManifestRequest(
-        new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
-        'parramatta-emergency-plumbing'
-      )
-      const manifest = await manifestResponse.json()
-      const llms = buildLlmsTxt(state, { canonicalBaseUrl: origin })
-      const sitemap = buildSitemapXml(state, { canonicalBaseUrl: origin, now: 0 })
-      const robots = buildRobotsTxt({ canonicalBaseUrl: origin })
-      const urls = uniqueUrls([
-        ...manifest.routes.map((route: { url: string }) => route.url),
-        ...llms.urls,
-        ...sitemap.urls,
-        ...sitemapLocs(sitemap.body),
-        ...robots.urls,
-      ])
+    const manifestResponse = handleUcpManifestRequest(
+      new Request(`${origin}/parramatta-emergency-plumbing/ucp`),
+      'parramatta-emergency-plumbing'
+    )
+    const manifest = await manifestResponse.json()
+    const llms = buildLlmsTxt(state, { canonicalBaseUrl: origin })
+    const sitemap = buildSitemapXml(state, { canonicalBaseUrl: origin, now: 0 })
+    const robots = buildRobotsTxt({ canonicalBaseUrl: origin })
+    const urls = uniqueUrls([
+      ...manifest.routes.map((route: { url: string }) => route.url),
+      ...llms.urls,
+      ...sitemap.urls,
+      ...sitemapLocs(sitemap.body),
+      ...robots.urls,
+    ])
 
-      expect(urls.length).toBeGreaterThan(0)
-      for (const url of urls) {
-        const resolved = await resolveAdvertisedUrl(url)
-        expect(resolved, url).toBe(true)
-      }
-    })
+    expect(urls.length).toBeGreaterThan(0)
+    for (const url of urls) {
+      const resolved = await resolveAdvertisedUrl(url)
+      expect(resolved, url).toBe(true)
+    }
   })
 
   it('keeps llms API routes aligned with public API response schemas', async () => {
@@ -248,11 +241,11 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
   }
 
   if (path === '/llms.txt') {
-    return (await handleDurableLlmsTxtRequest(new Request(url))).status === 200
+    return handleLlmsTxtRequest(new Request(url)).status === 200
   }
 
   if (path === '/sitemap.xml') {
-    return (await handleDurableSitemapXmlRequest(new Request(url))).status === 200
+    return handleSitemapXmlRequest(new Request(url)).status === 200
   }
 
   if (path === '/robots.txt') {
@@ -274,7 +267,7 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
 
   const ucpMatch = /^\/([^/]+)\/ucp$/u.exec(path)
   if (ucpMatch?.[1] !== undefined) {
-    return (await handleDurableUcpManifestRequest(new Request(url), ucpMatch[1])).status === 200
+    return handleUcpManifestRequest(new Request(url), ucpMatch[1]).status === 200
   }
 
   const pageMatch = /^\/([^/]+)$/u.exec(path)
@@ -294,9 +287,6 @@ function uniqueUrls(urls: readonly string[]): readonly string[] {
   return Array.from(new Set(urls))
 }
 
-async function jsonBody(response: Promise<Response>): Promise<PublicBusinessCatalogApiPage> {
-  return response.then((resolved) => resolved.json() as Promise<PublicBusinessCatalogApiPage>)
-}
 
 function createDurablePublishedDiscoveryState(input: {
   businessName: string

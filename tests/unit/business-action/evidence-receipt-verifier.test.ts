@@ -2,16 +2,23 @@ import { describe, expect, it } from 'vitest'
 
 import {
   BusinessActionSlug,
+  PublicActionReceiptPrivateFieldDenylistValues,
+  PublicActionReceiptReadbackFieldValues,
+  PublicActionReceiptReadbackHashFieldValues,
+  PublicActionReceiptVerifierMatrix,
+  PublicActionReceiptVerifierStatusValues,
   createCapabilityRequest,
   createEmptyBusinessActionSourceState,
   recordActionReceipt,
   recordAuthorizationCheckpoint,
   recordBusinessActionResultArtifact,
   recordHermesEvidenceEvent,
+  ReceiptReconstructionStatusValues,
   verifyActionReceipt,
 } from '@/modules/business-action/public'
 import { stableHash } from '@/modules/common/stable-hash'
-import type { ActionReceipt, BusinessActionCard, BuyerMandate } from '@/modules/business-action/public'
+import type { ActionReceipt, BusinessActionCard, BusinessActionSlug as BusinessActionSlugType, BuyerMandate } from '@/modules/business-action/public'
+import { brandNonEmpty } from '@/modules/common/ids'
 import type {
   AuthorizationCheckpointId,
   BusinessActionCardId,
@@ -29,6 +36,8 @@ const now = 3_000
 const businessId = 'business:plumbing-demo' as BusinessId
 const ownerId = 'owner:plumbing-demo' as OwnerId
 const checkpoint = 'authorization_checkpoint:capability_request:operation:request:operation:checkpoint' as AuthorizationCheckpointId
+
+const publishAgentIntakeEndpointActionSlug = 'publish-agent-intake-endpoint' satisfies BusinessActionSlugType
 
 describe('business action receipt verifier', () => {
   it('reconstructs success only with endpoint descriptor schema and private artifact ref', () => {
@@ -54,10 +63,61 @@ describe('business action receipt verifier', () => {
     const verification = verifyActionReceipt(receiptResult.state, receiptResult.receipt, { includePrivate: true })
     expect(verification.reconstructionStatus).toBe('complete')
     expect(verification.publicReadback.hashes.resultArtifactHash).toBe(artifact.artifact.artifactHash)
+    expect(Object.keys(verification.publicReadback).sort()).toEqual([...PublicActionReceiptReadbackFieldValues].sort())
+    expect(PublicActionReceiptReadbackHashFieldValues).toEqual(expect.arrayContaining(Object.keys(verification.publicReadback.hashes)))
+    for (const privateField of PublicActionReceiptPrivateFieldDenylistValues) {
+      expect(JSON.stringify(verification.publicReadback)).not.toContain(privateField)
+    }
     expect(JSON.stringify(verification.publicReadback)).not.toContain('private_endpoint_provisioning_payment_gate_ref')
     const privateArtifact = verification.privateReadback?.resultArtifact
     expect(privateArtifact).toBeDefined()
     expect(privateArtifact?.privateEndpointProvisioningPaymentGateRefHash).toBe('hash:private-artifact' as SourceHash)
+  })
+
+  it('keeps the public verifier status matrix hash-only and private-denied', () => {
+    expect(Object.keys(PublicActionReceiptVerifierMatrix).sort()).toEqual([...ReceiptReconstructionStatusValues].sort())
+
+    for (const reconstructionStatus of ReceiptReconstructionStatusValues) {
+      const row = PublicActionReceiptVerifierMatrix[reconstructionStatus]
+      expect(PublicActionReceiptVerifierStatusValues).toContain(row.publicStatus)
+      expect(row.publicReadbackAllowed).toBe(true)
+      expect(row.privatePayloadAllowed).toBe(false)
+    }
+
+    expect(PublicActionReceiptVerifierMatrix.complete.publicStatus).toBe('matched')
+    expect(PublicActionReceiptVerifierMatrix.refused_no_consequence.publicStatus).toBe('refused')
+  })
+
+  it('reconstructs publish-agent intake success with endpoint descriptor and schema but no payment gate', () => {
+    const accepted = createAcceptedState(publishAgentIntakeEndpointActionSlug)
+    expect(accepted.requests.at(-1)?.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
+    expect(accepted.requests.at(-1)?.amountCents).toBeUndefined()
+    expect(accepted.checkpoints.at(-1)?.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
+
+    const artifact = recordBusinessActionResultArtifact(accepted, endpointSchemaArtifactCommand())
+    expect(artifact.kind).toBe('ok')
+    if (artifact.kind !== 'ok') {
+      throw new Error('expected result artifact')
+    }
+    expect(artifact.artifact.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
+    expect(artifact.artifact.status).toBe('complete')
+    expect(artifact.artifact.endpointDescriptorHash).toBe('hash:endpoint-descriptor' as SourceHash)
+    expect(artifact.artifact.jsonSchemaHash).toBe('hash:json-schema' as SourceHash)
+    expect(artifact.artifact.privateEndpointProvisioningPaymentGateRefHash).toBeUndefined()
+
+    const receiptResult = recordActionReceipt(artifact.state, receiptCommand())
+    expect(receiptResult.kind).toBe('ok')
+    if (receiptResult.kind !== 'ok') {
+      throw new Error('expected receipt')
+    }
+    expect(receiptResult.receipt.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
+    expect(receiptResult.receipt.outcome).toBe('success')
+
+    const verification = verifyActionReceipt(receiptResult.state, receiptResult.receipt, { includePrivate: true })
+    expect(verification.reconstructionStatus).toBe('complete')
+    expect(verification.publicReadback.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
+    expect(verification.publicReadback.hashes.resultArtifactHash).toBe(artifact.artifact.artifactHash)
+    expect(verification.privateReadback?.resultArtifact?.privateEndpointProvisioningPaymentGateRefHash).toBeUndefined()
   })
 
   it('records proof_gap when any required result artifact component is missing', () => {
@@ -75,8 +135,8 @@ describe('business action receipt verifier', () => {
     }
   })
 
-  it('reconstructs refusal no consequence without Hermes or external evidence', () => {
-    const refused = recordAuthorizationCheckpoint(createRequestState(), {
+  it('reconstructs publish-agent refusal no consequence without a result artifact', () => {
+    const refused = recordAuthorizationCheckpoint(createRequestState(publishAgentIntakeEndpointActionSlug), {
       requestId: requestId(),
       decision: 'refused',
       authority: {
@@ -95,6 +155,8 @@ describe('business action receipt verifier', () => {
     if (refused.kind !== 'ok') {
       throw new Error('expected refused checkpoint')
     }
+    expect(refused.request.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
+    expect(refused.state.resultArtifacts).toHaveLength(0)
 
     const receiptResult = recordActionReceipt(refused.state, receiptCommand({ idempotencyKey: 'operation:receipt:refused' as OperationKey }))
     expect(receiptResult.kind).toBe('ok')
@@ -103,62 +165,66 @@ describe('business action receipt verifier', () => {
     }
 
     const verification = verifyActionReceipt(receiptResult.state, receiptResult.receipt)
+    expect(receiptResult.receipt.actionSlug).toBe(publishAgentIntakeEndpointActionSlug)
     expect(receiptResult.receipt.outcome).toBe('refused')
+    expect(receiptResult.receipt.resultArtifactHash).toBeUndefined()
     expect(verification.reconstructionStatus).toBe('refused_no_consequence')
     expect(receiptResult.state.externalEvidenceEvents).toHaveLength(0)
   })
 
-  it('detects evidence mismatch tampering stale card expired mandate and unbound provider event', () => {
-    const success = createSuccessReceipt()
+  it('detects evidence mismatch tampering stale card expired mandate and unbound provider event for every closed slug', () => {
+    for (const actionSlug of [BusinessActionSlug, publishAgentIntakeEndpointActionSlug] as const) {
+      const success = createSuccessReceipt(actionSlug)
 
-    expect(verifyActionReceipt(success.state, { ...success.receipt, externalEvidenceRefHashes: ['hash:missing' as SourceHash] }).reconstructionStatus).toBe(
-      'evidence_mismatch'
-    )
-    expect(verifyActionReceipt(success.state, { ...success.receipt, payloadHash: 'hash:tampered' as SourceHash }).reconstructionStatus).toBe(
-      'tampered'
-    )
-    expect(
-      verifyActionReceipt(
-        { ...success.state, cards: success.state.cards.map((entry) => ({ ...entry, status: 'stale' })) },
-        success.receipt
-      ).reconstructionStatus
-    ).toBe('stale_source')
-    expect(
-      verifyActionReceipt(
-        { ...success.state, cards: [] },
-        success.receipt
-      ).reconstructionStatus
-    ).toBe('evidence_mismatch')
-    expect(
-      verifyActionReceipt(
-        { ...success.state, mandates: success.state.mandates.map((entry) => ({ ...entry, expiresAt: 1 })) },
-        success.receipt
-      ).reconstructionStatus
-    ).toBe('expired_mandate')
-    expect(
-      verifyActionReceipt(
-        {
-          ...success.state,
-          externalEvidenceEvents: [
-            ...success.state.externalEvidenceEvents,
-            {
-              id: 'external_evidence:rogue' as ExternalEvidenceEventId,
-              requestId: requestId(),
-              checkpointId: 'authorization_checkpoint:rogue' as AuthorizationCheckpointId,
-              actionSlug: 'provision-paid-intake-endpoint',
-              provider: 'hermes',
-              status: 'accepted',
-              providerRefHash: 'hash:rogue-ref' as SourceHash,
-              payloadHash: 'hash:rogue-payload' as SourceHash,
-              idempotencyKey: 'operation:rogue' as OperationKey,
-              correlationId: 'correlation:rogue' as CorrelationId,
-              receivedAt: 3_040,
-            },
-          ],
-        },
-        { ...success.receipt, externalEvidenceRefHashes: [...success.receipt.externalEvidenceRefHashes, 'hash:rogue-payload' as SourceHash] }
-      ).reconstructionStatus
-    ).toBe('unbound_provider_event')
+      expect(verifyActionReceipt(success.state, { ...success.receipt, externalEvidenceRefHashes: ['hash:missing' as SourceHash] }).reconstructionStatus).toBe(
+        'evidence_mismatch'
+      )
+      expect(verifyActionReceipt(success.state, { ...success.receipt, payloadHash: 'hash:tampered' as SourceHash }).reconstructionStatus).toBe(
+        'tampered'
+      )
+      expect(
+        verifyActionReceipt(
+          { ...success.state, cards: success.state.cards.map((entry) => ({ ...entry, status: 'stale' })) },
+          success.receipt
+        ).reconstructionStatus
+      ).toBe('stale_source')
+      expect(
+        verifyActionReceipt(
+          { ...success.state, cards: [] },
+          success.receipt
+        ).reconstructionStatus
+      ).toBe('evidence_mismatch')
+      expect(
+        verifyActionReceipt(
+          { ...success.state, mandates: success.state.mandates.map((entry) => ({ ...entry, expiresAt: 1 })) },
+          success.receipt
+        ).reconstructionStatus
+      ).toBe('expired_mandate')
+      expect(
+        verifyActionReceipt(
+          {
+            ...success.state,
+            externalEvidenceEvents: [
+              ...success.state.externalEvidenceEvents,
+              {
+                id: 'external_evidence:rogue' as ExternalEvidenceEventId,
+                requestId: requestId(),
+                checkpointId: 'authorization_checkpoint:rogue' as AuthorizationCheckpointId,
+                actionSlug,
+                provider: 'hermes',
+                status: 'accepted',
+                providerRefHash: 'hash:rogue-ref' as SourceHash,
+                payloadHash: 'hash:rogue-payload' as SourceHash,
+                idempotencyKey: 'operation:rogue' as OperationKey,
+                correlationId: 'correlation:rogue' as CorrelationId,
+                receivedAt: 3_040,
+              },
+            ],
+          },
+          { ...success.receipt, externalEvidenceRefHashes: [...success.receipt.externalEvidenceRefHashes, 'hash:rogue-payload' as SourceHash] }
+        ).reconstructionStatus
+      ).toBe('unbound_provider_event')
+    }
   })
 
   it('detects self-consistent receipt field tampering against source state', () => {
@@ -171,6 +237,90 @@ describe('business action receipt verifier', () => {
     ]) {
       expect(verifyActionReceipt(success.state, tampered).reconstructionStatus).toBe('tampered')
     }
+  })
+
+  it('binds checked evidence refs into successful receipt reconstruction without exposing raw secrets publicly', () => {
+    const evidence = recordHermesEvidenceEvent(createAcceptedState(), hermesCommand())
+    if (evidence.kind !== 'ok') {
+      throw new Error('expected Hermes evidence')
+    }
+    const artifact = recordBusinessActionResultArtifact(evidence.state, completeArtifactCommand())
+    if (artifact.kind !== 'ok') {
+      throw new Error('expected artifact')
+    }
+
+    const receiptResult = recordActionReceipt(
+      artifact.state,
+      receiptCommand({
+        boundEvidenceRefHashes: ['hash:clearance-greenlight', 'hash:gateway-check'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+      })
+    )
+    expect(receiptResult.kind).toBe('ok')
+    if (receiptResult.kind !== 'ok') {
+      throw new Error('expected receipt')
+    }
+
+    expect(receiptResult.receipt.boundEvidenceRefHashes).toEqual(['hash:clearance-greenlight', 'hash:gateway-check'])
+    const verification = verifyActionReceipt(receiptResult.state, receiptResult.receipt)
+    expect(verification.reconstructionStatus).toBe('complete')
+    expect(verification.publicReadback).toMatchObject({
+      checkedEvidenceCount: 2,
+      checkedEvidenceStatus: 'complete',
+    })
+
+    const publicDto = JSON.stringify(verification.publicReadback)
+    expect(publicDto).not.toContain('boundEvidenceRefHashes')
+    expect(publicDto).not.toContain('raw-local-hmac')
+    expect(publicDto).not.toContain('AE_CLEARANCE_SIGNING_SECRET')
+    expect(publicDto).not.toContain('whsec_')
+    expect(publicDto).not.toContain('sk_test_')
+    expect(publicDto).not.toContain('private_endpoint_provisioning_payment_gate_ref')
+  })
+
+  it('detects changed bound evidence refs as receipt tampering rather than accepting a self-consistent rewrite', () => {
+    const evidence = recordHermesEvidenceEvent(createAcceptedState(), hermesCommand())
+    if (evidence.kind !== 'ok') {
+      throw new Error('expected Hermes evidence')
+    }
+    const artifact = recordBusinessActionResultArtifact(evidence.state, completeArtifactCommand())
+    if (artifact.kind !== 'ok') {
+      throw new Error('expected artifact')
+    }
+    const receiptResult = recordActionReceipt(
+      artifact.state,
+      receiptCommand({
+        boundEvidenceRefHashes: ['hash:clearance-greenlight'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+      })
+    )
+    if (receiptResult.kind !== 'ok') {
+      throw new Error('expected receipt')
+    }
+
+    const tamperedBoundEvidence = recomputeReceiptSelfHash({
+      ...receiptResult.receipt,
+      boundEvidenceRefHashes: ['hash:clearance-greenlight-tampered'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+    })
+
+    expect(verifyActionReceipt(receiptResult.state, tamperedBoundEvidence).reconstructionStatus).toBe('tampered')
+  })
+
+  it('detects changed checked evidence status as receipt tampering even with a recomputed payload hash', () => {
+    const receiptResult = recordActionReceipt(
+      createAcceptedState(),
+      receiptCommand({
+        boundEvidenceRefHashes: ['hash:clearance-greenlight'].map((hash) => brandNonEmpty(hash, 'SourceHash')),
+      })
+    )
+    if (receiptResult.kind !== 'ok') {
+      throw new Error('expected receipt')
+    }
+
+    const tamperedStatus = recomputeReceiptSelfHash({
+      ...receiptResult.receipt,
+      checkedEvidenceStatus: 'complete',
+    })
+
+    expect(verifyActionReceipt(receiptResult.state, tamperedStatus).reconstructionStatus).toBe('tampered')
   })
 
   it('does not accept owner inbox report screenshot model output payment event or status label alone as success', () => {
@@ -188,12 +338,15 @@ describe('business action receipt verifier', () => {
   })
 })
 
-function createSuccessReceipt(): { state: Parameters<typeof verifyActionReceipt>[0]; receipt: ActionReceipt } {
-  const evidence = recordHermesEvidenceEvent(createAcceptedState(), hermesCommand())
+function createSuccessReceipt(actionSlug: BusinessActionSlugType = BusinessActionSlug): { state: Parameters<typeof verifyActionReceipt>[0]; receipt: ActionReceipt } {
+  const evidence = recordHermesEvidenceEvent(createAcceptedState(actionSlug), hermesCommand())
   if (evidence.kind !== 'ok') {
     throw new Error('expected Hermes evidence')
   }
-  const artifact = recordBusinessActionResultArtifact(evidence.state, completeArtifactCommand())
+  const artifact = recordBusinessActionResultArtifact(
+    evidence.state,
+    actionSlug === BusinessActionSlug ? completeArtifactCommand() : endpointSchemaArtifactCommand()
+  )
   if (artifact.kind !== 'ok') {
     throw new Error('expected artifact')
   }
@@ -205,16 +358,17 @@ function createSuccessReceipt(): { state: Parameters<typeof verifyActionReceipt>
   return { state: receipt.state, receipt: receipt.receipt }
 }
 
-function createRequestState() {
+function createRequestState(actionSlug: BusinessActionSlugType = BusinessActionSlug) {
+  const requestCard = card(actionSlug)
+  const requestMandate = mandate(actionSlug)
   const result = createCapabilityRequest(
-    createEmptyBusinessActionSourceState({ cards: [card()], mandates: [mandate()] }),
+    createEmptyBusinessActionSourceState({ cards: [requestCard], mandates: [requestMandate] }),
     {
-      actionSlug: BusinessActionSlug,
-      cardId: card().id as BusinessActionCardId,
-      mandateId: mandate().id,
+      actionSlug,
+      cardId: requestCard.id as BusinessActionCardId,
+      mandateId: requestMandate.id,
       businessId,
-      amountCents: 4_500,
-      currency: 'aud',
+      ...(actionSlug === BusinessActionSlug ? { amountCents: 4_500, currency: 'aud' as const } : {}),
       requestedBy: 'hermes',
       idempotencyKey: 'operation:request' as OperationKey,
       correlationId: 'correlation:request' as CorrelationId,
@@ -229,8 +383,8 @@ function createRequestState() {
   return result.state
 }
 
-function createAcceptedState() {
-  const result = recordAuthorizationCheckpoint(createRequestState(), {
+function createAcceptedState(actionSlug: BusinessActionSlugType = BusinessActionSlug) {
+  const result = recordAuthorizationCheckpoint(createRequestState(actionSlug), {
     requestId: requestId(),
     decision: 'accepted',
     authority: {
@@ -271,15 +425,17 @@ function requestId(): CapabilityRequestId {
   return 'capability_request:operation:request' as CapabilityRequestId
 }
 
-function card(overrides: Partial<BusinessActionCard> = {}): BusinessActionCard {
+function card(actionSlug: BusinessActionSlugType = BusinessActionSlug, overrides: Partial<BusinessActionCard> = {}): BusinessActionCard {
+  const slugLabel = actionSlug === BusinessActionSlug ? 'paid-intake' : 'publish-agent-intake'
+
   return {
-    id: 'business_action_card:paid-intake' as BusinessActionCardId,
-    actionSlug: BusinessActionSlug,
+    id: `business_action_card:${slugLabel}` as BusinessActionCardId,
+    actionSlug,
     version: 1,
     ownerId,
-    sourceHash: 'hash:card' as SourceHash,
+    sourceHash: `hash:card:${slugLabel}` as SourceHash,
     status: 'active',
-    publicLabel: 'Provision paid intake endpoint',
+    publicLabel: actionSlug === BusinessActionSlug ? 'Provision paid intake endpoint' : 'Publish agent intake endpoint',
     posture: 'proposal_only',
     callable: false,
     paymentRequired: false,
@@ -290,18 +446,20 @@ function card(overrides: Partial<BusinessActionCard> = {}): BusinessActionCard {
   }
 }
 
-function mandate(overrides: Partial<BuyerMandate> = {}): BuyerMandate {
+function mandate(actionSlug: BusinessActionSlugType = BusinessActionSlug, overrides: Partial<BuyerMandate> = {}): BuyerMandate {
+  const slugLabel = actionSlug === BusinessActionSlug ? 'paid-intake' : 'publish-agent-intake'
+
   return {
-    id: 'buyer_mandate:paid-intake' as BuyerMandateId,
+    id: `buyer_mandate:${slugLabel}` as BuyerMandateId,
     buyerRef: 'buyer:hash',
     allowedBusinessId: businessId,
-    allowedActionSlug: BusinessActionSlug,
+    allowedActionSlug: actionSlug,
     maxAmountCents: 5_000,
     currency: 'aud',
     status: 'active',
-    mandateHash: 'hash:mandate' as SourceHash,
-    idempotencyKey: 'operation:mandate' as OperationKey,
-    correlationId: 'correlation:mandate' as CorrelationId,
+    mandateHash: `hash:mandate:${slugLabel}` as SourceHash,
+    idempotencyKey: `operation:mandate:${slugLabel}` as OperationKey,
+    correlationId: `correlation:mandate:${slugLabel}` as CorrelationId,
     createdAt: now - 100,
     expiresAt: now + 1_000,
     ...overrides,
@@ -321,6 +479,12 @@ function completeArtifactCommand(overrides: Partial<Parameters<typeof recordBusi
     supportingEvidenceLabels: [],
     ...overrides,
   } as const
+}
+
+function endpointSchemaArtifactCommand(overrides: Partial<Parameters<typeof recordBusinessActionResultArtifact>[1]> = {}) {
+  const { privateEndpointProvisioningPaymentGateRefHash: _omitted, ...command } = completeArtifactCommand(overrides)
+
+  return command
 }
 
 function incompleteArtifactCommand(
@@ -378,8 +542,10 @@ function recomputeReceiptSelfHash(receipt: ActionReceipt): ActionReceipt {
       resultArtifactHash: receipt.resultArtifactHash ?? null,
       externalEvidenceRefHashes: [...receipt.externalEvidenceRefHashes].sort(),
       guardrailEvidenceRefHashes: [...receipt.guardrailEvidenceRefHashes].sort(),
+      boundEvidenceRefHashes: [...(receipt.boundEvidenceRefHashes ?? [])].sort(),
       signatureRefHash: receipt.signatureRefHash,
       reconstructionStatus: receipt.reconstructionStatus,
+      checkedEvidenceStatus: receipt.checkedEvidenceStatus,
       recordedAt: receipt.recordedAt,
     }),
   }

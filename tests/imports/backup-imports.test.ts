@@ -11,7 +11,10 @@ describe('backup import guardrail', () => {
     )
 
     if (isFixtureMode()) {
-      expect(violations.map((violation) => violation.rule)).toContain('backup-import')
+      expect(violations.map((violation) => violation.rule)).toEqual(
+        expect.arrayContaining(['backup-import', 'forbidden-handshake-import']),
+      )
+      expect(violations.filter((violation) => violation.rule === 'forbidden-handshake-import')).toHaveLength(13)
       return
     }
 

@@ -15,6 +15,7 @@ import {
   createLocalE2eRegistrySourceState as createLocalE2eRegistrySourceStateImpl,
   getPublicBusinessCatalogBySlug as getPublicBusinessCatalogBySlugImpl,
   listPublicBusinessCatalog as listPublicBusinessCatalogImpl,
+  resolvePublishedInquiryTarget as resolvePublishedInquiryTargetImpl,
   searchPublicBusinessCatalog as searchPublicBusinessCatalogImpl,
 } from './internal/search'
 import type {
@@ -23,6 +24,7 @@ import type {
   PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
+  PublishedInquiryTargetResolution,
 } from './internal/search'
 
 export const IndexStatusValues = ['not_queued', 'queued', 'indexed', 'failed', 'stale'] as const
@@ -237,6 +239,7 @@ export type {
   PublicBusinessCatalogDetailResult,
   PublicBusinessCatalogQueryInput,
   PublicBusinessCatalogSearchInput,
+  PublishedInquiryTargetResolution,
 }
 
 export const createDefaultRegistrySourceState = createDefaultRegistrySourceStateImpl
@@ -251,6 +254,8 @@ export const listPublicBusinessCatalog = listPublicBusinessCatalogImpl
 export const searchPublicBusinessCatalog = searchPublicBusinessCatalogImpl
 
 export const getPublicBusinessCatalogBySlug = getPublicBusinessCatalogBySlugImpl
+
+export const resolvePublishedInquiryTarget = resolvePublishedInquiryTargetImpl
 
 export const getIndexStatus = getIndexStatusImpl
 

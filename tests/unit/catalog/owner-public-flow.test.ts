@@ -7,6 +7,10 @@ import {
   submitPublicOwnerClaimFlow,
   validatePublicOwnerClaimFlowInput,
 } from '@/modules/catalog/public'
+import {
+  confirmStorefrontImportDraft,
+  extractStorefrontDraftFromHtml,
+} from '@/modules/storefront/public'
 
 describe('public owner claim flow', () => {
   it('publishes the Sam service page from browser-safe facts only', () => {
@@ -62,6 +66,53 @@ describe('public owner claim flow', () => {
       ],
     })
     expect(input.serviceName).toBe(publicOwnerDefaultClaimInput.serviceName)
+  })
+
+  it('publishes a website import only after the owner confirms the reviewed draft', () => {
+    const draftResult = extractStorefrontDraftFromHtml({
+      websiteUrl: 'https://northside.example/',
+      html: '<title>Northside Plumbing</title><meta name="description" content="Hot water repairs for local homes."><h1>Hot water repairs</h1>',
+    })
+
+    if (draftResult.kind !== 'ok') {
+      throw new Error('Expected draft import to succeed.')
+    }
+
+    expect(confirmStorefrontImportDraft(draftResult.draft, false)).toMatchObject({
+      kind: 'error',
+      code: 'storefront_import_unconfirmed',
+    })
+
+    const confirmed = confirmStorefrontImportDraft(draftResult.draft, true)
+    if (confirmed.kind !== 'confirmed') {
+      throw new Error('Expected owner confirmation to produce claim input.')
+    }
+
+    const result = submitPublicOwnerClaimFlow({
+      ...confirmed.input,
+      suburb: 'Preston',
+      stateTerritory: 'VIC',
+      serviceArea: 'Preston and nearby suburbs',
+      hoursOrUnknown: 'Owner confirmed hours are not listed yet',
+      noContactReason: 'Owner has not supplied public contact instructions.',
+    })
+
+    expect(result).toMatchObject({
+      kind: 'ok',
+      catalog: {
+        slug: 'northside-plumbing',
+        publicStatus: 'published',
+        services: [
+          {
+            name: 'Hot water repairs',
+            firstRequest: {
+              mode: 'not_available_yet',
+              publicDisclosure: 'First request instructions are not available yet.',
+            },
+          },
+        ],
+      },
+    })
   })
 
   it('serves the default public page by slug and hides unknown slugs', () => {

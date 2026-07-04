@@ -49,7 +49,7 @@ export function AeThreadTurnStreamSection({
   onStreamEnd,
   onRetry,
 }: AeThreadTurnStreamSectionProps) {
-  const [state, dispatch] = useReducer(turnReducer, initialAnswerTurnUiState)
+  const [state, sendTurnUpdate] = useReducer(turnReducer, initialAnswerTurnUiState)
 
   const mountedRef = useRef(true)
   const completeRef = useRef(false)
@@ -66,6 +66,7 @@ export function AeThreadTurnStreamSection({
 
   // Freeze thread id at generation boundaries so remounts do not POST a just-created
   // thread id before Convex persistence finishes.
+  // oxlint-disable-next-line react-doctor/exhaustive-deps -- threadId is intentionally frozen until generation changes.
   useLayoutEffect(() => {
     requestThreadIdRef.current = threadId
   }, [generation])
@@ -78,7 +79,7 @@ export function AeThreadTurnStreamSection({
   }, [])
 
   useEffect(() => {
-    dispatch({ type: 'reset' })
+    sendTurnUpdate({ type: 'reset' })
     completeRef.current = false
     userStopRef.current = false
 
@@ -118,7 +119,7 @@ export function AeThreadTurnStreamSection({
     if (event.type === 'complete') {
       completeRef.current = true
     }
-    dispatch({ type: 'event', event })
+    sendTurnUpdate({ type: 'event', event })
   }
 
   function handleStreamResult(result: StreamAnswerResult, activeGeneration: number, streamKey: string) {
@@ -129,26 +130,26 @@ export function AeThreadTurnStreamSection({
     if (result === 'aborted') {
       if (userStopRef.current) {
         userStopRef.current = false
-        dispatch({ type: 'stopped' })
+        sendTurnUpdate({ type: 'stopped' })
         onStreamEndRef.current?.('stopped')
       }
       return
     }
 
     if (result === 'rate_limited') {
-      dispatch({ type: 'rate_limited' })
+      sendTurnUpdate({ type: 'rate_limited' })
       onStreamEndRef.current?.('rate_limited')
       return
     }
 
     if (result === 'error') {
-      dispatch({ type: 'stream_failed' })
+      sendTurnUpdate({ type: 'stream_failed' })
       onStreamEndRef.current?.('error')
       return
     }
 
     if (result === 'done') {
-      dispatch({ type: 'stream_finished' })
+      sendTurnUpdate({ type: 'stream_finished' })
       if (completeRef.current) {
         onStreamEndRef.current?.('complete')
       } else {

@@ -16,6 +16,7 @@ type RouteExpectation = {
   contentType: RegExp
   cache?: 'no-store'
   cors?: '*'
+  securityHeaders?: true
   mustContain?: readonly string[]
   mustNotMatch?: RegExp
 }
@@ -33,6 +34,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/',
     status: 200,
     contentType: /text\/html/i,
+    securityHeaders: true,
     mustContain: ['Ask for a local service. See who fits.'],
     mustNotMatch: privateSurfacePattern,
   },
@@ -40,6 +42,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/claim',
     status: 200,
     contentType: /text\/html/i,
+    securityHeaders: true,
     mustContain: ['Sign in'],
     mustNotMatch: privateSurfacePattern,
   },
@@ -47,6 +50,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: `/claim/success?slug=${config.businessSlug}`,
     status: 200,
     contentType: /text\/html/i,
+    securityHeaders: true,
     mustContain: ['Sign in'],
     mustNotMatch: privateDataPattern,
   },
@@ -54,6 +58,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/privacy/remove-business',
     status: 200,
     contentType: /text\/html/i,
+    securityHeaders: true,
     mustContain: ['Request removal or correction', 'Contact email'],
     mustNotMatch: privateSurfacePattern,
   },
@@ -61,6 +66,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/registry',
     status: 200,
     contentType: /text\/html/i,
+    securityHeaders: true,
     mustContain: ['Find local service details before you contact a business.', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
   },
@@ -68,6 +74,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/api/businesses',
     status: 200,
     contentType: /application\/json/i,
+    securityHeaders: true,
     cache: 'no-store',
     mustContain: ['public-business-catalog-api:v1', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
@@ -76,6 +83,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: '/api/businesses/search?q=',
     status: 200,
     contentType: /application\/json/i,
+    securityHeaders: true,
     cache: 'no-store',
     mustContain: ['"kind":"ok"', '"query":""'],
     mustNotMatch: privateSurfacePattern,
@@ -84,6 +92,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: `/api/businesses/${config.businessSlug}`,
     status: 200,
     contentType: /application\/json/i,
+    securityHeaders: true,
     cache: 'no-store',
     mustContain: ['public-business-catalog-api:v1', config.businessSlug],
     mustNotMatch: privateSurfacePattern,
@@ -92,6 +101,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: `/${config.businessSlug}`,
     status: 200,
     contentType: /text\/html/i,
+    securityHeaders: true,
     mustContain: ['Business-supplied details people can check', 'Booking and payment are not promised'],
     mustNotMatch: privateSurfacePattern,
   },
@@ -99,6 +109,7 @@ const publicRoutes: readonly RouteExpectation[] = [
     path: `/${config.businessSlug}/ucp`,
     status: 200,
     contentType: /application\/json/i,
+    securityHeaders: true,
     cache: 'no-store',
     cors: '*',
     mustContain: ['ae-ucp-fallback:v1', config.businessSlug, '"callable":false', '"paymentRequired":false'],
@@ -150,6 +161,10 @@ test.describe('Phase 1 deployed readback smoke', () => {
 
         if (route.cors !== undefined) {
           expect(response.headers()['access-control-allow-origin'], route.path).toBe(route.cors)
+        }
+
+        if (route.securityHeaders === true) {
+          assertSecurityHeaders(route.path, response.headers())
         }
 
         for (const expected of route.mustContain ?? []) {
@@ -326,6 +341,16 @@ function parseHttpsUrl(name: string, rawValue: string): URL {
 
 function resolvePath(path: string): string {
   return new URL(path, config.baseUrl).toString()
+}
+
+function assertSecurityHeaders(path: string, headers: Record<string, string>): void {
+  const csp = headers['content-security-policy-report-only'] ?? headers['content-security-policy']
+
+  expect(csp ?? '', path).toContain("frame-ancestors 'none'")
+  expect(headers['referrer-policy'], path).toBe('strict-origin-when-cross-origin')
+  expect(headers['permissions-policy'], path).toBe('geolocation=(), camera=(), microphone=()')
+  expect(headers['x-content-type-options'], path).toBe('nosniff')
+  expect(headers['x-frame-options'], path).toBe('DENY')
 }
 
 function escapeRegExp(value: string): string {

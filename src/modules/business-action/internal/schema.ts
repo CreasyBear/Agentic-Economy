@@ -19,9 +19,9 @@ import type {
 } from '@/modules/common/ids'
 
 export const BusinessActionSlug = 'provision-paid-intake-endpoint' as const
-export type BusinessActionSlug = typeof BusinessActionSlug
-
-export const BusinessActionSlugValues = [BusinessActionSlug] as const
+export const PublishAgentIntakeEndpointActionSlug = 'publish-agent-intake-endpoint' as const
+export const BusinessActionSlugValues = [BusinessActionSlug, PublishAgentIntakeEndpointActionSlug] as const
+export type BusinessActionSlug = (typeof BusinessActionSlugValues)[number]
 
 export const BusinessActionCardStatusValues = ['active', 'disabled', 'stale'] as const
 export type BusinessActionCardStatus = (typeof BusinessActionCardStatusValues)[number]
@@ -112,6 +112,75 @@ export const ReceiptReconstructionStatusValues = [
   'refused_no_consequence',
 ] as const
 export type ReceiptReconstructionStatus = (typeof ReceiptReconstructionStatusValues)[number]
+
+export const CheckedEvidenceStatusValues = ['complete', 'needs_review', 'proof_gap'] as const
+export type CheckedEvidenceStatus = (typeof CheckedEvidenceStatusValues)[number]
+
+export const PublicActionReceiptVerifierStatusValues = [
+  'matched',
+  'refused',
+  'proof_gap',
+  'tampered',
+  'evidence_mismatch',
+  'stale_source',
+  'expired_mandate',
+  'unbound_provider_event',
+  'incomplete',
+] as const
+export type PublicActionReceiptVerifierStatus = (typeof PublicActionReceiptVerifierStatusValues)[number]
+
+export const PublicActionReceiptVerifierMatrix = {
+  complete: { publicStatus: 'matched', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  refused_no_consequence: { publicStatus: 'refused', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  proof_gap: { publicStatus: 'proof_gap', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  tampered: { publicStatus: 'tampered', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  evidence_mismatch: { publicStatus: 'evidence_mismatch', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  stale_source: { publicStatus: 'stale_source', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  expired_mandate: { publicStatus: 'expired_mandate', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  unbound_provider_event: { publicStatus: 'unbound_provider_event', publicReadbackAllowed: true, privatePayloadAllowed: false },
+  incomplete: { publicStatus: 'incomplete', publicReadbackAllowed: true, privatePayloadAllowed: false },
+} satisfies Record<
+  ReceiptReconstructionStatus,
+  {
+    publicStatus: PublicActionReceiptVerifierStatus
+    publicReadbackAllowed: true
+    privatePayloadAllowed: false
+  }
+>
+
+export const PublicActionReceiptReadbackFieldValues = [
+  'receiptId',
+  'actionSlug',
+  'outcome',
+  'reconstructionStatus',
+  'cardVersion',
+  'hashes',
+  'labels',
+  'checkedEvidenceCount',
+  'checkedEvidenceStatus',
+  'recordedAt',
+] as const
+
+export const PublicActionReceiptReadbackHashFieldValues = [
+  'cardHash',
+  'mandateHash',
+  'requestHash',
+  'checkpointHash',
+  'resultArtifactHash',
+] as const
+
+export const PublicActionReceiptPrivateFieldDenylistValues = [
+  'privateReadback',
+  'privatePayloadRef',
+  'privateEndpointProvisioningPaymentGateRefHash',
+  'externalEvidenceEvents',
+  'guardrailDecisions',
+  'providerRefHash',
+  'payloadHash',
+  'signatureRefHash',
+  'idempotencyKey',
+  'correlationId',
+] as const
 
 export const BusinessActionSupportStatusValues = ['open', 'resolved', 'no_repair'] as const
 export type BusinessActionSupportStatus = (typeof BusinessActionSupportStatusValues)[number]
@@ -286,10 +355,12 @@ export type ActionReceipt = {
   policyHash?: SourceHash
   externalEvidenceRefHashes: readonly SourceHash[]
   guardrailEvidenceRefHashes: readonly SourceHash[]
+  boundEvidenceRefHashes: readonly SourceHash[]
   resultArtifactHash?: SourceHash
   previousReceiptHash?: SourceHash
   signatureRefHash: SourceHash
   reconstructionStatus: ReceiptReconstructionStatus
+  checkedEvidenceStatus: CheckedEvidenceStatus
   payloadHash: SourceHash
   idempotencyKey: OperationKey
   correlationId: CorrelationId
@@ -310,6 +381,8 @@ export type PublicActionReceiptReadback = {
     resultArtifactHash?: SourceHash
   }
   labels: readonly string[]
+  checkedEvidenceCount: number
+  checkedEvidenceStatus: CheckedEvidenceStatus
   recordedAt: number
 }
 

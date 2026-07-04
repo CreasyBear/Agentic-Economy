@@ -17,27 +17,27 @@ import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 const phaseOwnedCopyExamples = [
   {
     phase: 'P2 inquiry/inbox',
-    relativeFile: '.planning/phases/02-human-inquiry-owner-inbox/02-UI-SPEC.fixture',
+    relativeFile: '.planning/archive/phases/02-human-inquiry-owner-inbox/02-UI-SPEC.fixture',
     copy: 'Phase 2 customer inquiry and owner inbox copy names Resend/Novu notification outbox delivery readback; booking, payment, and protected action remain unavailable.',
   },
   {
     phase: 'P3 read-only discovery',
-    relativeFile: '.planning/phases/03-standard-agent-builder-discovery/03-UI-SPEC.fixture',
+    relativeFile: '.planning/archive/phases/03-standard-agent-builder-discovery/03-UI-SPEC.fixture',
     copy: 'Phase 3 read-only discovery exposes developer discovery, schema docs, API examples, support matrix, and route health; SDK/CLI platform, MCP mutation, API-key platform, standard merchant-origin UCP, OpenAPI action descriptor, callable endpoint, and payment handler remain unavailable.',
   },
   {
     phase: 'P4 protected action',
-    relativeFile: '.planning/phases/04-owner-pending-protected-actions/04-UI-SPEC.fixture',
+    relativeFile: '.planning/archive/phases/04-owner-pending-protected-actions/04-UI-SPEC.fixture',
     copy: 'Phase 4 protected-action loop presents a protected action proposal for owner approval before a provider/internal attempt; autonomous protected execution and direct execute remain unavailable.',
   },
   {
     phase: 'P5 paid activation',
-    relativeFile: '.planning/phases/05-paid-activation-money-rails/05-UI-SPEC.fixture',
+    relativeFile: '.planning/archive/phases/05-paid-activation-money-rails/05-UI-SPEC.fixture',
     copy: 'Phase 5 Autumn+Stripe paid activation shows Stripe PSP checkout, subscription, customer portal, and billing reconciliation; wallet/credits, balance, stored value, Connect/x402, x402 checkout, custody rail, direct Stripe subscription authority, marketplace payout, split payout, and settlement platform remain unavailable.',
   },
   {
     phase: 'P6 business action receipt',
-    relativeFile: '.planning/phases/06-agentic-business-action-receipts/06-UI-SPEC.fixture',
+    relativeFile: '.planning/archive/phases/06-agentic-business-action-receipts/06-UI-SPEC.fixture',
     copy: 'Phase 6 Business Action Card and Capability Request show the authorization checkpoint, GuardrailDecisionEvidence, ExternalEvidenceEvent, Action Receipt, receipt-backed software operation, receipt-backed autonomous business operation, and Hermes-run paid intake provisioning as source/local proof only; self-approving agent, agent checkout, AE wallet, Connect/x402, product marketplace, generic API marketplace, and production autonomous payment support remain unavailable.',
   },
 ] as const
@@ -100,27 +100,27 @@ const publicOverclaimExamples = [
 const wrongPhaseExamples = [
   {
     rule: 'p2-inquiry-overclaim',
-    relativeFile: '.planning/phases/03-standard-agent-builder-discovery/wrong-phase.fixture',
+    relativeFile: '.planning/archive/phases/03-standard-agent-builder-discovery/wrong-phase.fixture',
     copy: 'Customer inquiry and owner inbox are ready for builders.',
   },
   {
     rule: 'p3-read-only-discovery-overclaim',
-    relativeFile: '.planning/phases/05-paid-activation-money-rails/wrong-phase.fixture',
+    relativeFile: '.planning/archive/phases/05-paid-activation-money-rails/wrong-phase.fixture',
     copy: 'Developer discovery API docs and route health are ready for paid activation.',
   },
   {
     rule: 'p4-protected-action-overclaim',
-    relativeFile: '.planning/phases/02-human-inquiry-owner-inbox/wrong-phase.fixture',
+    relativeFile: '.planning/archive/phases/02-human-inquiry-owner-inbox/wrong-phase.fixture',
     copy: 'Protected action proposal with owner approval is ready for the inbox.',
   },
   {
     rule: 'p5-paid-activation-overclaim',
-    relativeFile: '.planning/phases/04-owner-pending-protected-actions/wrong-phase.fixture',
+    relativeFile: '.planning/archive/phases/04-owner-pending-protected-actions/wrong-phase.fixture',
     copy: 'Autumn+Stripe paid activation checkout is ready for protected actions.',
   },
   {
     rule: 'p6-business-action-overclaim',
-    relativeFile: '.planning/phases/05-paid-activation-money-rails/wrong-phase.fixture',
+    relativeFile: '.planning/archive/phases/05-paid-activation-money-rails/wrong-phase.fixture',
     copy: 'Business Action Card and receipt-backed autonomous business operation are ready for paid activation.',
   },
 ] as const

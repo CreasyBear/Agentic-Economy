@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { SearchIcon } from 'lucide-react'
 
 import { ChatComposer } from '@astryxdesign/core/Chat'
@@ -27,28 +27,46 @@ const DEFAULT_EXAMPLES: readonly string[] = [
 const QUERY_MAX_LENGTH = 200
 
 export function AeAnswerPromptInput({
-  onSubmit,
   defaultValue = '',
   examples = DEFAULT_EXAMPLES,
+  ...props
+}: AeAnswerPromptInputProps) {
+  const inputId = useId()
+  const initialValue = defaultValue.slice(0, QUERY_MAX_LENGTH)
+
+  return (
+    <AeAnswerPromptInputInner
+      key={initialValue}
+      inputId={inputId}
+      initialValue={initialValue}
+      examples={examples}
+      {...props}
+    />
+  )
+}
+
+function AeAnswerPromptInputInner({
+  inputId,
+  initialValue,
+  onSubmit,
+  examples,
   busy = false,
   compact: compactOverride,
   placeholder = 'What do you need done?',
   ariaLabel = 'Find local service businesses',
-}: AeAnswerPromptInputProps) {
-  const inputId = useId()
+}: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples'> & {
+  inputId: string
+  initialValue: string
+  examples: NonNullable<AeAnswerPromptInputProps['examples']>
+}) {
   const counterId = `${inputId}-counter`
   const hintId = `${inputId}-hint`
-  const initialValue = defaultValue.slice(0, QUERY_MAX_LENGTH)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [value, setValue] = useState(initialValue)
   const hydrated = useClientMounted()
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const showCharacterLimit = charactersRemaining <= 40
   const compact = compactOverride ?? examples.length === 0
-
-  useEffect(() => {
-    setValue(defaultValue.slice(0, QUERY_MAX_LENGTH))
-  }, [defaultValue])
 
   useEffect(() => {
     const input = inputRef.current
@@ -58,6 +76,20 @@ export function AeAnswerPromptInput({
     input.style.height = 'auto'
     input.style.height = `${input.scrollHeight}px`
   }, [value])
+
+  const headerContext = useMemo(
+    () => (
+      <span
+        id={counterId}
+        className={`inline-flex min-h-6 items-center font-mono text-xs leading-none text-secondary${showCharacterLimit ? ' opacity-100' : ' opacity-0'}${compact ? ' hidden' : ''}`}
+        data-numeric
+        aria-live="polite"
+      >
+        {charactersRemaining} left
+      </span>
+    ),
+    [charactersRemaining, compact, counterId, showCharacterLimit],
+  )
 
   function updateValue(nextValue: string) {
     setValue(nextValue.slice(0, QUERY_MAX_LENGTH))
@@ -101,16 +133,7 @@ export function AeAnswerPromptInput({
             Local service need
           </span>
         }
-        headerContext={
-          <span
-            id={counterId}
-            className={`inline-flex min-h-6 items-center font-mono text-xs leading-none text-secondary${showCharacterLimit ? ' opacity-100' : ' opacity-0'}${compact ? ' hidden' : ''}`}
-            data-numeric
-            aria-live="polite"
-          >
-            {charactersRemaining} left
-          </span>
-        }
+        headerContext={headerContext}
         footerActions={
           compact ? null : (
             <Text type="supporting" color="secondary" size="sm" className="hidden sm:block">

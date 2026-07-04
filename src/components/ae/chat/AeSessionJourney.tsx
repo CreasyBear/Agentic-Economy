@@ -26,7 +26,7 @@ export function AeSessionJourney({ projection, liveTurn = null }: AeSessionJourn
               {journey.heading}
             </p>
             <p className="text-sm font-medium leading-snug text-primary">
-              {journey.status}
+              {journey.statusText}
             </p>
           </div>
           <p className="text-sm leading-snug text-secondary">{journey.guidance}</p>

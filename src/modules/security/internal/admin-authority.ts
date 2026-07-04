@@ -76,6 +76,7 @@ export type AdminAuthorityState = AuditEventSink & {
 
 export type AdminBootstrapCommand = {
   clerkUserId: string
+  tokenIdentifier?: string
   authorizedClerkUserIds: readonly string[]
   reasonCode: string
   evidenceRefs: readonly string[]
@@ -87,6 +88,7 @@ export type AdminBootstrapCommand = {
 export type AdminGrantMembershipCommand = {
   actorMembership: AdminMembership | undefined
   targetClerkUserId: string
+  targetTokenIdentifier?: string
   role: AdminRole
   reasonCode: string
   evidenceRefs: readonly string[]
@@ -98,6 +100,7 @@ export type AdminGrantMembershipCommand = {
 export type AdminRevokeMembershipCommand = {
   actorMembership: AdminMembership | undefined
   targetClerkUserId: string
+  targetTokenIdentifier?: string
   reasonCode: string
   evidenceRefs: readonly string[]
   operationKey: string
@@ -188,6 +191,7 @@ export function bootstrapOwnerAdmin(
 
   const membership: AdminMembership = {
     clerkUserId: command.clerkUserId,
+    ...(command.tokenIdentifier === undefined ? {} : { tokenIdentifier: command.tokenIdentifier }),
     role: 'owner_admin',
     state: 'active',
     grantedBy: `bootstrap:${command.clerkUserId}`,
@@ -252,10 +256,15 @@ export function grantAdminMembership(
     return validated
   }
 
-  const existing = state.adminMemberships.find((membership) => membership.clerkUserId === command.targetClerkUserId)
-  const beforeState = existing === undefined ? 'none' : `${existing.state}:${existing.role}`
-  const membership = existing ?? {
+  const existing =
+    command.targetTokenIdentifier === undefined
+      ? undefined
+      : state.adminMemberships.find((membership) => membership.tokenIdentifier === command.targetTokenIdentifier)
+  const existingBySubject = existing ?? state.adminMemberships.find((membership) => membership.clerkUserId === command.targetClerkUserId)
+  const beforeState = existingBySubject === undefined ? 'none' : `${existingBySubject.state}:${existingBySubject.role}`
+  const membership = existingBySubject ?? {
     clerkUserId: command.targetClerkUserId,
+    ...(command.targetTokenIdentifier === undefined ? {} : { tokenIdentifier: command.targetTokenIdentifier }),
     role: command.role,
     state: 'active',
     grantedBy: authority.membership.clerkUserId,
@@ -267,10 +276,13 @@ export function grantAdminMembership(
   membership.grantedBy = authority.membership.clerkUserId
   membership.grantedAt = command.now
   membership.evidenceRef = validated.evidenceRef
+  if (command.targetTokenIdentifier !== undefined) {
+    membership.tokenIdentifier = command.targetTokenIdentifier
+  }
   delete membership.revokedBy
   delete membership.revokedAt
 
-  if (existing === undefined) {
+  if (existingBySubject === undefined) {
     state.adminMemberships.push(membership)
   }
 
@@ -330,7 +342,11 @@ export function revokeAdminMembership(
     return validated
   }
 
-  const membership = state.adminMemberships.find((candidate) => candidate.clerkUserId === command.targetClerkUserId)
+  const membership =
+    command.targetTokenIdentifier === undefined
+      ? state.adminMemberships.find((candidate) => candidate.clerkUserId === command.targetClerkUserId)
+      : state.adminMemberships.find((candidate) => candidate.tokenIdentifier === command.targetTokenIdentifier)
+        ?? state.adminMemberships.find((candidate) => candidate.clerkUserId === command.targetClerkUserId)
   if (membership === undefined) {
     return {
       kind: 'error',

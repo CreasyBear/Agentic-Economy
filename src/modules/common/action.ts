@@ -30,6 +30,7 @@ export type ActionSourceWriteRequest = {
   method: string
   origin: string
   pathname: string
+  bodyDigest: string
 }
 
 export type ActionTimingSink = {
@@ -44,6 +45,13 @@ export type ActionHarnessApprovalContext = {
   authority?: 'owner' | 'admin'
 }
 
+export type ActionAgentIdentity = {
+  kind: 'identity'
+  signatureAgent: string
+  keyid: string
+  verifiedAt: string
+}
+
 export type ActionContext = {
   /** Admission context for writes; built from the calling surface's request. */
   sourceWriteRequest?: ActionSourceWriteRequest
@@ -51,6 +59,14 @@ export type ActionContext = {
   request?: Request
   /** Internal timing sink used by answer turns; never exposed on human surfaces. */
   timing?: ActionTimingSink
+  /** Signed request identity for attribution/quota/audit only; never write authority. */
+  agentIdentity?: ActionAgentIdentity
+  /** Per-tool admission for signed agent writes; identity alone never grants this. */
+  agentToolAdmission?: {
+    toolId: string
+    scope: 'public_inquiry'
+    principalId: string
+  }
   /** Harness-only approval authority for owner/admin-gated tools. */
   harnessApproval?: ActionHarnessApprovalContext
 }

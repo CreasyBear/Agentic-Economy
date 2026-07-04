@@ -182,7 +182,7 @@ export const claimBusiness = mutationGeneric({
   },
   returns: v.union(claimOkResult, claimErrorResult),
   handler: async (ctx, args) => {
-    const sourceWrite = await requireSourceWrite(args, 'owner_claim')
+    const sourceWrite = await requireSourceWrite(ctx, args, 'owner_claim')
     if (sourceWrite.kind === 'rejected') {
       return claimError('claim_csrf_rejected', sourceWrite.reason)
     }
@@ -429,7 +429,7 @@ async function runVisibilityChange(
   mode: 'suppress' | 'unsuppress',
   args: VisibilityMutationArgs
 ) {
-  const sourceWrite = await requireSourceWrite(args, 'admin_operator')
+  const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
   if (sourceWrite.kind === 'rejected') {
     return {
       kind: 'error' as const,
@@ -530,7 +530,7 @@ function adminAuthorityState(source: Awaited<ReturnType<typeof loadPhaseOneSourc
 
 async function readCurrentActiveMembership(ctx: VisibilityMutationCtx): Promise<AdminMembership | undefined> {
   const identity = await ctx.auth.getUserIdentity()
-  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity.subject)
+  return identity === null ? undefined : readActiveAdminMembership(runtimeDb(ctx.db), identity)
 }
 
 function summarizeVisibilityResult(

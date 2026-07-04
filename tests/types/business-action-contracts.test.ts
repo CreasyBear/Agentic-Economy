@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type {
   BusinessActionCard,
+  BusinessActionSlug as BusinessActionSlugType,
   BusinessActionExternalEvidenceProvider,
   BusinessActionGuardrailDecision,
   BusinessActionGuardrailProvider,
@@ -9,7 +10,6 @@ import type {
   ReceiptReconstructionStatus,
 } from '@/modules/business-action/public'
 import {
-  BusinessActionCardDefaults,
   BusinessActionExternalEvidenceProviderValues,
   BusinessActionGuardrailDecisionValues,
   BusinessActionGuardrailProviderValues,
@@ -22,7 +22,8 @@ import {
 describe('business action type contracts', () => {
   it('keeps exported runtime values aligned with exact literal unions', () => {
     expectTypeOf<typeof BusinessActionSlug>().toEqualTypeOf<'provision-paid-intake-endpoint'>()
-    expectTypeOf<(typeof BusinessActionSlugValues)[number]>().toEqualTypeOf<typeof BusinessActionSlug>()
+    expectTypeOf<BusinessActionSlugType>().toEqualTypeOf<'provision-paid-intake-endpoint' | 'publish-agent-intake-endpoint'>()
+    expectTypeOf<(typeof BusinessActionSlugValues)[number]>().toEqualTypeOf<BusinessActionSlugType>()
     expectTypeOf<(typeof BusinessActionExternalEvidenceProviderValues)[number]>().toEqualTypeOf<BusinessActionExternalEvidenceProvider>()
     expectTypeOf<(typeof BusinessActionGuardrailProviderValues)[number]>().toEqualTypeOf<BusinessActionGuardrailProvider>()
     expectTypeOf<(typeof BusinessActionGuardrailDecisionValues)[number]>().toEqualTypeOf<BusinessActionGuardrailDecision>()
@@ -30,12 +31,12 @@ describe('business action type contracts', () => {
     expectTypeOf<(typeof ReceiptReconstructionStatusValues)[number]>().toEqualTypeOf<ReceiptReconstructionStatus>()
   })
 
-  it('keeps the public card shape proposal-only, owner-approved, and receipt-required', () => {
-    const card = {
-      id: 'business_action_card:test',
+  it('accepts both closed action slugs in the public card shape', () => {
+    const paidCard = {
+      id: 'business_action_card:paid-intake',
       actionSlug: BusinessActionSlug,
       version: 1,
-      sourceHash: 'sha256:test',
+      sourceHash: 'sha256:paid-intake',
       status: 'active',
       publicLabel: 'Provision paid intake endpoint',
       posture: 'proposal_only',
@@ -45,15 +46,28 @@ describe('business action type contracts', () => {
       receiptRequired: true,
       updatedAt: 1,
     } satisfies BusinessActionCard
+    const publishCard = {
+      id: 'business_action_card:publish-agent-intake',
+      actionSlug: 'publish-agent-intake-endpoint',
+      version: 1,
+      sourceHash: 'sha256:publish-agent-intake',
+      status: 'active',
+      publicLabel: 'Publish agent intake endpoint',
+      posture: 'proposal_only',
+      callable: false,
+      paymentRequired: false,
+      ownerApprovalRequired: true,
+      receiptRequired: true,
+      updatedAt: 1,
+    } satisfies BusinessActionCard
 
-    expect(card.actionSlug).toBe(BusinessActionSlug)
-    expect(BusinessActionCardDefaults.callable).toBe(false)
-    expect(BusinessActionCardDefaults.paymentRequired).toBe(false)
+    expectTypeOf(paidCard).toMatchTypeOf<BusinessActionCard>()
+    expectTypeOf(publishCard).toMatchTypeOf<BusinessActionCard>()
   })
 })
 
-// @ts-expect-error arbitrary action strings cannot replace the single Phase 6 slug
-const invalidActionSlug: typeof BusinessActionSlug = 'executeAction'
+// @ts-expect-error arbitrary action strings cannot replace the closed Issue 29 slug set
+const invalidActionSlug: BusinessActionSlugType = 'executeAction'
 void invalidActionSlug
 
 // @ts-expect-error provider "other" is not a valid external evidence provider

@@ -131,6 +131,10 @@ export function resolveHarnessApprovalPolicy(
     return block(input, 'write_requires_source_admission', overridePolicy === 'prompt', declaration.scope)
   }
 
+  if (mode === 'public-qualified-write' && !hasAgentToolAdmission(input.context, tool.id, declaration.scope)) {
+    return block(input, 'agent_tool_admission_required', overridePolicy === 'prompt', declaration.scope)
+  }
+
   if (!hasRequiredAuthority(input.context, declaration.authority)) {
     return block(input, `${declaration.authority}_auth_required`, overridePolicy === 'prompt', declaration.scope)
   }
@@ -269,6 +273,23 @@ function hasRequiredAuthority(
   }
 
   return approval.authority === authority
+}
+
+function hasAgentToolAdmission(
+  context: ActionContext | undefined,
+  toolId: string,
+  scope: HarnessSourceWriteAdmissionDeclaration['scope'],
+): boolean {
+  if (!isRecord(context)) {
+    return false
+  }
+
+  const admission = context.agentToolAdmission
+  if (!isRecord(admission)) {
+    return false
+  }
+
+  return admission.toolId === toolId && admission.scope === scope && typeof admission.principalId === 'string'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
