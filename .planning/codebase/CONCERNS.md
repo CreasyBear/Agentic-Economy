@@ -4,184 +4,222 @@
 
 ## Tech Debt
 
-**Retired AE presentation system remains active:**
-- Issue: The Astryx-era design authority says bespoke `Ae*` presentation components and handwritten CSS only shrink, but the app still imports the unlayered legacy CSS bundle and keeps a large `src/components/ae/` component tree.
-- Files: `DESIGN.md`, `src/styles/globals.css:13`, `src/styles/globals.css:19`, `src/styles/legacy.css:1`, `src/styles/legacy.css:9`, `src/components/ae/`, `public/images/illustration/`
-- Impact: New UI work can accidentally extend the retired Daylight/Register system, override Astryx tokens, or keep public surfaces visually inconsistent with `DESIGN.md`.
-- Fix approach: Re-skin one route family at a time onto Astryx primitives, delete the corresponding imports from `src/styles/legacy.css`, and keep new presentation code in `src/components/astryx/` or Astryx composition rather than adding new `Ae*` primitives.
+**Broad Convex source-state adapters:**
+- Issue: Several Convex functions load whole domain slices with `.collect()` and then hand large in-memory source-state objects to pure module code.
+- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/notificationOutbox.ts`, `convex/billingStore.ts`, `convex/business.ts`, `convex/security.ts`, `convex/observability.ts`
+- Impact: New tables and workflows increase read sets, write-conflict surface, private-data blast radius, and Convex transaction-limit risk.
+- Fix approach: Keep the pure domain modules, but replace broad loaders with indexed slice loaders by business, owner, thread, operation key, or dispatch id; use pagination for admin readbacks.
 
-**Large domain/runtime modules own too many responsibilities:**
-- Issue: Several files combine validators, source-state loading, authorization, command execution, persistence, projection, audit, and readback conversion in one module.
-- Files: `convex/inquiries.ts` (2627 lines), `src/modules/answer-thread/internal/turn-orchestrator.ts` (1819 lines), `src/modules/protected-action/internal/contact-follow-up.ts` (1801 lines), `src/modules/inquiries/internal/commands.ts` (1603 lines), `convex/registry.ts` (1590 lines), `convex/discovery.ts` (1502 lines)
-- Impact: Local changes have broad blast radius; policy and copy changes are hard to isolate from persistence and runtime adapter behavior.
-- Fix approach: Split by stable seams: keep pure command reducers in `src/modules/*/internal/commands.ts`, move Convex row codecs into `convex/*Store.ts`, and move public/readback projections into small files that can be tested without Convex runtime mocks.
+**Astryx migration has a live legacy presentation layer:**
+- Issue: `DESIGN.md` requires Astryx-first UI and no new bespoke `Ae*` presentation components, while active routes still rely on `src/components/ae/**` and unlayered legacy CSS.
+- Files: `DESIGN.md`, `src/components/ae/**`, `src/styles/globals.css`, `src/styles/legacy.css`, `src/styles/tokens.css`, `src/styles/base.css`, `src/routes/$slug.tsx`, `src/routes/claim.tsx`, `src/routes/owner.inquiries.tsx`
+- Impact: UI work can extend the retired Daylight-era component/token system, and legacy CSS can override Astryx defaults globally.
+- Fix approach: Move route surfaces to `@astryxdesign/core` primitives and neutral theme patterns, keep any remaining `Ae*` modules behavior-only, then remove the legacy CSS imports.
 
-**Registry/search fallback branches increase behavior surface:**
-- Issue: Public registry reads support Convex source queries, local E2E source ports, Meili search, dual shadow search, hydration, and explicit legacy fallback branches.
-- Files: `src/modules/registry/registry.functions.ts:76`, `src/modules/registry/registry.functions.ts:90`, `src/modules/registry/registry.functions.ts:96`, `src/modules/registry/registry.functions.ts:112`, `src/modules/registry/registry.functions.ts:161`, `src/modules/registry/registry.functions.ts:339`
-- Impact: Search behavior can differ by environment, and regressions can hide in one backend path while another path stays green.
-- Fix approach: Keep `tests/unit/registry/registry-fallback.test.ts` as the contract source, add backend-parity cases for every new search mode, and avoid adding new fallback paths without an explicit failure-mode test.
+**Duplicated local E2E auth bypass logic:**
+- Issue: Server modules read `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` directly instead of using one production-refusing helper.
+- Files: `src/start.ts`, `src/routes/__root.tsx`, `src/lib/server/require-operator-session.ts`, `src/lib/server/claim-owner-session.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/protected-action/contact-follow-up.functions.ts`, `src/modules/catalog/owner-claim.functions.ts`, `src/modules/storefront/storefront.functions.ts`, `src/routes/api.storefront.import-draft.ts`
+- Impact: The bypass is safe only while all production entrypoints run the top-level guards; duplicated checks are easy to miss in new server functions, route loaders, or tests.
+- Fix approach: Centralize a server-only `isLocalE2EAuthBypassEnabled()` helper that refuses production and replace every direct env check with it.
 
-**Policy code uses string fragmentation to avoid banned symbols:**
-- Issue: `src/modules/protected-action/internal/contact-follow-up.ts` builds blocked payment/provider parameter names from fragments such as `pay`, `ment`, `str`, and `ipe`.
-- Files: `src/modules/protected-action/internal/contact-follow-up.ts:1257`, `src/modules/protected-action/internal/contact-follow-up.ts:1276`, `src/lib/ui/contract-scans.ts:365`, `tests/imports/source-mining.test.ts:10`
-- Impact: The real policy surface is harder to read and audit; future edits can miss blocked names or accidentally weaken the protected-action boundary.
-- Fix approach: Move banned key lists into a documented scanner allowlist or test fixture exception so runtime policy can use explicit strings and remain reviewable.
+**Large mixed-responsibility modules:**
+- Issue: Several files combine adapter IO, source-state loading, validation, serialization, command orchestration, and policy decisions.
+- Files: `convex/inquiries.ts`, `src/modules/inquiries/internal/commands.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/businessActions.ts`, `convex/businessActionStore.ts`, `convex/notificationOutbox.ts`, `src/modules/protected-action/internal/contact-follow-up.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/discovery/developer-discovery.ts`, `src/modules/billing/internal/operations.ts`
+- Impact: Reviews span too many concerns at once, and small behavioral changes can accidentally touch auth, persistence, policy, and public DTOs in one file.
+- Fix approach: Split adapter loaders, DTO serializers, policy predicates, and pure commands into smaller modules while preserving existing public action boundaries.
+
+**Parked future-phase routes are importable code:**
+- Issue: Future-phase route files re-export active route behavior through a helper instead of staying purely inert documentation.
+- Files: `src/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook.ts`, `src/future-phases/route-helpers.ts`, `tests/unit/server/server-seams.test.ts`
+- Impact: Parked code can drift from active routes, and tests can create accidental dependencies on non-shipping future paths.
+- Fix approach: Keep future-phase route files as static plans or delete them when the phase lands; tests should import active route modules directly.
 
 ## Known Bugs
 
-**`inquiry.submit` is advertised on the quiet agent door but no successful tool-write path is visible:**
-- Symptoms: `GET /api/agent/tools` lists `inquiry.submit`, but `POST /api/agent/tools` forces `allowWrites: false` even after a signed identity check. Harness policy only enters `public-qualified-write` mode when `allowWrites === true`, so the write is blocked before `submitPublicInquiryThroughSource` can run.
-- Files: `src/routes/api.agent.tools.ts:39`, `src/routes/api.agent.tools.ts:92`, `src/routes/api.agent.tools.ts:109`, `src/routes/api.agent.tools.ts:114`, `src/modules/harness/tool-policy.ts:39`, `src/modules/harness/approval-policy.ts:121`, `src/modules/inquiries/inquiry.actions.ts:112`, `tests/integration/agent-tools-api.test.ts:195`, `tests/integration/agent-tools-api.test.ts:273`
-- Trigger: Submit a valid `inquiry.submit` body to `POST /api/agent/tools` with a signed Web Bot Auth identity.
-- Workaround: Use the human inquiry route or server-function path; do not tell assistants the quiet tool can submit until the public qualified-write path is implemented and tested.
+**Expired source-write nonces are never purged:**
+- Symptoms: `sourceWriteNonces` rows include `expiresAt`, and the schema says replay ledger rows are retained only until expiry, but no cleanup mutation or cron removes expired rows.
+- Files: `src/modules/security/internal/schema.ts`, `convex/sourceWriteAdmission.ts`, `convex/crons.ts`
+- Trigger: Any source-write protected mutation or agent write that consumes a nonce adds replay-ledger data.
+- Workaround: Not detected.
+- Fix approach: Add an internal cleanup mutation that scans `sourceWriteNonces.by_expiresAt` in batches and schedule it from `convex/crons.ts`.
 
-**Public trust vocabulary still contains `Verified` wording:**
-- Symptoms: The internal/public status presentation contains `registry_verified`, label `Registry verified`, and compact label `Verified`, while AGENTS/PRODUCT require `verified` only for a named standard.
-- Files: `src/lib/ui/status-presentation.ts:20`, `src/lib/ui/status-presentation.ts:190`, `src/lib/ui/status-presentation.ts:607`, `src/components/ae/status/AeStatusBadge.tsx:22`, `src/modules/business/public.ts:29`, `tests/ui-contract/status-copy.test.ts:5`
-- Trigger: Any public or operator status surface that renders `getStatusPresentation('registry_verified')` without the `AeStatusBadge` public override.
-- Workaround: `AeStatusBadge` maps public `registry_verified` to `Checked`, but the underlying presentation and JSON trust tier still use verified vocabulary.
+**Security spec does not match the storefront import fetch path:**
+- Symptoms: `.planning/SECURITY-SPEC.md` states there is no server-side fetch of owner-supplied URLs, while the active storefront import route fetches owner-provided websites behind an SSRF guard.
+- Files: `.planning/SECURITY-SPEC.md`, `src/routes/api.storefront.import-draft.ts`, `src/modules/storefront/internal/import-draft.ts`, `src/modules/storefront/internal/network-guard.ts`
+- Trigger: Owner storefront draft import requests that include `websiteUrl`.
+- Workaround: The implementation has URL parsing, DNS/public-IP checks, guarded lookup, redirect limits, timeout, byte cap, and content-type checks in `src/modules/storefront/internal/network-guard.ts`.
+- Fix approach: Update the security spec and threat model to describe the live fetch surface, then add a drift test that fails when fetch-capable routes lack SSRF documentation and tests.
 
 ## Security Considerations
 
-**CSP is report-only by default and allows inline scripts:**
-- Risk: Browser CSP does not block script execution unless `AE_CSP_REPORT_ONLY` is explicitly disabled, and `script-src` includes `'unsafe-inline'`.
-- Files: `src/lib/http/security-headers.ts:37`, `src/lib/http/security-headers.ts:49`, `src/lib/http/security-headers.ts:109`, `src/lib/http/security-headers.ts:120`, `tests/unit/http/security-headers.test.ts:37`, `tests/unit/http/security-headers.test.ts:67`
-- Current mitigation: Security headers include `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, and tests assert both report-only and enforcing modes in `tests/unit/http/security-headers.test.ts`.
-- Recommendations: Keep reports clean, switch production to enforcing CSP, and replace inline-script allowance with nonce/hash-compatible TanStack/Clerk/Astryx integration where feasible.
+**Agent tools endpoint reads request bodies before enforcing size caps:**
+- Risk: `POST /api/agent/tools` reads `request.text()` and computes a digest before schema/domain validation, and `inquiry.submit` action input does not enforce zod max lengths for body or contact fields at the route boundary.
+- Files: `src/routes/api.agent.tools.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/inquiries/internal/commands.ts`
+- Current mitigation: The route requires JSON, write tools require source-write admission, domain commands cap inquiry body length, and Convex inquiry abuse buckets rate-limit accepted submissions.
+- Recommendations: Enforce a byte cap before reading/hashing the request body, add zod max lengths for inquiry body and contact fields, and reject overlong payloads before invoking Convex.
 
-**Broad local E2E bypass flag touches auth, source writes, and fixtures:**
-- Risk: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` bypasses Clerk and routes multiple source paths to local fixtures. The production bootstrap guards are present, but a public-prefixed env var controls server-side behavior in many files.
-- Files: `src/start.ts:47`, `src/start.ts:49`, `src/start.ts:54`, `src/routes/__root.tsx:73`, `src/lib/server/require-operator-session.ts:10`, `src/lib/server/claim-owner-session.ts:5`, `src/modules/inquiries/inquiry.functions.ts:309`, `src/modules/inquiries/inquiry.functions.ts:826`, `src/modules/registry/registry.functions.ts:163`
-- Current mitigation: `src/start.ts:54` and `src/routes/__root.tsx:78` throw in production when the bypass is enabled.
-- Recommendations: Centralize this behind a server-only helper, use a non-`VITE_` server flag for server branches, and keep production/pre-production smoke tests proving the bypass is inactive.
+**CSP is telemetry-first by default:**
+- Risk: The security header helper defaults CSP to report-only unless `AE_CSP_REPORT_ONLY` disables report-only mode, and the policy allows `'unsafe-inline'` for scripts and styles.
+- Files: `src/lib/http/security-headers.ts`, `src/start.ts`
+- Current mitigation: Static headers include `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, referrer policy, permissions policy, and optional CSP reporting.
+- Recommendations: Make production CSP enforcement the default, move inline script/style requirements to nonces or hashes, and keep report-only mode only for explicit rollout windows.
 
-**Operator auth is split between sign-in guard and route readbacks:**
-- Risk: `operatorRouteOptions` only proves a user is signed in; owner/admin authorization is delegated to each route's readback branch.
-- Files: `src/lib/operator/route-options.ts:4`, `src/lib/operator/route-options.ts:10`, `src/lib/server/require-operator-session.ts:26`, `src/lib/server/require-operator-session.ts:33`, `src/routes/admin.inquiries.tsx`, `src/routes/admin.business-actions.tsx`, `src/routes/owner.inquiries.$threadId.tsx`
-- Current mitigation: Route comments and readback components distinguish missing membership from available rows, and admin/owner server functions call source queries with authenticated Convex clients.
-- Recommendations: Add a route-boundary test whenever a new `/admin/*`, `/owner/*`, or `/developers/*` route is added, proving no private rows render before the route-specific readback allows access.
+**Storefront import SSRF surface needs continuous hardening:**
+- Risk: Owner-supplied URL fetches are high-impact if URL parsing, DNS rebinding protection, redirect handling, or private-IP checks regress.
+- Files: `src/routes/api.storefront.import-draft.ts`, `src/modules/storefront/internal/import-draft.ts`, `src/modules/storefront/internal/network-guard.ts`, `src/modules/storefront/storefront.functions.ts`
+- Current mitigation: The route requires owner auth outside local E2E mode, validates URL protocol, blocks private/special host ranges, performs guarded DNS lookup, caps redirects, caps body bytes, enforces timeout, and accepts HTML content only.
+- Recommendations: Keep SSRF guard tests close to `src/modules/storefront/internal/network-guard.ts`, log denied reasons without leaking target details, and keep all owner URL fetches behind the same guard module.
+
+**Auth bypass env var is server-critical but client-named:**
+- Risk: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` is a `VITE_` variable even where it controls server-side auth behavior, which makes its intended scope easy to misunderstand.
+- Files: `src/start.ts`, `src/routes/__root.tsx`, `src/lib/server/require-operator-session.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/storefront/storefront.functions.ts`
+- Current mitigation: `src/start.ts` and `src/routes/__root.tsx` throw when the flag is enabled in production.
+- Recommendations: Move server-side bypass checks to a non-`VITE_` environment variable and expose client test state separately if the UI needs it.
 
 ## Performance Bottlenecks
 
-**Discovery files rebuild the full public catalog per request:**
-- Problem: `/llms.txt` and `/sitemap.xml` call Convex queries that collect all published businesses, then perform per-business lookups for context, services, capabilities, suppression, index status, and discovery attempts.
-- Files: `src/routes/llms[.]txt.ts:18`, `src/modules/discovery/discovery.functions.ts:36`, `convex/discovery.ts:355`, `convex/discovery.ts:369`, `convex/discovery.ts:655`, `convex/discovery.ts:606`, `convex/discovery.ts:620`, `convex/discovery.ts:627`, `convex/discovery.ts:1035`
-- Cause: `publicCatalogsForDiscovery` is catalog-wide and `indexStatusForBusiness` calls `db.query('indexStatus').collect()` for each business.
-- Improvement path: Persist discovery-file artifacts or catalog digest rows, update them on catalog publish/suppression/index events, and serve `/llms.txt`/`/sitemap.xml` from bounded reads.
+**Owner inquiry reads scan broad private inquiry state:**
+- Problem: Owner inbox, thread reads, and write flows hydrate broad inquiry source state before filtering to the current owner or thread.
+- Files: `convex/inquiries.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/inquiries/internal/commands.ts`
+- Cause: `loadInquirySourceState` collects inquiry threads, messages, notifications, privacy tombstones, abuse buckets, operation keys, and related catalog data as a single domain snapshot.
+- Improvement path: Load owner inbox slices by owner business ids, load threads by thread id plus owner authorization, and keep admin/system readbacks on paginated paths.
 
-**Owner billing slices scan all businesses before filtering:**
-- Problem: Owner billing paths load all `businesses` and filter by owner in application code.
-- Files: `convex/billing.ts:710`, `convex/billing.ts:719`, `convex/billingStore.ts:22`, `convex/billingStore.ts:425`
-- Cause: The code uses `.collect()` without a `by_ownerId` index on the billing read path.
-- Improvement path: Add an owner/business index or owner-business mapping table and read only the current owner's businesses before loading billing slices.
+**Public registry lookup performs bounded N+1 hydration:**
+- Problem: Public registry list/detail paths hydrate context, services, capabilities, suppression state, index status, and discovery attempts per business.
+- Files: `convex/registry.ts`, `src/modules/registry/registry.actions.ts`, `src/routes/api.businesses.$slug.ts`, `src/routes/api.businesses.search.ts`
+- Cause: `readPublicCatalogLookup` builds each public listing by running multiple per-business queries rather than reading a denormalized projection.
+- Improvement path: Treat `registryProjectionItems` or `registrySearchDocuments` as the primary public read model and update it from write paths; keep direct hydration for admin diagnostics.
 
-**Meili hydration is N+1 across public detail calls:**
-- Problem: Meili search returns candidate slugs, then hydration calls `sourcePort.detail` for every unique slug in parallel.
-- Files: `src/modules/registry/registry.functions.ts:112`, `src/modules/registry/registry.functions.ts:224`, `src/modules/registry/registry.functions.ts:225`, `src/modules/registry/internal/catalog-search-port.ts:181`
-- Cause: The search index intentionally stores lightweight documents, so result hydration depends on detail reads per slug.
-- Improvement path: Add a bounded batch detail source query or store enough public card data in the search document to avoid per-result detail calls for list/search pages.
+**Discovery file generation scans the whole public catalog:**
+- Problem: Discovery/assistant-oriented catalog generation collects all published businesses and sorts full catalog data in memory.
+- Files: `convex/discovery.ts`, `src/modules/discovery/internal/discovery-files.ts`, `src/routes/llms.txt.ts`
+- Cause: The discovery read path favors complete in-memory readback over paginated or pre-rendered output.
+- Improvement path: Generate cached discovery artifacts from projection tables, invalidate by digest, and paginate internal rebuild jobs.
 
-**Answer API rate limiting is process-local:**
-- Problem: Answer turn, answer stream, and follow-up chip rate limits use module-level arrays and maps.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts:12`, `src/modules/answer-thread/internal/turn-guard.ts:54`, `src/modules/answer-thread/internal/turn-guard.ts:78`, `src/modules/answer-thread/internal/turn-guard.ts:88`, `src/routes/api.answer.turn.ts:37`, `src/routes/api.answer.ts:30`, `src/routes/api.answer.follow-up-chips.ts:43`
-- Cause: Buckets live in memory, not Convex or a shared rate-limit store.
-- Improvement path: Move public answer abuse buckets to Convex or edge storage, keyed by pseudonymous session and request class, with cleanup equivalent to `convex/security.ts:267`.
+**Billing operation lookup uses broad table scans:**
+- Problem: Billing store helpers collect all businesses or all billing operations and then filter in memory.
+- Files: `convex/billingStore.ts`, `src/modules/billing/internal/operations.ts`
+- Cause: Billing slices are loaded as arrays instead of by owner or operation id indexes.
+- Improvement path: Add indexed Convex queries for owner billing state and operation id lookup before expanding paid activation flows.
 
 ## Fragile Areas
 
-**Convex source-state snapshot loaders collect many tables:**
-- Files: `convex/source_state.ts:139`, `convex/source_state.ts:165`, `convex/source_state.ts:180`, `convex/source_state.ts:460`
-- Why fragile: Full source reconstruction is useful for audits and tests, but it cannot be used safely on high-traffic or large-table paths.
-- Safe modification: Keep this path for explicit reconstruction only; create targeted loaders for business, inquiry, registry, and billing flows.
-- Test coverage: `tests/unit/convex/source-state.test.ts` and `tests/unit/convex/source-state-index-guard.test.ts` cover source-state shape and indexes, but performance budget tests are not visible.
+**Action registration and surface exposure are manual:**
+- Files: `src/modules/actions/index.ts`, `src/modules/common/action.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/registry/registry.actions.ts`, `src/modules/storefront/storefront.actions.ts`, `src/routes/api.agent.tools.ts`
+- Why fragile: New operations must be registered once and assigned the right `surfaces`; an incorrect `agentTools` surface can expose a write or internal action beyond the safe assistant contract.
+- Safe modification: Add or change operations only in `<module>/<module>.actions.ts`, register them in `src/modules/actions/index.ts`, and add tests that assert the `/api/agent/tools` allowlist contains only read/compare/detail plus qualified inquiry submission.
+- Test coverage: Surface and copy tests exist, but action registration needs a direct allowlist assertion for agent-callable tools.
 
-**Inquiry flow spans pure reducers and Convex adapter code:**
-- Files: `src/modules/inquiries/internal/commands.ts:284`, `src/modules/inquiries/internal/commands.ts:926`, `convex/inquiries.ts:612`, `convex/inquiries.ts:1246`, `convex/inquiries.ts:1314`, `convex/inquiries.ts:1480`
-- Why fragile: Inquiry admission, abuse buckets, owner inbox, notification binding, privacy export/delete, audit, and reconstruction all share the same runtime surface.
-- Safe modification: Change the pure command functions first, add unit tests in `tests/unit/inquiries/`, then update Convex row codecs/persistence separately in `convex/inquiries.ts`.
-- Test coverage: Good unit/runtime coverage exists in `tests/unit/inquiries/inquiry-flow.test.ts`, `tests/unit/convex/inquiries-runtime.test.ts`, and `tests/integration/agent-tools-api.test.ts`; the quiet-agent successful write path is not covered.
+**Source-write admission spans server routes, Convex nonces, and action execution:**
+- Files: `src/modules/security/source-write-admission.ts`, `convex/sourceWriteAdmission.ts`, `src/routes/api.agent.tools.ts`, `src/modules/inquiries/inquiry.functions.ts`, `convex/protectedActionStore.ts`, `convex/businessActionStore.ts`
+- Why fragile: Request binding, body digesting, nonce consumption, stale admission checks, and Convex mutation admission are distributed across multiple modules.
+- Safe modification: Treat source-write changes as security-sensitive and update replay, stale-token, wrong-tool, wrong-path, and wrong-body tests together.
+- Test coverage: Admission behavior has focused tests, but nonce retention cleanup and oversized body handling are uncovered.
 
-**Answer orchestration mixes intent routing, streaming, tool execution, and final prose assembly:**
-- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts:161`, `src/modules/answer-thread/internal/turn-orchestrator.ts:659`, `src/modules/answer-thread/internal/turn-orchestrator.ts:1071`, `src/modules/answer-thread/internal/turn-orchestrator.ts:1217`, `src/modules/answer-thread/internal/turn-orchestrator.ts:1330`
-- Why fragile: Small changes can affect empty states, inquiry handoff, boundary answers, LLM tool-use, persisted turn state, and streaming event ordering.
-- Safe modification: Add focused tests around the route branch being changed, especially `tests/integration/answer-turn-intent-routing.test.ts` and `tests/unit/answer-thread/answer-harness-operation.test.ts`.
-- Test coverage: Broad tests exist, but the module size makes branch-specific regressions likely when adding new answer states.
+**Generated route tree is large and committed:**
+- Files: `src/routeTree.gen.ts`, `src/routes/**`, `package.json`
+- Why fragile: Route changes depend on generated output staying in sync with source routes, and the generated file is large enough to hide unrelated churn.
+- Safe modification: Run the route generation command after route changes and review `src/routeTree.gen.ts` as generated output only.
+- Test coverage: Server route seam tests cover selected routes, but there is no simple generated-route freshness gate.
+
+**Trust contract vocabulary is split across product docs, actions, DTOs, and copy tests:**
+- Files: `AGENTS.md`, `PRODUCT.md`, `DESIGN.md`, `src/modules/inquiries/internal/policy.ts`, `src/modules/inquiries/internal/commands.ts`, `src/modules/registry/registry.actions.ts`, `tests/unit/copy/copy-guard.test.ts`
+- Why fragile: AE must describe reading, comparison, routing, and qualified inquiry submission without implying booking, charging, dispatch, or autonomous fulfillment; future copy/action changes can violate that boundary.
+- Safe modification: Keep action `summary` and `boundaries` explicit, run copy guard tests for public surfaces, and review DTO enum names before exposing them to human UI.
+- Test coverage: Copy guards exist, but new JSON/action DTOs need explicit boundary assertions when they become public or agent-callable.
 
 ## Scaling Limits
 
-**Public discovery artifacts scale with total published catalog size:**
-- Current capacity: Bounded by Convex transaction/read limits for `convex/discovery.ts:655` and per-business reads in `convex/discovery.ts:606`.
-- Limit: `/llms.txt`, `/sitemap.xml`, and developer discovery route health become expensive as published business count grows.
-- Scaling path: Maintain generated discovery artifacts in Convex tables and update them from publish/suppress/index operations.
+**Convex transaction and read-size ceilings constrain current loaders:**
+- Current capacity: Registry search caps public search output, inquiry abuse buckets cap accepted submissions per business/service, and most public lists are bounded at the route/action layer.
+- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/notificationOutbox.ts`, `src/modules/registry/registry.actions.ts`, `src/modules/inquiries/internal/schema.ts`
+- Limit: Broad `.collect()` loaders and per-business hydration hit Convex document, byte, and transaction-time limits as the catalog, inquiry history, audit events, and outbox rows grow.
+- Scaling path: Replace whole-table loaders with indexed query helpers, materialize public projections, and add pagination to owner/admin read models.
 
-**Answer sessions are capped at 25 turns per thread:**
-- Current capacity: `ANSWER_TURN_MAX_PER_THREAD = 25`.
-- Limit: Long-running chat sessions hit `thread_turn_limit` instead of compacting or archiving.
-- Scaling path: Add thread summarization/compaction or forked continuation threads before increasing the hard cap.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts:6`, `src/modules/answer-thread/internal/turn-guard.ts:115`, `convex/answerThreads.ts:104`
+**Append-only operational tables have limited retention controls:**
+- Current capacity: Abuse buckets have cleanup crons, while replay, audit, funnel, notification, and operation-key style data mostly accumulate.
+- Files: `convex/crons.ts`, `convex/sourceWriteAdmission.ts`, `convex/source_state.ts`, `convex/notificationOutbox.ts`, `convex/inquiries.ts`, `convex/protectedActionStore.ts`, `convex/businessActionStore.ts`
+- Limit: Long-lived operational rows increase storage costs and make broad source-state loaders slower.
+- Scaling path: Define retention by table class, add batched cleanup mutations, and keep audit-retention exceptions explicit.
 
-**In-memory answer buckets do not scale across serverless instances:**
-- Current capacity: Per process only.
-- Limit: Multiple Node serverless instances have independent `turnRateLimitBuckets`, `followUpChipsRateLimitBuckets`, and `answerStreamRateLimitBuckets`.
-- Scaling path: Use the persisted `abuseRateLimitBuckets` pattern from `convex/security.ts:267` for public answer endpoints.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts:12`, `convex/security.ts:267`
+**Agent/public JSON endpoints have no explicit platform-wide payload budget:**
+- Current capacity: Domain policy caps inquiry body length, and storefront import caps fetched remote bytes.
+- Files: `src/routes/api.agent.tools.ts`, `src/routes/api.businesses.search.ts`, `src/routes/api.businesses.$slug.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/storefront/internal/network-guard.ts`
+- Limit: Large request bodies, query strings, or response payloads can consume server memory before domain limits apply.
+- Scaling path: Define per-route request and response budgets, enforce them before parsing, and test large rejected payloads.
 
 ## Dependencies at Risk
 
-**Nitro nightly is in the build/deployment path:**
-- Risk: `nitro` is aliased to `nitro-nightly`, and `vite.config.ts` uses `nitro()` to produce the Vercel Node serverless deployment.
-- Impact: Nightly regressions can break builds, serverless routing, or webhook raw-body behavior.
-- Migration plan: Pin to a stable Nitro release when available; keep deploy-smoke coverage for webhook raw body/signature paths before and after migration.
-- Files: `package.json:93`, `package-lock.json:17350`, `vite.config.ts:5`, `vite.config.ts:60`
+**Fast-moving app runtime stack:**
+- Risk: The app depends on recent TanStack Start, React, Vite, TypeScript, Nitro, and Vinxi packages where routing, server functions, middleware, and build behavior can change under upgrades.
+- Impact: Route generation, server function execution, security headers, SSR behavior, and test harness behavior can break together.
+- Files: `package.json`, `vite.config.ts`, `app.config.ts`, `src/start.ts`, `src/routeTree.gen.ts`
+- Migration plan: Pin runtime upgrades to dedicated maintenance phases, run `test:all`, route generation, server seam tests, and an owner/agent API smoke suite before merging.
 
-**Client-exposed `VITE_` names are used for server behavior:**
-- Risk: Public-prefixed variables are easy to misunderstand as browser-only or safe to expose, while the code uses `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E` and scanner rules mention `VITE_AE_SOURCE_WRITE_SECRET`.
-- Impact: Environment mistakes can affect auth bypasses, source-write behavior, and local fixture routing.
-- Migration plan: Rename server-control env vars to server-only names and keep Vite public vars only for browser rendering decisions.
-- Files: `src/start.ts:49`, `src/routes/__root.tsx:73`, `src/lib/ui/contract-scans.ts:370`, `src/modules/registry/registry.functions.ts:350`
+**Astryx 0.1.x is still integrated alongside local legacy UI:**
+- Risk: The design-system dependency is early-versioned while the app still carries legacy `Ae*` components and Daylight-era CSS shims.
+- Impact: Astryx API churn can force UI changes across routes that have not fully migrated, and local CSS can mask component regressions.
+- Files: `package.json`, `src/components/astryx/**`, `src/components/ae/**`, `src/styles/legacy.css`, `src/styles/tokens.css`
+- Migration plan: Route all new UI through Astryx adapters, avoid extending `src/components/ae/**`, and remove legacy CSS imports as each route migrates.
+
+**Convex schema and generated files require disciplined regeneration:**
+- Risk: Convex functions rely on generated API/data-model files and guidelines that must stay aligned with schema changes.
+- Impact: Schema/type drift can surface as runtime failures or stale generated imports in server functions.
+- Files: `convex/schema.ts`, `convex/_generated/**`, `convex/_generated/ai/guidelines.md`, `package.json`
+- Migration plan: Regenerate Convex files after schema/function changes, read `convex/_generated/ai/guidelines.md` before Convex work, and keep generated output review separate from hand-written logic.
 
 ## Missing Critical Features
 
-**Successful public qualified inquiry through `/api/agent/tools`:**
-- Problem: The product contract says assistants can send a qualified inquiry when a listing publishes that capability, and `inquiry.submit` is listed as an agent tool, but the route-level runner does not allow writes.
-- Blocks: External assistant completion of the first owned conversion through the quiet agent door.
-- Files: `AGENTS.md`, `src/routes/api.agent.tools.ts:109`, `src/routes/api.agent.tools.ts:114`, `src/modules/inquiries/inquiry.actions.ts:112`
+**No source-write nonce retention job:**
+- Problem: Replay nonce storage has an expiry field and index but no scheduled cleanup.
+- Blocks: Long-running production use without manual data maintenance.
+- Files: `src/modules/security/internal/schema.ts`, `convex/sourceWriteAdmission.ts`, `convex/crons.ts`
 
-**Distributed abuse protection for answer endpoints:**
-- Problem: Public answer endpoints use session cookies and process-local buckets, but no shared limiter is visible for `POST /api/answer/turn`, `GET /api/answer?stream=1`, or `POST /api/answer/follow-up-chips`.
-- Blocks: Reliable abuse control under horizontal scaling or cold starts.
-- Files: `src/routes/api.answer.turn.ts:22`, `src/routes/api.answer.ts:23`, `src/routes/api.answer.follow-up-chips.ts:28`, `src/modules/answer-thread/internal/turn-guard.ts:12`
+**No centralized production-safe local bypass helper:**
+- Problem: Local E2E auth bypass checks are repeated across server modules and routes.
+- Blocks: Confident addition of new owner/admin/server functions that need test auth bypasses.
+- Files: `src/start.ts`, `src/routes/__root.tsx`, `src/lib/server/require-operator-session.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/storefront/storefront.functions.ts`
 
-**Named verification standard for any `verified` trust tier:**
-- Problem: `registry_verified` exists in trust-tier contracts without a named standard in the code paths inspected.
-- Blocks: Product-safe use of `Verified` labels on public or operator surfaces.
-- Files: `PRODUCT.md`, `AGENTS.md`, `src/modules/business/public.ts:29`, `src/lib/ui/status-presentation.ts:190`, `src/modules/discovery/developer-discovery.ts:510`
+**No current SSRF threat-model entry for storefront import:**
+- Problem: Active owner URL fetching is guarded in code but not represented in the current security spec.
+- Blocks: Reliable security review of future import/fetch features.
+- Files: `.planning/SECURITY-SPEC.md`, `src/routes/api.storefront.import-draft.ts`, `src/modules/storefront/internal/network-guard.ts`
+
+**No measured Convex performance budgets for hot paths:**
+- Problem: Broad source-state loaders and public catalog hydration have no documented query/read budgets.
+- Blocks: Knowing when catalog, inquiry, outbox, or owner surfaces cross safe operational limits.
+- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/notificationOutbox.ts`
 
 ## Test Coverage Gaps
 
-**No positive `/api/agent/tools` write test:**
-- What's not tested: A signed, admitted `inquiry.submit` request returning `inquiry_submitted` or `inquiry_replayed` through `POST /api/agent/tools`.
-- Files: `tests/integration/agent-tools-api.test.ts:195`, `tests/integration/agent-tools-api.test.ts:273`, `src/routes/api.agent.tools.ts:114`
-- Risk: The only assistant-exposed write remains listed but unusable.
+**Source-write nonce cleanup:**
+- What's not tested: Expired `sourceWriteNonces` cleanup by `expiresAt`, including batching and preserving unexpired nonce rows.
+- Files: `convex/sourceWriteAdmission.ts`, `src/modules/security/internal/schema.ts`, `convex/crons.ts`
+- Risk: Replay ledger data accumulates unnoticed.
 - Priority: High
 
-**Status copy tests do not reject verified wording:**
-- What's not tested: `aeStatusPresentation` public labels/descriptions/compact labels avoiding `Verified` unless backed by a named standard.
-- Files: `tests/ui-contract/status-copy.test.ts:5`, `src/lib/ui/status-presentation.ts:190`
-- Risk: Public or operator UI can drift away from the AGENTS/PRODUCT trust vocabulary.
+**Oversized agent tool payloads:**
+- What's not tested: Oversized JSON body rejection before `request.text()` digesting and oversized contact fields for `inquiry.submit`.
+- Files: `src/routes/api.agent.tools.ts`, `src/modules/inquiries/inquiry.actions.ts`, `src/modules/inquiries/internal/commands.ts`
+- Risk: Public agent endpoint can consume avoidable memory and CPU before domain validation rejects input.
+- Priority: High
+
+**Convex loader volume behavior:**
+- What's not tested: Public registry, owner inquiry, notification outbox, billing, and discovery functions under large table sizes.
+- Files: `convex/source_state.ts`, `convex/inquiries.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/notificationOutbox.ts`, `convex/billingStore.ts`
+- Risk: Convex limits or latency regressions appear only after production data grows.
+- Priority: High
+
+**Local E2E bypass centralization:**
+- What's not tested: Every server-side bypass path refusing production independently of app startup order.
+- Files: `src/start.ts`, `src/routes/__root.tsx`, `src/lib/server/require-operator-session.ts`, `src/modules/inquiries/inquiry.functions.ts`, `src/modules/storefront/storefront.functions.ts`
+- Risk: A new server entrypoint can accidentally honor test bypass configuration outside the intended environment.
 - Priority: Medium
 
-**No load/performance test for discovery file generation:**
-- What's not tested: Published-catalog size where `readLlmsTxt` and `readSitemapXml` exceed Convex read/function budgets.
-- Files: `convex/discovery.ts:355`, `convex/discovery.ts:369`, `convex/discovery.ts:655`, `tests/seo/discovery-files.test.ts`
-- Risk: Discovery routes pass correctness tests but degrade as catalog size grows.
-- Priority: Medium
-
-**No cross-instance rate-limit test for answer endpoints:**
-- What's not tested: Multiple server instances sharing answer-turn, stream, and follow-up-chip abuse limits.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts:12`, `tests/integration/answer-rate-limits.test.ts`
-- Risk: Rate limits appear correct in one process but fail under serverless scaling.
+**Security-spec drift for URL fetch surfaces:**
+- What's not tested: Any route that performs server-side fetches of user/owner-supplied URLs must use the shared SSRF guard and be represented in `.planning/SECURITY-SPEC.md`.
+- Files: `.planning/SECURITY-SPEC.md`, `src/routes/api.storefront.import-draft.ts`, `src/modules/storefront/internal/network-guard.ts`
+- Risk: New fetch features can bypass threat-model review or duplicate incomplete SSRF protections.
 - Priority: Medium
 
 ---

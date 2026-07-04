@@ -6,337 +6,387 @@
 
 ```text
 agentic-economy/
-├── src/                         # TanStack Start app, routes, components, modules, styles
-│   ├── routes/                  # File-based pages and API endpoints
-│   ├── modules/                 # Domain modules, actions, server functions, readbacks
-│   ├── components/              # UI components and Astryx adapter
-│   ├── lib/                     # Server, HTTP, observability, operator, UI helpers
+├── src/                         # TanStack Start app, domain modules, UI, server adapters
+│   ├── routes/                  # File-based routes, API routes, discovery routes
+│   ├── modules/                 # Domain seams, actions, server functions, internal logic
+│   ├── components/              # Astryx-backed UI, AE shells, chat/listing/inquiry components
+│   ├── lib/                     # Cross-cutting server, HTTP, operator, observability, UI helpers
 │   ├── hooks/                   # Shared React hooks
-│   ├── styles/                  # Global CSS cascade and legacy CSS
-│   ├── app/                     # App-style page experiments/library/chat pages
-│   ├── future-phases/           # Parked future route code excluded from TypeScript
-│   ├── router.tsx               # TanStack Router factory
-│   ├── start.ts                 # TanStack Start middleware
-│   └── routeTree.gen.ts         # Generated TanStack route tree
-├── convex/                      # Convex schema, functions, auth, crons, runtime adapters
-├── tests/                       # Vitest, integration, E2E, copy, import, SEO, UI contract tests
-├── eval/answer/                 # Answer eval suites, promptfoo config, scoring scripts
+│   ├── styles/                  # Global CSS, legacy CSS bridge, token/base files
+│   ├── app/                     # Prototype/demo pages not in the active TanStack route tree
+│   ├── future-phases/           # Excluded phase stubs and future work
+│   ├── routeTree.gen.ts         # Generated TanStack route tree
+│   ├── router.tsx               # Router creation
+│   └── start.ts                 # TanStack Start middleware entry
+├── convex/                      # Convex schema, functions, authz, stores, generated API
+├── tests/                       # Unit, integration, e2e, import, copy, SEO, UI contract tests
+├── eval/answer/                 # Answer-evaluation harness and promptfoo config
+├── examples/agent-experience/   # Agent experience audit example files
 ├── public/                      # Static assets and public images
-├── .agents/skills/              # Repo-local agent/UI/Convex/business skills
-├── .codex/skills/               # Repo-local GSD, Convex, Clerk, TanStack, security skills
-├── .planning/                   # GSD project planning artifacts and codebase maps
-├── .ui-craft/                   # UI design memory, reports, reviews, surface notes
-├── tools/                       # Local utility scripts
-├── workflows/                   # Workflow documentation
-├── examples/                    # Example agent-experience harness
-├── vendor/                      # Vendored/provenance-tracked external materials
-├── package.json                 # Scripts and dependencies
-├── vite.config.ts               # Vite/TanStack Start/Nitro/Tailwind/Sentry config
-├── vitest.config.ts             # Vitest config
-├── playwright.config.ts         # Playwright config
-├── tsconfig.json                # TypeScript config and path aliases
-├── DESIGN.md                    # Visual authority and Astryx-era rules
+├── .planning/                   # GSD planning, maps, audits, graph outputs, codebase docs
+├── .codex/                      # Project Codex skills and workflows
+├── .agents/                     # Project agent skills and local instructions
+├── vendor/                      # Vendored reference packages
+├── workflows/                   # Workflow documentation and support files
+├── package.json                 # Scripts, dependencies, package manager declaration
+├── vite.config.ts               # TanStack Start, Vite, Nitro, Tailwind, Sentry build config
+├── tsconfig.json                # TypeScript compiler config and path aliases
+├── DESIGN.md                    # Visual/UI authority
 ├── PRODUCT.md                   # Product thesis and trust contract
-└── AGENTS.md                    # Always-on repo instructions and AE boundaries
+└── AGENTS.md                    # Always-on repository instructions
 ```
 
 ## Directory Purposes
 
-**`src/routes/`:**
-- Purpose: Own browser routes, API routes, loaders, search param validation, server handlers, and route-local UI composition.
-- Contains: Public routes such as `src/routes/index.tsx`, `src/routes/registry.tsx`, `src/routes/$slug.tsx`, owner/admin routes such as `src/routes/owner.inquiries.tsx`, and API routes such as `src/routes/api.agent.tools.ts`.
-- Key files: `src/routes/__root.tsx`, `src/routes/api.answer.turn.ts`, `src/routes/api.businesses.search.ts`, `src/routes/llms[.]txt.ts`
+**`src/routes`:**
+- Purpose: Own URL shape for public pages, owner/admin/developer surfaces, API endpoints, and assistant-readable routes.
+- Contains: TanStack file routes such as `src/routes/registry.tsx`, dynamic public routes such as `src/routes/$slug.tsx`, nested inquiry route `src/routes/$slug.inquiry.tsx`, API routes such as `src/routes/api.agent.tools.ts`, and escaped text/XML routes such as `src/routes/llms[.]txt.ts`.
+- Key files: `src/routes/__root.tsx`, `src/routes/index.tsx`, `src/routes/registry.tsx`, `src/routes/$slug.tsx`, `src/routes/$slug.inquiry.tsx`, `src/routes/api.answer.turn.ts`, `src/routes/api.agent.tools.ts`.
 
-**`src/modules/`:**
-- Purpose: Own domain logic, contracts, readbacks, action definitions, server functions, and module-owned schema fragments.
-- Contains: Feature folders such as `src/modules/registry/`, `src/modules/inquiries/`, `src/modules/catalog/`, `src/modules/answer-thread/`, `src/modules/harness/`, `src/modules/security/`, and `src/modules/billing/`.
-- Key files: `src/modules/actions/index.ts`, `src/modules/common/action.ts`, `src/modules/registry/registry.actions.ts`, `src/modules/inquiries/inquiry.functions.ts`
+**`src/modules`:**
+- Purpose: Own domain behavior, action contracts, route readbacks, server functions, schemas, DTOs, and private implementation details.
+- Contains: Domain folders including `src/modules/registry`, `src/modules/catalog`, `src/modules/inquiries`, `src/modules/answer`, `src/modules/answer-thread`, `src/modules/discovery`, `src/modules/clearance`, `src/modules/security`, `src/modules/harness`, `src/modules/observability`, `src/modules/billing`, and `src/modules/protected-action`.
+- Key files: `src/modules/actions/index.ts`, `src/modules/common/action.ts`, `src/modules/registry/public.ts`, `src/modules/inquiries/public.ts`, `src/modules/answer/public.ts`, `src/modules/discovery/public.ts`.
 
-**`src/modules/*/internal/`:**
-- Purpose: Keep implementation details behind module `public.ts` seams.
-- Contains: Pure commands, validators, projections, schema definitions, adapters, and policy helpers.
-- Key files: `src/modules/inquiries/internal/commands.ts`, `src/modules/catalog/internal/catalog-model.ts`, `src/modules/registry/internal/search.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`
+**`src/components`:**
+- Purpose: Render application UI using Astryx as the primary component system and AE-specific behavioral/presentation wrappers where they already exist.
+- Contains: `src/components/ae` for AE shells and domain UI, `src/components/ai-elements` for chat primitives, `src/components/astryx` for Astryx adapters/ejected components, and `src/components/ui` for legacy UI wrappers.
+- Key files: `src/components/ae/layout/AePublicShell.tsx`, `src/components/ae/layout/AeOperatorShell.tsx`, `src/components/ae/listing/AeProviderListingPage.tsx`, `src/components/astryx/RouterLink.tsx`.
 
-**`src/components/`:**
-- Purpose: Render reusable UI pieces for route surfaces.
-- Contains: `src/components/astryx/` for framework adapters, `src/components/ae/` for AE-specific components, `src/components/ai-elements/` for chat primitives, and `src/components/ui/` legacy wrappers.
-- Key files: `src/components/astryx/RouterLink.tsx`, `src/components/ae/layout/AePublicShell.tsx`, `src/components/ae/layout/AeOperatorShell.tsx`, `src/components/ae/chat/AeChat.tsx`
+**`src/lib`:**
+- Purpose: House shared cross-cutting helpers that are not owned by one domain module.
+- Contains: Server helpers in `src/lib/server`, HTTP/security helpers in `src/lib/http`, observability setup in `src/lib/observability`, operator route helpers in `src/lib/operator`, and shared UI utilities in `src/lib/ui`.
+- Key files: `src/lib/server/convex-source.ts`, `src/lib/server/source-write-admission.ts`, `src/lib/server/require-operator-session.ts`, `src/lib/operator/route-options.ts`, `src/lib/observability/config.ts`.
 
-**`src/lib/`:**
-- Purpose: Provide non-domain infrastructure helpers shared by routes and modules.
-- Contains: Server clients/auth helpers in `src/lib/server/`, HTTP helpers in `src/lib/http/`, observability helpers in `src/lib/observability/`, operator navigation helpers in `src/lib/operator/`, and UI mapping utilities in `src/lib/ui/`.
-- Key files: `src/lib/server/convex-source.ts`, `src/lib/server/source-write-admission.ts`, `src/lib/http/security-headers.ts`, `src/lib/operator/navigation.ts`
+**`src/hooks`:**
+- Purpose: Provide small reusable React hooks.
+- Contains: Hook files such as `src/hooks/use-mobile.ts`.
+- Key files: `src/hooks/use-mobile.ts`.
 
-**`src/styles/`:**
-- Purpose: Own the global CSS cascade and transitional legacy styling.
-- Contains: `src/styles/globals.css`, `src/styles/base.css`, `src/styles/tokens.css`, `src/styles/legacy.css`, and answer-specific CSS under `src/styles/answer/`.
-- Key files: `src/styles/globals.css`, `src/styles/legacy.css`
+**`src/styles`:**
+- Purpose: Define global style ordering, Tailwind/Astryx integration, and the shrinking legacy style bridge.
+- Contains: `src/styles/globals.css`, `src/styles/legacy.css`, `src/styles/tokens.css`, and `src/styles/base.css`.
+- Key files: `src/styles/globals.css`, `src/styles/legacy.css`.
 
-**`convex/`:**
-- Purpose: Own Convex runtime functions, composed schema, auth config, crons, and persistence adapters.
-- Contains: `convex/schema.ts`, domain function files such as `convex/registry.ts` and `convex/inquiries.ts`, auth helpers in `convex/authz.ts`, and source-state adapters in `convex/source_state.ts`.
-- Key files: `convex/schema.ts`, `convex/auth.config.ts`, `convex/sourceWriteAdmission.ts`, `convex/crons.ts`
+**`src/app`:**
+- Purpose: Store prototype or demo pages that are not part of the active TanStack route tree.
+- Contains: Client-style demo pages such as `src/app/ai-chat/page.tsx`, `src/app/library/page.tsx`, and `src/app/ai-chat-landing/page.tsx`.
+- Key files: `src/app/ai-chat/page.tsx`, `src/app/library/page.tsx`, `src/app/ai-chat-landing/page.tsx`.
 
-**`tests/`:**
-- Purpose: Validate unit, integration, E2E, import-boundary, copy, SEO, UI contract, Convex runtime, and deployment smoke behavior.
-- Contains: `tests/unit/`, `tests/integration/`, `tests/e2e/`, `tests/copy/`, `tests/imports/`, `tests/seo/`, `tests/ui-contract/`, `tests/helpers/`, and fixtures.
-- Key files: `tests/integration/agent-tools-api.test.ts`, `tests/unit/actions/registry.test.ts`, `tests/copy/phase1-banned-copy.test.ts`, `tests/imports/route-boundary.test.ts`
+**`src/future-phases`:**
+- Purpose: Hold excluded future-phase stubs and non-active implementation sketches.
+- Contains: Files excluded by `tsconfig.json`.
+- Key files: `src/future-phases`.
 
-**`eval/answer/`:**
-- Purpose: Evaluate answer quality, coverage, promptfoo behavior, scoring, and live API studies.
-- Contains: `eval/answer/scripts/`, `eval/answer/lib/`, `eval/answer/assertions/`, and `eval/answer/promptfooconfig.yaml`.
-- Key files: `eval/answer/scripts/run-suite.ts`, `eval/answer/lib/scoring.ts`, `eval/answer/promptfooconfig.yaml`
+**`convex`:**
+- Purpose: Define durable backend schema, Convex functions, authz, stores, projections, and generated Convex API.
+- Contains: Function files such as `convex/registry.ts`, `convex/catalog.ts`, `convex/inquiries.ts`, `convex/discovery.ts`, store files such as `convex/businessActionStore.ts`, schema composition in `convex/schema.ts`, and generated files in `convex/_generated`.
+- Key files: `convex/schema.ts`, `convex/registry.ts`, `convex/catalog.ts`, `convex/inquiries.ts`, `convex/sourceWriteAdmission.ts`, `convex/authz.ts`, `convex/_generated/ai/guidelines.md`.
 
-**`public/`:**
-- Purpose: Serve static images and favicon assets.
-- Contains: `public/favicon.svg`, `public/images/illustration/*`, and landing assets under `public/ae-landing/`.
-- Key files: `public/images/illustration/hero-victorian-house.png`, `public/images/illustration/no-results.png`
+**`tests`:**
+- Purpose: Enforce behavior, copy boundaries, route boundaries, import seams, API contracts, E2E flows, and UI contracts.
+- Contains: `tests/unit`, `tests/integration`, `tests/e2e`, `tests/imports`, `tests/copy`, `tests/seo`, `tests/ui-contract`, `tests/eval`, and helper fixtures.
+- Key files: `tests/imports/route-boundary.test.ts`, `tests/imports/private-imports.test.ts`, `tests/imports/source-mining.test.ts`, `tests/copy/phase1-banned-copy.test.ts`, `tests/unit/actions/agent-tools-surface.test.ts`, `tests/integration/agent-tools-api.test.ts`.
 
-**`.agents/skills/` and `.codex/skills/`:**
-- Purpose: Store repo-local skill instructions that affect architecture, Convex, UI, GSD, and agent operations.
-- Contains: AE-specific `submit-qualified-inquiry`, UI Craft, Convex, GSD, Clerk, TanStack, and security skills.
-- Key files: `.agents/skills/submit-qualified-inquiry/SKILL.md`, `.agents/skills/ui-craft/SKILL.md`, `.agents/skills/convex/SKILL.md`, `.codex/skills/gsd-map-codebase/SKILL.md`
+**`eval/answer`:**
+- Purpose: Configure answer-quality evaluation and promptfoo-style checks.
+- Contains: Answer eval configuration and fixtures.
+- Key files: `eval/answer`.
 
-**`.planning/`:**
-- Purpose: Store GSD state, plans, and generated codebase maps.
-- Contains: `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/STRUCTURE.md`, and other planning artifacts.
-- Key files: `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/STRUCTURE.md`
+**`public`:**
+- Purpose: Serve static assets directly.
+- Contains: Public images and illustration assets.
+- Key files: `public/images/illustration`.
 
-**`.ui-craft/`:**
-- Purpose: Store UI design memory, reports, reviews, and surface notes used by UI Craft workflows.
-- Contains: `.ui-craft/surfaces/`, `.ui-craft/reports/`, `.ui-craft/reviews/`.
-- Key files: `.ui-craft/surfaces/*` when a UI task targets a named surface.
+**`.planning`:**
+- Purpose: Store GSD planning artifacts, codebase maps, graph outputs, audits, and generated context.
+- Contains: `.planning/codebase` for mapper output and other planning subdirectories.
+- Key files: `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/STRUCTURE.md`.
+
+**`.codex` and `.agents`:**
+- Purpose: Store project-specific agent skills, workflows, and instruction packs.
+- Contains: Skill directories with `SKILL.md` files and supporting workflow files.
+- Key files: `.codex/skills/gsd-map-codebase/SKILL.md`, `.codex/gsd-core/workflows/map-codebase.md`, `.agents/skills/convex/SKILL.md`, `.agents/skills/submit-qualified-inquiry/SKILL.md`.
+
+**`vendor`:**
+- Purpose: Store vendored reference packages.
+- Contains: `vendor/handshake-protocol-kernel`.
+- Key files: `vendor/handshake-protocol-kernel`.
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/routes/__root.tsx`: Root document, providers, CSS link, Clerk provider gating, observability, error boundary.
-- `src/router.tsx`: TanStack Router factory and default not-found component.
-- `src/start.ts`: TanStack Start request middleware stack.
-- `src/routeTree.gen.ts`: Generated route manifest imported by `src/router.tsx`.
-- `convex/schema.ts`: Convex schema composer for all module-owned tables.
-- `convex/auth.config.ts`: Clerk JWT provider config for Convex auth.
+- `src/start.ts`: TanStack Start middleware, observability, security headers, CSRF, source-write admission, and Clerk setup.
+- `src/router.tsx`: TanStack router creation from `src/routeTree.gen.ts`.
+- `src/routes/__root.tsx`: Root document shell, Astryx providers, conditional Clerk provider, global CSS, and outlet.
+- `vite.config.ts`: TanStack Start, Vite, Nitro/Vercel, Tailwind, React, and optional Sentry plugin configuration.
+- `convex/schema.ts`: Convex schema composition for durable backend tables.
 
-**Configuration:**
-- `package.json`: NPM scripts, runtime dependencies, and package manager declaration.
-- `vite.config.ts`: TanStack Start, Nitro Vercel Node runtime, Tailwind 4, React, Sentry plugin, and SSR bundling rules.
-- `tsconfig.json`: Strict TypeScript config, `@/*` and `~/*` aliases, and Convex/test includes.
-- `vitest.config.ts`: Vitest test environment and test file include pattern.
-- `playwright.config.ts`: Playwright E2E configuration.
-- `playwright.deploy-smoke.config.ts`: Deployment smoke Playwright configuration.
-- `.env.example`: Documented environment variable names only.
-
-**Core Logic:**
-- `src/modules/common/action.ts`: Action contract type, agent descriptor conversion, action surfaces.
-- `src/modules/actions/index.ts`: Explicit registry of action-backed operations.
-- `src/modules/registry/registry.actions.ts`: Public catalog read actions.
-- `src/modules/inquiries/inquiry.actions.ts`: Qualified inquiry action.
-- `src/modules/registry/registry.functions.ts`: Public registry source bridge and search backend selection.
-- `src/modules/inquiries/inquiry.functions.ts`: Public and owner inquiry source bridge.
-- `src/modules/catalog/public.ts`: Public catalog facade.
-- `src/modules/business/public.ts`: Business and claim facade.
-- `src/modules/answer-thread/internal/turn-orchestrator.ts`: Streaming answer-turn orchestration.
-- `src/modules/answer/internal/answer-tool-use-agent.ts`: OpenRouter tool-use agent.
-- `src/modules/harness/action-tool.ts`: Harness tool execution and policy enforcement.
-- `src/lib/server/convex-source.ts`: Convex HTTP client and source function references.
-- `src/lib/server/source-write-admission.ts`: Server-side source-write signing.
-- `convex/sourceWriteAdmission.ts`: Convex-side source-write verification.
-- `convex/source_state.ts`: Convex source-state load/persist adapter.
-
-**Public Surfaces:**
-- `src/routes/index.tsx`: Home ask/search entry and chat promotion.
-- `src/routes/registry.tsx`: Registry browsing page.
+**Public Routes:**
+- `src/routes/index.tsx`: Home route.
+- `src/routes/registry.tsx`: Public registry route.
 - `src/routes/$slug.tsx`: Public business listing route.
 - `src/routes/$slug.inquiry.tsx`: Public qualified inquiry route.
-- `src/routes/about.tsx`, `src/routes/help.tsx`, `src/routes/privacy.tsx`, `src/routes/terms.tsx`: Static/product support pages.
+- `src/routes/$slug.ucp.ts`: Public catalog discovery manifest route.
+- `src/routes/llms[.]txt.ts`: Canonical assistant-readable plain-text index route.
 
-**Owner/Admin Surfaces:**
-- `src/routes/owner.status.tsx`: Owner status route.
-- `src/routes/owner.inquiries.tsx`: Owner inquiry inbox.
-- `src/routes/owner.inquiries.$threadId.tsx`: Owner inquiry detail/reply route.
-- `src/routes/admin.inquiries.tsx`: Admin inquiry reconstruction.
-- `src/routes/admin.claims.tsx`: Admin claim readback.
-- `src/routes/admin.index-health.tsx`: Admin index health readback.
-- `src/routes/admin.business-actions.tsx`, `src/routes/admin.protected-actions.tsx`, `src/routes/admin.monetization.tsx`: Admin operational surfaces.
+**API Routes:**
+- `src/routes/api.businesses.ts`: Public catalog list JSON route.
+- `src/routes/api.businesses.search.ts`: Public catalog search JSON route.
+- `src/routes/api.businesses.$slug.ts`: Public business detail JSON route.
+- `src/routes/api.agent.tools.ts`: Quiet assistant tool list and invocation route.
+- `src/routes/api.answer.turn.ts`: Grounded answer turn SSE route.
+- `src/routes/api.discovery.schema.ts`: Developer discovery schema route.
 
-**API and Machine Surfaces:**
-- `src/routes/api.businesses.ts`: Public business catalog list JSON.
-- `src/routes/api.businesses.search.ts`: Public business catalog search JSON.
-- `src/routes/api.businesses.$slug.ts`: Public business catalog detail JSON.
-- `src/routes/api.agent.tools.ts`: Quiet assistant tools list/invoke endpoint.
-- `src/routes/api.answer.turn.ts`: Answer-turn SSE endpoint.
-- `src/routes/api.answer.threads.ts`: Answer thread list endpoint.
-- `src/routes/api.chat.ts`: Chat API endpoint.
-- `src/routes/api.discovery.schema.ts`: Discovery schema endpoint.
-- `src/routes/llms[.]txt.ts`: Canonical assistant index.
-- `src/routes/sitemap[.]xml.ts`, `src/routes/robots[.]txt.ts`: Search/discovery endpoints.
+**Action Contracts:**
+- `src/modules/common/action.ts`: Shared action type model and `defineAction`.
+- `src/modules/actions/index.ts`: Explicit action registry and agent-tool filtering.
+- `src/modules/registry/registry.actions.ts`: `registry.list`, `registry.search`, and `registry.detail`.
+- `src/modules/inquiries/inquiry.actions.ts`: `inquiry.submit`.
+- `src/modules/storefront/storefront.actions.ts`: `storefront.importDraft`.
 
-**Convex Runtime:**
-- `convex/registry.ts`: Public catalog list/search/detail Convex queries.
-- `convex/inquiries.ts`: Public inquiry, owner inbox/thread, admin reconstruction Convex functions.
-- `convex/catalog.ts`: Catalog publish/read Convex functions.
-- `convex/business.ts`: Business claim and suppression Convex functions.
-- `convex/answerThreads.ts`: Answer thread and turn persistence.
-- `convex/harnessSessions.ts`: Harness session persistence and answer turn finalization.
-- `convex/notificationOutbox.ts`: Notification dispatch and webhook persistence.
-- `convex/security.ts`: Admin membership, disputes, cleanup, and security readbacks.
-- `convex/billing.ts`, `convex/businessActions.ts`, `convex/protectedActions.ts`: Future/adjacent operational flows.
+**Core Logic:**
+- `src/modules/registry/public.ts`: Public registry seam.
+- `src/modules/registry/registry.functions.ts`: Registry server/source adapter.
+- `src/modules/registry/internal/search.ts`: Pure registry list/search/detail implementation.
+- `src/modules/catalog/owner-claim.functions.ts`: Owner claim and catalog publish source adapter.
+- `src/modules/inquiries/public.ts`: Public inquiry seam.
+- `src/modules/inquiries/inquiry.functions.ts`: Public inquiry server/source adapter.
+- `src/modules/inquiries/route-readbacks.ts`: Inquiry route readback builders.
+- `src/modules/answer/public.ts`: Public answer seam.
+- `src/modules/answer-thread/public.ts`: Public answer-thread seam.
+- `src/modules/answer-thread/internal/turn-orchestrator.ts`: Streaming answer turn orchestrator.
+- `src/modules/answer-thread/internal/tool-runner.ts`: Answer tool execution and evidence collection.
+- `src/modules/answer/internal/answer-tool-use-agent.ts`: Model tool-use loop.
+- `src/modules/answer/internal/answer-gate.ts`: Grounding and boundary gate.
+- `src/modules/discovery/public.ts`: Discovery artifacts and manifest builders.
+- `src/modules/discovery/discovery.functions.ts`: Discovery source adapter.
+- `src/modules/security/source-write-admission.ts`: Source-write admission signing and validation.
+- `src/modules/clearance/clearance.functions.ts`: Agent identity and assistant write-admission source adapter.
+- `src/modules/harness/public.ts`: Harness tool contract seam.
+
+**Convex Backend:**
+- `convex/schema.ts`: Schema table composition.
+- `convex/registry.ts`: Public registry source queries.
+- `convex/business.ts`: Business claim source mutations.
+- `convex/catalog.ts`: Catalog publish/read source functions.
+- `convex/inquiries.ts`: Public inquiry and owner inbox functions.
+- `convex/discovery.ts`: Discovery artifact queries.
+- `convex/sourceWriteAdmission.ts`: Convex-side write admission verification.
+- `convex/authz.ts`: Convex actor/admin authorization helpers.
+- `convex/_generated/ai/guidelines.md`: Required Convex coding guidelines before Convex edits.
+
+**UI and Styles:**
+- `src/components/ae/layout/AePublicShell.tsx`: Public route shell.
+- `src/components/ae/layout/AeOperatorShell.tsx`: Owner/admin/developer shell.
+- `src/components/ae/listing/AeProviderListingPage.tsx`: Public business listing UI.
+- `src/components/ae/inquiries`: Inquiry UI components.
+- `src/components/astryx/RouterLink.tsx`: Astryx link adapter.
+- `src/styles/globals.css`: Global style import order and Tailwind/Astryx integration.
+- `src/styles/legacy.css`: Retiring legacy style bridge.
+
+**Configuration:**
+- `package.json`: Scripts, dependencies, and package manager.
+- `package-lock.json`: npm lockfile.
+- `tsconfig.json`: Strict TypeScript config and aliases `@/*` and `~/*` to `src/*`.
+- `vite.config.ts`: Build and dev configuration.
+- `eslint.config.js`: ESLint configuration.
+- `components.json`: Component tooling configuration.
+- `DESIGN.md`: Visual/UI system authority.
+- `PRODUCT.md`: Product thesis and trust contract.
+- `AGENTS.md`: Always-on repository instructions.
 
 **Testing:**
-- `tests/unit/`: Unit tests by domain and surface.
-- `tests/integration/`: Route/API integration tests.
-- `tests/e2e/`: Playwright user-flow tests.
-- `tests/e2e/a11y/`: Accessibility E2E tests.
-- `tests/copy/`: Public copy and boundary-contract tests.
-- `tests/imports/`: Import-boundary and TypeScript standards tests.
-- `tests/ui-contract/`: UI contract scans.
-- `tests/seo/`: SEO and discovery tests.
-- `tests/helpers/`: Test helper ports and contract servers.
+- `tests/imports/route-boundary.test.ts`: Route adapter and source boundary rules.
+- `tests/imports/private-imports.test.ts`: Public seam import rules.
+- `tests/imports/source-mining.test.ts`: Source-mining and forbidden import rules.
+- `tests/copy/phase1-banned-copy.test.ts`: Public copy and overclaim guardrails.
+- `tests/unit/actions/agent-tools-surface.test.ts`: Assistant action exposure rules.
+- `tests/integration/agent-tools-api.test.ts`: Quiet agent tools API behavior.
+- `tests/e2e`: Browser-level flows.
 
 ## Naming Conventions
 
 **Files:**
-- `*.actions.ts`: Action contracts registered in `src/modules/actions/index.ts`; examples include `src/modules/registry/registry.actions.ts` and `src/modules/inquiries/inquiry.actions.ts`.
-- `*.functions.ts`: TanStack server functions and source bridges; examples include `src/modules/inquiries/inquiry.functions.ts`, `src/modules/billing/billing.functions.ts`, and `src/modules/harness/run-viewer.functions.ts`.
-- `public.ts`: Module facade for routes, tests, and Convex adapters; examples include `src/modules/registry/public.ts` and `src/modules/security/public.ts`.
-- `internal/*.ts`: Module-private implementation; examples include `src/modules/inquiries/internal/commands.ts` and `src/modules/registry/internal/search.ts`.
-- `internal/schema.ts` or `internal/convex-schema.ts`: Module-owned Convex table definitions; examples include `src/modules/business/internal/schema.ts` and `src/modules/answer-thread/internal/convex-schema.ts`.
-- `route-readbacks.ts`: Route-specific readback shaping; example `src/modules/inquiries/route-readbacks.ts`.
-- `owner-*.tsx` or `admin-*.tsx` in modules: Surface-specific panels/readbacks; example `src/modules/billing/owner-billing.panels.tsx`.
-- `src/routes/api.*.ts`: API route files; example `src/routes/api.agent.tools.ts`.
-- `src/routes/$param*.tsx`: Dynamic browser route files; examples `src/routes/$slug.tsx` and `src/routes/$slug.inquiry.tsx`.
-- `src/routes/name[.]ext.ts`: Literal dotted routes; examples `src/routes/llms[.]txt.ts` and `src/routes/sitemap[.]xml.ts`.
+- TanStack routes use file-route names in `src/routes`, including dotted API files such as `src/routes/api.businesses.search.ts`, dynamic segments such as `src/routes/$slug.tsx`, nested route segments such as `src/routes/$slug.inquiry.tsx`, and escaped literal names such as `src/routes/llms[.]txt.ts`.
+- Domain public seams are named `public.ts`, as in `src/modules/registry/public.ts` and `src/modules/inquiries/public.ts`.
+- Domain route/server adapters use `*.functions.ts`, as in `src/modules/registry/registry.functions.ts` and `src/modules/inquiries/inquiry.functions.ts`.
+- Domain operation contracts use `*.actions.ts`, as in `src/modules/registry/registry.actions.ts` and `src/modules/inquiries/inquiry.actions.ts`.
+- Domain internals live under `internal`, as in `src/modules/registry/internal/search.ts` and `src/modules/answer/internal/answer-gate.ts`.
+- Module-owned schema fragments use `schema.ts` or `internal/*schema*.ts`, then compose into `convex/schema.ts`.
+- Convex function files are domain-named, as in `convex/registry.ts`, `convex/catalog.ts`, `convex/inquiries.ts`, and `convex/discovery.ts`.
+- Tests use `*.test.ts` for Vitest files and `*.spec.ts` for Playwright E2E files, as in `tests/unit/actions/agent-tools-surface.test.ts` and `tests/e2e`.
 
 **Directories:**
-- Domain folders use lowercase or kebab-case under `src/modules/`, for example `src/modules/answer-thread/`, `src/modules/business-action/`, and `src/modules/notification-outbox/`.
-- Component folders use purpose names under `src/components/ae/`, for example `src/components/ae/layout/`, `src/components/ae/chat/`, `src/components/ae/inquiries/`, and `src/components/ae/operator/`.
-- Tests mirror behavior category first, then domain, for example `tests/unit/registry/`, `tests/integration/`, `tests/copy/`, and `tests/e2e/`.
+- Put route files only under `src/routes`.
+- Put domain-owned code under `src/modules/<domain>`.
+- Put private domain helpers under `src/modules/<domain>/internal`.
+- Put public route chrome and route-facing components under `src/components/ae/<area>`.
+- Put Astryx adapters under `src/components/astryx`.
+- Put cross-cutting server helpers under `src/lib/server`.
+- Put Convex source-of-truth functions under `convex`.
+- Put generated Convex files under `convex/_generated` and generated route tree in `src/routeTree.gen.ts`.
+
+**Components:**
+- Use PascalCase React component names, as in `AePublicShell`, `AeOperatorShell`, `AeProviderListingPage`, and `RouterLink`.
+- Keep existing `Ae*` components for current behavioral and route-specific UI; do not add new bespoke presentation systems when Astryx primitives cover the use case.
+- Use Astryx component names and adapters for new UI composition before reaching for legacy wrappers.
+
+**Functions:**
+- Use camelCase for functions and route helpers, as in `readPublicRegistrySearchPage`, `submitPublicInquiryThroughSource`, `streamAnswerTurn`, and `runAnswerToolCall`.
+- Use `read*` for read-only query helpers, `submit*` for form/write flows, `resolve*` for target/authorization lookup, and `build*` for DTO/readback/artifact construction.
+- Use Convex export names that describe domain action and visibility, such as `listPublicBusinessCatalog`, `searchPublicBusinessCatalog`, and `submitPublicInquiry`.
+
+**Types:**
+- Use PascalCase for exported TypeScript types and schemas, as in `ActionContext`, `PublicBusinessCatalogPage`, `RegistryRouteReadback`, and `PublicInquirySubmitInput`.
+- Keep Zod schemas beside the action/function that validates them or in the owning domain seam.
 
 ## Where to Add New Code
 
 **New Public Page:**
 - Primary code: `src/routes/<route>.tsx`
-- Shared UI: `src/components/ae/<surface>/` only when existing Astryx composition is insufficient; prefer direct Astryx primitives first per `DESIGN.md`.
-- Server reads/writes: existing or new `src/modules/<module>/<module>.functions.ts`
-- Tests: `tests/integration/<route>.test.ts`, `tests/ui-contract/`, and `tests/copy/` when public language changes.
+- Domain logic: `src/modules/<domain>/public.ts` or `src/modules/<domain>/<domain>.functions.ts`
+- UI: Astryx composition in the route or reusable components under `src/components/ae/<area>`
+- Tests: `tests/integration`, `tests/e2e`, or `tests/ui-contract` depending on behavior.
 
-**New Owner/Admin Page:**
-- Primary code: `src/routes/owner.<name>.tsx` or `src/routes/admin.<name>.tsx`
+**New Owner/Admin/Developer Page:**
+- Primary code: `src/routes/owner*.tsx`, `src/routes/admin*.tsx`, or `src/routes/developers*.tsx`
+- Auth guard: `src/lib/operator/route-options.ts`
 - Shell: `src/components/ae/layout/AeOperatorShell.tsx`
-- Route auth/options: `src/lib/operator/route-options.ts`
-- Readbacks/server calls: `src/modules/<module>/<module>.functions.ts` or `src/modules/<module>/public.ts`
-- Tests: `tests/integration/admin-runtime.test.ts`, `tests/unit/<module>/`, and `tests/e2e/` when workflow-critical.
+- Domain logic: `src/modules/<domain>`
+- Tests: `tests/integration` and `tests/e2e`.
 
-**New API Route:**
-- Primary code: `src/routes/api.<name>.ts`
-- Response helpers: reuse `jsonResponse` from `src/routes/api.businesses.ts` or a module-specific helper.
-- Core logic: `src/modules/<module>/public.ts`, `src/modules/<module>/<module>.functions.ts`, or `src/modules/<module>/<module>.actions.ts`
-- Tests: `tests/integration/<name>-route.test.ts` or `tests/unit/http/`.
-
-**New Assistant-Callable Operation:**
-- Action contract: `src/modules/<module>/<module>.actions.ts`
-- Registry import: `src/modules/actions/index.ts`
-- Shared runner: Use the module source bridge in `src/modules/<module>/<module>.functions.ts`
-- Agent exposure: Add `agentTools` only when the operation is safe for the quiet agent door; use explicit `boundaries`.
-- Tests: `tests/unit/actions/`, `tests/integration/agent-tools-api.test.ts`, and copy/boundary tests when public language changes.
+**New API Endpoint:**
+- Primary code: `src/routes/api.<namespace>.<name>.ts`
+- Shared operation: `src/modules/<domain>/<domain>.actions.ts` when the endpoint represents an AE operation.
+- Registry: `src/modules/actions/index.ts` when the operation must fan out to other surfaces.
+- Tests: `tests/integration` and action tests under `tests/unit/actions` when action exposure changes.
 
 **New Domain Module:**
-- Public facade: `src/modules/<module>/public.ts`
-- Implementation: `src/modules/<module>/internal/`
-- Server bridge: `src/modules/<module>/<module>.functions.ts`
-- Actions: `src/modules/<module>/<module>.actions.ts` only when an operation should fan out to action-backed surfaces.
-- Convex schema: `src/modules/<module>/internal/schema.ts` or `src/modules/<module>/internal/convex-schema.ts`
-- Convex functions: `convex/<module>.ts`
-- Schema registration: import table map in `convex/schema.ts`
-- Tests: `tests/unit/<module>/`, `tests/unit/convex/`, and `tests/integration/` for route/API behavior.
+- Implementation: `src/modules/<domain>/public.ts`, `src/modules/<domain>/internal`, and optional `src/modules/<domain>/<domain>.functions.ts`
+- Actions: `src/modules/<domain>/<domain>.actions.ts`
+- Convex schema: `src/modules/<domain>/internal/schema.ts` or a module-owned schema fragment imported by `convex/schema.ts`
+- Convex functions: `convex/<domain>.ts`
+- Tests: `tests/unit/<domain>` plus import-boundary coverage if new seams are introduced.
 
-**New Convex Code:**
-- Read first: `convex/_generated/ai/guidelines.md`
-- Schema fragment: `src/modules/<module>/internal/schema.ts` or `src/modules/<module>/internal/convex-schema.ts`
-- Backend functions: `convex/<module>.ts`
-- Auth/authority helpers: `convex/authz.ts` or module-specific helper if isolated.
-- Source bridge: `src/lib/server/convex-source.ts` for generic client/reference helpers; module-specific references in `src/modules/<module>/<module>.functions.ts`.
-- Tests: `tests/unit/convex/<module>-runtime.test.ts` and `tests/unit/schema/convex-schema.test.ts`.
+**New Assistant-Callable Operation:**
+- Primary code: `src/modules/<domain>/<domain>.actions.ts`
+- Registry: `src/modules/actions/index.ts`
+- Harness/tool surface: `src/modules/harness/public.ts` and `src/routes/api.agent.tools.ts` should consume it through the existing registry, not a bespoke path.
+- Tests: `tests/unit/actions/agent-tools-surface.test.ts`, `tests/integration/agent-tools-api.test.ts`, and copy/boundary tests when public wording changes.
+- Boundary rule: Only expose writes when the action has explicit admission and honest boundaries; `inquiry.submit` is the current assistant-exposed write.
 
-**New Public Catalog/Registry Logic:**
-- Catalog DTO/model logic: `src/modules/catalog/internal/catalog-model.ts`
-- Search/read logic: `src/modules/registry/internal/search.ts`
-- Public registry bridge: `src/modules/registry/registry.functions.ts`
-- Public APIs: `src/routes/api.businesses*.ts`
-- UI: `src/routes/registry.tsx` or `src/components/ae/listing/`
-- Tests: `tests/unit/catalog/`, `tests/unit/registry/`, `tests/integration/registry-api.test.ts`, and `tests/seo/public-business-seo.test.ts`.
+**New Convex Query/Mutation/Action:**
+- Primary code: `convex/<domain>.ts`
+- Schema: `convex/schema.ts` and any owning module schema under `src/modules/<domain>/internal`
+- Client adapter: `src/modules/<domain>/<domain>.functions.ts` through `src/lib/server/convex-source.ts`
+- Required reading: `convex/_generated/ai/guidelines.md`
+- Tests: Unit/integration coverage for validators, source-write admission, and route/action behavior.
 
-**New Inquiry Flow Logic:**
-- Pure command logic: `src/modules/inquiries/internal/commands.ts`
-- Server bridge: `src/modules/inquiries/inquiry.functions.ts`
-- Public action: `src/modules/inquiries/inquiry.actions.ts` only for assistant-facing qualified inquiry behavior.
-- UI readbacks: `src/modules/inquiries/route-readbacks.ts`
-- UI components: `src/components/ae/inquiries/`
-- Convex runtime: `convex/inquiries.ts`
-- Tests: `tests/unit/inquiries/`, `tests/integration/agent-tools-api.test.ts`, `tests/e2e/chat-discovery-inquiry-loop.spec.ts`.
+**New Qualified Inquiry Behavior:**
+- Primary code: `src/modules/inquiries/inquiry.functions.ts`, `src/modules/inquiries/public.ts`, and `convex/inquiries.ts`
+- Route readbacks: `src/modules/inquiries/route-readbacks.ts`
+- Action boundaries: `src/modules/inquiries/inquiry.actions.ts`
+- Public route: `src/routes/$slug.inquiry.tsx`
+- Constraint: Keep it a qualified first-contact message for owner review; do not add booking, payment, dispatch, or autonomous fulfillment semantics.
 
-**New Answer/Agent Logic:**
-- Tool-use loop: `src/modules/answer/internal/answer-tool-use-agent.ts`
-- Turn orchestration: `src/modules/answer-thread/internal/turn-orchestrator.ts`
-- Tool execution evidence: `src/modules/answer-thread/internal/tool-runner.ts`
-- SSE route: `src/routes/api.answer.turn.ts`
-- Convex persistence: `convex/answerThreads.ts`, `convex/harnessSessions.ts`
-- Tests/evals: `tests/unit/answer/`, `tests/unit/answer-thread/`, `tests/integration/answer-route.test.ts`, `eval/answer/`.
+**New Registry/Search Behavior:**
+- Primary code: `src/modules/registry/public.ts`, `src/modules/registry/registry.functions.ts`, and `src/modules/registry/internal/search.ts`
+- Convex query: `convex/registry.ts`
+- Public JSON routes: `src/routes/api.businesses.ts`, `src/routes/api.businesses.search.ts`, `src/routes/api.businesses.$slug.ts`
+- Tests: Registry unit tests, API integration tests, and action-surface tests when tool behavior changes.
+
+**New Answer Tool or Read Path:**
+- Primary code: `src/modules/<domain>/<domain>.actions.ts` with `readOnly: true`
+- Registry: `src/modules/actions/index.ts`
+- Tool execution: `src/modules/answer-thread/internal/tool-runner.ts`
+- Model loop: `src/modules/answer/internal/answer-tool-use-agent.ts`
+- Gate: `src/modules/answer/internal/answer-gate.ts`
+- Constraint: Do not let answer tools write or perform unsupported commerce operations.
+
+**New Discovery Artifact:**
+- Primary code: `src/modules/discovery/public.ts` and `src/modules/discovery/discovery.functions.ts`
+- Route: `src/routes/<artifact-route>.ts`
+- Convex read: `convex/discovery.ts`
+- Tests: `tests/seo`, `tests/integration`, and copy tests when public terms change.
+
+**New UI Component/Module:**
+- Implementation: Prefer Astryx primitives in route files or add adapters under `src/components/astryx` when needed.
+- Existing AE UI: Use `src/components/ae/<area>` for route-specific wrappers tied to AE behavior.
+- Styles: Use `src/styles/globals.css` and Tailwind utilities for layout glue only.
+- Avoid: New `src/components/ui` wrappers, new handwritten CSS files, new fontsource fonts, and new bespoke presentation-only `Ae*` systems.
 
 **Utilities:**
-- Shared IDs/hash/result helpers: `src/modules/common/`
-- Server-only helpers: `src/lib/server/`
-- HTTP helpers: `src/lib/http/`
-- UI label/status mapping: `src/lib/ui/`
-- Operator navigation helpers: `src/lib/operator/`
-- Observability helpers: `src/lib/observability/`
+- Shared server helpers: `src/lib/server`
+- Shared HTTP/security helpers: `src/lib/http`
+- Shared operator helpers: `src/lib/operator`
+- Shared domain primitives: `src/modules/common`
+- Shared UI helpers: `src/lib/ui`
+
+**Tests:**
+- Unit tests: `tests/unit/<domain>`
+- Integration tests: `tests/integration`
+- E2E tests: `tests/e2e`
+- Import-boundary tests: `tests/imports`
+- Copy/boundary tests: `tests/copy`
+- UI contract tests: `tests/ui-contract`
 
 ## Special Directories
 
+**`convex/_generated`:**
+- Purpose: Generated Convex API files and Convex AI guidelines.
+- Generated: Yes, except `convex/_generated/ai/guidelines.md` is a required instruction file.
+- Committed: Yes.
+
 **`src/routeTree.gen.ts`:**
-- Purpose: Generated TanStack Router route tree.
-- Generated: Yes
-- Committed: Yes
+- Purpose: Generated TanStack route tree imported by `src/router.tsx`.
+- Generated: Yes.
+- Committed: Yes.
 
-**`convex/_generated/`:**
-- Purpose: Generated Convex API/data model/server types plus managed AI guidelines.
-- Generated: Yes
-- Committed: Yes
+**`src/future-phases`:**
+- Purpose: Future-phase stubs excluded from active TypeScript compilation.
+- Generated: No.
+- Committed: Yes.
 
-**`src/future-phases/`:**
-- Purpose: Parked future route/code sketches excluded from `tsconfig.json`.
-- Generated: No
-- Committed: Yes
+**`src/app`:**
+- Purpose: Prototype/demo client pages that are not present in `src/routeTree.gen.ts`.
+- Generated: No.
+- Committed: Yes.
 
-**`dist/`, `.output/`, `.vercel/`, `playwright-report/`, `test-results/`, `output/`:**
-- Purpose: Build, deployment, Playwright, and evaluation output artifacts.
-- Generated: Yes
-- Committed: Not generally used as source; check git status before editing or relying on these.
+**`src/styles/legacy.css`, `src/styles/tokens.css`, `src/styles/base.css`:**
+- Purpose: Retiring legacy style bridge imported by `src/styles/globals.css`.
+- Generated: No.
+- Committed: Yes.
 
-**`graphify-out/`:**
-- Purpose: Graphify analysis output/cache.
-- Generated: Yes
-- Committed: Present in working tree; treat as tooling output unless a task targets it.
+**`src/components/ui`:**
+- Purpose: Legacy UI wrappers.
+- Generated: No.
+- Committed: Yes.
 
-**`.env`, `.env.local`:**
-- Purpose: Local environment configuration.
-- Generated: No
-- Committed: No expected source role; contents must not be read or quoted.
+**`public/images/illustration`:**
+- Purpose: Static committed illustration assets for public UI.
+- Generated: No.
+- Committed: Yes.
 
-**`.env.example`:**
-- Purpose: Safe environment variable name reference.
-- Generated: No
-- Committed: Yes
+**`.planning/codebase`:**
+- Purpose: GSD codebase mapper output consumed by planning and execution commands.
+- Generated: Yes.
+- Committed: Project-dependent.
 
-**`node_modules/`:**
-- Purpose: Installed npm dependencies.
-- Generated: Yes
-- Committed: No
+**`.codex` and `.agents`:**
+- Purpose: Project-specific skills, workflows, and agent instructions.
+- Generated: No.
+- Committed: Yes.
 
-**`.agents/skills/`, `.codex/skills/`, `.claude/skills/`, `.cursor/skills/`:**
-- Purpose: Local assistant/agent skill bundles and workflow instructions.
-- Generated: Mixed
-- Committed: Project-local skill directories are present; read relevant `SKILL.md` files before work that matches them.
+**`vendor/handshake-protocol-kernel`:**
+- Purpose: Vendored reference package; runtime imports are constrained by source-mining tests.
+- Generated: No.
+- Committed: Yes.
+
+**`.output`, `.vercel/output`, `output`, `playwright-report`, `test-results`, `graphify-out`, `.tmp`:**
+- Purpose: Build, deployment, test, graph, and temporary outputs.
+- Generated: Yes.
+- Committed: No source code should be added here.
 
 ---
 

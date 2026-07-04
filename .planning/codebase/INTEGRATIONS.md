@@ -4,163 +4,164 @@
 
 ## APIs & External Services
 
-**Data Platform:**
-- Convex - primary source database, query/mutation/action runtime, scheduled jobs, and public catalog/search backing.
-  - SDK/Client: `convex` package, `ConvexHttpClient` in `src/lib/server/convex-source.ts`, generated API under `convex/_generated/`, and schemas in `convex/schema.ts`.
-  - Auth: `CONVEX_URL` or `VITE_CONVEX_URL`; Clerk Convex JWT provider uses `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`.
+**Backend/Data:**
+- Convex Cloud - Source-of-truth database and function runtime for catalog, registry, inquiries, billing, clearance, notification outbox, answer threads, and observability.
+  - SDK/Client: `convex@1.42.0` via `src/lib/server/convex-source.ts`, `convex/schema.ts`, and `convex/*.ts`
+  - Auth: `CONVEX_URL` or `VITE_CONVEX_URL`; Clerk JWT issuer in `convex/auth.config.ts`
+- Meilisearch - Optional catalog search backend; Convex remains default and fallback.
+  - SDK/Client: native `fetch` port in `src/modules/registry/internal/catalog-search-port.ts`
+  - Auth: `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, `AE_SEARCH_INDEX_UID`, `AE_SEARCH_BACKEND`, `AE_SEARCH_TIMEOUT_MS`
 
-**Authentication & Owner Identity:**
-- Clerk - owner/admin authentication, protected route provider, server auth, Convex JWT token source, and owner email readback for notification delivery.
-  - SDK/Client: `@clerk/tanstack-react-start` in `src/start.ts`, `src/routes/__root.tsx`, `src/lib/server/claim-owner-session.ts`, and `src/lib/server/require-operator-session.ts`.
-  - Auth: Clerk runtime configuration plus `CLERK_JWT_ISSUER_DOMAIN` for Convex and `CLERK_SECRET_KEY` for Backend API calls in `src/lib/server/notification-provider.ts`.
+**Authentication & Agent Identity:**
+- Clerk - Owner/admin authentication, Clerk provider/middleware, server auth, and owner delivery-address lookup.
+  - SDK/Client: `@clerk/tanstack-react-start` in `src/start.ts`, `src/routes/__root.tsx`, and `src/lib/server/convex-source.ts`
+  - Auth: `CLERK_JWT_ISSUER_DOMAIN` in `convex/auth.config.ts`; `CLERK_SECRET_KEY` in `src/lib/server/notification-provider.ts`
+- Web Bot Auth - HTTP message signature verification for the quiet agent-tools door.
+  - SDK/Client: `web-bot-auth` in `src/modules/clearance/internal/web-bot-auth.ts`
+  - Auth: signed requests with `Signature`, `Signature-Input`, `Signature-Agent`, and `Content-Digest`; default trusted signature agent is `https://chatgpt.com` in `src/modules/clearance/internal/web-bot-auth.ts`
 
-**Assistant & Agent Interfaces:**
-- OpenRouter - LLM tool-use answer synthesis, model metadata, and follow-up chip generation.
-  - SDK/Client: custom `fetch` calls in `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer/internal/openrouter-models.ts`, and `src/modules/answer-thread/internal/llm-follow-up-chips.ts`.
-  - Auth: `OPENROUTER_API_KEY`; optional config through `AE_LLM_MODEL`, `AE_OPENROUTER_API_BASE_URL`, `AE_LLM_MODELS`, `AE_ANSWER_EVAL_PASSED`, `AE_ALLOW_CHAT_API`, and site URL env vars in `src/modules/answer/internal/llm-config.ts`.
-- Web Bot Auth / HTTP Message Signatures - verifies signed assistant requests to the quiet agent door before write consideration.
-  - SDK/Client: `web-bot-auth` package and local verification in `src/modules/clearance/internal/web-bot-auth.ts`; used by `src/routes/api.agent.tools.ts`.
-  - Auth: signature headers `Signature`, `Signature-Input`, and `Signature-Agent`; default trusted signature agent is `https://chatgpt.com`; dev smoke uses `AE_DEV_WBA_SMOKE_ENABLED`, `AE_DEV_WBA_SMOKE_SECRET`, and related smoke env in `convex/clearance.ts`.
-- AE actions registry - one action definition fans out to UI, HTTP API, agent JSON payloads, and the quiet agent tools endpoint.
-  - SDK/Client: local action contracts in `src/modules/common/action.ts`, registered in `src/modules/actions/index.ts`, exposed by `src/routes/api.agent.tools.ts`.
-  - Auth: read actions can be unsigned; writes require source/write and policy admission. The quiet agent door invokes `runHarnessTool` with writes disabled in `src/routes/api.agent.tools.ts`.
+**AI / Answer Generation:**
+- OpenRouter - Tool-use answer synthesis, follow-up chips, and model listing.
+  - SDK/Client: native `fetch` in `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/llm-follow-up-chips.ts`, and `src/modules/answer/internal/openrouter-models.ts`
+  - Auth: `OPENROUTER_API_KEY`; optional `AE_LLM_MODEL`, `AE_LLM_MODELS`, `AE_OPENROUTER_API_BASE_URL`, `AE_SITE_URL`, `SITE_URL`, `AE_ALLOW_CHAT_API`, `AE_ANSWER_EVAL_PASSED`
+- Promptfoo - Offline answer quality evaluation in CI and local scripts.
+  - SDK/Client: `promptfoo` CLI from `package.json` with config at `eval/answer/promptfooconfig.yaml`
+  - Auth: no application runtime auth detected; CI env is set in `.github/workflows/eval-gate.yml`
 
-**Search:**
-- Meilisearch - optional external search backend or shadow backend for registry search.
-  - SDK/Client: custom HTTP client in `src/modules/registry/internal/catalog-search-port.ts`.
-  - Auth: `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, `AE_SEARCH_INDEX_UID`, `AE_SEARCH_BACKEND`, and `AE_SEARCH_TIMEOUT_MS`.
-- Convex Search - default registry search backend through Convex search index.
-  - SDK/Client: `registrySearchDocuments` search index in `src/modules/registry/internal/schema.ts` and read path in `src/modules/registry/registry.functions.ts`.
-  - Auth: Convex URL and optional Clerk token as above.
-
-**Billing & Paid Activation Provider Readback:**
-- Autumn - billing provider API and webhook source for paid activation state.
-  - SDK/Client: custom HTTP client in `src/modules/billing/internal/provider-readback.ts`, provider config/signature helpers in `src/lib/server/billing-provider.ts`, and webhook route in `src/routes/api.billing.webhook.ts`.
-  - Auth: `AUTUMN_SECRET_KEY`; optional `AUTUMN_API_BASE_URL` and `AUTUMN_API_VERSION`; webhook auth via `AUTUMN_WEBHOOK_SECRET`.
-- Stripe - test-mode business-action evidence and webhook verification for source readbacks; this is not an AE public payment/charge surface.
-  - SDK/Client: custom HTTP Checkout Session evidence creation in `src/modules/business-action/internal/stripe-checkout.ts` and webhook verification in `src/routes/api.business-actions.stripe-webhook.ts`.
-  - Auth: `STRIPE_WEBHOOK_SECRET` for incoming webhook verification; checkout evidence accepts a server-supplied test-mode Stripe secret and rejects live-mode session evidence.
+**Billing / Paid Activation Evidence:**
+- Autumn - Paid activation plan/provider integration and billing webhook verification.
+  - SDK/Client: `atmn` plan config in `autumn.config.ts`; HTTP provider in `src/modules/billing/internal/provider-readback.ts`; server env adapter in `src/lib/server/billing-provider.ts`
+  - Auth: `AUTUMN_SECRET_KEY`, optional `AUTUMN_API_BASE_URL`, optional `AUTUMN_API_VERSION`, webhook `AUTUMN_WEBHOOK_SECRET`
+- Stripe - Test-mode business-action evidence and webhook signature verification; code rejects live-mode checkout evidence.
+  - SDK/Client: native `fetch` and HMAC verification in `src/modules/business-action/internal/stripe-checkout.ts`, `src/modules/business-action/internal/stripe-webhook-source.ts`, and `src/routes/api.business-actions.stripe-webhook.ts`
+  - Auth: `STRIPE_WEBHOOK_SECRET` for webhook verification; checkout helper accepts a test secret programmatically and rejects non-`sk_test_` values in `src/modules/business-action/internal/stripe-checkout.ts`
 
 **Notifications:**
-- Resend - owner inquiry email dispatch and delivery webhook ingestion.
-  - SDK/Client: custom HTTP client in `src/lib/server/notification-provider.ts`, dispatch route in `src/routes/api.notification.resend-dispatch.ts`, and webhook route in `src/routes/api.notification.resend-webhook.ts`.
-  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, webhook auth via `RESEND_WEBHOOK_SECRET`, and system dispatch auth via `AE_NOTIFICATION_OUTBOX_SECRET`.
-- Novu - owner/customer workflow trigger and readback for notification dispatches.
-  - SDK/Client: custom HTTP client in `src/lib/server/notification-provider.ts` and dispatch route in `src/routes/api.notification.novu-dispatch.ts`.
-  - Auth: `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, optional `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, optional `NOVU_API_BASE_URL`, and system dispatch auth via `AE_NOTIFICATION_OUTBOX_SECRET`.
+- Resend - Owner inquiry email delivery and Resend webhook ingestion.
+  - SDK/Client: native `fetch` and Svix-style HMAC verification in `src/lib/server/notification-provider.ts`
+  - Auth: `RESEND_API_KEY`, `RESEND_FROM`, optional `RESEND_API_BASE_URL`, webhook `RESEND_WEBHOOK_SECRET`, system key `AE_NOTIFICATION_OUTBOX_SECRET`
+- Novu - Owner inquiry workflow triggering and message readback.
+  - SDK/Client: native `fetch` in `src/lib/server/notification-provider.ts` and route handler `src/routes/api.notification.novu-dispatch.ts`
+  - Auth: `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, optional `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, optional `NOVU_API_BASE_URL`, system key `AE_NOTIFICATION_OUTBOX_SECRET`
 
-**Observability:**
-- Sentry - optional browser/server error tracking, tracing, and sourcemap upload.
-  - SDK/Client: `@sentry/react` in `src/lib/observability/sentry.client.ts`, `@sentry/node` in `src/lib/observability/sentry.server.ts`, request isolation in `src/start.ts`, and `@sentry/vite-plugin` in `vite.config.ts`.
-  - Auth: `SENTRY_DSN` or `VITE_SENTRY_DSN`; build upload uses `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; release/env via `SENTRY_RELEASE`, `SENTRY_ENVIRONMENT`, and Vercel/GitHub env.
-- PostHog - optional product analytics and funnel event capture.
-  - SDK/Client: `posthog-js` in `src/lib/observability/posthog.client.ts`, `posthog-node` in `src/lib/observability/posthog.server.ts`, config in `src/lib/observability/config.ts`, and funnel route in `src/routes/api.observability.funnel.ts`.
-  - Auth: `POSTHOG_KEY` or `VITE_POSTHOG_KEY`; optional `POSTHOG_HOST`, `VITE_POSTHOG_HOST`, `POSTHOG_APP_URL`, and `VITE_POSTHOG_APP_URL`.
+**Observability & Analytics:**
+- Sentry - Client/server exception capture and optional source map upload.
+  - SDK/Client: `@sentry/react`, `@sentry/node`, and `@sentry/vite-plugin` in `src/lib/observability/sentry.client.ts`, `src/lib/observability/sentry.server.ts`, and `vite.config.ts`
+  - Auth: runtime `SENTRY_DSN` or `VITE_SENTRY_DSN`; build upload `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, optional `SENTRY_RELEASE`
+- PostHog - Client/server funnel and product analytics.
+  - SDK/Client: `posthog-js` and `posthog-node` in `src/lib/observability/posthog.client.ts`, `src/lib/observability/posthog.server.ts`, and `src/modules/observability/funnel.functions.ts`
+  - Auth: `POSTHOG_KEY` or `VITE_POSTHOG_KEY`; optional `POSTHOG_HOST`, `VITE_POSTHOG_HOST`, `POSTHOG_APP_URL`, `VITE_POSTHOG_APP_URL`
 
-**Maps & Embedded Media:**
-- Google Maps Embed - optional generated map artifact rendering.
-  - SDK/Client: iframe URL built in `src/components/ae/artifacts/AeGenerativeMap.tsx`.
-  - Auth: `VITE_GOOGLE_MAPS_API_KEY`.
+**Discovery / Maps / Import:**
+- Google Maps Embed - Optional map iframe rendering when an API key is configured.
+  - SDK/Client: iframe URLs in `src/components/ae/artifacts/AeGenerativeMap.tsx`; CSP allowlist in `src/lib/http/security-headers.ts`
+  - Auth: `VITE_GOOGLE_MAPS_API_KEY`
+- Public website import - Owner-authenticated draft import from public business websites with DNS/SSRF guardrails.
+  - SDK/Client: native `fetch` plus `undici.Agent` in `src/modules/storefront/internal/import-draft.ts`
+  - Auth: owner auth through `src/modules/storefront/storefront.functions.ts`; no provider API key detected
 
 ## Data Storage
 
 **Databases:**
-- Convex
-  - Connection: `CONVEX_URL` or `VITE_CONVEX_URL` in `src/lib/server/convex-source.ts`.
-  - Client: `ConvexHttpClient`, `makeFunctionReference`, generated Convex APIs under `convex/_generated/`, and function refs in files such as `src/modules/registry/registry.functions.ts`, `src/modules/inquiries/inquiry.functions.ts`, and `src/modules/billing/billing.functions.ts`.
-  - Schema: `convex/schema.ts` composes tables from module schema files including `src/modules/business/internal/schema.ts`, `src/modules/catalog/internal/schema.ts`, `src/modules/registry/internal/schema.ts`, `src/modules/inquiries/internal/convex-schema.ts`, `src/modules/billing/internal/schema.ts`, `src/modules/notification-outbox/internal/schema.ts`, `src/modules/observability/internal/schema.ts`, `src/modules/security/internal/schema.ts`, and `src/modules/answer-thread/internal/convex-schema.ts`.
-  - Key tables: `owners`, `businesses`, `businessContexts`, `claims`, `businessServices`, `serviceCapabilities`, `registryProjectionItems`, `registrySearchDocuments`, `inquiryThreads`, `inquiryMessages`, `billingOffers`, `billingProviderEvents`, `notificationDispatches`, `operationKeys`, `auditEvents`, `answerThreads`, and `answerToolCalls`.
+- Convex document database
+  - Connection: `CONVEX_URL` or `VITE_CONVEX_URL` in `src/lib/server/convex-source.ts`
+  - Client: `ConvexHttpClient` in `src/lib/server/convex-source.ts`; Convex functions and schema in `convex/`
+  - Schema: module tables are composed in `convex/schema.ts` from `src/modules/*/internal/*schema.ts` and `convex/businessActionStore.ts`
+- Meilisearch optional search index
+  - Connection: `MEILISEARCH_HOST`, `AE_SEARCH_INDEX_UID`, and `AE_SEARCH_BACKEND` in `src/modules/registry/internal/catalog-search-port.ts`
+  - Client: native `fetch` search/index/task port in `src/modules/registry/internal/catalog-search-port.ts`
 
 **File Storage:**
-- Not detected for application data. No application path uses Convex file storage APIs; Convex file-storage rules are documented in `convex/_generated/ai/guidelines.md`.
+- Static/public assets - `public/`, `public/images/`, and `public/ae-landing/` are committed static assets.
+- Convex file storage - Not detected in active Convex code; no `ctx.storage` usage found under `convex/`.
+- Local/generated artifacts - build, test, and report outputs exist in `dist/`, `.output/`, `output/`, `test-results/`, and `playwright-report/`.
 
 **Caching:**
-- In-memory OpenRouter model cache with a short TTL in `src/modules/answer/internal/openrouter-models.ts`.
-- PostHog server batching in `src/lib/observability/posthog.server.ts`.
-- No Redis, Memcached, or external cache service detected in `package.json` or source imports.
+- OpenRouter model cache - In-memory two-minute cache in `src/modules/answer/internal/openrouter-models.ts`.
+- PostHog client persistence - Browser `sessionStorage` persistence in `src/lib/observability/posthog.client.ts`.
+- Discovery schema response cache headers - `public, max-age=60, stale-while-revalidate=300` in `src/routes/api.discovery.schema.ts`.
+- No Redis, Memcached, or external cache service detected in `package.json` or `src/`.
 
 ## Authentication & Identity
 
 **Auth Provider:**
 - Clerk
-  - Implementation: `clerkMiddleware()` in `src/start.ts`, conditional `ClerkProvider` wrapping protected route families in `src/routes/__root.tsx`, and server auth helpers in `src/lib/server/claim-owner-session.ts` and `src/lib/server/require-operator-session.ts`.
-  - Convex token bridge: `createAuthenticatedConvexClient` calls `auth().getToken({ template: 'convex' })` in `src/lib/server/convex-source.ts`; Convex accepts Clerk issuer configuration in `convex/auth.config.ts`.
+  - Implementation: request middleware in `src/start.ts`, conditional `<ClerkProvider>` in `src/routes/__root.tsx`, server `auth()` token flow in `src/lib/server/convex-source.ts`, Convex JWT config in `convex/auth.config.ts`, and admin/owner authority checks in `convex/authz.ts`.
+  - Convex identity rule: code prefers `identity.tokenIdentifier` for admin membership lookup in `convex/authz.ts`, matching `convex/_generated/ai/guidelines.md`.
 
-**Agent Identity:**
-- Web Bot Auth signatures verify agent request identity in `src/modules/clearance/internal/web-bot-auth.ts` and are used by `src/routes/api.agent.tools.ts`.
-- The quiet agent door is at `GET /api/agent/tools` and `POST /api/agent/tools` in `src/routes/api.agent.tools.ts`; public copy must not label it with internal protocol wording.
+**Machine Identity:**
+- Web Bot Auth signatures
+  - Implementation: `src/modules/clearance/internal/web-bot-auth.ts` verifies HTTP message signatures, fetches `/.well-known/http-message-signatures-directory`, and returns `Accept-Signature` requirements from `src/routes/api.agent.tools.ts`.
+  - Write boundary: `src/routes/api.agent.tools.ts` allows unsigned reads but requires signed identity and clearance mandate for write-tier tools; `src/modules/clearance/clearance.functions.ts` admits only `inquiry.submit` for `public_inquiry`.
 
-**Source Write Admission:**
-- Server-origin write admission uses HMAC-scoped source-write requests in `src/modules/security/source-write-admission.ts` and `src/lib/server/source-write-admission.ts`.
-- Scopes include owner claim, catalog publish, public inquiry, owner inquiry, protected action, billing, admin operator, discovery repair, notification repair, harness session, and agent identity.
+**Source-Write Admission:**
+- HMAC/HKDF source-write admission
+  - Implementation: `src/modules/security/source-write-admission.ts`, `src/lib/server/source-write-admission.ts`, and Convex verification in `convex/sourceWriteAdmission.ts`
+  - Auth: production uses scoped `AE_SOURCE_WRITE_KEY_INQUIRY`, `AE_SOURCE_WRITE_KEY_BILLING`, `AE_SOURCE_WRITE_KEY_PROTECTED`, `AE_SOURCE_WRITE_KEY_CLAIM`, `AE_SOURCE_WRITE_KEY_OPERATOR`, `AE_SOURCE_WRITE_KEY_REPAIR`, and `AE_SOURCE_WRITE_KEY_SESSION`; non-production may derive from `AE_SOURCE_WRITE_SECRET`
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Sentry - optional and disabled when `AE_DISABLE_OBSERVABILITY` or `VITE_AE_DISABLE_OBSERVABILITY` is set in `src/lib/observability/config.ts`.
-- Sentry client scrubs sensitive query parameters in `src/lib/observability/sentry.client.ts`; Sentry server scrubs request data in `src/lib/observability/sentry.server.ts`.
+- Sentry - `src/lib/observability/sentry.client.ts` and `src/lib/observability/sentry.server.ts` initialize only when DSNs exist; `vite.config.ts` uploads source maps only when Sentry build env is present.
 
 **Logs:**
-- Server request failures are captured through Sentry isolation middleware and PostHog flushing in `src/start.ts`.
-- Application audit and funnel state is persisted in Convex tables from `src/modules/observability/internal/schema.ts`.
-- Security and admission events are persisted through Convex functions under `convex/security.ts`, `convex/observability.ts`, and related module schemas.
+- Server exception capture flows through `src/start.ts` request middleware and `src/lib/observability/sentry.server.ts`.
+- Product/funnel analytics flow through `src/lib/observability/posthog.client.ts`, `src/lib/observability/posthog.server.ts`, and `src/routes/api.observability.funnel.ts`.
+- Convex observability/audit tables are composed in `convex/schema.ts` from `src/modules/observability/internal/schema.ts`.
+- Console logging framework beyond Sentry/PostHog/Convex was not detected in `package.json`.
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Vercel - configured by Nitro preset `vercel` with Node runtime `nodejs20.x` in `vite.config.ts`.
-- Convex deployment - required backend platform for database functions, cron jobs, and source writes under `convex/`.
+- Vercel Node serverless - Nitro `preset: 'vercel'` and `nodejs20.x` runtime are configured in `vite.config.ts`.
+- Vercel project artifacts - `.vercel/` exists, including `.vercel/output/`; contents are not required for application source mapping.
 
 **CI Pipeline:**
-- GitHub Actions - `.github/workflows/eval-gate.yml` runs on push/PR to `main`.
-- Pipeline steps include `npm ci`, `npm run typecheck`, `npm run check:convex-codegen`, unit/integration/type/copy/SEO/UI/import/source tests, promptfoo answer eval, artifact upload, and `npm run build`.
+- GitHub Actions - `.github/workflows/eval-gate.yml` runs `npm ci`, typecheck, Convex codegen dry run, unit/integration/type/import/source/copy/SEO/UI-contract tests, Promptfoo answer evals, report upload, and build on Node 20.
 
 ## Environment Configuration
 
 **Required env vars:**
-- Core Convex/source: `CONVEX_URL`, `VITE_CONVEX_URL`, `AE_SOURCE_WRITE_SECRET`.
-- Auth: `CLERK_JWT_ISSUER_DOMAIN`, `CLERK_SECRET_KEY`.
-- Canonical/base URLs: `AE_APP_BASE_URL`, `VITE_AE_APP_BASE_URL`, `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`, `AE_SITE_URL`, `SITE_URL`, `VITE_SITE_URL`, `VERCEL_URL`.
-- Assistant/LLM: `OPENROUTER_API_KEY`, `AE_LLM_MODEL`, `AE_OPENROUTER_API_BASE_URL`, `AE_LLM_MODELS`, `AE_ANSWER_EVAL_PASSED`, `AE_ALLOW_CHAT_API`.
-- Search: `AE_SEARCH_BACKEND`, `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, `AE_SEARCH_INDEX_UID`, `AE_SEARCH_TIMEOUT_MS`.
-- Billing: `AUTUMN_SECRET_KEY`, `AUTUMN_API_BASE_URL`, `AUTUMN_API_VERSION`, `AUTUMN_WEBHOOK_SECRET`.
-- Business-action evidence: `STRIPE_WEBHOOK_SECRET`.
-- Notifications: `AE_NOTIFICATION_OUTBOX_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_API_BASE_URL`, `RESEND_WEBHOOK_SECRET`, `NOVU_SECRET_KEY`, `NOVU_WORKFLOW_INQUIRY_OWNER`, `NOVU_WORKFLOW_INQUIRY_CUSTOMER`, `NOVU_API_BASE_URL`.
-- Observability: `SENTRY_DSN`, `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_RELEASE`, `SENTRY_ENVIRONMENT`, `VITE_SENTRY_ENVIRONMENT`, `POSTHOG_KEY`, `VITE_POSTHOG_KEY`, `POSTHOG_HOST`, `VITE_POSTHOG_HOST`, `POSTHOG_APP_URL`, `VITE_POSTHOG_APP_URL`, `AE_DISABLE_OBSERVABILITY`, `VITE_AE_DISABLE_OBSERVABILITY`.
-- Maps: `VITE_GOOGLE_MAPS_API_KEY`.
-- Local/deploy tests: `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`, `PLAYWRIGHT_BASE_URL`, `DEPLOY_BASE_URL`, `DEPLOY_CONVEX_URL`, `VERCEL_AUTOMATION_BYPASS_SECRET`, `AE_DEV_WBA_SMOKE_ENABLED`, `AE_DEV_WBA_SMOKE_SECRET`, and smoke-specific `SMOKE_*` variables used under `tests/deploy-smoke/` and `tests/dev-smoke/`.
-- Clearance signing: `AE_CLEARANCE_SIGNING_SECRET` and `AE_CLEARANCE_SIGNING_KEY_ID` in `src/modules/clearance/internal/signing.ts`.
+- Convex runtime: `CONVEX_URL` or `VITE_CONVEX_URL` from `src/lib/server/convex-source.ts`; `CLERK_JWT_ISSUER_DOMAIN` from `convex/auth.config.ts`
+- Clerk server lookup: `CLERK_SECRET_KEY` from `src/lib/server/notification-provider.ts`
+- Source-write admission: scoped `AE_SOURCE_WRITE_KEY_*` values in production or non-production `AE_SOURCE_WRITE_SECRET` from `src/modules/security/source-write-admission.ts`
+- Agent write admission dev bypass: `AE_DEV_AGENT_TOOL_WRITE_ADMISSION`, `AE_DEV_WBA_SMOKE_ENABLED`, and `AE_DEV_WBA_SIGNATURE_AGENT` are non-production controls in `src/modules/clearance/clearance.functions.ts` and `src/routes/api.agent.tools.ts`
+- Notification outbox: `AE_NOTIFICATION_OUTBOX_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_WEBHOOK_SECRET`, `NOVU_SECRET_KEY`, and `NOVU_WORKFLOW_INQUIRY_OWNER` from `src/lib/server/notification-provider.ts`
+- Billing: `AUTUMN_SECRET_KEY`, `AUTUMN_WEBHOOK_SECRET`, optional `AUTUMN_API_BASE_URL`, optional `AUTUMN_API_VERSION`, and app URL env `AE_APP_BASE_URL` / `VITE_AE_APP_BASE_URL` / `VERCEL_URL` from `src/lib/server/billing-provider.ts` and `src/modules/billing/billing.functions.ts`
+- Stripe evidence webhook: `STRIPE_WEBHOOK_SECRET` from `src/routes/api.business-actions.stripe-webhook.ts`
+- Answer AI: `OPENROUTER_API_KEY`, optional `AE_LLM_MODEL`, optional `AE_LLM_MODELS`, optional `AE_OPENROUTER_API_BASE_URL`, `AE_ANSWER_EVAL_PASSED`, and `AE_ALLOW_CHAT_API` from `src/modules/answer/internal/llm-config.ts`
+- Observability: `SENTRY_DSN`, `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `POSTHOG_KEY`, `VITE_POSTHOG_KEY`, and related host/app/release env from `src/lib/observability/config.ts` and `vite.config.ts`
+- Discovery/canonical URL: `AE_CANONICAL_BASE_URL`, `AE_CANONICAL_HOST_ALLOWLIST`, `SITE_URL`, and `VITE_SITE_URL` from `src/lib/server/canonical-url.ts`, `src/modules/inquiries/inquiry.functions.ts`, and `src/modules/catalog/owner-claim.functions.ts`
+- Optional integrations: `MEILISEARCH_HOST`, `MEILISEARCH_ADMIN_KEY`, `AE_SEARCH_INDEX_UID`, `AE_SEARCH_BACKEND`, and `VITE_GOOGLE_MAPS_API_KEY` from `src/modules/registry/internal/catalog-search-port.ts` and `src/components/ae/artifacts/AeGenerativeMap.tsx`
 
 **Secrets location:**
-- `.env`, `.env.local`, and `.env.example` exist at the repository root; contents were not read.
-- CI secrets are consumed by `.github/workflows/eval-gate.yml`.
-- Convex deployment env is configured through Convex environment variables referenced by `convex/` functions and smoke instructions in `tests/dev-smoke/agent-door-wba-source-smoke.test.ts`.
+- Local env files are present but not inspected: `.env`, `.env.local`, `.env.example`, and `examples/agent-experience/.env.example`.
+- Runtime secrets are expected in local process env, Vercel env, and Convex env; deploy-smoke tests refer to Vercel and Convex env setup in `tests/deploy-smoke/` and `tests/dev-smoke/agent-door-wba-source-smoke.test.ts`.
+- Source-write code rejects client-exposed `VITE_AE_SOURCE_WRITE_*` secrets and provider-secret reuse in `src/modules/security/source-write-admission.ts`.
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- `POST /api/billing/webhook` - Autumn webhook verified with Svix headers and `AUTUMN_WEBHOOK_SECRET` in `src/routes/api.billing.webhook.ts` and `src/lib/server/billing-provider.ts`.
-- `POST /api/notification/resend-webhook` - Resend webhook verified with Svix headers and `RESEND_WEBHOOK_SECRET` in `src/routes/api.notification.resend-webhook.ts` and `src/lib/server/notification-provider.ts`.
-- `POST /api/business-actions/stripe-webhook` - Stripe webhook verified with `stripe-signature` and `STRIPE_WEBHOOK_SECRET` in `src/routes/api.business-actions.stripe-webhook.ts`.
-- `POST /api/notification/resend-dispatch` - system-triggered dispatch endpoint authorized with `AE_NOTIFICATION_OUTBOX_SECRET` in `src/routes/api.notification.resend-dispatch.ts`.
-- `POST /api/notification/novu-dispatch` - system-triggered workflow dispatch endpoint authorized with `AE_NOTIFICATION_OUTBOX_SECRET` in `src/routes/api.notification.novu-dispatch.ts`.
-- `POST /api/agent/tools` - quiet agent tool invocation endpoint in `src/routes/api.agent.tools.ts`; exposed tools are action contracts from `src/modules/actions/index.ts`.
-- `POST /api/chat` - non-production or explicitly enabled chat endpoint in `src/routes/api.chat.ts`; disabled in production unless `AE_ALLOW_CHAT_API=1`.
-- `POST /api/answer/turn` - answer-thread streaming endpoint in `src/routes/api.answer.turn.ts`.
-- `POST /api/observability/funnel` - funnel event ingestion in `src/routes/api.observability.funnel.ts`.
+- `GET /api/agent/tools` and `POST /api/agent/tools` - quiet agent tool listing and invocation in `src/routes/api.agent.tools.ts`; write calls require signed identity and source-write admission.
+- `POST /api/billing/webhook` - Autumn billing webhook in `src/routes/api.billing.webhook.ts`; verifies Svix headers through `src/lib/server/billing-provider.ts`.
+- `POST /api/business-actions/stripe-webhook` - Stripe test-mode business-action evidence webhook in `src/routes/api.business-actions.stripe-webhook.ts`.
+- `POST /api/notification/resend-webhook` - Resend notification webhook in `src/routes/api.notification.resend-webhook.ts`; verifies Svix headers through `src/lib/server/notification-provider.ts`.
+- `POST /api/notification/resend-dispatch` - Internal/system owner notification email delivery endpoint in `src/routes/api.notification.resend-dispatch.ts`.
+- `POST /api/notification/novu-dispatch` - Internal/system Novu workflow trigger endpoint in `src/routes/api.notification.novu-dispatch.ts`.
+- `GET /api/businesses`, `GET /api/businesses/search`, `GET /api/businesses/$slug`, `GET /llms.txt`, `GET /sitemap.xml`, and `GET /robots.txt` - public read-only discovery surfaces in `src/routes/api.businesses.ts`, `src/routes/api.businesses.search.ts`, `src/routes/api.businesses.$slug.ts`, `src/routes/llms[.]txt.ts`, `src/routes/sitemap[.]xml.ts`, and `src/routes/robots[.]txt.ts`.
 
 **Outgoing:**
-- Convex queries, mutations, and actions through `src/lib/server/convex-source.ts`.
-- Clerk Backend API user lookup at `https://api.clerk.com/v1/users/:id` in `src/lib/server/notification-provider.ts`.
-- OpenRouter chat completions and model list through `src/modules/answer/internal/answer-tool-use-agent.ts` and `src/modules/answer/internal/openrouter-models.ts`.
-- Meilisearch index/search/settings/task HTTP calls through `src/modules/registry/internal/catalog-search-port.ts`.
-- Autumn customer, billing attach, customer portal, and readback API calls through `src/modules/billing/internal/provider-readback.ts`.
-- Resend email send calls through `src/lib/server/notification-provider.ts`.
-- Novu workflow trigger and message readback calls through `src/lib/server/notification-provider.ts`.
-- Stripe test-mode Checkout Session evidence calls through `src/modules/business-action/internal/stripe-checkout.ts`.
-- Sentry client/server event transport through `src/lib/observability/sentry.client.ts`, `src/lib/observability/sentry.server.ts`, and sourcemap upload in `vite.config.ts`.
-- PostHog client/server analytics through `src/lib/observability/posthog.client.ts` and `src/lib/observability/posthog.server.ts`.
-- Google Maps embed iframe URLs through `src/components/ae/artifacts/AeGenerativeMap.tsx`.
+- Convex HTTP client calls from `src/lib/server/convex-source.ts` to public/authenticated Convex functions.
+- Clerk user lookup from `src/lib/server/notification-provider.ts` to `https://api.clerk.com/v1`.
+- Resend email sends from `src/lib/server/notification-provider.ts` to `https://api.resend.com`.
+- Novu event trigger and readback from `src/lib/server/notification-provider.ts` to `https://api.novu.co`.
+- Autumn billing calls from `src/modules/billing/internal/provider-readback.ts` to `https://api.useautumn.com`.
+- Stripe checkout session creation from `src/modules/business-action/internal/stripe-checkout.ts` to `https://api.stripe.com`.
+- OpenRouter chat/model calls from `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/llm-follow-up-chips.ts`, and `src/modules/answer/internal/openrouter-models.ts`.
+- Meilisearch search/index calls from `src/modules/registry/internal/catalog-search-port.ts` when optional env is configured.
+- Google Maps iframe embed calls from `src/components/ae/artifacts/AeGenerativeMap.tsx` when `VITE_GOOGLE_MAPS_API_KEY` is configured.
+- Public website fetches for owner-reviewed draft import from `src/modules/storefront/internal/import-draft.ts`.
+- PostHog and Sentry network egress is enabled by env and CSP in `src/lib/observability/` and `src/lib/http/security-headers.ts`.
 
 ---
 
