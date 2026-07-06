@@ -12,6 +12,7 @@ export {
   BusinessActionResultArtifactRequirementValues,
   BusinessActionResultArtifactStatusValues,
   BusinessActionSlug,
+  ReserveBookingActionSlug,
   BusinessActionSlugValues,
   BusinessActionSupportStatusValues,
   BuyerMandateStatusValues,
@@ -101,3 +102,10 @@ export type {
   RecordHermesEvidenceEventCommand,
   RecordHermesEvidenceEventResult,
 } from './internal/business-action'
+export {
+  createReserveBookingCard,
+  mintReserveBookingMandate,
+  proposeReserveBooking,
+  resolveReserveBookingMode,
+} from './internal/reserve-booking'
+export type { ReserveBookingMode, ReserveBookingResolution } from './internal/reserve-booking'

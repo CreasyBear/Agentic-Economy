@@ -10,7 +10,7 @@ export function AeProtectedByAe() {
         AE
       </span>
       <Text type="supporting" color="secondary">
-        Published through Agentic Economy. Details only; the business handles timing, price, and availability.
+        Listed on Agentic Economy. The business handles timing, price, and availability.
       </Text>
     </div>
   )

@@ -21,7 +21,7 @@ export function AeSessionContextPanel({ projection, liveTurn = null }: AeSession
   }
 
   return (
-    <section className="mx-auto w-full max-w-4xl px-4 pt-3 md:px-6" aria-label="Session context">
+    <section className="w-full" aria-label="Session context">
       <Card padding={3} className="grid gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="grid min-w-0 gap-1">

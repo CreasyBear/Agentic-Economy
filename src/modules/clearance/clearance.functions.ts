@@ -5,6 +5,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
@@ -28,16 +29,24 @@ export type RegisterAgentPrincipalArgs = {
   sourceWrite: SourceWriteAdmission
 }
 
-export const registerAgentPrincipalMutation = sourceMutation<
+const registerAgentPrincipalMutation = sourceMutation<
   RegisterAgentPrincipalArgs,
   AgentPrincipalRecord
 >('clearance:registerAgentPrincipal')
 
+type AgentToolWriteToolId = 'inquiry.submit' | 'businessAction.requestCapability'
+type AgentToolWriteScope = 'public_inquiry' | 'business_action_request'
+
+const ALLOWED_WRITE_TOOLS: Record<string, AgentToolWriteScope> = {
+  'inquiry.submit': 'public_inquiry',
+  'businessAction.requestCapability': 'business_action_request',
+}
+
 export type AgentToolWriteAdmissionResult =
   | {
       kind: 'admitted'
-      toolId: 'inquiry.submit'
-      scope: 'public_inquiry'
+      toolId: AgentToolWriteToolId
+      scope: AgentToolWriteScope
       principalId: string
       mandateId?: string | undefined
     }
@@ -46,7 +55,7 @@ export type AgentToolWriteAdmissionResult =
       reason: string
     }
 
-export const readActiveAgentToolMandateQuery = sourceQuery<
+const readActiveAgentToolMandateQuery = sourceQuery<
   { principalId: string; actionRef: string },
   ClearanceMandate | null
 >('clearance:readActiveAgentToolMandate')
@@ -54,36 +63,41 @@ export const readActiveAgentToolMandateQuery = sourceQuery<
 export async function resolveAgentToolWriteAdmissionThroughSource(input: {
   identity: AgentIdentity
   toolId: string
-  scope: 'public_inquiry'
+  scope: AgentToolWriteScope
 }): Promise<AgentToolWriteAdmissionResult> {
-  if (input.toolId !== 'inquiry.submit' || input.scope !== 'public_inquiry') {
+  if (ALLOWED_WRITE_TOOLS[input.toolId] !== input.scope) {
     return { kind: 'refused', reason: 'agent_tool_write_not_declared' }
   }
 
   const principalId = buildAgentPrincipalId(input.identity)
-  if (isLocalPublicInquiryAdmissionEnabled()) {
-    return { kind: 'admitted', toolId: 'inquiry.submit', scope: 'public_inquiry', principalId }
+  if (isLocalAgentToolWriteAdmissionEnabled(input.scope)) {
+    return {
+      kind: 'admitted',
+      toolId: input.toolId as AgentToolWriteToolId,
+      scope: input.scope,
+      principalId,
+    }
   }
 
   try {
     const mandate = await callPublicSourceQuery(readActiveAgentToolMandateQuery, {
       principalId,
-      actionRef: 'inquiry.submit',
+      actionRef: input.toolId,
     })
     const evaluation = evaluateClearanceMandate({
       mandate: mandate ?? undefined,
       principalId,
       actionClass: 'contact_follow_up',
-      actionRef: 'inquiry.submit',
-      scope: 'public_inquiry',
+      actionRef: input.toolId,
+      scope: input.scope,
       now: Date.now(),
     })
 
     if (evaluation.kind === 'accepted') {
       return {
         kind: 'admitted',
-        toolId: 'inquiry.submit',
-        scope: 'public_inquiry',
+        toolId: input.toolId as AgentToolWriteToolId,
+        scope: input.scope,
         principalId,
         mandateId: evaluation.mandate.mandateId,
       }
@@ -130,8 +144,6 @@ export async function recordAgentIdentityThroughSource(
   }
 }
 
-function isLocalPublicInquiryAdmissionEnabled(): boolean {
-  return process.env.NODE_ENV !== 'production' &&
-    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true' &&
-    process.env.AE_DEV_AGENT_TOOL_WRITE_ADMISSION === 'public_inquiry'
+function isLocalAgentToolWriteAdmissionEnabled(scope: AgentToolWriteScope): boolean {
+  return isLocalE2EAuthBypassEnabled() && process.env.AE_DEV_AGENT_TOOL_WRITE_ADMISSION === scope
 }

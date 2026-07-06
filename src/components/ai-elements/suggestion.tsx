@@ -85,7 +85,7 @@ export const Suggestion = ({
   if (asChild && isValidElement<{ className?: string; onClick?: (event: MouseEvent<HTMLElement>) => void }>(children)) {
     return cloneElement(children as ReactElement<{ className?: string; onClick?: (event: MouseEvent<HTMLElement>) => void }>, {
       className: cn(
-        "inline-flex min-h-9 cursor-pointer items-center justify-center rounded-full px-4 text-sm font-medium text-primary no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2",
+        "inline-flex min-h-9 cursor-pointer items-center justify-center rounded-full px-4 text-sm font-medium text-primary no-underline hover:underline",
         className,
         children.props.className,
       ),

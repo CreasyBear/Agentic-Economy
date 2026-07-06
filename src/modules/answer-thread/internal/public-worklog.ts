@@ -10,7 +10,7 @@ import {
  * (AGENTS.md / DESIGN.md §public copy). Kept here as the single source so the
  * live orchestrator and the replay projection scrub identically.
  */
-export const INTERNAL_PUBLIC_TERMS = [
+const INTERNAL_PUBLIC_TERMS = [
   'source-owned',
   'readback',
   'manifest',
@@ -51,7 +51,7 @@ export function safeWorkLogUserText(value: string): string {
  * Collapse internal reasoning phases (interpret/route/assemble) to the public
  * 'read' phase; search/read/compare stay as-is.
  */
-export function publicWorkStepPhase(phase: AnswerWorkStep['phase']): AnswerWorkStep['phase'] {
+function publicWorkStepPhase(phase: AnswerWorkStep['phase']): AnswerWorkStep['phase'] {
   switch (phase) {
     case 'search':
     case 'read':

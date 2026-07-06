@@ -22,7 +22,7 @@
   --ae-surface-command: oklch(0.21 0.012 250);
 
   --ae-border: oklch(0.83 0.008 110);        /* hairline #C9C8BE */
-  --ae-ring: oklch(0.74 0.15 70);            /* amber ring */
+  --ae-ring: oklch(0.40 0.045 150);           /* eucalyptus ring */
 
   --ae-primary: oklch(0.74 0.15 70);         /* amber #E89B3C */
   --ae-primary-strong: oklch(0.64 0.14 65);  /* amber-deep #C9822A */
@@ -45,7 +45,7 @@
   --ae-shadow-border: 0 0 0 1px oklch(0.21 0.012 250 / 0.06);
   --ae-shadow-border-hover: 0 0 0 1px oklch(0.21 0.012 250 / 0.10);
   --ae-shadow-border-focus-visible: var(--ae-shadow-border-hover);
-  --ae-focus-ring: 0 0 0 3px oklch(0.74 0.15 70 / 0.32);
+  --ae-focus-ring: 0 0 0 3px oklch(0.40 0.045 150 / 0.34);
   --ae-command-fg: var(--ae-public-command-text);
   --ae-shadow-command: var(--ae-public-command-shadow);
 
@@ -256,7 +256,7 @@ body[data-ae-surface='register'] {
   --ae-surface-command: oklch(0.18 0.014 250);
 
   --ae-border: oklch(0.36 0.014 130);
-  --ae-ring: oklch(0.78 0.15 70);
+  --ae-ring: oklch(0.66 0.06 150);
 
   --ae-primary: oklch(0.78 0.15 70);
   --ae-primary-strong: oklch(0.84 0.13 65);
@@ -272,7 +272,7 @@ body[data-ae-surface='register'] {
   --ae-shadow-border: 0 0 0 1px oklch(1 0 0 / 0.10);
   --ae-shadow-border-hover: 0 0 0 1px oklch(1 0 0 / 0.16);
   --ae-shadow-border-focus-visible: var(--ae-shadow-border-hover);
-  --ae-focus-ring: 0 0 0 3px oklch(0.78 0.15 70 / 0.36);
+  --ae-focus-ring: 0 0 0 3px oklch(0.66 0.06 150 / 0.38);
 
   --ae-public-field: var(--ae-bg);
   --ae-public-field-alt: var(--ae-surface-sunken);

@@ -3,7 +3,7 @@ import type { AeSearchContext } from '@/modules/answer/search-context'
 
 export type AnswerStreamFrame = { seq: number; event: AnswerEvent }
 
-export function parseAnswerSseBuffer(buffer: string): { frames: AnswerStreamFrame[]; rest: string } {
+function parseAnswerSseBuffer(buffer: string): { frames: AnswerStreamFrame[]; rest: string } {
   const frames: AnswerStreamFrame[] = []
   const chunks = buffer.split('\n\n')
   const rest = chunks.pop() ?? ''
@@ -29,7 +29,7 @@ export function parseAnswerSseBuffer(buffer: string): { frames: AnswerStreamFram
 
 export type StreamAnswerResult = 'done' | 'aborted' | 'error' | 'rate_limited'
 
-export async function streamAnswerSse(input: {
+async function streamAnswerSse(input: {
   url: string
   method?: 'GET' | 'POST'
   body?: string

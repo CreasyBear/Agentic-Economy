@@ -7,6 +7,8 @@ depends_on: ["scope-01-deployed-env", "move-1-inquiry-submit-door-if-agent-submi
 files_modified:
   - .planning/scopes/scope-14day-bootstrap-gate/SCOPE-14DAY-INDEX.md
   - .planning/scopes/scope-14day-bootstrap-gate/14D-01-bootstrap-gate-evidence-PLAN.md
+  - .planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md
+  - .planning/scopes/SCOPE-EXECUTION-READINESS.md
   - .planning/ROADMAP.md
   - .planning/STATE.md
 autonomous: false
@@ -49,7 +51,7 @@ produce both demand and supplier maintenance in one narrow wedge.
 <preflight_gates>
 - Scope 1 deployed environment is required before public/deployed proof is claimed. Local/source setup is not market proof.
 - Move 1's admitted `inquiry.submit` quiet-door path is required if the run asks an assistant to submit through `/api/agent/tools`; otherwise assistant traffic may only route humans to the existing qualified-inquiry UI.
-- The 14-day clock does not start until attribution links, profile/source click measurement, inquiry receipts, and provider correction/listing evidence capture are verified on the target surface.
+- The 14-day clock does not start until attribution links, inquiry receipts, and provider correction/listing evidence capture are verified on the target surface; profile/source click measurement is either verified or explicitly marked unavailable before day 1.
 - No paid, quote-lock, booking, dispatch, automatic-fulfillment, broad-write, marketplace-liquidity, or autonomous-transaction copy may ship for this run.
 </preflight_gates>
 
@@ -57,7 +59,7 @@ produce both demand and supplier maintenance in one narrow wedge.
 
 <task type="manual" tdd="false" status="planned">
   <name>Task 1: Prepare supply corpus</name>
-  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md (later)</files>
+  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md</files>
   <action>Create 30–50 source-backed profile candidates in one metro and 2–3 high-intent categories. Record source URL, freshness date, public boundary, owner-confirmation status, and category extension notes. Do not add local-service-only fields to core schema.</action>
   <verify>Manual evidence review: every counted profile has a source pointer and boundary label.</verify>
   <acceptance_criteria>
@@ -69,7 +71,7 @@ produce both demand and supplier maintenance in one narrow wedge.
 
 <task type="manual" tdd="false" status="planned">
   <name>Task 2: Recruit providers</name>
-  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md (later)</files>
+  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md</files>
   <action>Manually recruit 10 providers. Offer free profile correction/listing for 30 days. Ask each provider to correct or maintain their profile before any paid promise.</action>
   <verify>Manual evidence review: 10 recruited providers with outreach date, channel, response status, and whether they corrected/maintained/asked to be listed.</verify>
   <acceptance_criteria>
@@ -81,20 +83,20 @@ produce both demand and supplier maintenance in one narrow wedge.
 
 <task type="manual" tdd="false" status="planned">
   <name>Task 3: Verify instrumentation before the clock</name>
-  <files>existing observability/inquiry/correction surfaces only unless a separate implementation ticket is opened</files>
-  <action>Verify that session attribution, registry/answer journey events, profile/source click-through, qualified inquiry receipts, and correction/listing evidence are emitted or otherwise source-owned before day 1. If profile/source clicks are not emitted, open a narrow implementation ticket before starting the clock rather than counting them manually.</action>
-  <verify>Dry-run one attributed session through registry/answer, one profile/source click, one qualified inquiry, and one correction/listing request in the target environment; record only non-secret IDs/counts.</verify>
+  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md; existing observability/inquiry/correction surfaces only unless a separate implementation ticket is opened</files>
+  <action>Verify that session attribution, registry/answer journey events, profile/source click-through, qualified inquiry receipts, and correction/listing evidence are emitted or otherwise source-owned before day 1. If profile/source clicks, supplier-maintenance evidence, or source-owned targeted-session counts are missing, record the blocker and open a narrow implementation ticket before starting the clock rather than counting them manually.</action>
+  <verify>Dry-run one attributed session through registry/answer, one profile/source click if instrumented, one qualified inquiry, and one correction/listing request in the target environment; record only non-secret IDs/counts.</verify>
   <acceptance_criteria>
-    - `visitor_attributed` or equivalent attributed session evidence exists for test traffic.
+    - `visitor_attributed` or equivalent attributed session evidence exists for test traffic, with source-owned evidence or an explicitly accepted external observability export.
     - `inquiry_submitted` receipt evidence exists for qualified inquiries.
-    - Provider correction/listing evidence has a source row or explicit operator evidence ref.
+    - Provider correction/listing evidence has a source-owned row or explicit operator evidence ref; the dispute/correction route alone is not supplier-pass proof.
     - Optional source/profile click-through is measurable or explicitly marked unavailable for the run.
   </acceptance_criteria>
 </task>
 
 <task type="manual" tdd="false" status="planned">
   <name>Task 4: Run 14-day traffic test</name>
-  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md (later)</files>
+  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md</files>
   <action>Send 100 attributable targeted sessions over 14 days using narrow paid search, local posts, direct outreach, partner links, or assistant/referral prompts. Do not change thresholds mid-run. Fix only broken instrumentation or overclaiming copy.</action>
   <verify>At day 14, count targeted sessions, qualified inquiries, provider corrections/listing requests, trust scan result, and optional source/profile click-through.</verify>
   <acceptance_criteria>
@@ -107,7 +109,7 @@ produce both demand and supplier maintenance in one narrow wedge.
 
 <task type="manual" tdd="false" status="planned">
   <name>Task 5: Record verdict and next move</name>
-  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md (later), .planning/STATE.md (later if verdict changes active state), .planning/ROADMAP.md (later only if roadmap admission changes)</files>
+  <files>.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md, .planning/STATE.md (later if verdict changes active state), .planning/ROADMAP.md (later only if roadmap admission changes)</files>
   <action>Write the evidence artifact and choose GO, ADAPT, or STOP from the index rules. Do not claim deployed/provider/live proof unless the evidence actually came from deployed/provider/live surfaces.</action>
   <verify>npm run typecheck && npm run test:copy && npm run test:seo, plus the deployed outside-in agent audit if assistant-facing claims are used.</verify>
   <acceptance_criteria>
@@ -123,6 +125,7 @@ produce both demand and supplier maintenance in one narrow wedge.
 - [ ] Scaffold verification: `npm run typecheck`
 - [ ] Scaffold verification: `npm run test:copy`
 - [ ] Scaffold verification: `npm run test:seo`
+- [ ] Scaffold verification: `.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md` exists with setup counts, instrumentation dry-run blockers, pass-rule calculation, trust scan slots, and GO/ADAPT/STOP verdict slot
 - [ ] Later gate run: dry-run instrumentation in the target environment before day 1
 - [ ] Later gate run: day-14 evidence artifact with GO/ADAPT/STOP verdict
 </verification>
@@ -134,5 +137,5 @@ produce both demand and supplier maintenance in one narrow wedge.
 </success_criteria>
 
 <output>
-When the 14-day run completes, write `.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md` with setup counts, pass/fail metrics, trust evidence, optional click-through, and GO/ADAPT/STOP verdict.
+The scaffold writes `.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md` as a blank evidence template. When the 14-day run completes, fill that same artifact with setup counts, pass/fail metrics, trust evidence, optional click-through status, blockers, and GO/ADAPT/STOP verdict.
 </output>

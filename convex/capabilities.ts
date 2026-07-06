@@ -6,6 +6,7 @@ import { literalUnion } from '../src/modules/common/convex-literals'
 import {
   AeEndpointCheckAllowedMethods,
   AeEndpointCheckBackoffMs,
+  AeEndpointCheckFreshnessWindowMsByKind,
   AeEndpointCheckStandardVersion,
   BusinessCapabilityKindValues,
   CapabilityTrustStateValues,
@@ -18,7 +19,6 @@ import {
   type ReachabilityFacetResult,
   type SchemaFacetResult,
 } from '../src/modules/capabilities/public'
-import { AeEndpointCheckFreshnessWindowMsByKind } from '../src/modules/capabilities/internal/check-standard'
 
 const capabilityKind = literalUnion(BusinessCapabilityKindValues)
 

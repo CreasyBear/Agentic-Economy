@@ -347,6 +347,7 @@ function routeSnapshotWithBusiness(input: {
   discoveryStatus: 'available' | 'degraded' | 'unavailable' | 'stale'
 }): DeveloperDiscoveryRouteSnapshot {
   const business = {
+    businessId: `businesses:${input.slug}`,
     slug: input.slug,
     name: input.name,
     category: 'Emergency plumbing',

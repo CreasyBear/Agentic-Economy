@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { callSourceMutation, callSourceQuery, ConvexSourceError, sourceMutation, sourceQuery } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, CorrelationId, OperationKey, OwnerId, ServiceId, SourceHash } from '@/modules/common/ids'
@@ -179,7 +180,7 @@ export const readAdminContactFollowUpReconstructionServer = createServerFn()
   .handler(async ({ data }) => readAdminContactFollowUpReconstructionThroughSource(data))
 
 export async function readCurrentOwnerContactFollowUpQueueThroughSource(): Promise<OwnerContactFollowUpQueueServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     const state = createLocalE2eContactFollowUpSourceState()
     const queue = listOwnerContactFollowUpQueue(state, localE2eOwnerId)
     return {
@@ -208,7 +209,7 @@ export async function readCurrentOwnerContactFollowUpQueueThroughSource(): Promi
 export async function readCurrentOwnerContactFollowUpDetailThroughSource(
   proposalId: string
 ): Promise<OwnerContactFollowUpDetailServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localDetail(proposalId)
   }
 
@@ -219,10 +220,10 @@ export async function readCurrentOwnerContactFollowUpDetailThroughSource(
   }
 }
 
-export async function readCurrentOwnerContactFollowUpReceiptThroughSource(
+async function readCurrentOwnerContactFollowUpReceiptThroughSource(
   proposalId: string
 ): Promise<OwnerContactFollowUpDetailServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localDetail(proposalId)
   }
 
@@ -237,7 +238,7 @@ export async function approveCurrentOwnerContactFollowUpThroughSource(
   data: z.infer<typeof ownerDecisionSchema>,
   context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localApprove(data)
   }
 
@@ -255,7 +256,7 @@ export async function rejectCurrentOwnerContactFollowUpThroughSource(
   data: z.infer<typeof ownerDecisionSchema>,
   context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localReject(data)
   }
 
@@ -273,7 +274,7 @@ export async function retryCurrentOwnerContactFollowUpThroughSource(
   data: z.infer<typeof retrySchema>,
   context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localRetry(data)
   }
 
@@ -291,7 +292,7 @@ export async function markCurrentOwnerContactFollowUpNoRepairThroughSource(
   data: z.infer<typeof noRepairSchema>,
   context?: unknown
 ): Promise<OwnerContactFollowUpMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localNoRepair(data)
   }
 
@@ -308,7 +309,7 @@ export async function markCurrentOwnerContactFollowUpNoRepairThroughSource(
 export async function readAdminContactFollowUpReconstructionThroughSource(
   filter: { proposalId?: string | undefined } = {}
 ): Promise<AdminContactFollowUpReconstructionServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     const state = createLocalE2eContactFollowUpSourceState()
     const rows =
       filter.proposalId === undefined
@@ -840,10 +841,6 @@ function compactAdminFilter(filter: { proposalId?: string | undefined }): { prop
 function normalizeOperationPart(value: string): string {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
   return normalized.length === 0 ? 'contact-follow-up' : normalized
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 function readEnv(name: string): string | undefined {

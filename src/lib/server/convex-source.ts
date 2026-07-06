@@ -94,7 +94,7 @@ export async function createAuthenticatedConvexClient(
   })
 }
 
-export function createPublicConvexClient(options: Pick<CreateAuthenticatedConvexClientOptions, 'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'> = {}): ConvexHttpClient {
+function createPublicConvexClient(options: Pick<CreateAuthenticatedConvexClientOptions, 'env' | 'fetch' | 'skipConvexDeploymentUrlCheck'> = {}): ConvexHttpClient {
   const convexUrl = readRequiredConvexUrl(options.env ?? process.env)
   return new ConvexHttpClient(convexUrl, {
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
@@ -114,7 +114,7 @@ export function createPublicSourceTransport(options: CreatePublicConvexClientOpt
   return createConvexSourceTransport(createPublicConvexClient(options))
 }
 
-export function createConvexSourceTransport(client: ConvexHttpClient): ConvexSourceTransport {
+function createConvexSourceTransport(client: ConvexHttpClient): ConvexSourceTransport {
   return {
     query: (query, args) => client.query(query, args),
     mutation: (mutation, args) => client.mutation(mutation, args),

@@ -18,6 +18,7 @@ import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as OperatorRouteImport } from './routes/_operator'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
@@ -25,31 +26,13 @@ import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
-import { Route as OwnerStatusRouteImport } from './routes/owner.status'
-import { Route as OwnerInquiriesRouteImport } from './routes/owner.inquiries'
-import { Route as OwnerBusinessActionsRouteImport } from './routes/owner.business-actions'
-import { Route as OwnerBillingRouteImport } from './routes/owner.billing'
-import { Route as OwnerActionsRouteImport } from './routes/owner.actions'
-import { Route as DevelopersDiscoveryRouteImport } from './routes/developers.discovery'
+import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiAnswerRouteImport } from './routes/api.answer'
-import { Route as AdminRunsRouteImport } from './routes/admin.runs'
-import { Route as AdminProtectedActionsRouteImport } from './routes/admin.protected-actions'
-import { Route as AdminMonetizationRouteImport } from './routes/admin.monetization'
-import { Route as AdminInquiriesRouteImport } from './routes/admin.inquiries'
-import { Route as AdminIndexHealthRouteImport } from './routes/admin.index-health'
-import { Route as AdminClaimsRouteImport } from './routes/admin.claims'
-import { Route as AdminBusinessActionsRouteImport } from './routes/admin.business-actions'
-import { Route as AdminAuditEventsRouteImport } from './routes/admin.audit-events'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
-import { Route as OwnerInquiriesThreadIdRouteImport } from './routes/owner.inquiries.$threadId'
-import { Route as OwnerBusinessActionsRequestIdRouteImport } from './routes/owner.business-actions.$requestId'
-import { Route as OwnerBillingRedirectingRouteImport } from './routes/owner.billing.redirecting'
-import { Route as OwnerBillingActivateRouteImport } from './routes/owner.billing.activate'
-import { Route as OwnerActionsProposalIdRouteImport } from './routes/owner.actions.$proposalId'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
 import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
@@ -68,16 +51,36 @@ import { Route as ApiAnswerThreadsRouteImport } from './routes/api.answer.thread
 import { Route as ApiAnswerFollowUpChipsRouteImport } from './routes/api.answer.follow-up-chips'
 import { Route as ApiAnswerEvalStatusRouteImport } from './routes/api.answer.eval-status'
 import { Route as ApiAgentToolsRouteImport } from './routes/api.agent.tools'
-import { Route as AdminRunsTurnIdRouteImport } from './routes/admin.runs.$turnId'
-import { Route as AdminProtectedActionsProposalIdRouteImport } from './routes/admin.protected-actions.$proposalId'
-import { Route as AdminMonetizationOperationIdRouteImport } from './routes/admin.monetization.$operationId'
-import { Route as AdminBusinessActionsRequestIdRouteImport } from './routes/admin.business-actions.$requestId'
-import { Route as OwnerBusinessActionsRequestIdReceiptRouteImport } from './routes/owner.business-actions.$requestId.receipt'
-import { Route as OwnerBillingReturnOperationIdRouteImport } from './routes/owner.billing.return.$operationId'
-import { Route as OwnerBillingReceiptsReceiptIdRouteImport } from './routes/owner.billing.receipts.$receiptId'
-import { Route as OwnerBillingCancelOperationIdRouteImport } from './routes/owner.billing.cancel.$operationId'
-import { Route as OwnerActionsProposalIdReceiptRouteImport } from './routes/owner.actions.$proposalId.receipt'
+import { Route as OperatorOwnerStatusRouteImport } from './routes/_operator/owner.status'
+import { Route as OperatorOwnerSettingsRouteImport } from './routes/_operator/owner.settings'
+import { Route as OperatorOwnerInquiriesRouteImport } from './routes/_operator/owner.inquiries'
+import { Route as OperatorOwnerBusinessActionsRouteImport } from './routes/_operator/owner.business-actions'
+import { Route as OperatorOwnerBillingRouteImport } from './routes/_operator/owner.billing'
+import { Route as OperatorOwnerActionsRouteImport } from './routes/_operator/owner.actions'
+import { Route as OperatorDevelopersDiscoveryRouteImport } from './routes/_operator/developers.discovery'
+import { Route as OperatorAdminRunsRouteImport } from './routes/_operator/admin.runs'
+import { Route as OperatorAdminProtectedActionsRouteImport } from './routes/_operator/admin.protected-actions'
+import { Route as OperatorAdminMonetizationRouteImport } from './routes/_operator/admin.monetization'
+import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/admin.inquiries'
+import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
+import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
+import { Route as OperatorAdminBusinessActionsRouteImport } from './routes/_operator/admin.business-actions'
+import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
+import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
+import { Route as OperatorOwnerBusinessActionsRequestIdRouteImport } from './routes/_operator/owner.business-actions.$requestId'
+import { Route as OperatorOwnerBillingRedirectingRouteImport } from './routes/_operator/owner.billing.redirecting'
+import { Route as OperatorOwnerBillingActivateRouteImport } from './routes/_operator/owner.billing.activate'
+import { Route as OperatorOwnerActionsProposalIdRouteImport } from './routes/_operator/owner.actions.$proposalId'
+import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
+import { Route as OperatorAdminProtectedActionsProposalIdRouteImport } from './routes/_operator/admin.protected-actions.$proposalId'
+import { Route as OperatorAdminMonetizationOperationIdRouteImport } from './routes/_operator/admin.monetization.$operationId'
+import { Route as OperatorAdminBusinessActionsRequestIdRouteImport } from './routes/_operator/admin.business-actions.$requestId'
+import { Route as OperatorOwnerBusinessActionsRequestIdReceiptRouteImport } from './routes/_operator/owner.business-actions.$requestId.receipt'
+import { Route as OperatorOwnerBillingReturnOperationIdRouteImport } from './routes/_operator/owner.billing.return.$operationId'
+import { Route as OperatorOwnerBillingReceiptsReceiptIdRouteImport } from './routes/_operator/owner.billing.receipts.$receiptId'
+import { Route as OperatorOwnerBillingCancelOperationIdRouteImport } from './routes/_operator/owner.billing.cancel.$operationId'
+import { Route as OperatorOwnerActionsProposalIdReceiptRouteImport } from './routes/_operator/owner.actions.$proposalId.receipt'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -124,6 +127,10 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OperatorRoute = OperatorRouteImport.update({
+  id: '/_operator',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SlugRoute = SlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -159,34 +166,9 @@ const PrivacyRemoveBusinessRoute = PrivacyRemoveBusinessRouteImport.update({
   path: '/remove-business',
   getParentRoute: () => PrivacyRoute,
 } as any)
-const OwnerStatusRoute = OwnerStatusRouteImport.update({
-  id: '/owner/status',
-  path: '/owner/status',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerInquiriesRoute = OwnerInquiriesRouteImport.update({
-  id: '/owner/inquiries',
-  path: '/owner/inquiries',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerBusinessActionsRoute = OwnerBusinessActionsRouteImport.update({
-  id: '/owner/business-actions',
-  path: '/owner/business-actions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerBillingRoute = OwnerBillingRouteImport.update({
-  id: '/owner/billing',
-  path: '/owner/billing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnerActionsRoute = OwnerActionsRouteImport.update({
-  id: '/owner/actions',
-  path: '/owner/actions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DevelopersDiscoveryRoute = DevelopersDiscoveryRouteImport.update({
-  id: '/developers/discovery',
-  path: '/developers/discovery',
+const IThreadIdRoute = IThreadIdRouteImport.update({
+  id: '/i/$threadId',
+  path: '/i/$threadId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
@@ -209,46 +191,6 @@ const ApiAnswerRoute = ApiAnswerRouteImport.update({
   path: '/api/answer',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRunsRoute = AdminRunsRouteImport.update({
-  id: '/admin/runs',
-  path: '/admin/runs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminProtectedActionsRoute = AdminProtectedActionsRouteImport.update({
-  id: '/admin/protected-actions',
-  path: '/admin/protected-actions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminMonetizationRoute = AdminMonetizationRouteImport.update({
-  id: '/admin/monetization',
-  path: '/admin/monetization',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminInquiriesRoute = AdminInquiriesRouteImport.update({
-  id: '/admin/inquiries',
-  path: '/admin/inquiries',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminIndexHealthRoute = AdminIndexHealthRouteImport.update({
-  id: '/admin/index-health',
-  path: '/admin/index-health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminClaimsRoute = AdminClaimsRouteImport.update({
-  id: '/admin/claims',
-  path: '/admin/claims',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminBusinessActionsRoute = AdminBusinessActionsRouteImport.update({
-  id: '/admin/business-actions',
-  path: '/admin/business-actions',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminAuditEventsRoute = AdminAuditEventsRouteImport.update({
-  id: '/admin/audit-events',
-  path: '/admin/audit-events',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SlugUcpRoute = SlugUcpRouteImport.update({
   id: '/ucp',
   path: '/ucp',
@@ -258,32 +200,6 @@ const SlugInquiryRoute = SlugInquiryRouteImport.update({
   id: '/inquiry',
   path: '/inquiry',
   getParentRoute: () => SlugRoute,
-} as any)
-const OwnerInquiriesThreadIdRoute = OwnerInquiriesThreadIdRouteImport.update({
-  id: '/$threadId',
-  path: '/$threadId',
-  getParentRoute: () => OwnerInquiriesRoute,
-} as any)
-const OwnerBusinessActionsRequestIdRoute =
-  OwnerBusinessActionsRequestIdRouteImport.update({
-    id: '/$requestId',
-    path: '/$requestId',
-    getParentRoute: () => OwnerBusinessActionsRoute,
-  } as any)
-const OwnerBillingRedirectingRoute = OwnerBillingRedirectingRouteImport.update({
-  id: '/redirecting',
-  path: '/redirecting',
-  getParentRoute: () => OwnerBillingRoute,
-} as any)
-const OwnerBillingActivateRoute = OwnerBillingActivateRouteImport.update({
-  id: '/activate',
-  path: '/activate',
-  getParentRoute: () => OwnerBillingRoute,
-} as any)
-const OwnerActionsProposalIdRoute = OwnerActionsProposalIdRouteImport.update({
-  id: '/$proposalId',
-  path: '/$proposalId',
-  getParentRoute: () => OwnerActionsRoute,
 } as any)
 const ApiStorefrontImportDraftRoute =
   ApiStorefrontImportDraftRouteImport.update({
@@ -380,64 +296,176 @@ const ApiAgentToolsRoute = ApiAgentToolsRouteImport.update({
   path: '/api/agent/tools',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AdminRunsTurnIdRoute = AdminRunsTurnIdRouteImport.update({
-  id: '/$turnId',
-  path: '/$turnId',
-  getParentRoute: () => AdminRunsRoute,
+const OperatorOwnerStatusRoute = OperatorOwnerStatusRouteImport.update({
+  id: '/owner/status',
+  path: '/owner/status',
+  getParentRoute: () => OperatorRoute,
 } as any)
-const AdminProtectedActionsProposalIdRoute =
-  AdminProtectedActionsProposalIdRouteImport.update({
-    id: '/$proposalId',
-    path: '/$proposalId',
-    getParentRoute: () => AdminProtectedActionsRoute,
+const OperatorOwnerSettingsRoute = OperatorOwnerSettingsRouteImport.update({
+  id: '/owner/settings',
+  path: '/owner/settings',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorOwnerInquiriesRoute = OperatorOwnerInquiriesRouteImport.update({
+  id: '/owner/inquiries',
+  path: '/owner/inquiries',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorOwnerBusinessActionsRoute =
+  OperatorOwnerBusinessActionsRouteImport.update({
+    id: '/owner/business-actions',
+    path: '/owner/business-actions',
+    getParentRoute: () => OperatorRoute,
   } as any)
-const AdminMonetizationOperationIdRoute =
-  AdminMonetizationOperationIdRouteImport.update({
-    id: '/$operationId',
-    path: '/$operationId',
-    getParentRoute: () => AdminMonetizationRoute,
+const OperatorOwnerBillingRoute = OperatorOwnerBillingRouteImport.update({
+  id: '/owner/billing',
+  path: '/owner/billing',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorOwnerActionsRoute = OperatorOwnerActionsRouteImport.update({
+  id: '/owner/actions',
+  path: '/owner/actions',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorDevelopersDiscoveryRoute =
+  OperatorDevelopersDiscoveryRouteImport.update({
+    id: '/developers/discovery',
+    path: '/developers/discovery',
+    getParentRoute: () => OperatorRoute,
   } as any)
-const AdminBusinessActionsRequestIdRoute =
-  AdminBusinessActionsRequestIdRouteImport.update({
-    id: '/$requestId',
-    path: '/$requestId',
-    getParentRoute: () => AdminBusinessActionsRoute,
+const OperatorAdminRunsRoute = OperatorAdminRunsRouteImport.update({
+  id: '/admin/runs',
+  path: '/admin/runs',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorAdminProtectedActionsRoute =
+  OperatorAdminProtectedActionsRouteImport.update({
+    id: '/admin/protected-actions',
+    path: '/admin/protected-actions',
+    getParentRoute: () => OperatorRoute,
   } as any)
-const OwnerBusinessActionsRequestIdReceiptRoute =
-  OwnerBusinessActionsRequestIdReceiptRouteImport.update({
-    id: '/receipt',
-    path: '/receipt',
-    getParentRoute: () => OwnerBusinessActionsRequestIdRoute,
+const OperatorAdminMonetizationRoute =
+  OperatorAdminMonetizationRouteImport.update({
+    id: '/admin/monetization',
+    path: '/admin/monetization',
+    getParentRoute: () => OperatorRoute,
   } as any)
-const OwnerBillingReturnOperationIdRoute =
-  OwnerBillingReturnOperationIdRouteImport.update({
-    id: '/return/$operationId',
-    path: '/return/$operationId',
-    getParentRoute: () => OwnerBillingRoute,
+const OperatorAdminInquiriesRoute = OperatorAdminInquiriesRouteImport.update({
+  id: '/admin/inquiries',
+  path: '/admin/inquiries',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorAdminIndexHealthRoute =
+  OperatorAdminIndexHealthRouteImport.update({
+    id: '/admin/index-health',
+    path: '/admin/index-health',
+    getParentRoute: () => OperatorRoute,
   } as any)
-const OwnerBillingReceiptsReceiptIdRoute =
-  OwnerBillingReceiptsReceiptIdRouteImport.update({
-    id: '/receipts/$receiptId',
-    path: '/receipts/$receiptId',
-    getParentRoute: () => OwnerBillingRoute,
+const OperatorAdminClaimsRoute = OperatorAdminClaimsRouteImport.update({
+  id: '/admin/claims',
+  path: '/admin/claims',
+  getParentRoute: () => OperatorRoute,
+} as any)
+const OperatorAdminBusinessActionsRoute =
+  OperatorAdminBusinessActionsRouteImport.update({
+    id: '/admin/business-actions',
+    path: '/admin/business-actions',
+    getParentRoute: () => OperatorRoute,
   } as any)
-const OwnerBillingCancelOperationIdRoute =
-  OwnerBillingCancelOperationIdRouteImport.update({
-    id: '/cancel/$operationId',
-    path: '/cancel/$operationId',
-    getParentRoute: () => OwnerBillingRoute,
-  } as any)
-const OwnerActionsProposalIdReceiptRoute =
-  OwnerActionsProposalIdReceiptRouteImport.update({
-    id: '/receipt',
-    path: '/receipt',
-    getParentRoute: () => OwnerActionsProposalIdRoute,
+const OperatorAdminAuditEventsRoute =
+  OperatorAdminAuditEventsRouteImport.update({
+    id: '/admin/audit-events',
+    path: '/admin/audit-events',
+    getParentRoute: () => OperatorRoute,
   } as any)
 const ApiAnswerThreadsThreadIdRoute =
   ApiAnswerThreadsThreadIdRouteImport.update({
     id: '/$threadId',
     path: '/$threadId',
     getParentRoute: () => ApiAnswerThreadsRoute,
+  } as any)
+const OperatorOwnerInquiriesThreadIdRoute =
+  OperatorOwnerInquiriesThreadIdRouteImport.update({
+    id: '/$threadId',
+    path: '/$threadId',
+    getParentRoute: () => OperatorOwnerInquiriesRoute,
+  } as any)
+const OperatorOwnerBusinessActionsRequestIdRoute =
+  OperatorOwnerBusinessActionsRequestIdRouteImport.update({
+    id: '/$requestId',
+    path: '/$requestId',
+    getParentRoute: () => OperatorOwnerBusinessActionsRoute,
+  } as any)
+const OperatorOwnerBillingRedirectingRoute =
+  OperatorOwnerBillingRedirectingRouteImport.update({
+    id: '/redirecting',
+    path: '/redirecting',
+    getParentRoute: () => OperatorOwnerBillingRoute,
+  } as any)
+const OperatorOwnerBillingActivateRoute =
+  OperatorOwnerBillingActivateRouteImport.update({
+    id: '/activate',
+    path: '/activate',
+    getParentRoute: () => OperatorOwnerBillingRoute,
+  } as any)
+const OperatorOwnerActionsProposalIdRoute =
+  OperatorOwnerActionsProposalIdRouteImport.update({
+    id: '/$proposalId',
+    path: '/$proposalId',
+    getParentRoute: () => OperatorOwnerActionsRoute,
+  } as any)
+const OperatorAdminRunsTurnIdRoute = OperatorAdminRunsTurnIdRouteImport.update({
+  id: '/$turnId',
+  path: '/$turnId',
+  getParentRoute: () => OperatorAdminRunsRoute,
+} as any)
+const OperatorAdminProtectedActionsProposalIdRoute =
+  OperatorAdminProtectedActionsProposalIdRouteImport.update({
+    id: '/$proposalId',
+    path: '/$proposalId',
+    getParentRoute: () => OperatorAdminProtectedActionsRoute,
+  } as any)
+const OperatorAdminMonetizationOperationIdRoute =
+  OperatorAdminMonetizationOperationIdRouteImport.update({
+    id: '/$operationId',
+    path: '/$operationId',
+    getParentRoute: () => OperatorAdminMonetizationRoute,
+  } as any)
+const OperatorAdminBusinessActionsRequestIdRoute =
+  OperatorAdminBusinessActionsRequestIdRouteImport.update({
+    id: '/$requestId',
+    path: '/$requestId',
+    getParentRoute: () => OperatorAdminBusinessActionsRoute,
+  } as any)
+const OperatorOwnerBusinessActionsRequestIdReceiptRoute =
+  OperatorOwnerBusinessActionsRequestIdReceiptRouteImport.update({
+    id: '/receipt',
+    path: '/receipt',
+    getParentRoute: () => OperatorOwnerBusinessActionsRequestIdRoute,
+  } as any)
+const OperatorOwnerBillingReturnOperationIdRoute =
+  OperatorOwnerBillingReturnOperationIdRouteImport.update({
+    id: '/return/$operationId',
+    path: '/return/$operationId',
+    getParentRoute: () => OperatorOwnerBillingRoute,
+  } as any)
+const OperatorOwnerBillingReceiptsReceiptIdRoute =
+  OperatorOwnerBillingReceiptsReceiptIdRouteImport.update({
+    id: '/receipts/$receiptId',
+    path: '/receipts/$receiptId',
+    getParentRoute: () => OperatorOwnerBillingRoute,
+  } as any)
+const OperatorOwnerBillingCancelOperationIdRoute =
+  OperatorOwnerBillingCancelOperationIdRouteImport.update({
+    id: '/cancel/$operationId',
+    path: '/cancel/$operationId',
+    getParentRoute: () => OperatorOwnerBillingRoute,
+  } as any)
+const OperatorOwnerActionsProposalIdReceiptRoute =
+  OperatorOwnerActionsProposalIdReceiptRouteImport.update({
+    id: '/receipt',
+    path: '/receipt',
+    getParentRoute: () => OperatorOwnerActionsProposalIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -454,33 +482,31 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
-  '/admin/audit-events': typeof AdminAuditEventsRoute
-  '/admin/business-actions': typeof AdminBusinessActionsRouteWithChildren
-  '/admin/claims': typeof AdminClaimsRoute
-  '/admin/index-health': typeof AdminIndexHealthRoute
-  '/admin/inquiries': typeof AdminInquiriesRoute
-  '/admin/monetization': typeof AdminMonetizationRouteWithChildren
-  '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
-  '/admin/runs': typeof AdminRunsRouteWithChildren
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
-  '/developers/discovery': typeof DevelopersDiscoveryRoute
-  '/owner/actions': typeof OwnerActionsRouteWithChildren
-  '/owner/billing': typeof OwnerBillingRouteWithChildren
-  '/owner/business-actions': typeof OwnerBusinessActionsRouteWithChildren
-  '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
-  '/owner/status': typeof OwnerStatusRoute
+  '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
-  '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
-  '/admin/monetization/$operationId': typeof AdminMonetizationOperationIdRoute
-  '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
-  '/admin/runs/$turnId': typeof AdminRunsTurnIdRoute
+  '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
+  '/admin/business-actions': typeof OperatorAdminBusinessActionsRouteWithChildren
+  '/admin/claims': typeof OperatorAdminClaimsRoute
+  '/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/admin/inquiries': typeof OperatorAdminInquiriesRoute
+  '/admin/monetization': typeof OperatorAdminMonetizationRouteWithChildren
+  '/admin/protected-actions': typeof OperatorAdminProtectedActionsRouteWithChildren
+  '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
+  '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
+  '/owner/actions': typeof OperatorOwnerActionsRouteWithChildren
+  '/owner/billing': typeof OperatorOwnerBillingRouteWithChildren
+  '/owner/business-actions': typeof OperatorOwnerBusinessActionsRouteWithChildren
+  '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
+  '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/status': typeof OperatorOwnerStatusRoute
   '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
@@ -499,17 +525,21 @@ export interface FileRoutesByFullPath {
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
-  '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
-  '/owner/billing/activate': typeof OwnerBillingActivateRoute
-  '/owner/billing/redirecting': typeof OwnerBillingRedirectingRoute
-  '/owner/business-actions/$requestId': typeof OwnerBusinessActionsRequestIdRouteWithChildren
-  '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
+  '/admin/business-actions/$requestId': typeof OperatorAdminBusinessActionsRequestIdRoute
+  '/admin/monetization/$operationId': typeof OperatorAdminMonetizationOperationIdRoute
+  '/admin/protected-actions/$proposalId': typeof OperatorAdminProtectedActionsProposalIdRoute
+  '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
+  '/owner/actions/$proposalId': typeof OperatorOwnerActionsProposalIdRouteWithChildren
+  '/owner/billing/activate': typeof OperatorOwnerBillingActivateRoute
+  '/owner/billing/redirecting': typeof OperatorOwnerBillingRedirectingRoute
+  '/owner/business-actions/$requestId': typeof OperatorOwnerBusinessActionsRequestIdRouteWithChildren
+  '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
-  '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
-  '/owner/billing/cancel/$operationId': typeof OwnerBillingCancelOperationIdRoute
-  '/owner/billing/receipts/$receiptId': typeof OwnerBillingReceiptsReceiptIdRoute
-  '/owner/billing/return/$operationId': typeof OwnerBillingReturnOperationIdRoute
-  '/owner/business-actions/$requestId/receipt': typeof OwnerBusinessActionsRequestIdReceiptRoute
+  '/owner/actions/$proposalId/receipt': typeof OperatorOwnerActionsProposalIdReceiptRoute
+  '/owner/billing/cancel/$operationId': typeof OperatorOwnerBillingCancelOperationIdRoute
+  '/owner/billing/receipts/$receiptId': typeof OperatorOwnerBillingReceiptsReceiptIdRoute
+  '/owner/billing/return/$operationId': typeof OperatorOwnerBillingReturnOperationIdRoute
+  '/owner/business-actions/$requestId/receipt': typeof OperatorOwnerBusinessActionsRequestIdReceiptRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -525,33 +555,31 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
-  '/admin/audit-events': typeof AdminAuditEventsRoute
-  '/admin/business-actions': typeof AdminBusinessActionsRouteWithChildren
-  '/admin/claims': typeof AdminClaimsRoute
-  '/admin/index-health': typeof AdminIndexHealthRoute
-  '/admin/inquiries': typeof AdminInquiriesRoute
-  '/admin/monetization': typeof AdminMonetizationRouteWithChildren
-  '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
-  '/admin/runs': typeof AdminRunsRouteWithChildren
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
-  '/developers/discovery': typeof DevelopersDiscoveryRoute
-  '/owner/actions': typeof OwnerActionsRouteWithChildren
-  '/owner/billing': typeof OwnerBillingRouteWithChildren
-  '/owner/business-actions': typeof OwnerBusinessActionsRouteWithChildren
-  '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
-  '/owner/status': typeof OwnerStatusRoute
+  '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
-  '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
-  '/admin/monetization/$operationId': typeof AdminMonetizationOperationIdRoute
-  '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
-  '/admin/runs/$turnId': typeof AdminRunsTurnIdRoute
+  '/admin/audit-events': typeof OperatorAdminAuditEventsRoute
+  '/admin/business-actions': typeof OperatorAdminBusinessActionsRouteWithChildren
+  '/admin/claims': typeof OperatorAdminClaimsRoute
+  '/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/admin/inquiries': typeof OperatorAdminInquiriesRoute
+  '/admin/monetization': typeof OperatorAdminMonetizationRouteWithChildren
+  '/admin/protected-actions': typeof OperatorAdminProtectedActionsRouteWithChildren
+  '/admin/runs': typeof OperatorAdminRunsRouteWithChildren
+  '/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
+  '/owner/actions': typeof OperatorOwnerActionsRouteWithChildren
+  '/owner/billing': typeof OperatorOwnerBillingRouteWithChildren
+  '/owner/business-actions': typeof OperatorOwnerBusinessActionsRouteWithChildren
+  '/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
+  '/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/owner/status': typeof OperatorOwnerStatusRoute
   '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
@@ -570,22 +598,27 @@ export interface FileRoutesByTo {
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
-  '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
-  '/owner/billing/activate': typeof OwnerBillingActivateRoute
-  '/owner/billing/redirecting': typeof OwnerBillingRedirectingRoute
-  '/owner/business-actions/$requestId': typeof OwnerBusinessActionsRequestIdRouteWithChildren
-  '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
+  '/admin/business-actions/$requestId': typeof OperatorAdminBusinessActionsRequestIdRoute
+  '/admin/monetization/$operationId': typeof OperatorAdminMonetizationOperationIdRoute
+  '/admin/protected-actions/$proposalId': typeof OperatorAdminProtectedActionsProposalIdRoute
+  '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
+  '/owner/actions/$proposalId': typeof OperatorOwnerActionsProposalIdRouteWithChildren
+  '/owner/billing/activate': typeof OperatorOwnerBillingActivateRoute
+  '/owner/billing/redirecting': typeof OperatorOwnerBillingRedirectingRoute
+  '/owner/business-actions/$requestId': typeof OperatorOwnerBusinessActionsRequestIdRouteWithChildren
+  '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
-  '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
-  '/owner/billing/cancel/$operationId': typeof OwnerBillingCancelOperationIdRoute
-  '/owner/billing/receipts/$receiptId': typeof OwnerBillingReceiptsReceiptIdRoute
-  '/owner/billing/return/$operationId': typeof OwnerBillingReturnOperationIdRoute
-  '/owner/business-actions/$requestId/receipt': typeof OwnerBusinessActionsRequestIdReceiptRoute
+  '/owner/actions/$proposalId/receipt': typeof OperatorOwnerActionsProposalIdReceiptRoute
+  '/owner/billing/cancel/$operationId': typeof OperatorOwnerBillingCancelOperationIdRoute
+  '/owner/billing/receipts/$receiptId': typeof OperatorOwnerBillingReceiptsReceiptIdRoute
+  '/owner/billing/return/$operationId': typeof OperatorOwnerBillingReturnOperationIdRoute
+  '/owner/business-actions/$requestId/receipt': typeof OperatorOwnerBusinessActionsRequestIdReceiptRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/_operator': typeof OperatorRouteWithChildren
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
@@ -597,33 +630,31 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
-  '/admin/audit-events': typeof AdminAuditEventsRoute
-  '/admin/business-actions': typeof AdminBusinessActionsRouteWithChildren
-  '/admin/claims': typeof AdminClaimsRoute
-  '/admin/index-health': typeof AdminIndexHealthRoute
-  '/admin/inquiries': typeof AdminInquiriesRoute
-  '/admin/monetization': typeof AdminMonetizationRouteWithChildren
-  '/admin/protected-actions': typeof AdminProtectedActionsRouteWithChildren
-  '/admin/runs': typeof AdminRunsRouteWithChildren
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
-  '/developers/discovery': typeof DevelopersDiscoveryRoute
-  '/owner/actions': typeof OwnerActionsRouteWithChildren
-  '/owner/billing': typeof OwnerBillingRouteWithChildren
-  '/owner/business-actions': typeof OwnerBusinessActionsRouteWithChildren
-  '/owner/inquiries': typeof OwnerInquiriesRouteWithChildren
-  '/owner/status': typeof OwnerStatusRoute
+  '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
-  '/admin/business-actions/$requestId': typeof AdminBusinessActionsRequestIdRoute
-  '/admin/monetization/$operationId': typeof AdminMonetizationOperationIdRoute
-  '/admin/protected-actions/$proposalId': typeof AdminProtectedActionsProposalIdRoute
-  '/admin/runs/$turnId': typeof AdminRunsTurnIdRoute
+  '/_operator/admin/audit-events': typeof OperatorAdminAuditEventsRoute
+  '/_operator/admin/business-actions': typeof OperatorAdminBusinessActionsRouteWithChildren
+  '/_operator/admin/claims': typeof OperatorAdminClaimsRoute
+  '/_operator/admin/index-health': typeof OperatorAdminIndexHealthRoute
+  '/_operator/admin/inquiries': typeof OperatorAdminInquiriesRoute
+  '/_operator/admin/monetization': typeof OperatorAdminMonetizationRouteWithChildren
+  '/_operator/admin/protected-actions': typeof OperatorAdminProtectedActionsRouteWithChildren
+  '/_operator/admin/runs': typeof OperatorAdminRunsRouteWithChildren
+  '/_operator/developers/discovery': typeof OperatorDevelopersDiscoveryRoute
+  '/_operator/owner/actions': typeof OperatorOwnerActionsRouteWithChildren
+  '/_operator/owner/billing': typeof OperatorOwnerBillingRouteWithChildren
+  '/_operator/owner/business-actions': typeof OperatorOwnerBusinessActionsRouteWithChildren
+  '/_operator/owner/inquiries': typeof OperatorOwnerInquiriesRouteWithChildren
+  '/_operator/owner/settings': typeof OperatorOwnerSettingsRoute
+  '/_operator/owner/status': typeof OperatorOwnerStatusRoute
   '/api/agent/tools': typeof ApiAgentToolsRoute
   '/api/answer/eval-status': typeof ApiAnswerEvalStatusRoute
   '/api/answer/follow-up-chips': typeof ApiAnswerFollowUpChipsRoute
@@ -642,17 +673,21 @@ export interface FileRoutesById {
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
-  '/owner/actions/$proposalId': typeof OwnerActionsProposalIdRouteWithChildren
-  '/owner/billing/activate': typeof OwnerBillingActivateRoute
-  '/owner/billing/redirecting': typeof OwnerBillingRedirectingRoute
-  '/owner/business-actions/$requestId': typeof OwnerBusinessActionsRequestIdRouteWithChildren
-  '/owner/inquiries/$threadId': typeof OwnerInquiriesThreadIdRoute
+  '/_operator/admin/business-actions/$requestId': typeof OperatorAdminBusinessActionsRequestIdRoute
+  '/_operator/admin/monetization/$operationId': typeof OperatorAdminMonetizationOperationIdRoute
+  '/_operator/admin/protected-actions/$proposalId': typeof OperatorAdminProtectedActionsProposalIdRoute
+  '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
+  '/_operator/owner/actions/$proposalId': typeof OperatorOwnerActionsProposalIdRouteWithChildren
+  '/_operator/owner/billing/activate': typeof OperatorOwnerBillingActivateRoute
+  '/_operator/owner/billing/redirecting': typeof OperatorOwnerBillingRedirectingRoute
+  '/_operator/owner/business-actions/$requestId': typeof OperatorOwnerBusinessActionsRequestIdRouteWithChildren
+  '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
-  '/owner/actions/$proposalId/receipt': typeof OwnerActionsProposalIdReceiptRoute
-  '/owner/billing/cancel/$operationId': typeof OwnerBillingCancelOperationIdRoute
-  '/owner/billing/receipts/$receiptId': typeof OwnerBillingReceiptsReceiptIdRoute
-  '/owner/billing/return/$operationId': typeof OwnerBillingReturnOperationIdRoute
-  '/owner/business-actions/$requestId/receipt': typeof OwnerBusinessActionsRequestIdReceiptRoute
+  '/_operator/owner/actions/$proposalId/receipt': typeof OperatorOwnerActionsProposalIdReceiptRoute
+  '/_operator/owner/billing/cancel/$operationId': typeof OperatorOwnerBillingCancelOperationIdRoute
+  '/_operator/owner/billing/receipts/$receiptId': typeof OperatorOwnerBillingReceiptsReceiptIdRoute
+  '/_operator/owner/billing/return/$operationId': typeof OperatorOwnerBillingReturnOperationIdRoute
+  '/_operator/owner/business-actions/$requestId/receipt': typeof OperatorOwnerBusinessActionsRequestIdReceiptRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -670,6 +705,16 @@ export interface FileRouteTypes {
     | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
+    | '/api/answer'
+    | '/api/businesses'
+    | '/api/chat'
+    | '/claim/success'
+    | '/i/$threadId'
+    | '/privacy/remove-business'
+    | '/q/$answerId'
+    | '/sign-in/$'
+    | '/sign-up/$'
+    | '/t/$threadId'
     | '/admin/audit-events'
     | '/admin/business-actions'
     | '/admin/claims'
@@ -678,25 +723,13 @@ export interface FileRouteTypes {
     | '/admin/monetization'
     | '/admin/protected-actions'
     | '/admin/runs'
-    | '/api/answer'
-    | '/api/businesses'
-    | '/api/chat'
-    | '/claim/success'
     | '/developers/discovery'
     | '/owner/actions'
     | '/owner/billing'
     | '/owner/business-actions'
     | '/owner/inquiries'
+    | '/owner/settings'
     | '/owner/status'
-    | '/privacy/remove-business'
-    | '/q/$answerId'
-    | '/sign-in/$'
-    | '/sign-up/$'
-    | '/t/$threadId'
-    | '/admin/business-actions/$requestId'
-    | '/admin/monetization/$operationId'
-    | '/admin/protected-actions/$proposalId'
-    | '/admin/runs/$turnId'
     | '/api/agent/tools'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
@@ -715,6 +748,10 @@ export interface FileRouteTypes {
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
     | '/api/storefront/import-draft'
+    | '/admin/business-actions/$requestId'
+    | '/admin/monetization/$operationId'
+    | '/admin/protected-actions/$proposalId'
+    | '/admin/runs/$turnId'
     | '/owner/actions/$proposalId'
     | '/owner/billing/activate'
     | '/owner/billing/redirecting'
@@ -741,6 +778,16 @@ export interface FileRouteTypes {
     | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
+    | '/api/answer'
+    | '/api/businesses'
+    | '/api/chat'
+    | '/claim/success'
+    | '/i/$threadId'
+    | '/privacy/remove-business'
+    | '/q/$answerId'
+    | '/sign-in/$'
+    | '/sign-up/$'
+    | '/t/$threadId'
     | '/admin/audit-events'
     | '/admin/business-actions'
     | '/admin/claims'
@@ -749,25 +796,13 @@ export interface FileRouteTypes {
     | '/admin/monetization'
     | '/admin/protected-actions'
     | '/admin/runs'
-    | '/api/answer'
-    | '/api/businesses'
-    | '/api/chat'
-    | '/claim/success'
     | '/developers/discovery'
     | '/owner/actions'
     | '/owner/billing'
     | '/owner/business-actions'
     | '/owner/inquiries'
+    | '/owner/settings'
     | '/owner/status'
-    | '/privacy/remove-business'
-    | '/q/$answerId'
-    | '/sign-in/$'
-    | '/sign-up/$'
-    | '/t/$threadId'
-    | '/admin/business-actions/$requestId'
-    | '/admin/monetization/$operationId'
-    | '/admin/protected-actions/$proposalId'
-    | '/admin/runs/$turnId'
     | '/api/agent/tools'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
@@ -786,6 +821,10 @@ export interface FileRouteTypes {
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
     | '/api/storefront/import-draft'
+    | '/admin/business-actions/$requestId'
+    | '/admin/monetization/$operationId'
+    | '/admin/protected-actions/$proposalId'
+    | '/admin/runs/$turnId'
     | '/owner/actions/$proposalId'
     | '/owner/billing/activate'
     | '/owner/billing/redirecting'
@@ -801,6 +840,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$slug'
+    | '/_operator'
     | '/about'
     | '/claim'
     | '/help'
@@ -812,33 +852,31 @@ export interface FileRouteTypes {
     | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
-    | '/admin/audit-events'
-    | '/admin/business-actions'
-    | '/admin/claims'
-    | '/admin/index-health'
-    | '/admin/inquiries'
-    | '/admin/monetization'
-    | '/admin/protected-actions'
-    | '/admin/runs'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
     | '/claim/success'
-    | '/developers/discovery'
-    | '/owner/actions'
-    | '/owner/billing'
-    | '/owner/business-actions'
-    | '/owner/inquiries'
-    | '/owner/status'
+    | '/i/$threadId'
     | '/privacy/remove-business'
     | '/q/$answerId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
-    | '/admin/business-actions/$requestId'
-    | '/admin/monetization/$operationId'
-    | '/admin/protected-actions/$proposalId'
-    | '/admin/runs/$turnId'
+    | '/_operator/admin/audit-events'
+    | '/_operator/admin/business-actions'
+    | '/_operator/admin/claims'
+    | '/_operator/admin/index-health'
+    | '/_operator/admin/inquiries'
+    | '/_operator/admin/monetization'
+    | '/_operator/admin/protected-actions'
+    | '/_operator/admin/runs'
+    | '/_operator/developers/discovery'
+    | '/_operator/owner/actions'
+    | '/_operator/owner/billing'
+    | '/_operator/owner/business-actions'
+    | '/_operator/owner/inquiries'
+    | '/_operator/owner/settings'
+    | '/_operator/owner/status'
     | '/api/agent/tools'
     | '/api/answer/eval-status'
     | '/api/answer/follow-up-chips'
@@ -857,22 +895,27 @@ export interface FileRouteTypes {
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
     | '/api/storefront/import-draft'
-    | '/owner/actions/$proposalId'
-    | '/owner/billing/activate'
-    | '/owner/billing/redirecting'
-    | '/owner/business-actions/$requestId'
-    | '/owner/inquiries/$threadId'
+    | '/_operator/admin/business-actions/$requestId'
+    | '/_operator/admin/monetization/$operationId'
+    | '/_operator/admin/protected-actions/$proposalId'
+    | '/_operator/admin/runs/$turnId'
+    | '/_operator/owner/actions/$proposalId'
+    | '/_operator/owner/billing/activate'
+    | '/_operator/owner/billing/redirecting'
+    | '/_operator/owner/business-actions/$requestId'
+    | '/_operator/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
-    | '/owner/actions/$proposalId/receipt'
-    | '/owner/billing/cancel/$operationId'
-    | '/owner/billing/receipts/$receiptId'
-    | '/owner/billing/return/$operationId'
-    | '/owner/business-actions/$requestId/receipt'
+    | '/_operator/owner/actions/$proposalId/receipt'
+    | '/_operator/owner/billing/cancel/$operationId'
+    | '/_operator/owner/billing/receipts/$receiptId'
+    | '/_operator/owner/billing/return/$operationId'
+    | '/_operator/owner/business-actions/$requestId/receipt'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRouteWithChildren
+  OperatorRoute: typeof OperatorRouteWithChildren
   AboutRoute: typeof AboutRoute
   ClaimRoute: typeof ClaimRouteWithChildren
   HelpRoute: typeof HelpRoute
@@ -882,23 +925,10 @@ export interface RootRouteChildren {
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
-  AdminAuditEventsRoute: typeof AdminAuditEventsRoute
-  AdminBusinessActionsRoute: typeof AdminBusinessActionsRouteWithChildren
-  AdminClaimsRoute: typeof AdminClaimsRoute
-  AdminIndexHealthRoute: typeof AdminIndexHealthRoute
-  AdminInquiriesRoute: typeof AdminInquiriesRoute
-  AdminMonetizationRoute: typeof AdminMonetizationRouteWithChildren
-  AdminProtectedActionsRoute: typeof AdminProtectedActionsRouteWithChildren
-  AdminRunsRoute: typeof AdminRunsRouteWithChildren
   ApiAnswerRoute: typeof ApiAnswerRouteWithChildren
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiChatRoute: typeof ApiChatRouteWithChildren
-  DevelopersDiscoveryRoute: typeof DevelopersDiscoveryRoute
-  OwnerActionsRoute: typeof OwnerActionsRouteWithChildren
-  OwnerBillingRoute: typeof OwnerBillingRouteWithChildren
-  OwnerBusinessActionsRoute: typeof OwnerBusinessActionsRouteWithChildren
-  OwnerInquiriesRoute: typeof OwnerInquiriesRouteWithChildren
-  OwnerStatusRoute: typeof OwnerStatusRoute
+  IThreadIdRoute: typeof IThreadIdRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
@@ -981,6 +1011,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_operator': {
+      id: '/_operator'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof OperatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$slug': {
       id: '/$slug'
       path: '/$slug'
@@ -1030,46 +1067,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRemoveBusinessRouteImport
       parentRoute: typeof PrivacyRoute
     }
-    '/owner/status': {
-      id: '/owner/status'
-      path: '/owner/status'
-      fullPath: '/owner/status'
-      preLoaderRoute: typeof OwnerStatusRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/inquiries': {
-      id: '/owner/inquiries'
-      path: '/owner/inquiries'
-      fullPath: '/owner/inquiries'
-      preLoaderRoute: typeof OwnerInquiriesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/business-actions': {
-      id: '/owner/business-actions'
-      path: '/owner/business-actions'
-      fullPath: '/owner/business-actions'
-      preLoaderRoute: typeof OwnerBusinessActionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/billing': {
-      id: '/owner/billing'
-      path: '/owner/billing'
-      fullPath: '/owner/billing'
-      preLoaderRoute: typeof OwnerBillingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owner/actions': {
-      id: '/owner/actions'
-      path: '/owner/actions'
-      fullPath: '/owner/actions'
-      preLoaderRoute: typeof OwnerActionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/developers/discovery': {
-      id: '/developers/discovery'
-      path: '/developers/discovery'
-      fullPath: '/developers/discovery'
-      preLoaderRoute: typeof DevelopersDiscoveryRouteImport
+    '/i/$threadId': {
+      id: '/i/$threadId'
+      path: '/i/$threadId'
+      fullPath: '/i/$threadId'
+      preLoaderRoute: typeof IThreadIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim/success': {
@@ -1100,62 +1102,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnswerRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/runs': {
-      id: '/admin/runs'
-      path: '/admin/runs'
-      fullPath: '/admin/runs'
-      preLoaderRoute: typeof AdminRunsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/protected-actions': {
-      id: '/admin/protected-actions'
-      path: '/admin/protected-actions'
-      fullPath: '/admin/protected-actions'
-      preLoaderRoute: typeof AdminProtectedActionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/monetization': {
-      id: '/admin/monetization'
-      path: '/admin/monetization'
-      fullPath: '/admin/monetization'
-      preLoaderRoute: typeof AdminMonetizationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/inquiries': {
-      id: '/admin/inquiries'
-      path: '/admin/inquiries'
-      fullPath: '/admin/inquiries'
-      preLoaderRoute: typeof AdminInquiriesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/index-health': {
-      id: '/admin/index-health'
-      path: '/admin/index-health'
-      fullPath: '/admin/index-health'
-      preLoaderRoute: typeof AdminIndexHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/claims': {
-      id: '/admin/claims'
-      path: '/admin/claims'
-      fullPath: '/admin/claims'
-      preLoaderRoute: typeof AdminClaimsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/business-actions': {
-      id: '/admin/business-actions'
-      path: '/admin/business-actions'
-      fullPath: '/admin/business-actions'
-      preLoaderRoute: typeof AdminBusinessActionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin/audit-events': {
-      id: '/admin/audit-events'
-      path: '/admin/audit-events'
-      fullPath: '/admin/audit-events'
-      preLoaderRoute: typeof AdminAuditEventsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/$slug/ucp': {
       id: '/$slug/ucp'
       path: '/ucp'
@@ -1169,41 +1115,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/$slug/inquiry'
       preLoaderRoute: typeof SlugInquiryRouteImport
       parentRoute: typeof SlugRoute
-    }
-    '/owner/inquiries/$threadId': {
-      id: '/owner/inquiries/$threadId'
-      path: '/$threadId'
-      fullPath: '/owner/inquiries/$threadId'
-      preLoaderRoute: typeof OwnerInquiriesThreadIdRouteImport
-      parentRoute: typeof OwnerInquiriesRoute
-    }
-    '/owner/business-actions/$requestId': {
-      id: '/owner/business-actions/$requestId'
-      path: '/$requestId'
-      fullPath: '/owner/business-actions/$requestId'
-      preLoaderRoute: typeof OwnerBusinessActionsRequestIdRouteImport
-      parentRoute: typeof OwnerBusinessActionsRoute
-    }
-    '/owner/billing/redirecting': {
-      id: '/owner/billing/redirecting'
-      path: '/redirecting'
-      fullPath: '/owner/billing/redirecting'
-      preLoaderRoute: typeof OwnerBillingRedirectingRouteImport
-      parentRoute: typeof OwnerBillingRoute
-    }
-    '/owner/billing/activate': {
-      id: '/owner/billing/activate'
-      path: '/activate'
-      fullPath: '/owner/billing/activate'
-      preLoaderRoute: typeof OwnerBillingActivateRouteImport
-      parentRoute: typeof OwnerBillingRoute
-    }
-    '/owner/actions/$proposalId': {
-      id: '/owner/actions/$proposalId'
-      path: '/$proposalId'
-      fullPath: '/owner/actions/$proposalId'
-      preLoaderRoute: typeof OwnerActionsProposalIdRouteImport
-      parentRoute: typeof OwnerActionsRoute
     }
     '/api/storefront/import-draft': {
       id: '/api/storefront/import-draft'
@@ -1331,68 +1242,110 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/admin/runs/$turnId': {
-      id: '/admin/runs/$turnId'
-      path: '/$turnId'
-      fullPath: '/admin/runs/$turnId'
-      preLoaderRoute: typeof AdminRunsTurnIdRouteImport
-      parentRoute: typeof AdminRunsRoute
+    '/_operator/owner/status': {
+      id: '/_operator/owner/status'
+      path: '/owner/status'
+      fullPath: '/owner/status'
+      preLoaderRoute: typeof OperatorOwnerStatusRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/admin/protected-actions/$proposalId': {
-      id: '/admin/protected-actions/$proposalId'
-      path: '/$proposalId'
-      fullPath: '/admin/protected-actions/$proposalId'
-      preLoaderRoute: typeof AdminProtectedActionsProposalIdRouteImport
-      parentRoute: typeof AdminProtectedActionsRoute
+    '/_operator/owner/settings': {
+      id: '/_operator/owner/settings'
+      path: '/owner/settings'
+      fullPath: '/owner/settings'
+      preLoaderRoute: typeof OperatorOwnerSettingsRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/admin/monetization/$operationId': {
-      id: '/admin/monetization/$operationId'
-      path: '/$operationId'
-      fullPath: '/admin/monetization/$operationId'
-      preLoaderRoute: typeof AdminMonetizationOperationIdRouteImport
-      parentRoute: typeof AdminMonetizationRoute
+    '/_operator/owner/inquiries': {
+      id: '/_operator/owner/inquiries'
+      path: '/owner/inquiries'
+      fullPath: '/owner/inquiries'
+      preLoaderRoute: typeof OperatorOwnerInquiriesRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/admin/business-actions/$requestId': {
-      id: '/admin/business-actions/$requestId'
-      path: '/$requestId'
-      fullPath: '/admin/business-actions/$requestId'
-      preLoaderRoute: typeof AdminBusinessActionsRequestIdRouteImport
-      parentRoute: typeof AdminBusinessActionsRoute
+    '/_operator/owner/business-actions': {
+      id: '/_operator/owner/business-actions'
+      path: '/owner/business-actions'
+      fullPath: '/owner/business-actions'
+      preLoaderRoute: typeof OperatorOwnerBusinessActionsRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/owner/business-actions/$requestId/receipt': {
-      id: '/owner/business-actions/$requestId/receipt'
-      path: '/receipt'
-      fullPath: '/owner/business-actions/$requestId/receipt'
-      preLoaderRoute: typeof OwnerBusinessActionsRequestIdReceiptRouteImport
-      parentRoute: typeof OwnerBusinessActionsRequestIdRoute
+    '/_operator/owner/billing': {
+      id: '/_operator/owner/billing'
+      path: '/owner/billing'
+      fullPath: '/owner/billing'
+      preLoaderRoute: typeof OperatorOwnerBillingRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/owner/billing/return/$operationId': {
-      id: '/owner/billing/return/$operationId'
-      path: '/return/$operationId'
-      fullPath: '/owner/billing/return/$operationId'
-      preLoaderRoute: typeof OwnerBillingReturnOperationIdRouteImport
-      parentRoute: typeof OwnerBillingRoute
+    '/_operator/owner/actions': {
+      id: '/_operator/owner/actions'
+      path: '/owner/actions'
+      fullPath: '/owner/actions'
+      preLoaderRoute: typeof OperatorOwnerActionsRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/owner/billing/receipts/$receiptId': {
-      id: '/owner/billing/receipts/$receiptId'
-      path: '/receipts/$receiptId'
-      fullPath: '/owner/billing/receipts/$receiptId'
-      preLoaderRoute: typeof OwnerBillingReceiptsReceiptIdRouteImport
-      parentRoute: typeof OwnerBillingRoute
+    '/_operator/developers/discovery': {
+      id: '/_operator/developers/discovery'
+      path: '/developers/discovery'
+      fullPath: '/developers/discovery'
+      preLoaderRoute: typeof OperatorDevelopersDiscoveryRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/owner/billing/cancel/$operationId': {
-      id: '/owner/billing/cancel/$operationId'
-      path: '/cancel/$operationId'
-      fullPath: '/owner/billing/cancel/$operationId'
-      preLoaderRoute: typeof OwnerBillingCancelOperationIdRouteImport
-      parentRoute: typeof OwnerBillingRoute
+    '/_operator/admin/runs': {
+      id: '/_operator/admin/runs'
+      path: '/admin/runs'
+      fullPath: '/admin/runs'
+      preLoaderRoute: typeof OperatorAdminRunsRouteImport
+      parentRoute: typeof OperatorRoute
     }
-    '/owner/actions/$proposalId/receipt': {
-      id: '/owner/actions/$proposalId/receipt'
-      path: '/receipt'
-      fullPath: '/owner/actions/$proposalId/receipt'
-      preLoaderRoute: typeof OwnerActionsProposalIdReceiptRouteImport
-      parentRoute: typeof OwnerActionsProposalIdRoute
+    '/_operator/admin/protected-actions': {
+      id: '/_operator/admin/protected-actions'
+      path: '/admin/protected-actions'
+      fullPath: '/admin/protected-actions'
+      preLoaderRoute: typeof OperatorAdminProtectedActionsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/monetization': {
+      id: '/_operator/admin/monetization'
+      path: '/admin/monetization'
+      fullPath: '/admin/monetization'
+      preLoaderRoute: typeof OperatorAdminMonetizationRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/inquiries': {
+      id: '/_operator/admin/inquiries'
+      path: '/admin/inquiries'
+      fullPath: '/admin/inquiries'
+      preLoaderRoute: typeof OperatorAdminInquiriesRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/index-health': {
+      id: '/_operator/admin/index-health'
+      path: '/admin/index-health'
+      fullPath: '/admin/index-health'
+      preLoaderRoute: typeof OperatorAdminIndexHealthRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/claims': {
+      id: '/_operator/admin/claims'
+      path: '/admin/claims'
+      fullPath: '/admin/claims'
+      preLoaderRoute: typeof OperatorAdminClaimsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/business-actions': {
+      id: '/_operator/admin/business-actions'
+      path: '/admin/business-actions'
+      fullPath: '/admin/business-actions'
+      preLoaderRoute: typeof OperatorAdminBusinessActionsRouteImport
+      parentRoute: typeof OperatorRoute
+    }
+    '/_operator/admin/audit-events': {
+      id: '/_operator/admin/audit-events'
+      path: '/admin/audit-events'
+      fullPath: '/admin/audit-events'
+      preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
+      parentRoute: typeof OperatorRoute
     }
     '/api/answer/threads/$threadId': {
       id: '/api/answer/threads/$threadId'
@@ -1400,6 +1353,104 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/answer/threads/$threadId'
       preLoaderRoute: typeof ApiAnswerThreadsThreadIdRouteImport
       parentRoute: typeof ApiAnswerThreadsRoute
+    }
+    '/_operator/owner/inquiries/$threadId': {
+      id: '/_operator/owner/inquiries/$threadId'
+      path: '/$threadId'
+      fullPath: '/owner/inquiries/$threadId'
+      preLoaderRoute: typeof OperatorOwnerInquiriesThreadIdRouteImport
+      parentRoute: typeof OperatorOwnerInquiriesRoute
+    }
+    '/_operator/owner/business-actions/$requestId': {
+      id: '/_operator/owner/business-actions/$requestId'
+      path: '/$requestId'
+      fullPath: '/owner/business-actions/$requestId'
+      preLoaderRoute: typeof OperatorOwnerBusinessActionsRequestIdRouteImport
+      parentRoute: typeof OperatorOwnerBusinessActionsRoute
+    }
+    '/_operator/owner/billing/redirecting': {
+      id: '/_operator/owner/billing/redirecting'
+      path: '/redirecting'
+      fullPath: '/owner/billing/redirecting'
+      preLoaderRoute: typeof OperatorOwnerBillingRedirectingRouteImport
+      parentRoute: typeof OperatorOwnerBillingRoute
+    }
+    '/_operator/owner/billing/activate': {
+      id: '/_operator/owner/billing/activate'
+      path: '/activate'
+      fullPath: '/owner/billing/activate'
+      preLoaderRoute: typeof OperatorOwnerBillingActivateRouteImport
+      parentRoute: typeof OperatorOwnerBillingRoute
+    }
+    '/_operator/owner/actions/$proposalId': {
+      id: '/_operator/owner/actions/$proposalId'
+      path: '/$proposalId'
+      fullPath: '/owner/actions/$proposalId'
+      preLoaderRoute: typeof OperatorOwnerActionsProposalIdRouteImport
+      parentRoute: typeof OperatorOwnerActionsRoute
+    }
+    '/_operator/admin/runs/$turnId': {
+      id: '/_operator/admin/runs/$turnId'
+      path: '/$turnId'
+      fullPath: '/admin/runs/$turnId'
+      preLoaderRoute: typeof OperatorAdminRunsTurnIdRouteImport
+      parentRoute: typeof OperatorAdminRunsRoute
+    }
+    '/_operator/admin/protected-actions/$proposalId': {
+      id: '/_operator/admin/protected-actions/$proposalId'
+      path: '/$proposalId'
+      fullPath: '/admin/protected-actions/$proposalId'
+      preLoaderRoute: typeof OperatorAdminProtectedActionsProposalIdRouteImport
+      parentRoute: typeof OperatorAdminProtectedActionsRoute
+    }
+    '/_operator/admin/monetization/$operationId': {
+      id: '/_operator/admin/monetization/$operationId'
+      path: '/$operationId'
+      fullPath: '/admin/monetization/$operationId'
+      preLoaderRoute: typeof OperatorAdminMonetizationOperationIdRouteImport
+      parentRoute: typeof OperatorAdminMonetizationRoute
+    }
+    '/_operator/admin/business-actions/$requestId': {
+      id: '/_operator/admin/business-actions/$requestId'
+      path: '/$requestId'
+      fullPath: '/admin/business-actions/$requestId'
+      preLoaderRoute: typeof OperatorAdminBusinessActionsRequestIdRouteImport
+      parentRoute: typeof OperatorAdminBusinessActionsRoute
+    }
+    '/_operator/owner/business-actions/$requestId/receipt': {
+      id: '/_operator/owner/business-actions/$requestId/receipt'
+      path: '/receipt'
+      fullPath: '/owner/business-actions/$requestId/receipt'
+      preLoaderRoute: typeof OperatorOwnerBusinessActionsRequestIdReceiptRouteImport
+      parentRoute: typeof OperatorOwnerBusinessActionsRequestIdRoute
+    }
+    '/_operator/owner/billing/return/$operationId': {
+      id: '/_operator/owner/billing/return/$operationId'
+      path: '/return/$operationId'
+      fullPath: '/owner/billing/return/$operationId'
+      preLoaderRoute: typeof OperatorOwnerBillingReturnOperationIdRouteImport
+      parentRoute: typeof OperatorOwnerBillingRoute
+    }
+    '/_operator/owner/billing/receipts/$receiptId': {
+      id: '/_operator/owner/billing/receipts/$receiptId'
+      path: '/receipts/$receiptId'
+      fullPath: '/owner/billing/receipts/$receiptId'
+      preLoaderRoute: typeof OperatorOwnerBillingReceiptsReceiptIdRouteImport
+      parentRoute: typeof OperatorOwnerBillingRoute
+    }
+    '/_operator/owner/billing/cancel/$operationId': {
+      id: '/_operator/owner/billing/cancel/$operationId'
+      path: '/cancel/$operationId'
+      fullPath: '/owner/billing/cancel/$operationId'
+      preLoaderRoute: typeof OperatorOwnerBillingCancelOperationIdRouteImport
+      parentRoute: typeof OperatorOwnerBillingRoute
+    }
+    '/_operator/owner/actions/$proposalId/receipt': {
+      id: '/_operator/owner/actions/$proposalId/receipt'
+      path: '/receipt'
+      fullPath: '/owner/actions/$proposalId/receipt'
+      preLoaderRoute: typeof OperatorOwnerActionsProposalIdReceiptRouteImport
+      parentRoute: typeof OperatorOwnerActionsProposalIdRoute
     }
   }
 }
@@ -1415,6 +1466,198 @@ const SlugRouteChildren: SlugRouteChildren = {
 }
 
 const SlugRouteWithChildren = SlugRoute._addFileChildren(SlugRouteChildren)
+
+interface OperatorAdminBusinessActionsRouteChildren {
+  OperatorAdminBusinessActionsRequestIdRoute: typeof OperatorAdminBusinessActionsRequestIdRoute
+}
+
+const OperatorAdminBusinessActionsRouteChildren: OperatorAdminBusinessActionsRouteChildren =
+  {
+    OperatorAdminBusinessActionsRequestIdRoute:
+      OperatorAdminBusinessActionsRequestIdRoute,
+  }
+
+const OperatorAdminBusinessActionsRouteWithChildren =
+  OperatorAdminBusinessActionsRoute._addFileChildren(
+    OperatorAdminBusinessActionsRouteChildren,
+  )
+
+interface OperatorAdminMonetizationRouteChildren {
+  OperatorAdminMonetizationOperationIdRoute: typeof OperatorAdminMonetizationOperationIdRoute
+}
+
+const OperatorAdminMonetizationRouteChildren: OperatorAdminMonetizationRouteChildren =
+  {
+    OperatorAdminMonetizationOperationIdRoute:
+      OperatorAdminMonetizationOperationIdRoute,
+  }
+
+const OperatorAdminMonetizationRouteWithChildren =
+  OperatorAdminMonetizationRoute._addFileChildren(
+    OperatorAdminMonetizationRouteChildren,
+  )
+
+interface OperatorAdminProtectedActionsRouteChildren {
+  OperatorAdminProtectedActionsProposalIdRoute: typeof OperatorAdminProtectedActionsProposalIdRoute
+}
+
+const OperatorAdminProtectedActionsRouteChildren: OperatorAdminProtectedActionsRouteChildren =
+  {
+    OperatorAdminProtectedActionsProposalIdRoute:
+      OperatorAdminProtectedActionsProposalIdRoute,
+  }
+
+const OperatorAdminProtectedActionsRouteWithChildren =
+  OperatorAdminProtectedActionsRoute._addFileChildren(
+    OperatorAdminProtectedActionsRouteChildren,
+  )
+
+interface OperatorAdminRunsRouteChildren {
+  OperatorAdminRunsTurnIdRoute: typeof OperatorAdminRunsTurnIdRoute
+}
+
+const OperatorAdminRunsRouteChildren: OperatorAdminRunsRouteChildren = {
+  OperatorAdminRunsTurnIdRoute: OperatorAdminRunsTurnIdRoute,
+}
+
+const OperatorAdminRunsRouteWithChildren =
+  OperatorAdminRunsRoute._addFileChildren(OperatorAdminRunsRouteChildren)
+
+interface OperatorOwnerActionsProposalIdRouteChildren {
+  OperatorOwnerActionsProposalIdReceiptRoute: typeof OperatorOwnerActionsProposalIdReceiptRoute
+}
+
+const OperatorOwnerActionsProposalIdRouteChildren: OperatorOwnerActionsProposalIdRouteChildren =
+  {
+    OperatorOwnerActionsProposalIdReceiptRoute:
+      OperatorOwnerActionsProposalIdReceiptRoute,
+  }
+
+const OperatorOwnerActionsProposalIdRouteWithChildren =
+  OperatorOwnerActionsProposalIdRoute._addFileChildren(
+    OperatorOwnerActionsProposalIdRouteChildren,
+  )
+
+interface OperatorOwnerActionsRouteChildren {
+  OperatorOwnerActionsProposalIdRoute: typeof OperatorOwnerActionsProposalIdRouteWithChildren
+}
+
+const OperatorOwnerActionsRouteChildren: OperatorOwnerActionsRouteChildren = {
+  OperatorOwnerActionsProposalIdRoute:
+    OperatorOwnerActionsProposalIdRouteWithChildren,
+}
+
+const OperatorOwnerActionsRouteWithChildren =
+  OperatorOwnerActionsRoute._addFileChildren(OperatorOwnerActionsRouteChildren)
+
+interface OperatorOwnerBillingRouteChildren {
+  OperatorOwnerBillingActivateRoute: typeof OperatorOwnerBillingActivateRoute
+  OperatorOwnerBillingRedirectingRoute: typeof OperatorOwnerBillingRedirectingRoute
+  OperatorOwnerBillingCancelOperationIdRoute: typeof OperatorOwnerBillingCancelOperationIdRoute
+  OperatorOwnerBillingReceiptsReceiptIdRoute: typeof OperatorOwnerBillingReceiptsReceiptIdRoute
+  OperatorOwnerBillingReturnOperationIdRoute: typeof OperatorOwnerBillingReturnOperationIdRoute
+}
+
+const OperatorOwnerBillingRouteChildren: OperatorOwnerBillingRouteChildren = {
+  OperatorOwnerBillingActivateRoute: OperatorOwnerBillingActivateRoute,
+  OperatorOwnerBillingRedirectingRoute: OperatorOwnerBillingRedirectingRoute,
+  OperatorOwnerBillingCancelOperationIdRoute:
+    OperatorOwnerBillingCancelOperationIdRoute,
+  OperatorOwnerBillingReceiptsReceiptIdRoute:
+    OperatorOwnerBillingReceiptsReceiptIdRoute,
+  OperatorOwnerBillingReturnOperationIdRoute:
+    OperatorOwnerBillingReturnOperationIdRoute,
+}
+
+const OperatorOwnerBillingRouteWithChildren =
+  OperatorOwnerBillingRoute._addFileChildren(OperatorOwnerBillingRouteChildren)
+
+interface OperatorOwnerBusinessActionsRequestIdRouteChildren {
+  OperatorOwnerBusinessActionsRequestIdReceiptRoute: typeof OperatorOwnerBusinessActionsRequestIdReceiptRoute
+}
+
+const OperatorOwnerBusinessActionsRequestIdRouteChildren: OperatorOwnerBusinessActionsRequestIdRouteChildren =
+  {
+    OperatorOwnerBusinessActionsRequestIdReceiptRoute:
+      OperatorOwnerBusinessActionsRequestIdReceiptRoute,
+  }
+
+const OperatorOwnerBusinessActionsRequestIdRouteWithChildren =
+  OperatorOwnerBusinessActionsRequestIdRoute._addFileChildren(
+    OperatorOwnerBusinessActionsRequestIdRouteChildren,
+  )
+
+interface OperatorOwnerBusinessActionsRouteChildren {
+  OperatorOwnerBusinessActionsRequestIdRoute: typeof OperatorOwnerBusinessActionsRequestIdRouteWithChildren
+}
+
+const OperatorOwnerBusinessActionsRouteChildren: OperatorOwnerBusinessActionsRouteChildren =
+  {
+    OperatorOwnerBusinessActionsRequestIdRoute:
+      OperatorOwnerBusinessActionsRequestIdRouteWithChildren,
+  }
+
+const OperatorOwnerBusinessActionsRouteWithChildren =
+  OperatorOwnerBusinessActionsRoute._addFileChildren(
+    OperatorOwnerBusinessActionsRouteChildren,
+  )
+
+interface OperatorOwnerInquiriesRouteChildren {
+  OperatorOwnerInquiriesThreadIdRoute: typeof OperatorOwnerInquiriesThreadIdRoute
+}
+
+const OperatorOwnerInquiriesRouteChildren: OperatorOwnerInquiriesRouteChildren =
+  {
+    OperatorOwnerInquiriesThreadIdRoute: OperatorOwnerInquiriesThreadIdRoute,
+  }
+
+const OperatorOwnerInquiriesRouteWithChildren =
+  OperatorOwnerInquiriesRoute._addFileChildren(
+    OperatorOwnerInquiriesRouteChildren,
+  )
+
+interface OperatorRouteChildren {
+  OperatorAdminAuditEventsRoute: typeof OperatorAdminAuditEventsRoute
+  OperatorAdminBusinessActionsRoute: typeof OperatorAdminBusinessActionsRouteWithChildren
+  OperatorAdminClaimsRoute: typeof OperatorAdminClaimsRoute
+  OperatorAdminIndexHealthRoute: typeof OperatorAdminIndexHealthRoute
+  OperatorAdminInquiriesRoute: typeof OperatorAdminInquiriesRoute
+  OperatorAdminMonetizationRoute: typeof OperatorAdminMonetizationRouteWithChildren
+  OperatorAdminProtectedActionsRoute: typeof OperatorAdminProtectedActionsRouteWithChildren
+  OperatorAdminRunsRoute: typeof OperatorAdminRunsRouteWithChildren
+  OperatorDevelopersDiscoveryRoute: typeof OperatorDevelopersDiscoveryRoute
+  OperatorOwnerActionsRoute: typeof OperatorOwnerActionsRouteWithChildren
+  OperatorOwnerBillingRoute: typeof OperatorOwnerBillingRouteWithChildren
+  OperatorOwnerBusinessActionsRoute: typeof OperatorOwnerBusinessActionsRouteWithChildren
+  OperatorOwnerInquiriesRoute: typeof OperatorOwnerInquiriesRouteWithChildren
+  OperatorOwnerSettingsRoute: typeof OperatorOwnerSettingsRoute
+  OperatorOwnerStatusRoute: typeof OperatorOwnerStatusRoute
+}
+
+const OperatorRouteChildren: OperatorRouteChildren = {
+  OperatorAdminAuditEventsRoute: OperatorAdminAuditEventsRoute,
+  OperatorAdminBusinessActionsRoute:
+    OperatorAdminBusinessActionsRouteWithChildren,
+  OperatorAdminClaimsRoute: OperatorAdminClaimsRoute,
+  OperatorAdminIndexHealthRoute: OperatorAdminIndexHealthRoute,
+  OperatorAdminInquiriesRoute: OperatorAdminInquiriesRoute,
+  OperatorAdminMonetizationRoute: OperatorAdminMonetizationRouteWithChildren,
+  OperatorAdminProtectedActionsRoute:
+    OperatorAdminProtectedActionsRouteWithChildren,
+  OperatorAdminRunsRoute: OperatorAdminRunsRouteWithChildren,
+  OperatorDevelopersDiscoveryRoute: OperatorDevelopersDiscoveryRoute,
+  OperatorOwnerActionsRoute: OperatorOwnerActionsRouteWithChildren,
+  OperatorOwnerBillingRoute: OperatorOwnerBillingRouteWithChildren,
+  OperatorOwnerBusinessActionsRoute:
+    OperatorOwnerBusinessActionsRouteWithChildren,
+  OperatorOwnerInquiriesRoute: OperatorOwnerInquiriesRouteWithChildren,
+  OperatorOwnerSettingsRoute: OperatorOwnerSettingsRoute,
+  OperatorOwnerStatusRoute: OperatorOwnerStatusRoute,
+}
+
+const OperatorRouteWithChildren = OperatorRoute._addFileChildren(
+  OperatorRouteChildren,
+)
 
 interface ClaimRouteChildren {
   ClaimSuccessRoute: typeof ClaimSuccessRoute
@@ -1436,53 +1679,6 @@ const PrivacyRouteChildren: PrivacyRouteChildren = {
 
 const PrivacyRouteWithChildren =
   PrivacyRoute._addFileChildren(PrivacyRouteChildren)
-
-interface AdminBusinessActionsRouteChildren {
-  AdminBusinessActionsRequestIdRoute: typeof AdminBusinessActionsRequestIdRoute
-}
-
-const AdminBusinessActionsRouteChildren: AdminBusinessActionsRouteChildren = {
-  AdminBusinessActionsRequestIdRoute: AdminBusinessActionsRequestIdRoute,
-}
-
-const AdminBusinessActionsRouteWithChildren =
-  AdminBusinessActionsRoute._addFileChildren(AdminBusinessActionsRouteChildren)
-
-interface AdminMonetizationRouteChildren {
-  AdminMonetizationOperationIdRoute: typeof AdminMonetizationOperationIdRoute
-}
-
-const AdminMonetizationRouteChildren: AdminMonetizationRouteChildren = {
-  AdminMonetizationOperationIdRoute: AdminMonetizationOperationIdRoute,
-}
-
-const AdminMonetizationRouteWithChildren =
-  AdminMonetizationRoute._addFileChildren(AdminMonetizationRouteChildren)
-
-interface AdminProtectedActionsRouteChildren {
-  AdminProtectedActionsProposalIdRoute: typeof AdminProtectedActionsProposalIdRoute
-}
-
-const AdminProtectedActionsRouteChildren: AdminProtectedActionsRouteChildren = {
-  AdminProtectedActionsProposalIdRoute: AdminProtectedActionsProposalIdRoute,
-}
-
-const AdminProtectedActionsRouteWithChildren =
-  AdminProtectedActionsRoute._addFileChildren(
-    AdminProtectedActionsRouteChildren,
-  )
-
-interface AdminRunsRouteChildren {
-  AdminRunsTurnIdRoute: typeof AdminRunsTurnIdRoute
-}
-
-const AdminRunsRouteChildren: AdminRunsRouteChildren = {
-  AdminRunsTurnIdRoute: AdminRunsTurnIdRoute,
-}
-
-const AdminRunsRouteWithChildren = AdminRunsRoute._addFileChildren(
-  AdminRunsRouteChildren,
-)
 
 interface ApiAnswerThreadsRouteChildren {
   ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRoute
@@ -1538,94 +1734,10 @@ const ApiChatRouteChildren: ApiChatRouteChildren = {
 const ApiChatRouteWithChildren =
   ApiChatRoute._addFileChildren(ApiChatRouteChildren)
 
-interface OwnerActionsProposalIdRouteChildren {
-  OwnerActionsProposalIdReceiptRoute: typeof OwnerActionsProposalIdReceiptRoute
-}
-
-const OwnerActionsProposalIdRouteChildren: OwnerActionsProposalIdRouteChildren =
-  {
-    OwnerActionsProposalIdReceiptRoute: OwnerActionsProposalIdReceiptRoute,
-  }
-
-const OwnerActionsProposalIdRouteWithChildren =
-  OwnerActionsProposalIdRoute._addFileChildren(
-    OwnerActionsProposalIdRouteChildren,
-  )
-
-interface OwnerActionsRouteChildren {
-  OwnerActionsProposalIdRoute: typeof OwnerActionsProposalIdRouteWithChildren
-}
-
-const OwnerActionsRouteChildren: OwnerActionsRouteChildren = {
-  OwnerActionsProposalIdRoute: OwnerActionsProposalIdRouteWithChildren,
-}
-
-const OwnerActionsRouteWithChildren = OwnerActionsRoute._addFileChildren(
-  OwnerActionsRouteChildren,
-)
-
-interface OwnerBillingRouteChildren {
-  OwnerBillingActivateRoute: typeof OwnerBillingActivateRoute
-  OwnerBillingRedirectingRoute: typeof OwnerBillingRedirectingRoute
-  OwnerBillingCancelOperationIdRoute: typeof OwnerBillingCancelOperationIdRoute
-  OwnerBillingReceiptsReceiptIdRoute: typeof OwnerBillingReceiptsReceiptIdRoute
-  OwnerBillingReturnOperationIdRoute: typeof OwnerBillingReturnOperationIdRoute
-}
-
-const OwnerBillingRouteChildren: OwnerBillingRouteChildren = {
-  OwnerBillingActivateRoute: OwnerBillingActivateRoute,
-  OwnerBillingRedirectingRoute: OwnerBillingRedirectingRoute,
-  OwnerBillingCancelOperationIdRoute: OwnerBillingCancelOperationIdRoute,
-  OwnerBillingReceiptsReceiptIdRoute: OwnerBillingReceiptsReceiptIdRoute,
-  OwnerBillingReturnOperationIdRoute: OwnerBillingReturnOperationIdRoute,
-}
-
-const OwnerBillingRouteWithChildren = OwnerBillingRoute._addFileChildren(
-  OwnerBillingRouteChildren,
-)
-
-interface OwnerBusinessActionsRequestIdRouteChildren {
-  OwnerBusinessActionsRequestIdReceiptRoute: typeof OwnerBusinessActionsRequestIdReceiptRoute
-}
-
-const OwnerBusinessActionsRequestIdRouteChildren: OwnerBusinessActionsRequestIdRouteChildren =
-  {
-    OwnerBusinessActionsRequestIdReceiptRoute:
-      OwnerBusinessActionsRequestIdReceiptRoute,
-  }
-
-const OwnerBusinessActionsRequestIdRouteWithChildren =
-  OwnerBusinessActionsRequestIdRoute._addFileChildren(
-    OwnerBusinessActionsRequestIdRouteChildren,
-  )
-
-interface OwnerBusinessActionsRouteChildren {
-  OwnerBusinessActionsRequestIdRoute: typeof OwnerBusinessActionsRequestIdRouteWithChildren
-}
-
-const OwnerBusinessActionsRouteChildren: OwnerBusinessActionsRouteChildren = {
-  OwnerBusinessActionsRequestIdRoute:
-    OwnerBusinessActionsRequestIdRouteWithChildren,
-}
-
-const OwnerBusinessActionsRouteWithChildren =
-  OwnerBusinessActionsRoute._addFileChildren(OwnerBusinessActionsRouteChildren)
-
-interface OwnerInquiriesRouteChildren {
-  OwnerInquiriesThreadIdRoute: typeof OwnerInquiriesThreadIdRoute
-}
-
-const OwnerInquiriesRouteChildren: OwnerInquiriesRouteChildren = {
-  OwnerInquiriesThreadIdRoute: OwnerInquiriesThreadIdRoute,
-}
-
-const OwnerInquiriesRouteWithChildren = OwnerInquiriesRoute._addFileChildren(
-  OwnerInquiriesRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
+  OperatorRoute: OperatorRouteWithChildren,
   AboutRoute: AboutRoute,
   ClaimRoute: ClaimRouteWithChildren,
   HelpRoute: HelpRoute,
@@ -1635,23 +1747,10 @@ const rootRouteChildren: RootRouteChildren = {
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
-  AdminAuditEventsRoute: AdminAuditEventsRoute,
-  AdminBusinessActionsRoute: AdminBusinessActionsRouteWithChildren,
-  AdminClaimsRoute: AdminClaimsRoute,
-  AdminIndexHealthRoute: AdminIndexHealthRoute,
-  AdminInquiriesRoute: AdminInquiriesRoute,
-  AdminMonetizationRoute: AdminMonetizationRouteWithChildren,
-  AdminProtectedActionsRoute: AdminProtectedActionsRouteWithChildren,
-  AdminRunsRoute: AdminRunsRouteWithChildren,
   ApiAnswerRoute: ApiAnswerRouteWithChildren,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiChatRoute: ApiChatRouteWithChildren,
-  DevelopersDiscoveryRoute: DevelopersDiscoveryRoute,
-  OwnerActionsRoute: OwnerActionsRouteWithChildren,
-  OwnerBillingRoute: OwnerBillingRouteWithChildren,
-  OwnerBusinessActionsRoute: OwnerBusinessActionsRouteWithChildren,
-  OwnerInquiriesRoute: OwnerInquiriesRouteWithChildren,
-  OwnerStatusRoute: OwnerStatusRoute,
+  IThreadIdRoute: IThreadIdRoute,
   QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,

@@ -18,6 +18,7 @@ import type { AbuseRateLimitBucketRecord } from '@/modules/security/public'
 export type InquiryThreadId = Brand<string, 'InquiryThreadId'>
 export type InquiryMessageId = Brand<string, 'InquiryMessageId'>
 export type InquiryNotificationId = Brand<string, 'InquiryNotificationId'>
+export type InquiryCustomerAccessKey = Brand<string, 'InquiryCustomerAccessKey'>
 
 export const InquiryThreadStatusValues = ['unread', 'read', 'replied', 'closed'] as const
 export type InquiryThreadStatus = (typeof InquiryThreadStatusValues)[number]
@@ -170,6 +171,8 @@ export type InquiryThreadRecord = {
   createdAt: number
   updatedAt: number
   version: number
+  customerAccessKey?: InquiryCustomerAccessKey
+  customerReplyEmail?: string
   readAt?: number
   repliedAt?: number
   closedAt?: number
@@ -342,6 +345,43 @@ export type OwnerInquiryDetailReadback = {
 export type InquiryDeliveryReadback = {
   threadId: InquiryThreadId
   notifications: readonly OwnerInboxNotificationProjection[]
+}
+
+
+export type InquiryCustomerRecordTimelineKey = 'received' | 'sent_to_business' | 'business_replied' | 'closed'
+export type InquiryCustomerRecordTimelineStatus = 'complete' | 'current' | 'pending'
+
+export type InquiryCustomerRecordTimelineStep = {
+  key: InquiryCustomerRecordTimelineKey
+  label: string
+  detail: string
+  status: InquiryCustomerRecordTimelineStatus
+  timestamp?: number
+}
+
+export type InquiryCustomerRecordReadback = {
+  schemaVersion: 'inquiry-customer-record:v1'
+  threadId: InquiryThreadId
+  business: {
+    name: string
+    slug: string
+  }
+  submitted: {
+    messageSummary: string
+    submittedAt: number
+  }
+  delivery: {
+    state: InquiryNotificationStatus
+    label: string
+    updatedAt: number
+  }
+  timeline: readonly InquiryCustomerRecordTimelineStep[]
+  reply?: {
+    body: string
+    createdAt: number
+  }
+  closedAt?: number
+  updatedAt: number
 }
 
 export type InquiryExportMessageProjection = OwnerInboxMessageProjection & {

@@ -25,4 +25,11 @@ crons.interval(
   {}
 )
 
+crons.interval(
+  'cleanup expired source write nonces',
+  { hours: 1 },
+  internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces,
+  {}
+)
+
 export default crons

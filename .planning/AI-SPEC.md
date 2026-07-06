@@ -9,10 +9,11 @@
 
 Prevent protocol theater and make the AI/runtime contract measurable.
 
-AE is the trust and discovery layer for agentic commerce. Public assistants may
-read, compare, summarize, and route to a safe next step. The only assistant
-exposed write is a qualified inquiry when the listing publishes that capability
-and the request stays within AE's source-write boundary.
+AE is the action layer for the household economy; today's shipped rung is a
+qualified inquiry in writing with a durable record for owner review. Public
+assistants may read, compare, summarize, and route to a safe next step. The
+only assistant-exposed write is a qualified inquiry when the listing publishes
+that capability and the request stays within AE's source-write boundary.
 
 This spec covers two surfaces:
 

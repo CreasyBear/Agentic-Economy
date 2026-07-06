@@ -46,7 +46,7 @@ export type AnswerSynthesizerInput = {
   model?: string
 }
 
-export const AnswerWorkStepPhaseValues = [
+const AnswerWorkStepPhaseValues = [
   'interpret',
   'search',
   'read',
@@ -57,7 +57,7 @@ export const AnswerWorkStepPhaseValues = [
 
 export type AnswerWorkStepPhase = (typeof AnswerWorkStepPhaseValues)[number]
 
-export const AnswerWorkStepStatusValues = [
+const AnswerWorkStepStatusValues = [
   'running',
   'complete',
   'skipped',

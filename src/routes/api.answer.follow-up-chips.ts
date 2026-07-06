@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import { readLlmFollowUpChipsEnabled } from '@/modules/answer/public'
 import {
@@ -25,12 +26,19 @@ export const Route = createFileRoute('/api/answer/follow-up-chips')({
   },
 })
 
+const MAX_FOLLOW_UP_CHIPS_BODY_BYTES = 64 * 1024
+
 export async function handleFollowUpChipsRequest(request: Request): Promise<Response> {
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
+  const boundedBody = await readBoundedRequestText(request, MAX_FOLLOW_UP_CHIPS_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return jsonError('payload_too_large', 413)
+  }
+
   let body: unknown
   try {
-    body = await request.json()
+    body = JSON.parse(boundedBody.text)
   } catch {
     return jsonError('invalid_body', 400)
   }

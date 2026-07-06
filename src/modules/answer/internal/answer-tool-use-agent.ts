@@ -24,6 +24,7 @@ import {
 import {
   ANSWER_READ_TOOL_IDS,
   findAnswerReadToolAction,
+  refuseAnswerToolCall,
   runAnswerToolCall,
   toolCallRecordsToGateInput,
   type AnswerToolCallRecord,
@@ -101,6 +102,10 @@ export type AnswerToolUseAgentInput = {
    * frozen prior evidence and never start a fresh catalog search.
    */
   disableTools?: boolean
+  /** Hard cap for model-requested tool calls executed during this agent turn. */
+  maxToolCalls?: number
+  /** Hard cap for model-supplied registry.search limit values. */
+  maxRegistrySearchLimit?: number
 }
 
 export type AnswerToolUseAgentResult = {
@@ -229,8 +234,9 @@ async function runRealToolUseAgent(
   const modelRequests: HarnessModelRequestRecord[] = []
   const providers: AnswerSource[] = []
   const slugSeen = new Set<string>()
+  const maxToolCalls = normalizeMaxToolCalls(input.maxToolCalls)
+  let toolCallAttempts = 0
   let seq = 0
-
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     const payload = await runOpenRouterModelRequest({
       input,
@@ -277,13 +283,17 @@ async function runRealToolUseAgent(
         toolId,
         parseToolInput(call.function?.arguments),
       )
-      const result = await runAnswerToolCall({
+      const toolInput = {
         toolId,
         input: parsedInput,
         turnId: 'pending',
         seq,
         ...(input.harnessLoop === undefined ? {} : { harnessLoop: input.harnessLoop }),
-      })
+      }
+      const result = toolCallAttempts >= maxToolCalls
+        ? refuseAnswerToolCall(toolInput, 'budget_exceeded', call.id)
+        : await runAnswerToolCall(toolInput)
+      toolCallAttempts += 1
       toolCalls.push(result.record)
       appendTimings(timings, result.timings, {
         phase: 'agent_tool',
@@ -295,8 +305,12 @@ async function runRealToolUseAgent(
       messages.push({
         role: 'tool',
         tool_call_id: call.id ?? result.record.toolCallId,
-        content: result.resultJson,
+        content: safeToolResultJsonForPrompt(result.resultJson),
       })
+    }
+    if (toolCallAttempts >= maxToolCalls) {
+      updateLastModelTiming(timings, { toolBudgetExhausted: true, maxToolCalls })
+      break
     }
   }
 
@@ -722,6 +736,7 @@ function applySearchContextToRegistrySearchInput(
   }
 
   const record = { ...(raw as Record<string, unknown>) }
+  record.limit = normalizeRegistrySearchLimit(record.limit, input.maxRegistrySearchLimit)
   const query = typeof record.query === 'string' ? record.query : input.query
   const userNamedLocation = extractRequestedLocation(input.query)
   const toolNamedLocation = extractRequestedLocation(query)
@@ -744,6 +759,57 @@ function applySearchContextToRegistrySearchInput(
   }
 
   return record
+}
+
+function normalizeMaxToolCalls(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 1
+  }
+  return Math.max(0, Math.floor(value))
+}
+
+function normalizeRegistrySearchLimit(value: unknown, maxLimit: number | undefined): number {
+  const max = normalizeMaxRegistrySearchLimit(maxLimit)
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return max
+  }
+  return Math.min(max, Math.max(1, Math.floor(value)))
+}
+
+function normalizeMaxRegistrySearchLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_LIMIT
+  }
+  return Math.max(1, Math.floor(value))
+}
+
+function safeToolResultJsonForPrompt(resultJson: string): string {
+  try {
+    return JSON.stringify(sanitizePromptValue(JSON.parse(resultJson)))
+  } catch {
+    return sanitizePromptString(resultJson)
+  }
+}
+
+function sanitizePromptValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizePromptString(value)
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizePromptValue(entry))
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, sanitizePromptValue(entry)]),
+    )
+  }
+  return value
+}
+
+function sanitizePromptString(value: string): string {
+  return value
+    .replace(/<\s*\/?\s*(?:catalog_data|system|assistant|user|tool)\b/gi, '[data-tag]')
+    .replace(/[<>]/g, (character) => character === '<' ? '‹' : '›')
 }
 
 function buildAgentJsonQueryForSearchContext(

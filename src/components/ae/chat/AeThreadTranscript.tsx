@@ -15,9 +15,13 @@ export type AeThreadTranscriptProps = {
     generation: number
     searchContext: AeSearchContext
     intent: FollowUpIntent
+    turnId?: string
+    turnSeq?: number
   } | null
-  onThreadCreated?: (threadId: string) => void
+  turnRenderKeys?: Readonly<Record<string, string>>
+  onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
   onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
+  onSettledTurn?: (turn: PublicThreadTurn, generation: number) => void
   onFollowUp?: (query: string) => void
   onRetry?: (query: string) => void
 }
@@ -26,8 +30,10 @@ export function AeThreadTranscript({
   threadId = null,
   projection,
   liveTurn = null,
+  turnRenderKeys,
   onThreadCreated,
   onStreamEnd,
+  onSettledTurn,
   onFollowUp,
   onRetry,
 }: AeThreadTranscriptProps) {
@@ -39,14 +45,15 @@ export function AeThreadTranscript({
     <>
       {completedTurns.map((turn, index) => {
         const isLastCompleted = index === completedTurns.length - 1
-        const expanded = isLastCompleted && liveTurn === null
+        const expanded = isLastCompleted
         const viewModel = toThreadViewModel(turn)
+        const turnKey = turnRenderKeys?.[turn.turnId] ?? turn.turnId
 
         const anchorThisTurn = liveTurn === null && isLastCompleted
 
         return (
           <MessageScrollerItem
-            key={turn.turnId}
+            key={turnKey}
             messageId={turn.turnId}
             scrollAnchor={anchorThisTurn}
           >
@@ -83,11 +90,12 @@ export function AeThreadTranscript({
               query={liveTurn.query}
               searchContext={liveTurn.searchContext}
               generation={liveTurn.generation}
-              seq={completedTurns.length + 1}
+              seq={liveTurn.turnSeq ?? completedTurns.length + 1}
               intent={liveTurn.intent}
               {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })}
               {...(onThreadCreated === undefined ? {} : { onThreadCreated })}
               {...(onStreamEnd === undefined ? {} : { onStreamEnd })}
+              {...(onSettledTurn === undefined ? {} : { onSettledTurn })}
               {...(onRetry === undefined ? {} : { onRetry: () => onRetry(liveTurn.query) })}
             />
           </div>

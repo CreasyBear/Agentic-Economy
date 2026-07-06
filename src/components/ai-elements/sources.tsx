@@ -6,6 +6,7 @@ import {
   AeCollapsibleContent as CollapsibleContent,
   AeCollapsibleTrigger as CollapsibleTrigger,
 } from '@/components/ae/primitives/AeCollapsible'
+import { RouterLink } from '@/components/astryx/RouterLink'
 import { cn } from '@/lib/utils'
 
 export type SourcesProps = ComponentProps<typeof Collapsible>
@@ -70,23 +71,43 @@ export type SourceProps = ComponentProps<'a'>
 
 export function Source({ className, href, title, children, ...props }: SourceProps) {
   const external = typeof href === 'string' && /^https?:\/\//i.test(href)
+  const appRoute = isInternalAppHref(href)
+  const content = children ?? (
+    <>
+      <BookOpenIcon data-icon="inline-start" aria-hidden="true" />
+      <span className="truncate font-medium">{title ?? href}</span>
+    </>
+  )
+  const sourceClassName = cn(
+    'flex min-w-0 items-center gap-2 rounded-sm border border-border bg-card px-3 py-2 text-primary transition-colors hover:border-border-strong hover:bg-muted',
+    className,
+  )
+
+  if (appRoute) {
+    return (
+      <RouterLink className={sourceClassName} href={href} {...props}>
+        {content}
+      </RouterLink>
+    )
+  }
 
   return (
     <a
-      className={cn(
-        'flex min-w-0 items-center gap-2 rounded-sm border border-border bg-card px-3 py-2 text-primary transition-colors hover:border-border-strong hover:bg-muted',
-        className,
-      )}
+      className={sourceClassName}
       href={href}
       {...(external ? { rel: 'noreferrer', target: '_blank' } : {})}
       {...props}
     >
-      {children ?? (
-        <>
-          <BookOpenIcon data-icon="inline-start" aria-hidden="true" />
-          <span className="truncate font-medium">{title ?? href}</span>
-        </>
-      )}
+      {content}
     </a>
   )
+}
+
+function isInternalAppHref(href: SourceProps['href']): href is string {
+  if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//')) {
+    return false
+  }
+
+  const [pathname = ''] = href.split(/[?#]/, 1)
+  return pathname !== '/llms.txt' && pathname !== '/robots.txt' && pathname !== '/sitemap.xml' && pathname !== '/api' && !pathname.startsWith('/api/')
 }

@@ -1,13 +1,13 @@
 import type { AdminMembership } from '@/modules/security/public'
 import { requireAdminAuthority } from './admin-authority'
 
-export const AdminReadbackSurfaceValues = ['claims_queue', 'audit_events', 'index_health'] as const
+const AdminReadbackSurfaceValues = ['claims_queue', 'audit_events', 'index_health'] as const
 export type AdminReadbackSurface = (typeof AdminReadbackSurfaceValues)[number]
 
-export const AdminReadbackRowTypeValues = ['claim', 'audit_event', 'index_surface'] as const
+const AdminReadbackRowTypeValues = ['claim', 'audit_event', 'index_surface'] as const
 export type AdminReadbackRowType = (typeof AdminReadbackRowTypeValues)[number]
 
-export const AdminReadbackRowStateValues = [
+const AdminReadbackRowStateValues = [
   'pending_review',
   'no_source_rows',
   'guarded',
@@ -19,7 +19,7 @@ export const AdminReadbackRowStateValues = [
 ] as const
 export type AdminReadbackRowState = (typeof AdminReadbackRowStateValues)[number]
 
-export const AdminReadbackRepairActionValues = [
+const AdminReadbackRepairActionValues = [
   'review_claim',
   'inspect_audit',
   'regenerate_projection',
@@ -28,7 +28,7 @@ export const AdminReadbackRepairActionValues = [
 ] as const
 export type AdminReadbackRepairAction = (typeof AdminReadbackRepairActionValues)[number]
 
-export const AdminReadbackRepairResultValues = ['not_run', 'succeeded', 'failed'] as const
+const AdminReadbackRepairResultValues = ['not_run', 'succeeded', 'failed'] as const
 export type AdminReadbackRepairResult = (typeof AdminReadbackRepairResultValues)[number]
 
 export type AdminReadbackRow = {

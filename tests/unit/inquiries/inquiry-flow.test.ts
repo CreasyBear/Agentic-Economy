@@ -46,6 +46,25 @@ describe('human inquiry owner inbox slice', () => {
     expect(JSON.stringify([submit.notification, submit.state.auditEvents, submit.state.funnelEvents])).not.toContain('sam.customer@example.test')
     expect(JSON.stringify([submit.notification, submit.state.auditEvents, submit.state.funnelEvents])).not.toContain('Pipe burst')
 
+    const customerAccessKey = submit.thread.customerAccessKey
+    if (customerAccessKey === undefined) throw new Error('missing customer access key')
+
+
+    const wrongCustomerRecord = inquiries.readCustomerRecord(submit.state, {
+      threadId: submit.thread.threadId,
+      accessKey: 'wrong-customer-record-key',
+    })
+    expect(wrongCustomerRecord).toMatchObject({ kind: 'error', code: 'inquiry_access_denied' })
+
+    const initialCustomerRecord = inquiries.readCustomerRecord(submit.state, {
+      threadId: submit.thread.threadId,
+      accessKey: customerAccessKey,
+    })
+    expect(initialCustomerRecord.kind).toBe('ok')
+    if (initialCustomerRecord.kind !== 'ok') throw new Error(initialCustomerRecord.code)
+    expect(initialCustomerRecord.record.timeline.find((step) => step.key === 'business_replied')?.status).toBe('pending')
+    expect(initialCustomerRecord.record.reply).toBeUndefined()
+
     const inbox = inquiries.listOwnerInbox(submit.state, { authority: { ownerId } })
     expect(inbox.buckets).toEqual({ unread: 1, needs_reply: 0, resolved: 0 })
     const firstInboxItem = inbox.inquiries[0]
@@ -89,6 +108,16 @@ describe('human inquiry owner inbox slice', () => {
     expect(reply.thread.status).toBe('replied')
     expect(reply.state.messages).toHaveLength(2)
     expect(reply.notification.status).toBe('sent')
+
+    const repliedCustomerRecord = inquiries.readCustomerRecord(reply.state, {
+      threadId: submit.thread.threadId,
+      accessKey: customerAccessKey,
+    })
+    expect(repliedCustomerRecord.kind).toBe('ok')
+    if (repliedCustomerRecord.kind !== 'ok') throw new Error(repliedCustomerRecord.code)
+    expect(repliedCustomerRecord.record.reply?.body).toContain('Thanks, we received your inquiry')
+    expect(repliedCustomerRecord.record.timeline.find((step) => step.key === 'business_replied')?.status).toBe('complete')
+
 
     const close = inquiries.closeInquiry(reply.state, {
       authority: { ownerId },
@@ -782,6 +811,7 @@ function submitCommand(key: string, overrides: Partial<SubmitInquiryCommand> = {
     abuseBucketKey: `ip:${key}`,
     now,
     ...overrides,
+    customerAccessKey: overrides.customerAccessKey ?? `customer-key:${key}:0123456789abcdef`,
   }
 }
 

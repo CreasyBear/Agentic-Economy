@@ -15,8 +15,7 @@ export function AeReviewBlock({ value }: AeReviewBlockProps) {
       title="Review before publishing"
       description={
         <>
-          Publishing creates a public service page for {value.businessName || 'this business'} at /{value.requestedSlug || 'your-slug'}.
-          What assistants and customers will see is added later, once its checks are ready.
+          Publishing creates a public page for {value.businessName || 'this business'} at /{value.requestedSlug || 'your-slug'}. Customers and their assistants can read the details you add here.
         </>
       }
     />

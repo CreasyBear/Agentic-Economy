@@ -2,8 +2,10 @@ import { auth } from '@clerk/tanstack-react-start/server'
 import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
+
 export const requireClaimOwnerSession = createServerFn().handler(async () => {
-  if (process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true') {
+  if (isLocalE2EAuthBypassEnabled()) {
     return { userId: 'local-e2e-owner' }
   }
 

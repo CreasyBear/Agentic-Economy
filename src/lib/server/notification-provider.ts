@@ -89,6 +89,9 @@ export type SendOwnerInquiryResendEmailInput = {
     inquiryThreadId: string
     businessName?: string
     businessSlug?: string
+    serviceName?: string
+    customerMessageFirstLine?: string
+    isFirstInquiryForBusiness?: boolean
   }
   appBaseUrl?: string
   fetch?: typeof globalThis.fetch
@@ -103,13 +106,46 @@ export type ResendProviderSendResult = {
 
 export type NovuProviderTriggerResult = {
   kind: 'ok'
-  status: 'triggered'
+  status: 'triggered' | 'sent'
   providerResponseHash: string
   novuTransactionId: string
   novuWorkflowId: string
   novuSubscriberId: string
   novuMessageId?: string
 }
+
+export type NovuSubscriberProfile = {
+  subscriberId: string
+  email?: string
+  phone?: string
+}
+
+export type SendInquiryNovuInput = {
+  config: NovuClientConfig
+  recipientRole: 'owner' | 'customer'
+  subscriber: NovuSubscriberProfile
+  dispatch: {
+    dispatchId: string
+    providerIdempotencyKey: string
+    inquiryThreadId: string
+    inquiryMessageId?: string
+    businessName?: string
+    businessSlug?: string
+    customerAccessKey?: string
+  }
+  appBaseUrl?: string
+  fetch?: typeof globalThis.fetch
+}
+
+export type NovuProviderDispatchResult =
+  | NovuProviderTriggerResult
+  | {
+      kind: 'error'
+      status: 'failed'
+      redactedError: string
+      providerResponseHash?: string
+    }
+
 
 export type SendOwnerInquiryNovuInput = {
   config: NovuClientConfig
@@ -124,6 +160,32 @@ export type SendOwnerInquiryNovuInput = {
   appBaseUrl?: string
   fetch?: typeof globalThis.fetch
 }
+
+export function ownerNovuSubscriberProfile(clerkUserId: string, email?: string): NovuSubscriberProfile {
+  const subscriberId = normalizeIdentifier(
+    clerkUserId,
+    'invalid_novu_trigger_payload',
+    'Owner Clerk user id is required for Novu subscriber id.'
+  )
+  const normalizedEmail = normalizeEmail(email)
+  const prefixedSubscriberId = subscriberId.startsWith('owner:') ? subscriberId : `owner:${subscriberId}`
+  return {
+    subscriberId: prefixedSubscriberId,
+    ...(normalizedEmail === undefined ? {} : { email: normalizedEmail }),
+  }
+}
+
+export function customerNovuSubscriberProfile(inquiryThreadId: string): NovuSubscriberProfile {
+  const subscriberId = normalizeIdentifier(
+    inquiryThreadId,
+    'invalid_novu_trigger_payload',
+    'Inquiry thread id is required for customer Novu subscriber id.'
+  )
+  return {
+    subscriberId: `customer:${subscriberId}`,
+  }
+}
+
 
 export type NovuMessageChannel = 'in_app' | 'email' | 'sms' | 'chat' | 'push' | 'unknown'
 export type NovuMessageReadbackStatus = 'sent' | 'error' | 'warning' | 'unknown'
@@ -316,12 +378,19 @@ export async function sendOwnerInquiryResendEmail(
   input: SendOwnerInquiryResendEmailInput
 ): Promise<ResendProviderSendResult> {
   const businessName = truncateLine(input.dispatch.businessName ?? 'your business', 80)
+  const serviceName = truncateLine(input.dispatch.serviceName ?? 'new service request', 80)
+  const messageFirstLine = firstMessageLine(input.dispatch.customerMessageFirstLine) ?? 'The customer sent a written inquiry.'
   const ownerLink = ownerInquiryLink(input.appBaseUrl, input.dispatch.inquiryThreadId)
   const text = [
-    `New inquiry for ${businessName}.`,
-    ownerLink === undefined ? 'Open your Agentic Economy owner inbox to reply.' : `Open it here: ${ownerLink}`,
-    'Delivery state is tracked in Agentic Economy.',
-  ].join('\n\n')
+    `${serviceName} inquiry: ${messageFirstLine}`,
+    input.dispatch.isFirstInquiryForBusiness === true
+      ? `This is the first inquiry for ${businessName} through Agentic Economy.`
+      : undefined,
+    `Your ${businessName} page is free, there are no lead fees, and replies go straight to the customer.`,
+    ownerLink === undefined
+      ? 'Reply from your Agentic Economy owner inbox.'
+      : `Reply in Agentic Economy: ${ownerLink}`,
+  ].filter((line): line is string => line !== undefined).join('\n\n')
 
   return sendResendNotificationEmail({
     config: input.config,
@@ -395,23 +464,32 @@ async function sendResendNotificationEmail(
   }
 }
 
-export async function triggerOwnerInquiryNovuWorkflow(
-  input: SendOwnerInquiryNovuInput
-): Promise<NovuProviderTriggerResult> {
-  const subscriberId = normalizeIdentifier(input.subscriberId, 'invalid_novu_trigger_payload', 'Novu subscriber id is required.')
+export async function triggerInquiryNovuWorkflow(input: SendInquiryNovuInput): Promise<NovuProviderTriggerResult> {
+  const subscriberId = normalizeIdentifier(input.subscriber.subscriberId, 'invalid_novu_trigger_payload', 'Novu subscriber id is required.')
   const idempotencyKey = normalizeNovuIdempotencyKey(input.dispatch.providerIdempotencyKey)
   const transactionId = idempotencyKey
-  const ownerLink = ownerInquiryLink(input.appBaseUrl, input.dispatch.inquiryThreadId)
+  const workflowId = novuWorkflowIdForRecipient(input.config, input.recipientRole)
+  const ownerLink = input.recipientRole === 'owner' ? ownerInquiryLink(input.appBaseUrl, input.dispatch.inquiryThreadId) : undefined
+  const customerRecordLink = input.recipientRole === 'customer' && input.dispatch.customerAccessKey !== undefined
+    ? customerInquiryRecordLink(input.appBaseUrl, input.dispatch.inquiryThreadId, input.dispatch.customerAccessKey)
+    : undefined
   const payload: RedactedPayload = {
     dispatchId: input.dispatch.dispatchId,
     inquiryThreadId: input.dispatch.inquiryThreadId,
+    ...(input.dispatch.inquiryMessageId === undefined ? {} : { inquiryMessageId: input.dispatch.inquiryMessageId }),
+    recipientRole: input.recipientRole,
     businessSlug: input.dispatch.businessSlug ?? 'unknown',
     businessName: truncateLine(input.dispatch.businessName ?? 'your business', 80),
     ...(ownerLink === undefined ? {} : { ownerInboxUrl: ownerLink }),
+    ...(customerRecordLink === undefined ? {} : {
+      customerRecordUrl: customerRecordLink,
+      emailSubject: truncateLine(`${input.dispatch.businessName ?? 'The business'} replied to your inquiry`, 120),
+      emailBody: `${input.dispatch.businessName ?? 'The business'} replied. Read it on your inquiry record: ${customerRecordLink}`,
+    }),
   }
   const requestPayload = {
-    name: input.config.ownerInquiryWorkflowId,
-    to: { subscriberId },
+    name: workflowId,
+    to: novuSubscriberTarget(input.subscriber, subscriberId),
     transactionId,
     payload,
   }
@@ -452,18 +530,75 @@ export async function triggerOwnerInquiryNovuWorkflow(
     kind: 'ok',
     status: 'triggered',
     novuTransactionId: responseTransactionId,
-    novuWorkflowId: input.config.ownerInquiryWorkflowId,
+    novuWorkflowId: workflowId,
     novuSubscriberId: subscriberId,
     ...(novuMessageId === undefined ? {} : { novuMessageId }),
     providerResponseHash: stableHash({
       providerFamily: 'novu',
       status: response.status,
       transactionId: responseTransactionId,
-      workflowId: input.config.ownerInquiryWorkflowId,
+      workflowId,
       subscriberId,
+      recipientRole: input.recipientRole,
     }),
   }
 }
+
+export async function triggerOwnerInquiryNovuWorkflow(
+  input: SendOwnerInquiryNovuInput
+): Promise<NovuProviderTriggerResult> {
+  return triggerInquiryNovuWorkflow({
+    config: input.config,
+    recipientRole: 'owner',
+    subscriber: ownerNovuSubscriberProfile(input.subscriberId),
+    dispatch: input.dispatch,
+    ...(input.appBaseUrl === undefined ? {} : { appBaseUrl: input.appBaseUrl }),
+    ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+  })
+}
+
+export function mapNovuReadbackToProviderResult(
+  triggerResult: NovuProviderTriggerResult,
+  readback: NovuTransactionMessageReadback
+): NovuProviderDispatchResult {
+  if (readback.messages.some((message) => message.status === 'error')) {
+    return {
+      kind: 'error',
+      status: 'failed',
+      redactedError: 'novu_delivery_error',
+      providerResponseHash: stableHash({
+        providerFamily: 'novu',
+        deliveryStatus: 'failed',
+        triggerResponseHash: triggerResult.providerResponseHash,
+        readbackResponseHash: readback.providerResponseHash,
+      }),
+    }
+  }
+
+  if (readback.messages.some((message) => message.status === 'sent')) {
+    return {
+      ...triggerResult,
+      status: 'sent',
+      providerResponseHash: stableHash({
+        providerFamily: 'novu',
+        deliveryStatus: 'sent',
+        triggerResponseHash: triggerResult.providerResponseHash,
+        readbackResponseHash: readback.providerResponseHash,
+      }),
+    }
+  }
+
+  return {
+    ...triggerResult,
+    providerResponseHash: stableHash({
+      providerFamily: 'novu',
+      deliveryStatus: 'triggered',
+      triggerResponseHash: triggerResult.providerResponseHash,
+      readbackResponseHash: readback.providerResponseHash,
+    }),
+  }
+}
+
 
 export async function readNovuTransactionMessages(
   input: ReadNovuTransactionMessagesInput
@@ -654,12 +789,57 @@ function readClerkEmailAddress(value: unknown): string | undefined {
   return normalizeEmail(readString(value.email_address) ?? readString(value.emailAddress))
 }
 
+function novuWorkflowIdForRecipient(config: NovuClientConfig, recipientRole: 'owner' | 'customer'): string {
+  if (recipientRole === 'owner') {
+    return config.ownerInquiryWorkflowId
+  }
+
+  if (config.customerInquiryWorkflowId === undefined) {
+    throw new NotificationProviderError(
+      'missing_novu_workflow',
+      'NOVU_WORKFLOW_INQUIRY_CUSTOMER is required for customer inquiry Novu provider calls.',
+      500
+    )
+  }
+
+  return config.customerInquiryWorkflowId
+}
+
+function novuSubscriberTarget(subscriber: NovuSubscriberProfile, subscriberId: string): { subscriberId: string; email?: string; phone?: string } {
+  const email = normalizeEmail(subscriber.email)
+  const phone = readString(subscriber.phone)
+  return {
+    subscriberId,
+    ...(email === undefined ? {} : { email }),
+    ...(phone === undefined ? {} : { phone }),
+  }
+}
+
+function firstMessageLine(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const line = truncateLine(value.split(/\r?\n/).find((candidate) => candidate.trim().length > 0) ?? '', 180)
+  return line.length === 0 ? undefined : line
+}
+
 function ownerInquiryLink(appBaseUrl: string | undefined, inquiryThreadId: string): string | undefined {
   if (appBaseUrl === undefined || appBaseUrl.trim().length === 0) {
     return undefined
   }
 
   const url = new URL(`/owner/inquiries/${encodeURIComponent(inquiryThreadId)}`, appBaseUrl)
+  return url.toString()
+}
+
+function customerInquiryRecordLink(appBaseUrl: string | undefined, inquiryThreadId: string, accessKey: string): string | undefined {
+  if (appBaseUrl === undefined || appBaseUrl.trim().length === 0 || accessKey.trim().length === 0) {
+    return undefined
+  }
+
+  const url = new URL(`/i/${encodeURIComponent(inquiryThreadId)}`, appBaseUrl)
+  url.searchParams.set('k', accessKey)
   return url.toString()
 }
 

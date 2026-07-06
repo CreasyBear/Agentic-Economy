@@ -29,7 +29,7 @@ describe('AeAnswerChecks', () => {
 
     const line = container.querySelector('[aria-label="Answer checks"]')
     expect(line).not.toBeNull()
-    expect(line?.textContent).toBe('1 search · 2 read · 2 listed · 5/5 checks · 1.3s')
+    expect(line?.textContent).toBe('Compared 2 listed businesses; checked 5 facts; done in 1.3s.')
   })
 
   it('renders nothing when a saved turn has no check summary', () => {

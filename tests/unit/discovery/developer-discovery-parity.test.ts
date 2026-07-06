@@ -188,6 +188,7 @@ function availableDiscoveryState(): DiscoverySourceState {
 
 function routeSnapshotWithNonDefaultBusiness(): DeveloperDiscoveryRouteSnapshot {
   const business = {
+    businessId: 'businesses:route-derived-solar-repair',
     slug: 'route-derived-solar-repair',
     name: 'Route Derived Solar Repair',
     category: 'Solar repair',

@@ -5,7 +5,7 @@ import {
   stableAeSearchContextKey,
   type AeSearchContext,
 } from '@/modules/answer/search-context'
-import type { FollowUpIntent } from '@/modules/answer-thread/public'
+import type { FollowUpIntent, PublicThreadTurn } from '@/modules/answer-thread/public'
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import { Message, MessageContent } from '@/components/ai-elements/message'
 import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
@@ -33,7 +33,8 @@ export type AeThreadTurnStreamSectionProps = {
   seq?: number
   threadId?: string
   generation: number
-  onThreadCreated?: (threadId: string) => void
+  onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
+  onSettledTurn?: (turn: PublicThreadTurn, generation: number) => void
   onStreamEnd?: (outcome: TurnStreamOutcome) => void
   onRetry?: () => void
 }
@@ -47,6 +48,7 @@ export function AeThreadTurnStreamSection({
   generation,
   onThreadCreated,
   onStreamEnd,
+  onSettledTurn,
   onRetry,
 }: AeThreadTurnStreamSectionProps) {
   const [state, sendTurnUpdate] = useReducer(turnReducer, initialAnswerTurnUiState)
@@ -57,18 +59,22 @@ export function AeThreadTurnStreamSection({
   const generationRef = useRef(generation)
   const onStreamEndRef = useRef(onStreamEnd)
   const onThreadCreatedRef = useRef(onThreadCreated)
+  const onSettledTurnRef = useRef(onSettledTurn)
+  const latestStateRef = useRef<AnswerTurnUiState>(initialAnswerTurnUiState)
+  const turnMetaRef = useRef<{ threadId: string; turnId: string; turnSeq: number } | null>(null)
   const requestThreadIdRef = useRef<string | undefined>(threadId)
   const streamKey = `${generation}:${query}:${stableAeSearchContextKey(searchContext)}`
 
   generationRef.current = generation
   onStreamEndRef.current = onStreamEnd
   onThreadCreatedRef.current = onThreadCreated
+  onSettledTurnRef.current = onSettledTurn
 
   // Freeze thread id at generation boundaries so remounts do not POST a just-created
   // thread id before Convex persistence finishes.
-  // oxlint-disable-next-line react-doctor/exhaustive-deps -- threadId is intentionally frozen until generation changes.
   useLayoutEffect(() => {
     requestThreadIdRef.current = threadId
+    // oxlint-disable-next-line react-doctor/exhaustive-deps -- threadId is intentionally frozen until generation changes.
   }, [generation])
 
   useEffect(() => {
@@ -82,6 +88,8 @@ export function AeThreadTurnStreamSection({
     sendTurnUpdate({ type: 'reset' })
     completeRef.current = false
     userStopRef.current = false
+    latestStateRef.current = initialAnswerTurnUiState
+    turnMetaRef.current = null
 
     const activeGeneration = generation
     const threadIdAtStart = requestThreadIdRef.current
@@ -96,7 +104,8 @@ export function AeThreadTurnStreamSection({
           if (!mountedRef.current || generationRef.current !== activeGeneration) {
             return
           }
-          onThreadCreatedRef.current?.(meta.threadId)
+          turnMetaRef.current = meta
+          onThreadCreatedRef.current?.(meta.threadId, { turnId: meta.turnId, turnSeq: meta.turnSeq })
         },
         onFrame: (frame) => applyEvent(frame.event, activeGeneration),
         onResult: (result) => handleStreamResult(result, activeGeneration, streamKey),
@@ -119,6 +128,7 @@ export function AeThreadTurnStreamSection({
     if (event.type === 'complete') {
       completeRef.current = true
     }
+    latestStateRef.current = reduceAnswerTurnEvent(latestStateRef.current, event)
     sendTurnUpdate({ type: 'event', event })
   }
 
@@ -150,6 +160,15 @@ export function AeThreadTurnStreamSection({
 
     if (result === 'done') {
       sendTurnUpdate({ type: 'stream_finished' })
+      const settledTurn = buildOptimisticSettledTurn({
+        state: latestStateRef.current,
+        meta: turnMetaRef.current,
+        query,
+        intent,
+      })
+      if (settledTurn !== null) {
+        onSettledTurnRef.current?.(settledTurn, activeGeneration)
+      }
       if (completeRef.current) {
         onStreamEndRef.current?.('complete')
       } else {
@@ -177,6 +196,7 @@ export function AeThreadTurnStreamSection({
             steps={state.thinkingSteps}
             workLog={state.workLog}
             {...(state.thinkingStep === undefined ? {} : { thinkingStep: state.thinkingStep })}
+            query={query}
           />
           <AeGenerativeAnswer
             artifacts={state.artifacts}
@@ -207,6 +227,34 @@ export function AeThreadTurnStreamSection({
       </Message>
     </div>
   )
+}
+
+function buildOptimisticSettledTurn({
+  state,
+  meta,
+  query,
+  intent,
+}: {
+  state: AnswerTurnUiState
+  meta: { threadId: string; turnId: string; turnSeq: number } | null
+  query: string
+  intent: FollowUpIntent
+}): PublicThreadTurn | null {
+  if (!state.complete || meta === null) {
+    return null
+  }
+
+  return {
+    turnId: meta.turnId,
+    seq: meta.turnSeq,
+    query,
+    intent,
+    status: 'complete',
+    workLog: state.workLog,
+    artifacts: state.artifacts,
+    oneLine: state.oneLineFallback,
+    ...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile }),
+  }
 }
 
 type TurnAction =

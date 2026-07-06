@@ -57,9 +57,7 @@ export async function runAnswerToolCall(
   input: RunAnswerToolCallInput,
 ): Promise<RunAnswerToolCallResult> {
   const timings = createTimingCollector()
-  const toolCallId = `tc-${input.turnId}-${input.seq}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
+  const toolCallId = makeToolCallId(input)
 
   if (!isAnswerReadToolId(input.toolId)) {
     return refuse(input, toolCallId, 'tool_not_known')
@@ -139,6 +137,20 @@ export async function runAnswerToolCall(
     timings: timings.entries(),
     resultHash: outcome.result.resultHash,
   })
+}
+
+export function refuseAnswerToolCall(
+  input: RunAnswerToolCallInput,
+  errorCode: string,
+  toolCallId: string = makeToolCallId(input),
+): RunAnswerToolCallResult {
+  return refuse(input, toolCallId, errorCode)
+}
+
+function makeToolCallId(input: RunAnswerToolCallInput): string {
+  return `tc-${input.turnId}-${input.seq}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
 }
 
 function refuse(

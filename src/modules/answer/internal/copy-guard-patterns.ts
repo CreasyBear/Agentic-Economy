@@ -3,13 +3,13 @@
 const EPISTEMIC_VOCABULARY_PATTERN = /\b(?:KNOWN|UNKNOWN|UNAVAILABLE|NEXT_STEP)\b/
 
 const OVERCLAIM_PATTERN =
-  /\b(?:book instantly|book now|booking confirmed|pay now|payment required|callable endpoint|agent-native|autonomous agent|verified by default|dispatch now|payment required on ae)\b/i
+  /\b(?:book instantly|book now|booking confirmed|confirmed booking|appointment booked|booked for|pay now|payment required|payment required on ae|charge(?:d)? (?:your|the) card|dispatch now|dispatch(?:ed)? (?:a|the) (?:provider|technician|plumber|electrician|cleaner|crew)|send(?:ing)? (?:a|the) (?:provider|technician|plumber|electrician|cleaner|crew)|schedule confirmed|scheduled for|callable endpoint|agent-native|autonomous agent|verified by default|live availability|guaranteed availability|available now)\b/i
 
 const BOUNDARY_COPY_PATTERN =
   /\b(?:cannot book|does not book|doesn't book|do not book|not book|no booking|no payment|does not pay|doesn't pay|do not pay|not pay|does not book or take payment|no booking or payment)\b/i
 
 const INJECTION_UPGRADE_PATTERN =
-  /\b(?:ignore previous instructions|callable=true|paymentrequired=true|mark as verified|verified emergency)\b/i
+  /(?:\b(?:ignore (?:all )?(?:previous|prior) instructions|disregard (?:all )?(?:previous|prior) instructions|system prompt|developer message|assistant should|tool result says|override (?:the )?(?:rules|instructions)|callable=true|paymentrequired=true|mark as verified|verified emergency)\b|<\/?(?:catalog_data|system|assistant|user|tool)\b)/i
 
 export function hasEpistemicVocabulary(text: string): boolean {
   return EPISTEMIC_VOCABULARY_PATTERN.test(text)

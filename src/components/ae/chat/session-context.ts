@@ -40,6 +40,12 @@ export function buildSessionContext(input: SessionContextInput): SessionContext 
   const inquiryReadyCount = providers.filter((provider) => hasInquiryPath(provider)).length
   const liveTurn = input.liveTurn ?? null
 
+  // No listings and nothing selected: the context card would just repeat "no
+  // listed business" in six rows, so suppress it and keep the empty turn lean.
+  if (providers.length === 0 && selectedProvider === undefined && currentSelectedProvider === undefined) {
+    return null
+  }
+
   return {
     badgeLabel: liveTurn === null ? 'Saved context' : intentLabel(liveTurn.intent),
     summary: contextSummary({

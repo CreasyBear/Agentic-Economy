@@ -64,7 +64,7 @@ export type ActionContext = {
   /** Per-tool admission for signed agent writes; identity alone never grants this. */
   agentToolAdmission?: {
     toolId: string
-    scope: 'public_inquiry'
+    scope: 'public_inquiry' | 'business_action_request'
     principalId: string
   }
   /** Harness-only approval authority for owner/admin-gated tools. */

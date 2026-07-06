@@ -47,6 +47,7 @@ function submittedResult(): PublicInquirySubmitServerResult {
       version: 1,
       notificationId: 'inquiry_notification:123',
       notificationStatus: 'queued',
+      accessKey: 'customer-record-key-0123456789abcdef',
     },
   }
 }

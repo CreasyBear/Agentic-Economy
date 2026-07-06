@@ -6,6 +6,9 @@ const BOOKING_PATTERNS = [
   /\bcharge\b/i,
   /\bdispatch\b/i,
   /\bconfirm\s+(my|the)\s+(booking|appointment)/i,
+  /\bschedule\b/i,
+  /\bsend\s+(?:a\s+)?(?:provider|technician|plumber|electrician|cleaner|crew)\b/i,
+  /\baccept\s+(?:the\s+)?(?:job|quote)\b/i,
   /\bdo\s+it\s+for\s+me\b/i,
 ]
 
@@ -50,12 +53,12 @@ export function classifyFollowUpIntent(query: string, priorQueryCount: number): 
     return 'explain_boundary'
   }
 
-  if (priorQueryCount === 0) {
-    return 'refine_search'
-  }
-
   if (BOOKING_PATTERNS.some((pattern) => pattern.test(normalized))) {
     return 'unsupported'
+  }
+
+  if (priorQueryCount === 0) {
+    return 'refine_search'
   }
 
   if (INQUIRY_HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized))) {

@@ -10,7 +10,7 @@ import type {
   AdminRole,
 } from '@/modules/security/public'
 
-export const AdminActionMatrix = {
+const AdminActionMatrix = {
   owner_admin: {
     read_admin_readbacks: true,
     annotate_triage: true,

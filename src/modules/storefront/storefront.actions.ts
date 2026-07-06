@@ -1,13 +1,12 @@
 import { z } from 'zod'
 
 import { defineAction, type ActionParameter } from '@/modules/common/action'
-import {
-  importStorefrontDraftFromWebsite,
-  type StorefrontImportInput,
-  type StorefrontImportResult,
+import type {
+  StorefrontImportInput,
+  StorefrontImportResult,
 } from '@/modules/storefront/public'
 
-export const storefrontImportDraftInputSchema = z.object({
+const storefrontImportDraftInputSchema = z.object({
   websiteUrl: z.string().trim().url().max(500).describe('Business website URL to import into an owner-reviewed draft'),
   abn: z.string().trim().max(40).optional().describe('Optional ABN supplied by the owner for review'),
 }) as z.ZodType<StorefrontImportInput>
@@ -41,7 +40,7 @@ const ownerClaimDraftProfileSchema = z.object({
   noContactReason: z.string(),
 })
 
-export const storefrontImportDraftOutputSchema = z.discriminatedUnion('kind', [
+const storefrontImportDraftOutputSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('ok'),
     draft: z.object({
@@ -96,7 +95,10 @@ export const storefrontImportDraftAction = defineAction({
   schema: storefrontImportDraftInputSchema,
   outputSchema: storefrontImportDraftOutputSchema,
   parameters: importDraftParameters,
-  readOnly: true,
+  readOnly: false,
   surfaces: ['ui', 'http'],
-  run: async ({ data }) => importStorefrontDraftFromWebsite(data),
+  run: async ({ data }) => {
+    const { importStorefrontDraftFromWebsite } = await import('@/modules/storefront/public')
+    return importStorefrontDraftFromWebsite(data)
+  },
 })

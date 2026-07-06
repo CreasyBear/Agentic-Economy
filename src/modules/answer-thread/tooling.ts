@@ -11,6 +11,7 @@ export type {
 
 export {
   runAnswerToolCall,
+  refuseAnswerToolCall,
   toolCallRecordsToGateInput,
   type RunAnswerToolCallInput,
   type RunAnswerToolCallResult,

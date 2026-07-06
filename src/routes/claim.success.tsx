@@ -3,6 +3,7 @@ import { ExternalLinkIcon } from 'lucide-react'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Link } from '@astryxdesign/core/Link'
+import { HStack, StackItem, VStack } from '@astryxdesign/core/Stack'
 import { Text } from '@astryxdesign/core/Text'
 
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
@@ -24,7 +25,7 @@ export const Route = createFileRoute('/claim/success')({
   loader: ({ deps }) => readOwnerClaimSuccessServer({ data: deps }),
   head: () => ({
     meta: [
-      { title: 'Your service page is published | Agentic Economy' },
+      { title: 'Your service page is live | Agentic Economy' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -61,18 +62,30 @@ function ClaimSuccessRoute() {
   return (
     <AePublicShell>
       <AePageHeader
-        eyebrow="Published"
-        title="Your service page is published"
-        description="The public page is live. Manage it from your owner status page."
+        eyebrow="Live"
+        title="Your service page is live."
+        description="People can now find it and reach you from the public page."
         actions={(
           <Button label="Manage your page" variant="primary" href={`/owner/status?slug=${encodeURIComponent(catalog.slug)}`} />
         )}
       />
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-16 md:px-6">
+        <Card padding={6} className="bg-accent text-on-accent">
+          <HStack vAlign="center" gap={4} wrap="wrap">
+            <StackItem size="fill">
+              <VStack gap={1}>
+                <Text type="large" weight="semibold" display="block" className="text-on-accent">Your page is discoverable now.</Text>
+                <Text display="block" className="text-on-accent/85">Share the link, or open it to see what customers and their assistants will read.</Text>
+              </VStack>
+            </StackItem>
+            <AeCopyPublicUrlButton slug={catalog.slug} />
+            <Button label="View public page" variant="secondary" href={`/${catalog.slug}`} icon={<ExternalLinkIcon aria-hidden="true" />} />
+          </HStack>
+        </Card>
         <Card padding={5} className="grid gap-4">
           <div className="grid gap-1.5">
-            <Text type="large" weight="semibold" color="primary" display="block">What was published</Text>
-            <Text color="secondary" display="block">Customers can now read this on the public service page.</Text>
+            <Text type="large" weight="semibold" color="primary" display="block">What is live</Text>
+            <Text color="secondary" display="block">Customers can now read these details on the public service page.</Text>
           </div>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
@@ -92,10 +105,6 @@ function ClaimSuccessRoute() {
               <dd className="text-secondary">/{catalog.slug}</dd>
             </div>
           </dl>
-          <div className="flex flex-wrap items-center gap-3">
-            <AeCopyPublicUrlButton slug={catalog.slug} />
-            <Button label="View public page" variant="secondary" href={`/${catalog.slug}`} icon={<ExternalLinkIcon aria-hidden="true" />} />
-          </div>
         </Card>
       </section>
     </AePublicShell>

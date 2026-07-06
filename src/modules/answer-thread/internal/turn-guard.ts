@@ -1,9 +1,10 @@
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { rateLimitClaim, type AbuseRateLimitBucketRecord, type RateLimitDecision } from '@/modules/security/public'
 
 import { getAnswerThread, getAnswerThreadWithTurns } from '../answer-thread.functions'
 import type { AnswerTurnRecord } from '../answer-thread.schema'
 
-export const ANSWER_TURN_MAX_PER_THREAD = 25
+const ANSWER_TURN_MAX_PER_THREAD = 25
 export const ANSWER_TURN_RATE_LIMIT = 30
 export const ANSWER_TURN_RATE_WINDOW_MS = 60 * 60 * 1000
 export const ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT = 60
@@ -108,7 +109,7 @@ export async function assertAnswerTurnAccess(input: {
     return { kind: 'denied', code: 'thread_not_found', status: 404 }
   }
 
-  if (thread.pseudonymousSessionId !== input.sessionId && !usesLocalE2eBypass()) {
+  if (thread.pseudonymousSessionId !== input.sessionId && !isLocalE2EAuthBypassEnabled()) {
     return { kind: 'denied', code: 'thread_forbidden', status: 403 }
   }
 
@@ -136,7 +137,7 @@ export async function readAnswerTurnAccessContext(input: {
     return { access: { kind: 'denied', code: 'thread_not_found', status: 404 }, priorTurns: [] }
   }
 
-  if (thread.pseudonymousSessionId !== input.sessionId && !usesLocalE2eBypass()) {
+  if (thread.pseudonymousSessionId !== input.sessionId && !isLocalE2EAuthBypassEnabled()) {
     return { access: { kind: 'denied', code: 'thread_forbidden', status: 403 }, priorTurns: [] }
   }
 
@@ -152,8 +153,4 @@ export function resetAnswerTurnGuardForTests(): void {
   followUpChipsRateLimitBuckets.length = 0
   answerStreamRateLimitBuckets.length = 0
   turnIdempotencyClaims.clear()
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

@@ -159,7 +159,7 @@ export async function runAnswerHarnessOperation(
   }
 }
 
-export function createAnswerHarnessOperationState(input: {
+function createAnswerHarnessOperationState(input: {
   runId: string
   sessionId: string
   status: AnswerTurnStatus
@@ -182,7 +182,7 @@ export function createAnswerHarnessOperationState(input: {
   }
 }
 
-export function buildAnswerHarnessOperationPhases(input: {
+function buildAnswerHarnessOperationPhases(input: {
   gate?: AnswerRunGateSummary
   model?: AnswerHarnessOperationModelPhase
   modelRequests?: readonly HarnessModelRequestRecord[]

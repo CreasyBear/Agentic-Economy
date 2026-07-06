@@ -14,6 +14,7 @@ import {
   describeHarnessToolForQuietAgent,
   filterAnswerModelToolContracts,
   filterQuietAgentToolContracts,
+  harnessToolContractToDefinition,
 } from '@/modules/harness/public'
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
@@ -60,6 +61,7 @@ describe('harness tool contract', () => {
       boundaries: ['Read-only. Does not book, charge, dispatch, or send inquiries.'],
       schema: {
         type: 'object',
+        additionalProperties: false,
         properties: {
           mode: {
             type: 'string',
@@ -69,6 +71,7 @@ describe('harness tool contract', () => {
       } as unknown as z.ZodType<unknown>,
       outputSchema: {
         type: 'object',
+        additionalProperties: false,
         properties: {
           kind: {
             type: 'string',
@@ -99,6 +102,34 @@ describe('harness tool contract', () => {
     expect(tool.providerViolations).toEqual(contract.schemas.providerViolations)
     expect(tool.strictInputSchemaViolation).toBe(validation.strictInputSchemaViolation)
     expect(tool.strictOutputSchemaViolation).toBe(validation.strictOutputSchemaViolation)
+  })
+
+  it('keeps actual quiet agent tool contracts strict and executable from their public payload shapes', () => {
+    const contracts = filterQuietAgentToolContracts(buildHarnessToolContracts(listActions()))
+    const validInputs: Record<string, unknown> = {
+      'inquiry.submit': {
+        target: {
+          businessSlug: 'demo-business',
+          serviceSlug: 'demo-service',
+          capabilityKind: 'phone_inquiry',
+        },
+        body: 'Need help comparing options.',
+        contact: {},
+      },
+      'businessAction.requestCapability': { businessId: 'business:example' },
+      'registry.detail': { slug: 'demo-business' },
+      'registry.search': { query: 'plumber', limit: 1 },
+    }
+
+    for (const contract of contracts) {
+      const validation = describeHarnessToolExecutionValidation(contract)
+      const tool = harnessToolContractToDefinition(contract)
+
+      expect(validation.strictInputSchemaViolation, contract.id).toBeUndefined()
+      expect(validation.strictOutputSchemaViolation, contract.id).toBeUndefined()
+      expect(validation.providerViolations, contract.id).toEqual([])
+      expect(tool.inputSchema.safeParse(validInputs[contract.id]).success, contract.id).toBe(true)
+    }
   })
 
   it('keeps raw internal fields out of the quiet descriptor projection', () => {

@@ -7,7 +7,7 @@ import {
 } from './search-documents'
 import type { PublicBusinessCatalogSearchInput } from './search'
 
-export const CatalogSearchBackendValues = ['convex', 'dual', 'meilisearch'] as const
+const CatalogSearchBackendValues = ['convex', 'dual', 'meilisearch'] as const
 export type CatalogSearchBackend = (typeof CatalogSearchBackendValues)[number]
 
 export type CatalogSearchHit = {
@@ -110,7 +110,7 @@ export function readCatalogSearchBackend(
     : 'convex'
 }
 
-export function readCatalogSearchTimeoutMs(
+function readCatalogSearchTimeoutMs(
   env: Record<string, string | undefined> = process.env,
 ): number {
   const parsed = Number(env.AE_SEARCH_TIMEOUT_MS)

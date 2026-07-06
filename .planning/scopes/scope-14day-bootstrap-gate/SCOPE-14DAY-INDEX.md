@@ -1,8 +1,8 @@
 # Scope 14Day — Bootstrap go/no-go gate
 
 **Direction:** `.planning/vision/2026-07-04-PLATFORM-ANATOMY.md` §11 and §14 Move 2.  
-**Status:** active planning gate, evidence not yet captured.  
-**Scope:** internal execution scaffold for the first falsifiable demand test. It changes no public capability, source schema, `src/`, or `convex/` surface.  
+**Status:** active planning gate; source-local G1/G2/G3 instrumentation exists, target-run evidence not yet captured.  
+**Scope:** internal execution scaffold for the first falsifiable demand test. The gate itself changes no public capability or source schema beyond narrow pre-clock instrumentation tickets (14D-G1/G2/G3) that touch existing observability/registry seams only to make counts reconstructable before the clock starts.  
 **Posture:** storefront prototype + qualified inquiry only. No booking, payment, dispatch, automatic fulfillment, broad write, live marketplace, or autonomous transaction claim.
 
 ## Gate rule
@@ -17,7 +17,7 @@ The 14-day clock starts only after all three setup counts are real and attributa
 |---|---:|---|
 | Source-backed profiles | 30–50 | Profiles must name source/freshness/boundary and whether owner facts are confirmed. Category-specific details stay extensions; core schema stays wedge-agnostic. |
 | Manually recruited providers | 10 | Providers are recruited by direct outreach and offered free correction/listing for 30 days. No paid promise. |
-| Targeted sessions | 100 over 14 days | Sessions must carry attribution (`utm_*`, `ref`, partner link, local post, outreach link, or assistant/referral source). |
+| Targeted sessions | 100 over 14 days | Counted sessions must carry the active `utm_campaign`/run id plus attribution (`utm_source`, `ref` as source, partner link, local post, outreach link, assistant/referral source, or external referrer host). |
 
 ## Pass / adapt / stop rules
 
@@ -26,7 +26,7 @@ The 14-day clock starts only after all three setup counts are real and attributa
 | Consumer pass | ≥10 qualified inquiries from the 100 attributable sessions | Required for GO. Count only source-owned `inquiry_submitted`/replayed inquiry receipts with attributable session/correlation data. |
 | Supplier pass | ≥5 recruited providers voluntarily correct/maintain a profile or ask to be listed | Required for GO. Count only explicit owner/provider actions or logged operator evidence, not polite interest. |
 | Trust pass | Zero public or assistant implication of booking, payment, dispatch, automatic fulfillment, price lock, schedule lock, broad marketplace liquidity, or autonomous transaction | Required for GO. Copy/SEO scans and outside-in agent audit must stay clean. |
-| Optional quality signal | ≥30% source/profile click-through before inquiry | Supports GO quality; failure does not by itself block if the three required rules pass. |
+| Optional quality signal | Source/profile click-through before inquiry, if instrumented | Supports GO quality only; no pass threshold and no blocking effect if explicitly marked unavailable before the run. |
 
 Verdicts:
 
@@ -38,14 +38,14 @@ Verdicts:
 
 Use existing source-owned funnel, inquiry, correction, and observability seams first. If a metric lacks emitted events before the run starts, create a narrow implementation ticket before starting the 14-day clock; do not count screenshots or manual dashboards as source proof.
 
-| Metric | Existing measurement surface | Repo paths to inspect |
-|---|---|---|
-| Attributable targeted sessions | Client attribution reads `utm_source`, `utm_campaign`, `ref`, document referrer, and a pseudonymous session; client events flow through PostHog and `/api/observability/funnel`; server persistence stores business-scoped funnel events. | `src/lib/observability/funnel-attribution.ts`; `src/lib/observability/funnel-client.ts`; `src/lib/observability/funnel-event-props.ts`; `src/routes/api.observability.funnel.ts`; `src/modules/observability/funnel.source.ts`; `src/modules/observability/funnel.functions.ts` |
-| Registry/answer demand | Registry visits emit `registry_search`; answer journeys emit `answer_query_started`, `answer_registry_searched`, `answer_provider_selected`, and `inquiry_attempted`. | `src/components/ae/layout/AeRegistryFunnelBoot.tsx`; `src/components/ae/chat/chat-funnel.ts`; `src/modules/observability/internal/literals.ts`; `tests/unit/chat-funnel.test.ts`; `tests/unit/observability/funnel.test.ts` |
-| Qualified inquiries | The inquiry reducer emits `inquiry_submitted` funnel records and source-owned audit/operation rows; Convex persists funnel rows with business, session, and correlation refs; `inquiry.submit` is the action-backed qualified write. | `src/modules/inquiries/internal/commands.ts`; `src/modules/inquiries/inquiry.actions.ts`; `src/modules/inquiries/inquiry.functions.ts`; `convex/inquiries.ts`; `tests/unit/inquiries/inquiry-flow.test.ts`; `tests/unit/convex/inquiries-runtime.test.ts` |
-| Provider corrections / listing requests | Existing owner intent and correction paths include claim/interest/correction/removal disputes. Count a supplier pass only when the provider explicitly asks to correct, maintain, claim, or be listed. | `src/routes/privacy.remove-business.tsx`; `src/modules/security/removal-dispute.functions.ts`; `src/modules/observability/internal/literals.ts`; `src/modules/observability/internal/funnel.ts`; `src/components/ae/forms/AeCopyPublicUrlButton.tsx`; `src/routes/owner.status.tsx` |
-| Optional source/profile click-through | Event vocabulary already includes `service_registry_result_clicked`; PostHog/funnel properties carry source, session, business, and campaign fields. Before the clock starts, verify emitted profile/source clicks or add one narrow instrumentation task. | `src/modules/observability/internal/literals.ts`; `src/lib/observability/funnel-event-props.ts`; `src/lib/observability/posthog.client.ts`; `src/lib/observability/funnel-client.ts` |
-| Trust pass | Producer-side scans plus deployed outside-in agent audit. Planning evidence is not public proof; local audit runs are iteration only. | `tests/copy/claims-register.test.ts`; `tests/copy/phase1-banned-copy.test.ts`; `examples/agent-experience/`; `.planning/scopes/scope-01-production-landing/01-05-agent-experience-audit-gate-PLAN.md` |
+| Metric | Existing measurement surface | Current clock status | Repo paths to inspect |
+|---|---|---|---|
+| Attributable targeted sessions | Client attribution reads `utm_source`, `utm_campaign`, `ref`, document referrer, and a pseudonymous session; client events now post valid no-`businessId` `visitor_attributed` rows through `/api/observability/funnel` into source-owned `funnelEvents`, while owner activation state remains business-scoped. A pure reconstruction helper dedupes by `utmCampaign`/run id + pseudonymous session and rejects direct/unknown/unattributed rows. | **Source-local implemented; target dry-run required.** Do not start the clock until one target-environment attributed session proves source-owned or explicitly accepted external event/export evidence with host-only/redacted referrer data. | `src/lib/observability/funnel-attribution.ts`; `src/lib/observability/funnel-client.ts`; `src/routes/api.observability.funnel.ts`; `src/modules/observability/funnel.source.ts`; `src/modules/observability/internal/record-funnel-event.ts`; `src/modules/observability/internal/targeted-sessions.ts`; `convex/observability.ts`; `tests/unit/observability/targeted-sessions.test.ts`; `tests/unit/convex/observability-runtime.test.ts` |
+| Registry/answer demand | Registry visits emit `registry_search`; answer journeys emit `answer_query_started`, `answer_registry_searched`, `answer_provider_selected`, and `inquiry_attempted`. | **Partial.** Useful context only; not a pass metric without a source-owned session/click ledger. | `src/components/ae/layout/AeRegistryFunnelBoot.tsx`; `src/components/ae/chat/chat-funnel.ts`; `src/modules/observability/internal/literals.ts`; `tests/unit/chat-funnel.test.ts`; `tests/unit/observability/funnel.test.ts` |
+| Qualified inquiries | The inquiry reducer emits `inquiry_submitted` funnel records and source-owned audit/operation rows; `inquiry.submit` is the action-backed qualified write. | **Ready for target-environment dry-run.** Count only receipts with attributable session/correlation/business refs. | `src/modules/inquiries/internal/commands.ts`; `src/modules/inquiries/inquiry.actions.ts`; `src/modules/inquiries/inquiry.functions.ts`; `convex/inquiries.ts`; `tests/unit/inquiries/inquiry-flow.test.ts`; `tests/unit/convex/inquiries-runtime.test.ts` |
+| Provider corrections / listing requests | `/privacy/remove-business` creates a security dispute/audit receipt and remains excluded. A pure source-local reconstruction helper now counts business-scoped `authenticated`/`published` claim/listing rows and future business-scoped `owner_interest_submitted` rows only when matched to direct recruitment or explicit accepted non-dispute operator evidence for the same provider/listing. | **Source-local implemented; target dry-run required.** Do not start the clock until one target-environment dry-run attaches non-secret claim/business refs, recruitment or operator-evidence refs, run window, count output, dedupe policy, and evidence that privacy/removal dispute rows were not counted. | `src/modules/observability/internal/supplier-actions.ts`; `tests/unit/observability/supplier-actions.test.ts`; `src/modules/observability/internal/literals.ts`; `src/modules/observability/internal/funnel.ts`; `src/routes/owner.status.tsx` |
+| Optional source/profile click-through | Registry "View details" now emits `service_registry_result_clicked` through the source-owned funnel client and `/api/observability/funnel`; public registry DTO/readback carries `businessId`; payload captures slug, query length, and result position while attribution/session/correlation come from the shared funnel client. | **Source-local implemented; target dry-run required.** Do not start the clock until one target-environment attributable registry click proves source-owned or explicitly accepted external event/export evidence with run id, businessId, session/correlation, payload, and dedupe/count policy. | `src/lib/observability/registry-click.ts`; `src/routes/registry.tsx`; `src/modules/registry/internal/search.ts`; `convex/registry.ts`; `tests/unit/observability/funnel-client.test.ts`; `tests/unit/convex/registry-runtime.test.ts` |
+| Trust pass | Producer-side scans plus deployed outside-in agent audit. Planning evidence is not public proof; local audit runs are iteration only. | **Partial.** Copy scans can run locally; deployed outside-in agent audit remains blocked by issue #36/#5 before assistant-facing claims. | `tests/copy/claims-register.test.ts`; `tests/copy/phase1-banned-copy.test.ts`; `examples/agent-experience/`; `.planning/scopes/scope-01-production-landing/01-05-agent-experience-audit-gate-PLAN.md` |
 
 ## Recruitment sketch
 
@@ -62,6 +62,9 @@ Use existing source-owned funnel, inquiry, correction, and observability seams f
 | Plan | Depends on | Output |
 |---|---|---|
 | [14D-01](14D-01-bootstrap-gate-evidence-PLAN.md) — run the falsifiable bootstrap gate | Scope 1 deployed env for public proof; Move 1 for signed/admitted quiet-door write if assistant submission is part of the run | Evidence summary with setup counts, pass/fail metrics, trust scan results, and next decision |
+| [14D-G1](14D-G1-source-owned-session-ledger-PLAN.md) — source-owned targeted-session count | 14D-01 scaffold; before the 14-day clock | Narrow session-start persistence plus pure count contract for attributable sessions. Does not cover supplier maintenance or optional click-through. |
+| [14D-G2](14D-G2-source-click-evidence-PLAN.md) — source/profile click-through | 14D-01 scaffold; before the 14-day clock if using the optional quality signal | Source-local registry click event with businessId/session/correlation/run attribution. Target dry-run remains open. |
+| [14D-G3](14D-G3-supplier-action-evidence-PLAN.md) — source-owned supplier-action count | 14D-01 scaffold; before the 14-day clock | Source-local supplier action reconstruction for recruited claim/listing or accepted operator evidence rows. Target dry-run remains open. |
 
 ## End conditions
 

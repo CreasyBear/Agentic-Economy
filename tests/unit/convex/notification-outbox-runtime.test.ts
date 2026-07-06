@@ -27,6 +27,7 @@ type IndexBuilder = {
 type Query = {
   withIndex: (indexName: string, callback: (query: IndexBuilder) => IndexBuilder) => Query
   collect: () => Promise<Row[]>
+  take: (limit: number) => Promise<Row[]>
   unique: () => Promise<Row | null>
   first: () => Promise<Row | null>
 }
@@ -103,7 +104,7 @@ process.env.AE_NOTIFICATION_OUTBOX_SECRET = systemKey
 
 describe('Convex notification outbox runtime bridge', () => {
   it('persists queued dispatches and owner-scoped redacted readbacks', async () => {
-    const db = seededNotificationDb()
+    const db = seededNotificationDb({ includeInquiry: true })
     const denied = await enqueueHandler(authCtx(db, null), { ...enqueueArgs('denied'), systemKey: 'wrong-key' })
     expect(denied).toMatchObject({ kind: 'error', code: 'notification_system_denied' })
 
@@ -143,6 +144,11 @@ describe('Convex notification outbox runtime bridge', () => {
         dispatch: { dispatchId: queued.dispatch.dispatchId, providerFamily: 'resend' },
         owner: { ownerId: 'owners:1', clerkUserId: 'user_sam' },
         business: { businessId: 'businesses:1', slug: 'sam-plumbing', name: 'Sam Plumbing' },
+        inquiry: {
+          serviceName: 'Emergency plumbing',
+          customerMessageFirstLine: 'Burst pipe under kitchen sink.',
+          isFirstInquiryForBusiness: true,
+        },
       },
     })
     expect(JSON.stringify(sendRead)).not.toContain('sam@example.test')
@@ -418,6 +424,10 @@ class FakeQuery implements Query {
     return this.rows.filter((row) => this.filters.every((filter) => row[filter.field] === filter.value))
   }
 
+
+  async take(limit: number): Promise<Row[]> {
+    return (await this.collect()).slice(0, limit)
+  }
   async unique(): Promise<Row | null> {
     return (await this.collect()).at(0) ?? null
   }
@@ -472,7 +482,7 @@ class FakeDb implements Db {
   }
 }
 
-function seededNotificationDb(): FakeDb {
+function seededNotificationDb(options: { includeInquiry?: boolean } = {}): FakeDb {
   const db = new FakeDb()
   db.seed('owners', {
     _id: 'owners:1',
@@ -526,6 +536,52 @@ function seededNotificationDb(): FakeDb {
     state: 'active',
     grantedBy: 'system',
     grantedAt: 5,
+  })
+  if (options.includeInquiry !== true) {
+    return db
+  }
+
+  db.seed('businessServices', {
+    _id: 'businessServices:1',
+    _creationTime: 6,
+    serviceId: 'businessServices:1',
+    serviceSlug: 'emergency-plumbing',
+    businessId: 'businesses:1',
+    name: 'Emergency plumbing',
+    category: 'Emergency plumbing',
+    summary: 'Urgent plumbing help.',
+    serviceArea: 'Parramatta',
+    hoursOrUnknown: 'Hours supplied by owner',
+    status: 'published',
+    sortOrder: 0,
+    sourceHash: 'source:service:sam',
+    createdAt: 6,
+    updatedAt: 6,
+  })
+  db.seed('inquiryThreads', {
+    _id: 'inquiryThreads:1',
+    _creationTime: 7,
+    threadId: 'inquiry_thread:1',
+    businessId: 'businesses:1',
+    ownerId: 'owners:1',
+    serviceId: 'businessServices:1',
+    capabilityKind: 'phone_inquiry',
+    status: 'unread',
+    firstMessageId: 'inquiry_message:1',
+    sourceHash: 'source:thread:1',
+    createdAt: 7,
+    updatedAt: 7,
+    version: 1,
+  })
+  db.seed('inquiryMessages', {
+    _id: 'inquiryMessages:1',
+    _creationTime: 8,
+    messageId: 'inquiry_message:1',
+    threadId: 'inquiry_thread:1',
+    sender: 'customer',
+    body: 'Burst pipe under kitchen sink.\nPlease help.',
+    bodyHash: stableHash('Burst pipe under kitchen sink.'),
+    createdAt: 8,
   })
   return db
 }

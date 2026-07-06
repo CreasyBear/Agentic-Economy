@@ -16,6 +16,7 @@ import { stableHash } from '@/modules/common/stable-hash'
 
 import {
   BusinessActionSlug,
+  ReserveBookingActionSlug,
   isBusinessActionSlug,
   type AuthorizationCheckpoint,
   type AuthorizationCheckpointDecision,
@@ -798,6 +799,9 @@ function latestResultArtifactFor(
 }
 
 function resultArtifactRequirements(actionSlug: BusinessActionSlug): readonly BusinessActionResultArtifactRequirement[] {
+  if (actionSlug === ReserveBookingActionSlug) {
+    return []
+  }
   if (actionSlug === BusinessActionSlug) {
     return ['endpoint_descriptor', 'json_schema', 'private_endpoint_provisioning_payment_gate_ref']
   }

@@ -40,7 +40,7 @@ const helpTopics = [
   {
     icon: StoreIcon,
     title: 'List or claim',
-    body: 'Publish business-supplied service details customers can compare.',
+    body: 'List your services so customers can compare and reach you.',
     label: 'Owner',
     href: '/claim',
     cta: 'Start claim',
@@ -66,13 +66,13 @@ const helpTopics = [
 const quickAnswers = [
   {
     icon: CreditCardIcon,
-    title: 'Do I book or pay through AE?',
-    body: 'No. AE helps you find, compare, and contact. Timing, price, and availability are confirmed with the business.',
+    title: 'How do I reach a business?',
+    body: 'Choose a business, write the job context, and send it for owner review. The business can reply with timing and quote.',
   },
   {
     icon: FileTextIcon,
     title: 'Where do page details come from?',
-    body: 'From the business or public information. Pages show source and update cues where available.',
+    body: 'From the business or public information. Pages show where details came from and when they changed where available.',
   },
   {
     icon: MessageSquareIcon,
@@ -89,7 +89,7 @@ const quickAnswers = [
 const helpPrompts = [
   'hot water help near Preston',
   'locksmith for a shopfront today',
-  'electrician with fast reply cue',
+  'electrician with a quick response note',
 ] as const
 
 function HelpRoute() {
@@ -101,7 +101,7 @@ function HelpRoute() {
         description="Find the right next step for contacting, listing, or correcting a business page."
       />
       <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
-        <section className="grid gap-4 md:grid-cols-2">
+        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-2">
           {helpTopics.map(({ icon: Icon, title, body, label, href, cta }) => (
             <Card key={title} padding={5} className="grid h-full gap-4">
               <div className="grid gap-1.5">
@@ -118,11 +118,8 @@ function HelpRoute() {
           ))}
         </section>
 
-        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.7fr_1.3fr]">
+        <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.7fr_1.3fr]">
           <div className="grid content-start gap-2">
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              Quick answers
-            </Text>
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Short version first.
             </Text>
@@ -130,13 +127,13 @@ function HelpRoute() {
           <HelpAccordion />
         </section>
 
-        <section className="flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Start with the job.
             </Text>
             <Text as="p" color="secondary" display="block" className="mt-2">
-              Ask in plain language and compare the businesses that publish a fit.
+              Ask in plain language and compare businesses that do the work.
             </Text>
             <Suggestions wrap className="mt-4" aria-label="Example service questions">
               {helpPrompts.map((prompt) => (

@@ -19,8 +19,9 @@ import type {
 } from '@/modules/common/ids'
 
 export const BusinessActionSlug = 'provision-paid-intake-endpoint' as const
-export const PublishAgentIntakeEndpointActionSlug = 'publish-agent-intake-endpoint' as const
-export const BusinessActionSlugValues = [BusinessActionSlug, PublishAgentIntakeEndpointActionSlug] as const
+const PublishAgentIntakeEndpointActionSlug = 'publish-agent-intake-endpoint' as const
+export const ReserveBookingActionSlug = 'reserve-booking' as const
+export const BusinessActionSlugValues = [BusinessActionSlug, PublishAgentIntakeEndpointActionSlug, ReserveBookingActionSlug] as const
 export type BusinessActionSlug = (typeof BusinessActionSlugValues)[number]
 
 export const BusinessActionCardStatusValues = ['active', 'disabled', 'stale'] as const

@@ -12,16 +12,22 @@ function buildCatalogDataBlock(
 ): string {
   const payload = providers.map((provider) => ({
     citationIndex: provider.citationIndex,
-    slug: provider.slug,
-    name: provider.name,
-    category: provider.category,
-    suburb: provider.suburb,
-    serviceArea: provider.serviceArea,
-    availabilityLabel: provider.availabilityLabel,
-    trustLabel: provider.trustLabel,
-    nextStepLabel: provider.nextStepLabel,
+    slug: sanitizeCatalogPromptString(provider.slug),
+    name: sanitizeCatalogPromptString(provider.name),
+    category: sanitizeCatalogPromptString(provider.category),
+    suburb: sanitizeCatalogPromptString(provider.suburb),
+    serviceArea: sanitizeCatalogPromptString(provider.serviceArea),
+    availabilityLabel: sanitizeCatalogPromptString(provider.availabilityLabel),
+    trustLabel: sanitizeCatalogPromptString(provider.trustLabel),
+    nextStepLabel: sanitizeCatalogPromptString(provider.nextStepLabel),
   }))
   return `${CATALOG_DATA_OPEN}${JSON.stringify(payload)}${CATALOG_DATA_CLOSE}`
+}
+
+function sanitizeCatalogPromptString(value: string): string {
+  return value
+    .replace(/<\s*\/?\s*(?:catalog_data|system|assistant|user|tool)\b/gi, '[data-tag]')
+    .replace(/[<>]/g, (character) => character === '<' ? '‹' : '›')
 }
 
 export function buildToolUseAgentSystemPrompt(): string {

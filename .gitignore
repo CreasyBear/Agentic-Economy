@@ -14,6 +14,7 @@ coverage/
 output/
 .ui-craft/
 .codex/
+.react-doctor/
 graphify-out/
 .tanstack/
 .promptfoo-home/

@@ -32,7 +32,7 @@ export function selectedProviderFromArtifacts(artifacts: readonly AnswerArtifact
   return undefined
 }
 
-export function hasProviderContext(artifacts: readonly AnswerArtifact[]): boolean {
+function hasProviderContext(artifacts: readonly AnswerArtifact[]): boolean {
   return artifacts.some((artifact) => {
     switch (artifact.kind) {
       case 'selected-provider':

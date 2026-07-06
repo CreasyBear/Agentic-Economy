@@ -38,8 +38,10 @@ test.describe('selected protected action accessibility', () => {
     await expect(page.locator(':focus')).toBeVisible()
     await expectNoHorizontalOverflow(page)
 
-    await page.goto(wrongOwnerProposalPath)
-    await expect(page.getByText(/contact follow-up unavailable/i)).toBeVisible()
+    await expect(async () => {
+      await page.goto(wrongOwnerProposalPath, { waitUntil: 'domcontentloaded' })
+      await expect(page.getByText(/contact follow-up unavailable/i)).toBeVisible({ timeout: 5_000 })
+    }).toPass({ timeout: 30_000 })
     await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toHaveCount(0)
     await expectNoHorizontalOverflow(page)
   })

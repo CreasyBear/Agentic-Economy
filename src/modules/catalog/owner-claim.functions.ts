@@ -8,6 +8,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   buildPublicOwnerStatusReadback,
@@ -165,11 +166,11 @@ export const readPublicBusinessPageServer = createServerFn()
   .validator((data) => publicPageInputSchema.parse(data))
   .handler(async ({ data }) => readPublicBusinessPageThroughSource(data.slug))
 
-export async function submitOwnerClaimThroughSource(
+async function submitOwnerClaimThroughSource(
   input: PublicOwnerClaimFlowInput,
   context?: unknown
 ): Promise<PublicOwnerClaimFlowRouteResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return redactOwnerClaimResult(submitDurablePublicOwnerClaimFlow(input))
   }
 
@@ -248,13 +249,13 @@ export async function submitOwnerClaimThroughSource(
   }
 }
 
-export async function readOwnerClaimSuccessThroughSource(slug: string | undefined): Promise<ClaimSuccessPageResult> {
+async function readOwnerClaimSuccessThroughSource(slug: string | undefined): Promise<ClaimSuccessPageResult> {
   const result = await readOwnerStatusThroughSource(slug)
   return result.kind === 'available' ? { kind: 'available', catalog: result.readback.catalog } : result
 }
 
 export async function readOwnerStatusThroughSource(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return readLocalOwnerStatus(slug)
   }
 
@@ -286,8 +287,8 @@ function readLocalOwnerStatus(slug: string | undefined): PublicOwnerStatusRouteR
     : { kind: 'available', readback: redactOwnerStatusReadback(readback) }
 }
 
-export async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {
-  if (usesLocalE2eBypass()) {
+async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {
+  if (isLocalE2EAuthBypassEnabled()) {
     return redactPublicBusinessPageReadback(getLocalE2ePublicBusinessPageReadback(slug))
   }
 
@@ -430,10 +431,6 @@ function ownerClaimSourceWriteError(error: unknown): PublicOwnerClaimFlowRouteRe
     retryable: true,
     reason: 'source_write_unavailable',
   }
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 function normalizeOperationPart(value: string): string {

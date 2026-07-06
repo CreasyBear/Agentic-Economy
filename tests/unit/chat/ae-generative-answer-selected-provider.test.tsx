@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeGenerativeAnswer } from '@/components/ae/artifacts/AeGenerativeAnswer'
 import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
+import { RouterContextProvider, createMemoryHistory, createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import type { ReactElement } from 'react'
 
 describe('AeGenerativeAnswer selected provider confirmation', () => {
   afterEach(() => {
@@ -95,7 +97,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
       },
     ]
 
-    render(
+    renderWithRouter(
       <AeGenerativeAnswer
         artifacts={artifacts}
         query="compare the top two"
@@ -134,4 +136,12 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     inquiryUrl: '/demo-plumbing/inquiry',
     ...overrides,
   }
+}
+
+function renderWithRouter(ui: ReactElement) {
+  const rootRoute = createRootRoute()
+  const slugRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$slug' })
+  const routeTree = rootRoute.addChildren([slugRoute])
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) })
+  return render(<RouterContextProvider router={router}>{ui}</RouterContextProvider>)
 }

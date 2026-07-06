@@ -160,7 +160,7 @@ describe('registry convex fallback', () => {
       })
 
       expect(page.items.map((item) => item.slug)).toEqual(['parramatta-emergency-plumbing'])
-      expect(JSON.stringify(page)).not.toMatch(/businessId|serviceId|sourceHash|private:evidence/)
+      expect(JSON.stringify(page)).not.toMatch(/serviceId|sourceHash|private:evidence/)
     } finally {
       restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)
     }

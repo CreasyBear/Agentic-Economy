@@ -36,9 +36,9 @@ const detailCards = [
   },
   {
     icon: ReceiptTextIcon,
-    label: 'Receipt',
-    title: 'Kept as a record',
-    body: 'AE keeps the sent message and delivery state so the handoff has a receipt.',
+    label: 'Copy',
+    title: 'Kept for follow-up',
+    body: 'AE keeps the sent message and delivery state so you can see what was sent.',
   },
   {
     icon: EyeOffIcon,
@@ -68,7 +68,7 @@ const moments = [
     label: 'Pages',
     icon: StoreIcon,
     title: 'When you read a business page',
-    points: ['Page details come from the business or public information.', 'Source and update cues appear where available.', 'Timing, quote, and availability still come from the business reply.'],
+    points: ['Page details come from the business or public information.', 'Pages can show where details came from and when they changed.', 'Timing, quote, and availability still come from the business reply.'],
   },
 ] as const
 
@@ -91,7 +91,7 @@ function PrivacyRoute() {
         description="What is shared when you ask, compare, or contact a business."
       />
       <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {detailCards.map(({ icon: CardIcon, label, title, body }) => (
             <Card key={title} padding={5} className="grid h-full gap-1.5">
               <div className="flex items-center justify-between gap-3">
@@ -105,11 +105,8 @@ function PrivacyRoute() {
           ))}
         </section>
 
-        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.72fr_1.28fr]">
+        <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.72fr_1.28fr]">
           <div className="grid content-start gap-2">
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              Pick a moment
-            </Text>
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               What happens where.
             </Text>
@@ -133,7 +130,7 @@ function PrivacyRoute() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Need a page fixed?

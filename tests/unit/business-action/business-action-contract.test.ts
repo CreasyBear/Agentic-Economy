@@ -13,12 +13,17 @@ import {
 } from '@/modules/business-action/public'
 
 describe('business action domain contract', () => {
-  it('locks Issue 29 to the paid intake and publish-agent intake action slugs', () => {
+  it('locks the closed action slug set to paid-intake, publish-agent-intake, and reserve-booking', () => {
     expect(BusinessActionSlug).toBe('provision-paid-intake-endpoint')
-    expect(BusinessActionSlugValues).toEqual(['provision-paid-intake-endpoint', 'publish-agent-intake-endpoint'])
+    expect(BusinessActionSlugValues).toEqual([
+      'provision-paid-intake-endpoint',
+      'publish-agent-intake-endpoint',
+      'reserve-booking',
+    ])
 
     expect(isBusinessActionSlug('provision-paid-intake-endpoint')).toBe(true)
     expect(isBusinessActionSlug('publish-agent-intake-endpoint')).toBe(true)
+    expect(isBusinessActionSlug('reserve-booking')).toBe(true)
     expect(isBusinessActionSlug('executeAction')).toBe(false)
     expect(isBusinessActionSlug('contact-follow-up')).toBe(false)
     expect(isBusinessActionSlug('generic-action')).toBe(false)

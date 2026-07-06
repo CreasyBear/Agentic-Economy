@@ -61,6 +61,7 @@ type SubmitArgs = {
   operationKey: string
   correlationId: string
   inquiryOrigin?: { kind: 'answer_thread'; threadId: string }
+  customerAccessKey: string
   csrfToken?: string
   csrfCookie?: string
   origin?: string
@@ -807,6 +808,7 @@ function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArg
     csrfCookie: 'csrf-inquiry',
     operationKey,
     correlationId,
+    customerAccessKey: `customer-access:${key}`,
     ...overrides,
   })
 }

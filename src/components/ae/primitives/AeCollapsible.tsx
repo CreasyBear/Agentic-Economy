@@ -86,12 +86,62 @@ export function AeCollapsibleTrigger({
 
 export type AeCollapsibleContentProps = React.ComponentPropsWithoutRef<'div'>
 
-export function AeCollapsibleContent({ className, ...props }: AeCollapsibleContentProps) {
+export function AeCollapsibleContent({ className, style, ...props }: AeCollapsibleContentProps) {
   const context = React.use(AeCollapsibleContext)
+  const open = context?.open ?? true
+  const [present, setPresent] = React.useState(open)
+  const [height, setHeight] = React.useState<number | 'auto'>(open ? 'auto' : 0)
+  const contentRef = React.useRef<HTMLDivElement>(null)
 
-  if (context?.open === false) {
+  React.useLayoutEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (reduceMotion) {
+      setPresent(open)
+      setHeight(open ? 'auto' : 0)
+      return
+    }
+
+    let frame = 0
+    let timer = 0
+
+    if (open) {
+      setPresent(true)
+      setHeight(0)
+      frame = window.requestAnimationFrame(() => {
+        setHeight(contentRef.current?.scrollHeight ?? 'auto')
+        timer = window.setTimeout(() => setHeight('auto'), 200)
+      })
+    } else {
+      const measuredHeight = contentRef.current?.scrollHeight ?? 0
+      setHeight(measuredHeight)
+      frame = window.requestAnimationFrame(() => {
+        setHeight(0)
+        timer = window.setTimeout(() => setPresent(false), 180)
+      })
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(timer)
+    }
+  }, [open])
+
+  if (!present && !open) {
     return null
   }
 
-  return <div data-state="open" className={className} {...props} />
+  return (
+    <div
+      {...props}
+      ref={contentRef}
+      data-state={open ? 'open' : 'closed'}
+      className={cn('overflow-hidden motion-safe:transition-[height,opacity] motion-safe:duration-200 motion-safe:ease-out', className)}
+      style={{ ...style, height, opacity: open ? 1 : 0 }}
+      aria-hidden={props['aria-hidden'] ?? (!open ? true : undefined)}
+    />
+  )
 }

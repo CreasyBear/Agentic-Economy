@@ -2,22 +2,6 @@ import type { AnswerSynthesizerFollowUpIntent } from '../answer-synthesizer'
 import type { AnswerSource } from '../answer-synthesizer'
 import { parseNarrowToSuburb } from '@/modules/common/narrow-to-chip'
 
-export function shouldUseCompactFollowUpLayout(input: {
-  compactFollowUp?: boolean
-  followUpIntent?: AnswerSynthesizerFollowUpIntent
-  prefetchedProviders?: readonly AnswerSource[]
-}): boolean {
-  if (input.compactFollowUp !== true) {
-    return false
-  }
-
-  if (input.followUpIntent === 'explain_boundary' || input.followUpIntent === 'unsupported') {
-    return true
-  }
-
-  return input.prefetchedProviders !== undefined
-}
-
 export function buildCompactFollowUpProse(input: {
   followUpIntent?: AnswerSynthesizerFollowUpIntent
   displayQuery: string

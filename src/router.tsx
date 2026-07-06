@@ -6,6 +6,8 @@ export function getRouter() {
   return createRouter({
     routeTree,
     defaultPreload: 'intent',
+    defaultPendingMs: 150,
+    defaultViewTransition: true,
     defaultNotFoundComponent: () => <AeNotFound />,
     scrollRestoration: true,
   })

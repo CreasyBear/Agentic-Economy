@@ -26,6 +26,8 @@ export const inquiryTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
     version: v.number(),
+    customerAccessKey: v.optional(v.string()),
+    customerReplyEmail: v.optional(v.string()),
     readAt: v.optional(v.number()),
     repliedAt: v.optional(v.number()),
     closedAt: v.optional(v.number()),

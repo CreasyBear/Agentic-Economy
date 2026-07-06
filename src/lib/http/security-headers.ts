@@ -1,4 +1,4 @@
-export const cspModes = ['report-only', 'enforce'] as const
+const cspModes = ['report-only', 'enforce'] as const
 export type CspMode = (typeof cspModes)[number]
 
 export type SecurityHeaderBuildOptions = {
@@ -28,6 +28,11 @@ const cspDirectiveNames = [
 
 type CspDirectiveName = (typeof cspDirectiveNames)[number]
 
+// CSP allows 'unsafe-inline' for script-src and style-src because TanStack Start's SSR
+// hydration (`<Scripts />` in src/routes/__root.tsx) runs inline bootstrap scripts, and
+// third-party embeds (Clerk, PostHog) inject inline styles. Dropping 'unsafe-inline' needs a
+// per-request nonce (or precomputed hashes) threaded through the SSR render, which is out of
+// scope here — tracked as a follow-up tightening once nonce plumbing lands.
 const cspDirectives = {
   'default-src': ["'self'"],
   'base-uri': ["'self'"],
@@ -106,8 +111,18 @@ const staticSecurityHeaders = {
   'X-Frame-Options': 'DENY',
 } satisfies Record<StaticSecurityHeaderName, string>
 
+// Production defaults to an enforcing Content-Security-Policy; AE_CSP_REPORT_ONLY only matters
+// there as an explicit opt-in back into report-only during a staged rollout (any value other
+// than 'false'/'0' requests it). Non-production keeps the original report-only-by-default
+// behavior unchanged so local dev never breaks on a policy violation.
 export function resolveCspModeFromEnv(env: SecurityHeaderEnv = process.env): CspMode {
   const raw = env[cspReportOnlyEnvName]?.trim().toLowerCase()
+
+  if (env.NODE_ENV === 'production') {
+    const reportOnlyRequested = raw !== undefined && raw !== 'false' && raw !== '0'
+    return reportOnlyRequested ? 'report-only' : 'enforce'
+  }
+
   return raw === 'false' || raw === '0' ? 'enforce' : 'report-only'
 }
 

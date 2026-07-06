@@ -15,6 +15,8 @@ export type AeAnswerPromptInputProps = {
   busy?: boolean
   compact?: boolean
   placeholder?: string
+  /** Stable accessible name for the searchbox; defaults to a fixed prompt so it does not shift with the visible placeholder. */
+  inputLabel?: string
   ariaLabel?: string
 }
 
@@ -25,6 +27,11 @@ const DEFAULT_EXAMPLES: readonly string[] = [
 ]
 
 const QUERY_MAX_LENGTH = 200
+
+// Stable accessible name for the query field. The visible placeholder rotates
+// with context (examples, follow-up prompts), but the searchbox's name must not
+// - a shifting accessible name is hostile to screen readers and test targeting.
+const SEARCHBOX_LABEL = 'What do you need done?'
 
 export function AeAnswerPromptInput({
   defaultValue = '',
@@ -53,6 +60,7 @@ function AeAnswerPromptInputInner({
   busy = false,
   compact: compactOverride,
   placeholder = 'What do you need done?',
+  inputLabel = SEARCHBOX_LABEL,
   ariaLabel = 'Find local service businesses',
 }: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples'> & {
   inputId: string
@@ -158,7 +166,7 @@ function AeAnswerPromptInputInner({
             spellCheck={false}
             rows={1}
             aria-describedby={showCharacterLimit ? `${hintId} ${counterId}` : hintId}
-            aria-label={placeholder}
+            aria-label={inputLabel}
             disabled={busy || !hydrated}
           />
         }

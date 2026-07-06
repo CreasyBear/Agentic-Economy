@@ -80,6 +80,7 @@ export type PublicInquirySubmittedReceipt = {
   status: 'unread' | 'read' | 'replied' | 'closed'
   notificationStatus: InquiryNotificationStatus
   deliveryLabel: string
+  accessKey: string
 }
 
 export type PublicInquiryRouteInput = {
@@ -99,6 +100,7 @@ export type PublicInquiryRouteSubmitInput = PublicInquiryFormInput & {
   inquiryOrigin?: InquiryOriginRef
   notificationStatus?: InquiryNotificationStatus
   notificationFailureCode?: string
+  customerAccessKey?: string
 }
 
 export type PublicInquiryRouteSubmitResult =
@@ -260,6 +262,7 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
     target: readback.target,
     body: validation.input.body,
     contact: validation.input.contact,
+    customerAccessKey: input.customerAccessKey ?? 'test-customer-record-access-key-00000000',
     operationKey: input.operationKey,
     correlationId: input.correlationId,
     pseudonymousSessionId: input.pseudonymousSessionId,
@@ -289,6 +292,7 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
     status: result.thread.status,
     notificationStatus: result.notification.status,
     deliveryLabel: deliveryLabel(result.notification.status),
+    accessKey: result.thread.customerAccessKey ?? input.customerAccessKey ?? 'test-customer-record-access-key-00000000',
   } satisfies PublicInquirySubmittedReceipt
 
   return {

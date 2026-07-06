@@ -20,7 +20,7 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 export const Route = createFileRoute('/about')({
   head: () => ({
     meta: [
-      { name: 'description', content: 'Agentic Economy helps people find local businesses, compare what they publish, and take the next step.' },
+      { name: 'description', content: 'Agentic Economy helps people find local businesses, compare what they offer, and reach them in writing.' },
     ],
   }),
   component: AboutRoute,
@@ -28,16 +28,16 @@ export const Route = createFileRoute('/about')({
 
 const doesItems = [
   { icon: SearchIcon, label: 'Search by need and place' },
-  { icon: GitCompareIcon, label: 'Compare what businesses publish' },
-  { icon: SendIcon, label: 'Send a qualified inquiry when available' },
+  { icon: GitCompareIcon, label: 'Compare what businesses offer' },
+  { icon: SendIcon, label: 'Send inquiry when available' },
   { icon: BotIcon, label: 'Use the same details with an assistant' },
 ]
 
 const doesNotItems = [
-  'Book work',
-  'Take payments',
-  'Dispatch jobs',
-  'Pretend availability is confirmed',
+  'No booking',
+  'No payment',
+  'No dispatch',
+  'No confirmed availability',
 ]
 
 const commerceShift = [
@@ -48,8 +48,8 @@ const commerceShift = [
   },
   {
     icon: GitCompareIcon,
-    title: 'Comparison has to be readable',
-    body: 'Assistants need clean business details: service, area, next step, and the limits around each claim.',
+    title: 'Comparison has to be clear',
+    body: 'People and assistants need service, area, and how to reach the business in one place.',
   },
   {
     icon: SendIcon,
@@ -72,13 +72,13 @@ const offerSteps = [
   },
   {
     number: '2',
-    title: 'See who fits',
-    body: 'Compare businesses by service, area, source, freshness, and next step.',
+    title: 'Compare who does it',
+    body: 'Compare businesses by service, area, update date, and how to reach them.',
   },
   {
     number: '3',
-    title: 'Interact with the business',
-    body: 'Use contact instructions or send a qualified inquiry. The business takes it from there.',
+    title: 'Reach the business',
+    body: 'Use contact instructions or send inquiry when the page offers it. The business takes it from there.',
   },
 ] satisfies readonly [OfferStep, ...OfferStep[]]
 
@@ -87,38 +87,32 @@ function AboutRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow="About"
-        title="Find the business that fits the job."
-        description="Agentic Economy helps people ask for a local service, compare businesses by what they publish, and take the next step without guessing."
+        title="Local help, without the runaround."
+        description="Say what you need once. Compare businesses that do the work. Reach one in writing."
       />
       <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
         <section className="grid gap-6 md:grid-cols-[1.25fr_1fr] md:items-center">
-          <Card padding={5} className="grid gap-4 border-border bg-surface">
+          <Card padding={5} className="grid gap-4 border-border bg-surface motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base">
             <div className="grid gap-1.5">
-              <Text type="supporting" weight="medium" color="secondary" display="block">
-                Agent-readable directory
-              </Text>
               <Text type="large" weight="semibold" color="primary" display="block">
-                Published business facts, one qualified next step.
+                Search. Compare. Send inquiry.
               </Text>
             </div>
             <div className="grid gap-2">
-              <Text color="secondary" display="block">Search a need and place.</Text>
-              <Text color="secondary" display="block">Compare what each business publishes.</Text>
-              <Text color="secondary" display="block">Send an inquiry only when AE exposes that next step.</Text>
+              <Text color="secondary" display="block">Search by need and place.</Text>
+              <Text color="secondary" display="block">Compare service, area, and how to reach them.</Text>
+              <Text color="secondary" display="block">Send inquiry when the page offers it.</Text>
             </div>
           </Card>
           <div className="grid gap-4">
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              Agentic commerce
-            </Text>
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block" textWrap="balance">
-              Commerce is moving from browsing to asking.
+              People ask for outcomes now.
             </Text>
             <Text as="p" type="large" color="secondary" display="block" textWrap="pretty">
-              People are starting to ask assistants for outcomes instead of browsing a stack of links. Local services need a more careful version: find businesses, understand what they publish, then interact with the business without pretending the job is already done.
+              People are starting to ask assistants for outcomes instead of browsing a stack of links. Local services need a clearer path: find businesses, understand what they offer, then reach the business without pretending the job is already done.
             </Text>
             <MobileAccordion
-              ariaLabel="Agentic commerce changes"
+              ariaLabel="Local search changes"
               className="md:hidden"
               defaultValue="Discovery starts as a question"
               items={commerceShift}
@@ -137,16 +131,13 @@ function AboutRoute() {
           </div>
         </section>
 
-        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.75fr_1.25fr] md:items-start">
+        <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.75fr_1.25fr] md:items-start">
           <div className="grid gap-2">
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              Answer shape
-            </Text>
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block" textWrap="balance">
-              AE should feel like asking, not filing.
+              AE turns a need into clear options.
             </Text>
             <Text color="secondary" display="block">
-              The page is for people. The details are structured enough for assistants to read, compare, and route.
+              The page is for people. Assistants can use the same service, area, and contact details.
             </Text>
           </div>
           <AeAssistantAnswerPreview />
@@ -154,11 +145,8 @@ function AboutRoute() {
 
         <section className="grid gap-5">
           <div className="grid gap-2 md:max-w-2xl">
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              The offer
-            </Text>
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block" textWrap="balance">
-              Use AE to find businesses and start the right conversation.
+              Find businesses and reach them in writing.
             </Text>
           </div>
           <MobileOfferTabs />
@@ -175,16 +163,13 @@ function AboutRoute() {
           </div>
         </section>
 
-        <section className="grid gap-7 border-t pt-8">
+        <section className="grid gap-7 border-t border-border pt-8">
           <MobileTrustAccordion />
           <div className="hidden gap-6 md:grid md:grid-cols-[0.85fr_1.15fr]">
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <Text type="supporting" weight="medium" color="secondary" display="block">
-                  What it can do
-                </Text>
                 <Text as="h2" type="display-3" weight="semibold" color="primary" display="block" textWrap="balance">
-                  The interaction stays honest.
+                  From need to business conversation.
                 </Text>
               </div>
               <div className="grid gap-3">
@@ -198,13 +183,13 @@ function AboutRoute() {
             </div>
             <div className="grid gap-4">
               <Card padding={4} variant="muted" className="grid gap-1">
-                <Text type="large" weight="medium" color="primary" display="block">What businesses still decide</Text>
+                <Text type="large" weight="medium" color="primary" display="block">What the business decides</Text>
                 <Text color="secondary" display="block">
                   Timing, price, materials, scope, and whether the job is a fit. AE helps the conversation start with better context.
                 </Text>
               </Card>
               <Card padding={4} variant="red" className="grid gap-2">
-                <Text type="large" weight="medium" color="primary" display="block">What it does not do</Text>
+                <Text type="large" weight="medium" color="primary" display="block">What AE never does</Text>
                 <div className="grid gap-2">
                   {doesNotItems.map((label) => (
                     <div key={label} className="flex items-center gap-3 text-sm text-secondary">
@@ -216,7 +201,7 @@ function AboutRoute() {
               </Card>
             </div>
           </div>
-          <div className="flex flex-col gap-4 border-t pt-7 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-4 border-t border-border pt-7 md:flex-row md:items-center md:justify-between">
             <div className="max-w-2xl">
               <Text as="h2" type="display-3" weight="semibold" color="primary" display="block" textWrap="balance">
                 Start with what you need done.
@@ -309,11 +294,8 @@ function MobileTrustAccordion() {
   return (
     <div className="grid gap-4 md:hidden">
       <div className="grid gap-2">
-        <Text type="supporting" weight="medium" color="secondary" display="block">
-          What it can do
-        </Text>
         <Text as="h2" type="display-3" weight="semibold" color="primary" display="block" textWrap="balance">
-          The interaction stays honest.
+          From need to business conversation.
         </Text>
       </div>
       <div className="grid gap-2">
@@ -321,7 +303,7 @@ function MobileTrustAccordion() {
           className="rounded-sm border bg-card"
           isOpen={openItem === 'can-do'}
           onOpenChange={(nextOpen) => setOpenItem(nextOpen ? 'can-do' : '')}
-          trigger={<MobileAccordionTrigger title="What AE can do" />}
+          trigger={<MobileAccordionTrigger title="What AE does" />}
         >
           <div className="grid gap-3 px-4 pb-4">
             {doesItems.map(({ icon: Icon, label }) => (
@@ -337,7 +319,7 @@ function MobileTrustAccordion() {
           className="rounded-sm border bg-muted/40"
           isOpen={openItem === 'business-decides'}
           onOpenChange={(nextOpen) => setOpenItem(nextOpen ? 'business-decides' : '')}
-          trigger={<MobileAccordionTrigger title="What businesses still decide" />}
+          trigger={<MobileAccordionTrigger title="What the business decides" />}
         >
           <Text as="p" color="secondary" display="block" className="px-4 pb-4">
             Timing, price, materials, scope, and whether the job is a fit. AE helps the conversation start with better context.
@@ -348,7 +330,7 @@ function MobileTrustAccordion() {
           className="rounded-sm border border-destructive/25 bg-destructive/5"
           isOpen={openItem === 'does-not'}
           onOpenChange={(nextOpen) => setOpenItem(nextOpen ? 'does-not' : '')}
-          trigger={<MobileAccordionTrigger title="What it does not do" />}
+          trigger={<MobileAccordionTrigger title="What AE never does" />}
         >
           <div className="grid gap-2 px-4 pb-4">
             {doesNotItems.map((label) => (

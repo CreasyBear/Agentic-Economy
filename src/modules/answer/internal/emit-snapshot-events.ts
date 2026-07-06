@@ -1,7 +1,6 @@
 import { splitSentences } from './text-utils'
 import type { AnswerArtifact } from '../answer-schema'
 import {
-  computeLayoutProfile,
   resolveLayoutProfile,
   type AnswerLayoutProfile,
 } from './answer-layout-profile'
@@ -11,7 +10,6 @@ import type {
   AnswerPlanEvent,
   AnswerResponseMode,
   AnswerSnapshot,
-  AnswerSynthesizerFollowUpIntent,
 } from '../answer-synthesizer'
 
 type EmitSnapshotPlan = Pick<AnswerPlanEvent, 'mode' | 'providerBudget' | 'artifactBudget'>
@@ -192,37 +190,6 @@ function progressivePause(pauseMs: number): Promise<void> {
   ).withResolvers<void>()
   setTimeout(resolve, pauseMs)
   return promise
-}
-
-export function mergeProseIntoSnapshot(input: {
-  query: string
-  evidence: {
-    providers: AnswerSnapshot['providers']
-    agentJsonUrl: string
-  }
-  oneLine: string
-  summary: string
-  nextStep: string
-  compactLayout?: boolean
-  followUpIntent?: AnswerSynthesizerFollowUpIntent
-}): AnswerSnapshot {
-  const compactLayout = input.compactLayout === true
-  const layoutProfile = computeLayoutProfile({
-    ...(compactLayout ? { compactLayout: true } : {}),
-    ...(input.followUpIntent === undefined ? {} : { followUpIntent: input.followUpIntent }),
-    providerCount: input.evidence.providers.length,
-  })
-
-  return {
-    query: input.query,
-    oneLine: input.oneLine,
-    providers: input.evidence.providers,
-    summary: input.summary,
-    nextStep: input.nextStep,
-    agentJsonUrl: input.evidence.agentJsonUrl,
-    ...(compactLayout ? { compactLayout: true } : {}),
-    layoutProfile,
-  }
 }
 
 export type { AnswerArtifact }

@@ -6,6 +6,7 @@ import { billingTables } from '../src/modules/billing/internal/schema'
 import { clearanceTables } from '../src/modules/clearance/internal/schema'
 import { capabilityTables } from '../src/modules/capabilities/internal/schema'
 import { catalogTables } from '../src/modules/catalog/internal/schema'
+import { demandTables } from '../src/modules/demand/internal/schema'
 import { discoveryTables } from '../src/modules/discovery/internal/schema'
 import { harnessTables } from '../src/modules/harness/internal/convex-schema'
 import { inquiryTables } from '../src/modules/inquiries/internal/convex-schema'
@@ -15,6 +16,7 @@ import { observabilityTables } from '../src/modules/observability/internal/schem
 import { protectedActionTables } from '../src/modules/protected-action/internal/schema'
 import { registryTables } from '../src/modules/registry/internal/schema'
 import { securityTables } from '../src/modules/security/internal/schema'
+import { settingsTables } from '../src/modules/settings/internal/schema'
 
 export default defineSchema({
   ...answerThreadTables,
@@ -25,6 +27,7 @@ export default defineSchema({
   ...clearanceTables,
   ...catalogTables,
   ...registryTables,
+  ...demandTables,
   ...discoveryTables,
   ...harnessTables,
   ...inquiryTables,
@@ -32,4 +35,5 @@ export default defineSchema({
   ...protectedActionTables,
   ...observabilityTables,
   ...securityTables,
+  ...settingsTables,
 })

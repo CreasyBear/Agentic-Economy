@@ -27,6 +27,7 @@ export function AeThreadTurnReplaySection({ scrollTargetId, threadId, ...turn }:
             steps={[]}
             workLog={turn.workLog}
             checkSummary={turn.answerCheckSummary}
+            query={turn.query}
           />
           <AeGenerativeAnswer
             artifacts={turn.artifacts}

@@ -193,6 +193,85 @@ describe('POST /api/agent/tools', () => {
     })
   })
 
+
+  it('rejects requests whose declared Content-Length exceeds the payload cap', async () => {
+    const response = await handleInvokeAgentTool(
+      new Request(REQUEST_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(64 * 1024 + 1),
+        },
+        body: JSON.stringify({ tool: 'inquiry.submit', input: validInquirySubmitInput() }),
+      })
+    )
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'agent_tools_payload_too_large',
+      retryable: false,
+    })
+  })
+
+  it('rejects an oversized actual body when Content-Length is missing', async () => {
+    const oversizedInput = { ...validInquirySubmitInput(), body: 'a'.repeat(70_000) }
+    const response = await handleInvokeAgentTool(
+      new Request(REQUEST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: 'inquiry.submit', input: oversizedInput }),
+      })
+    )
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'agent_tools_payload_too_large',
+      retryable: false,
+    })
+  })
+
+  it('rejects an oversized actual body even when Content-Length understates it', async () => {
+    const oversizedInput = { ...validInquirySubmitInput(), body: 'a'.repeat(70_000) }
+    const response = await handleInvokeAgentTool(
+      new Request(REQUEST_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': '10',
+        },
+        body: JSON.stringify({ tool: 'inquiry.submit', input: oversizedInput }),
+      })
+    )
+
+    expect(response.status).toBe(413)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'agent_tools_payload_too_large',
+      retryable: false,
+    })
+  })
+
+  it('rejects inquiry.submit with an over-max body field before any write is attempted', async () => {
+    const response = await handleInvokeAgentTool(
+      new Request(REQUEST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'inquiry.submit',
+          input: { ...validInquirySubmitInput(), body: 'a'.repeat(2_001) },
+        }),
+      })
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'agent_tools_invalid_input',
+      retryable: false,
+    })
+  })
   it('refuses unsigned inquiry.submit with signature step-up instead of failing open to a write', async () => {
     const response = await handleInvokeAgentTool(
       new Request(REQUEST_URL, {

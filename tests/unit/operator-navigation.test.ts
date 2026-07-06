@@ -54,7 +54,7 @@ describe('operator navigation', () => {
     const labels = navGroupsForRole('owner', { advanced: false }).flatMap((group) =>
       group.items.map((item) => item.label),
     )
-    expect(labels).toEqual(['Status', 'Inquiries'])
+    expect(labels).toEqual(['Status', 'Inquiries', 'Settings'])
   })
 
   it('shows advanced owner destinations in command list regardless of sidebar gate', () => {

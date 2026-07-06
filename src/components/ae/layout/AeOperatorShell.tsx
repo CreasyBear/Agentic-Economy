@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, use, useEffect, useId, useMemo, useRef } from 'react'
+import { createContext, use, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AppShell } from '@astryxdesign/core/AppShell'
 import { Divider } from '@astryxdesign/core/Divider'
@@ -22,6 +22,15 @@ import {
 export type OperatorDensity = 'compact' | 'comfortable'
 
 const OperatorDensityContext = createContext<OperatorDensity>('comfortable')
+type OperatorShellChrome = Omit<AeOperatorShellProps, 'children'>
+
+type OperatorShellChromeRegistration = {
+  setChrome: (chrome: OperatorShellChrome) => void
+  clearChrome: (chrome: OperatorShellChrome) => void
+}
+
+const OperatorShellChromeContext = createContext<OperatorShellChromeRegistration | null>(null)
+
 
 /** Owner routes render compact; admin/developer routes keep comfortable density. */
 export function useOperatorDensity(): OperatorDensity {
@@ -42,7 +51,18 @@ export type AeOperatorShellProps = {
   children: ReactNode
 }
 
-export function AeOperatorShell({
+export function AeOperatorShell(props: AeOperatorShellProps) {
+  const parentShell = use(OperatorShellChromeContext)
+
+  if (parentShell !== null) {
+    return <NestedOperatorShell parentShell={parentShell} {...props} />
+  }
+
+  return <RootOperatorShell {...props} />
+}
+
+function NestedOperatorShell({
+  parentShell,
   operatorRole,
   title,
   description,
@@ -50,11 +70,66 @@ export function AeOperatorShell({
   actions,
   currentPath,
   mainContentId,
-  breadcrumbs: providedBreadcrumbs,
+  breadcrumbs,
   navBadges,
   sectionId,
   children,
-}: AeOperatorShellProps) {
+}: AeOperatorShellProps & { parentShell: OperatorShellChromeRegistration }) {
+  const breadcrumbsKey = useMemo(
+    () => JSON.stringify(breadcrumbs?.map((item) => [item.label, item.href ?? null]) ?? []),
+    [breadcrumbs],
+  )
+  const navBadgesKey = useMemo(() => JSON.stringify(navBadges ?? {}), [navBadges])
+  const chrome = useMemo<OperatorShellChrome>(
+    () => ({
+      operatorRole,
+      title,
+      description,
+      currentPath,
+      ...(eyebrow === undefined ? {} : { eyebrow }),
+      ...(actions === undefined ? {} : { actions }),
+      ...(mainContentId === undefined ? {} : { mainContentId }),
+      ...(breadcrumbs === undefined ? {} : { breadcrumbs }),
+      ...(navBadges === undefined ? {} : { navBadges }),
+      ...(sectionId === undefined ? {} : { sectionId }),
+    }),
+    [operatorRole, title, description, eyebrow, currentPath, mainContentId, breadcrumbsKey, navBadgesKey, sectionId],
+  )
+
+  useLayoutEffect(() => {
+    parentShell.setChrome(chrome)
+    return () => parentShell.clearChrome(chrome)
+  }, [chrome, parentShell])
+
+  return <>{children}</>
+}
+
+function RootOperatorShell(props: AeOperatorShellProps) {
+  const [registeredChrome, setRegisteredChrome] = useState<OperatorShellChrome | null>(null)
+  const setChrome = useCallback((chrome: OperatorShellChrome) => {
+    setRegisteredChrome(chrome)
+  }, [])
+  const clearChrome = useCallback((chrome: OperatorShellChrome) => {
+    setRegisteredChrome((currentChrome) => (currentChrome === chrome ? null : currentChrome))
+  }, [])
+  const registration = useMemo<OperatorShellChromeRegistration>(
+    () => ({ setChrome, clearChrome }),
+    [clearChrome, setChrome],
+  )
+
+  const {
+    operatorRole,
+    title,
+    description,
+    eyebrow,
+    actions,
+    currentPath,
+    mainContentId,
+    breadcrumbs: providedBreadcrumbs,
+    navBadges,
+    sectionId,
+  } = registeredChrome ?? props
+  const { children } = props
   const titleId = useId()
   const descriptionId = useId()
   const activeSection = sectionId ?? resolveOperatorSection(currentPath)
@@ -118,57 +193,59 @@ export function AeOperatorShell({
 
   return (
     <OperatorDensityContext.Provider value={density}>
-      <AppShell
-        ref={shellRef}
-        height="auto"
-        contentPadding={0}
-        topNav={topNav}
-        {...(sidebar === undefined ? {} : { sideNav: sidebar })}
-      >
-        <div
-          ref={mainContentRef}
-          id={mainContentId}
-          tabIndex={mainContentId === undefined ? undefined : -1}
-          className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8"
+      <OperatorShellChromeContext.Provider value={registration}>
+        <AppShell
+          ref={shellRef}
+          height="auto"
+          contentPadding={0}
+          topNav={topNav}
+          {...(sidebar === undefined ? {} : { sideNav: sidebar })}
         >
-          {breadcrumbs.length === 0 ? null : (
-            <div className="md:hidden">
-              <AeOperatorBreadcrumbs items={breadcrumbs} />
-            </div>
-          )}
-
-          <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid gap-2">
-            {eyebrow ? (
-              <Text type="supporting" weight="medium" color="secondary" display="block">
-                {eyebrow}
-              </Text>
-            ) : null}
-            <Heading id={titleId} level={1} textWrap="balance">
-              {title}
-            </Heading>
-            <Text id={descriptionId} type="body" color="secondary" display="block" textWrap="pretty">
-              {description}
-            </Text>
-            {actions ? <div className="flex flex-wrap items-center gap-3 pt-1">{actions}</div> : null}
-          </section>
-          <Divider variant="subtle" />
-
           <div
-            className={
-              activeSection === undefined
-                ? 'grid gap-6'
-                : 'grid gap-6 lg:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:items-start'
-            }
+            ref={mainContentRef}
+            id={mainContentId}
+            tabIndex={mainContentId === undefined ? undefined : -1}
+            className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8"
           >
-            {activeSection === undefined ? null : (
-              <aside className="rounded-md border border-border bg-card p-4 lg:sticky lg:top-20">
-                <AeOperatorSectionNav sectionId={activeSection} currentPath={currentPath} />
-              </aside>
+            {breadcrumbs.length === 0 ? null : (
+              <div className="md:hidden">
+                <AeOperatorBreadcrumbs items={breadcrumbs} />
+              </div>
             )}
-            <section className="grid min-w-0 gap-4">{children}</section>
+
+            <section aria-labelledby={titleId} aria-describedby={descriptionId} className="grid gap-2">
+              {eyebrow ? (
+                <Text type="supporting" weight="medium" color="secondary" display="block">
+                  {eyebrow}
+                </Text>
+              ) : null}
+              <Heading id={titleId} level={1} textWrap="balance">
+                {title}
+              </Heading>
+              <Text id={descriptionId} type="body" color="secondary" display="block" textWrap="pretty">
+                {description}
+              </Text>
+              {actions ? <div className="flex flex-wrap items-center gap-3 pt-1">{actions}</div> : null}
+            </section>
+            <Divider variant="subtle" />
+
+            <div
+              className={
+                activeSection === undefined
+                  ? 'grid gap-6'
+                  : 'grid gap-6 lg:grid-cols-[minmax(12rem,14rem)_minmax(0,1fr)] lg:items-start'
+              }
+            >
+              {activeSection === undefined ? null : (
+                <aside className="rounded-md border border-border bg-card p-4 lg:sticky lg:top-20">
+                  <AeOperatorSectionNav sectionId={activeSection} currentPath={currentPath} />
+                </aside>
+              )}
+              <section className="grid min-w-0 gap-4">{children}</section>
+            </div>
           </div>
-        </div>
-      </AppShell>
+        </AppShell>
+      </OperatorShellChromeContext.Provider>
     </OperatorDensityContext.Provider>
   )
 }

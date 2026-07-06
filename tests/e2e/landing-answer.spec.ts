@@ -41,7 +41,7 @@ test.describe('landing query -> thread answer', () => {
 })
 
 async function submitLandingQuery(page: Page, query: string) {
-  const searchbox = page.getByRole('searchbox', { name: /what do you need done/i })
+  const searchbox = page.getByRole('search', { name: /find local service businesses/i }).getByRole('searchbox')
   await expect(searchbox).toBeEditable({ timeout: 30_000 })
   await searchbox.fill(query)
   await expect(searchbox).toHaveValue(query)

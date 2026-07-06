@@ -12,20 +12,27 @@
  */
 
 import type { AnyAction } from '@/modules/common/action'
-import { submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
+import { requestCapabilityAction } from '@/modules/business-action/business-action.actions'
+import { demandCaptureAction } from '@/modules/demand/demand.actions'
+import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 import {
   registryDetailAction,
   registryListAction,
   registrySearchAction,
 } from '@/modules/registry/registry.actions'
+import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/settings.actions'
 import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
   submitInquiryAction,
+  requestCapabilityAction,
+  readCustomerRecordAction,
   registryListAction,
   registrySearchAction,
   registryDetailAction,
   storefrontImportDraftAction,
+  demandCaptureAction,
+  updateOwnerNotificationPreferencesAction,
 ]
 
 assertUniqueActionIds(actions)

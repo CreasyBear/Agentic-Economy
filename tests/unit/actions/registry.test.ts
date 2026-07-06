@@ -28,12 +28,12 @@ describe('action registry', () => {
   it('registers storefront import for owner UI and HTTP but not quiet agent tools', () => {
     const action = findAction('storefront.importDraft')
     expect(action).toBeDefined()
-    expect(action?.readOnly).toBe(true)
+    expect(action?.readOnly).toBe(false)
     expect(action?.surfaces).toEqual(['ui', 'http'])
     expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['websiteUrl', 'abn'])
   })
 
-  it('exposes only qualified inquiry submit plus registry search/detail as quiet agent tools', () => {
+  it('exposes only qualified inquiry submit and registry search/detail as quiet agent tools', () => {
     const exposed = listAgentToolActions().map((action) => action.id)
     expect(exposed).toEqual(['inquiry.submit', 'registry.search', 'registry.detail'])
   })
@@ -121,5 +121,25 @@ describe('action registry', () => {
     expect(findAction('inquiry.reply')).toBeUndefined()
     expect(findAction('inquiry.markRead')).toBeUndefined()
     expect(findAction('inquiry.close')).toBeUndefined()
+  })
+
+  it('rejects inquiry.submit body and contact fields beyond the route-boundary max length', () => {
+    const schema = findAction('inquiry.submit')!.schema
+    const target = {
+      businessId: 'business:plumbing-demo',
+      serviceId: 'service:business:plumbing-demo:emergency-plumbing',
+      capabilityKind: 'phone_inquiry',
+    }
+    const baseInput = { target, body: 'Need help with a leak.', contact: { email: 'person@example.test' } }
+
+    expect(schema.safeParse(baseInput).success).toBe(true)
+    expect(schema.safeParse({ ...baseInput, body: 'a'.repeat(2_000) }).success).toBe(true)
+    expect(schema.safeParse({ ...baseInput, body: 'a'.repeat(2_001) }).success).toBe(false)
+    expect(schema.safeParse({ ...baseInput, contact: { name: 'a'.repeat(200) } }).success).toBe(true)
+    expect(schema.safeParse({ ...baseInput, contact: { name: 'a'.repeat(201) } }).success).toBe(false)
+    expect(schema.safeParse({ ...baseInput, contact: { email: `${'a'.repeat(241)}@example.test` } }).success).toBe(true)
+    expect(schema.safeParse({ ...baseInput, contact: { email: `${'a'.repeat(242)}@example.test` } }).success).toBe(false)
+    expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(32) } }).success).toBe(true)
+    expect(schema.safeParse({ ...baseInput, contact: { phone: '1'.repeat(33) } }).success).toBe(false)
   })
 })

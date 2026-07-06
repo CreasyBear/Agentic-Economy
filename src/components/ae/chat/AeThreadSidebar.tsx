@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useRouter } from '@tanstack/react-router'
+import { createLink, Link, useRouter } from '@tanstack/react-router'
 import { CopyIcon, EllipsisVerticalIcon, PlusIcon, TrashIcon } from 'lucide-react'
 import { copyThreadLink } from './copy-thread-link'
 
@@ -10,33 +10,50 @@ import { useClientMounted } from '@/hooks/use-client-mounted'
 import { formatRelativeTime, timestampIso } from '@/lib/ui/format-time'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import { AeModelSelector } from './AeModelSelector'
+const RouterButton = createLink(Button)
+
 
 export type AeThreadSidebarProps = {
   threads: readonly AnswerThreadRecord[]
   activeThreadId?: string | null
   visible: boolean
+  layout?: 'desktop' | 'mobile'
   onDelete?: (threadId: string) => void
+  onNavigate?: () => void
 }
 
-export function AeThreadSidebar({ threads, activeThreadId = null, visible, onDelete }: AeThreadSidebarProps) {
+export function AeThreadSidebar({
+  threads,
+  activeThreadId = null,
+  visible,
+  layout = 'desktop',
+  onDelete,
+  onNavigate,
+}: AeThreadSidebarProps) {
   if (!visible) {
     return null
   }
 
+  const sidebarClassName =
+    layout === 'desktop'
+      ? 'hidden h-full min-h-0 flex-col gap-3 overflow-hidden border-r border-border bg-muted px-1 py-2 lg:flex'
+      : 'flex h-full min-h-0 flex-col gap-3 overflow-hidden bg-body px-1 py-2'
+
   return (
-    <aside id="ae-thread-sidebar" className="hidden h-full min-h-0 flex-col gap-3 border-r border-border bg-muted px-1 py-2 lg:flex" aria-label="Recent questions">
+    <aside id={layout === 'desktop' ? 'ae-thread-sidebar' : 'ae-thread-mobile-sidebar-content'} className={sidebarClassName} aria-label="Recent questions">
       <div className="flex flex-col gap-3 p-1">
         <div className="flex min-h-7 items-center justify-between gap-2">
           <h2 className="truncate font-mono text-xs font-medium uppercase leading-tight text-secondary">Recent questions</h2>
           <span className="inline-grid min-h-6 min-w-6 place-items-center rounded-sm border border-border bg-surface font-mono text-xs leading-none tabular-nums text-secondary" data-numeric>{threads.length}</span>
         </div>
-        <Button
+        <RouterButton
           label="New question"
-          href="/"
+          to="/"
           variant="secondary"
           size="sm"
-          className="w-full"
+          className="min-h-11 w-full"
           icon={<PlusIcon aria-hidden="true" />}
+          {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
         />
       </div>
       {isStructuredAnswerModeEnabled() ? (
@@ -44,13 +61,19 @@ export function AeThreadSidebar({ threads, activeThreadId = null, visible, onDel
           <AeModelSelector />
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 px-0.5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-0.5">
         {threads.length === 0 ? (
           <p className="m-1 rounded-lg border border-dashed border-border p-3 text-sm leading-snug text-secondary">No recent questions yet.</p>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
             {threads.map((thread) => (
-              <AeThreadSidebarRow key={thread.threadId} thread={thread} active={thread.threadId === activeThreadId} onDelete={onDelete} />
+              <AeThreadSidebarRow
+                key={thread.threadId}
+                thread={thread}
+                active={thread.threadId === activeThreadId}
+                onDelete={onDelete}
+                onNavigate={onNavigate}
+              />
             ))}
           </ul>
         )}
@@ -63,10 +86,12 @@ function AeThreadSidebarRow({
   thread,
   active,
   onDelete,
+  onNavigate,
 }: {
   thread: AnswerThreadRecord
   active: boolean
   onDelete: ((threadId: string) => void) | undefined
+  onNavigate: (() => void) | undefined
 }) {
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -100,6 +125,7 @@ function AeThreadSidebarRow({
         params={{ threadId: thread.threadId }}
         className={`flex min-h-[2.875rem] flex-col gap-1 rounded-lg border px-3 py-2 no-underline transition-colors hover:bg-surface${active ? ' border-border-strong bg-surface' : ' border-transparent hover:border-border-strong'}`}
         aria-current={active ? 'page' : undefined}
+        onClick={onNavigate}
       >
         <span className="truncate text-sm leading-snug text-primary">{thread.title}</span>
         <ClientRelativeTime timestamp={thread.updatedAt} />
@@ -124,6 +150,7 @@ function AeThreadSidebarRow({
             onClick: () => {
               void router.navigate({ to: '/t/$threadId', params: { threadId: thread.threadId } })
               setMenuOpen(false)
+              onNavigate?.()
             },
           },
           {
@@ -137,6 +164,7 @@ function AeThreadSidebarRow({
             onClick: () => {
               void router.navigate({ to: '/' })
               setMenuOpen(false)
+              onNavigate?.()
             },
           },
           { type: 'divider' },

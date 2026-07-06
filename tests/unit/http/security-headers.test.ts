@@ -64,9 +64,35 @@ describe('security header middleware', () => {
     }
   })
 
-  it('resolves report-only rollout mode unless AE_CSP_REPORT_ONLY explicitly disables it', () => {
+  it('resolves an enforcing default in production, opting into report-only only when explicitly requested', () => {
+    const cases = [
+      { name: 'unset AE_CSP_REPORT_ONLY enforces by default', env: { NODE_ENV: 'production' }, expected: 'enforce' },
+      {
+        name: 'false explicitly keeps enforcing',
+        env: { NODE_ENV: 'production', AE_CSP_REPORT_ONLY: 'false' },
+        expected: 'enforce',
+      },
+      {
+        name: 'zero explicitly keeps enforcing',
+        env: { NODE_ENV: 'production', AE_CSP_REPORT_ONLY: '0' },
+        expected: 'enforce',
+      },
+      {
+        name: 'true opts into report-only',
+        env: { NODE_ENV: 'production', AE_CSP_REPORT_ONLY: 'true' },
+        expected: 'report-only',
+      },
+    ] as const
+
+    for (const { name, env, expected } of cases) {
+      expect(resolveCspModeFromEnv(env), name).toBe(expected)
+    }
+  })
+
+  it('resolves a report-only default outside production unless AE_CSP_REPORT_ONLY explicitly disables it', () => {
     const cases = [
       { name: 'unset env', env: {}, expected: 'report-only' },
+      { name: 'development NODE_ENV keeps report-only default', env: { NODE_ENV: 'development' }, expected: 'report-only' },
       { name: 'false disables report-only', env: { AE_CSP_REPORT_ONLY: 'false' }, expected: 'enforce' },
       { name: 'zero disables report-only', env: { AE_CSP_REPORT_ONLY: '0' }, expected: 'enforce' },
       { name: 'true keeps report-only', env: { AE_CSP_REPORT_ONLY: 'true' }, expected: 'report-only' },
@@ -75,6 +101,22 @@ describe('security header middleware', () => {
     for (const { name, env, expected } of cases) {
       expect(resolveCspModeFromEnv(env), name).toBe(expected)
     }
+  })
+
+  it('emits an enforcing Content-Security-Policy header by default in production, with report-only as an explicit opt-in and non-production untouched', () => {
+    const productionDefault = buildSecurityHeaders({ cspMode: resolveCspModeFromEnv({ NODE_ENV: 'production' }) })
+    expect(productionDefault.get('Content-Security-Policy')).toBe(buildContentSecurityPolicy())
+    expect(productionDefault.has('Content-Security-Policy-Report-Only')).toBe(false)
+
+    const productionReportOnly = buildSecurityHeaders({
+      cspMode: resolveCspModeFromEnv({ NODE_ENV: 'production', AE_CSP_REPORT_ONLY: 'true' }),
+    })
+    expect(productionReportOnly.get('Content-Security-Policy-Report-Only')).toBe(buildContentSecurityPolicy())
+    expect(productionReportOnly.has('Content-Security-Policy')).toBe(false)
+
+    const nonProductionDefault = buildSecurityHeaders({ cspMode: resolveCspModeFromEnv({}) })
+    expect(nonProductionDefault.get('Content-Security-Policy-Report-Only')).toBe(buildContentSecurityPolicy())
+    expect(nonProductionDefault.has('Content-Security-Policy')).toBe(false)
   })
 
   it('applies security headers to HTML responses while preserving response status, body, and existing headers', async () => {

@@ -15,7 +15,7 @@ export function AeClaimFormSection({ title, description, children }: AeClaimForm
   return (
     <section>
       <Card padding={5}>
-        <div className="grid gap-1.5">
+        <div className="grid gap-2">
           <Text as="h2" type="large" weight="semibold" id={titleId}>
             {title}
           </Text>
@@ -23,7 +23,7 @@ export function AeClaimFormSection({ title, description, children }: AeClaimForm
             {description}
           </Text>
         </div>
-        <div className="mt-4 grid gap-4">{children}</div>
+        <div className="mt-5 grid gap-5">{children}</div>
       </Card>
     </section>
   )

@@ -1,4 +1,5 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { buildDevSeedCatalogState } from '@/modules/dev/public'
 import type { ActionTimingSink } from '@/modules/common/action'
 import {
@@ -160,7 +161,7 @@ export function legacyPublicRegistryDetail(input: { slug: string }): PublicBusin
 
 function getPublicRegistrySourcePort(): PublicRegistrySourcePort {
 
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return createLegacyRegistrySourcePort()
   }
 
@@ -340,15 +341,11 @@ async function queryRegistryWithLegacyFallback<T>(query: () => Promise<T>, fallb
   try {
     return await query()
   } catch (error) {
-    if (usesLocalE2eBypass()) {
+    if (isLocalE2EAuthBypassEnabled()) {
       return fallback()
     }
     throw new Error('registry_source_query_failed', { cause: error })
   }
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 async function withTiming<T>(

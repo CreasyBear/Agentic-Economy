@@ -7,11 +7,11 @@ import { describe, expect, it } from 'vitest'
 import { scanCopyClaims } from '@/lib/ui/contract-scans'
 
 const businessActionRouteFiles = [
-  'src/routes/owner.business-actions.tsx',
-  'src/routes/owner.business-actions.$requestId.tsx',
-  'src/routes/owner.business-actions.$requestId.receipt.tsx',
-  'src/routes/admin.business-actions.tsx',
-  'src/routes/admin.business-actions.$requestId.tsx',
+  'src/routes/_operator/owner.business-actions.tsx',
+  'src/routes/_operator/owner.business-actions.$requestId.tsx',
+  'src/routes/_operator/owner.business-actions.$requestId.receipt.tsx',
+  'src/routes/_operator/admin.business-actions.tsx',
+  'src/routes/_operator/admin.business-actions.$requestId.tsx',
 ] as const
 
 describe('Phase 6 business-action SEO claim safety', () => {

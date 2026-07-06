@@ -43,13 +43,3 @@ export function resolveIntentRoute(intent: FollowUpIntent): IntentRoute {
       return { kind: 'unsupported' }
   }
 }
-
-/** True only for the route that exposes registry tools to the agent. */
-export function routeCallsTools(route: IntentRoute): boolean {
-  return route.kind === 'tool_search'
-}
-
-/** True for routes that answer from boundary copy with no LLM call. */
-export function routeIsBoundary(route: IntentRoute): boolean {
-  return route.kind === 'boundary_explain' || route.kind === 'unsupported'
-}

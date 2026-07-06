@@ -22,7 +22,7 @@ import {
 describe('business action type contracts', () => {
   it('keeps exported runtime values aligned with exact literal unions', () => {
     expectTypeOf<typeof BusinessActionSlug>().toEqualTypeOf<'provision-paid-intake-endpoint'>()
-    expectTypeOf<BusinessActionSlugType>().toEqualTypeOf<'provision-paid-intake-endpoint' | 'publish-agent-intake-endpoint'>()
+    expectTypeOf<BusinessActionSlugType>().toEqualTypeOf<'provision-paid-intake-endpoint' | 'publish-agent-intake-endpoint' | 'reserve-booking'>()
     expectTypeOf<(typeof BusinessActionSlugValues)[number]>().toEqualTypeOf<BusinessActionSlugType>()
     expectTypeOf<(typeof BusinessActionExternalEvidenceProviderValues)[number]>().toEqualTypeOf<BusinessActionExternalEvidenceProvider>()
     expectTypeOf<(typeof BusinessActionGuardrailProviderValues)[number]>().toEqualTypeOf<BusinessActionGuardrailProvider>()

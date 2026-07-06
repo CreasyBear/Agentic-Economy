@@ -66,8 +66,8 @@ export const Route = createFileRoute('/$slug/inquiry')({
   },
   head: () => ({
     meta: [
-      { title: 'Send inquiry details | Agentic Economy' },
-      { name: 'description', content: 'Send first-contact inquiry details to a published service.' },
+      { title: 'Tell a business about the job | Agentic Economy' },
+      { name: 'description', content: 'Send one clear inquiry for owner review.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -189,8 +189,8 @@ function PublicInquiryRoute() {
     <AePublicShell>
       <AePageHeader
         eyebrow={readback.businessName}
-        title="Send inquiry details"
-        description="Share the work, location, timing, and how the business should reply."
+        title={`Tell ${readback.businessName} about the job.`}
+        description="What you need, where, and when. It reaches them in writing."
       />
       <form onSubmit={handleSubmit} noValidate className="mx-auto grid w-full max-w-3xl gap-6 px-4 pb-16 md:px-6">
         {result !== undefined && result.kind === 'ok' ? (
@@ -225,7 +225,7 @@ function PublicInquiryRoute() {
             <Card padding={5} className="grid gap-4">
               <div className="grid gap-1.5">
                 <Text type="large" weight="semibold" color="primary" display="block">{readback.serviceName} inquiry</Text>
-                <Text color="secondary" display="block">Write the message the business should review.</Text>
+                <Text color="secondary" display="block">Tell the business what you need them to review.</Text>
               </div>
               <FormLayout>
                 <TextInput
@@ -257,8 +257,8 @@ function PublicInquiryRoute() {
                   onChange={(nextValue) => updateContact('phone', nextValue)}
                 />
                 <AeInquiryComposer
-                  label="Describe the inquiry"
-                  description={`${value.body.length}/${readback.maxBodyLength} characters. Include suburb, timing, and anything the business should know before replying.`}
+                  label="Tell them about the job"
+                  description={`${value.body.length}/${readback.maxBodyLength} characters. Include what you need, where, when, and anything the business should know before replying.`}
                   value={value.body}
                   maxLength={readback.maxBodyLength}
                   invalid={bodyError !== undefined}
@@ -270,7 +270,7 @@ function PublicInquiryRoute() {
               </FormLayout>
             </Card>
             <p className="text-sm leading-6 text-secondary">
-              AE sends this for owner review. The business replies with timing, quote, and availability. AE does not confirm them.
+              AE sends this for owner review. The business can reply with timing, quote, and whether they can take the work. AE does not book, charge, or confirm.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <AeActionButton type="button" state={pending ? 'loading' : 'idle'} leadingIcon={<SendIcon />} disabled={!hydrated || pending} onClick={() => void submitFormValue()}>
@@ -306,10 +306,8 @@ function QualifiedInquiryReceipt({
 }) {
   const receiptId = result.receipt.threadId
   const delivery = deliveryLabel(result.receipt.notificationStatus)
-  const receiptKicker = result.code === 'inquiry_replayed'
-    ? 'Qualified-inquiry receipt / already recorded'
-    : 'Qualified-inquiry receipt / docket'
-  const keepHref = answerHref ?? serviceHref
+  const receiptKicker = 'Your inquiry receipt'
+  const recordHref = customerRecordHref(result.receipt.threadId, result.receipt.accessKey)
 
   return (
     <Card
@@ -340,19 +338,23 @@ function QualifiedInquiryReceipt({
         </VStack>
 
         <ReceiptSection title="What AE sent">
-          One bounded inquiry for {serviceName} with the message and reply details you supplied.
+          One clear inquiry for {serviceName} with the message and reply details you supplied.
         </ReceiptSection>
 
+        <Text as="p" type="body" color="primary" display="block" className="rounded-md border border-accent bg-surface p-4">
+          AE has not booked, charged, or confirmed.
+        </Text>
+
         <ReceiptSection title="What happens next">
-          The business replies with timing, quote, or availability. AE records the handoff.
+          The business can reply with timing, quote, or whether they can take the work.
         </ReceiptSection>
 
         <VStack gap={2} className="border-t border-border pt-5">
-          <Text as="h3" type="supporting" color="secondary" weight="semibold" display="block" className="font-mono uppercase tracking-widest">
-            Source note
+          <Text as="h3" type="body" color="secondary" weight="semibold" display="block">
+            Receipt details
           </Text>
           <Text type="supporting" color="primary" display="block" className="font-mono text-accent">
-            business supplied · inquiry path published
+            inquiry sent · for owner review
           </Text>
           <Text type="supporting" color="secondary" display="block" className="font-mono">
             receipt issued · {delivery}
@@ -362,12 +364,12 @@ function QualifiedInquiryReceipt({
           </Text>
         </VStack>
 
-        <Text as="p" type="body" color="primary" display="block" className="rounded-md border border-accent bg-surface p-4">
-          AE has not booked, charged, or confirmed.
-        </Text>
+        <ReceiptSection title="Your record">
+          Your ask is on its way in writing. Keep the live record link to see the business reply when it arrives.
+        </ReceiptSection>
 
         <HStack gap={2} wrap="wrap" aria-label="Receipt actions">
-          <Button label="Keep receipt" variant="primary" href={keepHref} />
+          <Button label="View your record" variant="primary" href={recordHref} />
           <Button label={copied ? 'Receipt copied' : 'Copy receipt'} variant="secondary" onClick={onCopy} />
         </HStack>
       </VStack>
@@ -375,33 +377,36 @@ function QualifiedInquiryReceipt({
   )
 }
 
+const PROOF_SPINE_STEP_DELAYS = ['', 'motion-safe:delay-100', 'motion-safe:delay-150', 'motion-safe:delay-200'] as const
+
 function InquiryProofSpineCard({ result, businessName }: { result: SubmittedInquiryResult; businessName: string }) {
   const delivery = deliveryLabel(result.receipt.notificationStatus)
-  const stepDelays = ['', 'motion-safe:delay-100', 'motion-safe:delay-150', 'motion-safe:delay-200']
   const steps = [
     {
-      title: 'Published',
-      stamp: 'business supplied',
-      note: 'The business page was live when this inquiry was written.',
+      title: 'Page open',
+      stamp: 'business page live',
+      note: 'The business page was open when this inquiry was written.',
       reached: true,
     },
     {
-      title: 'Source checked',
-      stamp: 'inquiry path published',
-      note: 'AE confirmed the inquiry path was open before sending.',
+      title: 'Send path checked',
+      stamp: 'inquiry path open',
+      note: 'AE checked the send path before sending.',
       reached: true,
     },
     {
       title: 'Inquiry sent',
       stamp: 'receipt issued',
-      note: `One bounded inquiry recorded for ${businessName}.`,
+      note: `One clear inquiry sent to ${businessName} for owner review.`,
       reached: true,
     },
     {
-      title: 'Business reply',
+      title: 'Business can reply',
       stamp: delivery,
-      note: 'The business replies with timing, quote, or availability.',
-      reached: false,
+      note: result.receipt.status === 'replied' || result.receipt.status === 'closed'
+        ? 'The business reply is saved on your record.'
+        : 'The business can reply with timing, quote, or whether they can take the work.',
+      reached: result.receipt.status === 'replied' || result.receipt.status === 'closed',
     },
   ] satisfies Array<{ title: string; stamp: string; note: string; reached: boolean }>
 
@@ -412,15 +417,10 @@ function InquiryProofSpineCard({ result, businessName }: { result: SubmittedInqu
       className="w-full motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300 motion-safe:delay-150"
     >
       <VStack gap={3}>
-        <div>
-          <Text type="supporting" weight="medium" color="secondary" display="block" className="font-mono uppercase tracking-widest">
-            Proof spine
-          </Text>
-          <Text id="inquiry-proof-spine" type="large" weight="semibold" color="primary" display="block">
-            The handoff stays dated.
-          </Text>
-        </div>
-        <ol className="grid gap-0" aria-label="Inquiry proof spine">
+        <Text id="inquiry-proof-spine" type="large" weight="semibold" color="primary" display="block">
+          What happens next
+        </Text>
+        <ol className="grid gap-0" aria-label="Inquiry next steps">
           {steps.map((step, index) => {
             const hasNext = index < steps.length - 1
             const nextReached = steps[index + 1]?.reached === true
@@ -428,7 +428,7 @@ function InquiryProofSpineCard({ result, businessName }: { result: SubmittedInqu
             return (
               <li
                 key={step.title}
-                className={`grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300 ${stepDelays[index] ?? ''}`}
+                className={`grid grid-cols-[1rem_minmax(0,1fr)] gap-3 pb-4 last:pb-0 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300 ${PROOF_SPINE_STEP_DELAYS[index] ?? ''}`}
               >
                 <span className="relative mt-1 flex justify-center" aria-hidden="true">
                   <span className={`size-3 rounded-full border ${step.reached ? 'border-accent bg-accent' : 'border-border bg-surface'}`} />
@@ -457,7 +457,7 @@ function InquiryProofSpineCard({ result, businessName }: { result: SubmittedInqu
 function ReceiptSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <VStack gap={2} className="border-t border-border pt-5">
-      <Text as="h3" type="supporting" color="secondary" weight="semibold" display="block" className="font-mono uppercase tracking-widest">
+      <Text as="h3" type="body" color="secondary" weight="semibold" display="block">
         {title}
       </Text>
       <Text as="p" type="large" color="primary" display="block" className="max-w-xl text-balance tracking-tight">
@@ -484,9 +484,14 @@ function inquiryReceiptText({
     `What AE sent: One bounded inquiry with the message and reply details supplied.`,
     `What happens next: The business replies with timing, quote, or availability. AE records the handoff.`,
     `Source note: business supplied · inquiry path published`,
+    `Record: ${customerRecordHref(result.receipt.threadId, result.receipt.accessKey)}`,
     `Delivery state: ${delivery}`,
     `Boundary: AE has not booked, charged, or confirmed.`,
   ].join('\n')
+}
+
+function customerRecordHref(threadId: string, accessKey: string): string {
+  return `/i/${encodeURIComponent(threadId)}?k=${encodeURIComponent(accessKey)}`
 }
 
 function deliveryLabel(status: SubmittedInquiryResult['receipt']['notificationStatus']): string {
@@ -523,9 +528,9 @@ function focusFirstPublicInquiryError(errors: readonly PublicInquiryValidationEr
     return
   }
 
-  requestAnimationFrame(() => {
+  window.setTimeout(() => {
     document.querySelector<HTMLElement>(`[name="${first.field}"]`)?.focus()
-  })
+  }, 0)
 }
 
 function publicInquiryFormField(value: string | undefined): PublicInquiryFormField | undefined {
@@ -537,7 +542,7 @@ function UnavailableInquiry({ readback }: { readback: Extract<PublicInquiryRoute
     <AePublicShell>
       <section className="mx-auto w-full max-w-6xl px-4 py-16 md:px-6">
         <AeEmptyState
-          title="Handoff not open yet"
+          title="Inquiry not open yet"
           description={readback.reason}
           action={<Button label="Back to service page" variant="primary" href={`/${readback.slug}`} />}
         />
@@ -558,6 +563,7 @@ function submittedReceiptToResult(receipt: PublicInquirySubmittedReceipt): Publi
       version: 0,
       notificationId: '',
       notificationStatus: receipt.notificationStatus,
+      accessKey: receipt.accessKey,
     },
   }
 }

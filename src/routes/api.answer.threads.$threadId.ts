@@ -33,7 +33,11 @@ export async function handleDeleteAnswerThreadRequest(request: Request, threadId
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
   try {
-    await deleteAnswerThread({ threadId, pseudonymousSessionId: sessionId })
+    await deleteAnswerThread({
+      threadId,
+      pseudonymousSessionId: sessionId,
+      sourceWriteRequest: request,
+    })
     const response = jsonResponse({ threadId, deleted: true })
     return appendSessionCookie(response, sessionId, setCookie, request)
   } catch {

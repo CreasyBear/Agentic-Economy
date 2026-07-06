@@ -6,6 +6,7 @@ import {
 import type { FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { captureClientFunnelEventOnClient } from '@/lib/observability/capture-client-events'
 import type { FunnelEventType } from '@/modules/observability/public'
+import { shouldDropPublicFunnelSourceSync } from '@/modules/observability/source-sync-gate'
 
 export type EmitFunnelEventInput = {
   eventType: FunnelEventType
@@ -51,7 +52,7 @@ export async function emitFunnelEvent(input: EmitFunnelEventInput): Promise<void
 
   captureClientFunnelEventOnClient(captureInput)
 
-  if (input.businessId === undefined) {
+  if (shouldDropPublicFunnelSourceSync(captureInput.eventType)) {
     return
   }
 

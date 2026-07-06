@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const protectedActionRouteFiles = [
-  'src/routes/owner.actions.tsx',
-  'src/routes/owner.actions.$proposalId.tsx',
-  'src/routes/owner.actions.$proposalId.receipt.tsx',
-  'src/routes/admin.protected-actions.tsx',
-  'src/routes/admin.protected-actions.$proposalId.tsx',
+  'src/routes/_operator/owner.actions.tsx',
+  'src/routes/_operator/owner.actions.$proposalId.tsx',
+  'src/routes/_operator/owner.actions.$proposalId.receipt.tsx',
+  'src/routes/_operator/admin.protected-actions.tsx',
+  'src/routes/_operator/admin.protected-actions.$proposalId.tsx',
 ] as const
 
 describe('protected action route SEO posture', () => {

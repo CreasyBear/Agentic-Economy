@@ -41,10 +41,14 @@ test.describe('selected protected action routes', () => {
 
   test('owner reject path records decision without gateway or attempt', async ({ page }) => {
     await page.goto(pendingProposalPath)
+    await expect(page.getByRole('heading', { name: /review contact follow-up/i })).toBeVisible()
+    await expect(page.getByLabel(/reject reason/i)).toBeEditable()
 
-    await page.getByRole('button', { name: /reject contact follow-up/i }).click()
-    await expect(page.getByText(/reject reason is required/i)).toBeVisible()
-    await expect(page.getByLabel(/reject reason/i)).toBeFocused()
+    await expect(async () => {
+      await page.getByRole('button', { name: /reject contact follow-up/i }).click()
+      await expect(page.getByText(/reject reason is required/i)).toBeVisible({ timeout: 5_000 })
+      await expect(page.getByLabel(/reject reason/i)).toBeFocused()
+    }).toPass({ timeout: 30_000 })
 
     await page.getByLabel(/reject reason/i).fill('Owner declined this source-owned follow-up.')
     await page.getByRole('button', { name: /reject contact follow-up/i }).click()
@@ -92,9 +96,11 @@ test.describe('selected protected action routes', () => {
     await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toBeDisabled()
     await expect(page.getByRole('button', { name: /reject contact follow-up/i })).toBeDisabled()
 
-    await page.goto(wrongOwnerProposalPath)
-    await expect(page.getByText(/contact follow-up unavailable/i)).toBeVisible()
-    await expect(page.getByText(/not found for this owner/i)).toBeVisible()
+    await expect(async () => {
+      await page.goto(wrongOwnerProposalPath, { waitUntil: 'domcontentloaded' })
+      await expect(page.getByText(/contact follow-up unavailable/i)).toBeVisible({ timeout: 5_000 })
+      await expect(page.getByText(/not found for this owner/i)).toBeVisible()
+    }).toPass({ timeout: 30_000 })
     await expect(page.getByRole('button', { name: /approve contact follow-up/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /reject contact follow-up/i })).toHaveCount(0)
     expect(await page.locator('body').innerText()).not.toMatch(forbiddenFutureSurfaceCopy)

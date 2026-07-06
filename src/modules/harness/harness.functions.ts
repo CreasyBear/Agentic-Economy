@@ -177,7 +177,7 @@ export const harnessSessionSourceFunctionRefs = {
   >('harnessSessions:readAdminHarnessSessionEntries'),
 } as const
 
-export async function appendHarnessSessionEntryToSource(
+async function appendHarnessSessionEntryToSource(
   args: AdmittedAppendHarnessSessionEntryArgs,
 ): Promise<AppendHarnessSessionEntryResult> {
   return callPublicSourceMutation(harnessSessionSourceFunctionRefs.appendEntry, args)
@@ -227,7 +227,7 @@ export async function appendHarnessSessionEntryToSourceFromRequest(input: {
   })
 }
 
-export function harnessSessionAppendOperationKey(entry: Pick<
+function harnessSessionAppendOperationKey(entry: Pick<
   AppendHarnessSessionEntrySourceInput,
   'sessionId' | 'entryId' | 'idempotencyKey'
 >): string {

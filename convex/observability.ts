@@ -10,6 +10,7 @@ import {
   runtimeDb,
   type RuntimeDb,
   type RuntimeDocument,
+  type RuntimeQuery,
 } from './source_state'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import {
@@ -17,6 +18,7 @@ import {
   readOperatorControls as readOperatorControlsModule,
   recordFunnelEvent,
   setOperatorControl as setOperatorControlModule,
+  type FunnelEventPersistenceRow,
   type RecordFunnelEventInput,
   type AuditEventContract,
   type OwnerActivationState,
@@ -336,19 +338,12 @@ export const recordOwnerActivationEvent = mutationGeneric({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
-    if (args.businessId === undefined) {
-      return { ok: true as const }
-    }
-
     const db = runtimeDb(ctx.db)
-    const source = await loadPhaseOneSourceState(db)
     const now = Date.now()
-    const ownerActivationByBusiness = new Map<string, OwnerActivationState>(
-      source.observability.ownerActivationState.map((row) => [
-        String(row.businessId),
-        parseOwnerActivationStateRow(row),
-      ]),
-    )
+    const ownerActivationByBusiness =
+      args.businessId === undefined
+        ? new Map<string, OwnerActivationState>()
+        : await readOwnerActivationByBusiness(db, brandNonEmpty(args.businessId, 'BusinessId'))
 
     const input: RecordFunnelEventInput = {
       eventType: args.eventType,
@@ -364,25 +359,76 @@ export const recordOwnerActivationEvent = mutationGeneric({
       ...(args.actorRef === undefined ? {} : { actorRef: args.actorRef }),
       ...(args.claimId === undefined ? {} : { claimId: args.claimId }),
       ...(args.payload === undefined ? {} : { redactedPayload: args.payload }),
-      businessId: brandNonEmpty(args.businessId, 'BusinessId'),
+      ...(args.businessId === undefined ? {} : { businessId: brandNonEmpty(args.businessId, 'BusinessId') }),
     }
 
     const result = recordFunnelEvent(input, ownerActivationByBusiness)
-    if (result.ownerActivation === undefined) {
-      return { ok: true as const }
+    await upsertFunnelEventRow(db, result.event)
+
+    if (result.ownerActivation !== undefined) {
+      await upsertOwnerActivationStateRow(db, result.ownerActivation)
     }
 
-    source.observability.ownerActivationState = [
-      ...source.observability.ownerActivationState.filter(
-        (row) => String(row.businessId) !== String(result.ownerActivation?.businessId),
-      ),
-      result.ownerActivation,
-    ]
-
-    await persistPhaseOneSourceState(db, source)
     return { ok: true as const }
   },
 })
+
+async function readOwnerActivationByBusiness(
+  db: RuntimeDb,
+  businessId: OwnerActivationState['businessId']
+): Promise<Map<string, OwnerActivationState>> {
+  const existing = await db
+    .query('ownerActivationState')
+    .withIndex('by_business', (builder) => builder.eq('businessId', businessId))
+    .unique()
+  if (existing === null) {
+    return new Map()
+  }
+
+  return new Map([[String(businessId), parseOwnerActivationStateRow(existing)]])
+}
+
+async function upsertFunnelEventRow(db: RuntimeDb, event: FunnelEventPersistenceRow): Promise<void> {
+  const existing = await readFirstFunnelEventByCorrelationId(db, event.correlationId)
+  if (existing === null) {
+    await db.insert('funnelEvents', event)
+    return
+  }
+
+  await db.patch(existing._id, event)
+}
+
+async function readFirstFunnelEventByCorrelationId(
+  db: RuntimeDb,
+  correlationId: FunnelEventPersistenceRow['correlationId']
+): Promise<RuntimeDocument | null> {
+  const query = db
+    .query('funnelEvents')
+    .withIndex('by_correlationId', (builder) => builder.eq('correlationId', correlationId))
+
+  if (query.take !== undefined) {
+    return (await query.take(1))[0] ?? null
+  }
+
+  if (query.first !== undefined) {
+    return query.first()
+  }
+
+  return (await query.collect()).at(0) ?? null
+}
+
+async function upsertOwnerActivationStateRow(db: RuntimeDb, state: OwnerActivationState): Promise<void> {
+  const existing = await db
+    .query('ownerActivationState')
+    .withIndex('by_business', (builder) => builder.eq('businessId', state.businessId))
+    .unique()
+  if (existing === null) {
+    await db.insert('ownerActivationState', state)
+    return
+  }
+
+  await db.patch(existing._id, state)
+}
 
 /** @deprecated Use recordOwnerActivationEvent. Funnel events are stored in PostHog. */
 export const recordPublicFunnelEvent = recordOwnerActivationEvent

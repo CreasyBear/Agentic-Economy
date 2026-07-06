@@ -32,7 +32,7 @@ export type AnswerToolId = (typeof AnswerToolIdValues)[number]
 export const AnswerThreadSharePolicyValues = ['public', 'unlisted'] as const
 export type AnswerThreadSharePolicy = (typeof AnswerThreadSharePolicyValues)[number]
 
-export const ThinkingStepValues = ['search', 'read', 'write'] as const
+const ThinkingStepValues = ['search', 'read', 'write'] as const
 export type ThinkingStep = (typeof ThinkingStepValues)[number]
 
 export type AnswerThreadRecord = {

@@ -4,6 +4,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type { AppendHarnessSessionEntrySourceInput } from '@/modules/harness/harness.functions'
@@ -21,13 +22,23 @@ import {
 } from './internal/commands'
 import { buildPublicThreadProjection } from './internal/public-projection'
 
-export type CreateAnswerThreadArgs = {
+type AnswerThreadSourceWriteRequestArgs = {
+  sourceWriteRequest?: Request
+}
+
+type AnswerThreadSourceWriteMutationArgs = {
+  operationKey?: string
+  correlationId?: string
+  sourceWrite?: SourceWriteAdmission
+}
+
+export type CreateAnswerThreadArgs = AnswerThreadSourceWriteRequestArgs & {
   threadId: string
   pseudonymousSessionId: string
   title: string
 }
 
-export type AppendAnswerTurnArgs = {
+export type AppendAnswerTurnArgs = AnswerThreadSourceWriteRequestArgs & {
   turnId: string
   threadId: string
   pseudonymousSessionId: string
@@ -104,10 +115,18 @@ export type AnswerHarnessFinalizationResult =
       message: string
     }
 
-export type DeleteAnswerThreadArgs = {
+export type DeleteAnswerThreadArgs = AnswerThreadSourceWriteRequestArgs & {
   threadId: string
   pseudonymousSessionId: string
 }
+
+type CreateAnswerThreadMutationArgs = Omit<CreateAnswerThreadArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+type AppendAnswerTurnMutationArgs = Omit<AppendAnswerTurnArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+type AppendAnswerTurnWithToolCallsMutationArgs =
+  Omit<AppendAnswerTurnWithToolCallsArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+type AppendAnswerTurnWithThreadAndToolCallsMutationArgs =
+  Omit<AppendAnswerTurnWithThreadAndToolCallsArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+type DeleteAnswerThreadMutationArgs = Omit<DeleteAnswerThreadArgs, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
 
 export type AnswerThreadWithTurnCount = AnswerThreadRecord & {
   turnCount: number
@@ -121,21 +140,21 @@ export type ListSessionThreadsResult = {
   threads: readonly AnswerThreadRecord[]
 }
 
-export const createAnswerThreadMutation = sourceMutation<CreateAnswerThreadArgs, { threadId: string }>(
+export const createAnswerThreadMutation = sourceMutation<CreateAnswerThreadMutationArgs, { threadId: string }>(
   'answerThreads:createAnswerThread',
 )
 
-export const appendAnswerTurnMutation = sourceMutation<AppendAnswerTurnArgs, { turnId: string }>(
+export const appendAnswerTurnMutation = sourceMutation<AppendAnswerTurnMutationArgs, { turnId: string }>(
   'answerThreads:appendAnswerTurn',
 )
 
 export const appendAnswerTurnWithToolCallsMutation = sourceMutation<
-  AppendAnswerTurnWithToolCallsArgs,
+  AppendAnswerTurnWithToolCallsMutationArgs,
   { turnId: string; insertedToolCalls: number }
 >('answerThreads:appendAnswerTurnWithToolCalls')
 
 export const appendAnswerTurnWithThreadAndToolCallsMutation = sourceMutation<
-  AppendAnswerTurnWithThreadAndToolCallsArgs,
+  AppendAnswerTurnWithThreadAndToolCallsMutationArgs,
   { turnId: string; insertedToolCalls: number }
 >('answerThreads:appendAnswerTurnWithThreadAndToolCalls')
 
@@ -144,7 +163,7 @@ export const finalizeAnswerTurnHarnessRunMutation = sourceMutation<
   Exclude<AnswerHarnessFinalizationResult, { status: 'error' }>
 >('harnessSessions:finalizeAnswerTurnHarnessRun')
 
-export const deleteAnswerThreadMutation = sourceMutation<DeleteAnswerThreadArgs, { threadId: string }>(
+export const deleteAnswerThreadMutation = sourceMutation<DeleteAnswerThreadMutationArgs, { threadId: string }>(
   'answerThreads:deleteAnswerThread',
 )
 
@@ -204,7 +223,10 @@ export async function createAnswerThread(args: CreateAnswerThreadArgs): Promise<
   if (port !== undefined) {
     return port.createThread(args)
   }
-  return callPublicSourceMutation(createAnswerThreadMutation, args)
+  return callPublicSourceMutation(
+    createAnswerThreadMutation,
+    await withAnswerThreadSourceWrite(args, `answer_thread:create:${args.threadId}`),
+  )
 }
 
 export async function appendAnswerTurn(args: AppendAnswerTurnArgs): Promise<{ turnId: string }> {
@@ -212,7 +234,10 @@ export async function appendAnswerTurn(args: AppendAnswerTurnArgs): Promise<{ tu
   if (port !== undefined) {
     return port.appendTurn(args)
   }
-  return callPublicSourceMutation(appendAnswerTurnMutation, args)
+  return callPublicSourceMutation(
+    appendAnswerTurnMutation,
+    await withAnswerThreadSourceWrite(args, `answer_thread:append:${args.turnId}`),
+  )
 }
 
 export async function appendAnswerTurnWithToolCalls(
@@ -228,7 +253,10 @@ export async function appendAnswerTurnWithToolCalls(
   }
   if (!missingConvexFunctions.has('answerThreads:appendAnswerTurnWithToolCalls')) {
     try {
-      return await callPublicSourceMutation(appendAnswerTurnWithToolCallsMutation, args)
+      return await callPublicSourceMutation(
+        appendAnswerTurnWithToolCallsMutation,
+        await withAnswerThreadSourceWrite(args, `answer_thread:append_with_tool_calls:${args.turnId}`),
+      )
     } catch (error) {
       if (!isMissingConvexFunction(error, 'answerThreads:appendAnswerTurnWithToolCalls')) {
         throw error
@@ -242,7 +270,11 @@ export async function appendAnswerTurnWithToolCalls(
   if (toolCalls.length === 0) {
     return { turnId, insertedToolCalls: 0 }
   }
-  const { inserted } = await appendAnswerToolCalls({ turnId, toolCalls })
+  const { inserted } = await appendAnswerToolCalls({
+    turnId,
+    toolCalls,
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
+  })
   return { turnId, insertedToolCalls: inserted }
 }
 
@@ -270,7 +302,10 @@ export async function appendAnswerTurnWithThreadAndToolCalls(
   }
   if (!missingConvexFunctions.has('answerThreads:appendAnswerTurnWithThreadAndToolCalls')) {
     try {
-      return await callPublicSourceMutation(appendAnswerTurnWithThreadAndToolCallsMutation, args)
+      return await callPublicSourceMutation(
+        appendAnswerTurnWithThreadAndToolCallsMutation,
+        await withAnswerThreadSourceWrite(args, `answer_thread:append_with_thread:${args.turnId}`),
+      )
     } catch (error) {
       if (!isMissingConvexFunction(error, 'answerThreads:appendAnswerTurnWithThreadAndToolCalls')) {
         throw error
@@ -282,6 +317,7 @@ export async function appendAnswerTurnWithThreadAndToolCalls(
     threadId: args.threadId,
     pseudonymousSessionId: args.pseudonymousSessionId,
     title,
+    ...(args.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: args.sourceWriteRequest }),
   })
   return appendAnswerTurnWithToolCalls(appendArgs)
 }
@@ -409,14 +445,39 @@ export async function deleteAnswerThread(args: DeleteAnswerThreadArgs): Promise<
   if (port?.deleteThread !== undefined) {
     return port.deleteThread(args)
   }
-  return callPublicSourceMutation(deleteAnswerThreadMutation, args)
+  return callPublicSourceMutation(
+    deleteAnswerThreadMutation,
+    await withAnswerThreadSourceWrite(args, `answer_thread:delete:${args.threadId}:${args.pseudonymousSessionId}`),
+  )
+}
+
+async function withAnswerThreadSourceWrite<Args extends AnswerThreadSourceWriteRequestArgs>(
+  args: Args,
+  operationKey: string,
+): Promise<Omit<Args, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs> {
+  const { sourceWriteRequest, ...serializableArgs } = args
+  if (sourceWriteRequest === undefined) {
+    return serializableArgs as Omit<Args, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
+  }
+  const correlationId = operationKey
+  return {
+    ...serializableArgs,
+    operationKey,
+    correlationId,
+    sourceWrite: await sourceWriteAdmissionFromRequest({
+      request: sourceWriteRequest,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
+  } as Omit<Args, 'sourceWriteRequest'> & AnswerThreadSourceWriteMutationArgs
 }
 
 function activeAnswerThreadPort(): AnswerThreadPort | undefined {
   if (testPort !== undefined) {
     return testPort
   }
-  if (!usesLocalE2eBypass()) {
+  if (!isLocalE2EAuthBypassEnabled()) {
     return undefined
   }
   localE2ePort ??= createLocalE2eAnswerThreadPort()
@@ -437,7 +498,7 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
     if (thread === undefined) {
       throw new Error('thread_not_found')
     }
-    if (thread.pseudonymousSessionId !== args.pseudonymousSessionId && !usesLocalE2eBypass()) {
+    if (thread.pseudonymousSessionId !== args.pseudonymousSessionId && !isLocalE2EAuthBypassEnabled()) {
       throw new Error('thread_forbidden')
     }
     if (turnsForThread(args.threadId).length >= 25) {
@@ -460,7 +521,7 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
       const timestamp = Date.now()
       const existing = threads.get(args.threadId)
       if (existing !== undefined) {
-        if (existing.pseudonymousSessionId !== args.pseudonymousSessionId && !usesLocalE2eBypass()) {
+        if (existing.pseudonymousSessionId !== args.pseudonymousSessionId && !isLocalE2EAuthBypassEnabled()) {
           throw new Error('thread_forbidden')
         }
         return { threadId: args.threadId }
@@ -523,7 +584,7 @@ function createLocalE2eAnswerThreadPort(): AnswerThreadPort {
       if (thread === undefined) {
         return { threadId: args.threadId }
       }
-      if (thread.pseudonymousSessionId !== args.pseudonymousSessionId && !usesLocalE2eBypass()) {
+      if (thread.pseudonymousSessionId !== args.pseudonymousSessionId && !isLocalE2EAuthBypassEnabled()) {
         throw new Error('thread_forbidden')
       }
       threads.delete(args.threadId)
@@ -567,10 +628,6 @@ function markOptimizedAnswerThreadFunctionsMissing(): void {
   missingConvexFunctions.add('answerThreads:appendAnswerTurnWithToolCalls')
   missingConvexFunctions.add('answerThreads:appendAnswerTurnWithThreadAndToolCalls')
   missingConvexFunctions.add('answerThreads:getAnswerThreadWithTurns')
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }
 
 function answerHarnessFinalizationOperationKey(args: Pick<

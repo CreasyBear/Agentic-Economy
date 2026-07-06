@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { ArrowLeftIcon } from 'lucide-react'
 import { Badge } from '@astryxdesign/core/Badge'
+import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Divider } from '@astryxdesign/core/Divider'
@@ -7,14 +9,19 @@ import { Grid } from '@astryxdesign/core/Grid'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Token } from '@astryxdesign/core/Token'
+import { useServerFn } from '@tanstack/react-start'
 
+import { useClientMounted } from '@/hooks/use-client-mounted'
 import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenerativeMap'
 import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
+import { RouterLink } from '@/components/astryx/RouterLink'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { buildProviderPresentation, pillToneForAvailabilityLabel, type ProviderPresentation } from '@/lib/ui/provider-presentation'
-import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
+import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
 import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+import { resolveReserveBookingMode } from '@/modules/business-action/public'
+import { createReserveBookingProposalServer } from '@/modules/business-action/business-action.functions'
 
 export type AeProviderListingPageProps = {
   catalog: PublicRouteCatalogContract
@@ -77,7 +84,7 @@ export function AeProviderListingPage({
               </HStack>
 
               <Text type="supporting" color="secondary" display="block" className="max-w-3xl text-pretty">
-                Service details are published first. Timing, quote, and whether the business can take the work come from the business reply.
+                Services and contact details from {catalog.name}. Timing, quote, and whether they can take the work come from the business reply.
               </Text>
             </VStack>
           </Card>
@@ -85,11 +92,14 @@ export function AeProviderListingPage({
           <ListingPhotosSection catalog={catalog} presentation={presentation} />
 
           <Grid columns={{ minWidth: 300 }} gap={4}>
-            <ProofSpineCard updatedAt={catalog.updatedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
+            <ReachOutStepsCard updatedAt={catalog.updatedAt} inquiryAvailable={inquiryAffordance.kind === 'available'} />
             <SourceStampCard updatedAt={catalog.updatedAt} />
           </Grid>
 
-          <PublishedFactsCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} />
+          <CapabilityCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquiryHref={inquiryHref} />
+          <ReserveBookingCard catalog={catalog} />
+
+          <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} />
         </div>
 
         <aside className="grid content-start gap-6 lg:sticky lg:top-20" aria-label="Actions for this business">
@@ -97,45 +107,223 @@ export function AeProviderListingPage({
             <VStack gap={4}>
               <div>
                 <Text type="large" weight="semibold" color="primary" display="block">
-                  {inquiryAffordance.kind === 'available' ? presentation.nextStepLabel : 'Contact option'}
+                  {inquiryAffordance.kind === 'available' ? `Tell ${catalog.name} about the job.` : 'Contact option'}
                 </Text>
                 <Text color="secondary" display="block">
                   {inquiryAffordance.kind === 'available'
-                    ? 'Send the job details to the business so they can reply with timing and quote details.'
+                    ? 'The business can reply with timing, quote, and whether they can take the work.'
                     : inquiryAffordance.reason}
                 </Text>
               </div>
               {inquiryAffordance.kind === 'available' ? <Button label={inquiryAffordance.label} variant="primary" href={inquiryHref} /> : null}
-              {inquiryAffordance.kind === 'available' ? (
-                <Text type="supporting" color="secondary" display="block" className="text-pretty">
-                  The business replies with timing, quote, and whether it can take the work.
-                </Text>
-              ) : null}
               <AeProtectedByAe />
             </VStack>
           </Card>
 
-          <Card padding={5} className="bg-surface" aria-label="Assistant-ready published details">
+          <Card padding={5} className="bg-surface" aria-label="Details for your assistant">
             <VStack gap={3}>
               <div>
                 <Text type="large" weight="semibold" color="primary" display="block">
-                  Assistant-ready facts
+                  For your assistant
                 </Text>
                 <Text type="supporting" color="secondary" display="block">
-                  Share this page’s published details with an assistant before a human decides the next step.
+                  Copy the same page data into an assistant before you choose the next step.
                 </Text>
               </div>
               <AeAgentJsonAffordance agentJsonUrl={agentJsonUrl} query={catalog.name} />
             </VStack>
           </Card>
 
-          <a href="/privacy/remove-business" className="text-sm text-secondary underline-offset-4 hover:underline">
+          <RouterLink href="/privacy/remove-business" className="text-sm text-secondary underline-offset-4 hover:underline">
             Correct or remove this page
-          </a>
+          </RouterLink>
         </aside>
       </div>
     </article>
   )
+}
+
+function CapabilityCardsSection({
+  catalog,
+  inquiryAffordance,
+  inquiryHref,
+}: {
+  catalog: PublicRouteCatalogContract
+  inquiryAffordance: PublicInquiryAffordance
+  inquiryHref: string
+}) {
+  const capabilities = collectPublicCapabilities(catalog)
+  if (capabilities.length === 0) {
+    return null
+  }
+  const inquiryAvailable = inquiryAffordance.kind === 'available'
+
+  return (
+    <Card padding={6} aria-labelledby="listing-capabilities">
+      <VStack gap={4}>
+        <div>
+          <Text id="listing-capabilities" type="large" weight="semibold" color="primary" display="block">
+            What you can do here
+          </Text>
+          <Text type="supporting" color="secondary" display="block">
+            Each option is a request the business reviews. AE does not book, charge, or confirm.
+          </Text>
+        </div>
+        <Grid columns={{ minWidth: 260 }} gap={4}>
+          {capabilities.map((capability) => {
+            const presentation = capabilityCardPresentation(capability.kind)
+            const actionable = inquiryAvailable && capability.status === 'available'
+            return (
+              <Card key={capability.kind} padding={5} className="grid h-full content-start gap-2 bg-surface">
+                <HStack vAlign="center" gap={2} wrap="wrap">
+                  <Text weight="semibold" color="primary">{presentation.label}</Text>
+                  <Badge label={capabilityStatusLabel(capability.status)} variant="neutral" />
+                </HStack>
+                <Text type="supporting" color="secondary" display="block">{presentation.body}</Text>
+                {capability.reason === undefined ? null : (
+                  <Text type="supporting" color="secondary" display="block">{capability.reason}</Text>
+                )}
+                {actionable ? (
+                  <div className="pt-1">
+                    <Button label="Send inquiry" variant="secondary" size="sm" href={inquiryHref} />
+                  </div>
+                ) : (
+                  <Text type="supporting" color="secondary" display="block">
+                    {inquiryAvailable ? 'Confirm this with the business first.' : 'No request path published yet.'}
+                  </Text>
+                )}
+              </Card>
+            )
+          })}
+        </Grid>
+      </VStack>
+    </Card>
+  )
+}
+
+function ReserveBookingCard({ catalog }: { catalog: PublicRouteCatalogContract }) {
+  const reserveBookingMode = resolveReserveBookingMode({})
+  const createReserveBookingProposal = useServerFn(createReserveBookingProposalServer)
+  const hydrated = useClientMounted()
+  const [pending, setPending] = useState(false)
+  const [receiptLine, setReceiptLine] = useState<string | undefined>()
+  const [error, setError] = useState<string | undefined>()
+  const submitted = receiptLine !== undefined
+  const modeLine = reserveBookingMode.mode === 'query'
+    ? "This business hasn't published a direct booking channel yet, so your request goes to them in writing."
+    : "This business has published a direct booking channel. The business still reviews and confirms the request."
+
+  async function requestBooking() {
+    if (pending || submitted) {
+      return
+    }
+
+    setPending(true)
+    setError(undefined)
+    setReceiptLine(undefined)
+
+    try {
+      const result = await createReserveBookingProposal({ data: { businessId: catalog.businessId } })
+      if (result.kind === 'ok') {
+        const requestId = typeof result.request?.id === 'string' ? result.request.id : undefined
+        setReceiptLine(
+          requestId === undefined
+            ? 'Booking request sent for owner review.'
+            : `Booking request sent for owner review. Request ${requestId}.`
+        )
+        return
+      }
+
+      setError(result.reason)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Booking request could not be sent.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <Card padding={6} aria-labelledby="reserve-booking-title">
+      <VStack gap={4}>
+        <div>
+          <Text id="reserve-booking-title" type="large" weight="semibold" color="primary" display="block">
+            Reserve a booking
+          </Text>
+          <Text color="secondary" display="block" className="text-pretty">
+            Propose a booking. {catalog.name} reviews and confirms — AE does not book, charge, or confirm.
+          </Text>
+        </div>
+
+        <Text type="supporting" color="secondary" display="block" className="text-pretty">
+          {modeLine}
+        </Text>
+
+        {error === undefined ? null : (
+          <Banner status="error" title="Booking request needs attention" description={error} />
+        )}
+
+        {receiptLine === undefined ? null : (
+          <Text type="supporting" color="primary" display="block" aria-live="polite">
+            {receiptLine}
+          </Text>
+        )}
+
+        <div>
+          <Button
+            label="Request a booking"
+            variant="primary"
+            type="button"
+            onClick={() => {
+              void requestBooking()
+            }}
+            isDisabled={!hydrated || pending || submitted}
+            isLoading={pending}
+          />
+        </div>
+      </VStack>
+    </Card>
+  )
+}
+
+function collectPublicCapabilities(catalog: PublicRouteCatalogContract): readonly PublicRouteCapabilityContract[] {
+  const byKind: Partial<Record<PublicRouteCapabilityContract['kind'], PublicRouteCapabilityContract>> = {}
+  for (const service of catalog.services) {
+    for (const capability of service.capabilities) {
+      const existing = byKind[capability.kind]
+      if (existing === undefined || (existing.status !== 'available' && capability.status === 'available')) {
+        byKind[capability.kind] = capability
+      }
+    }
+  }
+  return Object.values(byKind).filter(
+    (capability): capability is PublicRouteCapabilityContract => capability !== undefined,
+  )
+}
+
+function capabilityCardPresentation(kind: PublicRouteCapabilityContract['kind']): { label: string; body: string } {
+  switch (kind) {
+    case 'phone_inquiry':
+      return { label: 'Send an inquiry', body: 'Describe the job in writing; it reaches the business for owner review.' }
+    case 'quote_request':
+      return { label: 'Request a quote', body: 'Ask for pricing on your job. The business replies with a quote.' }
+    case 'emergency_callout_interest':
+      return { label: 'Flag an urgent callout', body: 'Register urgent interest; the business confirms if they can attend.' }
+    case 'ae_hosted_discovery':
+      return { label: 'First contact via AE', body: 'Start a first-contact message the business reviews before replying.' }
+  }
+}
+
+function capabilityStatusLabel(status: PublicRouteCapabilityContract['status']): string {
+  switch (status) {
+    case 'available':
+      return 'Ready'
+    case 'degraded':
+      return 'Limited'
+    case 'unavailable':
+      return 'Not available'
+    case 'stale':
+      return 'Needs confirmation'
+  }
 }
 
 function SourceStampCard({ updatedAt }: { updatedAt: number }) {
@@ -143,17 +331,13 @@ function SourceStampCard({ updatedAt }: { updatedAt: number }) {
     <Card padding={5} aria-labelledby="listing-source-stamps">
       <VStack gap={3}>
         <div>
-          <Text type="supporting" weight="medium" color="secondary" display="block">
-            Source and freshness
-          </Text>
           <Text id="listing-source-stamps" type="large" weight="semibold" color="primary" display="block">
-            Dated facts, not claims.
+            Last updated
           </Text>
         </div>
-        <ul className="grid gap-2" aria-label="Source and freshness stamps">
+        <ul className="grid gap-2" aria-label="Last updated">
           <li><SourceStamp label="business supplied" updatedAt={updatedAt} /></li>
           <li><SourceStamp label="last checked" updatedAt={updatedAt} /></li>
-          <li><SourceStamp label={ownerReplyStamp} /></li>
         </ul>
       </VStack>
     </Card>
@@ -175,42 +359,39 @@ function SourceStamp({ label, updatedAt }: { label: string; updatedAt?: number }
   )
 }
 
-function ProofSpineCard({ updatedAt, inquiryAvailable }: { updatedAt: number; inquiryAvailable: boolean }) {
+function ReachOutStepsCard({ updatedAt, inquiryAvailable }: { updatedAt: number; inquiryAvailable: boolean }) {
   const steps = [
     {
-      title: 'Published',
+      title: 'Read the page',
       stamp: 'business supplied',
-      note: 'The business page is visible with published service details.',
+      note: 'Services, area, and contact details are on this page.',
       reached: true,
     },
     {
-      title: 'Source checked',
+      title: 'Check the date',
       stamp: 'last checked',
-      note: 'This date shows the latest public-source check for this page.',
+      note: 'The date shows the latest page check.',
       reached: true,
     },
     {
-      title: inquiryAvailable ? 'Inquiry ready' : 'Contact not supplied',
-      stamp: ownerReplyStamp,
+      title: inquiryAvailable ? 'Send inquiry' : 'Contact details needed',
+      stamp: 'for owner review',
       note: inquiryAvailable
-        ? 'A bounded inquiry can be sent; the business replies with timing and quote details.'
-        : 'The owner needs to supply public first-contact details.',
+        ? 'Your inquiry goes to the business for owner review.'
+        : 'The business needs to add a contact path first.',
       reached: inquiryAvailable,
     },
   ] satisfies Array<{ title: string; stamp: string; note: string; reached: boolean }>
 
   return (
-    <Card padding={5} aria-labelledby="listing-proof-spine">
+    <Card padding={5} aria-labelledby="listing-reach-out-steps">
       <VStack gap={3}>
         <div>
-          <Text type="supporting" weight="medium" color="secondary" display="block">
-            Proof spine
-          </Text>
-          <Text id="listing-proof-spine" type="large" weight="semibold" color="primary" display="block">
-            The handoff stays dated.
+          <Text id="listing-reach-out-steps" type="large" weight="semibold" color="primary" display="block">
+            What happens when you reach out
           </Text>
         </div>
-        <ol className="grid gap-0" aria-label="Provider proof spine">
+        <ol className="grid gap-0" aria-label="What happens when you reach out">
           {steps.map((step, index) => {
             const hasNext = index < steps.length - 1
             const nextReached = steps[index + 1]?.reached === true
@@ -241,7 +422,7 @@ function ProofSpineCard({ updatedAt, inquiryAvailable }: { updatedAt: number; in
   )
 }
 
-function PublishedFactsCard({
+function WhatTheyOfferCard({
   catalog,
   presentation,
   officeAddress,
@@ -251,13 +432,13 @@ function PublishedFactsCard({
   officeAddress: string | undefined
 }) {
   return (
-    <Card padding={6} className="grid gap-6" aria-labelledby="listing-published-facts">
+    <Card padding={6} className="grid gap-6" aria-labelledby="listing-offer-details">
       <VStack gap={1}>
-        <Text type="supporting" weight="medium" color="secondary" display="block">
-          Published facts
+        <Text id="listing-offer-details" type="large" weight="semibold" color="primary" display="block">
+          What they offer
         </Text>
-        <Text id="listing-published-facts" type="large" weight="semibold" color="primary" display="block">
-          Details the business chose to publish.
+        <Text type="supporting" color="secondary" display="block">
+          Services, area, and hours from {catalog.name}.
         </Text>
       </VStack>
 
@@ -282,7 +463,7 @@ function PublishedFactsCard({
       <Divider />
 
       <VStack gap={3}>
-        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">What they publish</span>
+        <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">Services</span>
         <Grid columns={{ minWidth: 240 }} gap={4}>
           <VStack gap={1}>
             <Text type="supporting" color="secondary" weight="medium" display="block">Primary service</Text>
@@ -367,10 +548,10 @@ function ListingBackLink({ from, threadId }: { from?: 'thread' | 'registry'; thr
   const href = from === 'thread' && threadId !== undefined ? `/t/${encodeURIComponent(threadId)}` : from === 'registry' ? '/registry?q=&limit=10' : '/'
   const label = from === 'thread' && threadId !== undefined ? 'Back to answer' : from === 'registry' ? 'Back to results' : 'Ask another'
   return (
-    <a href={href} className="inline-flex min-h-11 items-center gap-2 text-sm text-secondary underline-offset-4 hover:underline">
+    <RouterLink href={href} className="inline-flex min-h-11 items-center gap-2 text-sm text-secondary underline-offset-4 hover:underline">
       <ArrowLeftIcon aria-hidden="true" className="size-4" />
       {label}
-    </a>
+    </RouterLink>
   )
 }
 

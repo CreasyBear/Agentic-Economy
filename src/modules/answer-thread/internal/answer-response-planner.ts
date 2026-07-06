@@ -111,7 +111,7 @@ export function planAnswerTurn(input: {
   const contextLocation = aeSearchContextLocationQuery(input.searchContext)
   const hasUsableLocation = requestedLocation !== undefined || contextLocation !== undefined
 
-  if (!serviceSignal && isBroadLocalBrowseQuery(query)) {
+  if (!serviceSignal && (isBroadLocalBrowseQuery(query) || isLocatorOnlyBrowseQuery(query))) {
     const locationLabel = requestedLocation ?? aeSearchContextLocationLabel(input.searchContext)
     return buildClarifyResponsePlan({
       reason: 'missing_service',
@@ -226,4 +226,9 @@ function isBroadLocalBrowseQuery(query: string): boolean {
     return false
   }
   return /\b(?:near|around|in|local|near me|around me|all|show|find|browse)\b/.test(normalized)
+}
+
+function isLocatorOnlyBrowseQuery(query: string): boolean {
+  const normalized = query.toLowerCase()
+  return /\b(?:near me|around here|around me|nearby|local|everything|anything|stuff|what'?s available|whats available|who'?s available|whos available)\b/.test(normalized)
 }

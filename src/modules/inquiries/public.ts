@@ -6,6 +6,7 @@ import {
   evaluateInquiryLaunchSupportReadiness as evaluateInquiryLaunchSupportReadinessImpl,
   listOwnerInbox as listOwnerInboxImpl,
   markInquiryRead as markInquiryReadImpl,
+  readCustomerRecord as readCustomerRecordImpl,
   readInquiryPrivacyTombstone as readInquiryPrivacyTombstoneImpl,
   readInquiryDeliveryReadback as readInquiryDeliveryReadbackImpl,
   readInquiryOperatorReconstruction as readInquiryOperatorReconstructionImpl,
@@ -21,13 +22,13 @@ export type {
   CloseInquiryCommand,
   CloseInquiryResult,
   DeleteInquiryPrivateContentCommand,
-  DeleteInquiryPrivateContentResult,
   InquiryLaunchSupportReadiness,
   InquiryPrivacyErrorCode,
   MarkInquiryReadCommand,
   MarkInquiryReadResult,
   OwnerInquiryCommandBase,
   OwnerInquiryErrorCode,
+  ReadCustomerRecordResult,
   ReadInquiryDeliveryResult,
   ReadInquiryPrivacyTombstoneResult,
   ReadOwnerInquiryResult,
@@ -41,7 +42,12 @@ export type {
 export type {
   CapabilityLaunchSupportRecord,
   InquiryAuditRecord,
+  InquiryCustomerRecordReadback,
+  InquiryCustomerRecordTimelineKey,
+  InquiryCustomerRecordTimelineStatus,
+  InquiryCustomerRecordTimelineStep,
   InquiryDeliveryReadback,
+  InquiryCustomerAccessKey,
   InquiryExportMessageProjection,
   InquiryExportReadback,
   InquiryFunnelRecord,
@@ -114,6 +120,7 @@ export const readOwnerInquiry = readOwnerInquiryImpl
 export const markInquiryRead = markInquiryReadImpl
 export const replyToInquiry = replyToInquiryImpl
 export const closeInquiry = closeInquiryImpl
+export const readCustomerRecord = readCustomerRecordImpl
 export const readInquiryDeliveryReadback = readInquiryDeliveryReadbackImpl
 export const readInquiryOperatorReconstruction = readInquiryOperatorReconstructionImpl
 export const requestInquiryExport = requestInquiryExportImpl

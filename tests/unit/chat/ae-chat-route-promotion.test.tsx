@@ -15,8 +15,9 @@ const testState = vi.hoisted(() => {
           threadId?: string | null
           projection?: PublicThreadProjection | null
           liveTurn?: { query: string; generation: number; intent: string } | null
-          onThreadCreated?: (threadId: string) => void
+          onThreadCreated?: (threadId: string, turnMeta?: { turnId: string; turnSeq: number }) => void
           onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
+          onSettledTurn?: (turn: PublicThreadProjection['turns'][number], generation: number) => void
           onFollowUp?: (query: string) => void
         }
       | undefined,
@@ -30,6 +31,11 @@ const testState = vi.hoisted(() => {
 })
 
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to, ...props }: { children: ReactNode; to: string }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   useNavigate: () => testState.navigate,
 }))
 
@@ -195,6 +201,52 @@ describe('AeChat route promotion', () => {
     await waitFor(() => {
       expect(screen.getByTestId('thread-transcript').getAttribute('data-turn-count')).toBe('2')
     })
+  })
+
+  it('updates session chrome from a settled optimistic turn while the live stream is still mounted', async () => {
+    const initialProjection = buildProjection('thread-one', 'Selected provider', [
+      { kind: 'selected-provider', provider: provider({ name: 'Demo Plumbing', slug: 'demo-plumbing' }) },
+    ])
+    render(<AeChat threadId="thread-one" initialProjection={initialProjection} />)
+
+    expect(screen.getByRole('region', { name: /inquiry path/i }).textContent).toContain(
+      'Demo Plumbing selected for inquiry review',
+    )
+
+    await submitQuery('Compare plumbers in Parramatta', 'Ask limits, refine, or continue with the selected business')
+    await act(async () => {
+      testState.latestTranscriptProps?.onThreadCreated?.('thread-one', { turnId: 'thread-one-turn-2', turnSeq: 2 })
+      await Promise.resolve()
+    })
+
+    const replacementTurn = {
+      turnId: 'thread-one-turn-2',
+      seq: 2,
+      query: 'Compare plumbers in Parramatta',
+      intent: 'refine_search' as const,
+      status: 'complete' as const,
+      oneLine: 'Two listed businesses match.',
+      workLog: [],
+      artifacts: [
+        {
+          kind: 'provider-cards' as const,
+          providers: [
+            provider({ name: 'Demo Plumbing', slug: 'demo-plumbing' }),
+            provider({ citationIndex: 2, name: 'Parramatta Emergency Plumbing', slug: 'parramatta-emergency-plumbing' }),
+          ],
+        },
+      ],
+    } satisfies PublicThreadProjection['turns'][number]
+
+    await act(async () => {
+      testState.latestTranscriptProps?.onSettledTurn?.(replacementTurn, 1)
+      await Promise.resolve()
+    })
+
+    const inquiryPath = screen.getByRole('region', { name: /inquiry path/i })
+    expect(inquiryPath.textContent).toContain('2 listed businesses ready to compare')
+    expect(inquiryPath.textContent).not.toContain('Demo Plumbing selected for inquiry review')
+    expect(screen.getByRole('region', { name: /session context/i }).textContent).not.toContain('Selected business')
   })
 
   it('guides the composer toward refinement when no listed business is available', () => {

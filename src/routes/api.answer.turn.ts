@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import { createAbortAwareSseStream, isAbortError, sseDataLine } from '@/lib/server/sse-response'
@@ -19,12 +20,19 @@ export const Route = createFileRoute('/api/answer/turn')({
   },
 })
 
+const MAX_ANSWER_TURN_BODY_BYTES = 16 * 1024
+
 export async function handleAnswerTurnRequest(request: Request): Promise<Response> {
   const { sessionId, setCookie } = resolveOrCreateSessionId(request)
 
+  const boundedBody = await readBoundedRequestText(request, MAX_ANSWER_TURN_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return jsonError('payload_too_large', 413)
+  }
+
   let body: unknown
   try {
-    body = await request.json()
+    body = JSON.parse(boundedBody.text)
   } catch {
     return jsonError('invalid_body', 400)
   }
@@ -63,7 +71,7 @@ export async function handleAnswerTurnRequest(request: Request): Promise<Respons
   const stream = createAbortAwareSseStream({
     request,
     run: async (sendLine) => {
-      const sourceWriteRequest = usesLocalE2eBypass() ? undefined : request
+      const sourceWriteRequest = request
       const send = (frame: { seq: number; event: AnswerEvent }) => {
         if (request.signal.aborted) {
           return
@@ -120,8 +128,4 @@ function jsonError(code: string, status: number, retryAfter?: number): Response 
 
 function makeCopyId(): string {
   return `turn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

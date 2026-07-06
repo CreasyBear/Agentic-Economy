@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import {
   callPublicSourceMutation,
@@ -8,18 +9,26 @@ import {
   sourceQuery,
 } from '@/lib/server/convex-source'
 import {
+  customerNovuSubscriberProfile,
+  mapNovuReadbackToProviderResult,
   NotificationProviderError,
+  ownerNovuSubscriberProfile,
+  readClerkSecretKey,
   readNotificationOutboxSystemKey,
   readNovuClientConfig,
   readNovuTransactionMessages,
-  triggerOwnerInquiryNovuWorkflow,
+  resolveClerkOwnerDeliveryAddress,
+  triggerInquiryNovuWorkflow,
 } from '@/lib/server/notification-provider'
 import type {
+  ClerkOwnerDeliveryAddress,
   NovuClientConfig,
+  NovuProviderDispatchResult,
   NovuProviderTriggerResult,
+  NovuSubscriberProfile,
   NovuTransactionMessageReadback,
   ReadNovuTransactionMessagesInput,
-  SendOwnerInquiryNovuInput,
+  SendInquiryNovuInput,
 } from '@/lib/server/notification-provider'
 
 export const Route = createFileRoute('/api/notification/novu-dispatch')({
@@ -31,6 +40,8 @@ export const Route = createFileRoute('/api/notification/novu-dispatch')({
 })
 
 type Env = Record<string, string | undefined>
+
+const MAX_NOTIFICATION_DISPATCH_BODY_BYTES = 4 * 1024
 
 type NotificationDispatchProjection = {
   dispatchId: string
@@ -105,19 +116,26 @@ type NotificationSystemSendReadResult =
           slug: string
           name: string
         }
+        inquiry?: {
+          serviceName?: string
+          customerAccessKey?: string
+          customerMessageFirstLine?: string
+          isFirstInquiryForBusiness: boolean
+        }
       }
     }
   | NotificationRuntimeErrorResult
 
-type NotificationDispatchProviderResult =
-  | NovuProviderTriggerResult
-  | {
-      kind: 'error'
-      status: 'failed' | 'provider_missing' | 'orchestrator_missing'
-      redactedError: string
-      retryAfter?: number
-      providerResponseHash?: string
-    }
+type NotificationSystemSend = Extract<NotificationSystemSendReadResult, { kind: 'ok' }>['send']
+
+
+type NotificationDispatchProviderResult = NovuProviderDispatchResult | {
+  kind: 'error'
+  status: 'provider_missing' | 'orchestrator_missing'
+  redactedError: string
+  retryAfter?: number
+  providerResponseHash?: string
+}
 
 type NotificationRecordDispatchArgs = {
   dispatchId: string
@@ -161,13 +179,23 @@ type NotificationNovuDispatchResponse =
       novuMessageCount: number
       businessSlug: string
     }
+  | {
+      kind: 'ok'
+      code: 'notification_novu_held'
+      dispatchId: string
+      dispatchStatus: string
+      redactedError: string
+      businessSlug: string
+    }
   | NotificationRuntimeErrorResult
 
 type NovuDispatchHandlerOptions = {
   env?: Env
   readDispatchForSend?: (args: NotificationSystemSendReadArgs) => Promise<NotificationSystemSendReadResult>
-  triggerOwnerInquiry?: (input: SendOwnerInquiryNovuInput) => Promise<NovuProviderTriggerResult>
+  triggerInquiry?: (input: SendInquiryNovuInput) => Promise<NovuProviderTriggerResult>
+  triggerOwnerInquiry?: (input: SendInquiryNovuInput) => Promise<NovuProviderTriggerResult>
   readNovuMessages?: (input: ReadNovuTransactionMessagesInput) => Promise<NovuTransactionMessageReadback>
+  resolveOwnerDeliveryAddress?: (input: { clerkUserId: string; secretKey: string }) => Promise<ClerkOwnerDeliveryAddress>
   recordDispatch?: (args: NotificationRecordDispatchArgs) => Promise<NotificationRecordDispatchResult>
 }
 
@@ -194,21 +222,37 @@ export async function handleNovuDispatchRequest(
     }
 
     const send = readback.send
-    if (send.dispatch.providerFamily !== 'novu' || send.dispatch.recipientRole !== 'owner') {
+    if (send.dispatch.providerFamily !== 'novu') {
       throw new NotificationProviderError(
         'unsupported_notification_dispatch',
-        'Only owner Novu notification dispatches can use this route.',
+        'Only Novu notification dispatches can use this route.',
         422
       )
     }
 
-    const config = readNovuClientConfig(env)
-    const fallbackSubscriberId = ownerNovuSubscriberId(send.owner.clerkUserId)
+    const configResult = readNovuConfig(env)
+    if (configResult.kind === 'error') {
+      return await recordHeldNovuDispatch({
+        options,
+        send,
+        systemKey,
+        redactedError: configResult.error.code,
+      })
+    }
+    const config = configResult.config
+    if (send.dispatch.recipientRole === 'customer' && config.customerInquiryWorkflowId === undefined) {
+      return await recordHeldNovuDispatch({
+        options,
+        send,
+        systemKey,
+        redactedError: 'missing_novu_workflow',
+      })
+    }
     if (send.dispatch.novuTransactionId !== undefined) {
       const messageReadback = await readNovuProviderMessages(options, {
         config,
         transactionId: send.dispatch.novuTransactionId,
-        subscriberId: send.dispatch.novuSubscriberId ?? fallbackSubscriberId,
+        subscriberId: send.dispatch.novuSubscriberId ?? novuReadbackSubscriberId(send),
       })
       return notificationDispatchJsonResponse({
         kind: 'ok',
@@ -225,18 +269,38 @@ export async function handleNovuDispatchRequest(
       })
     }
 
-    const providerResult = await (options.triggerOwnerInquiry ?? defaultTriggerOwnerInquiry)({
+    const subscriberResult = await novuSubscriberForDispatch(send, env, options)
+    if (subscriberResult.kind === 'error') {
+      return await recordHeldNovuDispatch({
+        options,
+        send,
+        systemKey,
+        redactedError: subscriberResult.error.code,
+      })
+    }
+    const subscriber = subscriberResult.subscriber
+
+    const triggerResult = await (options.triggerInquiry ?? options.triggerOwnerInquiry ?? defaultTriggerInquiry)({
       config,
-      subscriberId: fallbackSubscriberId,
+      recipientRole: send.dispatch.recipientRole,
+      subscriber,
       dispatch: {
         dispatchId: send.dispatch.dispatchId,
         providerIdempotencyKey: send.dispatch.providerIdempotencyKey,
         inquiryThreadId: send.dispatch.inquiryThreadId,
+        inquiryMessageId: send.dispatch.inquiryMessageId,
         businessName: send.business.name,
         businessSlug: send.business.slug,
+        ...(send.inquiry?.customerAccessKey === undefined ? {} : { customerAccessKey: send.inquiry.customerAccessKey }),
       },
       appBaseUrl: new URL(request.url).origin,
     })
+    const messageReadback = await readNovuProviderMessages(options, {
+      config,
+      transactionId: triggerResult.novuTransactionId,
+      subscriberId: triggerResult.novuSubscriberId,
+    })
+    const providerResult = mapNovuReadbackToProviderResult(triggerResult, messageReadback)
     const record = await (options.recordDispatch ?? defaultRecordDispatch)({
       dispatchId: send.dispatch.dispatchId,
       systemKey,
@@ -248,22 +312,16 @@ export async function handleNovuDispatchRequest(
       return notificationDispatchJsonResponse(record, { status: statusForNotificationRuntimeError(record.code) })
     }
 
-    const messageReadback = await readNovuProviderMessages(options, {
-      config,
-      transactionId: providerResult.novuTransactionId,
-      subscriberId: providerResult.novuSubscriberId,
-    })
-
     return notificationDispatchJsonResponse({
       kind: 'ok',
       code: 'notification_novu_triggered',
       dispatchId: record.dispatch.dispatchId,
       dispatchStatus: record.dispatch.status,
-      novuTransactionId: providerResult.novuTransactionId,
-      novuWorkflowId: providerResult.novuWorkflowId,
-      ...(providerResult.novuMessageId === undefined ? {} : { novuMessageId: providerResult.novuMessageId }),
-      novuSubscriberId: providerResult.novuSubscriberId,
-      providerResponseHash: providerResult.providerResponseHash,
+      novuTransactionId: triggerResult.novuTransactionId,
+      novuWorkflowId: triggerResult.novuWorkflowId,
+      ...(triggerResult.novuMessageId === undefined ? {} : { novuMessageId: triggerResult.novuMessageId }),
+      novuSubscriberId: triggerResult.novuSubscriberId,
+      ...(providerResult.providerResponseHash === undefined ? {} : { providerResponseHash: providerResult.providerResponseHash }),
       readbackProviderResponseHash: messageReadback.providerResponseHash,
       novuMessageCount: messageReadback.messages.length,
       businessSlug: send.business.slug,
@@ -286,8 +344,8 @@ async function defaultReadDispatchForSend(
   return await callPublicSourceQuery(readDispatchForSendQuery, args)
 }
 
-async function defaultTriggerOwnerInquiry(input: SendOwnerInquiryNovuInput): Promise<NovuProviderTriggerResult> {
-  return await triggerOwnerInquiryNovuWorkflow(input)
+async function defaultTriggerInquiry(input: SendInquiryNovuInput): Promise<NovuProviderTriggerResult> {
+  return await triggerInquiryNovuWorkflow(input)
 }
 
 async function readNovuProviderMessages(
@@ -301,18 +359,85 @@ async function defaultRecordDispatch(args: NotificationRecordDispatchArgs): Prom
   return await callPublicSourceMutation(recordDispatchMutation, args)
 }
 
-function ownerNovuSubscriberId(clerkUserId: string): string {
-  const normalized = clerkUserId.trim()
-  if (normalized.length === 0) {
-    throw new NotificationProviderError(
-      'invalid_novu_trigger_payload',
-      'Owner Clerk user id is required for Novu subscriber id.',
-      500
-    )
+function readNovuConfig(env: Env): { kind: 'ok'; config: NovuClientConfig } | { kind: 'error'; error: NotificationProviderError } {
+  try {
+    return { kind: 'ok', config: readNovuClientConfig(env) }
+  } catch (error) {
+    if (error instanceof NotificationProviderError) {
+      return { kind: 'error', error }
+    }
+    throw error
+  }
+}
+
+async function novuSubscriberForDispatch(
+  send: NotificationSystemSend,
+  env: Env,
+  options: NovuDispatchHandlerOptions
+): Promise<{ kind: 'ok'; subscriber: NovuSubscriberProfile } | { kind: 'error'; error: NotificationProviderError }> {
+  try {
+    if (send.dispatch.recipientRole === 'customer') {
+      return { kind: 'ok', subscriber: customerNovuSubscriberProfile(send.dispatch.inquiryThreadId) }
+    }
+
+    const deliveryAddress = await (options.resolveOwnerDeliveryAddress ?? defaultResolveOwnerDeliveryAddress)({
+      clerkUserId: send.owner.clerkUserId,
+      secretKey: readClerkSecretKey(env),
+    })
+    return { kind: 'ok', subscriber: ownerNovuSubscriberProfile(send.owner.clerkUserId, deliveryAddress.email) }
+  } catch (error) {
+    if (error instanceof NotificationProviderError) {
+      return { kind: 'error', error }
+    }
+    throw error
+  }
+}
+
+function novuReadbackSubscriberId(send: NotificationSystemSend): string {
+  return send.dispatch.recipientRole === 'customer'
+    ? customerNovuSubscriberProfile(send.dispatch.inquiryThreadId).subscriberId
+    : ownerNovuSubscriberProfile(send.owner.clerkUserId).subscriberId
+}
+
+async function defaultResolveOwnerDeliveryAddress(input: {
+  clerkUserId: string
+  secretKey: string
+}): Promise<ClerkOwnerDeliveryAddress> {
+  return await resolveClerkOwnerDeliveryAddress(input)
+}
+
+async function recordHeldNovuDispatch(input: {
+  options: NovuDispatchHandlerOptions
+  send: NotificationSystemSend
+  systemKey: string
+  redactedError: string
+}): Promise<Response> {
+  console.warn(`Novu notification dispatch held: ${input.redactedError}`)
+  const record = await (input.options.recordDispatch ?? defaultRecordDispatch)({
+    dispatchId: input.send.dispatch.dispatchId,
+    systemKey: input.systemKey,
+    providerResult: {
+      kind: 'error',
+      status: 'orchestrator_missing',
+      redactedError: input.redactedError,
+    },
+    operationKey: `notification:dispatch:novu:${input.send.dispatch.dispatchId}`,
+    correlationId: `correlation:notification:dispatch:novu:${input.send.dispatch.dispatchId}`,
+  })
+  if (record.kind === 'error') {
+    return notificationDispatchJsonResponse(record, { status: statusForNotificationRuntimeError(record.code) })
   }
 
-  return `owner:${normalized}`
+  return notificationDispatchJsonResponse({
+    kind: 'ok',
+    code: 'notification_novu_held',
+    dispatchId: record.dispatch.dispatchId,
+    dispatchStatus: record.dispatch.status,
+    redactedError: input.redactedError,
+    businessSlug: input.send.business.slug,
+  })
 }
+
 
 function requireDispatchAuthorization(headers: Headers, systemKey: string): void {
   const authorization = headers.get('authorization')?.trim()
@@ -326,8 +451,17 @@ function requireDispatchAuthorization(headers: Headers, systemKey: string): void
 }
 
 async function readDispatchId(request: Request): Promise<string> {
+  const boundedBody = await readBoundedRequestText(request, MAX_NOTIFICATION_DISPATCH_BODY_BYTES)
+  if (!boundedBody.ok) {
+    throw new NotificationProviderError(
+      'invalid_notification_dispatch_payload',
+      'Notification dispatch request body is too large.',
+      413,
+    )
+  }
+
   try {
-    const body = (await request.json()) as unknown
+    const body = JSON.parse(boundedBody.text) as unknown
     if (isRecord(body) && typeof body.dispatchId === 'string' && body.dispatchId.trim().length > 0) {
       return body.dispatchId.trim()
     }

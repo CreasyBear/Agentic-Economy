@@ -18,6 +18,7 @@ export const SourceWriteAdmissionScopeValues = [
   'notification_repair',
   'harness_session',
   'agent_identity',
+  'answer_thread',
 ] as const
 
 export type SourceWriteAdmissionScope = (typeof SourceWriteAdmissionScopeValues)[number]
@@ -135,6 +136,7 @@ export function sourceWriteKeyFamilyForScope(scope: SourceWriteAdmissionScope): 
       return 'repair'
     case 'harness_session':
     case 'agent_identity':
+    case 'answer_thread':
       return 'session'
   }
 }
@@ -237,7 +239,7 @@ export function verifySourceWriteAdmission(input: {
   return { kind: 'accepted', admission: input.admission }
 }
 
-export function sourceWriteSigningPayload(admission: Omit<SourceWriteAdmission, 'signature'>): StableHashValue {
+function sourceWriteSigningPayload(admission: Omit<SourceWriteAdmission, 'signature'>): StableHashValue {
   return {
     version: admission.version,
     scope: admission.scope,
@@ -260,7 +262,7 @@ export function resolveActiveSourceWriteSigningKey(
   return resolveSourceWriteKeyring(sourceWriteKeyFamilyForScope(scope), env).active
 }
 
-export function resolveSourceWriteVerificationKey(
+function resolveSourceWriteVerificationKey(
   admission: Pick<SourceWriteAdmission, 'scope' | 'keyId'>,
   env: Env = readProcessEnv()
 ): SourceWriteSigningKey | undefined {

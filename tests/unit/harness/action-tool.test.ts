@@ -153,9 +153,39 @@ describe('harness action tool adapter', () => {
     })
   })
 
+  it('rejects tool object schemas that permit unspecified keys', () => {
+    for (const schema of [
+      {
+        name: 'missing additionalProperties',
+        schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+          },
+        },
+      },
+      {
+        name: 'additionalProperties true',
+        schema: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            query: { type: 'string' },
+          },
+        },
+      },
+    ]) {
+      expect(findStrictToolSchemaViolation(schema.schema), schema.name).toEqual({
+        path: '$',
+        reason: 'object schemas exposed as tools must set additionalProperties to false',
+      })
+    }
+  })
+
   it('detects strict JSON-schema type mismatches before model exposure', () => {
     const violation = findStrictToolSchemaViolation({
       type: 'object',
+      additionalProperties: false,
       properties: {
         mode: {
           type: 'string',

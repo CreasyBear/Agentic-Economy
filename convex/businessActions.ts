@@ -52,6 +52,9 @@ import {
   admitSignedStripeWebhookEvent,
   createCapabilityRequest,
   createEmptyBusinessActionSourceState,
+  createReserveBookingCard,
+  mintReserveBookingMandate,
+  proposeReserveBooking,
   recordActionReceipt,
   recordAuthorizationCheckpoint,
   recordGuardrailDecisionEvidence,
@@ -894,6 +897,77 @@ export const createBusinessActionCapabilityRequest = mutationGeneric({
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
       now,
       expiresAt: args.expiresAt,
+    })
+    if (result.kind === 'error') {
+      return moduleError(result)
+    }
+
+    await persistBusinessActionSlice(db, result.state)
+    return {
+      kind: 'ok' as const,
+      code: result.code,
+      request: serializeRequest(result.request),
+    }
+  },
+})
+
+export const createReserveBookingProposal = mutationGeneric({
+  args: {
+    cardId: v.string(),
+    mandateId: v.string(),
+    businessId: v.string(),
+    ...sourceWriteProtectedActionArgs,
+    operationKey: v.string(),
+    correlationId: v.string(),
+  },
+  returns: mutationResult,
+  handler: async (ctx, args) => {
+    const forbidden = firstForbiddenField(args, forbiddenCreateRequestFields)
+    if (forbidden !== undefined) {
+      return adapterError('business_action_untrusted_client_field', `client_supplied_${forbidden}`, forbidden)
+    }
+
+    const sourceWrite = await requireSourceWrite(ctx, args, 'protected_action')
+    if (sourceWrite.kind === 'rejected') {
+      return adapterError('business_action_source_write_rejected', sourceWrite.reason)
+    }
+
+    const db = runtimeDb(ctx.db)
+    const state = await loadBusinessActionRequestCreationSlice(db, {
+      cardId: args.cardId,
+      mandateId: args.mandateId,
+      operationKey: args.operationKey,
+    })
+    const now = Date.now()
+    const businessId = brandNonEmpty(args.businessId, 'BusinessId')
+    const idempotencyKey = brandNonEmpty(args.operationKey, 'OperationKey')
+    const correlationId = brandNonEmpty(args.correlationId, 'CorrelationId')
+    const card = createReserveBookingCard({
+      cardId: brandNonEmpty(args.cardId, 'BusinessActionCardId'),
+      sourceHash: stableHash({
+        actionSlug: 'reserve-booking',
+        businessId: args.businessId,
+        cardId: args.cardId,
+      }),
+      now,
+    })
+    const mandate = mintReserveBookingMandate({
+      mandateId: brandNonEmpty(args.mandateId, 'BuyerMandateId'),
+      buyerRef: 'buyer:public',
+      businessId,
+      idempotencyKey,
+      correlationId,
+      now,
+    })
+    const result = proposeReserveBooking(state, {
+      card,
+      mandate,
+      businessId,
+      requestedBy: 'buyer',
+      idempotencyKey,
+      correlationId,
+      now,
+      expiresAt: now + 60_000,
     })
     if (result.kind === 'error') {
       return moduleError(result)

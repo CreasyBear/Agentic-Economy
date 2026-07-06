@@ -43,6 +43,7 @@ export function AeThreadTurnCollapsed({ threadId, ...turn }: AeThreadTurnCollaps
               steps={[]}
               workLog={turn.workLog}
               checkSummary={turn.answerCheckSummary}
+              query={turn.query}
             />
             <AeGenerativeAnswer
               artifacts={turn.artifacts}

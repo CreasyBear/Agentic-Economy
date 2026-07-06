@@ -9,6 +9,7 @@ import {
   LockKeyhole,
   ScrollText,
   Search,
+  Settings,
   Wrench,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -71,7 +72,10 @@ const ownerNavGroups: readonly OperatorNavGroup[] = [
   {
     id: 'account',
     label: 'Account',
-    items: [{ href: '/owner/billing', label: 'Billing', icon: CreditCard, tier: 'advanced' }],
+    items: [
+      { href: '/owner/settings', label: 'Settings', icon: Settings, tier: 'core' },
+      { href: '/owner/billing', label: 'Billing', icon: CreditCard, tier: 'advanced' },
+    ],
   },
 ] as const
 

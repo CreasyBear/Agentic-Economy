@@ -632,6 +632,7 @@ describe('Convex business action runtime bridge', () => {
   it('exposes server function refs without importing business-action internals into routes', () => {
     expect(Object.keys(businessActionSourceFunctionRefs).sort()).toEqual([
       'createCapabilityRequest',
+      'createReserveBookingProposal',
       'readCurrentOwnerReceipt',
       'recordGuardrailDecision',
       'recordHermesEvidence',

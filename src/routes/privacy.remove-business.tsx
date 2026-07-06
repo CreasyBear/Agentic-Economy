@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { CopyXIcon, FileWarningIcon, StoreIcon } from 'lucide-react'
@@ -84,6 +84,14 @@ function RemoveBusinessRoute() {
   const [pending, setPending] = useState(false)
   const contactInvalid = error?.includes('contact') === true
   const evidenceInvalid = error?.includes('Evidence') === true
+  const contactEmailRef = useRef<HTMLInputElement>(null)
+  const evidenceSummaryRef = useRef<HTMLTextAreaElement>(null)
+  const contactDescriptionId = 'contactEmail-description'
+  const contactErrorId = 'contactEmail-error'
+  const evidenceDescriptionId = 'evidenceSummary-description'
+  const evidenceErrorId = 'evidenceSummary-error'
+  const contactDescribedBy = contactInvalid ? `${contactDescriptionId} ${contactErrorId}` : contactDescriptionId
+  const evidenceDescribedBy = evidenceInvalid ? `${evidenceDescriptionId} ${evidenceErrorId}` : evidenceDescriptionId
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -95,13 +103,13 @@ function RemoveBusinessRoute() {
 
     if (nextValue.contactEmail.trim().length === 0) {
       setError('A contact email is required.')
-      focusField('contactEmail')
+      focusField(contactEmailRef)
       return
     }
 
     if (nextValue.evidenceSummary.trim().length === 0) {
       setError('Evidence summary is required.')
-      focusField('evidenceSummary')
+      focusField(evidenceSummaryRef)
       return
     }
 
@@ -130,7 +138,7 @@ function RemoveBusinessRoute() {
         description="Send the page slug, your email, and what should change."
       />
       <main className="mx-auto grid w-full max-w-5xl gap-10 px-4 pb-16 md:px-6">
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {correctionPaths.map(({ icon: Icon, label, title, body }) => (
             <Card key={title} padding={5} className="grid h-full gap-1.5">
               <div className="flex items-center justify-between gap-3">
@@ -173,13 +181,17 @@ function RemoveBusinessRoute() {
               label="Your email"
               inputID="contactEmail"
               description="Used only to follow up."
-              {...(contactInvalid ? { status: { type: 'error' as const, message: error ?? '' } } : {})}
+              descriptionID={contactDescriptionId}
+              {...(contactInvalid ? { status: { type: 'error' as const, message: error ?? '', messageID: contactErrorId } } : {})}
             >
               <input
                 id="contactEmail"
                 name="contactEmail"
                 type="email"
                 aria-label="Your email"
+                aria-describedby={contactDescribedBy}
+                aria-invalid={contactInvalid}
+                ref={contactEmailRef}
                 value={value.contactEmail}
                 disabled={pending}
                 className="min-h-11 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
@@ -205,12 +217,16 @@ function RemoveBusinessRoute() {
               label="What should change?"
               inputID="evidenceSummary"
               description="A short note is enough."
-              {...(evidenceInvalid ? { status: { type: 'error' as const, message: error ?? '' } } : {})}
+              descriptionID={evidenceDescriptionId}
+              {...(evidenceInvalid ? { status: { type: 'error' as const, message: error ?? '', messageID: evidenceErrorId } } : {})}
             >
               <textarea
                 id="evidenceSummary"
                 name="evidenceSummary"
                 aria-label="What should change?"
+                aria-describedby={evidenceDescribedBy}
+                aria-invalid={evidenceInvalid}
+                ref={evidenceSummaryRef}
                 value={value.evidenceSummary}
                 disabled={pending}
                 className="min-h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 text-sm text-primary outline-none transition focus:border-primary disabled:opacity-50"
@@ -245,10 +261,10 @@ function readRemovalInput(form: HTMLFormElement, fallback: RemovalInput): Remova
   }
 }
 
-function focusField(name: keyof Pick<RemovalInput, 'contactEmail' | 'evidenceSummary'>) {
-  requestAnimationFrame(() => {
-    document.querySelector<HTMLElement>(`[name="${name}"]`)?.focus()
-  })
+function focusField(ref: RefObject<HTMLElement | null>) {
+  window.setTimeout(() => {
+    ref.current?.focus()
+  }, 0)
 }
 
 function toRemovalReason(value: string): RemovalInput['reasonCode'] {

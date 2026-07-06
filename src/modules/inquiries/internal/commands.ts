@@ -11,6 +11,7 @@ import {
   InquiryUnsafeFutureSurfaceFieldValues,
   type CapabilityLaunchSupportRecord,
   type InquiryAuditRecord,
+  type InquiryCustomerRecordReadback,
   type InquiryDeliveryReadback,
   type InquiryExportMessageProjection,
   type InquiryExportReadback,
@@ -60,6 +61,7 @@ export type SubmitInquiryCommand = {
   origin?: InquiryThreadRecord['origin']
   notificationStatus?: InquiryNotificationStatus
   notificationFailureCode?: string
+  customerAccessKey: string
   unsafeClientFields?: Record<string, unknown>
 }
 
@@ -157,6 +159,14 @@ export type ReadInquiryDeliveryResult = ModuleResult<
   'inquiry_delivery_read',
   'inquiry_not_found',
   { readback: InquiryDeliveryReadback },
+  { reason: string }
+>
+
+
+export type ReadCustomerRecordResult = ModuleResult<
+  'inquiry_customer_record_read',
+  'inquiry_not_found' | 'inquiry_access_denied',
+  { record: InquiryCustomerRecordReadback },
   { reason: string }
 >
 
@@ -377,6 +387,8 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
     createdAt: command.now,
     updatedAt: command.now,
     version: 1,
+    customerAccessKey: brandNonEmpty(command.customerAccessKey, 'InquiryCustomerAccessKey'),
+    ...(contact.replyEmail === undefined ? {} : { customerReplyEmail: contact.replyEmail }),
     ...(command.origin === undefined ? {} : { origin: { ...command.origin } }),
   }
   const message: InquiryMessageRecord = {
@@ -506,6 +518,27 @@ export function readOwnerInquiry(
     kind: 'ok',
     code: 'inquiry_read',
     readback: detailReadback(state, thread),
+  }
+}
+
+
+export function readCustomerRecord(
+  state: InquirySourceState,
+  input: { threadId: InquiryThreadId; accessKey: string }
+): ReadCustomerRecordResult {
+  const thread = findThread(state, input.threadId)
+  if (thread === undefined) {
+    return error('inquiry_not_found', 'Inquiry record was not found for this key.')
+  }
+
+  if (thread.customerAccessKey === undefined || thread.customerAccessKey !== input.accessKey.trim()) {
+    return error('inquiry_access_denied', 'Inquiry record was not found for this key.')
+  }
+
+  return {
+    kind: 'ok',
+    code: 'inquiry_customer_record_read',
+    record: customerRecordReadback(state, thread),
   }
 }
 
@@ -856,6 +889,7 @@ export function deleteInquiryPrivateContent(
       : { kind: 'ok', code: 'inquiry_private_content_delete_replayed', state, tombstone: replayTombstone }
   }
 
+  const redactedThread = removeCustomerReplyEmail(thread)
   const tombstone: InquiryPrivacyTombstoneRecord = {
     threadId: thread.threadId,
     businessId: thread.businessId,
@@ -898,6 +932,7 @@ export function deleteInquiryPrivateContent(
   })
   const nextState: InquirySourceState = {
     ...state,
+    threads: state.threads.map((candidate) => (candidate.threadId === redactedThread.threadId ? redactedThread : candidate)),
     messages: redactedMessages,
     auditEvents: [...state.auditEvents, auditEvent],
     operations: [...state.operations, operation],
@@ -981,7 +1016,7 @@ function resolveInquiryTarget(
 }
 
 function normalizeContact(input: PublicInquiryContactInput):
-  | { kind: 'valid'; hashInput: StableHashValue; redacted: { name: string; email: string; phone: string } }
+  | { kind: 'valid'; hashInput: StableHashValue; redacted: { name: string; email: string; phone: string }; replyEmail?: string }
   | { kind: 'invalid'; reason: string } {
   const name = normalizeText(input.name ?? '')
   const email = normalizeText(input.email ?? '').toLowerCase()
@@ -1005,6 +1040,7 @@ function normalizeContact(input: PublicInquiryContactInput):
       email: email.length === 0 ? 'not supplied' : '[redacted]',
       phone: phone.length === 0 ? 'not supplied' : '[redacted]',
     },
+    ...(email.length === 0 ? {} : { replyEmail: email }),
   }
 }
 
@@ -1238,6 +1274,116 @@ function redactedPayloadHasValue(value: StableHashValue, needle: string): boolea
 
 function uniqueStrings(values: readonly (string | undefined)[]): string[] {
   return Array.from(new Set(values.filter((value): value is string => value !== undefined && value.length > 0))).sort()
+}
+
+
+function customerRecordReadback(state: InquirySourceState, thread: InquiryThreadRecord): InquiryCustomerRecordReadback {
+  const business = state.businesses.find((candidate) => candidate.businessId === thread.businessId)
+  const firstMessage = state.messages.find((message) => message.messageId === thread.firstMessageId)
+  const reply = state.messages
+    .filter((message) => message.threadId === thread.threadId && message.sender === 'owner')
+    .sort((left, right) => right.createdAt - left.createdAt || String(left.messageId).localeCompare(String(right.messageId)))[0]
+  const deliveryNotification = state.notifications
+    .filter((notification) => notification.threadId === thread.threadId && notification.recipientRole === 'owner')
+    .sort((left, right) => right.updatedAt - left.updatedAt || String(left.notificationId).localeCompare(String(right.notificationId)))[0]
+  const deliveryState = deliveryNotification?.status ?? 'held'
+  const deliveryUpdatedAt = deliveryNotification?.updatedAt ?? thread.updatedAt
+
+  return {
+    schemaVersion: 'inquiry-customer-record:v1',
+    threadId: thread.threadId,
+    business: {
+      name: business?.name ?? 'Business unavailable',
+      slug: business?.slug ?? '',
+    },
+    submitted: {
+      messageSummary: preview(firstMessage?.body ?? ''),
+      submittedAt: thread.createdAt,
+    },
+    delivery: {
+      state: deliveryState,
+      label: customerDeliveryLabel(deliveryState),
+      updatedAt: deliveryUpdatedAt,
+    },
+    timeline: customerTimeline(thread, deliveryState, deliveryUpdatedAt, reply),
+    ...(reply === undefined ? {} : { reply: { body: messageBodyForProjection(reply), createdAt: reply.createdAt } }),
+    ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
+    updatedAt: thread.updatedAt,
+  }
+}
+
+function customerTimeline(
+  thread: InquiryThreadRecord,
+  deliveryState: InquiryNotificationStatus,
+  deliveryUpdatedAt: number,
+  reply: InquiryMessageRecord | undefined
+): InquiryCustomerRecordReadback['timeline'] {
+  const sentComplete = deliveryState === 'sent'
+  const deliveryCurrent = sentComplete === false && reply === undefined
+  const replied = reply !== undefined || thread.repliedAt !== undefined || thread.status === 'replied' || thread.status === 'closed'
+  const closed = thread.status === 'closed' && thread.closedAt !== undefined
+
+  return [
+    {
+      key: 'received',
+      label: 'Inquiry received',
+      detail: 'Your ask is saved as a written record.',
+      status: 'complete',
+      timestamp: thread.createdAt,
+    },
+    {
+      key: 'sent_to_business',
+      label: 'Sent to business',
+      detail: customerDeliveryDetail(deliveryState),
+      status: sentComplete ? 'complete' : deliveryCurrent ? 'current' : 'complete',
+      timestamp: deliveryUpdatedAt,
+    },
+    {
+      key: 'business_replied',
+      label: 'Business replied',
+      detail: replied ? 'Their reply is saved on this record.' : 'Their reply will appear here when it arrives.',
+      status: replied ? 'complete' : sentComplete ? 'current' : 'pending',
+      ...(reply?.createdAt === undefined ? thread.repliedAt === undefined ? {} : { timestamp: thread.repliedAt } : { timestamp: reply.createdAt }),
+    },
+    {
+      key: 'closed',
+      label: 'Record closed',
+      detail: closed ? 'This record is closed and kept for reference.' : 'The record stays open while the business follow-up is active.',
+      status: closed ? 'complete' : replied ? 'current' : 'pending',
+      ...(thread.closedAt === undefined ? {} : { timestamp: thread.closedAt }),
+    },
+  ]
+}
+
+function customerDeliveryLabel(status: InquiryNotificationStatus): string {
+  switch (status) {
+    case 'queued':
+      return 'Queued for business delivery'
+    case 'sent':
+      return 'Delivery recorded'
+    case 'failed':
+      return 'Delivery needs review'
+    case 'held':
+      return 'Delivery held for review'
+  }
+}
+
+function customerDeliveryDetail(status: InquiryNotificationStatus): string {
+  switch (status) {
+    case 'queued':
+      return 'The written inquiry is queued for business delivery.'
+    case 'sent':
+      return 'The written inquiry has a delivery record.'
+    case 'failed':
+      return 'The written inquiry is saved; delivery needs review.'
+    case 'held':
+      return 'The written inquiry is saved and held for review.'
+  }
+}
+
+function removeCustomerReplyEmail(thread: InquiryThreadRecord): InquiryThreadRecord {
+  const { customerReplyEmail: _customerReplyEmail, ...rest } = thread
+  return rest
 }
 
 function exportReadback(state: InquirySourceState, thread: InquiryThreadRecord): InquiryExportReadback {

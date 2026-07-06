@@ -8,7 +8,6 @@ import {
 } from './funnel.source'
 
 export {
-  readAdminOwnerActivationSummaryThroughSource,
   recordFunnelEventSchema,
   recordOwnerActivationThroughSource,
   type RecordPublicFunnelEventInput,

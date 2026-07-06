@@ -55,7 +55,7 @@ Hermes/Stripe/Link/NVIDIA evidence -> Phase 6 business-action admission/readback
 6. Consequential mutations write append-only typed audit events in the same logical operation.
 7. Public/discovery projections are allowlisted builders, not DB row spreads.
 8. Discovery emits no callable, payment, wallet, custody, settlement, or provider-handler descriptors.
-9. No server-side fetch of owner-supplied URLs in Phase 1.
+9. Server-side fetch of owner-supplied URLs is limited to the storefront import draft path (`POST /api/storefront/import-draft`), gated by the shared network guard described in "Provider URL / SSRF quarantine" below. No other Phase 1 route fetches an owner- or user-supplied endpoint.
 10. Idempotency covers claim publish, projection sync, discovery generation, suppression, unsuppression, and admin decisions.
 11. Logs/audit/readbacks pass redaction scans.
 
@@ -215,9 +215,31 @@ Tests cover empty, invalid, duplicate, oversized, rate-limited, CSRF-failed, con
 
 ## Provider URL / SSRF quarantine
 
-Phase 1 performs no server-side fetch of owner-supplied endpoint URLs.
+Phase 1 ships exactly one server-side fetch of an owner-supplied URL: the storefront import draft path documented below. No other Phase 1 route fetches an owner- or user-supplied endpoint.
 
-Future endpoint/provider verification must enforce:
+### Storefront import fetch surface (live)
+
+- Route: `POST /api/storefront/import-draft` (`src/routes/api.storefront.import-draft.ts`). It requires an authenticated Clerk session (`auth()` from `@clerk/tanstack-react-start/server`) before the request body is parsed; an unauthenticated caller gets `storefront_import_unauthenticated`. The only bypass is the local-only E2E flag `VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E`, which must never be enabled in production.
+- Action/handler: `storefrontImportDraftAction` (`src/modules/storefront/storefront.actions.ts`, read-only, `surfaces: ['ui', 'http']`) calls `importStorefrontDraftFromWebsite` in `src/modules/storefront/internal/import-draft.ts`. The action creates an unconfirmed draft only; every imported fact is labeled `imported-from-website` and stays unconfirmed until `confirmStorefrontImportDraft` records explicit owner confirmation. No business row or publish state is touched by the fetch itself.
+- Guard module: `src/modules/storefront/internal/network-guard.ts`, shared by the pre-flight check and the HTTP client's DNS resolution.
+
+Controls enforced, read from source:
+
+1. **Protocol validation** — `parseHttpUrl` accepts only `http:`/`https:` URLs and rejects everything else before any network call is attempted.
+2. **Private/special IP range rejection, IPv4 and IPv6** — `isPublicIpAddress` blocks IPv4 `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10` (CGNAT), `127.0.0.0/8`, `169.254.0.0/16` (link-local/metadata), `172.16.0.0/12`, `192.168.0.0/16`, `224.0.0.0/4` (multicast), and `240.0.0.0/4` (reserved); and IPv6 unspecified (`::`), loopback (`::1`), unique-local (`fc00::/7`), link-local (`fe80::/10`), and multicast (`ff00::/8`). IPv4-mapped IPv6 addresses are unwrapped and re-checked against the IPv4 list. The hostnames `localhost`, `local`, and any `*.local` suffix are rejected outright.
+3. **Guarded DNS lookup pinning — closes the DNS-rebinding TOCTOU window** — `createStorefrontGuardedLookup` is installed as the `connect.lookup` option on a per-request `undici.Agent`. Every DNS answer the HTTP client's socket layer actually connects to is validated against the same public-address rules inside that same lookup call, so a hostname cannot pass a separate pre-check while resolving to a different, private address at connect time.
+4. **Pre-flight target check on every hop** — `isPublicHttpTarget` independently re-validates the hostname/IP before the initial request and before following each redirect.
+5. **Redirect cap with re-guarding** — redirects are followed manually (`redirect: 'manual'`), capped at 5 (`StorefrontImportMaxRedirects`); each redirect target is re-parsed with `parseHttpUrl` and re-validated with `isPublicHttpTarget` before it is followed, so a redirect chain cannot smuggle a private-IP or non-HTTP target past the guard.
+6. **Timeout** — an `AbortController` aborts the fetch after 10 seconds (`StorefrontImportTimeoutMs`).
+7. **Response byte cap** — `readResponseTextWithCap` streams the body and aborts once total bytes exceed 2 MiB (`StorefrontImportMaxResponseBytes`).
+8. **HTML content-type requirement** — `isHtmlResponse` accepts only `text/html` or `application/xhtml+xml`; any other content type fails closed before the body is read.
+9. **Owner-auth requirement** — enforced at the route via the Clerk session check above; there is no existing business row to bind at import time, so this gates "signed-in caller" rather than an established owner-of-business relationship, which is consistent with import being a pre-claim draft step.
+
+Scope notes: these controls reduce SSRF risk; they are not a claim of immunity. The guard validates whatever addresses the configured DNS resolver returns (default `node:dns/promises` `lookup`) — it does not defend against a compromised resolver. Raw fetched HTML is not persisted into public state; only extracted, owner-reviewable facts are.
+
+### Future provider/endpoint verification
+
+Future endpoint/provider verification beyond the storefront import path must enforce:
 
 - HTTPS only,
 - no credentials in URL,

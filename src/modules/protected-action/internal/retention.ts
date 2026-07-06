@@ -8,7 +8,7 @@ import type {
   ContactFollowUpSourceState,
 } from './contact-follow-up'
 
-export const ContactFollowUpRetentionClass = 'protected_action_private_evidence' as const
+const ContactFollowUpRetentionClass = 'protected_action_private_evidence' as const
 export type ContactFollowUpRetentionClass = typeof ContactFollowUpRetentionClass
 
 export type ContactFollowUpRetentionPolicy = {

@@ -40,6 +40,7 @@ const durableTables = [
   'registrySearchDocuments',
   'registrySearchSyncAttempts',
   'indexStatus',
+  'demandSignals',
   'discoveryManifests',
   'discoveryManifestAttempts',
   'auditEvents',
@@ -51,6 +52,7 @@ const durableTables = [
   'abuseRateLimitBuckets',
   'claimFingerprints',
   'funnelEvents',
+  'ownerNotificationPreferences',
   'ownerActivationState',
   'inquiryThreads',
   'inquiryMessages',
@@ -103,6 +105,7 @@ const durableTables = [
 
 const requiredIndexes = {
   owners: ['by_clerkUserId'],
+  ownerNotificationPreferences: ['by_ownerId'],
   businesses: ['by_slug', 'by_publicStatus_slug'],
   businessServices: ['by_business_status', 'by_slug_serviceSlug'],
   serviceCapabilities: ['by_business_service_status', 'by_business_service_kind'],
@@ -111,6 +114,7 @@ const requiredIndexes = {
   registryProjectionItems: ['by_business', 'by_service'],
   registryProjectionAttempts: ['by_business_status', 'by_logicalKey'],
   registrySearchDocuments: ['by_documentId', 'by_business', 'by_service', 'by_publicStatus_updatedAt'],
+  demandSignals: ['by_sourceSurface_createdAt', 'by_service_suburb_createdAt'],
   registrySearchSyncAttempts: [
     'by_attemptId',
     'by_document_status',

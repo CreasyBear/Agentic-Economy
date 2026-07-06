@@ -285,6 +285,49 @@ describe('POST /api/answer/turn intent routing (tool-use)', () => {
     }
   })
 
+  it.each([
+    ['book this plumber and charge my card'],
+    ['send a technician now'],
+  ])('first-turn imperative "%s" stays on the safe-action boundary without registry tools', async (query) => {
+    const server = await startOpenRouterContractServer([])
+    const restoreOpenRouter = server.installEnv()
+
+    priorThreadPort()
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const response = await handleAnswerTurnRequest(
+        new Request('https://ae.example/api/answer/turn', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            cookie: `ae_session=${FIXED_SESSION_ID}`,
+          },
+          body: JSON.stringify({ query }),
+        }),
+      )
+
+      const frames = parseStream(await response.text())
+      const complete = frames.at(-1)?.event
+      expect(server.requests).toEqual([])
+      if (complete?.type !== 'complete') {
+        throw new Error(`expected complete event, got ${JSON.stringify(complete)}`)
+      }
+      expect(complete.answer.providers).toEqual([])
+      expect(complete.answer.oneLine).toContain('cannot book')
+      expect(complete.answer.nextStep).toContain('does not book or take payment')
+    } finally {
+      restoreOpenRouter()
+      await server.close()
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
+  })
+
   it('unsupported: answers from unsupported-prose directly without calling the agent', async () => {
     const server = await startOpenRouterContractServer([])
     const restoreOpenRouter = server.installEnv()

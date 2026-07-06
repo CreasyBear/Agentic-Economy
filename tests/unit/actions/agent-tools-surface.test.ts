@@ -13,11 +13,10 @@ describe('agentTools action surface', () => {
     expect(listActions().find((action) => action.id === 'registry.list')?.surfaces).not.toContain('agentTools')
   })
 
-  it('keeps inquiry.submit as the only assistant-callable write', () => {
-    const writes = listAgentToolActions()
-      .filter((action) => !action.readOnly)
+  it('keeps qualified inquiry submit as the only assistant-callable write', () => {
+    const writes = listActions()
+      .filter((action) => !action.readOnly && action.surfaces.includes('agentTools'))
       .map((action) => action.id)
-      .sort()
 
     expect(writes).toEqual(['inquiry.submit'])
   })

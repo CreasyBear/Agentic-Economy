@@ -1,33 +1,49 @@
 import { useState } from 'react'
-import { AlertCircleIcon, CheckIcon, ChevronDownIcon, CircleIcon, Loader2Icon, SquareIcon } from 'lucide-react'
+import { AlertCircleIcon, CheckIcon, Loader2Icon, SquareIcon, type LucideIcon } from 'lucide-react'
 
 import {
-  AeCollapsible as Collapsible,
-  AeCollapsibleContent as CollapsibleContent,
-  AeCollapsibleTrigger as CollapsibleTrigger,
-} from '@/components/ae/primitives/AeCollapsible'
-import { cn } from '@/lib/utils'
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from '@/components/ai-elements/chain-of-thought'
 import type { AnswerWorkStep } from '@/modules/answer/public'
 import type { PublicAnswerCheckSummary } from '@/modules/answer-thread/public'
-
-const STATUS_TONE =
-  'data-[status=complete]:border-green-ring data-[status=complete]:bg-green-subtle data-[status=complete]:text-green-vivid data-[status=running]:border-border-strong data-[status=running]:text-primary data-[status=error]:border-red-ring data-[status=error]:bg-red-subtle data-[status=error]:text-red-vivid data-[status=stopped]:border-red-ring data-[status=stopped]:bg-red-subtle data-[status=stopped]:text-red-vivid'
 
 export type AeResearchProcessProps = {
   isStreaming: boolean
   steps: readonly AnswerWorkStep[]
   checkSummary?: PublicAnswerCheckSummary | undefined
+  query?: string | undefined
+}
+
+const STEP_ICON: Record<AnswerWorkStep['status'], LucideIcon> = {
+  running: Loader2Icon,
+  error: AlertCircleIcon,
+  stopped: SquareIcon,
+  complete: CheckIcon,
+  skipped: CheckIcon,
+}
+
+const STEP_STATUS: Record<AnswerWorkStep['status'], 'complete' | 'active' | 'error'> = {
+  running: 'active',
+  error: 'error',
+  stopped: 'error',
+  complete: 'complete',
+  skipped: 'complete',
 }
 
 /**
- * Public check trace. This shows the sanitized work log AE already stores for
- * replay, not hidden chain-of-thought.
+ * Public check trace, built on the ai-elements ChainOfThought primitives. It
+ * shows the sanitized work log AE already stores for replay - public checks and
+ * listed facts, never hidden model reasoning. Streaming keeps it open and the
+ * steps reveal one at a time; a settled, healthy answer collapses to the
+ * summary line so completed turns do not dump the full audit log.
  */
-export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResearchProcessProps) {
+export function AeResearchProcess({ isStreaming, steps, checkSummary, query }: AeResearchProcessProps) {
   const needsReview = steps.some((step) => step.status === 'error' || step.status === 'stopped')
-  const defaultOpen = isStreaming || needsReview || steps.length > 0 || checkSummary !== undefined
   const [managedOpen, setManagedOpen] = useState<boolean | null>(null)
-  const open = managedOpen ?? defaultOpen
+  const open = managedOpen ?? (isStreaming || needsReview)
 
   if (steps.length === 0 && checkSummary === undefined) {
     return null
@@ -36,98 +52,76 @@ export function AeResearchProcess({ isStreaming, steps, checkSummary }: AeResear
   const overallStatus = steps.length === 0 && checkSummary !== undefined ? 'complete' : getOverallStatus(steps)
   const running = steps.find((step) => step.status === 'running')
   const latest = running ?? latestProblemStep(steps) ?? steps.at(-1)
-  const statusLabel = checkSummary === undefined ? getOverallStatusLabel(overallStatus, latest, steps) : answerCheckSummaryLine(checkSummary)
-
-  function handleOpenChange(nextOpen: boolean) {
-    setManagedOpen(nextOpen)
-  }
+  const queryContext = buildQueryContext(query)
+  const statusLabel =
+    checkSummary === undefined ? getOverallStatusLabel(overallStatus, latest, steps, queryContext) : answerCheckSummaryLine(checkSummary, queryContext)
 
   return (
-    <Collapsible
-      className="overflow-hidden rounded-md border border-border bg-surface"
+    <ChainOfThought
+      className="rounded-md border border-border bg-surface p-3"
       open={open}
-      onOpenChange={handleOpenChange}
+      onOpenChange={setManagedOpen}
     >
-      <CollapsibleTrigger
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted data-[state=open]:border-b data-[state=open]:border-border"
-        type="button"
-      >
-        <span
-          className={cn(
-            'inline-flex size-6 items-center justify-center rounded-full border border-border bg-card text-secondary',
-            STATUS_TONE,
-          )}
-          data-status={overallStatus}
-          aria-hidden="true"
-        >
-          <OverallStatusIcon status={overallStatus} />
-        </span>
+      <ChainOfThoughtHeader>
         <span className="grid min-w-0 gap-0.5">
           <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
             How AE checked this
           </span>
           <span className="truncate text-xs text-secondary">{statusLabel}</span>
         </span>
-        <ChevronDownIcon
-          className={cn('size-4 justify-self-end text-secondary transition-transform', open ? 'rotate-180' : 'rotate-0')}
-          aria-hidden="true"
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent className="p-3">
-        <p className="mb-3 text-xs leading-snug text-secondary">
-          Public checks and listed facts, not private reasoning.
-        </p>
+      </ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        <p className="text-xs leading-snug text-secondary">Public checks and listed facts, not private reasoning.</p>
         {checkSummary === undefined ? null : (
-          <dl className="mb-3 grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3" aria-label="Answer check summary">
+          <dl className="grid gap-2 rounded-md border border-border bg-card p-2 sm:grid-cols-3" aria-label="Answer check summary">
             <CheckSummaryFact label="Searches" value={String(checkSummary.catalogSearches)} />
             <CheckSummaryFact label="Listings read" value={String(checkSummary.listingsRead)} />
             <CheckSummaryFact label="Checks" value={`${checkSummary.checksPassed}/${checkSummary.checksPassed + checkSummary.checksFailed}`} />
           </dl>
         )}
-        {steps.length === 0 ? null : <ol className="grid gap-3" aria-label="AE check steps">
-          {steps.map((step) => {
-            const detailRows = visibleDetailRows(step.detailRows)
-            const summary = step.summary?.trim()
-            const showSummary = summary !== undefined && summary.length > 0 && summary !== step.title
+        {steps.length === 0 ? null : (
+          <ol className="grid gap-3" aria-label="AE check steps">
+            {steps.map((step, index) => {
+              // While streaming, only the running/problem step shows its dense
+              // detail rows; completed steps stay compact so the trace steps
+              // forward instead of growing into a wall. A settled trace the user
+              // expanded shows the full audit log for every step.
+              const showDetail = !isStreaming || step.status === 'running' || step.status === 'error' || step.status === 'stopped'
+              const detailRows = showDetail ? visibleDetailRows(step.detailRows) : []
+              const summary = step.summary?.trim()
+              const showSummary = summary !== undefined && summary.length > 0 && summary !== step.title
+              const stepLabel = workStepLabel(step, queryContext)
 
-            return (
-              <li
-                key={step.id}
-                className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 data-[status=skipped]:opacity-60"
-                data-status={step.status}
-              >
-                <span
-                  className={cn(
-                    'mt-px inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-secondary',
-                    STATUS_TONE,
-                  )}
-                  data-status={step.status}
-                  aria-hidden="true"
-                >
-                  <StepStatusIcon step={step} />
-                </span>
-                <span className="grid min-w-0 gap-1">
-                  <span className="text-sm font-medium leading-snug text-primary">{step.title}</span>
-                  {showSummary ? <span className="text-sm leading-snug text-secondary">{summary}</span> : null}
-                  {detailRows.length > 0 ? (
-                    <span className="grid gap-1 pt-1">
-                      {detailRows.map((row) => (
-                        <span key={`${step.id}-${row.label}`} className="grid gap-0.5 sm:grid-cols-[7rem_minmax(0,1fr)]">
-                          <span className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
-                            {row.label}
-                          </span>
-                          <span className="min-w-0 break-words text-xs leading-snug text-secondary">{row.value}</span>
-                        </span>
-                      ))}
-                    </span>
-                  ) : null}
-                </span>
-              </li>
-            )
-          })}
-        </ol>}
-      </CollapsibleContent>
-    </Collapsible>
+              return (
+                <li key={step.id}>
+                  <ChainOfThoughtStep
+                    icon={STEP_ICON[step.status]}
+                    status={STEP_STATUS[step.status]}
+                    spinning={step.status === 'running'}
+                    connector={index < steps.length - 1}
+                    label={stepLabel}
+                    {...(showSummary ? { description: summary } : {})}
+                  >
+                    {detailRows.length > 0 ? (
+                      <dl className="grid gap-1 pt-1">
+                        {detailRows.map((row) => (
+                          <div key={`${step.id}-${row.label}`} className="grid gap-0.5 sm:grid-cols-[7rem_minmax(0,1fr)]">
+                            <dt className="font-mono text-2xs font-semibold uppercase tracking-wider text-secondary">
+                              {row.label}
+                            </dt>
+                            <dd className="min-w-0 break-words text-xs leading-snug text-secondary">{row.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                  </ChainOfThoughtStep>
+                </li>
+              )
+            })}
+          </ol>
+        )}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
   )
 }
 
@@ -147,36 +141,6 @@ function visibleDetailRows(rows: AnswerWorkStep['detailRows']): NonNullable<Answ
   return rows
     .filter((row) => row.label.trim().length > 0 && row.value.trim().length > 0)
     .slice(0, 4)
-}
-
-function StepStatusIcon({ step }: { step: AnswerWorkStep }) {
-  const className = 'size-2.5'
-  switch (step.status) {
-    case 'complete':
-    case 'skipped':
-      return <CheckIcon className={className} aria-hidden="true" />
-    case 'error':
-      return <AlertCircleIcon className={className} aria-hidden="true" />
-    case 'stopped':
-      return <SquareIcon className={className} aria-hidden="true" />
-    case 'running':
-      return <Loader2Icon className={cn(className, 'motion-safe:animate-spin')} aria-hidden="true" />
-  }
-}
-
-function OverallStatusIcon({ status }: { status: OverallStatus }) {
-  switch (status) {
-    case 'running':
-      return <Loader2Icon className="size-4 motion-safe:animate-spin" aria-hidden="true" />
-    case 'complete':
-      return <CheckIcon className="size-4" aria-hidden="true" />
-    case 'error':
-      return <AlertCircleIcon className="size-4" aria-hidden="true" />
-    case 'stopped':
-      return <SquareIcon className="size-4" aria-hidden="true" />
-    case 'idle':
-      return <CircleIcon className="size-4" aria-hidden="true" />
-  }
 }
 
 type OverallStatus = 'idle' | 'running' | 'complete' | 'error' | 'stopped'
@@ -205,24 +169,25 @@ function getOverallStatusLabel(
   status: OverallStatus,
   latest: AnswerWorkStep | undefined,
   steps: readonly AnswerWorkStep[],
+  queryContext: string,
 ): string {
   switch (status) {
     case 'running':
-      return latest === undefined ? 'Checking published facts' : `Checking now: ${latest.title}`
+      return latest === undefined ? `Checking published facts${queryContext}` : `Checking now: ${workStepLabel(latest, queryContext)}`
     case 'complete':
-      return completedWorkLabel(steps, latest)
+      return completedWorkLabel(steps, latest, queryContext)
     case 'error':
-      return latest === undefined ? 'Needs attention' : `Needs attention: ${latest.title}`
+      return latest === undefined ? 'Needs attention' : `Needs attention: ${workStepLabel(latest, queryContext)}`
     case 'stopped':
-      return latest === undefined ? 'Stopped' : `Stopped at ${latest.title}`
+      return latest === undefined ? 'Stopped' : `Stopped at ${workStepLabel(latest, queryContext)}`
     case 'idle':
-      return latest?.title ?? 'Planning public checks'
+      return latest === undefined ? `Planning public checks${queryContext}` : workStepLabel(latest, queryContext)
   }
 }
 
-function completedWorkLabel(steps: readonly AnswerWorkStep[], latest: AnswerWorkStep | undefined): string {
+function completedWorkLabel(steps: readonly AnswerWorkStep[], latest: AnswerWorkStep | undefined, queryContext: string): string {
   const stepCount = steps.length
-  const prefix = stepCount === 1 ? '1 public check complete' : `${stepCount} public checks complete`
+  const prefix = `${stepCount === 1 ? '1 public check' : `${stepCount} public checks`} complete${queryContext}`
   const summary = latest?.summary?.trim()
 
   if (summary === undefined || summary.length === 0 || summary === latest?.title) {
@@ -232,16 +197,47 @@ function completedWorkLabel(steps: readonly AnswerWorkStep[], latest: AnswerWork
   return `${prefix} · ${summary}`
 }
 
-function answerCheckSummaryLine(summary: PublicAnswerCheckSummary): string {
+function answerCheckSummaryLine(summary: PublicAnswerCheckSummary, queryContext: string): string {
   const total = summary.checksPassed + summary.checksFailed
-  return [
-    `${summary.catalogSearches} ${summary.catalogSearches === 1 ? 'search' : 'searches'}`,
-    `${summary.listingsRead} read`,
-    `${summary.listedBusinesses} listed`,
-    `${summary.checksPassed}/${total} checks`,
-    formatElapsed(summary.elapsedMs),
-  ].join(' · ')
+  const parts = [
+    summary.listedBusinesses > 0 ? `compared ${summary.listedBusinesses} ${summary.listedBusinesses === 1 ? 'listed business' : 'listed businesses'}` : '',
+    total > 0 ? `checked ${total} ${total === 1 ? 'fact' : 'facts'}` : '',
+    `done in ${formatElapsed(summary.elapsedMs)}`,
+  ].filter((part) => part.length > 0)
+  const line = parts.join('; ')
+  return queryContext.length > 0 ? `For ${queryContext.slice(5)}: ${line}.` : `${line.replace(/^./, (char) => char.toUpperCase())}.`
 }
+
+function workStepLabel(step: AnswerWorkStep, queryContext: string): string {
+  if (queryContext.length === 0) {
+    return step.title
+  }
+
+  switch (step.phase) {
+    case 'interpret':
+      return `Reading the request${queryContext}`
+    case 'search':
+      return `Searching listed businesses${queryContext}`
+    case 'read':
+      return `Reading listings${queryContext}`
+    case 'compare':
+      return `Comparing listed facts${queryContext}`
+    case 'assemble':
+      return `Writing the answer${queryContext}`
+    case 'route':
+      return `Choosing the next step${queryContext}`
+  }
+}
+
+function buildQueryContext(query: string | undefined): string {
+  const normalized = query?.replace(/\s+/g, ' ').trim() ?? ''
+  if (normalized.length === 0) {
+    return ''
+  }
+  const short = normalized.length > 72 ? `${normalized.slice(0, 69).trimEnd()}…` : normalized
+  return ` for “${short}”`
+}
+
 
 function formatElapsed(ms: number): string {
   if (ms <= 0) {

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import type { AnswerEvent } from '@/modules/answer/public'
 import {
@@ -23,6 +24,8 @@ export const Route = createFileRoute('/api/chat')({
   },
 })
 
+const MAX_CHAT_BODY_BYTES = 16 * 1024
+
 export async function handleChatRequest(request: Request): Promise<Response> {
   if (!isChatApiEnabled()) {
     return jsonError('chat_unavailable', 404)
@@ -42,9 +45,14 @@ export async function handleChatRequest(request: Request): Promise<Response> {
     })
   }
 
+  const boundedBody = await readBoundedRequestText(request, MAX_CHAT_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return jsonError('payload_too_large', 413)
+  }
+
   let body: unknown
   try {
-    body = await request.json()
+    body = JSON.parse(boundedBody.text)
   } catch {
     return jsonError('invalid_body', 400)
   }

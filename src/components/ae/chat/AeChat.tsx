@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { PanelLeftIcon } from 'lucide-react'
+import { PanelLeftIcon, XIcon } from 'lucide-react'
 
 import { AeEmptyState } from '@/components/ae/feedback/AeEmptyState'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@astryxdesign/core/Button'
+import { Dialog } from '@astryxdesign/core/Dialog'
 import { IconButton } from '@astryxdesign/core/IconButton'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
@@ -18,6 +19,7 @@ import {
   type AnswerThreadRecord,
   type FollowUpIntent,
   type PublicThreadProjection,
+  type PublicThreadTurn,
 } from '@/modules/answer-thread/public'
 import { AeAnswerModelProvider } from './AeAnswerModelContext'
 import { AeChatWelcome } from './AeChatWelcome'
@@ -34,10 +36,7 @@ import {
   buildChatSubmitFunnelEvents,
   type ChatFunnelEvent,
 } from './chat-funnel'
-import {
-  activeSelectedProviderForTurns,
-  providerHasInquiryPath,
-} from './session-provider-context'
+import { buildFollowUpComposerCopy } from './composer-copy'
 
 export type AeChatProps = {
   threadId?: string | null
@@ -50,12 +49,20 @@ type LiveTurn = {
   generation: number
   searchContext: AeSearchContext
   intent: FollowUpIntent
+  turnId?: string
+  turnSeq?: number
 }
 
 type ProjectionFetchState = {
   threadId: string
   projection: PublicThreadProjection | null
   unavailable: boolean
+}
+
+type OptimisticTurnRecord = {
+  threadId: string
+  stableKey: string
+  turn: PublicThreadTurn
 }
 
 type ThreadRecordsUpdater =
@@ -89,9 +96,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const generationRef = useRef(initialLiveTurn === null ? 0 : 1)
   const [streamingBusy, setStreamingBusy] = useState(initialLiveTurn !== null)
   const [sessionThreadId, setSessionThreadId] = useState<string | null>(null)
+  const [optimisticTurns, setOptimisticTurns] = useState<readonly OptimisticTurnRecord[]>([])
   const searchContext = DEFAULT_AE_SEARCH_CONTEXT
   const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const pendingThreadIdRef = useRef<string | null>(null)
+  const mobileSidebarReturnFocusRef = useRef<HTMLElement | null>(null)
   threadsRef.current = threads
 
   const setThreadRecords = useCallback((updater: ThreadRecordsUpdater) => {
@@ -102,15 +112,44 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const initialRouteProjection =
     routeThreadId !== null && initialProjection?.threadId === routeThreadId ? initialProjection : null
   const fetchedRouteProjection = fetchedProjection?.threadId === routeThreadId ? fetchedProjection : null
-  const projection =
+  const serverProjection =
     routeThreadId === null ? null : (fetchedRouteProjection?.projection ?? initialRouteProjection ?? null)
   const projectionUnavailable =
     routeThreadId !== null &&
     (initialProjection === null || (initialRouteProjection === null && fetchedRouteProjection?.unavailable === true))
   const streamingThreadId = routeThreadId ?? sessionThreadId
+  const activeLiveTurnId = liveTurn?.turnId ?? null
+  const projection = useMemo(
+    () =>
+      mergeProjectionWithOptimisticTurns({
+        serverProjection,
+        streamingThreadId,
+        optimisticTurns,
+        omitTurnId: activeLiveTurnId,
+      }),
+    [serverProjection, streamingThreadId, optimisticTurns, activeLiveTurnId],
+  )
+  const sessionProjection = useMemo(
+    () =>
+      mergeProjectionWithOptimisticTurns({
+        serverProjection,
+        streamingThreadId,
+        optimisticTurns,
+      }),
+    [serverProjection, streamingThreadId, optimisticTurns],
+  )
+  const turnRenderKeys = useMemo(() => {
+    const keys: Record<string, string> = {}
+    for (const record of optimisticTurns) {
+      if (record.threadId === streamingThreadId) {
+        keys[record.turn.turnId] = record.stableKey
+      }
+    }
+    return keys
+  }, [streamingThreadId, optimisticTurns])
   const showWelcome = routeThreadId === null && liveTurn === null && (projection?.turns.length ?? 0) === 0
   const showThreadUnavailable = routeThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
-  const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
+  const completedTurns = sessionProjection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const completedTurnCount = completedTurns.length
 
 
@@ -177,6 +216,23 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setLeavingWelcome(false)
   }, [showWelcome])
 
+  function openMobileSidebar() {
+    const activeElement = document.activeElement
+    mobileSidebarReturnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null
+    setMobileSidebarOpen(true)
+  }
+
+  function closeMobileSidebar() {
+    const returnFocusElement = mobileSidebarReturnFocusRef.current
+    setMobileSidebarOpen(false)
+    window.requestAnimationFrame(() => {
+      if (returnFocusElement?.isConnected) {
+        returnFocusElement.focus()
+      }
+      mobileSidebarReturnFocusRef.current = null
+    })
+  }
+
   function startTurn(
     query: string,
     context: AeSearchContext = searchContext,
@@ -199,13 +255,39 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     startTurn(query, searchContext, intent)
   }
 
-  function handleThreadCreated(id: string) {
+  function handleThreadCreated(id: string, turnMeta?: { turnId: string; turnSeq: number }) {
     pendingThreadIdRef.current = id
     setSessionThreadId(id)
+    if (turnMeta !== undefined) {
+      setLiveTurn((current) => {
+        if (current === null || current.turnId === turnMeta.turnId) {
+          return current
+        }
+        return { ...current, turnId: turnMeta.turnId, turnSeq: turnMeta.turnSeq }
+      })
+    }
     setThreadRecords((current) => upsertOptimisticThread(current, {
       threadId: id,
       title: liveTurn?.query.trim() ?? 'New question',
     }))
+  }
+
+  function handleSettledTurn(turn: PublicThreadTurn, generation: number) {
+    const threadIdForTurn = routeThreadId ?? sessionThreadId ?? pendingThreadIdRef.current
+    if (threadIdForTurn === null) {
+      return
+    }
+    setOptimisticTurns((current) => {
+      const nextRecord = {
+        threadId: threadIdForTurn,
+        stableKey: `live-${generation}`,
+        turn,
+      } satisfies OptimisticTurnRecord
+      return [
+        ...current.filter((record) => record.threadId !== threadIdForTurn || record.turn.turnId !== turn.turnId),
+        nextRecord,
+      ]
+    })
   }
 
   function handleStreamEnd(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
@@ -278,7 +360,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const sidebarContextActive = routeThreadId !== null || liveTurn !== null
   const showSidebarToggle = sidebarContextActive || threads.length > 0 || sidebarManuallyOpen
   const sidebarVisible = sidebarContextActive || sidebarManuallyOpen
-  const showThreadChrome = routeThreadId !== null && completedTurnCount > 1
+  const showThreadChrome = routeThreadId !== null && projection !== null
+  // Session-level orientation (inquiry path + saved context) is premature during
+  // the very first streaming reveal - there is no settled context to orient yet,
+  // and stacking it on the live turn is the info dump we are removing. Show it
+  // once at least one turn has completed, so the first prompt streams cleanly.
+  const showSessionChrome = completedTurnCount >= 1
 
   // Keep scroller mounted while a turn streams - sessionThreadId updates mid-stream must not remount.
   const scrollerKey = routeThreadId ?? (liveTurn !== null ? 'live' : sessionThreadId) ?? 'home'
@@ -288,12 +375,79 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     liveTurn === null && completedTurns.length > 0 ? (completedTurns[completedTurns.length - 1]?.turnId ?? null) : null
   const followUpComposerCopy = buildFollowUpComposerCopy(completedTurns, liveTurn?.intent ?? null)
 
+  // Both large-screen column states are explicit so the content column resizes
+  // smoothly and the sidebar slides in from a 0-width track instead of the
+  // layout hard-jumping when it mounts/toggles.
+  const sidebarGridCols = sidebarVisible
+    ? 'lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]'
+    : 'lg:grid-cols-[0rem_minmax(0,1fr)]'
   const shell = (
-    <div className={`grid h-full min-h-0 w-full bg-body${sidebarVisible ? ' lg:grid-cols-[clamp(13.5rem,16vw,16.25rem)_minmax(0,1fr)]' : ''}`}>
+    <div className={`grid h-full min-h-0 w-full bg-body motion-safe:transition-[grid-template-columns] motion-safe:duration-base motion-safe:ease-standard ${sidebarGridCols}`}>
+      <Dialog
+        id="ae-thread-mobile-sidebar"
+        isOpen={mobileSidebarOpen}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            closeMobileSidebar()
+          }
+        }}
+        variant="fullscreen"
+        purpose="info"
+        padding={0}
+        role="dialog"
+        aria-labelledby="ae-thread-mobile-sidebar-title"
+        className="lg:hidden"
+      >
+        <div className="relative h-dvh w-dvw overflow-hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-primary/20"
+            aria-label="Close recent questions panel"
+            tabIndex={-1}
+            onClick={closeMobileSidebar}
+          />
+          <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-body shadow-sm">
+            <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4">
+              <h2 id="ae-thread-mobile-sidebar-title" className="font-heading text-base font-semibold text-primary">
+                Recent questions
+              </h2>
+              <Button
+                label="Close recent questions"
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-11"
+                icon={<XIcon aria-hidden="true" />}
+                isIconOnly
+                data-autofocus=""
+                onClick={closeMobileSidebar}
+              />
+            </div>
+            <AeThreadSidebar
+              threads={threads}
+              activeThreadId={routeThreadId}
+              visible
+              layout="mobile"
+              onDelete={handleDeleteThread}
+              onNavigate={closeMobileSidebar}
+            />
+          </div>
+        </div>
+      </Dialog>
       <AeThreadSidebar threads={threads} activeThreadId={routeThreadId} visible={sidebarVisible} onDelete={handleDeleteThread} />
-      <div className="flex h-full min-h-0 w-full flex-col bg-body">
+      <div className="flex h-full min-h-0 w-full flex-col bg-body lg:col-start-2">
         {showSidebarToggle ? (
-          <div className="flex min-h-10 items-center px-4 pt-2 md:px-6">
+          <div className={`flex min-h-10 items-center px-4 pt-2 md:px-6${showThreadChrome ? ' hidden lg:flex' : ''}`}>
+            <IconButton
+              label="Open recent questions"
+              variant="ghost"
+              size="sm"
+              className="min-h-11 text-secondary lg:hidden"
+              icon={<PanelLeftIcon aria-hidden="true" />}
+              onClick={openMobileSidebar}
+              aria-controls="ae-thread-mobile-sidebar"
+              aria-expanded={mobileSidebarOpen}
+            />
             <IconButton
               label={sidebarVisible ? 'Hide recent questions' : 'Show recent questions'}
               variant="ghost"
@@ -306,8 +460,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             />
           </div>
         ) : null}
-        {showThreadChrome && projection !== null ? (
-          <AeThreadHeader title={projection.title} threadId={projection.threadId} />
+        {showThreadChrome ? (
+          <AeThreadHeader
+            title={projection.title}
+            threadId={projection.threadId}
+            showSidebarButton={showSidebarToggle}
+            onOpenSidebar={openMobileSidebar}
+            sidebarOpen={mobileSidebarOpen}
+          />
         ) : null}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <AeThreadScroller
@@ -329,20 +489,26 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 />
               </div>
             ) : null}
-            <AeSessionJourney projection={projection} liveTurn={liveTurn} />
-            <AeSessionContextPanel projection={projection} liveTurn={liveTurn} />
+            {showSessionChrome ? (
+              <>
+                <AeSessionJourney projection={sessionProjection} liveTurn={liveTurn} />
+                <AeSessionContextPanel projection={sessionProjection} liveTurn={liveTurn} />
+              </>
+            ) : null}
             <AeThreadTranscript
               threadId={streamingThreadId}
               projection={projection}
               liveTurn={liveTurn}
+              turnRenderKeys={turnRenderKeys}
               onThreadCreated={handleThreadCreated}
               onStreamEnd={handleStreamEnd}
+              onSettledTurn={handleSettledTurn}
               {...(routeThreadId === null ? {} : { onFollowUp: handleFollowUp })}
               onRetry={handleRetry}
             />
           </AeThreadScroller>
           {!showWelcome ? (
-            <div className="mx-auto w-full max-w-[52rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
+            <div className="mx-auto w-full max-w-[56rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
               <AeQueryPanel
                 onSubmit={handleSubmit}
                 busy={streamingBusy}
@@ -355,7 +521,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           ) : null}
           {landingMode ? (
             <div
-              className={`absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-body px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-200${!showWelcome ? ' pointer-events-none invisible opacity-0' : ''}`}
+              className={`absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-body px-4 py-12 md:px-6 motion-safe:transition-opacity motion-safe:duration-base motion-safe:ease-standard${!showWelcome ? ' pointer-events-none invisible opacity-0' : ''}`}
               aria-hidden={!showWelcome}
             >
               <div className="mx-auto flex w-full min-w-0 max-w-[44rem] flex-col gap-8">
@@ -383,131 +549,42 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   )
 }
 
-type FollowUpComposerCopy = {
-  placeholder: string
-  loopHint: string
-}
-
-export function buildFollowUpComposerCopy(
-  completedTurns: readonly NonNullable<PublicThreadProjection>['turns'][number][],
-  liveIntent: FollowUpIntent | null = null,
-): FollowUpComposerCopy | null {
-  if (liveIntent !== null) {
-    return buildLiveComposerCopy(liveIntent, completedTurns.length)
+function mergeProjectionWithOptimisticTurns(input: {
+  serverProjection: PublicThreadProjection | null
+  streamingThreadId: string | null
+  optimisticTurns: readonly OptimisticTurnRecord[]
+  omitTurnId?: string | null
+}): PublicThreadProjection | null {
+  if (input.streamingThreadId === null) {
+    return input.serverProjection
   }
 
-  if (completedTurns.length === 0) {
-    return null
+  const scopedOptimisticTurns = input.optimisticTurns
+    .filter((record) => record.threadId === input.streamingThreadId && record.turn.turnId !== input.omitTurnId)
+    .map((record) => record.turn)
+
+  if (scopedOptimisticTurns.length === 0) {
+    return input.serverProjection
   }
 
-  const state = readComposerContext(completedTurns)
-  if (state.selectedProvider !== undefined) {
-    return providerHasInquiryPath(state.selectedProvider)
-      ? {
-          placeholder: 'Ask limits, refine, or continue with the selected business',
-          loopHint: 'AE keeps that business in context for qualified inquiry review. The business still confirms timing, quote, and availability.',
-        }
-      : {
-          placeholder: 'Ask limits, refine, or review the selected listing',
-          loopHint: 'This business needs a published inquiry path before AE can route contact.',
-        }
-  }
-
-  if (state.hasInquiryReadyProvider) {
+  if (input.serverProjection === null) {
     return {
-      placeholder: 'Narrow, compare, or prepare a qualified inquiry',
-      loopHint: 'Continue by narrowing or comparing the listed businesses, then prepare a qualified inquiry when one fits.',
-    }
+      threadId: input.streamingThreadId,
+      title: scopedOptimisticTurns[0]?.query ?? 'New question',
+      turns: scopedOptimisticTurns,
+    } satisfies PublicThreadProjection
   }
 
-  if (state.hasListedProvider) {
-    return {
-      placeholder: 'Narrow, compare, or ask for the contact step',
-      loopHint: 'These listings need a published inquiry path before AE can route contact.',
-    }
+  const serverTurnIds = new Set(input.serverProjection.turns.map((turn) => turn.turnId))
+  const pendingTurns = scopedOptimisticTurns.filter((turn) => !serverTurnIds.has(turn.turnId))
+  if (pendingTurns.length === 0) {
+    return input.serverProjection
   }
 
   return {
-    placeholder: 'Refine the search or ask what AE can safely do',
-    loopHint: 'AE needs a listed business before it can compare options or route a qualified inquiry.',
-  }
-}
-
-function buildLiveComposerCopy(intent: FollowUpIntent, completedTurnCount: number): FollowUpComposerCopy {
-  switch (intent) {
-    case 'filter_known':
-      return {
-        placeholder: 'Filtering the listed businesses from this thread',
-        loopHint: 'AE is narrowing the known businesses before any contact step.',
-      }
-    case 'compare_known':
-      return {
-        placeholder: 'Comparing the listed businesses from this thread',
-        loopHint: 'AE is comparing published details from the businesses already found.',
-      }
-    case 'inquiry_handoff':
-      return {
-        placeholder: 'Preparing the qualified inquiry next step',
-        loopHint: 'AE is carrying the selected business into inquiry review. The business still confirms timing, quote, and availability.',
-      }
-    case 'explain_boundary':
-      return {
-        placeholder: "Checking AE's inquiry-only limits",
-        loopHint: 'AE will route back to published listings when a request exceeds read, compare, or qualified inquiry.',
-      }
-    case 'unsupported':
-      return {
-        placeholder: 'Routing back to published listings',
-        loopHint: 'AE does not book, charge, or dispatch; it reads, compares, and routes qualified inquiries.',
-      }
-    case 'refine_search':
-      return {
-        placeholder: completedTurnCount > 0 ? 'Searching again with this thread in mind' : 'Checking published business details',
-        loopHint: 'AE is checking published business details before any contact step.',
-      }
-  }
-}
-
-function readComposerContext(
-  completedTurns: readonly NonNullable<PublicThreadProjection>['turns'][number][],
-): {
-  hasListedProvider: boolean
-  hasInquiryReadyProvider: boolean
-  selectedProvider: ReturnType<typeof activeSelectedProviderForTurns>
-} {
-  let hasListedProvider = false
-  let hasInquiryReadyProvider = false
-  const selectedProvider = activeSelectedProviderForTurns(completedTurns)
-
-  for (const turn of completedTurns) {
-    for (const artifact of turn.artifacts) {
-      switch (artifact.kind) {
-        case 'selected-provider':
-          hasListedProvider = true
-          if (hasPublishedInquiryPath(artifact.provider)) {
-            hasInquiryReadyProvider = true
-          }
-          break
-        case 'provider-cards':
-        case 'provider-compare-table':
-          if (artifact.providers.length > 0) {
-            hasListedProvider = true
-          }
-          if (artifact.providers.some(hasPublishedInquiryPath)) {
-            hasInquiryReadyProvider = true
-          }
-          break
-        default:
-          break
-      }
-    }
-  }
-
-  return { hasListedProvider, hasInquiryReadyProvider, selectedProvider }
-}
-
-function hasPublishedInquiryPath(provider: { inquiryUrl?: string }): boolean {
-  return provider.inquiryUrl !== undefined && provider.inquiryUrl.length > 0
+    ...input.serverProjection,
+    turns: [...input.serverProjection.turns, ...pendingTurns].sort((left, right) => left.seq - right.seq),
+  } satisfies PublicThreadProjection
 }
 
 function emitChatFunnelEvents(events: readonly ChatFunnelEvent[]): void {

@@ -1,5 +1,7 @@
 import { v } from 'convex/values'
 
+import { internal } from './_generated/api'
+import { internalMutation } from './_generated/server'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import {
   SourceWriteAdmissionError,
@@ -190,3 +192,46 @@ function isSourceWriteAdmission(value: unknown): value is SourceWriteAdmission {
   )
 }
 
+const sourceWriteNonceCleanupResult = v.object({
+  deleted: v.number(),
+  cutoff: v.number(),
+  rescheduled: v.boolean(),
+})
+
+const SOURCE_WRITE_NONCE_CLEANUP_BATCH_SIZE = 200
+const SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE = 500
+
+export const cleanupExpiredSourceWriteNonces = internalMutation({
+  args: {
+    now: v.optional(v.number()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: sourceWriteNonceCleanupResult,
+  handler: async (ctx, args) => {
+    const cutoff = args.now !== undefined && Number.isFinite(args.now) ? args.now : Date.now()
+    const batchSize =
+      args.batchSize !== undefined && Number.isFinite(args.batchSize)
+        ? Math.min(Math.max(Math.floor(args.batchSize), 1), SOURCE_WRITE_NONCE_CLEANUP_MAX_BATCH_SIZE)
+        : SOURCE_WRITE_NONCE_CLEANUP_BATCH_SIZE
+
+    const expiredNonces = await ctx.db
+      .query('sourceWriteNonces')
+      .withIndex('by_expiresAt', (query) => query.lt('expiresAt', cutoff))
+      .take(batchSize)
+
+    for (const expiredNonce of expiredNonces) {
+      await ctx.db.delete(expiredNonce._id)
+    }
+
+    const deleted = expiredNonces.length
+    const rescheduled = deleted >= batchSize
+    if (rescheduled) {
+      await ctx.scheduler.runAfter(0, internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces, {
+        now: cutoff,
+        batchSize,
+      })
+    }
+
+    return { deleted, cutoff, rescheduled }
+  },
+})

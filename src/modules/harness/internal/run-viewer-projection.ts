@@ -107,7 +107,7 @@ export function buildHarnessRunViewerDetailResult(
   })
 }
 
-export function buildHarnessRunViewerDeniedResult(
+function buildHarnessRunViewerDeniedResult(
   input: HarnessRunViewerDeniedInput,
 ): Extract<HarnessRunViewerListResult, { kind: 'denied' }> {
   return {
@@ -121,7 +121,7 @@ export function buildHarnessRunViewerDeniedResult(
   }
 }
 
-export function buildHarnessRunViewerListProjection(
+function buildHarnessRunViewerListProjection(
   input: HarnessRunViewerListInput,
 ): HarnessRunViewerListAllowed {
   const filters = normalizeHarnessRunViewerFilters(input.filters)
@@ -177,7 +177,7 @@ export function buildHarnessRunViewerDetailProjection(
   }
 }
 
-export function buildHarnessRunViewerListRow(turn: AnswerTurnRecord): HarnessRunViewerListRow {
+function buildHarnessRunViewerListRow(turn: AnswerTurnRecord): HarnessRunViewerListRow {
   const evidence = readFrozenEvidence(turn.evidenceJson)
   const run = resolveRunOverview(turn, evidence)
   const answerRun = evidence.answerRun ?? buildAnswerRunReport({
@@ -212,7 +212,7 @@ export function buildHarnessRunViewerListRow(turn: AnswerTurnRecord): HarnessRun
   }
 }
 
-export function buildHarnessRunViewerDetail(turn: AnswerTurnRecord): HarnessRunViewerDetail {
+function buildHarnessRunViewerDetail(turn: AnswerTurnRecord): HarnessRunViewerDetail {
   const evidence = readFrozenEvidence(turn.evidenceJson)
   const prose = readFrozenProse(turn.proseJson)
   const artifactKinds = readStringArrayJson(turn.artifactKindsJson)

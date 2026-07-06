@@ -1,4 +1,4 @@
-export const ResultKindValues = ['ok', 'error'] as const
+const ResultKindValues = ['ok', 'error'] as const
 
 export type ResultKind = (typeof ResultKindValues)[number]
 

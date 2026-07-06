@@ -218,7 +218,7 @@ export async function createStripeCheckoutSessionEvidence(
   }
 }
 
-export function verifyStripeWebhookSignature(
+function verifyStripeWebhookSignature(
   input: StripeWebhookSignatureInput
 ): { kind: 'ok'; payloadHash: SourceHash; timestamp: number } | Extract<StripeWebhookAdmissionResult, { kind: 'error' }> {
   if (input.webhookSecret === undefined || input.webhookSecret.trim().length === 0) {

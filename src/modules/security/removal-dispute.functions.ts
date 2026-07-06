@@ -4,6 +4,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import {
   getDefaultPublicOwnerStatusReadback,
@@ -58,7 +59,7 @@ const openRemovalDisputeMutation = sourceMutation<OpenRemovalDisputeArgs, Disput
 )
 
 export async function openRemovalDisputeThroughSource(data: RemovalDisputeInput, context?: unknown): Promise<DisputeOpenResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return openRemovalDisputeLocal(data)
   }
 
@@ -186,8 +187,4 @@ function readEnv(env: Env, name: string): string | undefined {
 function normalizeOperationPart(value: string): string {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
   return normalized.length === 0 ? 'removal' : normalized
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

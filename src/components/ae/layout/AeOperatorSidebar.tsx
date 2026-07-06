@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 import { Badge } from '@astryxdesign/core/Badge'
 import { SideNav, SideNavHeading, SideNavItem, SideNavSection } from '@astryxdesign/core/SideNav'
 
@@ -22,13 +24,39 @@ type AeOperatorSidebarProps = {
 
 const EMPTY_NAV_BADGES: OperatorNavBadges = {}
 
+const operatorSidebarCollapsedStorageKey = 'ae.operator.sidebar.collapsed'
+
 export function AeOperatorSidebar({ operatorRole, currentPath, navBadges = EMPTY_NAV_BADGES }: AeOperatorSidebarProps) {
   const navGroups = navGroupsForRole(operatorRole)
   const utilityItems = operatorUtilityItemsForRole(operatorRole)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false
+    }
+
+    try {
+      return window.localStorage.getItem(operatorSidebarCollapsedStorageKey) === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(operatorSidebarCollapsedStorageKey, String(isCollapsed))
+    } catch {
+      return
+    }
+  }, [isCollapsed])
 
   return (
     <SideNav
-      collapsible={{ defaultIsCollapsed: false, hasButton: true, buttonLabel: 'Collapse navigation' }}
+      collapsible={{
+        isCollapsed,
+        onCollapsedChange: setIsCollapsed,
+        hasButton: true,
+        buttonLabel: 'Collapse navigation',
+      }}
       header={
         <SideNavHeading
           heading="Agentic Economy"

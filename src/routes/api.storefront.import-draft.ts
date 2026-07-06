@@ -2,6 +2,8 @@ import { auth } from '@clerk/tanstack-react-start/server'
 import { createFileRoute } from '@tanstack/react-router'
 import { z } from 'zod'
 
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 import { jsonResponse } from './api.businesses'
 
@@ -13,17 +15,24 @@ export const Route = createFileRoute('/api/storefront/import-draft')({
   },
 })
 
+const MAX_STOREFRONT_IMPORT_BODY_BYTES = 16 * 1024
+
 export async function handleImportStorefrontDraftRequest(request: Request): Promise<Response> {
-  if (process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {
+  if (!isLocalE2EAuthBypassEnabled()) {
     const session = await auth()
     if (!session.isAuthenticated) {
       return jsonResponse({ kind: 'error', code: 'storefront_import_unauthenticated', reason: 'Sign in before importing a service page draft.' }, { status: 401 })
     }
   }
 
+  const boundedBody = await readBoundedRequestText(request, MAX_STOREFRONT_IMPORT_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return jsonResponse({ kind: 'error', code: 'storefront_import_payload_too_large', reason: 'Request body is too large.' }, { status: 413 })
+  }
+
   let body: unknown
   try {
-    body = await request.json()
+    body = JSON.parse(boundedBody.text)
   } catch {
     return jsonResponse({ kind: 'error', code: 'storefront_import_invalid_body', reason: 'Request body must be JSON.' }, { status: 400 })
   }

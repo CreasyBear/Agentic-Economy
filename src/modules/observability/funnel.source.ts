@@ -35,9 +35,6 @@ export type RecordPublicFunnelEventInput = z.infer<typeof recordFunnelEventSchem
 
 export async function recordOwnerActivationThroughSource(input: RecordPublicFunnelEventInput): Promise<void> {
   const parsed = recordFunnelEventSchema.parse(input)
-  if (parsed.businessId === undefined) {
-    return
-  }
 
   await callPublicSourceMutation(recordOwnerActivationEventMutation, parsed)
 }

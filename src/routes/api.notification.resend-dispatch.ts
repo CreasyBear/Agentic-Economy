@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import {
   callPublicSourceMutation,
@@ -30,6 +31,8 @@ export const Route = createFileRoute('/api/notification/resend-dispatch')({
 })
 
 type Env = Record<string, string | undefined>
+const MAX_NOTIFICATION_DISPATCH_BODY_BYTES = 4 * 1024
+
 
 type NotificationDispatchProjection = {
   dispatchId: string
@@ -93,6 +96,11 @@ type NotificationSystemSendReadResult =
           businessId: string
           slug: string
           name: string
+        }
+        inquiry?: {
+          serviceName?: string
+          customerMessageFirstLine?: string
+          isFirstInquiryForBusiness: boolean
         }
       }
     }
@@ -217,6 +225,9 @@ export async function handleResendDispatchRequest(
         inquiryThreadId: send.dispatch.inquiryThreadId,
         businessName: send.business.name,
         businessSlug: send.business.slug,
+        ...(send.inquiry?.serviceName === undefined ? {} : { serviceName: send.inquiry.serviceName }),
+        ...(send.inquiry?.customerMessageFirstLine === undefined ? {} : { customerMessageFirstLine: send.inquiry.customerMessageFirstLine }),
+        ...(send.inquiry === undefined ? {} : { isFirstInquiryForBusiness: send.inquiry.isFirstInquiryForBusiness }),
       },
       appBaseUrl: new URL(request.url).origin,
     })
@@ -286,8 +297,17 @@ function requireDispatchAuthorization(headers: Headers, systemKey: string): void
 }
 
 async function readDispatchId(request: Request): Promise<string> {
+  const boundedBody = await readBoundedRequestText(request, MAX_NOTIFICATION_DISPATCH_BODY_BYTES)
+  if (!boundedBody.ok) {
+    throw new NotificationProviderError(
+      'invalid_notification_dispatch_payload',
+      'Notification dispatch request body is too large.',
+      413,
+    )
+  }
+
   try {
-    const body = (await request.json()) as unknown
+    const body = JSON.parse(boundedBody.text) as unknown
     if (isRecord(body) && typeof body.dispatchId === 'string' && body.dispatchId.trim().length > 0) {
       return body.dispatchId.trim()
     }

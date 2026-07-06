@@ -2,6 +2,7 @@ import { clerkMiddleware } from '@clerk/tanstack-react-start/server'
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 
 import { applySecurityHeadersToResponse, resolveCspModeFromEnv } from '@/lib/http/security-headers'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { createSourceWriteAdmissionMiddleware } from '@/lib/server/source-write-admission'
 
 const observabilityRequestMiddleware = createMiddleware().server(async (ctx) => {
@@ -44,19 +45,7 @@ const securityHeadersRequestMiddleware = createMiddleware().server(async (ctx) =
   }
 })
 
-const clerkRequestMiddleware = usesClerkBypass() ? [] : [clerkMiddleware()]
-
-function usesClerkBypass(): boolean {
-  if (process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {
-    return false
-  }
-
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E cannot be enabled in production.')
-  }
-
-  return true
-}
+const clerkRequestMiddleware = isLocalE2EAuthBypassEnabled() ? [] : [clerkMiddleware()]
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [

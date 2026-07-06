@@ -1,4 +1,5 @@
 import { callPublicSourceQuery, sourceQuery } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import {
   readFixtureCatalogDiscoveryManifest,
   readFixtureLlmsTxt,
@@ -43,7 +44,7 @@ export async function readPublicSitemapXml(options: BuildDiscoveryFileOptions): 
 
 function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
 
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return {
       manifest: (input) => Promise.resolve(readFixtureCatalogDiscoveryManifest(input)),
       llms: (options) => Promise.resolve(readFixtureLlmsTxt(options)),
@@ -56,8 +57,4 @@ function getPublicDiscoverySourcePort(): PublicDiscoverySourcePort {
     llms: (options) => callPublicSourceQuery(readLlmsTxtQuery, options),
     sitemap: (options) => callPublicSourceQuery(readSitemapXmlQuery, options),
   }
-}
-
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
 }

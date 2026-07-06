@@ -19,9 +19,11 @@ import { AeKicker } from '@/components/ae/primitives/AeKicker'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { AeStreamingLabel } from '@/components/ae/chat/AeStreamingLabel'
 import { AeGenerativeMap } from './AeGenerativeMap'
+import { cn } from '@/lib/utils'
 
-const REVEAL_ENTER =
-  'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300'
+// Calm fade-only reveal. Slide-from-bottom on every streamed part stacks into
+// jitter when several artifacts arrive in quick succession, so parts just fade.
+const REVEAL_ENTER = 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-base motion-safe:ease-standard'
 
 export type AeGenerativeAnswerPhase =
   | 'idle'
@@ -72,6 +74,12 @@ export function AeGenerativeAnswer({
 
   const empty = phase === 'complete' && profile === 'empty_state'
   const isFirstTurnProfile = profile === 'discovery_full' || profile === 'empty_state'
+  // One headline size token drives both the streaming placeholder and the final
+  // one-line so the lead answer text does not resize as it settles. The first
+  // substantive answer leads with the heading scale; follow-ups read at body.
+  const headlineSize = isFirstTurnProfile
+    ? 'font-heading text-2xl leading-snug text-balance'
+    : 'text-base font-medium leading-snug'
   const hasProviderEvidence = parts.some(isProviderEvidencePart)
   const hasSummary = parts.some((part) => part.kind === 'prose' && part.text.trim().length > 0)
   const hasNextStep = parts.some((part) => part.kind === 'what-to-do-now' && part.text.trim().length > 0)
@@ -87,25 +95,23 @@ export function AeGenerativeAnswer({
       <div className="flex items-start justify-between gap-3">
         {headline.length > 0 ? (
           <p
-            className={
-              isFirstTurnProfile
-                ? `${REVEAL_ENTER} min-w-0 flex-1 font-heading text-2xl leading-snug text-balance text-primary`
-                : 'min-w-0 flex-1 text-sm text-secondary'
-            }
+            className={cn(
+              'min-w-0 flex-1 text-primary',
+              headlineSize,
+              isFirstTurnProfile && REVEAL_ENTER,
+            )}
             aria-live={busy ? 'polite' : 'off'}
           >
             {headline}
           </p>
-        ) : busy ? (
+        ) : (
           <p
-            className="min-w-0 flex-1 text-lg text-secondary"
-            aria-live="polite"
+            className={cn('min-w-0 flex-1 text-secondary', headlineSize)}
+            {...(busy ? { 'aria-live': 'polite' as const } : {})}
             aria-label="Finding listed businesses"
           >
-            <AeStreamingLabel as="span">Finding listed businesses</AeStreamingLabel>
+            {busy ? <AeStreamingLabel as="span">Finding listed businesses</AeStreamingLabel> : 'Finding listed businesses'}
           </p>
-        ) : (
-          <p className="min-w-0 flex-1 text-lg text-secondary">Finding listed businesses</p>
         )}
 
         {phase === 'reconnecting' ? (
@@ -125,14 +131,20 @@ export function AeGenerativeAnswer({
         </div>
       ) : null}
 
-      <AeAnswerJourney
-        phase={phase}
-        profile={profile}
-        hasHeadline={headline.length > 0}
-        hasProviderEvidence={hasProviderEvidence}
-        hasSummary={hasSummary}
-        hasNextStep={hasNextStep}
-      />
+      {/* The handoff record only means something once there are real listings to route to.
+         On an empty or clarify turn it just restates "nothing found", so it stays out. */}
+      {hasProviderEvidence ? (
+        <AeAnswerJourney
+          phase={phase}
+          profile={profile}
+          progress={{
+            headline: headline.length > 0,
+            providerEvidence: hasProviderEvidence,
+            summary: hasSummary,
+            nextStep: hasNextStep,
+          }}
+        />
+      ) : null}
 
       {parts.map((part, index) => (
         <AnswerPartView key={`${part.kind}-${index}`} part={part} query={query} empty={empty} phase={phase} threadId={threadId} />
@@ -160,20 +172,21 @@ function isProviderEvidencePart(part: AnswerMessagePart): boolean {
 
 type AnswerJourneyState = 'complete' | 'active' | 'pending' | 'error' | 'stopped'
 
+type AnswerJourneyProgress = {
+  headline: boolean
+  providerEvidence: boolean
+  summary: boolean
+  nextStep: boolean
+}
+
 function AeAnswerJourney({
   phase,
   profile,
-  hasHeadline,
-  hasProviderEvidence,
-  hasSummary,
-  hasNextStep,
+  progress,
 }: {
   phase: AeGenerativeAnswerPhase
   profile: AnswerLayoutProfile
-  hasHeadline: boolean
-  hasProviderEvidence: boolean
-  hasSummary: boolean
-  hasNextStep: boolean
+  progress: AnswerJourneyProgress
 }) {
   const empty = profile === 'empty_state'
   const steps = [
@@ -201,30 +214,31 @@ function AeAnswerJourney({
     },
   ] as const
 
-  const completedIndex = getJourneyCompletedIndex({
-    phase,
-    empty,
-    hasHeadline,
-    hasProviderEvidence,
-    hasSummary,
-    hasNextStep,
-  })
+  const completedIndex = getJourneyCompletedIndex({ phase, empty, progress })
   const activeIndex =
     phase === 'streaming'
       ? Math.min(completedIndex + 1, steps.length - 1)
       : Math.max(0, Math.min(completedIndex, steps.length - 1))
   const guidance =
     phase === 'streaming'
-      ? 'AE is assembling the proof spine as the answer arrives.'
+      ? 'AE is putting the answer record together as the answer arrives.'
       : empty
         ? 'No clear published match yet; use the route below to sharpen the search.'
         : 'AE reads, checks, compares, and routes. The business still confirms timing, quote, and availability.'
+
+  // The handoff record is settled evidence, not live chrome. During streaming
+  // the research trace + streaming answer already show progress, so this stays
+  // out until the turn settles and then fades in as one card.
+  // no strip-to-card swap, no mid-stream layout jump.
+  if (phase === 'idle' || phase === 'streaming' || phase === 'reconnecting') {
+    return null
+  }
 
   return (
     <Card
       padding={4}
       className={`${REVEAL_ENTER} grid gap-5 border border-border bg-surface`}
-      aria-label="AE proof spine"
+      aria-label="How this answer was put together"
       data-phase={phase}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -237,7 +251,7 @@ function AeAnswerJourney({
             loading="lazy"
           />
           <div className="grid min-w-0 gap-1">
-            <Badge variant="neutral" className="w-fit" label="Proof spine" />
+            <Badge variant="neutral" className="w-fit" label="How this was put together" />
             <Text type="large" weight="semibold" color="primary" display="block">
               The handoff is a record.
             </Text>
@@ -247,14 +261,14 @@ function AeAnswerJourney({
           </div>
         </div>
         <Text type="supporting" color="secondary" className="font-mono tabular-nums" display="block">
-          {phase === 'complete' ? 'record ready' : phase === 'streaming' ? 'assembling' : 'handoff record'}
+          {phase === 'complete' ? 'record ready' : 'handoff record'}
         </Text>
       </div>
 
       <ol
         className="grid gap-4 border-l border-border pl-5 sm:grid-cols-4 sm:gap-5 sm:border-l-0 sm:border-t sm:pl-0 sm:pt-5"
-        aria-live={phase === 'streaming' ? 'polite' : 'off'}
-        aria-label="Answer handoff proof spine"
+        aria-live="off"
+        aria-label="How this answer was put together"
       >
         {steps.map((step, index) => {
           const state = getJourneyState({ index, activeIndex, completedIndex, phase })
@@ -297,33 +311,28 @@ function AeAnswerJourney({
 function getJourneyCompletedIndex({
   phase,
   empty,
-  hasHeadline,
-  hasProviderEvidence,
-  hasSummary,
-  hasNextStep,
+  progress,
 }: {
   phase: AeGenerativeAnswerPhase
   empty: boolean
-  hasHeadline: boolean
-  hasProviderEvidence: boolean
-  hasSummary: boolean
-  hasNextStep: boolean
+  progress: AnswerJourneyProgress
 }): number {
   if (phase === 'complete') {
     return 3
   }
 
+  const { headline, providerEvidence, summary, nextStep } = progress
   let completed = -1
-  if (hasHeadline || hasProviderEvidence || hasSummary || hasNextStep || empty) {
+  if (headline || providerEvidence || summary || nextStep || empty) {
     completed = 0
   }
-  if (hasProviderEvidence || hasSummary || hasNextStep || empty) {
+  if (providerEvidence || summary || nextStep || empty) {
     completed = 1
   }
-  if (hasSummary || hasNextStep || empty) {
+  if (summary || nextStep || empty) {
     completed = 2
   }
-  if (hasNextStep) {
+  if (nextStep) {
     completed = 3
   }
   return completed
@@ -397,7 +406,7 @@ function AnswerPartView({
       )
     case 'recovery-prompts':
       return empty ? (
-        <RecoveryPrompts prompts={part.prompts} {...(part.title === undefined ? {} : { title: part.title })} />
+        <RecoveryPrompts prompts={part.prompts} {...(part.links === undefined ? {} : { links: part.links })} {...(part.title === undefined ? {} : { title: part.title })} />
       ) : null
     case 'location-map':
       return <AeGenerativeMap label={part.label} placeQuery={part.placeQuery} />
@@ -614,15 +623,15 @@ function ProviderCompareRow({
   fields: readonly AnswerCompareField[]
   threadId: string | undefined
 }) {
-  const detailHref = appendThreadOrigin(provider.detailUrl, threadId)
+  const detailSearch = threadId === undefined ? {} : { from: 'thread' as const, id: threadId }
 
   return (
     <tr>
       <th scope="row" className="sticky left-0 z-10 border-t border-border bg-surface px-4 py-3 text-left align-top">
         <span className="grid gap-0.5">
-          <a href={detailHref} className="font-medium text-primary underline-offset-4 hover:underline">
+          <Link to="/$slug" params={{ slug: provider.slug }} search={detailSearch} className="font-medium text-primary underline-offset-4 hover:underline">
             {provider.name}
-          </a>
+          </Link>
           <span className="font-mono text-2xs text-secondary">{provider.category}</span>
         </span>
       </th>
@@ -644,11 +653,13 @@ function ProviderCompareRow({
 function RecoveryPrompts({
   title,
   prompts,
+  links = [],
 }: {
   title?: string
   prompts: readonly { label: string; query: string }[]
+  links?: readonly { label: string; href: '/claim' | '/registry' }[]
 }) {
-  if (prompts.length === 0) {
+  if (prompts.length === 0 && links.length === 0) {
     return null
   }
 
@@ -669,19 +680,38 @@ function RecoveryPrompts({
           <p className="font-heading text-base text-primary">{title ?? 'Try a narrower query'}</p>
         </div>
       </header>
-      <ul className="flex flex-wrap gap-2">
-        {prompts.map((prompt) => (
-          <li key={`${prompt.label}-${prompt.query}`}>
-            <Link
-              className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-primary transition-colors hover:bg-muted active:scale-[0.96]"
-              to="/"
-              search={{ q: prompt.query }}
-            >
-              {prompt.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {prompts.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {prompts.map((prompt) => (
+            <li key={`${prompt.label}-${prompt.query}`}>
+              <Link
+                className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-4 text-sm text-primary transition-colors motion-safe:duration-fast motion-safe:ease-standard hover:bg-muted motion-safe:active:scale-press"
+                to="/"
+                search={{ q: prompt.query }}
+              >
+                {prompt.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {links.length > 0 ? (
+        <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-secondary" aria-label="More ways to continue">
+          {links.map((link) => (
+            <li key={link.href}>
+              {link.href === '/claim' ? (
+                <Link className="underline-offset-4 hover:text-primary hover:underline" to="/claim">
+                  {link.label}
+                </Link>
+              ) : (
+                <Link className="underline-offset-4 hover:text-primary hover:underline" to="/registry" search={{ q: '', limit: 10 }}>
+                  {link.label}
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   )
 }

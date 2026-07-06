@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { getFunctionName } from 'convex/server'
 import { createHmac } from 'node:crypto'
 
@@ -669,6 +669,9 @@ describe('server notification provider seam', () => {
         inquiryThreadId: 'inquiry_thread:abc',
         businessName: 'Sam Plumbing',
         businessSlug: 'sam-plumbing',
+        serviceName: 'Emergency plumbing',
+        customerMessageFirstLine: 'Burst pipe under the kitchen sink.',
+        isFirstInquiryForBusiness: true,
       },
       appBaseUrl: 'https://agentic.test',
       fetch,
@@ -684,8 +687,13 @@ describe('server notification provider seam', () => {
       to: ['owner@example.test'],
       subject: 'New inquiry for Sam Plumbing',
     })
-    expect(String(body.text)).toContain('https://agentic.test/owner/inquiries/inquiry_thread%3Aabc')
-    expect(String(body.text)).not.toContain('burst pipe raw body')
+    expect(String(body.text)).toContain('Emergency plumbing inquiry: Burst pipe under the kitchen sink.')
+    expect(String(body.text)).toContain('This is the first inquiry for Sam Plumbing through Agentic Economy.')
+    expect(String(body.text)).toContain('Your Sam Plumbing page is free, there are no lead fees, and replies go straight to the customer.')
+    expect(String(body.text)).toContain('Reply in Agentic Economy: https://agentic.test/owner/inquiries/inquiry_thread%3Aabc')
+    expect(String(body.text)).not.toContain('booking')
+    expect(String(body.text)).not.toContain('payment')
+    expect(String(body.text)).not.toContain('verified')
     expect(result).toMatchObject({
       kind: 'ok',
       status: 'sent',
@@ -842,6 +850,72 @@ describe('server notification provider seam', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('rejects oversized Novu dispatch bodies before reading dispatch or provider callbacks', async () => {
+    const calls: { read: unknown[]; resolve: unknown[]; trigger: unknown[]; readback: unknown[]; record: unknown[] } = {
+      read: [],
+      resolve: [],
+      trigger: [],
+      readback: [],
+      record: [],
+    }
+    const oversizedBody = JSON.stringify({
+      dispatchId: 'notification_dispatch:123',
+      padding: 'x'.repeat(4 * 1024),
+    })
+
+    const response = await handleNovuDispatchRequest(
+      new Request('https://agentic.test/api/notification/novu-dispatch', {
+        method: 'POST',
+        body: oversizedBody,
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer outbox-secret',
+        },
+      }),
+      {
+        env: {
+          AE_NOTIFICATION_OUTBOX_SECRET: 'outbox-secret',
+          CLERK_SECRET_KEY: 'sk_test',
+          NOVU_SECRET_KEY: 'novu_test',
+          NOVU_WORKFLOW_INQUIRY_OWNER: 'owner-inquiry',
+        },
+        readDispatchForSend: async (args) => {
+          calls.read.push(args)
+          throw new Error('should not read dispatch')
+        },
+        resolveOwnerDeliveryAddress: async (input) => {
+          calls.resolve.push(input)
+          throw new Error('should not resolve owner')
+        },
+        triggerOwnerInquiry: async (input) => {
+          calls.trigger.push(input)
+          throw new Error('should not trigger Novu')
+        },
+        readNovuMessages: async (input) => {
+          calls.readback.push(input)
+          throw new Error('should not read Novu messages')
+        },
+        recordDispatch: async (args) => {
+          calls.record.push(args)
+          throw new Error('should not record dispatch')
+        },
+      }
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'invalid_notification_dispatch_payload',
+    })
+    expect(response.status).toBe(413)
+    expect(calls).toEqual({
+      read: [],
+      resolve: [],
+      trigger: [],
+      readback: [],
+      record: [],
+    })
+  })
+
   it('runs the guarded Novu dispatch bridge with authenticated readback and redacted provider refs', async () => {
     const calls: { read: unknown[]; trigger: unknown[]; readback: unknown[]; record: unknown[] } = {
       read: [],
@@ -862,6 +936,7 @@ describe('server notification provider seam', () => {
       {
         env: {
           AE_NOTIFICATION_OUTBOX_SECRET: 'outbox-secret',
+          CLERK_SECRET_KEY: 'sk_test',
           NOVU_SECRET_KEY: 'novu_test',
           NOVU_WORKFLOW_INQUIRY_OWNER: 'owner-inquiry',
           NOVU_API_BASE_URL: 'https://novu.example.test',
@@ -869,6 +944,15 @@ describe('server notification provider seam', () => {
         readDispatchForSend: async (args) => {
           calls.read.push(args)
           return novuDispatchSendReadback()
+        },
+        resolveOwnerDeliveryAddress: async (input) => {
+          expect(input).toEqual({ clerkUserId: 'user_sam', secretKey: 'sk_test' })
+          return {
+            clerkUserId: input.clerkUserId,
+            email: 'owner@example.test',
+            addressHash: 'owner-email-hash',
+            redactedAddress: '[redacted]',
+          }
         },
         triggerOwnerInquiry: async (input) => {
           calls.trigger.push(input)
@@ -905,11 +989,11 @@ describe('server notification provider seam', () => {
           calls.record.push(args)
           return {
             kind: 'ok',
-            code: 'notification_triggered',
+            code: 'notification_sent',
             dispatch: {
               ...dispatchProjection(),
               providerFamily: 'novu',
-              status: 'triggered',
+              status: 'sent',
               novuTransactionId: 'ae:notification_dispatch:123',
               novuWorkflowId: 'owner-inquiry',
               novuMessageId: 'novu_message_123',
@@ -917,7 +1001,7 @@ describe('server notification provider seam', () => {
             },
             attempt: {
               attemptId: 'notification_attempt:novu',
-              status: 'triggered',
+              status: 'sent',
               providerResponseHash: 'novu-provider-response-hash',
             },
           }
@@ -929,12 +1013,12 @@ describe('server notification provider seam', () => {
       kind: 'ok',
       code: 'notification_novu_triggered',
       dispatchId: 'notification_dispatch:123',
-      dispatchStatus: 'triggered',
+      dispatchStatus: 'sent',
       novuTransactionId: 'ae:notification_dispatch:123',
       novuWorkflowId: 'owner-inquiry',
       novuMessageId: 'novu_message_123',
       novuSubscriberId: 'owner:user_sam',
-      providerResponseHash: 'novu-provider-response-hash',
+      providerResponseHash: expect.any(String),
       readbackProviderResponseHash: 'novu-readback-response-hash',
       novuMessageCount: 1,
       businessSlug: 'sam-plumbing',
@@ -943,7 +1027,11 @@ describe('server notification provider seam', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     expect(calls.read).toEqual([{ dispatchId: 'notification_dispatch:123', systemKey: 'outbox-secret' }])
     expect(calls.trigger[0]).toMatchObject({
-      subscriberId: 'owner:user_sam',
+      recipientRole: 'owner',
+      subscriber: {
+        subscriberId: 'owner:user_sam',
+        email: 'owner@example.test',
+      },
       dispatch: {
         providerIdempotencyKey: 'ae:notification_dispatch:123',
         inquiryThreadId: 'inquiry_thread:abc',
@@ -967,16 +1055,180 @@ describe('server notification provider seam', () => {
       systemKey: 'outbox-secret',
       providerResult: {
         kind: 'ok',
-        status: 'triggered',
+        status: 'sent',
         novuTransactionId: 'ae:notification_dispatch:123',
         novuWorkflowId: 'owner-inquiry',
         novuMessageId: 'novu_message_123',
         novuSubscriberId: 'owner:user_sam',
-        providerResponseHash: 'novu-provider-response-hash',
+        providerResponseHash: expect.any(String),
       },
     })
-    expect(JSON.stringify(calls)).not.toContain('owner@example.test')
+    expect(JSON.stringify(calls.record)).not.toContain('owner@example.test')
     expect(JSON.stringify(calls)).not.toContain('Raw customer inquiry')
+  })
+
+  it('routes customer Novu dispatches through the customer workflow without owner lookup', async () => {
+    const calls: { trigger: unknown[]; readback: unknown[]; record: unknown[]; resolve: unknown[] } = {
+      trigger: [],
+      readback: [],
+      record: [],
+      resolve: [],
+    }
+    const response = await handleNovuDispatchRequest(
+      new Request('https://agentic.test/api/notification/novu-dispatch', {
+        method: 'POST',
+        body: JSON.stringify({ dispatchId: 'notification_dispatch:123' }),
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer outbox-secret',
+        },
+      }),
+      {
+        env: {
+          AE_NOTIFICATION_OUTBOX_SECRET: 'outbox-secret',
+          NOVU_SECRET_KEY: 'novu_test',
+          NOVU_WORKFLOW_INQUIRY_OWNER: 'owner-inquiry',
+          NOVU_WORKFLOW_INQUIRY_CUSTOMER: 'customer-inquiry',
+        },
+        readDispatchForSend: async () => novuDispatchSendReadback({ recipientRole: 'customer' }),
+        resolveOwnerDeliveryAddress: async (input) => {
+          calls.resolve.push(input)
+          throw new Error('should not resolve owner for customer dispatch')
+        },
+        triggerInquiry: async (input) => {
+          calls.trigger.push(input)
+          return {
+            kind: 'ok',
+            status: 'triggered',
+            providerResponseHash: 'novu-customer-provider-response-hash',
+            novuTransactionId: 'ae:notification_dispatch:123',
+            novuWorkflowId: 'customer-inquiry',
+            novuSubscriberId: 'customer:inquiry_thread:abc',
+          }
+        },
+        readNovuMessages: async (input) => {
+          calls.readback.push(input)
+          return {
+            kind: 'ok',
+            transactionId: input.transactionId,
+            providerResponseHash: 'novu-customer-readback-response-hash',
+            totalCount: 0,
+            hasMore: false,
+            messages: [],
+          }
+        },
+        recordDispatch: async (args) => {
+          calls.record.push(args)
+          return {
+            kind: 'ok',
+            code: 'notification_triggered',
+            dispatch: {
+              ...dispatchProjection(),
+              recipientRole: 'customer',
+              providerFamily: 'novu',
+              status: 'triggered',
+              novuTransactionId: 'ae:notification_dispatch:123',
+              novuWorkflowId: 'customer-inquiry',
+              novuSubscriberId: 'customer:inquiry_thread:abc',
+            },
+            attempt: {
+              attemptId: 'notification_attempt:novu-customer',
+              status: 'triggered',
+              providerResponseHash: 'novu-customer-provider-response-hash',
+            },
+          }
+        },
+      }
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'ok',
+      code: 'notification_novu_triggered',
+      dispatchStatus: 'triggered',
+      novuWorkflowId: 'customer-inquiry',
+      novuSubscriberId: 'customer:inquiry_thread:abc',
+    })
+    expect(response.status).toBe(200)
+    expect(calls.resolve).toHaveLength(0)
+    expect(calls.trigger[0]).toMatchObject({
+      recipientRole: 'customer',
+      subscriber: { subscriberId: 'customer:inquiry_thread:abc' },
+      dispatch: {
+        inquiryThreadId: 'inquiry_thread:abc',
+        inquiryMessageId: 'inquiry_message:abc',
+        businessName: 'Sam Plumbing',
+      },
+    })
+    expect(calls.record[0]).toMatchObject({
+      providerResult: {
+        kind: 'ok',
+        status: 'triggered',
+        novuWorkflowId: 'customer-inquiry',
+        novuSubscriberId: 'customer:inquiry_thread:abc',
+      },
+    })
+  })
+
+  it('holds Novu dispatches without provider env so local inquiry submission can continue', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const calls: unknown[] = []
+    try {
+      const response = await handleNovuDispatchRequest(
+        new Request('https://agentic.test/api/notification/novu-dispatch', {
+          method: 'POST',
+          body: JSON.stringify({ dispatchId: 'notification_dispatch:123' }),
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer outbox-secret',
+          },
+        }),
+        {
+          env: {
+            AE_NOTIFICATION_OUTBOX_SECRET: 'outbox-secret',
+          },
+          readDispatchForSend: async () => novuDispatchSendReadback(),
+          recordDispatch: async (args) => {
+            calls.push(args)
+            return {
+              kind: 'ok',
+              code: 'notification_orchestrator_missing',
+              dispatch: {
+                ...dispatchProjection(),
+                providerFamily: 'novu',
+                status: 'orchestrator_missing',
+                orchestratorMissing: true,
+              },
+              attempt: {
+                attemptId: 'notification_attempt:novu-missing-config',
+                status: 'orchestrator_missing',
+              },
+            }
+          },
+        }
+      )
+
+      await expect(response.json()).resolves.toEqual({
+        kind: 'ok',
+        code: 'notification_novu_held',
+        dispatchId: 'notification_dispatch:123',
+        dispatchStatus: 'orchestrator_missing',
+        redactedError: 'missing_novu_secret_key',
+        businessSlug: 'sam-plumbing',
+      })
+      expect(response.status).toBe(200)
+      expect(calls).toEqual([
+        expect.objectContaining({
+          providerResult: {
+            kind: 'error',
+            status: 'orchestrator_missing',
+            redactedError: 'missing_novu_secret_key',
+          },
+        }),
+      ])
+      expect(warn).toHaveBeenCalledWith('Novu notification dispatch held: missing_novu_secret_key')
+    } finally {
+      warn.mockRestore()
+    }
   })
 
   it('refuses unsupported Novu dispatches before triggering or reading Novu', async () => {
@@ -1103,6 +1355,66 @@ describe('server notification provider seam', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('rejects oversized Resend dispatch bodies before reading dispatch or provider callbacks', async () => {
+    const calls: { read: unknown[]; resolve: unknown[]; send: unknown[]; record: unknown[] } = {
+      read: [],
+      resolve: [],
+      send: [],
+      record: [],
+    }
+    const oversizedBody = JSON.stringify({
+      dispatchId: 'notification_dispatch:123',
+      padding: 'x'.repeat(4 * 1024),
+    })
+
+    const response = await handleResendDispatchRequest(
+      new Request('https://agentic.test/api/notification/resend-dispatch', {
+        method: 'POST',
+        body: oversizedBody,
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer outbox-secret',
+        },
+      }),
+      {
+        env: {
+          AE_NOTIFICATION_OUTBOX_SECRET: 'outbox-secret',
+          CLERK_SECRET_KEY: 'sk_test',
+          RESEND_API_KEY: 're_test',
+          RESEND_FROM: 'Agentic Economy <hello@example.test>',
+        },
+        readDispatchForSend: async (args) => {
+          calls.read.push(args)
+          throw new Error('should not read dispatch')
+        },
+        resolveOwnerDeliveryAddress: async (input) => {
+          calls.resolve.push(input)
+          throw new Error('should not resolve owner')
+        },
+        sendOwnerInquiry: async (input) => {
+          calls.send.push(input)
+          throw new Error('should not send Resend')
+        },
+        recordDispatch: async (args) => {
+          calls.record.push(args)
+          throw new Error('should not record dispatch')
+        },
+      }
+    )
+
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'error',
+      code: 'invalid_notification_dispatch_payload',
+    })
+    expect(response.status).toBe(413)
+    expect(calls).toEqual({
+      read: [],
+      resolve: [],
+      send: [],
+      record: [],
+    })
+  })
+
   it('runs the guarded Resend dispatch bridge without leaking owner email in the response or writeback', async () => {
     const calls: { read: unknown[]; resolve: unknown[]; send: unknown[]; record: unknown[] } = {
       read: [],
@@ -1189,6 +1501,9 @@ describe('server notification provider seam', () => {
         providerIdempotencyKey: 'ae:notification_dispatch:123',
         inquiryThreadId: 'inquiry_thread:abc',
         businessName: 'Sam Plumbing',
+        serviceName: 'Emergency plumbing',
+        customerMessageFirstLine: 'Burst pipe under the kitchen sink.',
+        isFirstInquiryForBusiness: true,
       },
       appBaseUrl: 'https://agentic.test',
     })
@@ -1436,6 +1751,11 @@ function dispatchSendReadback() {
         businessId: 'businesses:1',
         slug: 'sam-plumbing',
         name: 'Sam Plumbing',
+      },
+      inquiry: {
+        serviceName: 'Emergency plumbing',
+        customerMessageFirstLine: 'Burst pipe under the kitchen sink.',
+        isFirstInquiryForBusiness: true,
       },
     },
   }

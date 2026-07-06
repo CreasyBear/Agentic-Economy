@@ -207,8 +207,10 @@ export const claimBusiness = mutationGeneric({
       return claimError('claim_slug_conflict', 'A business already owns this public slug.')
     }
 
-    const owner = await findOrCreateOwner(runtimeCtx, actor, now)
-    const rateLimited = await incrementClaimRateLimit(runtimeCtx, actor.clerkUserId, now)
+    const [owner, rateLimited] = await Promise.all([
+      findOrCreateOwner(runtimeCtx, actor, now),
+      incrementClaimRateLimit(runtimeCtx, actor.clerkUserId, now),
+    ])
     if (rateLimited !== undefined) {
       return rateLimited
     }

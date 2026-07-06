@@ -3,24 +3,26 @@ import { z } from 'zod'
 import { defineAction, type ActionParameter } from '@/modules/common/action'
 import {
   publicInquirySubmitSchema,
+  readCustomerRecordThroughSource,
   submitPublicInquiryThroughSource,
+  type CustomerInquiryRecordServerResult,
   type PublicInquirySubmitServerResult,
 } from '@/modules/inquiries/inquiry.functions'
 
-const serverErrorOutputSchema = z.looseObject({
+const serverErrorOutputSchema = z.object({
   kind: z.literal('error'),
   code: z.string(),
   retryable: z.boolean(),
   reason: z.string(),
   field: z.string().optional(),
   retryAfter: z.number().optional(),
-})
+}).strict()
 
 const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
-  z.looseObject({
+  z.object({
     kind: z.literal('ok'),
     code: z.enum(['inquiry_submitted', 'inquiry_replayed']),
-    receipt: z.looseObject({
+    receipt: z.object({
       threadId: z.string(),
       businessId: z.string(),
       serviceId: z.string(),
@@ -28,8 +30,9 @@ const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
       version: z.number().int().nonnegative(),
       notificationId: z.string(),
       notificationStatus: z.string(),
-    }),
-  }),
+      accessKey: z.string(),
+    }).strict(),
+  }).strict(),
   serverErrorOutputSchema,
 ]) as z.ZodType<PublicInquirySubmitServerResult>
 
@@ -103,6 +106,71 @@ const submitParameters: readonly ActionParameter[] = [
   },
 ]
 
+// Route-boundary caps for inquiry.submit, checked ahead of (and stricter than) the domain caps
+// in internal/commands.ts / internal/schema.ts, so oversized agent payloads are rejected before
+// a Convex mutation is ever attempted. `body` matches the source-owned
+// defaultInquiryOperatorControls.maxBodyLength (2_000 chars). The domain has no length cap for
+// contact fields today, so these use generous, standard upper bounds (RFC 5321 email length,
+// a formatted international phone number, a normal display name).
+const agentToolInquirySubmitSchema = publicInquirySubmitSchema.extend({
+  body: z.string().max(2_000),
+  contact: z.object({
+    name: z.string().max(200).optional(),
+    email: z.string().max(254).optional(),
+    phone: z.string().max(32).optional(),
+  }).strict(),
+}).strict()
+
+
+const readCustomerRecordInputSchema = z.object({
+  threadId: z.string().trim().min(1).max(240),
+  accessKey: z.string().trim().min(16).max(256),
+}).strict()
+
+const customerRecordOutputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('ok'),
+    code: z.literal('inquiry_customer_record_read'),
+    record: z.object({
+      schemaVersion: z.literal('inquiry-customer-record:v1'),
+      threadId: z.string(),
+      business: z.object({ name: z.string(), slug: z.string() }).strict(),
+      submitted: z.object({ messageSummary: z.string(), submittedAt: z.number() }).strict(),
+      delivery: z.object({
+        state: z.enum(['queued', 'sent', 'failed', 'held']),
+        label: z.string(),
+        updatedAt: z.number(),
+      }).strict(),
+      timeline: z.array(z.object({
+        key: z.enum(['received', 'sent_to_business', 'business_replied', 'closed']),
+        label: z.string(),
+        detail: z.string(),
+        status: z.enum(['complete', 'current', 'pending']),
+        timestamp: z.number().optional(),
+      }).strict()),
+      reply: z.object({ body: z.string(), createdAt: z.number() }).strict().optional(),
+      closedAt: z.number().optional(),
+      updatedAt: z.number(),
+    }).strict(),
+  }).strict(),
+  serverErrorOutputSchema,
+]) as z.ZodType<CustomerInquiryRecordServerResult>
+
+const readCustomerRecordParameters: readonly ActionParameter[] = [
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Inquiry record id from the customer receipt link.',
+    required: true,
+  },
+  {
+    name: 'accessKey',
+    type: 'string',
+    description: 'Private access key from the customer receipt link. The thread id alone is not enough.',
+    required: true,
+  },
+]
+
 export const submitInquiryAction = defineAction({
   id: 'inquiry.submit',
   name: 'Submit a qualified inquiry',
@@ -115,11 +183,31 @@ export const submitInquiryAction = defineAction({
     'Refuse to call this if the person wants instant booking, payment, or autonomous execution.',
     'Use one of phone_inquiry / quote_request / emergency_callout_interest / ae_hosted_discovery as the capability kind, matching what the listing publishes.',
   ],
-  schema: publicInquirySubmitSchema,
+  schema: agentToolInquirySubmitSchema,
   outputSchema: publicInquirySubmitOutputSchema,
   parameters: submitParameters,
   readOnly: false,
   surfaces: ['agentJson', 'agentTools'],
   run: async ({ data, context }) =>
     submitPublicInquiryThroughSource(data, context) as Promise<PublicInquirySubmitServerResult>,
+})
+
+
+export const readCustomerRecordAction = defineAction({
+  id: 'inquiry.readCustomerRecord',
+  name: 'Read a customer inquiry record',
+  summary:
+    'Read the customer-facing inquiry record using the receipt thread id and private access key. ' +
+    'Returns the written handoff status, business identity, and any business reply saved on the record.',
+  boundaries: [
+    'Read-only. The thread id alone never grants access; the private access key is required.',
+    'Returns business identity, delivery state, submitted-message summary, and business reply text only.',
+    'Does not expose owner private data, customer contact details, booking, payment, dispatch, or job acceptance.',
+  ],
+  schema: readCustomerRecordInputSchema,
+  outputSchema: customerRecordOutputSchema,
+  parameters: readCustomerRecordParameters,
+  readOnly: true,
+  surfaces: ['http', 'agentJson'],
+  run: async ({ data }) => readCustomerRecordThroughSource(data),
 })

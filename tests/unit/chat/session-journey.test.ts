@@ -9,16 +9,11 @@ describe('session journey', () => {
     expect(buildSessionJourney({ projection: null, liveTurn: null })).toBeNull()
   })
 
-  it('marks a first live query as the active listing search', () => {
-    const journey = buildSessionJourney({ projection: null, liveTurn: { intent: 'refine_search' } })
-
-    expect(journey?.guidance).toBe('AE is checking published service details before any contact step.')
-    expect(journey?.steps.map((step) => [step.id, step.status])).toEqual([
-      ['search', 'active'],
-      ['compare', 'pending'],
-      ['follow_up', 'pending'],
-      ['inquiry', 'pending'],
-    ])
+  it('stays hidden for a first live query until listings or inquiry activity exist', () => {
+    // Nothing to orient during the opening search: the answer's own streaming
+    // state carries progress, so an empty "inquiry path" would only be noise.
+    // The journey appears once listings arrive or an inquiry is in play.
+    expect(buildSessionJourney({ projection: null, liveTurn: { intent: 'refine_search' } })).toBeNull()
   })
 
   it('makes the next follow-up explicit after provider evidence exists', () => {
@@ -187,6 +182,7 @@ describe('session journey', () => {
     expect(journey?.guidance).toBe(
       'Compare fit, then choose a business to contact. The business still confirms timing, quote, and availability.',
     )
+    expect(journey?.steps.find((step) => step.id === 'inquiry')?.status).toBe('pending')
   })
 })
 

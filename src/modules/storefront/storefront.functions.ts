@@ -1,6 +1,7 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 import { createServerFn } from '@tanstack/react-start'
 
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 import type { StorefrontImportInput, StorefrontImportResult } from '@/modules/storefront/public'
 
@@ -8,8 +9,8 @@ export const importStorefrontDraftServer = createServerFn({ method: 'POST' })
   .validator((data) => storefrontImportDraftAction.schema.parse(data))
   .handler(async ({ data }) => importStorefrontDraftForOwner(data))
 
-export async function importStorefrontDraftForOwner(data: StorefrontImportInput): Promise<StorefrontImportResult> {
-  if (process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {
+async function importStorefrontDraftForOwner(data: StorefrontImportInput): Promise<StorefrontImportResult> {
+  if (!isLocalE2EAuthBypassEnabled()) {
     const session = await auth()
     if (!session.isAuthenticated) {
       return {

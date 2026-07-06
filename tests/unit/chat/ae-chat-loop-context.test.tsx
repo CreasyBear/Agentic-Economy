@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { AeThinkingRail } from '@/components/ae/artifacts/AeThinkingRail'
@@ -65,11 +65,19 @@ describe('AeResearchProcess', () => {
     cleanup()
   })
 
-  it('shows completed public work-log details by default', () => {
-    const { getByText } = render(<AeResearchProcess isStreaming={false} steps={[workStep()]} />)
+  it('keeps completed public work-log details behind the trigger by default', () => {
+    const { getByText, queryByText, getByRole } = render(<AeResearchProcess isStreaming={false} steps={[workStep()]} />)
 
+    // Trigger + summary are always visible; the dense trace stays collapsed on
+    // a settled turn so completed answers do not dump the full audit log.
     expect(getByText('How AE checked this')).toBeTruthy()
     expect(getByText('1 public check complete · 2 listed businesses found.')).toBeTruthy()
+    expect(queryByText('Public checks and listed facts, not private reasoning.')).toBeNull()
+    expect(queryByText('Searching listed businesses')).toBeNull()
+    expect(queryByText('Results')).toBeNull()
+
+    fireEvent.click(getByRole('button', { name: /how ae checked this/i }))
+
     expect(getByText('Public checks and listed facts, not private reasoning.')).toBeTruthy()
     expect(getByText('Searching listed businesses')).toBeTruthy()
     expect(getByText('2 listed businesses found.')).toBeTruthy()
@@ -78,7 +86,7 @@ describe('AeResearchProcess', () => {
   })
 
   it('summarizes public answer checks in the process header', () => {
-    const { getByText } = render(
+    const { getByText, getByRole } = render(
       <AeResearchProcess
         isStreaming={false}
         steps={[workStep()]}
@@ -93,7 +101,9 @@ describe('AeResearchProcess', () => {
       />,
     )
 
-    expect(getByText('1 search · 2 read · 2 listed · 5/5 checks · 1.3s')).toBeTruthy()
+    // Header summary shows without expanding; the fact grid lives in the trace.
+    expect(getByText('Compared 2 listed businesses; checked 5 facts; done in 1.3s.')).toBeTruthy()
+    fireEvent.click(getByRole('button', { name: /how ae checked this/i }))
     expect(getByText('Searches')).toBeTruthy()
     expect(getByText('Listings read')).toBeTruthy()
     expect(getByText('Checks')).toBeTruthy()
@@ -115,7 +125,7 @@ describe('AeResearchProcess', () => {
       />,
     )
 
-    expect(getByText('0 searches · 0 read · 0 listed · 1/1 checks · <1s')).toBeTruthy()
+    expect(getByText('Checked 1 fact; done in <1s.')).toBeTruthy()
   })
 
   it('keeps running and failed public work visible in the process header', () => {

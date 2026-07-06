@@ -18,9 +18,9 @@ export const AuditTargetTypeSchema = z.enum(AuditTargetTypeValues)
 export const AuditEventTypeSchema = z.enum(AuditEventTypeValues)
 export const OperatorControlKeySchema = z.enum(OperatorControlKeyValues)
 export const FunnelEventTypeSchema = z.enum(FunnelEventTypeValues)
-export const ActivationStageSchema = z.enum(ActivationStageValues)
+const ActivationStageSchema = z.enum(ActivationStageValues)
 
-export const OwnerActivationStateSchema = z.object({
+const OwnerActivationStateSchema = z.object({
   businessId: z.string().min(1),
   stage: ActivationStageSchema,
   publishSeen: z.boolean(),

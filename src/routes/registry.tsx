@@ -1,29 +1,33 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { createServerFn } from '@tanstack/react-start'
+import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
+import { Skeleton } from '@astryxdesign/core/Skeleton'
 import { Center } from '@astryxdesign/core/Center'
-import { DropdownMenu } from '@astryxdesign/core/DropdownMenu'
 import { Grid } from '@astryxdesign/core/Grid'
+import { FormLayout } from '@astryxdesign/core/FormLayout'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Layout, LayoutContent, LayoutHeader } from '@astryxdesign/core/Layout'
-import { OverflowList } from '@astryxdesign/core/OverflowList'
 import { Section } from '@astryxdesign/core/Section'
 import { HStack, StackItem, VStack } from '@astryxdesign/core/Stack'
+import { Selector } from '@astryxdesign/core/Selector'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { ToggleButton, ToggleButtonGroup } from '@astryxdesign/core/ToggleButton'
+import { TextArea } from '@astryxdesign/core/TextArea'
+import { Toolbar } from '@astryxdesign/core/Toolbar'
 import { Token } from '@astryxdesign/core/Token'
 import { SearchIcon } from 'lucide-react'
 
 import { AeRegistryFunnelBoot } from '@/components/ae/layout/AeRegistryFunnelBoot'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeAnimatedNumber } from '@/components/ae/motion/AeAnimatedNumber'
+import { emitRegistryResultClick } from '@/lib/observability/registry-click'
 import { buildProviderPresentation, pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
 import { readPublicRegistryCatalogPage, readPublicRegistrySearchPage } from '@/modules/registry/registry.functions'
+import { captureDemandSignalServer, type DemandCaptureServerResult } from '@/modules/demand/demand.functions'
 
 type RegistrySearchParams = {
   q: string
@@ -37,8 +41,8 @@ type RegistryRouteReadback = {
   limit: number
 }
 
-const defaultRegistryHeadline = 'Find local service details before you contact a business.'
-const defaultRegistryVisualHeadline = 'Find local service details.'
+const defaultRegistryHeadline = 'Who does what, near you.'
+const defaultRegistryVisualHeadline = 'Who does what, near you.'
 
 const registrySearchParamsSchema = z.object({
   q: z.string(),
@@ -71,8 +75,8 @@ export const Route = createFileRoute('/registry')({
   errorComponent: RegistryError,
   head: () => ({
     meta: [
-      { title: 'Local business discovery | Agentic Economy' },
-      { name: 'description', content: 'Find claimed local service businesses and see the details they have published for customers.' },
+      { title: 'Compare local businesses | Agentic Economy' },
+      { name: 'description', content: 'Compare local businesses by service, area, and how to reach them.' },
     ],
   }),
   component: RegistryRoute,
@@ -118,12 +122,11 @@ function RegistryRoute() {
         header={
           <LayoutHeader hasDivider padding={6}>
             <VStack gap={2}>
-              <Text type="supporting" weight="medium" color="secondary" display="block">Browse published service pages</Text>
               <Heading level={1} aria-label={hasQuery ? undefined : defaultRegistryHeadline}>
                 {hasQuery ? `Results for “${query}”` : defaultRegistryVisualHeadline}
               </Heading>
               <Text type="large" color="secondary" display="block">
-                Search business-supplied pages, compare service areas and next steps, then contact the business with clearer expectations.
+                Compare local businesses by service, area, and how to reach them.
               </Text>
             </VStack>
           </LayoutHeader>
@@ -142,14 +145,11 @@ function RegistryRoute() {
                 setSortOrder={setSortOrder}
               />
               <RegistryContextCards />
-              {isEmpty && !hasQuery ? (
-                <RegistryEmptyState title="No businesses published yet" description="Claimed business pages will appear here once owners publish customer-ready details." />
-              ) : null}
-              {isEmpty && hasQuery ? (
-                <RegistryEmptyState
-                  title="No matching business yet"
-                  description="Try a business name, suburb, or service."
-                  action={<Button label="Clear search" variant="secondary" href="/registry?q=&limit=10" />}
+              {isEmpty ? (
+                <RegistryDemandCaptureEmptyState
+                  key={query.length > 0 ? `search-${query}` : 'browse-empty'}
+                  query={query}
+                  showClearSearch={hasQuery}
                 />
               ) : null}
               {!isEmpty ? (
@@ -157,8 +157,7 @@ function RegistryRoute() {
                   <HStack vAlign="end" gap={4}>
                     <StackItem size="fill">
                       <VStack gap={1}>
-                        <Text type="supporting" weight="medium" color="secondary" display="block">Published businesses</Text>
-                        <Heading level={2}>Comparable local service pages</Heading>
+                        <Heading level={2}>Published businesses</Heading>
                       </VStack>
                     </StackItem>
                     <Text color="secondary" display="block"><AeAnimatedNumber value={result.pagination.total} /> {resultSummary(result.pagination.total, query)}</Text>
@@ -168,7 +167,7 @@ function RegistryRoute() {
                       <Text type="supporting" color="secondary">No results found in this category.</Text>
                     </Center>
                   ) : (
-                    <RegistryLibraryGrid items={filteredItems} />
+                    <RegistryLibraryGrid items={filteredItems} query={query} />
                   )}
                   <RegistryPagination
                     query={query}
@@ -179,17 +178,19 @@ function RegistryRoute() {
                   />
                 </VStack>
               ) : null}
-              <Card padding={5}>
-                <HStack vAlign="center" gap={4}>
-                  <StackItem size="fill">
-                    <VStack gap={1}>
-                      <Text type="large" weight="semibold" color="primary" display="block">Own a service business?</Text>
-                      <Text color="secondary" display="block">Publish the services, areas, and first-contact details customers should see before they get in touch.</Text>
-                    </VStack>
-                  </StackItem>
-                  <Button label="List/claim your business" variant="primary" href="/claim" />
-                </HStack>
-              </Card>
+              {!isEmpty ? (
+                <Card padding={6} className="bg-accent text-on-accent">
+                  <HStack vAlign="center" gap={4}>
+                    <StackItem size="fill">
+                      <VStack gap={1}>
+                        <Text type="large" weight="semibold" display="block" className="text-on-accent">Own a service business?</Text>
+                        <Text display="block" className="text-on-accent/85">Get found by people ready to ask, in writing.</Text>
+                      </VStack>
+                    </StackItem>
+                    <Button label="List your business, free" variant="secondary" href="/claim" />
+                  </HStack>
+                </Card>
+              ) : null}
             </VStack>
           </LayoutContent>
         }
@@ -218,7 +219,7 @@ function RegistrySearchControls({
   const [search, setSearch] = useState(() => initialSearch)
 
   return (
-    <Card padding={5} aria-label="Search published business details">
+    <Card padding={5} aria-label="Search business details">
       <VStack gap={4}>
         <form action="/registry" method="get" className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
           <input type="hidden" name="limit" value={String(limit)} />
@@ -233,39 +234,29 @@ function RegistrySearchControls({
           />
           <Button label="Search businesses" variant="primary" type="submit" />
         </form>
-        <Text type="supporting" color="secondary" display="block">Published details only. The business confirms timing, quote, and availability.</Text>
-        <HStack vAlign="center" gap={4}>
-          <StackItem size="fill">
-            <ToggleButtonGroup label="Filter by category" value={activeCategory} onChange={(value) => setActiveCategory(value ?? 'All')}>
-              <OverflowList
-                gap={1}
-                behavior="observeParent"
-                overflowRenderer={(overflowItems) => (
-                  <DropdownMenu
-                    button={{ label: `+${overflowItems.length}`, variant: 'ghost', size: 'lg' }}
-                    items={overflowItems.flatMap(({ index }) => {
-                      const category = categories[index]
-                      if (category === undefined) return []
-                      return [{ label: category, onClick: () => setActiveCategory(category) }]
-                    })}
-                  />
-                )}
-              >
-                {categories.map((category) => (
-                  <ToggleButton key={category} label={category} value={category} size="lg" />
-                ))}
-              </OverflowList>
-            </ToggleButtonGroup>
-          </StackItem>
-          <DropdownMenu
-            button={{ label: sortOrder, size: 'lg' }}
-            items={[
-              { label: 'A-Z', onClick: () => setSortOrder('A-Z') },
-              { label: 'Z-A', onClick: () => setSortOrder('Z-A') },
-              { label: 'Newest', onClick: () => setSortOrder('Newest') },
-            ]}
-          />
-        </HStack>
+        <Toolbar
+          label="Filter and sort businesses"
+          size="lg"
+          gap={2}
+          startContent={
+            <Selector
+              label="Category"
+              isLabelHidden
+              options={categories}
+              value={activeCategory}
+              onChange={(value) => setActiveCategory(value ?? 'All')}
+            />
+          }
+          endContent={
+            <Selector
+              label="Sort by"
+              isLabelHidden
+              options={['A-Z', 'Z-A', 'Newest']}
+              value={sortOrder}
+              onChange={(value) => setSortOrder(value ?? 'A-Z')}
+            />
+          }
+        />
       </VStack>
     </Card>
   )
@@ -276,14 +267,13 @@ function RegistryContextCards() {
     <Grid columns={{ minWidth: 320 }} gap={4}>
       <Card padding={5}>
         <VStack gap={2}>
-          <Text type="supporting" weight="medium" color="secondary" display="block">Compare what is published</Text>
           <Text type="large" weight="semibold" color="primary" display="block">Service area, response cue, and next step sit beside the provider.</Text>
-          <Text color="secondary" display="block">Registry browsing is for quick comparison. For a cited answer to a specific job, start from Ask on the home page.</Text>
+          <Text color="secondary" display="block">Search, compare, then choose the next step for the job.</Text>
         </VStack>
       </Card>
       <Card padding={5}>
         <VStack gap={2}>
-          <Text type="large" weight="semibold" color="primary" display="block">Assistants read the same details.</Text>
+          <Text type="large" weight="semibold" color="primary" display="block">Assistants can read it too.</Text>
           <Text color="secondary" display="block">Each listing keeps a quiet JSON view for assistants. People still confirm timing, quote, and availability with the business.</Text>
         </VStack>
       </Card>
@@ -291,24 +281,123 @@ function RegistryContextCards() {
   )
 }
 
-function RegistryEmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+type DemandCaptureField = 'service' | 'suburb' | 'note' | 'queryText'
+
+function RegistryDemandCaptureEmptyState({ query, showClearSearch }: { query: string; showClearSearch: boolean }) {
+  const captureDemandSignal = useServerFn(captureDemandSignalServer)
+  const [service, setService] = useState(() => query)
+  const [suburb, setSuburb] = useState('')
+  const [note, setNote] = useState('')
+  const [pending, setPending] = useState(false)
+  const [result, setResult] = useState<DemandCaptureServerResult | undefined>()
+  const [fieldError, setFieldError] = useState<{ field: DemandCaptureField; message: string } | undefined>()
+  const submittedOk = result?.kind === 'ok'
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setResult(undefined)
+    setFieldError(undefined)
+
+    const cleanService = service.trim()
+    if (cleanService.length === 0) {
+      setFieldError({ field: 'service', message: 'Enter what you needed.' })
+      return
+    }
+
+    const cleanSuburb = suburb.trim()
+    if (cleanSuburb.length === 0) {
+      setFieldError({ field: 'suburb', message: 'Enter the suburb or local area.' })
+      return
+    }
+
+    setPending(true)
+    try {
+      const captured = await captureDemandSignal({
+        data: {
+          service: cleanService,
+          suburb: cleanSuburb,
+          ...(note.trim().length === 0 ? {} : { note }),
+          ...(query.length === 0 ? {} : { queryText: query }),
+        },
+      })
+      setResult(captured)
+      if (captured.kind === 'error' && captured.field !== undefined) {
+        setFieldError({ field: captured.field, message: captured.reason })
+      }
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <Card padding={6}>
       <Center>
-        <VStack gap={3}>
-          <Heading level={2}>{title}</Heading>
-          <Text color="secondary" display="block">{description}</Text>
-          {action}
+        <VStack gap={4} className="w-full max-w-2xl">
+          <VStack gap={2}>
+            <Heading level={2}>No businesses here yet.</Heading>
+            <Text color="secondary" display="block">Tell us what you needed — we're expanding here.</Text>
+          </VStack>
+
+          {submittedOk ? (
+            <Text type="large" weight="semibold" color="primary" display="block" role="status">
+              Got it. We're expanding here.
+            </Text>
+          ) : (
+            <form onSubmit={handleSubmit} className="w-full" noValidate>
+              <FormLayout>
+                <TextInput
+                  label="Service needed"
+                  htmlName="service"
+                  value={service}
+                  isDisabled={pending}
+                  {...(fieldError?.field === 'service' ? { status: { type: 'error' as const, message: fieldError.message } } : {})}
+                  onChange={setService}
+                />
+                <TextInput
+                  label="Suburb"
+                  htmlName="suburb"
+                  value={suburb}
+                  isDisabled={pending}
+                  {...(fieldError?.field === 'suburb' ? { status: { type: 'error' as const, message: fieldError.message } } : {})}
+                  onChange={setSuburb}
+                />
+                <TextArea
+                  label="Optional note"
+                  value={note}
+                  rows={3}
+                  maxLength={280}
+                  isDisabled={pending}
+                  {...(fieldError?.field === 'note' ? { status: { type: 'error' as const, message: fieldError.message } } : {})}
+                  onChange={setNote}
+                />
+                {result?.kind === 'error' && fieldError === undefined ? (
+                  <Text color="secondary" display="block" role="alert">{result.reason}</Text>
+                ) : null}
+                <Button
+                  label={pending ? 'Saving...' : 'Tell us what you needed'}
+                  variant="primary"
+                  type="submit"
+                  isLoading={pending}
+                  isDisabled={pending}
+                />
+              </FormLayout>
+            </form>
+          )}
+
+          <HStack gap={2} wrap="wrap" hAlign="center">
+            {showClearSearch ? <Button label="Clear search" variant="secondary" href="/registry?q=&limit=10" /> : null}
+            <Button label="Own a business? List it free" variant="secondary" href="/claim" />
+          </HStack>
         </VStack>
       </Center>
     </Card>
   )
 }
 
-function RegistryLibraryGrid({ items }: { items: readonly PublicBusinessCatalogApiDto[] }) {
+function RegistryLibraryGrid({ items, query }: { items: readonly PublicBusinessCatalogApiDto[]; query: string }) {
   return (
     <Grid columns={{ minWidth: 320 }} gap={4} aria-label="Business results">
-      {items.map((item) => <RegistryLibraryCard key={item.slug} item={item} />)}
+      {items.map((item, index) => <RegistryLibraryCard key={item.slug} item={item} query={query} position={index + 1} />)}
     </Grid>
   )
 }
@@ -324,9 +413,9 @@ const thumbnailImage: CSSProperties = {
   objectFit: 'cover',
 }
 
-function RegistryLibraryCard({ item }: { item: PublicBusinessCatalogApiDto }) {
+function RegistryLibraryCard({ item, query, position }: { item: PublicBusinessCatalogApiDto; query: string; position: number }) {
   const presentation = buildProviderPresentation(item, { serviceChipLimit: 2 })
-  const summary = presentation.primaryServiceSummary ?? item.services[0]?.summary ?? 'Published details for customers.'
+  const summary = presentation.primaryServiceSummary ?? item.services[0]?.summary ?? 'Service details for customers.'
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(presentation.availabilityLabel))
 
   return (
@@ -350,7 +439,7 @@ function RegistryLibraryCard({ item }: { item: PublicBusinessCatalogApiDto }) {
           <CompactProviderFacts facts={[{ term: 'Service area', description: presentation.serviceArea }, { term: 'Response', description: presentation.responseFallbackLabel }]} />
           <Text type="supporting" color="primary" display="block"><strong>Best next step:</strong> {presentation.nextStepLabel}</Text>
           <HStack gap={2}>
-            <Button label="View details" variant="primary" size="sm" href={`/${item.slug}?from=registry`} />
+            <Button label="View details" variant="primary" size="sm" href={`/${item.slug}?from=registry`} onClick={() => { void emitRegistryResultClick({ slug: item.slug, query, position }) }} />
             <Button label="Get as agent JSON" variant="ghost" size="sm" href={`/api/businesses/${encodeURIComponent(item.slug)}`} />
           </HStack>
         </VStack>
@@ -394,12 +483,12 @@ function badgeVariantForTone(tone: string): 'neutral' | 'success' | 'warning' | 
 }
 
 function resultSummary(total: number, query: string): string {
-  const label = total === 1 ? 'matching business' : 'matching businesses'
+  const label = total === 1 ? 'business' : 'businesses'
   if (query.length > 0) {
     return `${label} for "${query}".`
   }
 
-  return total === 1 ? 'published business.' : 'published businesses.'
+  return `${label}.`
 }
 
 function RegistryPagination({ query, limit, cursor, nextCursor, hasMore }: { query: string; limit: number; cursor?: string; nextCursor?: string; hasMore: boolean }) {
@@ -420,9 +509,110 @@ function RegistryPagination({ query, limit, cursor, nextCursor, hasMore }: { que
 function RegistryLoading() {
   return (
     <AePublicShell>
-      <section className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-8 md:px-6">
-        {Array.from({ length: 6 }, (_, index) => <div key={index} className="h-40 rounded-md border border-border bg-card" />)}
-      </section>
+      <Layout
+        height="auto"
+        contentWidth={1280}
+        header={
+          <LayoutHeader hasDivider padding={6}>
+            <VStack gap={2} aria-label="Loading registry header">
+              <Skeleton height="2.75rem" width="22rem" index={0} />
+              <Skeleton height="1.5rem" width="28rem" index={1} />
+            </VStack>
+          </LayoutHeader>
+        }
+        content={
+          <LayoutContent padding={6}>
+            <VStack gap={6} aria-busy="true" aria-label="Loading registry">
+              <Card padding={5} aria-label="Loading business search controls">
+                <VStack gap={4}>
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <VStack gap={2}>
+                      <Skeleton height="1rem" width="11rem" index={2} />
+                      <Skeleton height="3rem" width="100%" index={3} />
+                    </VStack>
+                    <Skeleton height="3rem" width="10rem" index={4} />
+                  </div>
+                  <HStack gap={2} wrap="wrap">
+                    <Skeleton height="2.5rem" width="11rem" index={5} />
+                    <div className="min-w-0 flex-1" aria-hidden="true" />
+                    <Skeleton height="2.5rem" width="8rem" index={6} />
+                  </HStack>
+                </VStack>
+              </Card>
+
+              <Grid columns={{ minWidth: 320 }} gap={4}>
+                {Array.from({ length: 2 }, (_, index) => (
+                  <Card key={index} padding={5} aria-label="Loading registry context">
+                    <VStack gap={2}>
+                      <Skeleton height="1.75rem" width={index === 0 ? '84%' : '60%'} index={7 + index} />
+                      <Skeleton height="1.25rem" width="92%" index={9 + index} />
+                      <Skeleton height="1.25rem" width="68%" index={11 + index} />
+                    </VStack>
+                  </Card>
+                ))}
+              </Grid>
+
+              <VStack gap={6} aria-label="Loading published businesses">
+                <HStack vAlign="end" gap={4}>
+                  <StackItem size="fill">
+                    <Skeleton height="2rem" width="16rem" index={13} />
+                  </StackItem>
+                  <Skeleton height="1.25rem" width="8rem" index={14} />
+                </HStack>
+
+                <Grid columns={{ minWidth: 320 }} gap={4} aria-label="Loading business results">
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <Card key={index} padding={0} className="h-full overflow-hidden" aria-label="Loading business result">
+                      <div style={thumbnailWrapper}>
+                        <Skeleton height="100%" width="100%" index={15 + index} />
+                      </div>
+                      <Section variant="transparent" padding={4}>
+                        <VStack gap={3}>
+                          <HStack vAlign="start" gap={3}>
+                            <StackItem size="fill">
+                              <VStack gap={1}>
+                                <Skeleton height="0.875rem" width="70%" index={21 + index} />
+                                <Skeleton height="1.75rem" width="86%" index={27 + index} />
+                              </VStack>
+                            </StackItem>
+                            <Skeleton height="1.75rem" width="5.5rem" index={33 + index} />
+                          </HStack>
+                          <Skeleton height="2.5rem" width="100%" index={39 + index} />
+                          <HStack gap={2} wrap="wrap">
+                            <Skeleton height="1.5rem" width="6rem" index={45 + index} />
+                            <Skeleton height="1.5rem" width="7rem" index={51 + index} />
+                          </HStack>
+                          <VStack gap={2}>
+                            <Skeleton height="1rem" width="58%" index={57 + index} />
+                            <Skeleton height="1rem" width="68%" index={63 + index} />
+                          </VStack>
+                          <Skeleton height="1.25rem" width="78%" index={69 + index} />
+                          <HStack gap={2}>
+                            <Skeleton height="2rem" width="6.5rem" index={75 + index} />
+                            <Skeleton height="2rem" width="8.5rem" index={81 + index} />
+                          </HStack>
+                        </VStack>
+                      </Section>
+                    </Card>
+                  ))}
+                </Grid>
+              </VStack>
+
+              <Card padding={6} aria-label="Loading business owner callout">
+                <HStack vAlign="center" gap={4}>
+                  <StackItem size="fill">
+                    <VStack gap={1}>
+                      <Skeleton height="1.5rem" width="13rem" index={87} />
+                      <Skeleton height="1.25rem" width="20rem" index={88} />
+                    </VStack>
+                  </StackItem>
+                  <Skeleton height="2.5rem" width="12rem" index={89} />
+                </HStack>
+              </Card>
+            </VStack>
+          </LayoutContent>
+        }
+      />
     </AePublicShell>
   )
 }

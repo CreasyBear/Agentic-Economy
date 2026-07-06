@@ -693,7 +693,7 @@ export function recordBillingReturn(state: BillingSourceState, command: BillingR
   return ok(isCancel ? 'billing_cancel_returned' : 'billing_return_recorded', { state: nextState, operation: nextOperation, auditEvent })
 }
 
-export async function reconcileBillingOperation(
+async function reconcileBillingOperation(
   state: BillingSourceState,
   command: BillingReconciliationCommand,
   provider: AutumnProvider,

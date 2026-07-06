@@ -43,6 +43,13 @@ function walkSchema(value: unknown, path: string): StrictSchemaViolation | null 
     }
   }
 
+
+  if ((allowedTypes.includes('object') || isRecord(value.properties)) && value.additionalProperties !== false) {
+    return {
+      path,
+      reason: 'object schemas exposed as tools must set additionalProperties to false',
+    }
+  }
   const nested = [
     nestedRecord(value.properties, `${path}.properties`),
     nestedRecord(value.$defs, `${path}.$defs`),

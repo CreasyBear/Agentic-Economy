@@ -131,10 +131,6 @@ export async function persistAnswerTurn(input: PersistAnswerTurnInput): Promise<
   return (await persistAnswerTurnWithResult(input)).ok
 }
 
-export async function persistAnswerTurnWithHarnessLoop(input: PersistAnswerTurnInput): Promise<boolean> {
-  return (await persistAnswerTurnWithResult(input)).ok
-}
-
 export type PersistAnswerTurnResult = {
   ok: boolean
   status: AnswerTurnStatus
@@ -206,6 +202,7 @@ export async function persistAnswerTurnWithResult(input: PersistAnswerTurnInput)
     ),
     status,
     ...(input.errorCopyId === undefined ? {} : { errorCopyId: input.errorCopyId }),
+    ...(input.sourceWriteRequest === undefined ? {} : { sourceWriteRequest: input.sourceWriteRequest }),
     toolCalls: input.toolCalls.map((call) => ({
       toolCallId: call.toolCallId,
       seq: call.seq,
@@ -423,7 +420,7 @@ function emptyProse(): FrozenTurnProse {
   return { oneLine: '', summary: '', nextStep: '' }
 }
 
-export async function appendAnswerHarnessSessionJournal(args: {
+async function appendAnswerHarnessSessionJournal(args: {
   input: PersistAnswerTurnInput
   harnessRun: HarnessRunReport
   snapshotHash: string

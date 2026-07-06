@@ -59,13 +59,13 @@ const registrySearchInputSchema = z.object({
     .max(80)
     .optional()
     .describe('Place to search around when mode is near_me'),
-})
+}).strict()
 
 const registryDetailInputSchema = z.object({
   slug: z.string().min(1).max(200).describe('Published business slug'),
-})
+}).strict()
 
-const publicBusinessCatalogApiDtoOutputSchema = z.looseObject({
+const publicBusinessCatalogApiDtoOutputSchema = z.object({
   slug: z.string(),
   name: z.string(),
   category: z.string(),
@@ -79,53 +79,53 @@ const publicBusinessCatalogApiDtoOutputSchema = z.looseObject({
   discoveryStatus: z.string(),
   schemaVersion: z.string(),
   updatedAt: z.number(),
-  photos: z.array(z.looseObject({ url: z.string(), alt: z.string() })),
+  photos: z.array(z.object({ url: z.string(), alt: z.string() }).strict()),
   responseTimeMinutes: z.number().optional(),
   services: z.array(
-    z.looseObject({
+    z.object({
       slug: z.string(),
       name: z.string(),
       category: z.string(),
       summary: z.string(),
       serviceArea: z.string(),
       hoursOrUnknown: z.string(),
-      firstRequest: z.looseObject({
+      firstRequest: z.object({
         mode: z.string(),
         publicDisclosure: z.string(),
         publicChannel: z.string(),
         noContactReason: z.string().optional(),
-      }),
+      }).strict(),
       status: z.literal('published'),
-      capabilities: z.array(z.looseObject({ kind: z.string(), status: z.string() })),
-    })
+      capabilities: z.array(z.object({ kind: z.string(), status: z.string() }).strict()),
+    }).strict()
   ),
-}) as z.ZodType<PublicBusinessCatalogApiDto>
+}).strict() as z.ZodType<PublicBusinessCatalogApiDto>
 
-const registryPageOutputSchema = z.looseObject({
+const registryPageOutputSchema = z.object({
   kind: z.literal('ok'),
   schemaVersion: z.string(),
   query: z.string().optional(),
   items: z.array(publicBusinessCatalogApiDtoOutputSchema),
-  pagination: z.looseObject({
+  pagination: z.object({
     cursor: z.string().optional(),
     nextCursor: z.string().optional(),
     limit: z.number().int().nonnegative(),
     total: z.number().int().nonnegative(),
     hasMore: z.boolean(),
-  }),
-}) as z.ZodType<PublicBusinessCatalogApiPage>
+  }).strict(),
+}).strict() as z.ZodType<PublicBusinessCatalogApiPage>
 
 const registryDetailOutputSchema = z.discriminatedUnion('kind', [
-  z.looseObject({
+  z.object({
     kind: z.literal('found'),
     schemaVersion: z.string(),
     business: publicBusinessCatalogApiDtoOutputSchema,
-  }),
-  z.looseObject({
+  }).strict(),
+  z.object({
     kind: z.literal('not_found'),
     code: z.literal('business_not_found'),
     reason: z.string(),
-  }),
+  }).strict(),
 ]) as z.ZodType<PublicBusinessCatalogDetailResult>
 
 const listParameters: readonly ActionParameter[] = [

@@ -3,15 +3,18 @@ import { z } from 'zod'
 
 import {
   callPublicSourceMutation,
+  callPublicSourceQuery,
   callSourceMutation,
   callSourceQuery,
   ConvexSourceError,
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import type { BusinessRecord } from '@/modules/business/public'
 import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type { ActionAgentIdentity, ActionSourceWriteRequest } from '@/modules/common/action'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
@@ -22,6 +25,7 @@ import {
   createEmptyInquirySourceState,
   listOwnerInbox as listOwnerInboxLocal,
   markInquiryRead as markInquiryReadLocal,
+  readCustomerRecord as readCustomerRecordLocal,
   readInquiryDeliveryReadback as readInquiryDeliveryReadbackLocal,
   readInquiryOperatorReconstruction as readInquiryOperatorReconstructionLocal,
   readInquiryPrivacyTombstone as readInquiryPrivacyTombstoneLocal,
@@ -29,6 +33,7 @@ import {
   replyToInquiry as replyToInquiryLocal,
   submitInquiry as submitInquiryLocal,
   type CapabilityLaunchSupportRecord,
+  type InquiryCustomerRecordReadback,
   type InquiryDeliveryReadback,
   type InquiryNotificationStatus,
   type InquiryOperatorReconstructionFilter,
@@ -54,27 +59,32 @@ export const publicInquirySubmitSchema = z.object({
       businessId: z.string(),
       serviceId: z.string(),
       capabilityKind: inquiryCapabilityKindSchema,
-    }),
+    }).strict(),
     z.object({
       businessSlug: z.string(),
       serviceSlug: z.string(),
       capabilityKind: inquiryCapabilityKindSchema,
-    }),
+    }).strict(),
   ]),
   body: z.string(),
   contact: z.object({
     name: z.string().optional(),
     email: z.string().optional(),
     phone: z.string().optional(),
-  }),
+  }).strict(),
   inquiryOrigin: z.object({
     kind: z.literal('answer_thread'),
     threadId: z.string().trim().min(1).max(200),
-  }).optional(),
+  }).strict().optional(),
+}).strict()
+
+const ownerThreadSchema = z.object({
+  threadId: z.string(),
 })
 
-export const ownerThreadSchema = z.object({
+const customerRecordSchema = z.object({
   threadId: z.string(),
+  accessKey: z.string(),
 })
 
 const operatorReconstructionSchema = z
@@ -86,12 +96,12 @@ const operatorReconstructionSchema = z
   .optional()
   .transform((value): InquiryOperatorReconstructionFilter => compactOperatorFilter(value ?? {}))
 
-export const ownerReplySchema = ownerThreadSchema.extend({
+const ownerReplySchema = ownerThreadSchema.extend({
   expectedVersion: z.number(),
   body: z.string(),
 })
 
-export const ownerVersionedSchema = ownerThreadSchema.extend({
+const ownerVersionedSchema = ownerThreadSchema.extend({
   expectedVersion: z.number(),
 })
 
@@ -111,6 +121,7 @@ type PublicInquirySubmitArgs = {
     kind: 'answer_thread'
     threadId: string
   }
+  customerAccessKey: string
   origin?: string
   sourceWrite?: SourceWriteAdmission
 }
@@ -125,6 +136,7 @@ type ConvexPublicInquirySubmitResult =
         serviceId: string
         status: InquiryThreadStatus
         version: number
+        customerAccessKey: string
       }
       notification: {
         notificationId: string
@@ -145,7 +157,17 @@ export type PublicInquirySubmitServerResult =
         version: number
         notificationId: string
         notificationStatus: InquiryNotificationStatus
+        accessKey: string
       }
+    }
+  | ServerErrorResult
+
+
+export type CustomerInquiryRecordServerResult =
+  | {
+      kind: 'ok'
+      code: 'inquiry_customer_record_read'
+      record: InquiryCustomerRecordReadback
     }
   | ServerErrorResult
 
@@ -253,6 +275,7 @@ type ServerErrorResult = {
 }
 
 const submitPublicInquiryMutation = sourceMutation<PublicInquirySubmitArgs, ConvexPublicInquirySubmitResult>('inquiries:submitPublicInquiry')
+const readCustomerRecordSourceQuery = sourceQuery<{ threadId: string; accessKey: string }, CustomerInquiryRecordServerResult>('inquiries:readCustomerRecord')
 const listOwnerInboxQuery = sourceQuery<Record<string, never>, OwnerInboxSourceResult>('inquiries:listCurrentOwnerInbox')
 const readOperatorInquiryReconstructionQuery = sourceQuery<
   InquiryOperatorReconstructionFilter,
@@ -274,6 +297,10 @@ export const submitPublicInquiryServer = createServerFn({ method: 'POST' })
   .handler(async ({ data, context }) => submitPublicInquiryThroughSource(data, context))
 
 export const readCurrentOwnerInboxServer = createServerFn().handler(() => readCurrentOwnerInboxThroughSource())
+
+export const readCustomerRecordServer = createServerFn()
+  .validator((data) => customerRecordSchema.parse(data))
+  .handler(async ({ data }) => readCustomerRecordThroughSource(data))
 
 export const readInquiryOperatorReconstructionServer = createServerFn()
   .validator((data) => operatorReconstructionSchema.parse(data))
@@ -306,17 +333,19 @@ export async function submitPublicInquiryThroughSource(
     }
     const target = resolved.target
 
-    if (usesLocalE2eBypass()) {
+    if (isLocalE2EAuthBypassEnabled()) {
       return submitLocalE2ePublicInquiry(data, target)
     }
 
-    const operationSuffix = `${normalizeOperationPart(target.businessId)}:${crypto.randomUUID()}`
+    const customerAccessKey = createCustomerAccessKey()
+    const operationSuffix = resolvePublicInquiryOperationSuffix(target, context)
     const operationKey = `inquiry:${operationSuffix}`
     const correlationId = `correlation:${operationSuffix}`
     const result = await callPublicSourceMutation(submitPublicInquiryMutation, {
       target,
       body: data.body,
       contact: compactContact(data.contact),
+      customerAccessKey,
       ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
       pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
       abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
@@ -338,8 +367,28 @@ export async function submitPublicInquiryThroughSource(
         version: result.thread.version,
         notificationId: result.notification.notificationId,
         notificationStatus: result.notification.status,
+        accessKey: result.thread.customerAccessKey,
       },
     }
+  } catch (error) {
+    return inquirySourceError(error)
+  }
+}
+
+export async function readCustomerRecordThroughSource(
+  data: z.infer<typeof customerRecordSchema>
+): Promise<CustomerInquiryRecordServerResult> {
+  if (isLocalE2EAuthBypassEnabled()) {
+    const state = createLocalE2eInquirySourceState()
+    const result = readCustomerRecordLocal(state, {
+      threadId: brandNonEmpty(data.threadId, 'InquiryThreadId'),
+      accessKey: data.accessKey,
+    })
+    return result.kind === 'ok' ? { kind: 'ok', code: result.code, record: result.record } : result
+  }
+
+  try {
+    return await callPublicSourceQuery(readCustomerRecordSourceQuery, data)
   } catch (error) {
     return inquirySourceError(error)
   }
@@ -383,7 +432,7 @@ async function resolvePublicInquiryTarget(
 }
 
 export async function readCurrentOwnerInboxThroughSource(): Promise<OwnerInboxServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return {
       kind: 'ok',
       inbox: listOwnerInboxLocal(createLocalE2eInquirySourceState(), { authority: { ownerId: localE2eOwnerId } }),
@@ -408,7 +457,7 @@ export async function readCurrentOwnerInboxThroughSource(): Promise<OwnerInboxSe
 export async function readInquiryOperatorReconstructionThroughSource(
   filter: InquiryOperatorReconstructionFilter = {}
 ): Promise<InquiryOperatorReconstructionServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     const readback = readInquiryOperatorReconstructionLocal(createLocalE2eInquirySourceState(), filter)
     return {
       ...readback,
@@ -424,7 +473,7 @@ export async function readInquiryOperatorReconstructionThroughSource(
 }
 
 export async function readCurrentOwnerInquiryThreadThroughSource(threadId: string): Promise<OwnerInquiryThreadServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return readLocalE2eOwnerInquiryThread(threadId)
   }
 
@@ -489,7 +538,7 @@ export async function markCurrentOwnerInquiryReadThroughSource(
   data: z.infer<typeof ownerVersionedSchema>,
   context?: unknown
 ): Promise<OwnerInquiryMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localOwnerMarkRead(data)
   }
 
@@ -511,7 +560,7 @@ export async function replyCurrentOwnerInquiryThroughSource(
   data: z.infer<typeof ownerReplySchema>,
   context?: unknown
 ): Promise<OwnerInquiryMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localOwnerReply(data)
   }
 
@@ -530,11 +579,11 @@ export async function replyCurrentOwnerInquiryThroughSource(
   }
 }
 
-export async function closeCurrentOwnerInquiryThroughSource(
+async function closeCurrentOwnerInquiryThroughSource(
   data: z.infer<typeof ownerVersionedSchema>,
   context?: unknown
 ): Promise<OwnerInquiryMutationServerResult> {
-  if (usesLocalE2eBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     return localOwnerClose(data)
   }
 
@@ -558,6 +607,7 @@ function submitLocalE2ePublicInquiry(
 ): PublicInquirySubmitServerResult {
   const now = Date.now()
   const operationSuffix = `${normalizeOperationPart(target.businessId)}:local-e2e:${now}`
+  const customerAccessKey = createCustomerAccessKey()
   const result = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
     target: {
       businessId: brandNonEmpty(target.businessId, 'BusinessId'),
@@ -566,6 +616,7 @@ function submitLocalE2ePublicInquiry(
     },
     body: data.body,
     contact: compactContact(data.contact),
+    customerAccessKey,
     ...(data.inquiryOrigin === undefined ? {} : { origin: data.inquiryOrigin }),
     pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
     abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
@@ -598,6 +649,7 @@ function submitLocalE2ePublicInquiry(
       version: result.thread.version,
       notificationId: result.notification.notificationId,
       notificationStatus: result.notification.status,
+      accessKey: result.thread.customerAccessKey ?? customerAccessKey,
     },
   }
 }
@@ -781,10 +833,76 @@ function ownerSourceError(error: unknown): ServerErrorResult {
     reason: 'Owner inquiry readback is not reachable right now.',
   }
 }
+function resolvePublicInquiryOperationSuffix(
+  target: PublicInquirySubmitArgs['target'],
+  context: unknown,
+): string {
+  const agentIdentity = actionAgentIdentityFromContext(context)
+  const sourceWriteRequest = actionSourceWriteRequestFromContext(context)
+  if (agentIdentity === undefined || sourceWriteRequest === undefined) {
+    return `${normalizeOperationPart(target.businessId)}:${crypto.randomUUID()}`
+  }
+
+  return [
+    normalizeOperationPart(target.businessId),
+    normalizeOperationPart(target.serviceId),
+    'agent',
+    normalizeOperationPart(agentIdentity.signatureAgent),
+    normalizeOperationPart(agentIdentity.keyid),
+    normalizeOperationPart(sourceWriteRequest.bodyDigest),
+  ].join(':')
+}
+
+function actionAgentIdentityFromContext(context: unknown): ActionAgentIdentity | undefined {
+  if (!isRecord(context) || !isRecord(context.agentIdentity)) {
+    return undefined
+  }
+  const identity = context.agentIdentity
+  return identity.kind === 'identity' &&
+    typeof identity.signatureAgent === 'string' &&
+    typeof identity.keyid === 'string' &&
+    typeof identity.verifiedAt === 'string'
+    ? {
+        kind: 'identity',
+        signatureAgent: identity.signatureAgent,
+        keyid: identity.keyid,
+        verifiedAt: identity.verifiedAt,
+      }
+    : undefined
+}
+
+function actionSourceWriteRequestFromContext(context: unknown): ActionSourceWriteRequest | undefined {
+  if (!isRecord(context) || !isRecord(context.sourceWriteRequest)) {
+    return undefined
+  }
+  const request = context.sourceWriteRequest
+  return typeof request.method === 'string' &&
+    typeof request.origin === 'string' &&
+    typeof request.pathname === 'string' &&
+    typeof request.bodyDigest === 'string'
+    ? {
+        method: request.method,
+        origin: request.origin,
+        pathname: request.pathname,
+        bodyDigest: request.bodyDigest,
+      }
+    : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 
 function normalizeOperationPart(value: string): string {
   const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 72)
   return normalized.length === 0 ? 'inquiry' : normalized
+}
+
+function createCustomerAccessKey(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function compactContact(input: z.infer<typeof publicInquirySubmitSchema>['contact']): PublicInquiryContactInput {
@@ -823,10 +941,7 @@ function readEnv(name: string): string | undefined {
   return value === undefined || value.trim().length === 0 ? undefined : value.trim()
 }
 
-function usesLocalE2eBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
-}
-
+const localE2eCustomerAccessKey = 'local-e2e-customer-record-key-0000000000000000'
 const localE2eNow = 1_777_000_000_000
 const localE2eOwnerId = brandNonEmpty('owner:inquiries-route', 'OwnerId')
 const localE2eBusinessId = brandNonEmpty('business:plumbing-demo', 'BusinessId')
@@ -842,6 +957,7 @@ function createLocalE2eInquirySourceState(): InquirySourceState {
     target: localE2eTarget,
     body: 'Water is leaking under the kitchen sink and I need a human owner to confirm next steps.',
     contact: { email: 'customer@example.test' },
+    customerAccessKey: localE2eCustomerAccessKey,
     operationKey: brandNonEmpty('inquiry:local-e2e-submit', 'OperationKey'),
     correlationId: brandNonEmpty('correlation:local-e2e-submit', 'CorrelationId'),
     pseudonymousSessionId: 'public-inquiry:local-e2e',

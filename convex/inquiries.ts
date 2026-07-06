@@ -29,6 +29,7 @@ import {
   readInquiryDeliveryReadback as readInquiryDeliveryReadbackModule,
   readInquiryOperatorReconstruction as readInquiryOperatorReconstructionModule,
   readInquiryPrivacyTombstone as readInquiryPrivacyTombstoneModule,
+  readCustomerRecord as readCustomerRecordModule,
   OwnerInboxBucketValues,
   readOwnerInquiry as readOwnerInquiryModule,
   replyToInquiry as replyToInquiryModule,
@@ -38,6 +39,7 @@ import {
 import type {
   CapabilityLaunchSupportRecord,
   InquiryDeliveryReadback,
+  InquiryCustomerRecordReadback,
   InquiryAuditRecord,
   InquiryExportReadback,
   InquiryFunnelRecord,
@@ -127,6 +129,7 @@ const submitInquiryResult = v.union(
       serviceId: v.string(),
       status: literalUnion(InquiryThreadStatusValues),
       version: v.number(),
+      customerAccessKey: v.string(),
     }),
     notification: v.object({
       notificationId: v.string(),
@@ -241,6 +244,58 @@ const ownerInquiryDetailResult = v.union(
   v.object({
     kind: v.literal('error'),
     code: v.union(v.literal('inquiry_not_found'), v.literal('missing_auth'), v.literal('owner_not_found')),
+    retryable: v.boolean(),
+    reason: v.string(),
+  })
+)
+
+const customerRecordTimelineStep = v.object({
+  key: v.union(
+    v.literal('received'),
+    v.literal('sent_to_business'),
+    v.literal('business_replied'),
+    v.literal('closed')
+  ),
+  label: v.string(),
+  detail: v.string(),
+  status: v.union(v.literal('complete'), v.literal('current'), v.literal('pending')),
+  timestamp: v.optional(v.number()),
+})
+
+const customerRecordReadback = v.object({
+  schemaVersion: v.literal('inquiry-customer-record:v1'),
+  threadId: v.string(),
+  business: v.object({
+    name: v.string(),
+    slug: v.string(),
+  }),
+  submitted: v.object({
+    messageSummary: v.string(),
+    submittedAt: v.number(),
+  }),
+  delivery: v.object({
+    state: literalUnion(InquiryNotificationStatusValues),
+    label: v.string(),
+    updatedAt: v.number(),
+  }),
+  timeline: v.array(customerRecordTimelineStep),
+  reply: v.optional(v.object({
+    body: v.string(),
+    createdAt: v.number(),
+  })),
+  closedAt: v.optional(v.number()),
+  updatedAt: v.number(),
+})
+
+const customerRecordResult = v.union(
+  v.object({
+    kind: v.literal('ok'),
+    code: v.literal('inquiry_customer_record_read'),
+    record: customerRecordReadback,
+  }),
+  v.object({
+    kind: v.literal('error'),
+    code: v.union(v.literal('inquiry_not_found'), v.literal('inquiry_access_denied')),
     retryable: v.boolean(),
     reason: v.string(),
   })
@@ -615,6 +670,7 @@ export const submitPublicInquiry = mutationGeneric({
     body: v.string(),
     contact: publicInquiryContact,
     inquiryOrigin: v.optional(inquiryOrigin),
+    customerAccessKey: v.string(),
     pseudonymousSessionId: v.string(),
     abuseBucketKey: v.string(),
     ...csrfArgs,
@@ -638,6 +694,7 @@ export const submitPublicInquiry = mutationGeneric({
       },
       body: args.body,
       contact: args.contact,
+      customerAccessKey: args.customerAccessKey,
       ...(args.inquiryOrigin === undefined ? {} : { origin: args.inquiryOrigin }),
       operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
@@ -664,6 +721,7 @@ export const submitPublicInquiry = mutationGeneric({
         serviceId: result.thread.serviceId,
         status: result.thread.status,
         version: result.thread.version,
+        customerAccessKey: result.thread.customerAccessKey ?? args.customerAccessKey,
       },
       notification: {
         notificationId: bridged.notification.notificationId,
@@ -763,6 +821,30 @@ export const readCurrentOwnerInquiry = queryGeneric({
       kind: 'ok' as const,
       code: result.code,
       readback: serializeOwnerInquiryDetail(result.readback),
+    }
+  },
+})
+
+export const readCustomerRecord = queryGeneric({
+  args: {
+    threadId: v.string(),
+    accessKey: v.string(),
+  },
+  returns: customerRecordResult,
+  handler: async (ctx, args) => {
+    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const result = readCustomerRecordModule(state, {
+      threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
+      accessKey: args.accessKey,
+    })
+    if (result.kind === 'error') {
+      return result
+    }
+
+    return {
+      kind: 'ok' as const,
+      code: result.code,
+      record: serializeCustomerRecord(result.record),
     }
   },
 })
@@ -1064,7 +1146,7 @@ async function enqueueInquiryNotificationDispatches(
 }
 
 function notificationProviderFamilies(): readonly NotificationProviderFamily[] {
-  return ['resend', 'novu']
+  return ['novu', 'resend']
 }
 
 function dispatchBindingFromDispatch(dispatch: NotificationDispatchRecord): InquiryNotificationDispatchBinding {
@@ -1132,59 +1214,61 @@ async function persistNotificationDispatchBindingState(db: RuntimeDb, state: Not
 }
 
 async function upsertNotificationDispatchReconstruction(db: RuntimeDb, dispatch: NotificationDispatchRecord): Promise<void> {
-  await upsertByFields(db, 'operationKeys', ['scope', 'key'], {
-    scope: 'notification',
-    actorKind: 'system',
-    actorRef: 'system:notification-outbox',
-    operationName: 'enqueueInquiryNotification',
-    key: dispatch.operationKey,
-    requestHash: dispatch.payloadHash,
-    sourceHash: dispatch.dispatchId,
-    status: 'succeeded',
-    resultHash: stableHash({ code: 'notification_queued', dispatchId: dispatch.dispatchId }),
-    effectRefs: [
-      'result:notification_queued',
-      `dispatch:${dispatch.dispatchId}`,
-      `inquiryThread:${dispatch.inquiryThreadId}`,
-      `inquiryMessage:${dispatch.inquiryMessageId}`,
-    ],
-    createdAt: dispatch.createdAt,
-    updatedAt: dispatch.updatedAt,
-  })
-  await upsertNotificationAuditEvent(db, {
-    eventType: 'notification.queued',
-    actorKind: 'system',
-    actorRef: 'system:notification-outbox',
-    targetRef: dispatch.dispatchId,
-    businessId: dispatch.businessId,
-    operationKey: dispatch.operationKey,
-    correlationId: dispatch.correlationId,
-    beforeState: 'none',
-    afterState: dispatch.status,
-    redactedPayload: {
-      dispatchId: dispatch.dispatchId,
-      providerFamily: dispatch.providerFamily,
-      inquiryThreadId: dispatch.inquiryThreadId,
-      inquiryMessageId: dispatch.inquiryMessageId,
-      payloadHash: dispatch.payloadHash,
-    },
-    createdAt: dispatch.createdAt,
-  })
-  await upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
-    eventType: 'notification_queued',
-    source: 'notification-outbox',
-    stage: 'published',
-    pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
-    businessId: dispatch.businessId,
-    redactedPayloadJson: JSON.stringify({
-      dispatchId: dispatch.dispatchId,
-      providerFamily: dispatch.providerFamily,
-      status: dispatch.status,
+  await Promise.all([
+    upsertByFields(db, 'operationKeys', ['scope', 'key'], {
+      scope: 'notification',
+      actorKind: 'system',
+      actorRef: 'system:notification-outbox',
+      operationName: 'enqueueInquiryNotification',
+      key: dispatch.operationKey,
+      requestHash: dispatch.payloadHash,
+      sourceHash: dispatch.dispatchId,
+      status: 'succeeded',
+      resultHash: stableHash({ code: 'notification_queued', dispatchId: dispatch.dispatchId }),
+      effectRefs: [
+        'result:notification_queued',
+        `dispatch:${dispatch.dispatchId}`,
+        `inquiryThread:${dispatch.inquiryThreadId}`,
+        `inquiryMessage:${dispatch.inquiryMessageId}`,
+      ],
+      createdAt: dispatch.createdAt,
+      updatedAt: dispatch.updatedAt,
     }),
-    consentFlag: true,
-    correlationId: dispatch.correlationId,
-    createdAt: dispatch.createdAt,
-  })
+    upsertNotificationAuditEvent(db, {
+      eventType: 'notification.queued',
+      actorKind: 'system',
+      actorRef: 'system:notification-outbox',
+      targetRef: dispatch.dispatchId,
+      businessId: dispatch.businessId,
+      operationKey: dispatch.operationKey,
+      correlationId: dispatch.correlationId,
+      beforeState: 'none',
+      afterState: dispatch.status,
+      redactedPayload: {
+        dispatchId: dispatch.dispatchId,
+        providerFamily: dispatch.providerFamily,
+        inquiryThreadId: dispatch.inquiryThreadId,
+        inquiryMessageId: dispatch.inquiryMessageId,
+        payloadHash: dispatch.payloadHash,
+      },
+      createdAt: dispatch.createdAt,
+    }),
+    upsertByFields(db, 'funnelEvents', ['eventType', 'businessId', 'correlationId', 'createdAt'], {
+      eventType: 'notification_queued',
+      source: 'notification-outbox',
+      stage: 'published',
+      pseudonymousSessionId: `notification:${dispatch.recipientRole}`,
+      businessId: dispatch.businessId,
+      redactedPayloadJson: JSON.stringify({
+        dispatchId: dispatch.dispatchId,
+        providerFamily: dispatch.providerFamily,
+        status: dispatch.status,
+      }),
+      consentFlag: true,
+      correlationId: dispatch.correlationId,
+      createdAt: dispatch.createdAt,
+    }),
+  ])
 }
 
 async function upsertNotificationAuditEvent(
@@ -1336,6 +1420,8 @@ async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceStat
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
       version: thread.version,
+      ...(thread.customerAccessKey === undefined ? {} : { customerAccessKey: thread.customerAccessKey }),
+      ...(thread.customerReplyEmail === undefined ? {} : { customerReplyEmail: thread.customerReplyEmail }),
       ...(thread.readAt === undefined ? {} : { readAt: thread.readAt }),
       ...(thread.repliedAt === undefined ? {} : { repliedAt: thread.repliedAt }),
       ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
@@ -1666,6 +1752,8 @@ function toInquiryThreadRecord(row: RuntimeDocument): InquiryThreadRecord {
     createdAt: numberField(row, 'createdAt'),
     updatedAt: numberField(row, 'updatedAt'),
     version: numberField(row, 'version'),
+    ...(optionalStringField(row, 'customerAccessKey') === undefined ? {} : { customerAccessKey: brandNonEmpty(stringField(row, 'customerAccessKey'), 'InquiryCustomerAccessKey') }),
+    ...(optionalStringField(row, 'customerReplyEmail') === undefined ? {} : { customerReplyEmail: stringField(row, 'customerReplyEmail') }),
     ...(optionalNumberField(row, 'readAt') === undefined ? {} : { readAt: numberField(row, 'readAt') }),
     ...(optionalNumberField(row, 'repliedAt') === undefined ? {} : { repliedAt: numberField(row, 'repliedAt') }),
     ...(optionalNumberField(row, 'closedAt') === undefined ? {} : { closedAt: numberField(row, 'closedAt') }),
@@ -2181,6 +2269,20 @@ function serializeOwnerInquiryDetail(readback: OwnerInquiryDetailReadback): {
     inquiry: { ...readback.inquiry },
     messages: readback.messages.map((message) => ({ ...message })),
     notifications: readback.notifications.map(serializeOwnerNotificationProjection),
+  }
+}
+
+function serializeCustomerRecord(record: InquiryCustomerRecordReadback) {
+  return {
+    schemaVersion: record.schemaVersion,
+    threadId: record.threadId,
+    business: { ...record.business },
+    submitted: { ...record.submitted },
+    delivery: { ...record.delivery },
+    timeline: record.timeline.map((step) => ({ ...step })),
+    ...(record.reply === undefined ? {} : { reply: { ...record.reply } }),
+    ...(record.closedAt === undefined ? {} : { closedAt: record.closedAt }),
+    updatedAt: record.updatedAt,
   }
 }
 

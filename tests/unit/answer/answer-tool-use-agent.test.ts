@@ -166,7 +166,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
         estimatedUsd: 0.00000307,
         unavailableReasons: [],
       })
-      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(2)
+      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_round')).toHaveLength(1)
+      expect(result.timings.filter((timing) => timing.name === 'model.openrouter_final_prose')).toHaveLength(1)
     } finally {
       if (previousLocalRegistry === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -187,7 +188,8 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
     expect(requests[0]?.tools?.map((tool) => tool.function.name)).not.toContain(
       'inquiry.submit',
     )
-    expect(requests[1]?.tool_choice).toBe('auto')
+    expect(requests[1]?.tools).toBeUndefined()
+    expect(requests[1]?.tool_choice).toBe('none')
 
     const toolMessage = requests[1]?.messages.find((message) => message.role === 'tool')
     expect(toolMessage?.tool_call_id).toBe('call-search-1')
@@ -332,6 +334,83 @@ describe('runAnswerToolUseAgent — tool-choice recovery', () => {
       }
       await server.close()
     }
+  })
+
+  it('refuses over-budget tool calls from the same assistant message and requests final prose without tools', async () => {
+    const server = await startOpenRouterServer(toolThenProseResponses({
+      toolCalls: [
+        { id: 'call-search-allowed', toolId: 'registry.search', input: { query: 'parramatta' } },
+        { id: 'call-detail-over-budget', toolId: 'registry.detail', input: { slug: 'parramatta-emergency-plumbing' } },
+      ],
+      prose: matchingProviderProse(),
+    }))
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const result = await runAnswerToolUseAgent({
+        query: 'paramata',
+        maxToolCalls: 1,
+        config: { apiKey: 'test-key', model: 'test-model', apiBaseUrl: server.endpointUrl },
+      })
+
+      expect(result.providers.map((provider) => provider.slug)).toContain(
+        'parramatta-emergency-plumbing',
+      )
+      expect(result.toolCalls).toHaveLength(2)
+      expect(result.toolCalls[0]).toMatchObject({
+        toolId: 'registry.search',
+        status: 'complete',
+      })
+      expect(JSON.parse(result.toolCalls[0]!.resultSummaryJson)).toMatchObject({
+        count: expect.any(Number),
+      })
+      expect(result.toolCalls[1]).toMatchObject({
+        toolCallId: 'call-detail-over-budget',
+        toolId: 'registry.detail',
+        status: 'refused',
+      })
+      expect(JSON.parse(result.toolCalls[1]!.resultSummaryJson)).toMatchObject({
+        count: 0,
+        errorCode: 'budget_exceeded',
+      })
+      expect(JSON.parse(result.toolCalls[1]!.resultJson)).toEqual({
+        kind: 'refused',
+        code: 'budget_exceeded',
+      })
+      expect(result.modelRequests).toHaveLength(2)
+      expect(result.modelRequests[0]).toMatchObject({ stopReason: 'tool_calls' })
+      expect(result.gate.ok).toBe(true)
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+      await server.close()
+    }
+
+    expect(server.requests).toHaveLength(2)
+    expect(server.requests[0]?.tools?.map((tool) => tool.function.name)).toEqual([
+      'registry.search',
+      'registry.detail',
+    ])
+    expect(server.requests[0]?.tool_choice).toBe('auto')
+    expect(server.requests[1]?.tools).toBeUndefined()
+    expect(server.requests[1]?.tool_choice).toBe('none')
+    expect(server.requests[1]?.response_format?.type).toBe('json_schema')
+    expect(server.requests[1]?.messages.at(-1)?.content).toContain('Stop calling tools')
+
+    const toolMessages = server.requests[1]?.messages.filter((message) => message.role === 'tool') ?? []
+    expect(toolMessages).toHaveLength(2)
+    expect(toolMessages.map((message) => message.tool_call_id)).toEqual([
+      'call-search-allowed',
+      'call-detail-over-budget',
+    ])
+    expect(JSON.parse(toolMessages[1]!.content)).toEqual({
+      kind: 'refused',
+      code: 'budget_exceeded',
+    })
   })
 
   it('persists active near-me context on location-free registry searches', async () => {

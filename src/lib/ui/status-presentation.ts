@@ -791,14 +791,10 @@ export function categoryIllustrationPath(category: string): string {
   const rules: readonly [RegExp, string][] = [
     [/plumb/, '/images/illustration/cat-plumbing.png'],
     [/electr/, '/images/illustration/cat-electrical.png'],
-    [/hvac|heat|cool|air.?con/, '/images/illustration/cat-hvac.png'],
-    [/lock/, '/images/illustration/cat-locksmith.png'],
-    [/roof/, '/images/illustration/cat-roofing.png'],
-    [/pest/, '/images/illustration/cat-pest.png'],
-    [/garden|landscap/, '/images/illustration/cat-gardening.png'],
-    [/glaz|window/, '/images/illustration/cat-glazing.png'],
-    [/appliance/, '/images/illustration/cat-appliance.png'],
-    [/clean/, '/images/illustration/cat-cleaning.png'],
+    [/account|bookkeep|payroll|\btax\b/, '/images/illustration/cat-accounting.png'],
+    [/aged.?care|elder|senior/, '/images/illustration/cat-aged-care.png'],
+    [/dental|dentist|orthodont/, '/images/illustration/cat-dental.png'],
+    [/\blaw\b|legal|solicit|lawyer|conveyanc/, '/images/illustration/cat-family-law.png'],
   ]
 
   for (const [pattern, path] of rules) {
@@ -807,5 +803,5 @@ export function categoryIllustrationPath(category: string): string {
     }
   }
 
-  return '/images/illustration/map-pin.png'
+  return '/images/illustration/cat-default.png'
 }

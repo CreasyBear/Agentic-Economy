@@ -12,7 +12,7 @@ import type {
   ServiceCatalogInput,
 } from './catalog-model'
 
-export const PublicOwnerClaimFieldValues = [
+const PublicOwnerClaimFieldValues = [
   'businessName',
   'category',
   'suburb',

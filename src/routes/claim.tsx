@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
@@ -54,6 +54,141 @@ const emptyPublicOwnerClaimInput = {
   publicDisclosure: '',
   noContactReason: '',
 } satisfies PublicOwnerClaimFlowInput
+
+const textClaimFields = [
+  'businessName',
+  'category',
+  'suburb',
+  'stateTerritory',
+  'requestedSlug',
+  'ownerMessage',
+  'sourceLabel',
+  'serviceName',
+  'serviceCategory',
+  'serviceSummary',
+  'serviceArea',
+  'hoursOrUnknown',
+  'photoUrl',
+  'responseTimeMinutes',
+  'publicDisclosure',
+  'noContactReason',
+] as const satisfies readonly TextClaimField[]
+
+const claimFields = [...textClaimFields, 'firstRequestMode'] as const satisfies readonly PublicOwnerClaimField[]
+
+const CLAIM_DRAFT_STORAGE_KEY = 'ae.claimFormDraft.v1'
+
+type ClaimDraftSnapshot = {
+  value: PublicOwnerClaimFlowInput
+  factsConfirmed: boolean
+  dirtyFields: readonly PublicOwnerClaimField[]
+}
+
+function readStoredClaimDraft(): ClaimDraftSnapshot | undefined {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+
+  const raw = window.sessionStorage.getItem(CLAIM_DRAFT_STORAGE_KEY)
+  if (raw === null) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<ClaimDraftSnapshot>
+    return {
+      value: normalizeStoredClaimInput(parsed.value),
+      factsConfirmed: parsed.factsConfirmed === true,
+      dirtyFields: normalizeStoredDirtyFields(parsed.dirtyFields),
+    }
+  } catch {
+    window.sessionStorage.removeItem(CLAIM_DRAFT_STORAGE_KEY)
+    return undefined
+  }
+}
+
+function writeStoredClaimDraft(snapshot: ClaimDraftSnapshot) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.sessionStorage.setItem(CLAIM_DRAFT_STORAGE_KEY, JSON.stringify(snapshot))
+}
+
+function clearStoredClaimDraft() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.sessionStorage.removeItem(CLAIM_DRAFT_STORAGE_KEY)
+}
+
+function normalizeStoredClaimInput(value: unknown): PublicOwnerClaimFlowInput {
+  const source = typeof value === 'object' && value !== null ? value as Partial<Record<PublicOwnerClaimField, unknown>> : {}
+  const normalized: PublicOwnerClaimFlowInput = { ...emptyPublicOwnerClaimInput }
+
+  for (const field of textClaimFields) {
+    const storedValue = source[field]
+    normalized[field] = typeof storedValue === 'string' ? storedValue : ''
+  }
+
+  const storedFirstRequestMode = source.firstRequestMode
+  normalized.firstRequestMode = typeof storedFirstRequestMode === 'string'
+    ? toFirstRequestMode(storedFirstRequestMode)
+    : emptyPublicOwnerClaimInput.firstRequestMode
+
+  return normalized
+}
+
+function normalizeStoredDirtyFields(value: unknown): readonly PublicOwnerClaimField[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter((field): field is PublicOwnerClaimField => claimFields.includes(field as PublicOwnerClaimField))
+}
+
+function mergeClaimInputPreservingDirty(
+  current: PublicOwnerClaimFlowInput,
+  incoming: PublicOwnerClaimFlowInput,
+  dirtyFields: ReadonlySet<PublicOwnerClaimField>,
+): PublicOwnerClaimFlowInput {
+  const next = { ...incoming }
+
+  for (const field of textClaimFields) {
+    if (dirtyFields.has(field)) {
+      next[field] = current[field]
+    }
+  }
+
+  if (dirtyFields.has('firstRequestMode')) {
+    next.firstRequestMode = current.firstRequestMode
+  }
+
+  return next
+}
+
+function readClaimInputWithStateFallback(
+  form: HTMLFormElement,
+  fallback: PublicOwnerClaimFlowInput,
+  dirtyFields: ReadonlySet<PublicOwnerClaimField>,
+): PublicOwnerClaimFlowInput {
+  const formValue = readClaimInput(form, fallback)
+  const next = { ...formValue }
+
+  for (const field of textClaimFields) {
+    const fallbackValue = fallback[field]
+    if (dirtyFields.has(field) && formValue[field].trim().length === 0 && fallbackValue.trim().length > 0) {
+      next[field] = fallbackValue
+    }
+  }
+
+  if (dirtyFields.has('firstRequestMode') && formValue.firstRequestMode === emptyPublicOwnerClaimInput.firstRequestMode) {
+    next.firstRequestMode = fallback.firstRequestMode
+  }
+
+  return next
+}
 
 function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowInput {
   const data = new FormData(form)
@@ -129,8 +264,8 @@ const identityFields = [
   },
   {
     field: 'sourceLabel',
-    label: 'Fact note',
-    description: 'Describe where these public facts came from.',
+    label: 'Detail note',
+    description: 'Describe where these public details came from.',
     control: 'input',
   },
 ] as const satisfies readonly FieldConfig[]
@@ -196,8 +331,8 @@ export const Route = createFileRoute('/claim')({
   beforeLoad: async () => await requireClaimOwnerSession(),
   head: () => ({
     meta: [
-      { title: 'Claim your service page | Agentic Economy' },
-      { name: 'description', content: 'Submit business identity and service facts for a truthful public service page.' },
+      { title: 'Get your business found | Agentic Economy' },
+      { name: 'description', content: 'Claim a free service page so people and assistants can find your business and reach you in writing.' },
       { name: 'robots', content: 'noindex' },
     ],
   }),
@@ -220,15 +355,50 @@ function ClaimRoute() {
   const [importPending, setImportPending] = useState(false)
   const [importDraftResult, setImportDraftResult] = useState<StorefrontImportDraft | undefined>()
   const [importMessage, setImportMessage] = useState<string | undefined>()
+  const dirtyFieldsRef = useRef<Set<PublicOwnerClaimField>>(new Set())
+  const [storageReady, setStorageReady] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
   const firstRequestModeError = errorByField.get('firstRequestMode')
   const firstRequestModeInvalid = firstRequestModeError !== undefined
+
+  useEffect(() => {
+    if (!hydrated || storageReady) {
+      return
+    }
+
+    const storedDraft = readStoredClaimDraft()
+    if (storedDraft !== undefined) {
+      const storedDirtyFields = new Set(storedDraft.dirtyFields)
+      setValue((current) => mergeClaimInputPreservingDirty(current, storedDraft.value, dirtyFieldsRef.current))
+      setFactsConfirmed(storedDraft.factsConfirmed)
+      dirtyFieldsRef.current = new Set([...storedDirtyFields, ...dirtyFieldsRef.current])
+    }
+
+    setStorageReady(true)
+  }, [hydrated, storageReady])
+
+  useEffect(() => {
+    if (!hydrated || !storageReady) {
+      return
+    }
+
+    writeStoredClaimDraft({
+      value,
+      factsConfirmed,
+      dirtyFields: Array.from(dirtyFieldsRef.current),
+    })
+  }, [factsConfirmed, hydrated, storageReady, value])
+
+  useEffect(() => {
+    focusFirstError(errors)
+  }, [errors])
 
   if (location.pathname !== '/claim') {
     return <Outlet />
   }
 
   function updateTextField(field: TextClaimField, nextValue: string) {
+    dirtyFieldsRef.current.add(field)
     setValue((current) => ({ ...current, [field]: nextValue }))
   }
 
@@ -244,7 +414,7 @@ function ClaimRoute() {
       })
       if (result.kind === 'ok') {
         setImportDraftResult(result.draft)
-        setValue(result.draft.profile)
+        setValue((current) => mergeClaimInputPreservingDirty(current, result.draft.profile, dirtyFieldsRef.current))
         setFactsConfirmed(false)
         setImportMessage('Review the imported draft below. Nothing publishes until you confirm and submit.')
         return
@@ -259,12 +429,19 @@ function ClaimRoute() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setMessage(undefined)
-    const nextValue = readClaimInput(event.currentTarget, value)
+    const nextValue = readClaimInputWithStateFallback(event.currentTarget, value, dirtyFieldsRef.current)
+    for (const field of textClaimFields) {
+      if (nextValue[field].trim().length > 0) {
+        dirtyFieldsRef.current.add(field)
+      }
+    }
+    if (nextValue.firstRequestMode !== emptyPublicOwnerClaimInput.firstRequestMode) {
+      dirtyFieldsRef.current.add('firstRequestMode')
+    }
     setValue(nextValue)
     const validation = validatePublicOwnerClaimFlowInput(nextValue)
     if (validation.kind === 'invalid') {
       setErrors(validation.errors)
-      focusFirstError(validation.errors)
       return
     }
 
@@ -273,13 +450,13 @@ function ClaimRoute() {
     try {
       const result = await submitClaim({ data: nextValue })
       if (result.kind === 'ok') {
+        clearStoredClaimDraft()
         await navigate({ to: '/claim/success', search: { slug: result.catalog.slug } })
         return
       }
 
       setMessage(result.reason)
       setErrors(result.errors ?? [])
-      focusFirstError(result.errors ?? [])
     } finally {
       setPending(false)
     }
@@ -288,9 +465,9 @@ function ClaimRoute() {
   return (
     <AePublicShell>
       <AePageHeader
-        eyebrow="Owner claim"
-        title="Tell us what your service page should say"
-        description="Add business identity, service details, first-request status, and a public note. ABN is not required for this first page."
+        eyebrow="For businesses"
+        title="Get your business found."
+        description="Publish your services once. People and their assistants can find you, compare you, and reach you in writing."
       />
       {!hydrated ? (
         <div className="mx-auto w-full max-w-6xl px-4 pb-16 text-sm text-secondary md:px-6" aria-live="polite">
@@ -301,6 +478,10 @@ function ClaimRoute() {
         {message === undefined ? null : (
           <Banner status="error" title="Publish did not complete" description={message} />
         )}
+        <Card padding={5} className="grid gap-1.5 bg-accent text-on-accent">
+          <Text type="large" weight="semibold" display="block" className="text-on-accent">Free to claim. No lead fees.</Text>
+          <Text display="block" className="text-on-accent/85">You own the page, choose what appears, and set how customers reach you.</Text>
+        </Card>
         <ImportDraftSection
           websiteUrl={importWebsiteUrl}
           abn={importAbn}
@@ -345,7 +526,7 @@ function ClaimRoute() {
             />
             <AeFileUploadField
               label="Supporting files"
-              description="Preview evidence files while preparing the claim. Use the Photo URL field for the image that should publish."
+              description="Preview files while preparing the claim. Use the Photo URL field for the image that should publish."
               accept="image/*,.pdf"
             />
           </FormLayout>
@@ -367,6 +548,7 @@ function ClaimRoute() {
                 aria-invalid={firstRequestModeInvalid}
                 disabled={pending}
                 onValueChange={(nextValue) => {
+                  dirtyFieldsRef.current.add('firstRequestMode')
                   setValue((current) => ({
                     ...current,
                     firstRequestMode: toFirstRequestMode(nextValue),
@@ -415,8 +597,8 @@ function ClaimRoute() {
         <AeReviewBlock value={value} />
         <AeCheckboxField
           id="claimFactsConfirmed"
-          label="I confirm these public facts are supplied by the business and ready to publish."
-          description="Agentic Economy publishes what you submit. Review the summary above before continuing."
+          label="I confirm these public details are supplied by the business and ready to publish."
+          description="Review what will appear before continuing."
           checked={factsConfirmed}
           disabled={pending}
           onCheckedChange={setFactsConfirmed}
@@ -464,7 +646,7 @@ function ImportDraftSection({
   return (
     <AeClaimFormSection
       title="Start from a website"
-      description="Import a draft from a business website, then review and edit every public fact before publishing."
+      description="Import a draft from a business website, then review and edit every public detail before publishing."
     >
       <div className="grid gap-4">
         {message === undefined ? null : (
@@ -535,7 +717,7 @@ function ImportedDraftReview({ draft }: { draft: StorefrontImportDraft }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-1">
           <Text type="large" weight="semibold" color="primary" display="block">Review imported draft</Text>
-          <Text type="supporting" color="secondary" display="block">{draft.boundaryStatement}</Text>
+          <Text type="supporting" color="secondary" display="block">Review and adjust the imported details before you publish.</Text>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="neutral" label={draft.source.label} />
@@ -663,9 +845,9 @@ function focusFirstError(errors: readonly PublicOwnerClaimValidationError[]) {
     return
   }
 
-  requestAnimationFrame(() => {
+  window.setTimeout(() => {
     document.querySelector<HTMLElement>(`[name="${first.field}"]`)?.focus()
-  })
+  }, 0)
 }
 
 function toFirstRequestMode(value: string): PublicOwnerClaimFlowInput['firstRequestMode'] {

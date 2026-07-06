@@ -21,7 +21,7 @@ Current assistant-callable actions remain exactly `registry.search`, `registry.d
 | PM-02 assistant distribution | Open/not proven | Assistant distribution/public posture/readback/propose expansion claims | Query table/runbook only. |
 | PM-04 hands require pull | Open/not proven | Scope 4 04-02+ and Scope 5 05-02+ product-demo proof | Demo script and acceptance rubric only. |
 | PM-05 trust language | ADAPT/not unlocked; fixture/ledger/template scaffolded | Public/demo copy and assistant-visible descriptors | Run `.planning/scopes/PM-05-ADAPTATION-PLAN.md`; keep `.planning/scopes/PM-05-REVIEWER-EVIDENCE.md` empty until real reviewers answer. |
-| 14-day bootstrap gate | Active/evidence-free | Public platform-rung widening beyond storefront prototype + qualified inquiry | Evidence scaffold and instrumentation dry-run. The clock starts only after setup counts are real. |
+| 14-day bootstrap gate | Active/evidence-free; scaffold exists in `.planning/scopes/scope-14day-bootstrap-gate/EVIDENCE-14DAY-GATE.md`; G1, G2, and G3 are source-local implemented but target dry-runs remain open; clock remains blocked by target-environment targeted-session proof, target-environment source/profile click proof or explicit exclusion, target-environment supplier-action proof, and issue #36/#5 outside-in audit evidence | Public platform-rung widening beyond storefront prototype + qualified inquiry | Source-backed profile corpus, provider recruitment, target dry-run evidence, and narrow pre-clock blocker tickets only. The clock has not started. |
 
 ## Cross-scope lock table
 

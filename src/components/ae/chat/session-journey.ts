@@ -50,11 +50,18 @@ export function buildSessionJourney(input: SessionJourneyInput): SessionJourney 
   }
 
   const handoffActive = liveIntent === 'inquiry_handoff'
-  const handoffComplete = completedTurns.some((turn) => turn.intent === 'inquiry_handoff')
+  const handoffComplete = selectedProvider !== undefined && completedTurns.some((turn) => turn.intent === 'inquiry_handoff')
   const hasFollowUp = completedTurns.some((turn) => turn.seq > 1) || (completedTurnCount > 0 && liveTurnCount > 0)
   const hasSearchStarted = totalTurnCount > 0
   const hasSearchCompleted = completedTurnCount > 0
   const hasProviderEvidence = providerCount > 0
+
+  // Nothing to orient yet: no listings found and no inquiry activity. An empty
+  // "inquiry path" only restates "nothing found", so suppress it entirely and
+  // let the answer's own recovery prompts carry the empty case.
+  if (!hasProviderEvidence && selectedProvider === undefined && !handoffActive && !handoffComplete && !hasInquiryReadyProvider) {
+    return null
+  }
 
   return {
     providerCount,

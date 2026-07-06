@@ -1,0 +1,51 @@
+import { createFileRoute } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+
+import { AeOperatorShell } from '@/components/ae/layout/AeOperatorShell'
+import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPanel'
+import { operatorRouteOptions } from '@/lib/operator/route-options'
+import {
+  readAdminIndexHealthThroughSource,
+} from '@/modules/security/admin-readback.functions'
+
+const readAdminIndexHealthServer = createServerFn().handler(() => readAdminIndexHealthThroughSource())
+
+export const Route = createFileRoute('/_operator/admin/index-health')({
+  ...operatorRouteOptions,
+  loader: async () => ({
+    readback: await readAdminIndexHealthServer(),
+  }),
+  head: () => ({
+    meta: [
+      { title: 'Index health | Agentic Economy' },
+      {
+        name: 'description',
+        content: 'Check catalog and projection readbacks before public discovery files ship.',
+      },
+      { name: 'robots', content: 'noindex' },
+    ],
+  }),
+  component: AdminIndexHealthRoute,
+})
+
+function AdminIndexHealthRoute() {
+  const { readback } = Route.useLoaderData()
+
+  return (
+    <AeOperatorShell
+      operatorRole="admin"
+      title="Index health"
+      description="Check catalog and projection readbacks before public discovery files are allowed to ship."
+      currentPath="/admin/index-health"
+      navBadges={{ '/admin/index-health': readback.rows.length }}
+    >
+      <div className="grid gap-6">
+        <AeAdminReadbackPanel
+          title="Index readback"
+          description="Denied reads return no private rows; authorized reads show source, attempt, repair, and affected public surfaces."
+          readback={readback}
+        />
+      </div>
+    </AeOperatorShell>
+  )
+}

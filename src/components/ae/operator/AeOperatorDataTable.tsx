@@ -68,7 +68,7 @@ export function AeOperatorDataTable<TData>({
           placeholder={filterPlaceholder}
           label={filterPlaceholder}
           isLabelHidden
-          width="24rem"
+          width="min(24rem, 100%)"
         />
       ) : null}
       <div className="overflow-auto rounded-md border border-border" style={{ maxHeight }}>

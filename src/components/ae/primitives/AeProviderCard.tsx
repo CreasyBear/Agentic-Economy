@@ -1,9 +1,13 @@
+import { MapPin } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+
 import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Text } from '@astryxdesign/core/Text'
 import { Token } from '@astryxdesign/core/Token'
 
+import { RouterLink } from '@/components/astryx/RouterLink'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { buildProviderPresentation, pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
@@ -32,11 +36,12 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
   const inquiryPath = answerCardInquiryPath(source)
   const detailHref = appendThreadOrigin(source.detailUrl, threadId)
   const inquiryHref = source.inquiryUrl === undefined ? undefined : appendThreadOrigin(source.inquiryUrl, threadId)
+  const grounding = answerCardGrounding(source)
 
   return (
     <Card
       padding={4}
-      className="grid gap-4"
+      className="group relative grid gap-4 shadow-sm motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-md motion-safe:hover:lift"
       data-variant="answer"
       id={`source-${source.citationIndex}`}
       aria-labelledby={`source-${source.citationIndex}-name`}
@@ -51,9 +56,10 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
             color="primary"
             display="block"
           >
-            <a href={detailHref} className="text-primary underline-offset-4 hover:underline">{source.name}</a>
+            <RouterLink href={detailHref} className="text-primary underline-offset-4 hover:underline">{source.name}</RouterLink>
           </Text>
           <Text type="supporting" color="secondary" display="block">{source.category}</Text>
+          {grounding === undefined ? null : <Text type="supporting" color="secondary" display="block">{grounding}</Text>}
           <Text type="supporting" color="secondary" display="block">Choice {source.citationIndex} in this answer</Text>
           {source.trustCue.length > 0 ? <Text type="supporting" color="secondary" display="block">{source.trustCue}</Text> : null}
         </div>
@@ -111,6 +117,20 @@ function answerCardInquiryPath(source: AnswerSource): { description: string; act
     actionLabel: source.nextStepLabel.length > 0 ? source.nextStepLabel : 'Review listing',
   }
 }
+function answerCardGrounding(source: AnswerSource): string | undefined {
+  const serviceCategory = source.services.find((service) => service.category.trim().length > 0)?.category.trim() ?? source.category.trim()
+  const place = [source.suburb.trim(), source.stateTerritory.trim()].filter((part) => part.length > 0).join(', ')
+  const listedFor = [serviceCategory.length > 0 ? `Listed for ${serviceCategory}` : '', place.length > 0 ? `in ${place}` : '']
+    .filter((part) => part.length > 0)
+    .join(' ')
+  const facts = [
+    listedFor,
+    source.freshnessLabel?.trim() ?? '',
+  ].filter((part) => part.length > 0)
+
+  return facts.length === 0 ? undefined : facts.join(' · ')
+}
+
 
 function AeProviderCardRegistry({ item }: { item: PublicBusinessCatalogApiDto }) {
   const presentation = buildProviderPresentation(item, { serviceChipLimit: 3 })
@@ -121,28 +141,48 @@ function AeProviderCardRegistry({ item }: { item: PublicBusinessCatalogApiDto })
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(presentation.availabilityLabel))
 
   return (
-    <Card padding={0} className="grid h-full overflow-hidden" data-variant="registry" aria-labelledby={`registry-card-${item.slug}`}>
-      <figure className="aspect-[16/9] overflow-hidden bg-card">
-        <img className="h-full w-full object-cover" src={presentation.image.url} alt={presentation.image.alt} loading="lazy" />
+    <Card
+      padding={0}
+      className="group relative grid h-full overflow-hidden bg-card shadow-sm motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-lg motion-safe:hover:lift focus-within:shadow-lg"
+      data-variant="registry"
+      aria-labelledby={`registry-card-${item.slug}`}
+    >
+      <figure className="aspect-video overflow-hidden bg-accent-muted">
+        <img
+          className="h-full w-full object-cover"
+          src={presentation.image.url}
+          alt={presentation.image.alt}
+          onError={(event) => {
+            const image = event.currentTarget
+            if (image.dataset.fallback === '1') {
+              image.style.visibility = 'hidden'
+              return
+            }
+            image.dataset.fallback = '1'
+            image.src = '/images/illustration/cat-default.png'
+          }}
+          loading="lazy"
+        />
       </figure>
-      <div className="grid gap-4 p-4">
+      <div className="grid content-start gap-4 p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <Text type="supporting" color="secondary" display="block">{item.category} · {presentation.locationLabel}</Text>
             <Text id={`registry-card-${item.slug}`} type="large" weight="semibold" color="primary" display="block">{item.name}</Text>
+            <span className="mt-0.5 flex items-center gap-1">
+              <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
+              <Text type="supporting" color="secondary">{item.category} · {presentation.locationLabel}</Text>
+            </span>
           </div>
           <Badge label={presentation.availabilityLabel} variant={badgeVariant} />
         </div>
-        <Text color="secondary" display="block">{summary}</Text>
+        <Text color="secondary" display="block" className="line-clamp-2">{summary}</Text>
         {presentation.trustCue.length > 0 ? <Text type="supporting" color="secondary" display="block">{presentation.trustCue}</Text> : null}
         <TokenList labels={presentation.serviceChips.map((service) => service.label)} />
         <ProviderFacts facts={[{ term: 'Service area', description: presentation.serviceArea }, { term: 'Response', description: presentation.responseFallbackLabel }]} />
         <Text type="supporting" color="primary" display="block"><strong>Best next step:</strong> {presentation.nextStepLabel}</Text>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button label="View details" variant="primary" size="sm" href={`/${item.slug}?from=registry`} />
-          <a className="text-sm text-secondary underline-offset-4 hover:underline" href={`/api/businesses/${encodeURIComponent(item.slug)}`}>
-            Get as agent JSON
-          </a>
+        <div className="mt-1 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+          <Link to="/$slug" params={{ slug: item.slug }} search={{ from: 'registry' }} aria-label={`View ${item.name}`} className="text-sm font-semibold text-accent underline-offset-4 after:absolute after:inset-0 hover:underline">View details</Link>
+          <a className="relative z-10 ml-auto text-sm text-secondary underline-offset-4 hover:underline" href={`/api/businesses/${encodeURIComponent(item.slug)}`}>Get as agent JSON</a>
         </div>
       </div>
     </Card>

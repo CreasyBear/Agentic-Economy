@@ -5,7 +5,7 @@ import { v } from 'convex/values'
 import { readActiveAdminMembership, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { runtimeDb } from './source_state'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
+import type { RuntimeDb, RuntimeDocument, RuntimeQuery } from './source_state'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
@@ -65,6 +65,7 @@ const notificationErrorCode = v.union(
   v.literal('notification_terminal'),
   v.literal('notification_system_denied'),
   v.literal('notification_csrf_rejected'),
+  v.literal('notification_owner_email_disabled'),
   v.literal('missing_auth'),
   v.literal('owner_not_found')
 )
@@ -255,6 +256,12 @@ const notificationSystemSendReadResult = v.union(
         slug: v.string(),
         name: v.string(),
       }),
+      inquiry: v.optional(v.object({
+        serviceName: v.optional(v.string()),
+        customerAccessKey: v.optional(v.string()),
+        customerMessageFirstLine: v.optional(v.string()),
+        isFirstInquiryForBusiness: v.boolean(),
+      })),
     }),
   }),
   v.object({
@@ -484,6 +491,15 @@ export const readNotificationDispatchForSystemSend = queryGeneric({
       return notificationRuntimeError('owner_not_found')
     }
 
+    if (stringField(dispatch, 'recipientRole') === 'owner' && !(await readOwnerNewInquiryEmailEnabled(db, owner._id))) {
+      return notificationRuntimeError(
+        'notification_owner_email_disabled',
+        'Owner new-inquiry email notifications are turned off.'
+      )
+    }
+
+    const inquiry = await readInquiryForDispatch(db, dispatch)
+
     return {
       kind: 'ok' as const,
       code: 'notification_dispatch_send_read' as const,
@@ -498,6 +514,7 @@ export const readNotificationDispatchForSystemSend = queryGeneric({
           slug: stringField(business, 'slug'),
           name: stringField(business, 'name'),
         },
+        ...(inquiry === undefined ? {} : { inquiry }),
       },
     }
   },
@@ -1226,12 +1243,73 @@ function deserializeProviderResult(result: RuntimeNotificationProviderTriggerRes
   }
 }
 
+type DispatchInquiryEmailContext = {
+  serviceName?: string
+  customerMessageFirstLine?: string
+  customerAccessKey?: string
+  isFirstInquiryForBusiness: boolean
+}
+
+async function readInquiryForDispatch(
+  db: RuntimeDb,
+  dispatch: RuntimeDocument
+): Promise<DispatchInquiryEmailContext | undefined> {
+  const threadId = stringField(dispatch, 'inquiryThreadId')
+  const messageId = stringField(dispatch, 'inquiryMessageId')
+  const businessId = stringField(dispatch, 'businessId')
+  const thread = await db
+    .query('inquiryThreads')
+    .withIndex('by_threadId', (query) => query.eq('threadId', threadId))
+    .unique()
+  if (thread === null) {
+    return undefined
+  }
+
+  const [service, message, businessThreads] = await Promise.all([
+    db.get(stringField(thread, 'serviceId')),
+    db
+      .query('inquiryMessages')
+      .withIndex('by_messageId', (query) => query.eq('messageId', messageId))
+      .unique(),
+    queryTake(
+      db
+        .query('inquiryThreads')
+        .withIndex('by_business_status', (query) => query.eq('businessId', businessId)),
+      2
+    ),
+  ])
+  const serviceName = service === null ? undefined : stringField(service, 'name')
+  const customerMessageFirstLine = message === null ? undefined : firstNonEmptyLine(stringField(message, 'body'))
+  const customerAccessKey = stringField(thread, 'customerAccessKey')
+
+  return {
+    ...(serviceName === undefined || serviceName.length === 0 ? {} : { serviceName }),
+    ...(customerMessageFirstLine === undefined ? {} : { customerMessageFirstLine }),
+    ...(customerAccessKey.length === 0 ? {} : { customerAccessKey }),
+    isFirstInquiryForBusiness: businessThreads.length === 1,
+  }
+}
+
+async function queryTake(query: RuntimeQuery, limit: number): Promise<RuntimeDocument[]> {
+  if (query.take !== undefined) {
+    return await query.take(limit)
+  }
+
+  return (await query.collect()).slice(0, limit)
+}
+
+function firstNonEmptyLine(value: string): string | undefined {
+  const line = value.split(/\r?\n/).find((candidate) => candidate.trim().length > 0)?.replace(/\s+/g, ' ').trim()
+  return line === undefined || line.length === 0 ? undefined : line
+}
+
 function notificationRuntimeError(
   code:
     | 'missing_auth'
     | 'owner_not_found'
     | 'notification_not_found'
     | 'notification_system_denied'
+    | 'notification_owner_email_disabled'
     | 'notification_csrf_rejected',
   reason: string = code
 ) {
@@ -1243,6 +1321,15 @@ function notificationRuntimeError(
   }
 }
 
+
+async function readOwnerNewInquiryEmailEnabled(db: RuntimeDb, ownerId: string): Promise<boolean> {
+  const preferences = await db
+    .query('ownerNotificationPreferences')
+    .withIndex('by_ownerId', (query) => query.eq('ownerId', ownerId))
+    .unique()
+
+  return preferences === null ? true : booleanField(preferences, 'newInquiryEmailEnabled')
+}
 function requireNotificationSystemAccess(systemKey: string): { kind: 'allowed' } | { kind: 'denied'; reason: string } {
   const expected = process.env.AE_NOTIFICATION_OUTBOX_SECRET?.trim()
   if (expected === undefined || expected.length === 0) {

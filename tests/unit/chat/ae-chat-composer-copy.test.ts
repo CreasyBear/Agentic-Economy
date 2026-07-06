@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildFollowUpComposerCopy } from '@/components/ae/chat/AeChat'
+import { buildFollowUpComposerCopy } from '@/components/ae/chat/composer-copy'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicThreadTurn } from '@/modules/answer-thread/public'
 

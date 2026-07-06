@@ -18,11 +18,11 @@ import {
 } from '@/modules/protected-action/internal/validators'
 
 const selectedActionRouteFiles = [
-  'src/routes/owner.actions.tsx',
-  'src/routes/owner.actions.$proposalId.tsx',
-  'src/routes/owner.actions.$proposalId.receipt.tsx',
-  'src/routes/admin.protected-actions.tsx',
-  'src/routes/admin.protected-actions.$proposalId.tsx',
+  'src/routes/_operator/owner.actions.tsx',
+  'src/routes/_operator/owner.actions.$proposalId.tsx',
+  'src/routes/_operator/owner.actions.$proposalId.receipt.tsx',
+  'src/routes/_operator/admin.protected-actions.tsx',
+  'src/routes/_operator/admin.protected-actions.$proposalId.tsx',
 ] as const
 
 describe('selected contact follow-up action contract', () => {

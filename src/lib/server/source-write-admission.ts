@@ -72,7 +72,7 @@ export async function sourceWriteAdmissionFromRequest(input: {
   })
 }
 
-export function readRequiredSourceWriteSigningKey(
+function readRequiredSourceWriteSigningKey(
   scope: SourceWriteAdmissionScope,
   env: Env = process.env
 ): { keyId: string; secret: string } {

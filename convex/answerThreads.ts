@@ -4,6 +4,7 @@ import { v } from 'convex/values'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { resolveAdminAuthority } from './authz'
 import { runtimeDb } from './source_state'
+import { requireSourceWrite, sourceWriteArgs, type SourceWriteArgs } from './sourceWriteAdmission'
 import {
   AnswerTurnStatusValues,
   AnswerThreadSharePolicyValues,
@@ -57,8 +58,12 @@ export const createAnswerThread = mutationGeneric({
     threadId: v.string(),
     pseudonymousSessionId: v.string(),
     title: v.string(),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
     const timestamp = now()
     await ctx.db.insert('answerThreads', {
       threadId: args.threadId,
@@ -86,8 +91,12 @@ export const appendAnswerTurn = mutationGeneric({
     artifactKindsJson: v.string(),
     status: literalUnion(AnswerTurnStatusValues),
     errorCopyId: v.optional(v.string()),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
     const thread = await ctx.db
       .query('answerThreads')
       .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
@@ -156,8 +165,12 @@ export const appendAnswerTurnWithToolCalls = mutationGeneric({
         status: literalUnion(AnswerToolCallStatusValues),
       }),
     ),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
     const thread = await ctx.db
       .query('answerThreads')
       .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
@@ -243,8 +256,12 @@ export const appendAnswerTurnWithThreadAndToolCalls = mutationGeneric({
         status: literalUnion(AnswerToolCallStatusValues),
       }),
     ),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
     const timestamp = now()
     const existingThread = await ctx.db
       .query('answerThreads')
@@ -328,8 +345,12 @@ export const appendAnswerToolCalls = mutationGeneric({
         status: literalUnion(AnswerToolCallStatusValues),
       }),
     ),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
     const nowTs = now()
     for (const call of args.toolCalls) {
       await ctx.db.insert('answerToolCalls', {
@@ -656,8 +677,12 @@ export const deleteAnswerThread = mutationGeneric({
   args: {
     threadId: v.string(),
     pseudonymousSessionId: v.string(),
+    operationKey: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    ...sourceWriteArgs,
   },
   handler: async (ctx, args) => {
+    await requireAnswerThreadSourceWrite(ctx, args)
     const thread = await ctx.db
       .query('answerThreads')
       .withIndex('by_threadId', (q) => q.eq('threadId', args.threadId))
@@ -691,3 +716,13 @@ export const deleteAnswerThread = mutationGeneric({
     return { threadId: args.threadId }
   },
 })
+
+async function requireAnswerThreadSourceWrite(
+  ctx: { db: unknown },
+  args: SourceWriteArgs,
+): Promise<void> {
+  const sourceWrite = await requireSourceWrite(ctx, args, 'answer_thread')
+  if (sourceWrite.kind === 'rejected') {
+    throw new Error(`answer_thread_source_write_rejected:${sourceWrite.reason}`)
+  }
+}

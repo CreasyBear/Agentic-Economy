@@ -87,6 +87,7 @@ function toFunnelEventContract(input: RecordFunnelEventInput, redactedPayload: R
 
 function toPersistenceRow(contract: FunnelEventContract, input: RecordFunnelEventInput): FunnelEventPersistenceRow {
   const redactedPayload = JSON.parse(contract.redactedPayload) as RedactedPayload
+  const referrerEvidence = normalizeReferrerEvidence(input.referrer)
 
   return {
     eventId: `funnel:${payloadHash(redactedPayload)}:${contract.correlationId}:${contract.eventType}`,
@@ -98,11 +99,38 @@ function toPersistenceRow(contract: FunnelEventContract, input: RecordFunnelEven
     consentFlag: contract.consentFlag,
     redactedPayloadJson: contract.redactedPayload,
     createdAt: contract.createdAt,
-    ...(input.referrer === undefined ? {} : { referrer: input.referrer.slice(0, 240) }),
+    ...(referrerEvidence === undefined ? {} : { referrer: referrerEvidence }),
     ...(input.utmSource === undefined ? {} : { utmSource: input.utmSource.slice(0, 120) }),
     ...(input.utmCampaign === undefined ? {} : { utmCampaign: input.utmCampaign.slice(0, 120) }),
     ...(input.actorRef === undefined ? {} : { actorRef: input.actorRef.slice(0, 120) }),
     ...(input.businessId === undefined ? {} : { businessId: input.businessId }),
     ...(input.claimId === undefined ? {} : { claimId: input.claimId }),
+  }
+}
+
+function normalizeReferrerEvidence(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return undefined
+  }
+
+  const parsed = parseReferrerHost(trimmed) ?? parseReferrerHost(`https://${trimmed}`)
+  if (parsed !== undefined) {
+    return parsed
+  }
+
+  return '[redacted-referrer]'
+}
+
+function parseReferrerHost(value: string): string | undefined {
+  try {
+    const host = new URL(value).hostname.trim().toLowerCase()
+    return host.length === 0 ? undefined : host.slice(0, 240)
+  } catch {
+    return undefined
   }
 }

@@ -32,7 +32,7 @@ export function AeQueryPanel({
         defaultValue={defaultValue}
         busy={busy}
         examples={examples}
-        {...(placeholder === undefined ? {} : { placeholder })}
+        {...(placeholder === undefined ? {} : { placeholder, inputLabel: placeholder })}
       />
       {loopHint !== undefined && loopHint.length > 0 ? (
         <p className="font-mono text-xs leading-snug text-secondary">{loopHint}</p>

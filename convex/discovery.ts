@@ -235,9 +235,11 @@ export const regenerateDiscoveryManifest = mutationGeneric({
     const manifest = buildManifest(catalog, canonicalBaseUrl(args.canonicalBaseUrl), now, 'available')
     const existingAttempt = await latestAttemptForBusiness(db, catalog.businessId)
     const replayed = existingAttempt?.status === 'succeeded' && existingAttempt.generatedHash === manifest.generatedHash
-    await upsertManifest(db, manifest)
-    const attempt = await upsertSucceededAttempt(db, manifest, existingAttempt, now)
-    const auditEvent = await ensureDiscoveryAuditEvent(db, manifest, now)
+    const [, attempt, auditEvent] = await Promise.all([
+      upsertManifest(db, manifest),
+      upsertSucceededAttempt(db, manifest, existingAttempt, now),
+      ensureDiscoveryAuditEvent(db, manifest, now),
+    ])
     return {
       kind: 'ok' as const,
       code: replayed ? 'discovery_manifest_replayed' as const : 'discovery_manifest_generated' as const,

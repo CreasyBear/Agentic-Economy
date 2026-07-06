@@ -25,6 +25,7 @@ const firstRequestDto = v.object({
 })
 
 const catalogItemDto = v.object({
+  businessId: v.string(),
   slug: v.string(),
   name: v.string(),
   category: v.string(),
@@ -306,6 +307,7 @@ export const readCatalogHealth = queryGeneric({
 type RuntimeDb = RuntimeReader
 
 type CatalogDto = {
+  businessId: string
   slug: string
   name: string
   category: string
@@ -855,6 +857,7 @@ function catalogForBusinessFromLookup(
 
   const capabilities = lookup.capabilitiesByBusinessId.get(business._id) ?? []
   return {
+    businessId: business._id,
     slug: stringField(business, 'slug'),
     name: stringField(business, 'name'),
     category: stringField(context, 'category'),

@@ -5,7 +5,7 @@ import type {
   PublicBusinessCatalogSearchInput,
 } from './search'
 
-export const RegistrySearchDocumentSchemaVersion = 'registry-search-document:v1' as const
+const RegistrySearchDocumentSchemaVersion = 'registry-search-document:v1' as const
 
 export type RegistrySearchDocument = {
   documentId: string
@@ -161,7 +161,7 @@ export function buildRegistrySearchDocumentsForCatalog(
   })
 }
 
-export function buildRegistrySearchDocumentId(businessSlug: string, serviceSlug: string): string {
+function buildRegistrySearchDocumentId(businessSlug: string, serviceSlug: string): string {
   return `${businessSlug}__${serviceSlug}`
 }
 
@@ -218,7 +218,7 @@ export function normalizePlaceKey(value: string): string {
   return normalizeRegistrySearchText(value)
 }
 
-export function normalizeSearchToken(token: string): string {
+function normalizeSearchToken(token: string): string {
   if (token === 'plumber' || token === 'plumbers') {
     return 'plumbing'
   }

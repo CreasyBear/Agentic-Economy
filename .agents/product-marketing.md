@@ -1,10 +1,14 @@
 # Product Marketing Context
 
-*Last updated: 2026-06-27*
+*Last updated: 2026-07-04*
+
+> **Positioning authority:** `.planning/brand/REPOSITION-2026-07.md` (outcome-led,
+> 2026-07-04) supersedes trust-led framing below wherever they conflict. Trust is
+> texture (stamps, receipts, dated notes), never the headline.
 
 ## Product Overview
 
-**One-liner:** Agentic Economy gives Australian local businesses a controlled public front door for AI-era discovery.
+**One-liner:** Agentic Economy is the easiest way to find a local business and reach it with one clear ask — for people, and for the assistants they use.
 
 **What it does:** A business owner can claim and publish a public business page, expose truthful registry/search and agent-discovery projections, and see whether that discovery path is healthy. The first product is claim, publish, discover, and observe. Conversation, protected actions, payments, and autonomous execution are future phases.
 
@@ -114,9 +118,9 @@
 - "The page agents can read without pretending they can act."
 - "Claim, publish, and see if it's discoverable."
 
-**Words to use:** controlled front door, claimed, published, discoverable, indexed, source-owned, verified only when true, owner-approved later.
+**Words to use:** find, compare, ask once, in writing, no phone tag, reply, receipt (as object), get found, free to list.
 
-**Words to avoid:** marketplace, autonomous, AI agent can book, payment-ready, verified unless sourced, trusted unless defined, seamless, revolutionary.
+**Words to avoid:** proof-ledger, business of record, the honest way, honest (as headline), published facts (as heading), source-owned, marketplace, autonomous, AI agent can book, payment-ready, verified unless sourced, trusted/vetted/good (provider quality), seamless, revolutionary.
 
 **Glossary:**
 
@@ -130,11 +134,11 @@
 
 ## Brand Voice
 
-**Tone:** Direct, technical when needed, owner-first, Australian but globally legible.
+**Tone:** Warm, direct, outcome-first. Like Airtasker/Google Maps: sell the after-state, keep the mechanism quiet.
 
-**Style:** Plainspoken. No hype. No protocol jargon on owner pages. Engineering-honest claims.
+**Style:** Short verb-led headlines (2–6 words). Sub carries the three-beat: search → compare → send one inquiry. One boundary line per viewport, stated plainly, never as the pitch.
 
-**Personality:** Controlled, skeptical, useful, sharp, anti-bloat.
+**Personality:** Useful, confident, unfussy, honest without saying "honest".
 
 ## Proof Points
 

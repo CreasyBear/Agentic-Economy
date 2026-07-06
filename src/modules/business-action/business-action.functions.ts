@@ -9,7 +9,9 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext, sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
+import { brandNonEmpty } from '@/modules/common/ids'
 import type {
   AuthorizationCheckpointDecision,
   BusinessActionCard,
@@ -22,6 +24,9 @@ import {
   BusinessActionSlug,
   createCapabilityRequest,
   createEmptyBusinessActionSourceState,
+  createReserveBookingCard,
+  mintReserveBookingMandate,
+  proposeReserveBooking,
   recordActionReceipt,
   recordAuthorizationCheckpoint,
   recordBusinessActionResultArtifact,
@@ -52,6 +57,11 @@ const capabilityRequestSchema = z.object({
   businessId: z.string().min(1),
   requestedBy: z.enum(['buyer', 'hermes', 'operator']).default('hermes'),
   expiresAt: z.number(),
+})
+
+const reserveBookingProposalSchema = z.object({
+  businessId: z.string().min(1),
+  buyerRef: z.string().min(1).max(200).optional(),
 })
 
 const checkpointSchema = z.object({
@@ -156,6 +166,10 @@ export const businessActionSourceFunctionRefs = {
   createCapabilityRequest: sourceMutation<z.infer<typeof capabilityRequestSchema> & BrowserMutationAdmission, BusinessActionMutationServerResult>(
     'businessActions:createBusinessActionCapabilityRequest'
   ),
+  createReserveBookingProposal: sourceMutation<
+    { cardId: string; mandateId: string; businessId: string } & BrowserMutationAdmission,
+    BusinessActionMutationServerResult
+  >('businessActions:createReserveBookingProposal'),
   recordOwnerCheckpoint: sourceMutation<z.infer<typeof checkpointSchema> & BrowserMutationAdmission, BusinessActionMutationServerResult>(
     'businessActions:recordBusinessActionOwnerCheckpoint'
   ),
@@ -194,6 +208,15 @@ export const createBusinessActionCapabilityRequestServer = createServerFn({ meth
   .validator((data) => capabilityRequestSchema.parse(data))
   .handler(async ({ data, context }) => createBusinessActionCapabilityRequestThroughSource(data, context))
 
+export const createReserveBookingProposalServer = createServerFn({ method: 'POST' })
+  .validator((data) => reserveBookingProposalSchema.parse(data))
+  .handler(async ({ data, context }) =>
+    createReserveBookingProposalThroughSource(
+      data.buyerRef === undefined ? { businessId: data.businessId } : { businessId: data.businessId, buyerRef: data.buyerRef },
+      context
+    )
+  )
+
 export const recordBusinessActionOwnerCheckpointServer = createServerFn({ method: 'POST' })
   .validator((data) => checkpointSchema.parse(data))
   .handler(async ({ data, context }) => recordBusinessActionOwnerCheckpointThroughSource(data, context))
@@ -225,7 +248,7 @@ export const readAdminBusinessActionReconstructionServer = createServerFn()
   .validator((data) => z.object({ requestId: z.string().min(1).optional() }).parse(data ?? {}))
   .handler(async ({ data }) => readAdminBusinessActionReconstructionThroughSource(data))
 
-export async function createBusinessActionCapabilityRequestThroughSource(
+async function createBusinessActionCapabilityRequestThroughSource(
   data: z.infer<typeof capabilityRequestSchema>,
   context?: unknown
 ): Promise<BusinessActionMutationServerResult> {
@@ -239,7 +262,67 @@ export async function createBusinessActionCapabilityRequestThroughSource(
   }
 }
 
-export async function recordBusinessActionOwnerCheckpointThroughSource(
+export async function createReserveBookingProposalThroughSource(
+  data: { businessId: string; buyerRef?: string },
+  context?: unknown
+): Promise<BusinessActionMutationServerResult> {
+  const now = Date.now()
+  const opSeed = `reserve-booking:${data.businessId}:${now}`
+  const businessId = brandNonEmpty(data.businessId, 'BusinessId')
+  const card = createReserveBookingCard({
+    cardId: brandNonEmpty(`business_action_card:reserve-booking:${data.businessId}`, 'BusinessActionCardId'),
+    sourceHash: sourceHash(`reserve-booking:card:${data.businessId}`),
+    now,
+  })
+  const mandate = mintReserveBookingMandate({
+    mandateId: brandNonEmpty(`buyer_mandate:reserve-booking:${now}`, 'BuyerMandateId'),
+    buyerRef: data.buyerRef ?? 'buyer:public',
+    businessId,
+    idempotencyKey: operationKey(`${opSeed}:mandate`),
+    correlationId: correlationId(`${opSeed}:mandate`),
+    now,
+  })
+
+  if (isLocalE2EAuthBypassEnabled()) {
+    const result = proposeReserveBooking(createEmptyBusinessActionSourceState(), {
+      card,
+      mandate,
+      businessId,
+      requestedBy: 'buyer',
+      idempotencyKey: operationKey(`${opSeed}:request`),
+      correlationId: correlationId(`${opSeed}:request`),
+      now,
+      expiresAt: now + 60_000,
+    })
+    if (result.kind === 'error') {
+      return {
+        kind: 'error',
+        code: result.code,
+        retryable: result.retryable ?? false,
+        reason: result.reason ?? result.code,
+      }
+    }
+
+    return {
+      kind: 'ok',
+      code: result.code,
+      request: { id: result.request.id, status: result.request.status, actionSlug: result.request.actionSlug },
+    }
+  }
+
+  try {
+    return await callSourceMutation(businessActionSourceFunctionRefs.createReserveBookingProposal, {
+      cardId: card.id,
+      mandateId: mandate.id,
+      businessId: data.businessId,
+      ...(await browserMutationAdmission(context, 'reserve-booking', `${data.businessId}:${now}`)),
+    })
+  } catch (error) {
+    return sourceError(error)
+  }
+}
+
+async function recordBusinessActionOwnerCheckpointThroughSource(
   data: z.infer<typeof checkpointSchema>,
   context?: unknown
 ): Promise<BusinessActionMutationServerResult> {
@@ -253,7 +336,7 @@ export async function recordBusinessActionOwnerCheckpointThroughSource(
   }
 }
 
-export async function recordBusinessActionReceiptThroughSource(
+async function recordBusinessActionReceiptThroughSource(
   data: z.infer<typeof receiptSchema>,
   context?: unknown
 ): Promise<BusinessActionMutationServerResult> {
@@ -267,7 +350,7 @@ export async function recordBusinessActionReceiptThroughSource(
   }
 }
 
-export async function recordBusinessActionGuardrailDecisionThroughSource(
+async function recordBusinessActionGuardrailDecisionThroughSource(
   data: z.infer<typeof guardrailDecisionSchema>,
   context?: unknown
 ): Promise<BusinessActionMutationServerResult> {
@@ -281,7 +364,7 @@ export async function recordBusinessActionGuardrailDecisionThroughSource(
   }
 }
 
-export async function recordBusinessActionHermesEvidenceThroughSource(
+async function recordBusinessActionHermesEvidenceThroughSource(
   data: z.infer<typeof hermesEvidenceSchema>,
   context?: unknown
 ): Promise<BusinessActionMutationServerResult> {
@@ -319,7 +402,7 @@ export async function admitBusinessActionStripeWebhookThroughSource(
   }
 }
 
-export async function readCurrentOwnerBusinessActionReceiptThroughSource(
+async function readCurrentOwnerBusinessActionReceiptThroughSource(
   data: z.infer<typeof receiptSchema>
 ): Promise<BusinessActionReceiptServerResult> {
   try {
@@ -329,8 +412,8 @@ export async function readCurrentOwnerBusinessActionReceiptThroughSource(
   }
 }
 
-export async function readCurrentOwnerBusinessActionQueueThroughSource(): Promise<OwnerBusinessActionSourceStateServerResult> {
-  if (usesLocalBusinessActionBypass()) {
+async function readCurrentOwnerBusinessActionQueueThroughSource(): Promise<OwnerBusinessActionSourceStateServerResult> {
+  if (isLocalE2EAuthBypassEnabled()) {
     return {
       kind: 'ok',
       state: createLocalBusinessActionSourceState(),
@@ -344,10 +427,10 @@ export async function readCurrentOwnerBusinessActionQueueThroughSource(): Promis
   }
 }
 
-export async function readCurrentOwnerBusinessActionDetailThroughSource(
+async function readCurrentOwnerBusinessActionDetailThroughSource(
   data: z.infer<typeof receiptSchema>
 ): Promise<OwnerBusinessActionSourceStateServerResult> {
-  if (usesLocalBusinessActionBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     const state = createLocalBusinessActionSourceState()
     const hasRequest = state.requests.some((request) => request.id === data.requestId)
     if (!hasRequest) {
@@ -369,10 +452,10 @@ export async function readCurrentOwnerBusinessActionDetailThroughSource(
   }
 }
 
-export async function readAdminBusinessActionReconstructionThroughSource(
+async function readAdminBusinessActionReconstructionThroughSource(
   filter: { requestId?: string | undefined } = {}
 ): Promise<AdminBusinessActionSourceStateServerResult> {
-  if (usesLocalBusinessActionBypass()) {
+  if (isLocalE2EAuthBypassEnabled()) {
     const state = createLocalBusinessActionSourceState()
     return {
       kind: 'allowed',
@@ -423,10 +506,6 @@ const localBusinessActionNow = 9_000
 const localBusinessId = 'business:local-business-action' as BusinessId
 const localOwnerId = 'owner:local-business-action' as OwnerId
 
-function usesLocalBusinessActionBypass(): boolean {
-  return process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E === 'true'
-}
-
 function compactAdminFilter(filter: { requestId?: string | undefined }): { requestId?: string } {
   return filter.requestId === undefined || filter.requestId.trim().length === 0 ? {} : { requestId: filter.requestId }
 }
@@ -436,6 +515,7 @@ function createLocalBusinessActionSourceState(): BusinessActionSourceState {
     createLocalBusinessActionFlow('success', 'accepted', 'complete'),
     createLocalBusinessActionFlow('refused', 'refused', 'none'),
     createLocalBusinessActionFlow('proof-gap', 'accepted', 'proof_gap'),
+    createLocalReserveBookingFlow(),
   ])
 }
 
@@ -539,6 +619,73 @@ function createLocalBusinessActionFlow(
     supportRecords: [localSupportRecord(suffix)],
     noRepairRecords: artifactMode === 'proof_gap' ? [localNoRepairRecord(created.request.id, suffix)] : [],
   }
+}
+
+function createLocalReserveBookingFlow(): BusinessActionSourceState {
+  const card = createReserveBookingCard({
+    cardId: localReserveBookingCardId(),
+    ownerId: localOwnerId,
+    sourceHash: sourceHash('reserve-booking:card'),
+    now: localBusinessActionNow - 10,
+  })
+  const mandate = mintReserveBookingMandate({
+    mandateId: localReserveBookingMandateId(),
+    buyerRef: 'buyer:local-reserve-booking',
+    businessId: localBusinessId,
+    idempotencyKey: operationKey('reserve-booking:mandate'),
+    correlationId: correlationId('reserve-booking:mandate'),
+    now: localBusinessActionNow - 100,
+  })
+  const created = expectLocalOk(
+    proposeReserveBooking(createEmptyBusinessActionSourceState(), {
+      card,
+      mandate,
+      businessId: localBusinessId,
+      requestedBy: 'buyer',
+      idempotencyKey: operationKey('reserve-booking:request'),
+      correlationId: correlationId('reserve-booking:request'),
+      now: localBusinessActionNow,
+      expiresAt: localBusinessActionNow + 60_000,
+    })
+  )
+  const guarded = expectLocalOk(
+    recordGuardrailDecisionEvidence(created.state, {
+      requestId: created.request.id,
+      provider: 'nemo_guardrails',
+      modelName: 'nemotron',
+      modelVersion: 'local-test',
+      decision: 'allow',
+      policyHash: sourceHash('reserve-booking:policy'),
+      privateTraceRefHash: sourceHash('reserve-booking:trace'),
+      payloadHash: sourceHash('reserve-booking:guardrail'),
+      idempotencyKey: operationKey('reserve-booking:guardrail'),
+      correlationId: correlationId('reserve-booking:guardrail'),
+      recordedAt: localBusinessActionNow + 5,
+    })
+  )
+  const checkpointed = expectLocalOk(
+    recordAuthorizationCheckpoint(guarded.state, {
+      requestId: created.request.id,
+      decision: 'accepted',
+      authority: localAuthority(),
+      ownerDecisionRef: 'owner-decision:reserve-booking',
+      reasonCode: 'local_accepted',
+      idempotencyKey: operationKey('reserve-booking:checkpoint'),
+      correlationId: correlationId('reserve-booking:checkpoint'),
+      now: localBusinessActionNow + 10,
+      expiresAt: localBusinessActionNow + 60_000,
+    })
+  )
+  const receipted = expectLocalOk(
+    recordActionReceipt(checkpointed.state, {
+      requestId: created.request.id,
+      idempotencyKey: operationKey('reserve-booking:receipt'),
+      correlationId: correlationId('reserve-booking:receipt'),
+      recordedAt: localBusinessActionNow + 40,
+    })
+  )
+
+  return receipted.state
 }
 
 function filterBusinessActionStateForRequests(
@@ -676,6 +823,14 @@ function localCardId(suffix: string): BusinessActionCardId {
 
 function localMandateId(suffix: string): BuyerMandateId {
   return `buyer_mandate:local:${suffix}` as BuyerMandateId
+}
+
+function localReserveBookingCardId(): BusinessActionCardId {
+  return 'business_action_card:local:reserve-booking' as BusinessActionCardId
+}
+
+function localReserveBookingMandateId(): BuyerMandateId {
+  return 'buyer_mandate:local:reserve-booking' as BuyerMandateId
 }
 
 function operationKey(value: string): OperationKey {

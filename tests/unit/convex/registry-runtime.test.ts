@@ -69,7 +69,7 @@ describe('Convex registry public read paths', () => {
 
     expect(page).toMatchObject({
       kind: 'ok',
-      items: [{ slug: 'business-001' }, { slug: 'business-002' }],
+      items: [{ slug: 'business-001', businessId: 'businesses:001' }, { slug: 'business-002', businessId: 'businesses:002' }],
       pagination: {
         nextCursor: 'business-003',
         limit: 2,

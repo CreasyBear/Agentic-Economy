@@ -57,6 +57,7 @@ export type CapabilityDescriptor =
 export {
   AeEndpointCheckAllowedMethods,
   AeEndpointCheckBackoffMs,
+  AeEndpointCheckFreshnessWindowMsByKind,
   AeEndpointCheckMaxBodyBytes,
   AeEndpointCheckTimeoutMs,
   evaluateFreshnessFacet,

@@ -29,7 +29,7 @@ export function payloadHash(value: RedactedPayload): SourceHash {
   return stableHash(JSON.stringify(value) ?? 'undefined')
 }
 
-export function stableHash(value: string): SourceHash {
+function stableHash(value: string): SourceHash {
   let hash = 2166136261
 
   for (const character of value) {

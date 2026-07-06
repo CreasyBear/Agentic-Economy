@@ -53,7 +53,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The active next action is the 14-day bootstrap gate in `.planning/scopes/scope-14day-bootstrap-gate/`: prepare the source-backed profile corpus, provider recruitment, attribution instrumentation, and day-14 GO/ADAPT/STOP evidence before any public platform widening.
+The active next action is pre-clock 14-day gate readiness in `.planning/scopes/scope-14day-bootstrap-gate/`: fill the source-backed profile corpus and provider recruitment ledgers, then resolve or explicitly accept the instrumentation blockers recorded in `EVIDENCE-14DAY-GATE.md` before the clock starts. Current blockers are source-owned targeted-session counting, supplier-maintenance evidence, optional profile/source click instrumentation, and deployed outside-in assistant audit evidence.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 

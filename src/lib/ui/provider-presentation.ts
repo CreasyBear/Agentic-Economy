@@ -60,7 +60,7 @@ export function buildProviderPresentation(
   })
   const responseLabel = plainResponseTimeLabel(catalog.responseTimeMinutes)
   const trustLabel = plainTrustLabel(catalog.trustTier)
-  const photo = catalog.photos?.[0]
+  const ownerPhoto = catalog.photos?.find((entry) => !entry.url.startsWith('/images/illustration/'))
   const serviceChips = readServiceChips(services, options.serviceChipLimit)
 
   return {
@@ -78,16 +78,16 @@ export function buildProviderPresentation(
     ...(primaryService === undefined ? {} : { primaryServiceName: primaryService.name }),
     ...(primaryService === undefined ? {} : { primaryServiceSummary: primaryService.summary }),
     hoursLabel: plainHoursLabel(primaryService?.hoursOrUnknown),
-    image: photo === undefined
+    image: ownerPhoto === undefined
       ? {
           kind: 'illustration',
           url: categoryIllustrationPath(catalog.category),
-          alt: `${catalog.category} illustration`,
+          alt: catalog.category,
         }
       : {
           kind: 'photo',
-          url: photo.url,
-          alt: photo.alt,
+          url: ownerPhoto.url,
+          alt: ownerPhoto.alt,
         },
     serviceChips,
   }

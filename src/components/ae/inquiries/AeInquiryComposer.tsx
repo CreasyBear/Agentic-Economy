@@ -28,7 +28,7 @@ type ComposerInputGroupAddonAlign = 'inline-start' | 'inline-end' | 'block-start
 function ComposerInputGroup({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
   return (
     <div
-      className={cn('flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3', className)}
+      className={cn('flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3 motion-safe:transition motion-safe:duration-150 focus-within:border-accent', className)}
       {...props}
     />
   )

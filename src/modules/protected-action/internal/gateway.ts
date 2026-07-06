@@ -8,7 +8,6 @@ import { validateAuditEvent } from '@/modules/observability/public'
 
 import {
   ContactFollowUpActionSlug,
-  createContactFollowUpGatewayAdmission,
   type ContactFollowUpGatewayAdmission,
   type ContactFollowUpGatewayAdmissionId,
   type ContactFollowUpOperatorControls,
@@ -19,7 +18,6 @@ import {
 } from './contact-follow-up'
 
 export {
-  createContactFollowUpGatewayAdmission,
   type ContactFollowUpGatewayAdmission,
   type ContactFollowUpGatewayAdmissionId,
   type CreateContactFollowUpGatewayAdmissionCommand,

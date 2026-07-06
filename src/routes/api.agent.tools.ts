@@ -11,6 +11,7 @@ import {
   type AgentToolWriteAdmissionResult,
 } from '@/modules/clearance/server'
 import { sourceWriteBodyDigest } from '@/modules/security/source-write-admission'
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 import {
   listAgentToolActions,
@@ -52,13 +53,42 @@ type InvokeRequestBody = {
   input?: unknown
 }
 
+// Domain-owned inquiry body cap is 2_000 chars (defaultInquiryOperatorControls.maxBodyLength in
+// src/modules/inquiries/internal/schema.ts). Worst case 4-byte-per-char UTF-8 that is ~8 KiB;
+// add generous contact-field maxes (name/email/phone), the business/service target refs, and
+// JSON/tool-envelope overhead and a legitimate inquiry.submit payload stays comfortably under
+// 16 KiB. 64 KiB keeps 4x+ headroom over that while still bounding memory/CPU spent reading and
+// digesting bodies the route boundary should reject outright.
+const MAX_AGENT_TOOL_BODY_BYTES = 64 * 1024
+const WRITE_TOOL_SCOPES: Record<string, 'public_inquiry' | 'business_action_request'> = {
+  'inquiry.submit': 'public_inquiry',
+  'businessAction.requestCapability': 'business_action_request',
+}
+
+
 export async function handleInvokeAgentTool(request: Request): Promise<Response> {
+  const declaredContentLength = Number(request.headers.get('content-length'))
+  if (Number.isFinite(declaredContentLength) && declaredContentLength > MAX_AGENT_TOOL_BODY_BYTES) {
+    return jsonError(
+      'agent_tools_payload_too_large',
+      `Request body must be at most ${MAX_AGENT_TOOL_BODY_BYTES} bytes.`,
+      413,
+    )
+  }
+
   if (!isJsonContentType(request)) {
     return jsonError('agent_tools_invalid_content_type', 'Request body must be JSON.', 415)
   }
 
-  const bodyText = await request.text()
-  const bodyDigest = sourceWriteBodyDigest(bodyText)
+  const boundedBody = await readBoundedRequestText(request, MAX_AGENT_TOOL_BODY_BYTES)
+  if (!boundedBody.ok) {
+    return jsonError(
+      'agent_tools_payload_too_large',
+      `Request body must be at most ${MAX_AGENT_TOOL_BODY_BYTES} bytes.`,
+      413,
+    )
+  }
+  const bodyText = boundedBody.text
   let body: InvokeRequestBody
   try {
     body = JSON.parse(bodyText) as InvokeRequestBody
@@ -96,9 +126,6 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
     return jsonError(agentIdentity.code, agentIdentity.reason, agentIdentity.status)
   }
 
-  if (agentIdentity.kind === 'identity') {
-    await recordAgentIdentityThroughSource(agentIdentity, request).catch(() => undefined)
-  }
 
   let writeAdmission: Extract<AgentToolWriteAdmissionResult, { kind: 'admitted' }> | undefined
   if (tool.tier === 'write') {
@@ -114,11 +141,17 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
     if (agentIdentity.kind !== 'identity') {
       return jsonError('agent_tools_refused', 'agent_identity_required', 403)
     }
+    await recordAgentIdentityThroughSource(agentIdentity, request).catch(() => undefined)
+
+    const writeScope = WRITE_TOOL_SCOPES[tool.id]
+    if (writeScope === undefined) {
+      return jsonError('agent_tools_refused', 'agent_tool_write_not_declared', 403)
+    }
 
     const admission = await resolveAgentToolWriteAdmissionThroughSource({
       identity: agentIdentity,
       toolId: tool.id,
-      scope: 'public_inquiry',
+      scope: writeScope,
     })
     if (admission.kind === 'refused') {
       return jsonError('agent_tools_refused', admission.reason, 403)
@@ -127,6 +160,7 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
   }
 
 
+  const bodyDigest = sourceWriteBodyDigest(bodyText)
   const context = contextFromRequest(
     request,
     agentIdentity.kind === 'identity' ? agentIdentity : undefined,
@@ -138,7 +172,7 @@ export async function handleInvokeAgentTool(request: Request): Promise<Response>
     input: parsedInput.data,
     context,
     surface: 'agentTools',
-    allowWrites: writeAdmission?.toolId === 'inquiry.submit',
+    allowWrites: writeAdmission !== undefined && writeAdmission.toolId === tool.id,
   })
 
   if (outcome.result.status === 'ok' && outcome.result.output !== undefined) {

@@ -4,6 +4,8 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admission'
+import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 import type {
   AnswerToolCallRecord,
@@ -32,20 +34,30 @@ export type AnswerToolCallInputRow = {
   status: AnswerToolCallStatus
 }
 
+type AnswerToolCallSourceWriteMutationArgs = {
+  operationKey?: string
+  correlationId?: string
+  sourceWrite?: SourceWriteAdmission
+}
+
 export type AppendAnswerToolCallsArgs = {
   turnId: string
   toolCalls: readonly AnswerToolCallInputRow[]
+  sourceWriteRequest?: Request
 }
+
+type AppendAnswerToolCallsMutationArgs =
+  Omit<AppendAnswerToolCallsArgs, 'sourceWriteRequest'> & AnswerToolCallSourceWriteMutationArgs
 
 export type ReadTurnToolCallsResult = {
   toolCalls: readonly AnswerToolCallRecord[]
 }
 
-export const appendAnswerToolCallsMutation = sourceMutation<AppendAnswerToolCallsArgs, { inserted: number }>(
+const appendAnswerToolCallsMutation = sourceMutation<AppendAnswerToolCallsMutationArgs, { inserted: number }>(
   'answerThreads:appendAnswerToolCalls',
 )
 
-export const readTurnToolCallsQuery = sourceQuery<{ turnId: string }, ReadTurnToolCallsResult>(
+const readTurnToolCallsQuery = sourceQuery<{ turnId: string }, ReadTurnToolCallsResult>(
   'answerThreads:readTurnToolCalls',
 )
 
@@ -70,7 +82,10 @@ export async function appendAnswerToolCalls(
   if (testPort !== undefined) {
     return testPort.appendToolCalls(args)
   }
-  return callPublicSourceMutation(appendAnswerToolCallsMutation, args)
+  return callPublicSourceMutation(
+    appendAnswerToolCallsMutation,
+    await withAnswerToolCallSourceWrite(args),
+  )
 }
 
 export async function readTurnToolCalls(turnId: string): Promise<ReadTurnToolCallsResult> {
@@ -78,4 +93,26 @@ export async function readTurnToolCalls(turnId: string): Promise<ReadTurnToolCal
     return testPort.readTurnToolCalls(turnId)
   }
   return callPublicSourceQuery(readTurnToolCallsQuery, { turnId })
+}
+
+async function withAnswerToolCallSourceWrite(
+  args: AppendAnswerToolCallsArgs,
+): Promise<AppendAnswerToolCallsMutationArgs> {
+  const { sourceWriteRequest, ...serializableArgs } = args
+  if (sourceWriteRequest === undefined) {
+    return serializableArgs
+  }
+  const operationKey = `answer_thread:append_tool_calls:${args.turnId}`
+  const correlationId = operationKey
+  return {
+    ...serializableArgs,
+    operationKey,
+    correlationId,
+    sourceWrite: await sourceWriteAdmissionFromRequest({
+      request: sourceWriteRequest,
+      scope: 'answer_thread',
+      operationKey,
+      correlationId,
+    }),
+  }
 }

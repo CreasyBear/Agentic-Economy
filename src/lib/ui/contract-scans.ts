@@ -256,6 +256,7 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
     'src/modules/discovery/',
     'src/modules/protected-action/',
     'src/modules/billing/',
+    'src/modules/settings/',
     'src/modules/business-action/',
     'src/modules/observability/',
     'src/future-phases/04-owner-pending-protected-actions/',
@@ -277,6 +278,12 @@ function isAllowedSourceOwnedFutureSurface(violation: ScanViolation): boolean {
     'src/routes/api.billing',
     'src/routes/owner.business-actions',
     'src/routes/admin.business-actions',
+    'src/routes/_operator/owner.actions',
+    'src/routes/_operator/admin.protected-actions',
+    'src/routes/_operator/owner.billing',
+    'src/routes/_operator/admin.monetization',
+    'src/routes/_operator/owner.business-actions',
+    'src/routes/_operator/admin.business-actions',
     'src/routes/api.business-actions',
     'src/modules/security/source-write-admission.ts',
     'convex/protectedActions.ts',
@@ -314,18 +321,26 @@ function isAllowedGeneratedRouteFutureSurface(excerpt: string): boolean {
     'OwnerBusinessActions',
     "'/owner/business-actions",
     '| \'/owner/business-actions',
+    "'/_operator/owner/business-actions",
+    '| \'/_operator/owner/business-actions',
     'AdminBusinessActions',
     "'/admin/business-actions",
     '| \'/admin/business-actions',
+    "'/_operator/admin/business-actions",
+    '| \'/_operator/admin/business-actions',
     'ApiBusinessActions',
     "'/api/business-actions",
     '| \'/api/business-actions',
     'OwnerBilling',
     "'/owner/billing",
     '| \'/owner/billing',
+    "'/_operator/owner/billing",
+    '| \'/_operator/owner/billing',
     'AdminMonetization',
     "'/admin/monetization",
     '| \'/admin/monetization',
+    "'/_operator/admin/monetization",
+    '| \'/_operator/admin/monetization',
     'ApiBilling',
     "'/api/billing",
     '| \'/api/billing',
@@ -752,23 +767,33 @@ function isPhase2InquiryRuntimeContext(normalizedPath: string): boolean {
     'src/modules/notification-outbox/',
     'src/lib/server/notification-provider.ts',
     'src/routes/$slug.inquiry',
+    'src/routes/_operator/$slug.inquiry',
     'src/routes/owner.inquiries',
     'src/routes/admin.inquiries',
     'src/routes/api.notification',
+    'src/routes/_operator/owner.inquiries',
+    'src/routes/_operator/admin.inquiries',
+    'src/routes/_operator/api.notification',
   ].some((path) => normalizedPath.includes(path))
 }
 
 function isPhase3DiscoveryRuntimeContext(normalizedPath: string): boolean {
-  return ['src/modules/discovery/', 'src/routes/developers.discovery', 'src/routes/api.discovery'].some((path) =>
-    normalizedPath.includes(path)
-  )
+  return [
+    'src/modules/discovery/',
+    'src/routes/developers.discovery',
+    'src/routes/_operator/developers.discovery',
+    'src/routes/api.discovery',
+    'src/routes/_operator/api.discovery',
+  ].some((path) => normalizedPath.includes(path))
 }
 
 function isPhase4ProtectedActionRuntimeContext(normalizedPath: string): boolean {
   return [
     'src/modules/protected-action/',
     'src/routes/owner.actions',
+    'src/routes/_operator/owner.actions',
     'src/routes/admin.protected-actions',
+    'src/routes/_operator/admin.protected-actions',
     'convex/protectedActions.ts',
   ].some((path) => normalizedPath.includes(path))
 }
@@ -778,7 +803,10 @@ function isPhase5PaidActivationRuntimeContext(normalizedPath: string): boolean {
     'src/modules/billing/',
     'src/lib/server/billing-provider.ts',
     'src/routes/owner.billing',
+    'src/routes/_operator/owner.billing',
     'src/routes/admin.monetization',
+    'src/routes/_operator/admin.monetization',
+    'src/routes/_operator/api.billing',
     'src/routes/api.billing',
     'convex/billing.ts',
     'convex/billingStore.ts',
@@ -789,7 +817,10 @@ function isPhase6BusinessActionRuntimeContext(normalizedPath: string): boolean {
   return [
     'src/modules/business-action/',
     'src/routes/owner.business-actions',
+    'src/routes/_operator/owner.business-actions',
     'src/routes/admin.business-actions',
+    'src/routes/_operator/admin.business-actions',
+    'src/routes/_operator/api.business-actions',
     'src/routes/api.business-actions',
     'convex/businessActions.ts',
     'convex/businessActionStore.ts',

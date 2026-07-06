@@ -1,5 +1,5 @@
 /*
- * AE style entry — Astryx design system + Tailwind 4 utility glue.
+ * AE style entry: Astryx design system + Tailwind 4 utility glue.
  *
  * Layer cascade (low → high priority):
  *   reset        Astryx reset
@@ -69,46 +69,132 @@
   --radius-2xl: var(--ae-radius-sm);
   --radius-3xl: var(--ae-radius-sm);
   --radius-4xl: var(--ae-radius-sm);
+  --duration-fast: var(--motion-duration-fast);
+  --duration-base: var(--motion-duration-base);
+  --duration-slow: var(--motion-duration-slow);
+  --ease-standard: var(--motion-ease-standard);
+  --ease-emphasized: var(--motion-ease-emphasized);
+  --spacing-lift: var(--motion-lift);
+  --scale-press: var(--motion-press-scale);
 }
+
+@utility duration-fast {
+  --tw-duration: var(--duration-fast);
+  --tw-animation-duration: var(--duration-fast);
+  transition-duration: var(--duration-fast);
+}
+
+@utility duration-base {
+  --tw-duration: var(--duration-base);
+  --tw-animation-duration: var(--duration-base);
+  transition-duration: var(--duration-base);
+}
+
+@utility duration-slow {
+  --tw-duration: var(--duration-slow);
+  --tw-animation-duration: var(--duration-slow);
+  transition-duration: var(--duration-slow);
+}
+
+@utility ease-standard {
+  --tw-ease: var(--ease-standard);
+  transition-timing-function: var(--ease-standard);
+}
+
+@utility ease-emphasized {
+  --tw-ease: var(--ease-emphasized);
+  transition-timing-function: var(--ease-emphasized);
+}
+
+@utility scale-press {
+  --tw-scale-x: var(--scale-press);
+  --tw-scale-y: var(--scale-press);
+  --tw-scale-z: var(--scale-press);
+  scale: var(--tw-scale-x) var(--tw-scale-y);
+}
+
+@utility lift {
+  --tw-translate-y: calc(var(--spacing-lift) * -1);
+  translate: var(--tw-translate-x) var(--tw-translate-y);
+}
+
 
 @layer astryx-theme {
   @scope ([data-astryx-theme="neutral"]) to ([data-astryx-theme]) {
     :scope {
-      /* AE Bible palette: Astryx semantic token overrides. */
-      --color-background-body: #F4EFE6;    /* Bone → bg-body */
-      --color-background-surface: #FBF8F1; /* Paper → bg-surface */
-      --color-background-card: #FBF8F1;    /* Paper → bg-card */
-      --color-background-popover: #FBF8F1;
-      --color-background-muted: #ECE6DC;   /* Mist → muted fills/chips */
+      /* AE marketplace palette: chroma tints toward eucalyptus hue, not warmth. Astryx semantic token overrides. */
+      --color-background-body: #F5F7F4;    /* eucalyptus-tinted off-white page ground */
+      --color-background-surface: #FCFDFC; /* near-white raised panels */
+      --color-background-card: #FFFFFF;    /* white cards so imagery and facts pop */
+      --color-background-popover: #FFFFFF;
+      --color-background-muted: #E7EBE5;   /* eucalyptus-tinted quiet fills and chips */
 
-      --color-text-primary: #17201F;       /* Ink → text-primary */
-      --color-text-secondary: #5B6360;     /* Slate → text-secondary */
-      --color-text-disabled: #8AA396;      /* Dust only for disabled/muted marks, never body text */
+      --color-text-primary: #20261F;       /* friendly warm charcoal */
+      --color-text-secondary: #5C625A;     /* warm slate */
+      --color-text-disabled: #8AA396;      /* sage, disabled/muted marks only, never body text */
 
-      --color-border: #D8CFC2;             /* Stone → border-border */
-      --color-border-emphasized: #8AA396;  /* Dust → hairline accent / active proof rule */
-      --color-skeleton: #D8CFC2;
+      --color-border: #E2E6E0;             /* eucalyptus-tinted soft light rule */
+      --color-border-emphasized: #8AA396;  /* sage hairline accent */
+      --color-skeleton: var(--color-background-muted);
 
-      --color-accent: #40614F;             /* Eucalyptus → accent / CTA fill */
-      --color-text-accent: #40614F;        /* text-accent / links / kickers */
+      --color-accent: #40614F;             /* eucalyptus, the single accent */
+      --color-text-accent: #40614F;        /* accent text, links, kickers */
       --color-icon-accent: #40614F;
-      --color-on-accent: #F4EFE6;          /* Bone on Eucalyptus passes AA */
-      --color-accent-muted: color-mix(in oklch, #8AA396 24%, #FBF8F1);
+      --color-accent-strong: #35523F;      /* hover/pressed eucalyptus for accent surfaces */
+      --color-on-accent: #FDFDFB;          /* near-white on eucalyptus, passes AA */
+      --color-accent-muted: #E8EFE9;       /* soft eucalyptus wash for active/selected fills */
 
-      --radius-inner: 4px;
-      --radius-element: 6px;
-      --radius-container: 6px;
-      --radius-page: 6px;
-      --radius-chat: 6px;
+      /* Soft inviting rounding (marketplace warmth, not strict record) */
+      --radius-inner: 8px;
+      --radius-element: 10px;
+      --radius-container: 14px;
+      --radius-page: 16px;
+      --radius-chat: 14px;
 
-      --shadow-low: 0 1px 2px oklch(23.44% 0.0131 187.94 / 0.04),
-        inset 0 0 0 1px oklch(23.44% 0.0131 187.94 / 0.06);
-      --shadow-med: 0 2px 8px oklch(23.44% 0.0131 187.94 / 0.06),
-        inset 0 0 0 1px oklch(23.44% 0.0131 187.94 / 0.08);
-      --shadow-high: 0 8px 24px oklch(23.44% 0.0131 187.94 / 0.08),
-        inset 0 0 0 1px oklch(23.44% 0.0131 187.94 / 0.10);
-      --shadow-inset-hover: inset 0 0 0 2px oklch(46.14% 0.0486 159.87 / 0.22);
-      --shadow-inset-selected: inset 0 0 0 2px oklch(46.14% 0.0486 159.87 / 0.40);
+      /* Soft warm elevation: cards lift off the page, no pure-black depth */
+      --shadow-low: 0 1px 2px rgb(32 38 31 / 0.05), 0 1px 3px rgb(32 38 31 / 0.06);
+      --shadow-med: 0 4px 14px rgb(32 38 31 / 0.08), 0 2px 6px rgb(32 38 31 / 0.06);
+      --shadow-high: 0 12px 32px rgb(32 38 31 / 0.12), 0 6px 14px rgb(32 38 31 / 0.08);
+      --shadow-inset-hover: inset 0 0 0 1.5px oklch(46.14% 0.0486 159.87 / 0.30);
+      --shadow-inset-selected: inset 0 0 0 2px oklch(46.14% 0.0486 159.87 / 0.46);
+
+      /* Functional motion: quick confirmation, not decorative staging */
+      --motion-duration-fast: 120ms;
+      --motion-duration-base: 200ms;
+      --motion-duration-slow: 300ms;
+      --motion-ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+      --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+      --motion-lift: 2px;
+      --motion-press-scale: 0.98;
+      --duration-fast: var(--motion-duration-fast);
+      --duration-base: var(--motion-duration-base);
+      --duration-slow: var(--motion-duration-slow);
+      --ease-standard: var(--motion-ease-standard);
+      --ease-emphasized: var(--motion-ease-emphasized);
+      --spacing-lift: var(--motion-lift);
+      --scale-press: var(--motion-press-scale);
+    }
+
+    :where(h1, h2, h3) {
+      text-wrap: balance;
+    }
+
+    :where(h1) {
+      font-size: clamp(2.5rem, 6vw, 4.25rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+
+    :where(h2) {
+      font-size: clamp(2rem, 4vw, 2.5rem);
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+    }
+
+    :where(p) {
+      font-size: 1rem;
+      line-height: 1.6;
     }
   }
 }
+

@@ -1,7 +1,7 @@
-export const AE_SESSION_COOKIE = 'ae_session'
-export const AE_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
+const AE_SESSION_COOKIE = 'ae_session'
+const AE_SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60
 
-export function readSessionIdFromRequest(request: Request): string | undefined {
+function readSessionIdFromRequest(request: Request): string | undefined {
   const cookieHeader = request.headers.get('cookie')
   if (cookieHeader === null) {
     return undefined
@@ -30,7 +30,7 @@ export function resolveOrCreateSessionId(request: Request): { sessionId: string;
   return { sessionId: crypto.randomUUID(), setCookie: true }
 }
 
-export function buildSessionSetCookieHeader(sessionId: string, request?: Request): string {
+function buildSessionSetCookieHeader(sessionId: string, request?: Request): string {
   const maxAge = AE_SESSION_MAX_AGE_SECONDS
   const secure = request !== undefined && isSecureRequest(request)
   return `${AE_SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`

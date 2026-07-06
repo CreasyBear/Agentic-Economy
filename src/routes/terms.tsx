@@ -37,7 +37,7 @@ const canDoItems = [
   {
     icon: GitCompareIcon,
     title: 'Compare businesses',
-    body: 'Read published services, areas, source cues, and next steps.',
+    body: 'Read services, areas, update notes, and how to reach them.',
   },
   {
     icon: SendIcon,
@@ -54,12 +54,12 @@ const termsItems = [
   },
   {
     icon: MessageSquareIcon,
-    title: 'A message is not a booking',
+    title: 'No booking from a message',
     body: 'It is a first-contact request. The business may accept, decline, ask questions, or not reply.',
   },
   {
     icon: PencilIcon,
-    title: 'Published details can be fixed',
+    title: 'Page details can be fixed',
     body: 'Owners can claim a page. Anyone can request a correction when something looks wrong.',
   },
 ] as const
@@ -73,7 +73,7 @@ function TermsRoute() {
         description="Use AE to find and contact businesses. The business confirms the work."
       />
       <main className="mx-auto grid w-full max-w-5xl gap-12 px-4 pb-20 md:px-6">
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-base md:grid-cols-3">
           {canDoItems.map(({ icon: Icon, title, body }) => (
             <Card key={title} padding={5} className="grid h-full gap-1.5">
               <div className="flex items-center justify-between gap-3">
@@ -87,19 +87,16 @@ function TermsRoute() {
           ))}
         </section>
 
-        <section className="grid gap-5 border-t pt-8 md:grid-cols-[0.72fr_1.28fr]">
+        <section className="grid gap-5 border-t border-border pt-8 md:grid-cols-[0.72fr_1.28fr]">
           <div className="grid content-start gap-2">
-            <Text type="supporting" weight="medium" color="secondary" display="block">
-              Ground rules
-            </Text>
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
-              Keep the handoff real.
+              Keep expectations clear.
             </Text>
           </div>
           <TermsAccordion />
         </section>
 
-        <section className="flex flex-col gap-4 border-t pt-8 md:flex-row md:items-center md:justify-between">
+        <section className="flex flex-col gap-4 border-t border-border pt-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             <Text as="h2" type="display-3" weight="semibold" color="primary" display="block">
               Start with what you need.

@@ -8,6 +8,7 @@ import { LayerProvider } from '@astryxdesign/core/Layer'
 import { neutralTheme } from '@astryxdesign/theme-neutral/built'
 
 import { RouterLink } from '@/components/astryx/RouterLink'
+import { RouteProgressBar } from '@/components/astryx/RouteProgressBar'
 
 import { AeObservabilityErrorBoundary } from '@/components/ae/feedback/AeObservabilityErrorBoundary'
 import { AeToaster } from '@/components/ae/feedback/AeToaster'
@@ -55,6 +56,7 @@ function RootDocument({ children }: { children: ReactNode }) {
         <Theme theme={neutralTheme} mode="light">
           <LinkProvider component={RouterLink}>
             <LayerProvider>
+              <RouteProgressBar />
               <AeObservabilityBoot />
               <AeObservabilityErrorBoundary>{content}</AeObservabilityErrorBoundary>
               <AeToaster />
@@ -71,6 +73,10 @@ function requiresClerkProvider(pathname: string): boolean {
   return pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/owner') || pathname.startsWith('/admin')
 }
 
+// Client-side mirror of the canonical server check in
+// src/lib/server/local-e2e-bypass.ts (isLocalE2EAuthBypassEnabled). Kept
+// separate because this file is client-rendered and must not import a
+// server-only module.
 function usesClerkBypass(): boolean {
   if (import.meta.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E !== 'true') {
     return false

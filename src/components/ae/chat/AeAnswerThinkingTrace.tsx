@@ -21,6 +21,7 @@ export type AeAnswerThinkingTraceProps = {
   steps?: readonly string[]
   workLog?: readonly AnswerWorkStep[]
   checkSummary?: PublicAnswerCheckSummary | undefined
+  query?: string | undefined
 }
 
 export function AeAnswerThinkingTrace({
@@ -30,11 +31,12 @@ export function AeAnswerThinkingTrace({
   steps = EmptyThinkingSteps,
   workLog = EmptyWorkLog,
   checkSummary,
+  query,
 }: AeAnswerThinkingTraceProps) {
   const structuredMode = isStructuredAnswerModeEnabled()
 
   if (workLog.length > 0 || checkSummary !== undefined) {
-    return <AeResearchProcess isStreaming={isStreaming} steps={workLog} checkSummary={checkSummary} />
+    return <AeResearchProcess isStreaming={isStreaming} steps={workLog} checkSummary={checkSummary} query={query} />
   }
 
   if (structuredMode) {

@@ -317,7 +317,7 @@ export const disableAdminPaidActivationServer = createServerFn({ method: 'POST' 
   .validator((data) => disableSchema.parse(data))
   .handler(async ({ data, context }) => disableAdminPaidActivationThroughSource(data, context))
 
-export async function readCurrentOwnerBillingThroughSource(): Promise<OwnerBillingServerResult> {
+async function readCurrentOwnerBillingThroughSource(): Promise<OwnerBillingServerResult> {
   try {
     const result = await callSourceQuery(readOwnerBillingProjectionQuery, {})
     if (result.kind === 'error') {
@@ -338,7 +338,7 @@ export async function readCurrentOwnerBillingThroughSource(): Promise<OwnerBilli
   }
 }
 
-export async function readPublicPaidActivationThroughSource(
+async function readPublicPaidActivationThroughSource(
   businessId: string
 ): Promise<{ kind: 'ok'; publicActivation: PublicPaidActivationProjection } | BillingServerErrorResult> {
   try {
@@ -349,7 +349,7 @@ export async function readPublicPaidActivationThroughSource(
   }
 }
 
-export async function startCurrentOwnerPaidActivationThroughSource(
+async function startCurrentOwnerPaidActivationThroughSource(
   data: z.infer<typeof startActivationSchema>,
   context?: unknown
 ): Promise<OwnerBillingMutationServerResult> {
@@ -403,7 +403,7 @@ export async function startCurrentOwnerPaidActivationThroughSource(
   }
 }
 
-export async function openCurrentOwnerBillingPortalThroughSource(
+async function openCurrentOwnerBillingPortalThroughSource(
   data: z.infer<typeof operationSchema>,
   context?: unknown
 ): Promise<OwnerBillingMutationServerResult> {
@@ -457,7 +457,7 @@ export async function openCurrentOwnerBillingPortalThroughSource(
   }
 }
 
-export async function recordCurrentOwnerBillingReturnThroughSource(
+async function recordCurrentOwnerBillingReturnThroughSource(
   data: z.infer<typeof operationSchema> & { returnedPath: string },
   context?: unknown
 ): Promise<OwnerBillingMutationServerResult> {
@@ -489,7 +489,7 @@ export async function recordCurrentOwnerBillingReturnThroughSource(
   }
 }
 
-export async function readCurrentOwnerBillingReceiptThroughSource(
+async function readCurrentOwnerBillingReceiptThroughSource(
   data: z.infer<typeof receiptSchema>
 ): Promise<OwnerBillingReceiptServerResult> {
   try {
@@ -517,7 +517,7 @@ export async function readCurrentOwnerBillingReceiptThroughSource(
   }
 }
 
-export async function readAdminBillingThroughSource(
+async function readAdminBillingThroughSource(
   filter: { businessId?: string | undefined; operationId?: string | undefined } = {}
 ): Promise<AdminBillingServerResult> {
   try {
@@ -547,7 +547,7 @@ export async function readAdminBillingThroughSource(
   }
 }
 
-export async function publishAdminBillingOfferThroughSource(
+async function publishAdminBillingOfferThroughSource(
   data: z.infer<typeof publishOfferSchema>,
   context?: unknown
 ): Promise<AdminBillingMutationServerResult> {
@@ -572,7 +572,7 @@ export async function publishAdminBillingOfferThroughSource(
   }
 }
 
-export async function reconcileAdminBillingOperationThroughSource(
+async function reconcileAdminBillingOperationThroughSource(
   data: { businessId: string; operationId: string },
   context?: unknown
 ): Promise<AdminBillingMutationServerResult> {
@@ -616,7 +616,7 @@ export async function reconcileAdminBillingOperationThroughSource(
   }
 }
 
-export async function recordAdminBillingEvidenceThroughSource(
+async function recordAdminBillingEvidenceThroughSource(
   data: z.infer<typeof providerEvidenceSchema>,
   context?: unknown
 ): Promise<AdminBillingMutationServerResult> {
@@ -667,7 +667,7 @@ export async function recordAdminBillingEvidenceThroughSource(
   }
 }
 
-export async function markAdminBillingNoRepairThroughSource(
+async function markAdminBillingNoRepairThroughSource(
   data: z.infer<typeof noRepairSchema>,
   context?: unknown
 ): Promise<AdminBillingMutationServerResult> {
@@ -714,7 +714,7 @@ export async function markAdminBillingNoRepairThroughSource(
   }
 }
 
-export async function disableAdminPaidActivationThroughSource(
+async function disableAdminPaidActivationThroughSource(
   data: z.infer<typeof disableSchema>,
   context?: unknown
 ): Promise<AdminBillingMutationServerResult> {
