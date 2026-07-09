@@ -8,6 +8,13 @@ import { handleBusinessDetailRequest } from '@/routes/api.businesses.$slug'
 import { handleSearchBusinessesRequest } from '@/routes/api.businesses.search'
 import { handleInvokeAgentTool, handleListAgentTools } from '@/routes/api.agent.tools'
 import { sourceWriteContentDigestHeader } from '@/modules/security/source-write-admission'
+import { listAgentToolActions } from '@/modules/actions'
+import {
+  buildHarnessToolContracts,
+  filterQuietAgentToolContracts,
+  harnessToolContractToDefinition,
+  sourceWriteDeclarationForTool,
+} from '@/modules/harness/public'
 
 const REQUEST_URL = 'https://ae.example/api/agent/tools'
 const DIRECTORY_PATH = '/.well-known/http-message-signatures-directory'
@@ -124,6 +131,20 @@ describe('GET /api/agent/tools', () => {
       'registry.detail',
       'registry.search',
     ])
+  })
+
+  it('backs every quiet-agent write tool with a public-qualified source-write declaration', () => {
+    const writeTools = filterQuietAgentToolContracts(buildHarnessToolContracts(listAgentToolActions()))
+      .map((contract) => harnessToolContractToDefinition(contract))
+      .filter((tool) => tool.tier === 'write')
+
+    expect(writeTools.map((tool) => tool.id)).toEqual(['inquiry.submit'])
+    for (const tool of writeTools) {
+      expect(sourceWriteDeclarationForTool(tool)).toMatchObject({
+        scope: 'public_inquiry',
+        allowedModes: expect.arrayContaining(['public-qualified-write']),
+      })
+    }
   })
 })
 
@@ -293,6 +314,46 @@ describe('POST /api/agent/tools', () => {
     })
   })
 
+  it('hands an unsigned inquiry.submit a prefilled handoff url when the target names a business slug', async () => {
+    const response = await handleInvokeAgentTool(
+      new Request(REQUEST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'inquiry.submit',
+          input: validInquirySubmitInputBySlug(),
+        }),
+      })
+    )
+
+    expect(response.status).toBe(403)
+    const payload = await response.json()
+    expect(payload).toMatchObject({ kind: 'error', code: 'agent_tools_signature_required', retryable: false })
+    expect(typeof payload.handoffUrl).toBe('string')
+    const handoff = new URL(`https://ae.example${payload.handoffUrl}`)
+    expect(handoff.pathname).toBe('/plumbing-demo/inquiry')
+    expect(handoff.searchParams.get('draft')).toBe('A pipe is leaking under the sink. Please reply with next steps.')
+    expect(handoff.searchParams.get('service')).toBe('emergency-plumbing')
+  })
+
+  it('omits the handoff url when the refused inquiry.submit target uses ids without a slug', async () => {
+    const response = await handleInvokeAgentTool(
+      new Request(REQUEST_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'inquiry.submit',
+          input: validInquirySubmitInput(),
+        }),
+      })
+    )
+
+    expect(response.status).toBe(403)
+    const payload = await response.json()
+    expect(payload.code).toBe('agent_tools_signature_required')
+    expect(payload.handoffUrl).toBeUndefined()
+  })
+
   it('accepts a real Web Bot Auth signed read request without advertising extra tools', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
@@ -393,19 +454,31 @@ describe('POST /api/agent/tools', () => {
             threadId?: string
             businessId?: string
             serviceId?: string
+            notificationId?: string
             notificationStatus?: string
+            accessKey?: string
+            status?: string
+            version?: number
           }
         }
 
         expect(response.status, responseText).toBe(200)
         expect(body.kind).toBe('ok')
         expect(body.code).toMatch(/inquiry_(submitted|replayed)/)
+        // Path C act receipt (message proof) — separate from authority stamp headers.
         expect(body.receipt).toMatchObject({
           businessId: 'business:plumbing-demo',
           serviceId: 'service:business:plumbing-demo:emergency-plumbing',
           notificationStatus: 'held',
         })
         expect(body.receipt?.threadId).toMatch(/^inquiry_thread:/)
+        expect(typeof body.receipt?.notificationId).toBe('string')
+        expect(body.receipt?.notificationId?.length).toBeGreaterThan(0)
+        expect(typeof body.receipt?.accessKey).toBe('string')
+        expect(body.receipt?.accessKey?.length).toBeGreaterThan(0)
+        // Path C authority stamp — not a substitute for the act receipt.
+        expect(response.headers.get('x-ae-authority-receipt')).toBeTruthy()
+        expect(response.headers.get('x-ae-authority-boundary')).toBeTruthy()
       })
     } finally {
       restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalInquiry)
@@ -708,6 +781,21 @@ function validInquirySubmitInput() {
     target: {
       businessId: 'business:plumbing-demo',
       serviceId: 'service:business:plumbing-demo:emergency-plumbing',
+      capabilityKind: 'phone_inquiry',
+    },
+    body: 'A pipe is leaking under the sink. Please reply with next steps.',
+    contact: {
+      name: 'Casey',
+      email: 'casey@example.test',
+    },
+  }
+}
+
+function validInquirySubmitInputBySlug() {
+  return {
+    target: {
+      businessSlug: 'plumbing-demo',
+      serviceSlug: 'emergency-plumbing',
       capabilityKind: 'phone_inquiry',
     },
     body: 'A pipe is leaking under the sink. Please reply with next steps.',

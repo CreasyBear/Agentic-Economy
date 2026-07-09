@@ -17,6 +17,14 @@ import { AeSurface, Trace, type HttpOutcome } from './ae-surface'
 import type { QuietToolDescriptor } from './ae-surface'
 import { scoreAudit } from './score'
 import type { AgentRun, AuditReport, AuditScenarioResult } from './score'
+import {
+  evaluateAgenticLoopProof,
+  parseActReceiptFromInquirySubmitBody,
+  parseDeliveryTrailFromDispatchReadback,
+  type ActReceiptProof,
+  type AgenticLoopProofInput,
+  type DeliveryTrailProof,
+} from '../../src/modules/harness/agentic-loop-proof'
 
 const DEFAULT_BASE = process.env.AE_BASE_URL ?? 'http://127.0.0.1:3000'
 const DEFAULT_GOAL =
@@ -50,6 +58,8 @@ interface ProbeState {
   successCriterionFromDocs: string | null
   primaryOutcome: string
   status: AgentRun['status']
+  /** Path C inputs captured from the signed inquiry hop (delivery trail optional). */
+  loopProof?: AgenticLoopProofInput
 }
 
 interface PublicBusinessDetailBody {
@@ -159,7 +169,9 @@ async function runProbe(base: string, goal: string): Promise<AgentRun> {
 
   const scenarios: AuditScenarioResult[] = []
   scenarios.push(await runColdStorefrontDiscoveryScenario(ae, trace, goal, state))
-  scenarios.push(await runSignedInquirySubmissionScenario(ae, trace, state))
+  const signedInquiry = await runSignedInquirySubmissionScenario(ae, trace, state)
+  scenarios.push(signedInquiry)
+  scenarios.push(await runAgenticLoopReceiptScenario(signedInquiry, state))
   scenarios.push(await runBoundaryRefusalScenario(trace, state))
   scenarios.push(await runFreshnessCorrectionScenario(ae, trace, state))
 
@@ -274,30 +286,129 @@ async function runSignedInquirySubmissionScenario(
 
   const signing = await readSigningConfig()
   if (signing.kind === 'skip') {
+    state.loopProof = {
+      signingAvailable: false,
+      admittedWriteSucceeded: false,
+      authorityStampPresent: false,
+    }
     return scenario('signed_inquiry_submission', 'Signed inquiry submission', 'skip', signing.reason, evidence)
   }
 
   const signedBody = { tool: 'inquiry.submit', input }
   const headers = await signAgentToolPost(ae, signing, signedBody)
   if (headers.kind === 'error') {
+    state.loopProof = {
+      signingAvailable: false,
+      admittedWriteSucceeded: false,
+      authorityStampPresent: false,
+    }
     return scenario('signed_inquiry_submission', 'Signed inquiry submission', 'skip', headers.reason, evidence)
   }
 
   trace.thought('Signing env is present; submit the same qualified-inquiry payload with Web Bot Auth headers. The target must still admit the principal separately.')
   const signedWrite = await ae.invokeTool('inquiry.submit', input, headers.headers)
   evidence.push(`signed inquiry.submit ${signedWrite.status}`)
-  const signedBodyJson = parseJson<{ kind?: string; code?: string }>(signedWrite.text)
-  if (signedWrite.ok && signedBodyJson?.kind === 'ok' && /inquiry_(submitted|replayed)/.test(signedBodyJson.code ?? '')) {
+  const signedBodyJson = parseJson<{
+    kind?: string
+    code?: string
+    receipt?: ActReceiptProof
+  }>(signedWrite.text)
+  const actReceipt = parseActReceiptFromInquirySubmitBody(signedBodyJson)
+  const authorityStampPresent = Boolean(signedWrite.headers['x-ae-authority-receipt']?.trim())
+  const admittedWriteSucceeded =
+    Boolean(signedWrite.ok) &&
+    signedBodyJson?.kind === 'ok' &&
+    /inquiry_(submitted|replayed)/.test(signedBodyJson.code ?? '')
+
+  state.loopProof = {
+    signingAvailable: true,
+    admittedWriteSucceeded,
+    authorityStampPresent,
+    ...(actReceipt === undefined ? {} : { actReceipt }),
+    // Delivery trail requires NotificationDispatchStatus via readNotificationDispatchReadback.
+    // Cold HTTP audit has no public dispatch-readback surface; leave unset → path C fails closed.
+    ...((): { deliveryTrail?: DeliveryTrailProof } => {
+      const trail = readOptionalAuditDeliveryTrail()
+      return trail === undefined ? {} : { deliveryTrail: trail }
+    })(),
+  }
+
+  if (admittedWriteSucceeded) {
     state.status = 'completed'
-    state.primaryOutcome = `Submitted a signed, admitted qualified inquiry for ${state.topSlug}; result ${signedBodyJson.code}.`
+    state.primaryOutcome = `Submitted a signed, admitted qualified inquiry for ${state.topSlug}; result ${signedBodyJson?.code}.`
     state.identifiedNextStep = true
-    evidence.push(`result ${signedBodyJson.code}`)
+    evidence.push(`result ${signedBodyJson?.code}`)
+    if (actReceipt !== undefined) {
+      evidence.push(`actReceipt.threadId=${actReceipt.threadId}`)
+      evidence.push(`actReceipt.notificationId=${actReceipt.notificationId}`)
+    } else {
+      evidence.push('actReceipt=missing')
+    }
+    evidence.push(
+      authorityStampPresent
+        ? `x-ae-authority-receipt=${signedWrite.headers['x-ae-authority-receipt']}`
+        : 'x-ae-authority-receipt=missing',
+    )
     return scenario('signed_inquiry_submission', 'Signed inquiry submission', 'pass', 'Unsigned step-up taught the signing requirement; signed admitted write returned inquiry_submitted or inquiry_replayed.', evidence)
   }
 
   state.status = 'partial'
   state.primaryOutcome = `Found the business; signed qualified-inquiry write returned status ${signedWrite.status}.`
   return scenario('signed_inquiry_submission', 'Signed inquiry submission', 'fail', 'Signing env was present, but signed+admitted inquiry did not return inquiry_submitted or inquiry_replayed.', evidence)
+}
+
+/**
+ * Path C loop proof: act receipt + authority stamp + dispatch readback.
+ * Never passes on x-ae-authority-receipt alone. Never treats InquiryNotificationStatus
+ * as a delivery-trail substitute.
+ */
+async function runAgenticLoopReceiptScenario(
+  signedInquiry: AuditScenarioResult,
+  state: ProbeState,
+): Promise<AuditScenarioResult> {
+  if (signedInquiry.status === 'skip' || state.loopProof?.signingAvailable === false) {
+    const proof = evaluateAgenticLoopProof(
+      state.loopProof ?? {
+        signingAvailable: false,
+        admittedWriteSucceeded: false,
+        authorityStampPresent: false,
+      },
+    )
+    return scenario('agentic_loop_receipt', 'Agentic loop proof', proof.status, proof.reason, proof.evidence)
+  }
+
+  const proof = evaluateAgenticLoopProof(
+    state.loopProof ?? {
+      signingAvailable: true,
+      admittedWriteSucceeded: false,
+      authorityStampPresent: false,
+    },
+  )
+  return scenario('agentic_loop_receipt', 'Agentic loop proof', proof.status, proof.reason, [
+    ...proof.evidence,
+    ...signedInquiry.evidence.filter((line) => line.startsWith('actReceipt.') || line.startsWith('x-ae-authority-')),
+  ])
+}
+
+/** Optional CI/local injection of dispatch readback JSON for path C (not a public agent API). */
+function readOptionalAuditDeliveryTrail(): DeliveryTrailProof | undefined {
+  const raw = process.env.AE_AUDIT_DELIVERY_TRAIL_JSON?.trim()
+  if (!raw) {
+    return undefined
+  }
+  try {
+    const parsed = JSON.parse(raw) as { dispatchId?: string; status?: string; attemptCount?: number }
+    if (typeof parsed.dispatchId !== 'string' || typeof parsed.status !== 'string') {
+      return undefined
+    }
+    return parseDeliveryTrailFromDispatchReadback({
+      dispatchId: parsed.dispatchId,
+      status: parsed.status,
+      attemptCount: typeof parsed.attemptCount === 'number' ? parsed.attemptCount : 0,
+    })
+  } catch {
+    return undefined
+  }
 }
 
 async function runBoundaryRefusalScenario(trace: Trace, state: ProbeState): Promise<AuditScenarioResult> {

@@ -11,6 +11,34 @@ export {
 } from './approval-policy'
 
 export {
+  AGENT_TOOL_WRITE_SCOPES,
+  declaredAgentToolWriteScope,
+  publicQuietAgentWriteScopeForTool,
+  type AgentToolWriteScope,
+  type AgentToolWriteToolId,
+} from './agent-tool-write-scope'
+
+export {
+  invokeQuietAgentTool,
+  listQuietAgentTools,
+  type QuietAgentDoorErrorCode,
+  type QuietAgentDoorFailure,
+  type QuietAgentDoorInvokeResult,
+  type QuietAgentDoorListResult,
+  type QuietAgentDoorSuccess,
+} from './agent-door'
+
+export {
+  evaluateAgenticLoopProof,
+  parseActReceiptFromInquirySubmitBody,
+  parseDeliveryTrailFromDispatchReadback,
+  type ActReceiptProof,
+  type AgenticLoopProofInput,
+  type AgenticLoopProofResult,
+  type DeliveryTrailProof,
+} from './agentic-loop-proof'
+
+export {
   actionToHarnessTool,
   runHarnessTool,
   type ActionHarnessTool,
@@ -27,8 +55,6 @@ export {
 export {
   compareHarnessEmissionSeverity,
   HarnessEmissionGuard,
-  HarnessEmissionSeverityValues,
-  HarnessEmissionSurfaceValues,
   hashHarnessEmissionNote,
   normalizeHarnessEmissionText,
   type HarnessAcceptedEmission,
@@ -52,7 +78,6 @@ export {
   HarnessRunLoopAbortError,
   HarnessRunLoopExecutionError,
   HarnessRunLoopTimeoutError,
-  runHarnessRunLoop,
   type HarnessRunLoopGuardedWork,
   type HarnessRunLoopModelAccounting,
   type HarnessRunLoopEventSink,
@@ -81,7 +106,6 @@ export {
 export {
   buildHarnessPrivateReplayProjection,
   buildHarnessPublicReplayProjection,
-  buildHarnessReplayProjection,
   isHarnessTerminalSessionEntry,
   type HarnessPrivateReplayEntry,
   type HarnessPrivateReplayProjection,
@@ -161,14 +185,10 @@ export {
 } from './tool-policy'
 
 export {
-  HarnessApprovalPolicyValues,
   HarnessRunPhaseValues,
   HarnessRunStatusValues,
   HarnessSessionEntryKindValues,
-  HarnessToolConcurrencyValues,
-  HarnessToolLoadModeValues,
   HarnessToolStatusValues,
-  HarnessToolTierValues,
   type HarnessApprovalDecision,
   type HarnessApprovalPolicy,
   type HarnessCostSummary,

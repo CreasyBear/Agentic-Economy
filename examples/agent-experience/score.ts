@@ -13,7 +13,12 @@ import type { TraceEvent } from './ae-surface'
 export type AuditScenarioStatus = 'pass' | 'fail' | 'skip'
 
 export interface AuditScenarioResult {
-  id: 'cold_storefront_discovery' | 'signed_inquiry_submission' | 'boundary_refusal' | 'freshness_correction'
+  id:
+    | 'cold_storefront_discovery'
+    | 'signed_inquiry_submission'
+    | 'boundary_refusal'
+    | 'freshness_correction'
+    | 'agentic_loop_receipt'
   title: string
   status: AuditScenarioStatus
   reason: string

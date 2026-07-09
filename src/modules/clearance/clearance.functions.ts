@@ -10,6 +10,12 @@ import { sourceWriteAdmissionFromRequest } from '@/lib/server/source-write-admis
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 import {
+  declaredAgentToolWriteScope,
+  type AgentToolWriteScope,
+  type AgentToolWriteToolId,
+} from '@/modules/harness/agent-tool-write-scope'
+
+import {
   evaluateClearanceMandate,
   type ClearanceMandate,
 } from './internal/mandate'
@@ -34,14 +40,6 @@ const registerAgentPrincipalMutation = sourceMutation<
   AgentPrincipalRecord
 >('clearance:registerAgentPrincipal')
 
-type AgentToolWriteToolId = 'inquiry.submit' | 'businessAction.requestCapability'
-type AgentToolWriteScope = 'public_inquiry' | 'business_action_request'
-
-const ALLOWED_WRITE_TOOLS: Record<string, AgentToolWriteScope> = {
-  'inquiry.submit': 'public_inquiry',
-  'businessAction.requestCapability': 'business_action_request',
-}
-
 export type AgentToolWriteAdmissionResult =
   | {
       kind: 'admitted'
@@ -65,7 +63,7 @@ export async function resolveAgentToolWriteAdmissionThroughSource(input: {
   toolId: string
   scope: AgentToolWriteScope
 }): Promise<AgentToolWriteAdmissionResult> {
-  if (ALLOWED_WRITE_TOOLS[input.toolId] !== input.scope) {
+  if (declaredAgentToolWriteScope(input.toolId) !== input.scope) {
     return { kind: 'refused', reason: 'agent_tool_write_not_declared' }
   }
 

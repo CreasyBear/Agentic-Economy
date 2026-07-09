@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, CorrelationId, NotificationDispatchId, OperationKey, SourceHash } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import {
+  evaluateAgenticLoopProof,
+  parseDeliveryTrailFromDispatchReadback,
+} from '@/modules/harness/public'
 import * as notificationOutbox from '@/modules/notification-outbox/public'
 import type {
   EnqueueInquiryNotificationCommand,
@@ -264,6 +268,55 @@ describe('notification outbox readback', () => {
       code: 'notification_no_repair_marked',
       dispatch: { status: 'no_repair' },
     })
+  })
+
+  it('proves delivery trail after enqueue via readNotificationDispatchReadback (path C seam)', () => {
+    const queued = requireQueued(enqueue())
+    const readback = notificationOutbox.readNotificationDispatchReadback(queued.state, queued.dispatch.dispatchId)
+    expect(readback).toMatchObject({
+      kind: 'ok',
+      code: 'notification_dispatch_read',
+      readback: {
+        dispatch: {
+          dispatchId: queued.dispatch.dispatchId,
+          status: 'queued',
+          inquiryThreadId: 'inquiry_thread:1',
+        },
+        attempts: [],
+      },
+    })
+    if (readback.kind !== 'ok') {
+      throw new Error(readback.code)
+    }
+
+    const deliveryTrail = parseDeliveryTrailFromDispatchReadback({
+      dispatchId: readback.readback.dispatch.dispatchId,
+      status: readback.readback.dispatch.status,
+      attemptCount: readback.readback.attempts.length,
+    })
+    expect(deliveryTrail).toEqual({
+      kind: 'dispatch_readback',
+      dispatchId: queued.dispatch.dispatchId,
+      status: 'queued',
+      attemptCount: 0,
+    })
+
+    const proof = evaluateAgenticLoopProof({
+      signingAvailable: true,
+      admittedWriteSucceeded: true,
+      authorityStampPresent: true,
+      actReceipt: {
+        threadId: 'inquiry_thread:1',
+        businessId: String(businessId),
+        serviceId: 'service:1',
+        notificationId: 'inquiry_notification:1',
+        notificationStatus: 'queued',
+        accessKey: 'access:1',
+      },
+      deliveryTrail,
+    })
+    expect(proof.status).toBe('pass')
+    expect(proof.evidence).toContain('deliveryTrail.kind=dispatch_readback')
   })
 })
 
