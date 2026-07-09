@@ -44,6 +44,58 @@ describe('action registry', () => {
     }
   })
 
+  it('accepts public catalog DTOs that include businessId on search and detail outputs', () => {
+    const business = {
+      businessId: 'business:adelaide-emergency-plumbing',
+      slug: 'adelaide-emergency-plumbing',
+      name: 'Adelaide Emergency Plumbing',
+      category: 'Emergency plumbing',
+      suburb: 'Adelaide',
+      stateTerritory: 'SA',
+      publicUrl: '/adelaide-emergency-plumbing',
+      trustTier: 'claimed',
+      publicStatus: 'published' as const,
+      indexStatus: 'not_queued',
+      discoveryStatus: 'degraded',
+      schemaVersion: 'public-business-catalog-api:v1',
+      updatedAt: 1,
+      photos: [] as Array<{ url: string; alt: string }>,
+      services: [
+        {
+          slug: 'emergency-pipe-repair',
+          name: 'Emergency pipe repair',
+          category: 'Emergency plumbing',
+          summary: 'Urgent local plumbing.',
+          serviceArea: 'Adelaide and nearby suburbs',
+          hoursOrUnknown: 'Hours supplied by owner',
+          firstRequest: {
+            mode: 'inquiry_available',
+            publicDisclosure: 'Use the inquiry form for a first contact.',
+            publicChannel: 'public_business_contact',
+          },
+          status: 'published' as const,
+          capabilities: [{ kind: 'phone_inquiry', status: 'available' }],
+        },
+      ],
+    }
+
+    const search = findAction('registry.search')!.outputSchema.safeParse({
+      kind: 'ok',
+      schemaVersion: 'public-business-catalog-api:v1',
+      query: 'plumber',
+      items: [business],
+      pagination: { limit: 1, total: 1, hasMore: false },
+    })
+    expect(search.success).toBe(true)
+
+    const detail = findAction('registry.detail')!.outputSchema.safeParse({
+      kind: 'found',
+      schemaVersion: 'public-business-catalog-api:v1',
+      business,
+    })
+    expect(detail.success).toBe(true)
+  })
+
   it('exposes schema metadata on agent-facing descriptors', () => {
     const search = describeActionForAgent(findAction('registry.search')!)
     expect(search.hasOutputSchema).toBe(true)
