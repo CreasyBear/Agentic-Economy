@@ -16,11 +16,11 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RRouteImport } from './routes/r'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
-import { Route as SkillDotmdRouteImport } from './routes/SKILL[.]md'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as OperatorRouteImport } from './routes/_operator'
+import { Route as SKILLDotmdRouteImport } from './routes/SKILL[.]md'
 import { Route as SlugRouteImport } from './routes/$slug'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
@@ -34,6 +34,7 @@ import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
 import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as ApiAnswerRouteImport } from './routes/api.answer'
+import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
@@ -120,11 +121,6 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SkillDotmdRoute = SkillDotmdRouteImport.update({
-  id: '/SKILL.md',
-  path: '/SKILL.md',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
@@ -142,6 +138,11 @@ const AboutRoute = AboutRouteImport.update({
 } as any)
 const OperatorRoute = OperatorRouteImport.update({
   id: '/_operator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SKILLDotmdRoute = SKILLDotmdRouteImport.update({
+  id: '/SKILL.md',
+  path: '/SKILL.md',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SlugRoute = SlugRouteImport.update({
@@ -209,6 +210,12 @@ const ApiAnswerRoute = ApiAnswerRouteImport.update({
   path: '/api/answer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotwellKnownHttpMessageSignaturesDirectoryRoute =
+  DotwellKnownHttpMessageSignaturesDirectoryRouteImport.update({
+    id: '/.well-known/http-message-signatures-directory',
+    path: '/.well-known/http-message-signatures-directory',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const SlugUcpRoute = SlugUcpRouteImport.update({
   id: '/ucp',
   path: '/ucp',
@@ -489,11 +496,11 @@ const OperatorOwnerActionsProposalIdReceiptRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
-  '/SKILL.md': typeof SkillDotmdRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/r': typeof RRouteWithChildren
   '/registry': typeof RegistryRoute
@@ -502,6 +509,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
@@ -565,11 +573,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
-  '/SKILL.md': typeof SkillDotmdRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/r': typeof RRouteWithChildren
   '/registry': typeof RegistryRoute
@@ -578,6 +586,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
@@ -642,12 +651,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$slug': typeof SlugRouteWithChildren
+  '/SKILL.md': typeof SKILLDotmdRoute
   '/_operator': typeof OperatorRouteWithChildren
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
-  '/SKILL.md': typeof SkillDotmdRoute
   '/privacy': typeof PrivacyRouteWithChildren
   '/r': typeof RRouteWithChildren
   '/registry': typeof RegistryRoute
@@ -656,6 +665,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
+  '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
   '/api/chat': typeof ApiChatRouteWithChildren
@@ -721,11 +731,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$slug'
+    | '/SKILL.md'
     | '/about'
     | '/claim'
     | '/help'
     | '/llms.txt'
-    | '/SKILL.md'
     | '/privacy'
     | '/r'
     | '/registry'
@@ -734,6 +744,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
+    | '/.well-known/http-message-signatures-directory'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
@@ -797,11 +808,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$slug'
+    | '/SKILL.md'
     | '/about'
     | '/claim'
     | '/help'
     | '/llms.txt'
-    | '/SKILL.md'
     | '/privacy'
     | '/r'
     | '/registry'
@@ -810,6 +821,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
+    | '/.well-known/http-message-signatures-directory'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
@@ -873,12 +885,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$slug'
+    | '/SKILL.md'
     | '/_operator'
     | '/about'
     | '/claim'
     | '/help'
     | '/llms.txt'
-    | '/SKILL.md'
     | '/privacy'
     | '/r'
     | '/registry'
@@ -887,6 +899,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/$slug/inquiry'
     | '/$slug/ucp'
+    | '/.well-known/http-message-signatures-directory'
     | '/api/answer'
     | '/api/businesses'
     | '/api/chat'
@@ -951,18 +964,19 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SlugRoute: typeof SlugRouteWithChildren
+  SKILLDotmdRoute: typeof SKILLDotmdRoute
   OperatorRoute: typeof OperatorRouteWithChildren
   AboutRoute: typeof AboutRoute
   ClaimRoute: typeof ClaimRouteWithChildren
   HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
-  SkillDotmdRoute: typeof SkillDotmdRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
   RRoute: typeof RRouteWithChildren
   RegistryRoute: typeof RegistryRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
+  DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   ApiAnswerRoute: typeof ApiAnswerRouteWithChildren
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
   ApiChatRoute: typeof ApiChatRouteWithChildren
@@ -1035,13 +1049,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/SKILL.md': {
-      id: '/SKILL.md'
-      path: '/SKILL.md'
-      fullPath: '/SKILL.md'
-      preLoaderRoute: typeof SkillDotmdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/help': {
       id: '/help'
       path: '/help'
@@ -1068,6 +1075,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof OperatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/SKILL.md': {
+      id: '/SKILL.md'
+      path: '/SKILL.md'
+      fullPath: '/SKILL.md'
+      preLoaderRoute: typeof SKILLDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$slug': {
@@ -1159,6 +1173,13 @@ declare module '@tanstack/react-router' {
       path: '/api/answer'
       fullPath: '/api/answer'
       preLoaderRoute: typeof ApiAnswerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/http-message-signatures-directory': {
+      id: '/.well-known/http-message-signatures-directory'
+      path: '/.well-known/http-message-signatures-directory'
+      fullPath: '/.well-known/http-message-signatures-directory'
+      preLoaderRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$slug/ucp': {
@@ -1806,18 +1827,20 @@ const ApiChatRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SlugRoute: SlugRouteWithChildren,
+  SKILLDotmdRoute: SKILLDotmdRoute,
   OperatorRoute: OperatorRouteWithChildren,
   AboutRoute: AboutRoute,
   ClaimRoute: ClaimRouteWithChildren,
   HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
-  SkillDotmdRoute: SkillDotmdRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
   RRoute: RRouteWithChildren,
   RegistryRoute: RegistryRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
+  DotwellKnownHttpMessageSignaturesDirectoryRoute:
+    DotwellKnownHttpMessageSignaturesDirectoryRoute,
   ApiAnswerRoute: ApiAnswerRouteWithChildren,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
   ApiChatRoute: ApiChatRouteWithChildren,
@@ -1841,13 +1864,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

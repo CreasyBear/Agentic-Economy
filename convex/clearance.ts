@@ -16,6 +16,7 @@ import {
   ClearanceSignaturePostureValues,
   ClearanceSignedRecordKindValues,
   consumeClearanceGreenlight,
+  createClearanceMandate,
   putClearanceRecordIfAbsentOrSame,
   recordClearanceProofGap,
   type AgentPrincipalRecord,
@@ -227,38 +228,144 @@ export const readActiveAgentToolMandate = query({
     const now = Date.now()
     const candidates = await ctx.db
       .query('clearanceMandates')
-      .withIndex('by_principalId_and_actionClass_and_actionRef', (q) =>
+      .withIndex('by_principal_action_ref_status_expiresAt', (q) =>
         q.eq('principalId', args.principalId)
           .eq('actionClass', 'contact_follow_up')
           .eq('actionRef', args.actionRef)
+          .eq('status', 'active')
+          .gt('expiresAt', now)
       )
-      .collect()
-    const admitted = candidates.find((candidate) =>
-      candidate.status === 'active' &&
-      candidate.expiresAt > now &&
-      candidate.allowedScopes.includes('public_inquiry')
-    )
 
-    if (admitted === undefined) {
-      return null
+    for await (const admitted of candidates) {
+      if (!admitted.allowedScopes.includes('public_inquiry')) {
+        continue
+      }
+
+      return {
+        mandateId: admitted.mandateId,
+        principalId: admitted.principalId,
+        actionClass: admitted.actionClass,
+        actionRef: admitted.actionRef,
+        allowedScopes: admitted.allowedScopes,
+        status: admitted.status,
+        sourceVersion: admitted.sourceVersion,
+        createdAt: admitted.createdAt,
+        expiresAt: admitted.expiresAt,
+        ...(admitted.revokedAt === undefined ? {} : { revokedAt: admitted.revokedAt }),
+        ...(admitted.maxAmountCents === undefined ? {} : { maxAmountCents: admitted.maxAmountCents }),
+        sourceHash: admitted.sourceHash,
+      }
     }
 
-    return {
-      mandateId: admitted.mandateId,
-      principalId: admitted.principalId,
-      actionClass: admitted.actionClass,
-      actionRef: admitted.actionRef,
-      allowedScopes: admitted.allowedScopes,
-      status: admitted.status,
-      sourceVersion: admitted.sourceVersion,
-      createdAt: admitted.createdAt,
-      expiresAt: admitted.expiresAt,
-      ...(admitted.revokedAt === undefined ? {} : { revokedAt: admitted.revokedAt }),
-      ...(admitted.maxAmountCents === undefined ? {} : { maxAmountCents: admitted.maxAmountCents }),
-      sourceHash: admitted.sourceHash,
-    }
+    return null
   },
 })
+
+/**
+ * Operator/source-write gated issue of a public_inquiry mandate for inquiry.submit.
+ * Used to admit a verified Signature-Agent principal for the product loop audit.
+ */
+export const issuePublicInquiryMandate = mutation({
+  args: {
+    principalId: v.string(),
+    expiresAt: v.number(),
+    operationKey: v.string(),
+    correlationId: v.string(),
+    ...sourceWriteArgs,
+  },
+  returns: clearanceMandateResult,
+  handler: async (ctx, args) => {
+    const sourceWrite = await requireSourceWrite(ctx, args, 'admin_operator')
+    if (sourceWrite.kind === 'rejected') {
+      throw new Error(`mandate_source_write_rejected:${sourceWrite.reason}`)
+    }
+
+    return persistPublicInquiryMandate(ctx, {
+      principalId: args.principalId,
+      expiresAt: args.expiresAt,
+    })
+  },
+})
+
+/**
+ * CLI/ops path for product-loop audits. Requires AE_AUDIT_MANDATE_ISSUE_SECRET on Convex
+ * to match the caller secret. Does not use HTTP source-write admission.
+ */
+export const issuePublicInquiryMandateForAudit = mutation({
+  args: {
+    principalId: v.string(),
+    expiresAt: v.number(),
+    issueSecret: v.string(),
+  },
+  returns: clearanceMandateResult,
+  handler: async (ctx, args) => {
+    const expected = readEnv('AE_AUDIT_MANDATE_ISSUE_SECRET')
+    if (expected === undefined || args.issueSecret !== expected) {
+      throw new Error('mandate_issue_secret_rejected')
+    }
+
+    return persistPublicInquiryMandate(ctx, {
+      principalId: args.principalId,
+      expiresAt: args.expiresAt,
+    })
+  },
+})
+
+async function persistPublicInquiryMandate(
+  // Convex mutation ctx — keep loose to avoid coupling this helper to generated Db types.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx: { db: any },
+  input: { principalId: string; expiresAt: number },
+) {
+  if (!Number.isFinite(input.expiresAt) || input.expiresAt <= Date.now()) {
+    throw new Error('mandate_expires_at_invalid')
+  }
+
+  const mandate = createClearanceMandate({
+    principalId: input.principalId,
+    actionClass: 'contact_follow_up',
+    actionRef: 'inquiry.submit',
+    allowedScopes: ['public_inquiry'],
+    createdAt: Date.now(),
+    expiresAt: input.expiresAt,
+    status: 'active',
+  })
+
+  const existing = await ctx.db
+    .query('clearanceMandates')
+    .withIndex('by_mandateId', (q: { eq: (field: string, value: string) => unknown }) =>
+      q.eq('mandateId', mandate.mandateId),
+    )
+    .unique()
+
+  if (existing === null) {
+    await ctx.db.insert('clearanceMandates', {
+      mandateId: mandate.mandateId,
+      principalId: mandate.principalId,
+      actionClass: mandate.actionClass,
+      actionRef: mandate.actionRef,
+      allowedScopes: [...mandate.allowedScopes],
+      status: mandate.status,
+      sourceVersion: mandate.sourceVersion,
+      createdAt: mandate.createdAt,
+      expiresAt: mandate.expiresAt,
+      sourceHash: mandate.sourceHash,
+    })
+  }
+
+  return {
+    mandateId: mandate.mandateId,
+    principalId: mandate.principalId,
+    actionClass: mandate.actionClass,
+    actionRef: mandate.actionRef,
+    allowedScopes: [...mandate.allowedScopes],
+    status: mandate.status,
+    sourceVersion: mandate.sourceVersion,
+    createdAt: mandate.createdAt,
+    expiresAt: mandate.expiresAt,
+    sourceHash: mandate.sourceHash,
+  }
+}
 
 function normalizeVerifiedAt(value: string, fallback: number): number {
   const parsed = Date.parse(value)

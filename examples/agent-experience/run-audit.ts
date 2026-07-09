@@ -25,6 +25,7 @@ import {
   type AgenticLoopProofInput,
   type DeliveryTrailProof,
 } from '../../src/modules/harness/agentic-loop-proof'
+import { sourceWriteContentDigestHeader } from '../../src/modules/security/source-write-admission'
 
 const DEFAULT_BASE = process.env.AE_BASE_URL ?? 'http://127.0.0.1:3000'
 const DEFAULT_GOAL =
@@ -602,10 +603,12 @@ async function signAgentToolPost(ae: AeSurface, signing: Extract<SigningConfig, 
   const url = ae.resolve('/api/agent/tools')
   if (url === null) return { kind: 'error', reason: 'Could not resolve /api/agent/tools for signing.' }
   const bodyText = JSON.stringify(body)
+  const contentDigest = sourceWriteContentDigestHeader(bodyText)
   const request = new Request(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Content-Digest': contentDigest,
       'Signature-Agent': `"${signing.signatureAgent}"`,
     },
     body: bodyText,
@@ -615,10 +618,12 @@ async function signAgentToolPost(ae: AeSurface, signing: Extract<SigningConfig, 
     const signed = await signatureHeaders(request, signing.signer, {
       created: new Date(Date.now() - 10_000),
       expires: new Date(Date.now() + 50_000),
+      components: ['@method', '@authority', '@path', 'content-digest', 'signature-agent'],
     })
     return {
       kind: 'ok',
       headers: {
+        'Content-Digest': contentDigest,
         'Signature-Agent': `"${signing.signatureAgent}"`,
         Signature: signed.Signature,
         'Signature-Input': signed['Signature-Input'],

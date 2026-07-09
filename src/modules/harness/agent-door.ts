@@ -207,17 +207,46 @@ function agentIdentityOptionsFromRequest(
   bodyText?: string,
 ): AgentIdentityVerificationOptions {
   const expectedAuthority = new URL(request.url).host
-  const devSignatureAgent = readDevWbaSignatureAgent()
-  if (devSignatureAgent === undefined) {
+  const extras = [
+    ...readProdWbaSignatureAgentAllowlist(),
+    ...((): string[] => {
+      const dev = readDevWbaSignatureAgent()
+      return dev === undefined ? [] : [dev]
+    })(),
+  ]
+  if (extras.length === 0) {
     return { expectedAuthority, ...(bodyText === undefined ? {} : { bodyText }) }
   }
 
+  // chatgpt.com remains the default anchor; extras are additive (prod allowlist / local smoke).
+  const allowed = Array.from(new Set(['https://chatgpt.com', ...extras]))
   return {
     expectedAuthority,
-    allowedSignatureAgents: [devSignatureAgent],
-    pretrustedDirectoryOrigins: [devSignatureAgent],
+    allowedSignatureAgents: allowed,
+    pretrustedDirectoryOrigins: allowed,
     ...(bodyText === undefined ? {} : { bodyText }),
   }
+}
+
+/** Comma-separated HTTPS origins trusted as Signature-Agent on any environment (including production). */
+function readProdWbaSignatureAgentAllowlist(): readonly string[] {
+  const raw = readEnv('AE_WBA_SIGNATURE_AGENT_ALLOWLIST')
+  if (raw === undefined) {
+    return []
+  }
+
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .flatMap((entry) => {
+      try {
+        const url = new URL(entry)
+        return url.protocol === 'https:' ? [url.origin] : []
+      } catch {
+        return []
+      }
+    })
 }
 
 function readDevWbaSignatureAgent(): string | undefined {

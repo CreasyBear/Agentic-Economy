@@ -33,3 +33,5 @@ graphify-out/
 
 # clerk configuration (can include secrets)
 /.clerk/
+.vercel
+examples/agent-experience/.local/
