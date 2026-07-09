@@ -1,0 +1,50 @@
+export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: string }): string {
+  const base = trimTrailingSlash(options.canonicalBaseUrl)
+  return [
+    '# Agentic Economy — assistant setup',
+    '',
+    `Fetch this file from the site origin (\`GET ${base}/SKILL.md\`). It teaches the cold path`,
+    'for assistants that discover AE without a human briefing.',
+    '',
+    '## What AE is',
+    '',
+    'AE publishes business listings assistants can read and compare, and supports one',
+    'conversion: a **qualified inquiry** — a human first-contact message for owner',
+    'review. AE does not book, charge, dispatch, or auto-fulfil.',
+    '',
+    '## Hop sequence (do this in order)',
+    '',
+    `1. Read \`GET ${base}/llms.txt\` for the public surface index and catalog lines.`,
+    `2. Read \`GET ${base}/api/agent/tools\` for the quiet tool list (parameters + boundaries).`,
+    '3. Call `registry.search` or `registry.detail` (unsigned reads are fine).',
+    '4. Confirm the listing’s first-contact channel before any write.',
+    '5. Only then call `inquiry.submit` with a signed agent identity that is',
+    '   admitted for the write. Unsigned writes return `403` with `Accept-Signature`.',
+    '',
+    `Browse without a search query: \`GET ${base}/api/businesses\` (list) or`,
+    `\`GET ${base}/api/businesses/search?q=\`.`,
+    '',
+    '## Write wall recovery',
+    '',
+    '- `403` + `Accept-Signature` means sign the request, then retry.',
+    '- `403` with `agent_tools_refused` after signing means the signed identity is',
+    '  not admitted for that write — a human or ops step must grant write admission.',
+    '  Do not invent booking or payment workarounds.',
+    '- On success, response headers include `x-ae-authority-receipt` (and related',
+    '  authority headers). Treat those as the machine receipt for the hop.',
+    '',
+    '## Boundaries (hard)',
+    '',
+    'Refuse asks that require booking, payment, dispatch, or auto-fulfil.',
+    'Route the person to AE’s human inquiry path or state the limit plainly.',
+    '',
+    '## Privacy',
+    '',
+    `\`${base}/privacy/remove-business\` for listing correction or removal requests.`,
+    '',
+  ].join('\n')
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value.slice(0, -1) : value
+}

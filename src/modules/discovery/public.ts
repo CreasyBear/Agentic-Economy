@@ -10,6 +10,7 @@ import {
   readDiscoveryHealth as readDiscoveryHealthImpl,
   regenerateDiscoveryManifest as regenerateDiscoveryManifestImpl,
 } from './internal/manifest-attempts'
+import { buildPublicAgentSkillMarkdown as buildPublicAgentSkillMarkdownImpl } from './internal/agent-skill'
 import {
   buildLlmsTxt as buildLlmsTxtImpl,
   buildRobotsTxt as buildRobotsTxtImpl,
@@ -274,6 +275,8 @@ export const invalidateDiscoveryManifest = invalidateDiscoveryManifestImpl
 export const readDiscoveryHealth = readDiscoveryHealthImpl
 
 export const buildLlmsTxt = buildLlmsTxtImpl
+
+export const buildPublicAgentSkillMarkdown = buildPublicAgentSkillMarkdownImpl
 
 export const buildSitemapXml = buildSitemapXmlImpl
 

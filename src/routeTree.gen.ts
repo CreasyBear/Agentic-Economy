@@ -13,8 +13,10 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as RRouteImport } from './routes/r'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as SkillDotmdRouteImport } from './routes/SKILL[.]md'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AboutRouteImport } from './routes/about'
@@ -24,6 +26,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TThreadIdRouteImport } from './routes/t.$threadId'
 import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
+import { Route as RRequestIdRouteImport } from './routes/r.$requestId'
 import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
@@ -102,6 +105,11 @@ const RegistryRoute = RegistryRouteImport.update({
   path: '/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RRoute = RRouteImport.update({
+  id: '/r',
+  path: '/r',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -110,6 +118,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
   path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SkillDotmdRoute = SkillDotmdRouteImport.update({
+  id: '/SKILL.md',
+  path: '/SKILL.md',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HelpRoute = HelpRouteImport.update({
@@ -155,6 +168,11 @@ const SignInSplatRoute = SignInSplatRouteImport.update({
   id: '/sign-in/$',
   path: '/sign-in/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const RRequestIdRoute = RRequestIdRouteImport.update({
+  id: '/$requestId',
+  path: '/$requestId',
+  getParentRoute: () => RRoute,
 } as any)
 const QAnswerIdRoute = QAnswerIdRouteImport.update({
   id: '/q/$answerId',
@@ -475,7 +493,9 @@ export interface FileRoutesByFullPath {
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/SKILL.md': typeof SkillDotmdRoute
   '/privacy': typeof PrivacyRouteWithChildren
+  '/r': typeof RRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -489,6 +509,7 @@ export interface FileRoutesByFullPath {
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
+  '/r/$requestId': typeof RRequestIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
@@ -548,7 +569,9 @@ export interface FileRoutesByTo {
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/SKILL.md': typeof SkillDotmdRoute
   '/privacy': typeof PrivacyRouteWithChildren
+  '/r': typeof RRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -562,6 +585,7 @@ export interface FileRoutesByTo {
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
+  '/r/$requestId': typeof RRequestIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
@@ -623,7 +647,9 @@ export interface FileRoutesById {
   '/claim': typeof ClaimRouteWithChildren
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/SKILL.md': typeof SkillDotmdRoute
   '/privacy': typeof PrivacyRouteWithChildren
+  '/r': typeof RRouteWithChildren
   '/registry': typeof RegistryRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -637,6 +663,7 @@ export interface FileRoutesById {
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
   '/q/$answerId': typeof QAnswerIdRoute
+  '/r/$requestId': typeof RRequestIdRoute
   '/sign-in/$': typeof SignInSplatRoute
   '/sign-up/$': typeof SignUpSplatRoute
   '/t/$threadId': typeof TThreadIdRoute
@@ -698,7 +725,9 @@ export interface FileRouteTypes {
     | '/claim'
     | '/help'
     | '/llms.txt'
+    | '/SKILL.md'
     | '/privacy'
+    | '/r'
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -712,6 +741,7 @@ export interface FileRouteTypes {
     | '/i/$threadId'
     | '/privacy/remove-business'
     | '/q/$answerId'
+    | '/r/$requestId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
@@ -771,7 +801,9 @@ export interface FileRouteTypes {
     | '/claim'
     | '/help'
     | '/llms.txt'
+    | '/SKILL.md'
     | '/privacy'
+    | '/r'
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -785,6 +817,7 @@ export interface FileRouteTypes {
     | '/i/$threadId'
     | '/privacy/remove-business'
     | '/q/$answerId'
+    | '/r/$requestId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
@@ -845,7 +878,9 @@ export interface FileRouteTypes {
     | '/claim'
     | '/help'
     | '/llms.txt'
+    | '/SKILL.md'
     | '/privacy'
+    | '/r'
     | '/registry'
     | '/robots.txt'
     | '/sitemap.xml'
@@ -859,6 +894,7 @@ export interface FileRouteTypes {
     | '/i/$threadId'
     | '/privacy/remove-business'
     | '/q/$answerId'
+    | '/r/$requestId'
     | '/sign-in/$'
     | '/sign-up/$'
     | '/t/$threadId'
@@ -920,7 +956,9 @@ export interface RootRouteChildren {
   ClaimRoute: typeof ClaimRouteWithChildren
   HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
+  SkillDotmdRoute: typeof SkillDotmdRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
+  RRoute: typeof RRouteWithChildren
   RegistryRoute: typeof RegistryRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -976,6 +1014,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/r': {
+      id: '/r'
+      path: '/r'
+      fullPath: '/r'
+      preLoaderRoute: typeof RRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/privacy': {
       id: '/privacy'
       path: '/privacy'
@@ -988,6 +1033,13 @@ declare module '@tanstack/react-router' {
       path: '/llms.txt'
       fullPath: '/llms.txt'
       preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/SKILL.md': {
+      id: '/SKILL.md'
+      path: '/SKILL.md'
+      fullPath: '/SKILL.md'
+      preLoaderRoute: typeof SkillDotmdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/help': {
@@ -1052,6 +1104,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in/$'
       preLoaderRoute: typeof SignInSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/r/$requestId': {
+      id: '/r/$requestId'
+      path: '/$requestId'
+      fullPath: '/r/$requestId'
+      preLoaderRoute: typeof RRequestIdRouteImport
+      parentRoute: typeof RRoute
     }
     '/q/$answerId': {
       id: '/q/$answerId'
@@ -1680,6 +1739,16 @@ const PrivacyRouteChildren: PrivacyRouteChildren = {
 const PrivacyRouteWithChildren =
   PrivacyRoute._addFileChildren(PrivacyRouteChildren)
 
+interface RRouteChildren {
+  RRequestIdRoute: typeof RRequestIdRoute
+}
+
+const RRouteChildren: RRouteChildren = {
+  RRequestIdRoute: RRequestIdRoute,
+}
+
+const RRouteWithChildren = RRoute._addFileChildren(RRouteChildren)
+
 interface ApiAnswerThreadsRouteChildren {
   ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRoute
 }
@@ -1742,7 +1811,9 @@ const rootRouteChildren: RootRouteChildren = {
   ClaimRoute: ClaimRouteWithChildren,
   HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
+  SkillDotmdRoute: SkillDotmdRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
+  RRoute: RRouteWithChildren,
   RegistryRoute: RegistryRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
