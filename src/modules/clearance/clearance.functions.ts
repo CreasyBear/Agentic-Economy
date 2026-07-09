@@ -77,6 +77,15 @@ export async function resolveAgentToolWriteAdmissionThroughSource(input: {
     }
   }
 
+  if (isEnvListedPublicInquiryAdmission(principalId, input.toolId, input.scope)) {
+    return {
+      kind: 'admitted',
+      toolId: input.toolId as AgentToolWriteToolId,
+      scope: input.scope,
+      principalId,
+    }
+  }
+
   try {
     const mandate = await callPublicSourceQuery(readActiveAgentToolMandateQuery, {
       principalId,
@@ -144,4 +153,28 @@ export async function recordAgentIdentityThroughSource(
 
 function isLocalAgentToolWriteAdmissionEnabled(scope: AgentToolWriteScope): boolean {
   return isLocalE2EAuthBypassEnabled() && process.env.AE_DEV_AGENT_TOOL_WRITE_ADMISSION === scope
+}
+
+/**
+ * Production-safe ops allowlist for product-loop audits: comma-separated principalIds
+ * that may call inquiry.submit with public_inquiry without a Convex mandate row.
+ * Identity verification still required. Empty/unset = no bypass.
+ */
+function isEnvListedPublicInquiryAdmission(
+  principalId: string,
+  toolId: string,
+  scope: AgentToolWriteScope,
+): boolean {
+  if (toolId !== 'inquiry.submit' || scope !== 'public_inquiry') {
+    return false
+  }
+  const raw = process.env.AE_AGENT_PUBLIC_INQUIRY_ADMISSION_PRINCIPALS?.trim()
+  if (raw === undefined || raw.length === 0) {
+    return false
+  }
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .includes(principalId)
 }
