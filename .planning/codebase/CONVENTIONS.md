@@ -1,172 +1,103 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-07-07
+**Analysis date:** 2026-07-10
 
-## Naming Patterns
+## Governing Standards
 
-**Files:**
-- Use descriptive lower-kebab filenames for non-component modules: `src/modules/registry/registry.actions.ts`, `src/modules/harness/tool-contract.ts`, `src/modules/security/source-write-admission.ts`.
-- Use PascalCase only for files that export React components or component adapters: `src/components/astryx/RouterLink.tsx`.
-- Domain modules use a fixed file shape:
-  - `src/modules/<domain>/public.ts` for the public seam.
-  - `src/modules/<domain>/<domain>.functions.ts` for TanStack server functions and source adapters.
-  - `src/modules/<domain>/<domain>.actions.ts` for `defineAction` declarations.
-  - `src/modules/<domain>/internal/*` for private implementation.
-- Tests mirror concern and layer under `tests/unit/<domain>`, `tests/integration`, `tests/imports`, `tests/copy`, `tests/seo`, `tests/types`, `tests/e2e`, and `tests/deploy-smoke`.
+- `.planning/ENGINEERING-STANDARDS.md` is the repository's implementation constitution. It defines the TypeScript hard spec, module boundaries, route/Convex rules, audit requirements, source scans, and verification ladder.
+- `CLAUDE.md` adds change-discipline guidance: inspect before coding, prefer the smallest durable solution, keep edits surgical, and define verifiable success criteria.
+- `tsconfig.json` enforces the core language posture: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `isolatedModules`, and `noEmit`.
+- There is no ESLint, Prettier, or Biome configuration in the current repository. Formatting is maintained by matching nearby source, while repository-specific static constraints are executable Vitest scans under `tests/imports/` and `tests/ui-contract/`.
 
-**Functions:**
-- Use lower-camel verb phrases: `listActions`, `findAction`, `readPublicRegistrySearchPage`, `validatePublicOwnerClaimFlowInput`.
-- Use `handle*Request` for route-handler seams exported from route files: `handleListBusinessesRequest` in `src/routes/api.businesses.ts`, `handleSearchBusinessesRequest` in `src/routes/api.businesses.search.ts`.
-- Use `*Server` for TanStack server-function exports consumed by routes, and `*ThroughSource` for functions that bind source adapters.
-- Prefer domain verbs already used in the repo: `create`, `read`, `submit`, `resolve`, `build`, `validate`, `sync`, `retry`, `normalize`, `record`, `publish`, `claim`.
+## Language and Formatting
 
-**Variables:**
-- Use exact domain names over generic abbreviations: `sourceWriteRequest`, `agentToolAdmission`, `publicBusinessCatalogApiDtoOutputSchema`.
-- Preserve environment variable names exactly when documenting or reading configuration, but never include secret values: `.env.example`, `docs/ONBOARDING.md`.
-- Prefer `const` tuples for closed values: `ClaimStatusValues`, `PublicStatusValues`, `TrustTierValues` in `src/modules/business/public.ts`.
+- Source is TypeScript/TSX in ESM mode (`"type": "module"` in `package.json`); JavaScript source is disallowed by `allowJs: false` in `tsconfig.json`.
+- Files consistently use single quotes, omit semicolons, and include trailing commas in multiline literals and parameter lists. Representative examples include `src/modules/common/result.ts` and `src/modules/registry/internal/validators.ts`.
+- Use two-space indentation. Break long calls, generic types, object literals, and JSX props across lines rather than compressing them.
+- Import groups are separated by blank lines: platform or package imports first, then repository aliases. Type-only dependencies use `import type`, as in `tests/integration/registry-api.test.ts`.
+- Prefer the `@/` alias for `src/` imports. `tsconfig.json` also defines `~/`, but repository source predominantly uses `@/`.
+- Generated outputs are not hand-edited. `src/routeTree.gen.ts` and `convex/_generated/` are generated surfaces; the latter is excluded from TypeScript input and source scans.
 
-**Types:**
-- Closed domains are modeled as `*Values` const tuple + derived union + runtime schema. `tests/types/domain-contracts.test.ts` asserts `ClaimStatusValues` / `ClaimStatus` / `ClaimStatusSchema`, `IndexStatus` / `IndexStatusSchema`, and related contracts stay aligned.
-- Avoid TypeScript `enum`; use literal unions and Zod schemas.
-- Do not use broad `status: string` result fields in runtime/domain contracts. `tests/imports/ts-standards.test.ts` scans for broad status strings.
-- Expected outcomes should be discriminated result unions, usually `{ kind: 'ok' | 'error', code, ... }` through `src/modules/common/result.ts`, or domain-specific discriminants such as `kind: 'found' | 'not_found'` in `src/modules/registry/registry.actions.ts`.
+## Naming
 
-## Code Style
+- Files use lowercase kebab-case for general modules and components, for example `src/modules/common/stable-hash.ts` and `src/components/ae/chat/answer-turn-state.ts`.
+- TanStack file-based route names encode route hierarchy with dots and dynamic segments with `$`, for example `src/routes/api.businesses.$slug.ts` and `src/routes/_operator/admin.runs.$turnId.tsx`.
+- Route-local implementation files begin with `-` so they are excluded from route generation, for example `src/routes/-registry-search-params.ts` and `src/routes/_operator/-owner-billing-readback.ts`.
+- React component files may retain PascalCase when matching an exported component or vendor-derived surface, such as `src/components/ai-elements/MessageContent.tsx`.
+- Types, React components, schemas, and exported constant-value tuples use PascalCase: `ModuleResult`, `IndexStatusSchema`, and `IndexStatusValues`.
+- Functions and local variables use camelCase. Boolean names describe the condition (`retryable`, `hasMore`, `paymentRequired`) rather than using ambiguous flags.
+- Domain string values and result codes use `snake_case`, while human-facing route slugs and URLs use kebab-case.
+- Test names describe observable behavior in complete phrases, for example `it('keeps durable public DTOs strict across registry and API outputs', ...)` in `tests/integration/registry-api.test.ts`.
 
-**Formatting:**
-- No committed Prettier or ESLint config was detected. `docs/CONTRIBUTING.md` and `CLAUDE.md` state that `npm run typecheck` plus guardrail tests are the enforcement layer.
-- Match existing style manually:
-  - 2-space indentation.
-  - Single quotes.
-  - No semicolons.
-  - Trailing commas in multiline objects, arrays, and call arguments.
-  - Blank line between external imports and internal/relative imports.
-- `tsconfig.json` enables strict TypeScript with `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, `isolatedModules`, and `forceConsistentCasingInFileNames`.
+## Type and Domain Modeling
 
-**Linting:**
-- Not detected: `.eslintrc*`, `eslint.config.*`, `.prettierrc*`, `prettier.config.*`, and `biome.json`.
-- Use executable guardrails instead:
-  - `npm run typecheck` for whole-program TypeScript.
-  - `npm run test:ts-standards` for explicit `any`, `as any`, `as unknown as`, non-null assertions, `v.any()`, broad status strings, and client-exposed source-write secrets.
-  - `npm run test:imports` for backup/private/route-boundary imports.
-  - `npm run test:copy` for public and assistant-visible language.
+- Model finite domain vocabularies as readonly tuples plus derived unions, not TypeScript enums:
 
-## Import Organization
+  ```ts
+  export const StatusValues = ['one', 'two'] as const
+  export type Status = (typeof StatusValues)[number]
+  ```
 
-**Order:**
-1. Node built-ins and external packages: `node:fs`, `vitest`, `zod`, `@tanstack/ai`.
-2. Internal aliases from `@/` or `~/`: `@/modules/actions`, `@/modules/registry/public`.
-3. Relative imports: `./scan-targets`.
+- Pair boundary validation with the owning vocabulary. Zod schemas use the tuple directly, as `z.enum(IndexStatusValues)` does in `src/modules/registry/internal/validators.ts`.
+- Expected failures are discriminated result unions. `src/modules/common/result.ts` establishes `kind: 'ok' | 'error'`, literal `code` values, and an explicit `retryable` field for errors.
+- Prefer readonly DTOs and explicit input/output types at module and transport boundaries. Public projections must be allowlisted rather than serialized from persistence records.
+- Use `satisfies Record<Union, ...>` for exhaustive maps. Do not use broad `string` status fields, `enum`, `Partial<Record<...>>` for required maps, explicit `any`, `as any`, `as unknown as`, or non-null assertions.
+- Allowed narrowing patterns are `as const`, `satisfies`, generated-code casts, and the single documented validator-helper exception described by `.planning/ENGINEERING-STANDARDS.md`.
+- `tests/types/domain-contracts.test.ts`, `tests/types/capability-contracts.test.ts`, and related files use `expectTypeOf` to prove schema/type equality and literal preservation.
 
-**Path Aliases:**
-- `@/*` and `~/*` both resolve to `./src/*` in `tsconfig.json`.
-- Route aliases map owner/admin operator paths: `@/routes/owner.*`, `@/routes/admin.*`, and `@/routes/developers.discovery`.
-- `vite.config.ts` and `vitest.config.ts` both use `tsconfigPaths: true`.
+## Module Boundaries
 
-**Module Boundaries:**
-- Routes may import public module seams and route-facing function seams, but not module internals. `tests/imports/route-boundary.test.ts` scans `src/routes`.
-- Sibling modules and routes must not import another module's `internal/*`; use `src/modules/<domain>/public.ts`. `tests/imports/private-imports.test.ts` enforces this.
-- App/runtime code must not import `.planning` or backup paths. `tests/imports/backup-imports.test.ts` owns that scanner.
-- Convex schema composition is the special case: `convex/schema.ts` composes module-owned schema fragments such as `src/modules/registry/internal/schema.ts`.
+- Domain code is organized under `src/modules/<domain>/`. Each module owns its model, validators, source state, operations, and public projection.
+- `public.ts` is the stable import seam for consumers. Module-private implementation belongs under `internal/`; routes and other modules must not import another module's `internal/` files.
+- Framework boundary functions are separated into purpose-named files such as `*.functions.ts` and `*.actions.ts`; UI/readback adapters use names such as `*.readback.ts` and `*.panels.tsx`.
+- Routes are adapters. They may compose UI, generated client hooks intended for routes, and module public seams, but must not reach into provider SDKs, `convex/schema`, or module internals.
+- Cross-domain primitives live in `src/modules/common/`, including result types, IDs, hashes, audit events, and Convex literal helpers. Avoid generic dumping-ground utilities.
+- Convex top-level files compose runtime functions and schemas from source-owned modules. `convex/schema.ts` is a composition root rather than a second domain model.
+- The import rules are executable: `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, `tests/imports/backup-imports.test.ts`, and `tests/imports/source-mining.test.ts` scan the repository for boundary violations.
 
-## Error Handling
+## Functions and Control Flow
 
-**Patterns:**
-- Use Zod `.strict()` input schemas at boundaries. `src/modules/registry/registry.actions.ts` uses `.strict()` on `registrySearchInputSchema`, `registryDetailInputSchema`, and output object schemas.
-- Use `.safeParse` for untrusted request input and `.parse` only for trusted internal assertions or test fixtures.
-- Expected domain outcomes return typed unions rather than throwing. `src/modules/common/result.ts` exposes `ok()` and `error()` helpers with `retryable` on error results.
-- Throw `Error` for programmer faults, impossible states, or configuration faults, not for ordinary user/domain refusals.
-- Public assistant writes fail closed through explicit result/error codes. `src/routes/api.agent.tools.ts` and `src/modules/harness/tool-contract.ts` separate unsigned identity, unverified identity, missing write scope, and admission refusal.
+- Functions expose explicit inputs and return values at system boundaries. Server functions with input use an input validator; Convex functions validate all untrusted arguments.
+- Prefer deterministic pure transformations in domain code and isolate network, persistence, time, and provider access behind named adapters.
+- Consequential/retryable operations carry durable logical keys, typed audit data, and idempotency information. Best-effort external writes without attempt state are prohibited.
+- Handle expected negative outcomes as data, not exceptions. Reserve throws for programmer errors or infrastructure faults.
+- Environment mutations in tests are restored in `afterEach` or `finally`; `tests/integration/registry-api.test.ts` demonstrates preserving the previous value and deleting it when originally absent.
+- Avoid hidden global state. Where an in-memory source is used, expose creation/reset helpers so tests can construct isolated state explicitly.
 
-## Logging
+## React and Route Conventions
 
-**Framework:** Sentry/PostHog plus internal evidence/event sinks; console is not the main observability contract.
+- TanStack Router file conventions own route discovery; do not edit `src/routeTree.gen.ts` manually.
+- Route-specific components and parsing helpers sit beside the route with `-`-prefixed filenames, keeping route adapters smaller without expanding a global component surface.
+- Server-only logic is kept behind server functions or server modules rather than imported into client-rendered component code.
+- UI tests favor accessible roles and labels, mirroring the product requirement that controls remain keyboard and screen-reader discoverable.
+- UI state is explicit: loading, empty, unavailable, error, and success states have distinct components or discriminants rather than being inferred from missing data.
+- Public surfaces must avoid internal vocabulary and unsupported capability claims. Copy and UI-contract tests make this a code convention, not merely editorial guidance.
 
-**Patterns:**
-- Use observability modules for product/runtime events: `src/modules/observability/public.ts`, `src/modules/observability/funnel.functions.ts`, and tests under `tests/unit/observability`.
-- Harness runs should emit replayable evidence through `src/modules/harness/evidence-envelope.ts`, `src/modules/harness/session-journal.ts`, and related projections, not ad hoc console logs.
-- Audit and redaction behavior is tested in `tests/unit/observability/audit-redaction.test.ts`.
-- Do not log secrets, source-write keys, provider tokens, raw private owner fields, or signature material.
+## Validation, Security, and Observability
 
-## Comments
+- Validate untrusted data at HTTP, server-function, provider, and Convex boundaries. Zod is the primary general-purpose schema library; Convex validators own database function contracts.
+- Derive actor and administrator authority at trusted server/Convex boundaries. Browser-supplied owner or admin identifiers are not authoritative.
+- Public outputs use allowlist builders and tests assert that private identifiers, source hashes, provider payloads, and unsupported capability flags do not leak.
+- Consequential mutations emit typed audit events with actor, target, correlation, idempotency, and redacted evidence fields as required by `.planning/ENGINEERING-STANDARDS.md`.
+- Logs and receipts distinguish source-owned facts from provider readback and external evidence. Provider success is not silently treated as local authority.
+- Error codes are stable machine-readable literals; messages are safe for their audience and must not expose secrets or raw provider responses.
 
-**When to Comment:**
-- Use comments to document load-bearing boundaries, not obvious assignments. Good examples are `src/modules/common/action.ts` explaining action registration and `vite.config.ts` explaining the Vercel Node serverless Nitro preset.
-- Keep public-facing strings separate from engineer comments; action `summary` and `boundaries` are assistant-visible copy, not internal comments.
+## Documentation and Comments
 
-**JSDoc/TSDoc:**
-- Use JSDoc on core abstractions and public contracts: `src/modules/common/action.ts` documents `ActionContext`, `ActionDefinition`, `readOnly`, and registration.
-- Prefer short domain comments over long speculative explanations inside leaf code.
+- Prefer names and types that make behavior self-explanatory. Comments explain a non-obvious invariant, boundary, or operational reason rather than restating code.
+- Documentation changes accompany changes to behavior, setup, environment variables, APIs, or authority boundaries.
+- Planning documents classify statements as invariants, interfaces, state machines, failure modes, acceptance gates, runbooks, or decisions; unsupported maturity claims are explicitly rejected.
+- Keep generated and derived documents subordinate to live code and configuration when they disagree.
 
-## Function Design
+## Enforced Checks
 
-**Size:** Keep route handlers thin and domain logic in modules. Route tests such as `tests/integration/registry-api.test.ts` call exported handler seams with real `Request` objects.
-
-**Parameters:** Prefer single options objects for multi-field domain operations, especially at source/route boundaries. Trim and normalize input before handing it to lower layers, as in `registrySearchAction.run` in `src/modules/registry/registry.actions.ts`.
-
-**Return Values:** Return exact typed results with discriminants and precise schema coverage. Every `ActionDefinition` must carry `schema`, `outputSchema`, `parameters`, `readOnly`, and `surfaces` through `src/modules/common/action.ts`.
-
-## Module Design
-
-**Exports:**
-- Export public domain behavior from `public.ts` only. `src/modules/registry/public.ts`, `src/modules/inquiries/public.ts`, and `src/modules/security/public.ts` are the import seams for routes and sibling modules.
-- Register operations explicitly in `src/modules/actions/index.ts`; do not rely on side-effect imports because production bundlers can tree-shake them.
-- Action ids are stable dot-namespaced strings such as `registry.search`, `registry.detail`, and `inquiry.submit`.
-
-**Barrel Files:**
-- Use module-local barrels (`public.ts`) as ownership seams, not repo-wide barrels.
-- `src/modules/actions/index.ts` is the explicit action registry and the place to assert unique action ids.
-
-## Product Copy Conventions
-
-**Public Truth:**
-- `PRODUCT.md` Layer 3 wins for anything a person or assistant can read. `CLAUDE.md`, `docs/CONTRIBUTING.md`, and `.agents/skills/ae-public-copy-guardrails/SKILL.md` all point to this authority order.
-- AE publishes business-supplied service pages and qualified inquiries. Do not imply booking, payment, dispatch, live availability, marketplace liquidity, or autonomous fulfillment.
-- Use "verified" only with a named standard and evidence wording. Otherwise use checked/supplied/published/last checked/needs confirmation.
-- State limitations once, as a clean fact, at the contract point. Do not repeat missing capabilities as personality.
-
-**Banned Public/Assistant Vocabulary:**
-- Public human copy and assistant-visible action descriptors must avoid internal architecture terms listed in `docs/CONTRIBUTING.md` and `.agents/skills/ae-public-copy-guardrails/SKILL.md`: `source-owned`, `readback`, `manifest`, `capability`, `gateway`, `operator`, `MCP`, `OpenAPI`, `callable`, `autonomous`, `agent-native`, `DTO`, `fixture`.
-- `tests/copy/pm05-trust-language-gate.test.ts`, `tests/copy/phase1-banned-copy.test.ts`, `tests/copy/discovery-overclaim.test.ts`, and `tests/copy/scope3-handshake-banned-copy.test.ts` enforce the copy contract over real source.
-
-## UI and Design Conventions
-
-**Authority:**
-- `DESIGN.md` is the visual/UI authority. `.agents/skills/ae-design-system/SKILL.md` summarizes the same rules.
-- Astryx is the component layer: `@astryxdesign/core` and `@astryxdesign/theme-neutral`.
-- Providers are wired once in `src/routes/__root.tsx`; internal navigation goes through `src/components/astryx/RouterLink.tsx`.
-
-**Implementation Rules:**
-- Use Astryx first. Use Tailwind 4 only as layout glue through semantic classes such as `text-primary`, `bg-surface`, `bg-card`, `bg-body`, `border-border`, `rounded-md`, and `shadow-sm`.
-- Do not add new bespoke `Ae*` presentation components, shadcn/radix/cva wrappers, new handwritten CSS files, font packages, raw route-local palettes, purple gradients, glass, blobs, or generic icon grids.
-- `src/styles/globals.css` owns the Astryx theme bridge and token overrides. `src/styles/legacy.css` is retiring and should shrink.
-- UI changes should consider loading, empty, error, keyboard/focus, responsive, and reduced-motion states.
-
-## Security and Boundary Conventions
-
-**Auth and Authority:**
-- Signed agent identity is attribution/quota/audit only; it never authorizes a verb. The identity/authorization split is documented in `.agents/skills/ae-agent-identity-and-mandates/SKILL.md`.
-- Browser input must not supply actor, owner/admin identity, money fields, receipt status, or authorization. Authority comes from Clerk/Convex identity, source rows, and source-write admission.
-- Public quiet-agent writes are gated: `inquiry.submit` is the only assistant-exposed write, and it requires Web Bot Auth identity plus write admission before execution.
-
-**Convex:**
-- Read `convex/_generated/ai/guidelines.md` before Convex edits.
-- Add tables to module-owned schema fragments and compose them in `convex/schema.ts`.
-- Keep Node built-ins out of shared Convex import graphs. Node-only Convex actions require a dedicated `"use node"` file that exports actions only, as documented in `.agents/skills/ae-convex-guardrails/SKILL.md`.
-
-## Docs and Planning Conventions
-
-**Authority Docs:**
-- `CLAUDE.md` is present and says to read `AGENTS.md`, `PRODUCT.md`, `DESIGN.md`, `docs/ARCHITECTURE.md`, `docs/CONTRIBUTING.md`, and `docs/ONBOARDING.md` before non-trivial work.
-- `AGENTS.md` was not present as a live file during this scan, even though the prompt supplied AGENTS instructions and repo docs reference the file. Treat the prompt instructions as active for this run and record the file absence as a source discrepancy.
-- `docs/CONTRIBUTING.md` is the daily guardrail digest.
-- `docs/ONBOARDING.md` documents setup, environment variable names, and the verification ladder.
-
-**Planning Docs:**
-- `.planning/` constrains and records work but is not runtime authority.
-- App/runtime code must not import `.planning` artifacts; `tests/imports/backup-imports.test.ts` enforces this.
-- Refresh `.planning/codebase/*.md` after substantial changes to module ownership, conventions, structure, testing, integrations, or concerns.
+- `npm run typecheck` applies the strict TypeScript contract.
+- `npm run check:convex-codegen` checks schema/function compatibility without rewriting generated files.
+- `npm run test:ts-standards` scans source for banned TypeScript constructs and widened contracts.
+- `npm run test:imports` and `npm run test:source-mining` enforce ownership and import boundaries.
+- `npm run test:copy`, `npm run test:seo`, and `npm run test:ui-contract` enforce public-language, discovery, and visual-contract constraints.
+- Fixture variants such as `npm run test:ts-standards:fixtures` prove the scanners reject known-bad files under `tests/fixtures/`.
 
 ---
 
-*Convention analysis: 2026-07-07*
+*Convention analysis: 2026-07-10*
