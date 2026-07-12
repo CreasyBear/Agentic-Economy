@@ -6,6 +6,7 @@ import { handleRoutingKernelHttpRequest } from '@/modules/routing-kernel/http'
 import { handleRoutingKernelMcpRequest } from '@/modules/routing-kernel/mcp'
 import { handleRoutingKernelDescriptorRequest } from '@/modules/routing-kernel/descriptor'
 import { canonicalAuthorityDigest } from '@/modules/routing-kernel/public'
+import { verifyRoutingEdgeEnvelope } from '@/modules/routing-kernel/routing-edge-envelope'
 
 import { httpAction } from './_generated/server'
 import { createRegisteredRoutingKernel } from './routingKernel'
@@ -24,7 +25,21 @@ function routingDependencies(ctx: Parameters<Parameters<typeof httpAction>[0]>[0
   return {
     operations: createRegisteredRoutingKernel(ctx).operations,
     authenticate: async (candidate: Request, bodyText: string) => {
-      const signedRequest = new Request(candidate.url, { method: candidate.method, headers: candidate.headers, body: bodyText })
+      const edgeKey = process.env.AE_EDGE_ORIGIN_HMAC_KEY?.trim()
+      const requiredAuthority = process.env.AE_ROUTING_PUBLIC_AUTHORITY?.trim()
+      let publicUrl = candidate.url
+      if (edgeKey !== undefined && edgeKey.length > 0) {
+        const edge = await verifyRoutingEdgeEnvelope(candidate, {
+          key: edgeKey,
+          ...(requiredAuthority === undefined || requiredAuthority.length === 0 ? {} : { requiredAuthority }),
+        })
+        if (edge.kind !== 'verified') {
+          console.warn('routing_edge_envelope_refused', { reason: edge.reason })
+          return { kind: 'unauthenticated' as const }
+        }
+        publicUrl = edge.publicUrl
+      }
+      const signedRequest = new Request(publicUrl, { method: candidate.method, headers: candidate.headers, body: bodyText })
       const configuredAgents = (process.env.AE_ROUTING_SIGNATURE_AGENTS ?? '').split(',').map((value) => value.trim()).filter(Boolean)
       const allowedSignatureAgents = [...new Set(configuredAgents)]
       const agent = await verifyAgentIdentity(signedRequest, {
