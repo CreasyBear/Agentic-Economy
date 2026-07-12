@@ -33,7 +33,8 @@ export type CapabilityFieldDefinition = Readonly<{
   required: boolean
   disclosure?: Readonly<{
     classification: DataClassification
-    recipient: 'selected_provider' | 'offer_issuer' | 'named_recipient'
+    phase: 'preparation' | 'execution'
+    recipient: 'candidate_provider' | 'selected_provider' | 'offer_issuer' | 'named_recipient'
     purposes: readonly string[]
   }>
   evidenceRole?: 'provider_offer' | 'result_artifact' | 'status' | 'provider_report'
@@ -64,6 +65,12 @@ export type CustomerRequest = Readonly<{
   principalId: string
   delegatedAgentId: string
   intent: string
+  routing: Readonly<{
+    networkId: string
+    currency: string
+    maximumSpendMinor: number
+    optimizeFor: 'cost' | 'latency'
+  }>
   revision: number
   createdAt: number
 }>
@@ -116,16 +123,40 @@ export type PreparedAction = Readonly<{
     selectedBecause: readonly string[]
     commercialInfluence: 'none' | 'disclosed'
   }>
-  allowedFallbackBindings: readonly string[]
+  allowedFallbacks: readonly Readonly<{
+    business: Readonly<{ nodeId: string; bindingId: string; name: string }>
+    trigger: 'effect_not_committed'
+    maximumCost: Readonly<{ currency: string; amountMinor: number }>
+  }>[]
   expectedCost: Readonly<{ currency: string; amountMinor: number }>
   maximumGrossCost: Readonly<{ currency: string; amountMinor: number }>
   priceComponents: readonly Readonly<{ kind: 'provider' | 'ae_fee' | 'tax'; label: string; amountMinor: number }>[]
-  disclosures: readonly Readonly<{ field: string; recipientBindingId: string; recipientName: string; purposes: readonly string[] }>[]
+  disclosures: readonly Readonly<{
+    field: string
+    timing: 'already_shared_to_prepare' | 'on_execution'
+    recipientBindingId: string
+    recipientName: string
+    purposes: readonly string[]
+  }>[]
   materialTerms: readonly Readonly<{ key: string; label: string; value: string }>[]
   cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
   expectedBy?: number
   expiresAt: number
   preparedAt: number
+}>
+
+export type PreparationGrant = Readonly<{
+  preparationGrantId: string
+  requestId: string
+  requestRevision: number
+  principalId: string
+  allowedDataFields: readonly string[]
+  allowedRecipientKinds: readonly ('candidate_provider' | 'selected_provider' | 'offer_issuer' | 'named_recipient')[]
+  allowedPurposes: readonly string[]
+  maximumRecipients: number
+  authenticationEvidenceRef: string
+  expiresAt: number
+  grantedAt: number
 }>
 
 export type ApprovalGrant = Readonly<{
@@ -188,7 +219,8 @@ const fieldDefinitionSchema = z.object({
   required: z.boolean(),
   disclosure: z.object({
     classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
-    recipient: z.enum(['selected_provider', 'offer_issuer', 'named_recipient']),
+    phase: z.enum(['preparation', 'execution']),
+    recipient: z.enum(['candidate_provider', 'selected_provider', 'offer_issuer', 'named_recipient']),
     purposes: z.array(identifier).min(1).max(16),
   }).strict().optional(),
   evidenceRole: z.enum(['provider_offer', 'result_artifact', 'status', 'provider_report']).optional(),
@@ -212,6 +244,12 @@ const requestSchema = z.object({
   principalId: identifier,
   delegatedAgentId: identifier,
   intent: z.string().trim().min(1).max(2_000),
+  routing: z.object({
+    networkId: identifier,
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    maximumSpendMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    optimizeFor: z.enum(['cost', 'latency']),
+  }).strict(),
   createdAt: timestamp,
 }).strict()
 const planInputSchema = z.discriminatedUnion('kind', [

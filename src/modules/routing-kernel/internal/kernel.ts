@@ -39,6 +39,7 @@ export type CreateNeutralRoutingKernelInput = Readonly<{
 }>
 
 export type RouteInput = Readonly<{
+  routingRequestId?: string
   networkId: string
   caller: KernelCaller
   query: string
@@ -166,6 +167,14 @@ export function createNeutralRoutingKernel(input: CreateNeutralRoutingKernelInpu
   async function route(request: RouteInput): Promise<RouteResult> {
     const query = request.query.trim()
     if (query.length === 0) return { kind: 'no_route', reason: 'query_empty' }
+    if (request.routingRequestId !== undefined) {
+      const routingRequestId = request.routingRequestId.trim()
+      if (routingRequestId.length === 0 || routingRequestId.length > 200) return { kind: 'no_route', reason: 'routing_request_invalid' }
+      const existing = await store.getQuoteByRoutingRequestId(routingRequestId)
+      if (existing !== undefined) return sameRoutingRequest(existing, request, query)
+        ? { kind: 'quoted', quote: existing }
+        : { kind: 'no_route', reason: 'routing_request_conflict' }
+    }
     const compiledAt = input.now()
     const routeAdmission = await incidentControl.evaluate(callerScope(request.networkId, request.caller), 'route')
     if (routeAdmission.kind === 'frozen') return { kind: 'no_route', reason: 'incident_frozen' }
@@ -213,7 +222,7 @@ export function createNeutralRoutingKernel(input: CreateNeutralRoutingKernelInpu
 
     const createdAt = input.now()
     const quoteId = input.ids.next('quote')
-    const routingRequestId = input.ids.next('routing-request')
+    const routingRequestId = request.routingRequestId?.trim() ?? input.ids.next('routing-request')
     const quoteMaterial = {
       quoteId,
       routingRequestId,
@@ -1413,6 +1422,16 @@ function disclosureGrantRecordDetails(grant: DisclosureGrant) {
     expiresAt: grant.expiresAt,
     incidentEpochDigest: grant.incidentEpochDigest,
   }
+}
+
+function sameRoutingRequest(existing: RouteQuote, request: RouteInput, normalizedQuery: string): boolean {
+  const optimizeFor = request.constraints.optimizeFor ?? 'cost'
+  return existing.networkId === request.networkId
+    && sameCaller(existing.caller, request.caller)
+    && existing.query === normalizedQuery
+    && existing.routingSnapshot.constraints.currency === request.constraints.currency
+    && existing.routingSnapshot.constraints.maximumSpendMinor === request.constraints.maximumSpendMinor
+    && existing.routingSnapshot.constraints.optimizeFor === optimizeFor
 }
 
 function authorizationRefusal(

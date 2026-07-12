@@ -2,6 +2,7 @@ import { defineSchema } from 'convex/server'
 
 import { businessTables } from '../src/modules/business/internal/schema'
 import { catalogTables } from '../src/modules/catalog/internal/schema'
+import { customerRequestTables } from '../src/modules/customer-request/internal/convex-schema'
 import { demandTables } from '../src/modules/demand/internal/schema'
 import { discoveryTables } from '../src/modules/discovery/internal/schema'
 import { harnessTables } from '../src/modules/harness/internal/convex-schema'
@@ -18,6 +19,7 @@ export default defineSchema({
   ...answerThreadTables,
   ...businessTables,
   ...catalogTables,
+  ...customerRequestTables,
   ...registryTables,
   ...routingKernelTables,
   ...demandTables,

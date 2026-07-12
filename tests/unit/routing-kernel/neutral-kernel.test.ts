@@ -19,6 +19,29 @@ import { createIncidentControlTestHarness } from '@/modules/routing-kernel/incid
 const ids = createSequentialIds()
 
 describe('neutral routing kernel', () => {
+  it('returns one immutable quote for an idempotent routing request and refuses changed payload', async () => {
+    let quoteCalls = 0
+    const adapter = parcelBinding({ bindingId: 'binding:idempotent:v1', nodeId: 'node:idempotent', amountMinor: 1_145, dispatched: [] })
+    const kernel = createNeutralRoutingKernel({
+      now: () => 1_750_000_000_000, executionMode: 'simulation', ids: createSequentialIds(), quoteTtlMs: 60_000,
+      bindings: [{ ...adapter, quote: async (input) => { quoteCalls += 1; return await adapter.quote(input) } }],
+    })
+    const caller = { agentId: 'agent:request:1', principalId: 'principal:request:1' }
+    const input = {
+      routingRequestId: 'request:1:revision:1:action:purchase',
+      networkId: 'network:au-first', caller, query: 'Purchase parcel label.',
+      constraints: { currency: 'AUD', maximumSpendMinor: 1_500 },
+    } as const
+
+    const first = await kernel.operations.route(input)
+    const replay = await kernel.operations.route(input)
+    const changed = await kernel.operations.route({ ...input, constraints: { ...input.constraints, maximumSpendMinor: 2_000 } })
+
+    expect(first).toEqual(replay)
+    expect(quoteCalls).toBe(1)
+    expect(changed).toEqual({ kind: 'no_route', reason: 'routing_request_conflict' })
+  })
+
   it('binds an exact provider quote reference into the route digest and forwards it before expiry', async () => {
     let releasedQuoteRef: string | undefined
     const base = parcelBinding({ bindingId: 'binding:shippo:v1', nodeId: 'node:shippo', amountMinor: 1_145, dispatched: [] })

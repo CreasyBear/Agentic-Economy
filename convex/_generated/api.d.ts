@@ -14,6 +14,8 @@ import type * as authzMigration from "../authzMigration.js";
 import type * as business from "../business.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
+import type * as customerRequestStoreAdapter from "../customerRequestStoreAdapter.js";
+import type * as customerRequests from "../customerRequests.js";
 import type * as demand from "../demand.js";
 import type * as devSeed from "../devSeed.js";
 import type * as devSeedStore from "../devSeedStore.js";
@@ -53,6 +55,8 @@ declare const fullApi: ApiFromModules<{
   business: typeof business;
   catalog: typeof catalog;
   crons: typeof crons;
+  customerRequestStoreAdapter: typeof customerRequestStoreAdapter;
+  customerRequests: typeof customerRequests;
   demand: typeof demand;
   devSeed: typeof devSeed;
   devSeedStore: typeof devSeedStore;

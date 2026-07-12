@@ -10,6 +10,7 @@ export type KernelStore = Readonly<{
   incidentRecoveryAuthority: 'none' | 'atomic'
   putQuote: (quote: RouteQuote) => Awaitable<void>
   getQuote: (quoteId: string) => Awaitable<RouteQuote | undefined>
+  getQuoteByRoutingRequestId: (routingRequestId: string) => Awaitable<RouteQuote | undefined>
   putAuthorization: (authorization: RouteAuthorization) => Awaitable<void>
   getAuthorization: (authorizationRef: string) => Awaitable<RouteAuthorization | undefined>
   getBudgetAuthority: (budgetAuthorityRef: string) => Awaitable<BudgetAuthority | undefined>
@@ -99,6 +100,7 @@ export type ClaimExecutionResult =
 
 export function createInMemoryKernelStore(): KernelStore {
   const quotes = new Map<string, RouteQuote>()
+  const quotesByRoutingRequestId = new Map<string, RouteQuote>()
   const authorizations = new Map<string, RouteAuthorization>()
   const runs = new Map<string, RootRunSnapshot>()
   const budgets = new Map<string, BudgetAuthority>()
@@ -114,8 +116,14 @@ export function createInMemoryKernelStore(): KernelStore {
 
   return Object.freeze({
     incidentRecoveryAuthority: 'none' as const,
-    putQuote: (quote: RouteQuote) => { quotes.set(quote.quoteId, quote) },
+    putQuote: (quote: RouteQuote) => {
+      const existing = quotesByRoutingRequestId.get(quote.routingRequestId)
+      if (existing !== undefined && existing.quoteDigest !== quote.quoteDigest) throw new Error('routing_request_identity_conflict')
+      quotes.set(quote.quoteId, quote)
+      quotesByRoutingRequestId.set(quote.routingRequestId, quote)
+    },
     getQuote: (quoteId: string) => quotes.get(quoteId),
+    getQuoteByRoutingRequestId: (routingRequestId: string) => quotesByRoutingRequestId.get(routingRequestId),
     putAuthorization: (authorization: RouteAuthorization) => {
       authorizations.set(authorization.authorizationRef, authorization)
     },

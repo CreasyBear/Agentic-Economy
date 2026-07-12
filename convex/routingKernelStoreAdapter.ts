@@ -15,6 +15,12 @@ export function createConvexKernelStore(ctx: KernelStoreActionContext): KernelSt
       const result = await ctx.runQuery(internal.routingKernelStore.getQuote, { quoteId })
       return result ?? undefined
     },
+    getQuoteByRoutingRequestId: async (routingRequestId) => {
+      const quoteId = await ctx.runQuery(internal.routingKernelStore.getQuoteIdByRoutingRequestId, { routingRequestId })
+      if (quoteId === null) return undefined
+      const result = await ctx.runQuery(internal.routingKernelStore.getQuote, { quoteId })
+      return result ?? undefined
+    },
     putAuthorization: async (authorization) => {
       await ctx.runMutation(internal.routingKernelStore.putAuthorization, { authorization: { ...authorization, allowedDataFields: [...authorization.allowedDataFields], allowedRecipientBindingIds: [...authorization.allowedRecipientBindingIds], allowedDisclosurePurposes: [...authorization.allowedDisclosurePurposes] } })
     },

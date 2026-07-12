@@ -1,14 +1,10 @@
-import { sha256 } from '@noble/hashes/sha2'
-import { bytesToHex } from '@noble/hashes/utils'
-
-import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
-
-const encoder = new TextEncoder()
+import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 
 export function canonicalAuthorityDigest(value: StableHashValue): string {
-  return `sha256:${bytesToHex(sha256(encoder.encode(stableStringify(value))))}`
+  return canonicalDigest(value)
 }
 
 export function isCanonicalAuthorityDigest(value: string): boolean {
-  return /^sha256:[0-9a-f]{64}$/.test(value)
+  return isCanonicalDigest(value)
 }

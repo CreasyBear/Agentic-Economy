@@ -225,6 +225,11 @@ const rootRun = v.object({
 export const putQuote = internalMutation({
   args: { quote },
   handler: async (ctx, args) => {
+    const requestQuote = await ctx.db
+      .query('routingKernelQuotes')
+      .withIndex('by_routingRequestId', (query) => query.eq('routingRequestId', args.quote.routingRequestId))
+      .unique()
+    if (requestQuote !== null && requestQuote.quoteId !== args.quote.quoteId) throw new Error('routing_request_identity_conflict')
     const existing = await ctx.db
       .query('routingKernelQuotes')
       .withIndex('by_quoteId', (query) => query.eq('quoteId', args.quote.quoteId))
@@ -296,6 +301,18 @@ export const putQuote = internalMutation({
       }
     }
     return null
+  },
+})
+
+export const getQuoteIdByRoutingRequestId = internalQuery({
+  args: { routingRequestId: v.string() },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query('routingKernelQuotes')
+      .withIndex('by_routingRequestId', (query) => query.eq('routingRequestId', args.routingRequestId))
+      .unique()
+    return row?.quoteId ?? null
   },
 })
 

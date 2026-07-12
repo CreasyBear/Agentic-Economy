@@ -14,6 +14,7 @@ describe('customer request contracts', () => {
       principalId: 'principal:customer:1',
       delegatedAgentId: 'agent:customer:1',
       intent: '  Compare a courier and buy one shipping label.  ',
+      routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' },
       createdAt: 1_000,
     })
 
@@ -22,6 +23,7 @@ describe('customer request contracts', () => {
       principalId: 'principal:customer:1',
       delegatedAgentId: 'agent:customer:1',
       intent: 'Compare a courier and buy one shipping label.',
+      routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' },
       revision: 1,
       createdAt: 1_000,
     })
@@ -58,7 +60,8 @@ describe('customer request contracts', () => {
           ...field('string', 'Destination postcode'),
           disclosure: {
             classification: 'personal',
-            recipient: 'selected_provider',
+            phase: 'preparation',
+            recipient: 'candidate_provider',
             purposes: ['shipping_rate_quote'],
           },
         },
@@ -206,6 +209,7 @@ function request() {
   return createCustomerRequest({
     requestId: 'request:shipping:1', principalId: 'principal:customer:1',
     delegatedAgentId: 'agent:customer:1', intent: 'Buy a shipping label.', createdAt: 1_000,
+    routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' },
   })
 }
 
@@ -218,7 +222,7 @@ function shippingRegistry() {
       input: {
         destinationPostcode: {
           ...field('string', 'Destination postcode'),
-          disclosure: { classification: 'personal', recipient: 'selected_provider', purposes: ['shipping_rate_quote'] },
+          disclosure: { classification: 'personal', phase: 'preparation', recipient: 'candidate_provider', purposes: ['shipping_rate_quote'] },
         },
       },
       output: { offerRef: { ...field('provider_offer_ref', 'Provider offer'), evidenceRole: 'provider_offer' } },
@@ -232,7 +236,7 @@ function shippingRegistry() {
         offerRef: field('provider_offer_ref', 'Provider offer'),
         recipientAddress: {
           ...field('string', 'Recipient address'),
-          disclosure: { classification: 'personal', recipient: 'offer_issuer', purposes: ['shipping_label_fulfillment'] },
+          disclosure: { classification: 'personal', phase: 'execution', recipient: 'offer_issuer', purposes: ['shipping_label_fulfillment'] },
         },
       },
       output: {

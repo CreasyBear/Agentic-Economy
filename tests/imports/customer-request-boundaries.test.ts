@@ -7,6 +7,7 @@ const root = process.cwd()
 describe('customer request module boundaries', () => {
   it('makes CustomerRequest canonical and retires the rejected CustomerPlan prototype', () => {
     expect(existsSync(join(root, 'src/modules/customer-request/public.ts'))).toBe(true)
+    expect(existsSync(join(root, 'src/modules/customer-request/runtime.ts'))).toBe(true)
     expect(existsSync(join(root, 'src/modules/customer-plan/public.ts'))).toBe(false)
     expect(existsSync(join(root, 'src/modules/customer-plan/kernel-adapter.ts'))).toBe(false)
   })
