@@ -5,12 +5,10 @@ import { Link } from '@astryxdesign/core/Link'
 import { MobileNavToggle } from '@astryxdesign/core/MobileNav'
 import { TopNav, TopNavItem } from '@astryxdesign/core/TopNav'
 import { Text } from '@astryxdesign/core/Text'
-import { Building2Icon, SearchIcon } from 'lucide-react'
+import { NetworkIcon, RouteIcon } from 'lucide-react'
 
-import { AeCorrectionWidget } from '@/components/ae/feedback/AeCorrectionWidget'
 import { AeFunnelAttributionBoot } from '@/components/ae/layout/AeFunnelAttributionBoot'
 import { AePublicRouteCommandMenu } from '@/components/ae/layout/AeRouteCommandMenu'
-import { emitFunnelEvent } from '@/lib/observability/funnel-client'
 
 type AePublicShellProps = {
   children: ReactNode
@@ -18,11 +16,6 @@ type AePublicShellProps = {
 }
 
 const defaultRegistryHref = '/registry?q=&limit=10'
-const ownerDoorHref = '/sign-in/?redirect=/owner/status'
-
-function emitClaimCtaClicked() {
-  void emitFunnelEvent({ eventType: 'claim_cta_clicked', stage: 'visitor', correlationPrefix: 'claim-cta' })
-}
 
 function AeSkipFocusBridge() {
   useEffect(() => {
@@ -57,33 +50,25 @@ const publicTopNav = (
       <>
         <div className="hidden items-center gap-2 md:flex">
           <AePublicRouteCommandMenu />
-          <Button
-            label="List your business"
-            variant="ghost"
-            size="sm"
-            href="/claim"
-            icon={<Building2Icon aria-hidden="true" />}
-            clickAction={() => emitClaimCtaClicked()}
-          />
-          <Button label="Ask" variant="primary" size="sm" href="/" icon={<SearchIcon aria-hidden="true" />} />
+          <Button label="Network" variant="ghost" size="sm" href={defaultRegistryHref} icon={<NetworkIcon aria-hidden="true" />} />
+          <Button label="Route" variant="primary" size="sm" href="/engine" icon={<RouteIcon aria-hidden="true" />} />
         </div>
         <div className="flex items-center gap-1 md:hidden">
           <Button
-            label="List your business"
+            label="Network"
             variant="ghost"
             size="lg"
-            href="/claim"
-            icon={<Building2Icon aria-hidden="true" />}
-            clickAction={() => emitClaimCtaClicked()}
+            href={defaultRegistryHref}
+            icon={<NetworkIcon aria-hidden="true" />}
             isIconOnly
             className="min-h-11 min-w-11"
           />
           <Button
-            label="Ask"
+            label="Route"
             variant="primary"
             size="lg"
-            href="/"
-            icon={<SearchIcon aria-hidden="true" />}
+            href="/engine"
+            icon={<RouteIcon aria-hidden="true" />}
             isIconOnly
             className="min-h-11 min-w-11"
           />
@@ -109,7 +94,6 @@ export function AePublicShell({ children, immersive = false }: AePublicShellProp
         <div id="main-content" tabIndex={-1} className={immersive ? 'h-full min-h-0' : undefined}>
           {children}
         </div>
-        {immersive ? null : <AeCorrectionWidget />}
         <PublicFooter immersive={immersive} />
       </AppShell>
     </div>
@@ -122,22 +106,20 @@ function PublicNavItems() {
   if (isMobile) {
     return (
       <>
-        <TopNavItem label="Find a business" href={defaultRegistryHref} />
-        <TopNavItem label="About" href="/about" />
-        <TopNavItem label="Help" href="/help" />
-        <TopNavItem label="Corrections" href="/privacy/remove-business" />
-        <TopNavItem label="For businesses" href={ownerDoorHref} />
+        <TopNavItem label="Route" href="/engine" />
+        <TopNavItem label="Network" href={defaultRegistryHref} />
+        <TopNavItem label="Build" href="/developers/discovery" />
+        <TopNavItem label="Runs" href="/admin/runs" />
       </>
     )
   }
 
   return (
     <div className="hidden md:contents">
-      <Button label="Find a business" variant="ghost" size="sm" href={defaultRegistryHref} />
-      <Button label="About" variant="ghost" size="sm" href="/about" />
-      <Button label="Help" variant="ghost" size="sm" href="/help" />
-      <Button label="Corrections" variant="ghost" size="sm" href="/privacy/remove-business" />
-      <Button label="For businesses" variant="ghost" size="sm" href={ownerDoorHref} />
+      <Button label="Route" variant="ghost" size="sm" href="/engine" />
+      <Button label="Network" variant="ghost" size="sm" href={defaultRegistryHref} />
+      <Button label="Build" variant="ghost" size="sm" href="/developers/discovery" />
+      <Button label="Runs" variant="ghost" size="sm" href="/admin/runs" />
     </div>
   )
 }
@@ -149,7 +131,7 @@ function PublicBrandLink() {
       aria-label="Agentic Economy home"
       className="flex min-h-11 min-w-11 items-center gap-3 no-underline md:min-h-0 md:min-w-0"
     >
-      <img src="/brand/logo/ae-seal.svg" alt="" className="size-9 shrink-0" loading="eager" />
+      <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-sm font-semibold text-on-accent">AE</span>
       <span className="hidden min-w-0 sm:block">
         <Text type="label" weight="semibold" color="primary">Agentic Economy</Text>
       </span>
@@ -171,7 +153,7 @@ function PublicFooter({ immersive }: { immersive: boolean }) {
           <a href="/llms.txt" className="text-secondary underline-offset-4 hover:text-primary hover:underline">Assistants</a>
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>
-          {immersive ? null : <Link href={ownerDoorHref}>For businesses</Link>}
+          {immersive ? null : <Link href="/engine">Routing engine</Link>}
         </nav>
       </div>
     </footer>

@@ -16,6 +16,7 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as EngineRouteImport } from './routes/engine'
 import { Route as ClaimRouteImport } from './routes/claim'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as OperatorRouteImport } from './routes/_operator'
@@ -93,6 +94,11 @@ const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
 const HelpRoute = HelpRouteImport.update({
   id: '/help',
   path: '/help',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EngineRoute = EngineRouteImport.update({
+  id: '/engine',
+  path: '/engine',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ClaimRoute = ClaimRouteImport.update({
@@ -326,6 +332,7 @@ export interface FileRoutesByFullPath {
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/engine': typeof EngineRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRouteWithChildren
@@ -377,6 +384,7 @@ export interface FileRoutesByTo {
   '/SKILL.md': typeof SKILLDotmdRoute
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/engine': typeof EngineRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRouteWithChildren
@@ -430,6 +438,7 @@ export interface FileRoutesById {
   '/_operator': typeof OperatorRouteWithChildren
   '/about': typeof AboutRoute
   '/claim': typeof ClaimRouteWithChildren
+  '/engine': typeof EngineRoute
   '/help': typeof HelpRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/privacy': typeof PrivacyRouteWithChildren
@@ -483,6 +492,7 @@ export interface FileRouteTypes {
     | '/SKILL.md'
     | '/about'
     | '/claim'
+    | '/engine'
     | '/help'
     | '/llms.txt'
     | '/privacy'
@@ -534,6 +544,7 @@ export interface FileRouteTypes {
     | '/SKILL.md'
     | '/about'
     | '/claim'
+    | '/engine'
     | '/help'
     | '/llms.txt'
     | '/privacy'
@@ -586,6 +597,7 @@ export interface FileRouteTypes {
     | '/_operator'
     | '/about'
     | '/claim'
+    | '/engine'
     | '/help'
     | '/llms.txt'
     | '/privacy'
@@ -639,6 +651,7 @@ export interface RootRouteChildren {
   OperatorRoute: typeof OperatorRouteWithChildren
   AboutRoute: typeof AboutRoute
   ClaimRoute: typeof ClaimRouteWithChildren
+  EngineRoute: typeof EngineRoute
   HelpRoute: typeof HelpRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   PrivacyRoute: typeof PrivacyRouteWithChildren
@@ -716,6 +729,13 @@ declare module '@tanstack/react-router' {
       path: '/help'
       fullPath: '/help'
       preLoaderRoute: typeof HelpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/engine': {
+      id: '/engine'
+      path: '/engine'
+      fullPath: '/engine'
+      preLoaderRoute: typeof EngineRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim': {
@@ -1140,6 +1160,7 @@ const rootRouteChildren: RootRouteChildren = {
   OperatorRoute: OperatorRouteWithChildren,
   AboutRoute: AboutRoute,
   ClaimRoute: ClaimRouteWithChildren,
+  EngineRoute: EngineRoute,
   HelpRoute: HelpRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   PrivacyRoute: PrivacyRouteWithChildren,
