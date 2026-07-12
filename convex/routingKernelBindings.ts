@@ -54,14 +54,14 @@ export const register = mutation({
   handler: async (ctx, args) => {
     const authority = await resolveAdminAuthority({ db: ctx.db as never, auth: ctx.auth }, 'register_capability_binding')
     if (authority.kind !== 'allowed') return { kind: 'refused' as const, reason: 'authorization_denied' as const }
-    return await registerBinding(ctx.db, args.registration, Date.now())
+    return await registerCapabilityBinding(ctx.db, args.registration, Date.now())
   },
 })
 
 export const registerInternal = internalMutation({
   args: { registration: bindingRegistration, registeredAt: v.number() },
   returns: registrationResult,
-  handler: async (ctx, args) => await registerBinding(ctx.db, args.registration, args.registeredAt),
+  handler: async (ctx, args) => await registerCapabilityBinding(ctx.db, args.registration, args.registeredAt),
 })
 
 export const setEligibility = mutation({
@@ -103,7 +103,7 @@ export const setEligibility = mutation({
   },
 })
 
-async function registerBinding(
+export async function registerCapabilityBinding(
   db: MutationCtx['db'],
   registration: Infer<typeof bindingRegistration>,
   registeredAt: number,

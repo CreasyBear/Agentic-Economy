@@ -1,0 +1,83 @@
+import { z } from 'zod'
+
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+
+const MAX_BODY_BYTES = 64 * 1024
+const requestBody = z.object({
+  protocolVersion: z.literal('ae-capability:v1'),
+  operation: z.enum(['quote', 'structured_quote', 'structured_quote_reconcile', 'execute', 'reconcile', 'cancel']),
+  bindingId: z.string().min(1).max(200),
+  capabilityContractId: z.string().min(1).max(200),
+}).passthrough()
+
+type SandboxProfile = Readonly<{ bindingId: string; nodeId: string; label: string; amountMinor: number; latencyMs: number }>
+type HandlerOptions = Readonly<{ providerKey?: string; now?: () => number }>
+
+const profiles: Readonly<Record<string, SandboxProfile>> = Object.freeze({
+  one: Object.freeze({ bindingId: 'sandbox.option.one:v1', nodeId: 'sandbox:option-one', label: 'Sandbox Option One', amountMinor: 1_200, latencyMs: 120 }),
+  two: Object.freeze({ bindingId: 'sandbox.option.two:v1', nodeId: 'sandbox:option-two', label: 'Sandbox Option Two', amountMinor: 900, latencyMs: 180 }),
+})
+
+export async function handleSandboxCapabilityRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
+  const expectedKey = options.providerKey ?? process.env.AE_SANDBOX_PROVIDER_KEY?.trim()
+  if (expectedKey === undefined || expectedKey.length === 0) return json({ kind: 'refused', reason: 'sandbox_provider_unconfigured' }, 503)
+  if (request.headers.get('Authorization') !== `Bearer ${expectedKey}`) return json({ kind: 'refused', reason: 'authentication_required' }, 401)
+  const url = new URL(request.url)
+  const profile = profiles[url.searchParams.get('profile') ?? '']
+  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  const body = await readBoundedRequestText(request, MAX_BODY_BYTES)
+  if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
+  let parsedJson: unknown
+  try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
+  const parsed = requestBody.safeParse(parsedJson)
+  if (!parsed.success || parsed.data.bindingId !== profile.bindingId) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+
+  if (parsed.data.operation === 'quote') return json({
+    kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
+    expectedLatencyMs: profile.latencyMs, dataFields: [], disclosures: [],
+    providerQuoteRef: quoteRef(profile, parsed.data), providerQuoteExpiresAt: expiresAt(options.now),
+  })
+  if (parsed.data.operation === 'structured_quote' || parsed.data.operation === 'structured_quote_reconcile') {
+    return structuredQuote(profile, parsed.data, options.now)
+  }
+  if (parsed.data.operation === 'execute') return json({
+    kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects',
+    providerReference: quoteRef(profile, parsed.data),
+  })
+  if (parsed.data.operation === 'reconcile') return json({ kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects' })
+  return json({ kind: 'cancellation_rejected', reason: 'sandbox_provider_has_no_real_world_effect' })
+}
+
+function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>, now?: () => number): Response {
+  const version = typeof body.capabilityContractVersion === 'string' ? body.capabilityContractVersion : undefined
+  const registrationHash = typeof body.registrationHash === 'string' ? body.registrationHash : undefined
+  const environment = typeof body.environment === 'string' ? body.environment : undefined
+  if (version === undefined || registrationHash === undefined || environment === undefined) {
+    return json({ kind: 'refused', reason: 'structured_quote_contract_incomplete' }, 400)
+  }
+  return json({
+    kind: 'quoted', issuerBindingId: profile.bindingId, issuerNodeId: profile.nodeId,
+    capabilityContractId: body.capabilityContractId, capabilityContractVersion: version, registrationHash, environment,
+    expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor), expectedLatencyMs: profile.latencyMs,
+    dataFields: [], disclosures: [], providerQuoteRef: quoteRef(profile, body), providerQuoteExpiresAt: expiresAt(now),
+    offerOutputs: [{ field: 'optionSummary', valueType: 'string', value: `${profile.label} — sandbox verification only` }],
+    priceComponents: [{ label: 'Sandbox quoted amount', amountMinor: profile.amountMinor }],
+    materialTerms: [{ key: 'sandbox', label: 'Supply status', value: 'Verification only; no real service or fulfilment.' }],
+    cancellation: { kind: 'unsupported', summary: 'No cancellation is needed because this sandbox cannot create an effect.' },
+  })
+}
+
+function quoteRef(profile: SandboxProfile, body: Record<string, unknown>): string {
+  return `sandbox-offer:${canonicalDigest({ bindingId: profile.bindingId, body: JSON.stringify(body) }).slice(7, 31)}`
+}
+
+function expiresAt(now: (() => number) | undefined): number {
+  return (now ?? Date.now)() + 5 * 60_000
+}
+
+function money(amountMinor: number) { return { currency: 'AUD', amountMinor } }
+
+function json(body: unknown, status = 200): Response {
+  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
+}

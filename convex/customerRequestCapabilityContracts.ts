@@ -4,33 +4,53 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { createCapabilityContractRegistry, defineCapabilityContract } from '@/modules/customer-request/public'
 import { capabilityContractValue } from '@/modules/customer-request/runtime'
 
-import { internalMutation, internalQuery } from './_generated/server'
+import { internalMutation, internalQuery, mutation, type MutationCtx } from './_generated/server'
+import { resolveAdminAuthority } from './authz'
 
 const registrationResult = v.union(
   v.object({ kind: v.literal('registered'), capabilityContractId: v.string(), contractDigest: v.string() }),
   v.object({ kind: v.literal('refused'), reason: v.union(v.literal('contract_invalid'), v.literal('contract_identity_conflict')) }),
 )
 
+export const register = mutation({
+  args: { contract: capabilityContractValue },
+  returns: v.union(
+    registrationResult,
+    v.object({ kind: v.literal('refused'), reason: v.literal('authorization_denied') }),
+  ),
+  handler: async (ctx, args) => {
+    const authority = await resolveAdminAuthority({ db: ctx.db as never, auth: ctx.auth }, 'register_capability_binding')
+    if (authority.kind !== 'allowed') return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    return await registerCapabilityContract(ctx.db, args.contract, Date.now())
+  },
+})
+
 export const registerInternal = internalMutation({
   args: { contract: capabilityContractValue, registeredAt: v.number() },
   returns: registrationResult,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => await registerCapabilityContract(ctx.db, args.contract, args.registeredAt),
+})
+
+export async function registerCapabilityContract(
+  db: MutationCtx['db'],
+  input: Infer<typeof capabilityContractValue>,
+  registeredAt: number,
+) {
     let contract
-    try { contract = defineCapabilityContract(args.contract) } catch {
+    try { contract = defineCapabilityContract(input) } catch {
       return { kind: 'refused' as const, reason: 'contract_invalid' as const }
     }
     const contractDigest = canonicalDigest(contract)
-    const existing = await ctx.db.query('customerRequestCapabilityContracts')
+    const existing = await db.query('customerRequestCapabilityContracts')
       .withIndex('by_capabilityContractId', (query) => query.eq('capabilityContractId', contract.capabilityContractId)).unique()
     if (existing !== null) return existing.contractDigest === contractDigest && existing.status === 'active'
       ? { kind: 'registered' as const, capabilityContractId: contract.capabilityContractId, contractDigest }
       : { kind: 'refused' as const, reason: 'contract_identity_conflict' as const }
-    await ctx.db.insert('customerRequestCapabilityContracts', {
-      ...writableContract(contract), contractDigest, status: 'active', registeredAt: args.registeredAt, updatedAt: args.registeredAt,
+    await db.insert('customerRequestCapabilityContracts', {
+      ...writableContract(contract), contractDigest, status: 'active', registeredAt, updatedAt: registeredAt,
     })
     return { kind: 'registered' as const, capabilityContractId: contract.capabilityContractId, contractDigest }
-  },
-})
+}
 
 export const listActiveInternal = internalQuery({
   args: {},

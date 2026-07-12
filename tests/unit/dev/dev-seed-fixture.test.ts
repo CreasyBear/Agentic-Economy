@@ -15,6 +15,10 @@ describe('buildDevSeedCatalogState', () => {
     expect(bundle.state.businesses).toHaveLength(DEV_SEED_BUSINESS_FIXTURES.length)
     expect(bundle.state.businesses).toHaveLength(100)
     expect(bundle.state.businesses.every((business) => business.publicStatus === 'published')).toBe(true)
+    expect(bundle.state.businesses.filter((business) => business.name.startsWith('Sandbox Option'))).toMatchObject([
+      { slug: 'sandbox-option-one', publicStatus: 'published', claimStatus: 'published' },
+      { slug: 'sandbox-option-two', publicStatus: 'published', claimStatus: 'published' },
+    ])
     expect(
       bundle.state.serviceCapabilities.every((capability) => capability.firstRequest.mode === 'inquiry_available')
     ).toBe(true)

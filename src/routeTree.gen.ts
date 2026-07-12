@@ -35,6 +35,7 @@ import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from '
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
+import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
 import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
 import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
 import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
@@ -192,6 +193,11 @@ const ApiStorefrontImportDraftRoute =
     path: '/api/storefront/import-draft',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiSandboxCapabilityRoute = ApiSandboxCapabilityRouteImport.update({
+  id: '/api/sandbox/capability',
+  path: '/api/sandbox/capability',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiObservabilityFunnelRoute = ApiObservabilityFunnelRouteImport.update({
   id: '/api/observability/funnel',
   path: '/api/observability/funnel',
@@ -373,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -425,6 +432,7 @@ export interface FileRoutesByTo {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -479,6 +487,7 @@ export interface FileRoutesById {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -533,6 +542,7 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
@@ -585,6 +595,7 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
@@ -638,6 +649,7 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
@@ -677,6 +689,7 @@ export interface RootRouteChildren {
   ApiNotificationResendDispatchRoute: typeof ApiNotificationResendDispatchRoute
   ApiNotificationResendWebhookRoute: typeof ApiNotificationResendWebhookRoute
   ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
+  ApiSandboxCapabilityRoute: typeof ApiSandboxCapabilityRoute
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
 }
 
@@ -862,6 +875,13 @@ declare module '@tanstack/react-router' {
       path: '/api/storefront/import-draft'
       fullPath: '/api/storefront/import-draft'
       preLoaderRoute: typeof ApiStorefrontImportDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sandbox/capability': {
+      id: '/api/sandbox/capability'
+      path: '/api/sandbox/capability'
+      fullPath: '/api/sandbox/capability'
+      preLoaderRoute: typeof ApiSandboxCapabilityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/observability/funnel': {
@@ -1187,6 +1207,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNotificationResendDispatchRoute: ApiNotificationResendDispatchRoute,
   ApiNotificationResendWebhookRoute: ApiNotificationResendWebhookRoute,
   ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
+  ApiSandboxCapabilityRoute: ApiSandboxCapabilityRoute,
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
 }
 export const routeTree = rootRouteImport
