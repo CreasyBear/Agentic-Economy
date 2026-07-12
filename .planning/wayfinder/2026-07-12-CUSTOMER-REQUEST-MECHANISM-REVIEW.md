@@ -285,6 +285,69 @@ Cancel/replan ----------------------------------------------+
 9. Build the customer Request/options/review/activity/recovery UI and equivalent agent checkpoint/status/evidence objects.
 10. Only then broaden capability contracts and public claims based on live coverage.
 
+## The Uber / Airbnb Build Test
+
+At every product decision, ask: **Would Uber or Airbnb expose this as machinery, or make it part of the customer’s durable commercial journey?**
+
+Neither company asks a customer to approve an abstract dispatch or booking ceiling and chooses the counterparty and terms afterward. The durable pattern is:
+
+| Product pattern | Uber / Airbnb shape | AE equivalent |
+|---|---|---|
+| Stable customer objective | Destination/trip need; stay/search need | `CustomerRequest` |
+| Decision-ready supply | Actual ride class/upfront fare; actual property/price/terms | `PreparedAction` options from registered bindings |
+| Consequential confirmation | Request this ride; reserve/book these exact terms | Approval bound to one exact PreparedAction |
+| Fulfillment lifecycle | Driver assigned/arriving/trip; reservation pending/confirmed/stay | `ActionAttempt` plus evidence-qualified Request projection |
+| Changes require a new decision | Revised fare/trip; changed dates/price/terms | New PreparedAction revision and readable reapproval diff |
+| Support record | Receipt, cancellation fee, trip issue; reservation, cancellation, resolution | Append-only activity, cancellation, issue, and evidence record |
+
+The lesson is not to copy travel UI. It is to preserve the commercial ordering: **need → real options and terms → exact confirmation → fulfillment state → receipt and recovery**. Routing remains hidden dispatch infrastructure.
+
+## Product Decision Tree
+
+```text
+Customer or external AI states a need
+  |
+  +-- Are decisive constraints missing?
+  |      +-- yes -> ask only the question that changes eligibility,
+  |      |          price, disclosure, commitment, or timing
+  |      +-- no  -> continue
+  |
+  +-- Is there a registered capability contract for the need?
+  |      +-- no  -> unsupported honestly; preserve Request context
+  |      +-- yes -> validate typed input and consequence semantics
+  |
+  +-- Can AE prepare a route without releasing a material effect?
+  |      +-- no  -> do not route; require an admitted preparation contract
+  |      +-- yes -> route once and persist exact PreparedAction evidence
+  |
+  +-- How many currently eligible options exist?
+  |      +-- zero -> no connected option; say what is missing
+  |      +-- one  -> show one connected option; never call it a comparison/best
+  |      +-- many -> show a small set, declared comparison basis, and tradeoffs
+  |
+  +-- Does preparation cross any approval threshold?
+  |      thresholds = commitment OR spend/reservation OR data recipient/purpose
+  |                   OR irreversibility/cancellation cost OR policy mandate
+  |      +-- yes -> show exact business, total/bound, data, purpose, terms,
+  |      |          timing, expiry, rationale, alternatives, and Approve/Change/Decline
+  |      +-- no  -> standing mandate may cover it, with visible policy provenance
+  |
+  +-- Did any material term change or expire?
+  |      +-- yes -> invalidate grant; show readable diff; return to review
+  |      +-- no  -> execute the exact quote; never reroute after approval
+  |
+  +-- What did the kernel/provider evidence establish?
+         +-- dispatch pending -> replay the exact idempotent execute command
+         +-- provider pending -> show who is waiting and expected next check
+         +-- outcome unknown  -> freeze redispatch; reconcile and say AE is checking
+         +-- definitely failed-> state what did not happen and safe alternatives
+         +-- committed        -> qualify the evidence; return artifact/status
+         +-- cancel requested -> pending / confirmed / rejected / unknown
+         +-- issue reported   -> preserve claim, evidence, owner, deadline, resolution
+```
+
+This decision tree is the product vision in executable order. The UI, agent API, schemas, and tests must all project the same branches; none may skip directly from generic intent to provider execution.
+
 ## Chairman Synthesis
 
 **Decision: redesign and split.**
