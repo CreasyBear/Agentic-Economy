@@ -8,7 +8,6 @@ import { Text } from '@astryxdesign/core/Text'
 import { NetworkIcon, RouteIcon } from 'lucide-react'
 
 import { AeFunnelAttributionBoot } from '@/components/ae/layout/AeFunnelAttributionBoot'
-import { AePublicRouteCommandMenu } from '@/components/ae/layout/AeRouteCommandMenu'
 
 type AePublicShellProps = {
   children: ReactNode
@@ -49,13 +48,12 @@ const publicTopNav = (
     endContent={
       <>
         <div className="hidden items-center gap-2 md:flex">
-          <AePublicRouteCommandMenu />
-          <Button label="Network" variant="ghost" size="sm" href={defaultRegistryHref} icon={<NetworkIcon aria-hidden="true" />} />
-          <Button label="Route" variant="primary" size="sm" href="/engine" icon={<RouteIcon aria-hidden="true" />} />
+          <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} icon={<NetworkIcon aria-hidden="true" />} />
+          <Button label="Ask AE" variant="primary" size="sm" href="/engine" icon={<RouteIcon aria-hidden="true" />} />
         </div>
         <div className="flex items-center gap-1 md:hidden">
           <Button
-            label="Network"
+            label="Businesses"
             variant="ghost"
             size="lg"
             href={defaultRegistryHref}
@@ -64,7 +62,7 @@ const publicTopNav = (
             className="min-h-11 min-w-11"
           />
           <Button
-            label="Route"
+            label="Ask AE"
             variant="primary"
             size="lg"
             href="/engine"
@@ -106,20 +104,20 @@ function PublicNavItems() {
   if (isMobile) {
     return (
       <>
-        <TopNavItem label="Route" href="/engine" />
-        <TopNavItem label="Network" href={defaultRegistryHref} />
-        <TopNavItem label="Build" href="/developers/discovery" />
-        <TopNavItem label="Runs" href="/admin/runs" />
+        <TopNavItem label="Ask AE" href="/engine" />
+        <TopNavItem label="Businesses" href={defaultRegistryHref} />
+        <TopNavItem label="For agents" href="/developers/discovery" />
+        <TopNavItem label="Activity" href="/admin/runs" />
       </>
     )
   }
 
   return (
     <div className="hidden md:contents">
-      <Button label="Route" variant="ghost" size="sm" href="/engine" />
-      <Button label="Network" variant="ghost" size="sm" href={defaultRegistryHref} />
-      <Button label="Build" variant="ghost" size="sm" href="/developers/discovery" />
-      <Button label="Runs" variant="ghost" size="sm" href="/admin/runs" />
+      <Button label="Ask AE" variant="ghost" size="sm" href="/engine" />
+      <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} />
+      <Button label="For agents" variant="ghost" size="sm" href="/developers/discovery" />
+      <Button label="Activity" variant="ghost" size="sm" href="/admin/runs" />
     </div>
   )
 }
@@ -153,7 +151,7 @@ function PublicFooter({ immersive }: { immersive: boolean }) {
           <a href="/llms.txt" className="text-secondary underline-offset-4 hover:text-primary hover:underline">Assistants</a>
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>
-          {immersive ? null : <Link href="/engine">Routing engine</Link>}
+          {immersive ? null : <Link href="/engine">Ask AE</Link>}
         </nav>
       </div>
     </footer>

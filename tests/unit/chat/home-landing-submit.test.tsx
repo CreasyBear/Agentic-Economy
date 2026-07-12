@@ -19,21 +19,21 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
 
 import '@/routes/index'
 
-describe('engine-first home', () => {
+describe('customer-first home', () => {
   afterEach(cleanup)
 
-  it('leads into the routing workbench instead of the retired chat search', () => {
+  it('leads with the customer promise and opens the ask workspace', () => {
     renderHomeRoute()
-    expect(screen.getByRole('heading', { level: 1, name: 'Give the job to the right endpoint.' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Route a request' }).getAttribute('href')).toBe('/engine')
+    expect(screen.getByRole('heading', { level: 1, name: 'Your agent knows who to call.' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Tell us what you need' }).getAttribute('href')).toBe('/engine')
     expect(screen.queryByRole('searchbox')).toBeNull()
   })
 
-  it('makes the route quote lifecycle explicit', () => {
+  it('explains the customer journey without exposing protocol objects', () => {
     renderHomeRoute()
-    expect(screen.getByRole('heading', { name: 'The plan is the product.' })).toBeTruthy()
-    expect(screen.getByText('Awaiting approval')).toBeTruthy()
-    expect(screen.getByText('Runs and incidents over time')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Less searching. Less chasing.' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'See the best way forward' })).toBeTruthy()
+    expect(screen.queryByText('Route quote')).toBeNull()
   })
 })
 

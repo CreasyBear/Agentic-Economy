@@ -1,8 +1,26 @@
 # Agentic Economy product authority
 
-## Product
+## Customer promise
 
-Agentic Economy is a neutral routing engine for agents.
+**Your agent knows who to call.**
+
+People should not need to understand routing, protocols, capability graphs, or
+provider infrastructure. They tell their agent what they need. Agentic Economy
+helps that agent find the right real businesses, compare the available ways
+forward, and carry the work into action.
+
+The customer experience is:
+
+1. **Ask** — say what you need in your own words.
+2. **Clarify** — answer only the questions that materially improve the choice.
+3. **Choose** — see a recommendation, alternatives, price, timing, and important
+   tradeoffs in ordinary language.
+4. **Confirm** — approve the exact spend, information sharing, and next action.
+5. **Follow** — see progress, respond when needed, and keep the resulting record.
+
+## Product architecture
+
+Agentic Economy is powered by a neutral routing engine for agents.
 
 An agent gives AE a natural-language request and constraints. AE finds registered
 capability bindings, composes viable route graphs, and returns a signed route
@@ -50,10 +68,11 @@ belong in kernel contracts.
 - **People** use the product UI to understand the network, inspect plans and runs,
   and manage authority. The UI is a projection of the same contracts agents use.
 
-## Product architecture
+## Surface architecture
 
-- `/` explains the engine and starts with a route request, not a directory search.
-- `/engine` is the human route workbench and protocol explorer.
+- `/` explains the customer promise and starts with a need, not an engine.
+- `/engine` is the ask workspace. The route request is a secondary technical
+  disclosure for agents and builders.
 - `/registry` is the marketplace projection of registered entities and published
   supply.
 - `/developers/discovery` and machine-readable discovery files expose the agent
@@ -63,11 +82,10 @@ belong in kernel contracts.
 
 ## Brand
 
-**Promise:** Give the job to the right endpoint.
+**Promise:** Your agent knows who to call.
 
-**Position:** Agents can browse and choose alone. AE earns its place when the
-decision needs a graph: multiple possible providers, multiple calls, declared
-cost, bounded authority, fallbacks, and one inspectable result.
+**Position:** People already ask AI for advice. AE gives their agent a way to
+work with real businesses when the answer needs to become action.
 
 **Voice:** direct, technical when precision matters, and readable by a person who
 does not write software. Name the object and the action. Do not sell aspiration as
@@ -75,8 +93,9 @@ current capability.
 
 ## Product rules
 
-1. The graph is the differentiator. Every surface makes the route graph,
-   decision inputs, or resulting run more legible.
+1. The graph is the differentiator and stays backstage. Customer surfaces show
+   its useful consequence: a better recommendation, a clear alternative, an
+   upfront boundary, or a recoverable failure.
 2. Quote before authority. No execution without approval bound to an immutable
    quote digest.
 3. Data is authority. Disclosure is bounded by field, recipient, purpose, and
@@ -87,6 +106,8 @@ current capability.
 6. Human and machine surfaces describe the same lifecycle and operations.
 7. Registration is necessary, never sufficient. Routeable supply requires an
    admitted, conformant capability binding.
+8. Public copy leads with the customer's need. Protocol vocabulary belongs in a
+   disclosure, builder surface, machine contract, or diagnostic view.
 
 ## Banned framing
 

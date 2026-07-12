@@ -2,8 +2,8 @@
 
 ## Register
 
-Product. AE is an agent-routing tool with a public network projection, not a
-consumer marketplace brand with an engine hidden behind it.
+Brand on the public landing surface; product inside the ask, confirmation, and
+activity flows. The routing engine is architecture, not the public category.
 
 ## System
 
@@ -17,7 +17,16 @@ It is not decoration. Status colours remain functional.
 
 ## Product shape
 
-The primary visual object is the **route docket**:
+The primary customer object is the **recommendation**:
+
+- the need in the customer's words;
+- the recommended way forward;
+- the business or businesses involved;
+- price, timing, and the few tradeoffs that matter;
+- one clear confirmation action;
+- alternatives when they change the decision.
+
+The **route docket** is the technical projection behind that recommendation:
 
 - the request and constraints;
 - ranked graph options;
@@ -31,13 +40,16 @@ Secondary objects are a network ledger, binding record, incident record, and run
 timeline. These replace inquiry receipts, household imagery, generic feature
 cards, and ornamental diagrams.
 
-## Information architecture
+## Customer information architecture
 
-- **Route** — compose a request, inspect a quote, approve exact authority.
-- **Network** — discover entities and their routeable capability bindings.
-- **Runs** — inspect Root Runs, leaf attempts, evidence, and reconciliation.
-- **Incidents** — inspect reported failures and current routing effect.
-- **Build** — integrate through signed HTTP, MCP, or a provider adapter.
+- **Ask** — say what you need and clarify the important constraints.
+- **Businesses** — discover real businesses and what they can help with.
+- **Activity** — follow work, respond to exceptions, and keep records.
+- **For agents** — integrate through the machine-readable contract.
+
+Recommendation views progressively disclose **Why this**, **What it costs**,
+**What will be shared**, **Other options**, and **Technical details**. Graphs,
+digests, bindings, and protocols never lead the customer journey.
 
 Use a familiar top navigation publicly and a compact side navigation for
 protected operational surfaces. Mobile navigation collapses structurally.
@@ -58,9 +70,9 @@ protected operational surfaces. Mobile navigation collapses structurally.
 
 ## Copy
 
-Use concrete nouns: request, route quote, plan, step, provider, capability, cost,
-approval, run, incident. Explain each technical term in the same surface the
-first time it appears. Human copy can say “plan” first and “route quote” second.
+Use the customer's nouns: need, business, option, price, timing, details,
+confirmation, progress, and problem. Builder surfaces may use request, route
+quote, provider, capability, approval, run, and incident.
 
 Do not use household, inquiry, lead, posting, sorted, domestic economy, or
 business-owner framing as the universal product voice. Do not call registry rows
