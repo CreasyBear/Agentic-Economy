@@ -6,7 +6,7 @@ import { kernelRetirementManifest } from './kernel-retirement-manifest.mjs'
 
 export function verifyKernelRetirement(root = process.cwd()) {
   const errors = []
-  const activeFiles = sourceFiles(root, ['src', 'convex', 'examples', 'tools', 'tests', 'docs'])
+  const activeFiles = sourceFiles(root, ['src', 'convex', 'examples', 'tools', 'tests', 'docs', '.github', '.env.example', 'package.json'])
     .filter((path) => path !== 'src/lib/ui/contract-scans.ts')
     .filter((path) => !path.startsWith('tests/fixtures/'))
     .filter((path) => !path.endsWith('tests/imports/routing-authority-retirement.test.ts'))
@@ -15,6 +15,10 @@ export function verifyKernelRetirement(root = process.cwd()) {
     .filter((path) => !path.endsWith('tools/release/kernel-retirement-manifest.mjs'))
     .filter((path) => !path.endsWith('tools/release/verify-kernel-retirement.mjs'))
   const activeText = activeFiles.map((path) => [path, readFileSync(join(root, path), 'utf8')])
+
+  for (const [role, path] of Object.entries(kernelRetirementManifest.canonicalAuthority)) {
+    if (!existsSync(join(root, path))) errors.push(`canonical_authority_missing:${role}:${path}`)
+  }
 
   for (const path of kernelRetirementManifest.retired.files) {
     if (existsSync(join(root, path))) errors.push(`retired_file_present:${path}`)

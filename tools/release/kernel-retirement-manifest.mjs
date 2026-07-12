@@ -2,6 +2,16 @@ export const KERNEL_RETIREMENT_MANIFEST_VERSION = 'ae-kernel-retirement:v1'
 
 export const kernelRetirementManifest = Object.freeze({
   schemaVersion: KERNEL_RETIREMENT_MANIFEST_VERSION,
+  canonicalAuthority: Object.freeze({
+    contract: 'src/modules/routing-kernel/contract.ts',
+    application: 'src/modules/routing-kernel/application.ts',
+    runtime: 'src/modules/routing-kernel/runtime.ts',
+    ingress: 'convex/http.ts',
+    durableRuntime: 'convex/routingKernel.ts',
+    persistence: 'convex/routingKernelStore.ts',
+    schema: 'src/modules/routing-kernel/internal/convex-schema.ts',
+    scheduler: 'convex/crons.ts',
+  }),
   retired: Object.freeze({
     files: Object.freeze([
       'convex/clearance.ts',
