@@ -18,18 +18,18 @@ describe('customer Request workspace', () => {
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json({
-        kind: 'request', requestRef: 'request:uuid-1', revision: 1, status: 'ready_to_compare',
-        summary: 'Compare suitable options', nextAction: 'compare_options', missingFields: [], stepCount: 1,
+        kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'ready_to_compare',
+        summary: 'Compare suitable options', nextAction: 'prepare_options', missingFields: [], options: [],
       }))
       .mockResolvedValueOnce(Response.json({
-        kind: 'options', requestRef: 'request:uuid-1', revision: 1,
-        options: { inspectionRef: 'options_1', candidates: [{
+        kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'options_ready',
+        summary: 'Compare suitable options', nextAction: 'inspect_options', missingFields: [], options: [{
           optionRef: 'option_1', business: { name: 'Sandbox Option Two' },
           expectedCost: { currency: 'AUD', amountMinor: 900 }, maximumCost: { currency: 'AUD', amountMinor: 900 }, expectedLatencyMs: 180,
           priceComponents: [{ label: 'Sandbox amount', amountMinor: 900 }], comparableOutputs: [{ label: 'Option', value: 'Sandbox verification only' }],
           materialTerms: ['Verification only; no real service or fulfilment.'], cancellation: { kind: 'unsupported', summary: 'No effect.' },
           expiresAt: 10_000, inspectionRef: 'evidence_1',
-        }], attempts: [] },
+        }],
       }))
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)

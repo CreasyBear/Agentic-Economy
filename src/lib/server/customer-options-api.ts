@@ -5,7 +5,7 @@ import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 
 const bodySchema = z.object({
-  revision: z.number().int().positive(), idempotencyKey: z.string().trim().min(1).max(200),
+  revision: z.number().int().positive(),
 }).strict()
 const compareAction = sourceAction<Record<string, unknown>, CustomerOptionsProjection>('customerRequestApplication:compare')
 type HandlerOptions = Readonly<{ compare?: (args: Record<string, unknown>) => Promise<CustomerOptionsProjection> }>
@@ -19,13 +19,11 @@ export async function handleCustomerOptionsPost(request: Request, requestRef: st
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
-    const args = { requestRef, revision: parsed.data.revision, idempotencyKey: parsed.data.idempotencyKey }
+    const args = { requestRef, revision: parsed.data.revision }
     const result = await (options.compare ?? (async (input) => await callSourceAction(compareAction, input)))(args)
     if (result.kind === 'refused') return response(result, 401)
     if (result.kind === 'conflict') return response(result, 409)
-    if (result.kind === 'checking') return response(result, 202)
-    if (result.kind === 'unavailable') return response(result, 422)
-    return response(result, 200)
+    return response(result, result.state === 'preparing_options' ? 202 : 200)
   } catch (error) {
     if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
     return response({ error: 'options_unavailable' }, 503)

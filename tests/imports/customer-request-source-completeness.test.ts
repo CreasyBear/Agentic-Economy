@@ -12,6 +12,8 @@ const productionAuthority = {
   application: 'convex/customerRequestApplication.ts',
   persistence: 'convex/customerRequests.ts',
   submitHttp: 'src/lib/server/customer-request-api.ts',
+  inspectHttp: 'src/lib/server/customer-request-inspect-api.ts',
+  factsHttp: 'src/lib/server/customer-request-facts-api.ts',
   optionsHttp: 'src/lib/server/customer-options-api.ts',
   humanUi: 'src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx',
 } as const
@@ -32,11 +34,13 @@ describe('CustomerRequest source completeness', () => {
   it('keeps routes and UI on the shared projection instead of rebuilding product state', () => {
     expect(readFileSync('src/routes/api.requests.ts', 'utf8')).toMatch(/handleCustomerRequestPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleCustomerOptionsPost/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleCustomerRequestGet/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleCustomerRequestFactsPost/)
     const ui = source('humanUi')
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
     expect(ui).toContain("fetch('/api/requests'")
     expect(ui).toContain('/options`')
-    for (const route of ['src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.options.ts']) {
+    for (const route of ['src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.options.ts']) {
       expect(readFileSync(route, 'utf8')).not.toMatch(/compileCustomerRequest|prepareCustomerRequestAction|createNeutralRoutingKernel/)
     }
   })

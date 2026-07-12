@@ -37,6 +37,7 @@ import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
+import { Route as ApiRequestsRequestRefRouteImport } from './routes/api.requests.$requestRef'
 import { Route as ApiObservabilityFunnelRouteImport } from './routes/api.observability.funnel'
 import { Route as ApiNotificationResendWebhookRouteImport } from './routes/api.notification.resend-webhook'
 import { Route as ApiNotificationResendDispatchRouteImport } from './routes/api.notification.resend-dispatch'
@@ -60,6 +61,7 @@ import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
+import { Route as ApiRequestsRequestRefFactsRouteImport } from './routes/api.requests.$requestRef.facts'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
@@ -205,6 +207,11 @@ const ApiSandboxCapabilityRoute = ApiSandboxCapabilityRouteImport.update({
   path: '/api/sandbox/capability',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRequestsRequestRefRoute = ApiRequestsRequestRefRouteImport.update({
+  id: '/$requestRef',
+  path: '/$requestRef',
+  getParentRoute: () => ApiRequestsRoute,
+} as any)
 const ApiObservabilityFunnelRoute = ApiObservabilityFunnelRouteImport.update({
   id: '/api/observability/funnel',
   path: '/api/observability/funnel',
@@ -323,9 +330,15 @@ const OperatorAdminAuditEventsRoute =
   } as any)
 const ApiRequestsRequestRefOptionsRoute =
   ApiRequestsRequestRefOptionsRouteImport.update({
-    id: '/$requestRef/options',
-    path: '/$requestRef/options',
-    getParentRoute: () => ApiRequestsRoute,
+    id: '/options',
+    path: '/options',
+    getParentRoute: () => ApiRequestsRequestRefRoute,
+  } as any)
+const ApiRequestsRequestRefFactsRoute =
+  ApiRequestsRequestRefFactsRouteImport.update({
+    id: '/facts',
+    path: '/facts',
+    getParentRoute: () => ApiRequestsRequestRefRoute,
   } as any)
 const ApiAnswerThreadsThreadIdRoute =
   ApiAnswerThreadsThreadIdRouteImport.update({
@@ -393,11 +406,13 @@ export interface FileRoutesByFullPath {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
 }
 export interface FileRoutesByTo {
@@ -448,11 +463,13 @@ export interface FileRoutesByTo {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
 }
 export interface FileRoutesById {
@@ -505,11 +522,13 @@ export interface FileRoutesById {
   '/api/notification/resend-dispatch': typeof ApiNotificationResendDispatchRoute
   '/api/notification/resend-webhook': typeof ApiNotificationResendWebhookRoute
   '/api/observability/funnel': typeof ApiObservabilityFunnelRoute
+  '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
 }
 export interface FileRouteTypes {
@@ -562,11 +581,13 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/options'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -617,11 +638,13 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/options'
   id:
     | '__root__'
@@ -673,11 +696,13 @@ export interface FileRouteTypes {
     | '/api/notification/resend-dispatch'
     | '/api/notification/resend-webhook'
     | '/api/observability/funnel'
+    | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/options'
   fileRoutesById: FileRoutesById
 }
@@ -917,6 +942,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSandboxCapabilityRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/requests/$requestRef': {
+      id: '/api/requests/$requestRef'
+      path: '/$requestRef'
+      fullPath: '/api/requests/$requestRef'
+      preLoaderRoute: typeof ApiRequestsRequestRefRouteImport
+      parentRoute: typeof ApiRequestsRoute
+    }
     '/api/observability/funnel': {
       id: '/api/observability/funnel'
       path: '/api/observability/funnel'
@@ -1073,10 +1105,17 @@ declare module '@tanstack/react-router' {
     }
     '/api/requests/$requestRef/options': {
       id: '/api/requests/$requestRef/options'
-      path: '/$requestRef/options'
+      path: '/options'
       fullPath: '/api/requests/$requestRef/options'
       preLoaderRoute: typeof ApiRequestsRequestRefOptionsRouteImport
-      parentRoute: typeof ApiRequestsRoute
+      parentRoute: typeof ApiRequestsRequestRefRoute
+    }
+    '/api/requests/$requestRef/facts': {
+      id: '/api/requests/$requestRef/facts'
+      path: '/facts'
+      fullPath: '/api/requests/$requestRef/facts'
+      preLoaderRoute: typeof ApiRequestsRequestRefFactsRouteImport
+      parentRoute: typeof ApiRequestsRequestRefRoute
     }
     '/api/answer/threads/$threadId': {
       id: '/api/answer/threads/$threadId'
@@ -1202,12 +1241,27 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
-interface ApiRequestsRouteChildren {
+interface ApiRequestsRequestRefRouteChildren {
+  ApiRequestsRequestRefFactsRoute: typeof ApiRequestsRequestRefFactsRoute
   ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
 }
 
-const ApiRequestsRouteChildren: ApiRequestsRouteChildren = {
+const ApiRequestsRequestRefRouteChildren: ApiRequestsRequestRefRouteChildren = {
+  ApiRequestsRequestRefFactsRoute: ApiRequestsRequestRefFactsRoute,
   ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,
+}
+
+const ApiRequestsRequestRefRouteWithChildren =
+  ApiRequestsRequestRefRoute._addFileChildren(
+    ApiRequestsRequestRefRouteChildren,
+  )
+
+interface ApiRequestsRouteChildren {
+  ApiRequestsRequestRefRoute: typeof ApiRequestsRequestRefRouteWithChildren
+}
+
+const ApiRequestsRouteChildren: ApiRequestsRouteChildren = {
+  ApiRequestsRequestRefRoute: ApiRequestsRequestRefRouteWithChildren,
 }
 
 const ApiRequestsRouteWithChildren = ApiRequestsRoute._addFileChildren(

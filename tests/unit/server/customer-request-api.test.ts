@@ -5,8 +5,8 @@ import { handleCustomerRequestPost } from '@/lib/server/customer-request-api'
 describe('customer Request HTTP API', () => {
   it('maps agent-facing input into the authenticated application command and returns customer semantics', async () => {
     const submit = vi.fn().mockResolvedValue({
-      kind: 'request', requestRef: 'request:1', revision: 1, status: 'ready_to_compare',
-      summary: 'Find a suitable option', nextAction: 'compare_options', missingFields: [], stepCount: 1,
+      kind: 'request', requestRef: 'request:1', revision: 1, state: 'ready_to_compare',
+      summary: 'Find a suitable option', nextAction: 'prepare_options', missingFields: [], options: [],
     })
     const response = await handleCustomerRequestPost(request({
       idempotencyKey: 'command:1', requestRef: 'request:1', agentRef: 'agent:claude', request: 'Find a suitable option',
@@ -18,7 +18,7 @@ describe('customer Request HTTP API', () => {
       customerJob: 'Find a suitable option', knownFacts: {},
       routing: { networkId: 'ae:public', currency: 'AUD', maximumSpendMinor: 0, optimizeFor: 'cost' },
     })
-    await expect(response.json()).resolves.toMatchObject({ status: 'ready_to_compare', nextAction: 'compare_options' })
+    await expect(response.json()).resolves.toMatchObject({ state: 'ready_to_compare', nextAction: 'prepare_options' })
   })
 
   it('rejects malformed input before invoking the application', async () => {

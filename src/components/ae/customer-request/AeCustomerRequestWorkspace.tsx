@@ -3,16 +3,14 @@ import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
 
-import type { CustomerOptionsProjection, CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
+import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
 type WorkspaceState =
   | Readonly<{ kind: 'idle' }>
   | Readonly<{ kind: 'submitting' }>
-  | Readonly<{ kind: 'request'; projection: Extract<CustomerRequestProjection, { kind: 'request' }> }>
-  | Readonly<{ kind: 'comparing'; projection: Extract<CustomerRequestProjection, { kind: 'request' }> }>
-  | Readonly<{ kind: 'options'; projection: Extract<CustomerOptionsProjection, { kind: 'options' }> }>
-  | Readonly<{ kind: 'checking'; projection: Extract<CustomerOptionsProjection, { kind: 'checking' }> }>
+  | Readonly<{ kind: 'request'; projection: CustomerRequestView }>
+  | Readonly<{ kind: 'comparing'; projection: CustomerRequestView }>
   | Readonly<{ kind: 'error'; message: string; authenticationRequired: boolean }>
 
 export function AeCustomerRequestWorkspace() {
@@ -48,16 +46,15 @@ export function AeCustomerRequestWorkspace() {
     }
   }
 
-  async function compare(projection: Extract<CustomerRequestProjection, { kind: 'request' }>) {
+  async function compare(projection: CustomerRequestView) {
     setState({ kind: 'comparing', projection })
     try {
       const response = await fetch(`/api/requests/${encodeURIComponent(projection.requestRef)}/options`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ revision: projection.revision, idempotencyKey: `compare:${projection.requestRef}:${projection.revision}` }),
+        body: JSON.stringify({ revision: projection.revision }),
       })
-      const result: CustomerOptionsProjection | Readonly<{ error: string }> = await response.json()
-      if ('kind' in result && result.kind === 'options') setState({ kind: 'options', projection: result })
-      else if ('kind' in result && result.kind === 'checking') setState({ kind: 'checking', projection: result })
+      const result: CustomerRequestView | Readonly<{ error: string }> = await response.json()
+      if ('kind' in result && result.kind === 'request') setState({ kind: 'request', projection: result })
       else setState(errorState(response.status, 'AE could not prepare comparable options for this request.'))
     } catch {
       setState({ kind: 'error', message: 'AE could not be reached. No option was selected or purchased.', authenticationRequired: false })
@@ -94,17 +91,16 @@ export function AeCustomerRequestWorkspace() {
   )
 }
 
-function RequestResult({ state, compare }: { state: WorkspaceState; compare: (projection: Extract<CustomerRequestProjection, { kind: 'request' }>) => Promise<void> }) {
-  if (state.kind === 'options') return <OptionsCard projection={state.projection} />
+function RequestResult({ state, compare }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void> }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
-  if (state.kind === 'request') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.status)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.missingFields.map((field) => <Text key={field.field} color="secondary"><strong>{field.label}:</strong> {field.explanation}</Text>)}{state.projection.nextAction === 'compare_options' ? <Button label="Compare available options" variant="primary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">Change the request or add the information shown here, then submit it again.</Text>}</div></Card>
-  if (state.kind === 'checking') return <Card padding={5} className="min-w-0" aria-live="polite"><Heading level={2}>Checking connected businesses…</Heading><Text color="secondary" className="mt-2">AE has not selected or purchased anything. Check again to retrieve the same comparison.</Text></Card>
+  if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} />
+  if (state.kind === 'request') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.missingFields.map((field) => <Text key={field.field} color="secondary"><strong>{field.label}:</strong> {field.explanation}</Text>)}{state.projection.nextAction === 'prepare_options' ? <Button label="Compare available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">Change the request or add the information shown here, then continue.</Text>}</div></Card>
   if (state.kind === 'submitting' || state.kind === 'comparing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : 'Comparing available options…'}</Heading><Text color="secondary" className="mt-2">No purchase or booking occurs during this step.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
 }
 
-function OptionsCard({ projection }: { projection: Extract<CustomerOptionsProjection, { kind: 'options' }> }) {
-  return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-5"><div><Text className="text-sm font-medium text-accent">Available options</Text><Heading level={2} className="mt-2">Compare before deciding</Heading></div>{projection.options.candidates.length === 0 ? <Text color="secondary">No comparable options were returned.</Text> : projection.options.candidates.map((candidate) => <article key={candidate.optionRef} className="grid gap-2 border-t border-border pt-4"><Heading level={3}>{candidate.business.name}</Heading><Text>{formatMoney(candidate.expectedCost.currency, candidate.expectedCost.amountMinor)}</Text>{candidate.comparableOutputs.map((output) => <Text key={output.label} color="secondary">{output.label}: {String(output.value)}</Text>)}{candidate.materialTerms.map((term) => <Text key={term} color="secondary">{term}</Text>)}</article>)}<Text color="secondary">These are sandbox or registered provider responses. AE has not purchased, booked, or selected anything.</Text></div></Card>
+function OptionsCard({ projection }: { projection: CustomerRequestView }) {
+  return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-5"><div><Text className="text-sm font-medium text-accent">Available options</Text><Heading level={2} className="mt-2">Compare before deciding</Heading></div>{projection.options.length === 0 ? <Text color="secondary">No comparable options were returned.</Text> : projection.options.map((candidate) => <article key={candidate.optionRef} className="grid gap-2 border-t border-border pt-4"><Heading level={3}>{candidate.business.name}</Heading><Text>{formatMoney(candidate.expectedCost.currency, candidate.expectedCost.amountMinor)}</Text>{candidate.comparableOutputs.map((output) => <Text key={output.label} color="secondary">{output.label}: {String(output.value)}</Text>)}{candidate.materialTerms.map((term) => <Text key={term} color="secondary">{term}</Text>)}</article>)}<Text color="secondary">These are sandbox or registered provider responses. AE has not purchased, booked, or selected anything.</Text></div></Card>
 }
 
 function Field({ label, value, onChange, placeholder, inputMode, disabled }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; inputMode?: 'decimal'; disabled: boolean }) {
@@ -112,6 +108,12 @@ function Field({ label, value, onChange, placeholder, inputMode, disabled }: { l
 }
 
 function maximumSpendMinor(value: string): number { return Math.max(0, Math.round((Number.parseFloat(value) || 0) * 100)) }
-function statusLabel(status: Extract<CustomerRequestProjection, { kind: 'request' }>['status']): string { return status === 'ready_to_compare' ? 'Ready to compare' : status === 'needs_information' ? 'More information needed' : 'Not supported yet' }
+function statusLabel(state: CustomerRequestView['state']): string {
+  if (state === 'ready_to_compare') return 'Ready to compare'
+  if (state === 'needs_information') return 'More information needed'
+  if (state === 'preparing_options') return 'Checking connected businesses'
+  if (state === 'needs_attention') return 'Needs attention'
+  return state === 'options_ready' ? 'Available options' : 'Not supported yet'
+}
 function formatMoney(currency: string, amountMinor: number): string { return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amountMinor / 100) }
 function errorState(status: number, message: string): WorkspaceState { return { kind: 'error', message: status === 401 ? 'Sign in so AE can keep this request private and resumable.' : message, authenticationRequired: status === 401 } }

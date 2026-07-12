@@ -231,6 +231,7 @@ export const customerRequestTables = {
   })
     .index('by_preparationScope', ['preparationScope'])
     .index('by_preparationKey', ['preparationKey'])
+    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision'])
     .index('by_requestId_and_status', ['requestId', 'status'])
     .index('by_status_and_leaseExpiresAt', ['status', 'leaseExpiresAt']),
 

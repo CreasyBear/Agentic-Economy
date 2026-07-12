@@ -3,13 +3,21 @@ import { v } from 'convex/values'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import { createJsonCustomerRequestInterpreter } from '@/modules/customer-request/interpreter'
 import { createOpenRouterCustomerRequestTransport } from '@/modules/customer-request/openrouter-transport'
-import { projectCustomerRequest } from '@/modules/customer-request/customer-projection'
+import {
+  projectCustomerRequest,
+  projectNeedsAttention,
+  projectOptionsReady,
+  projectPreparingOptions,
+  type CustomerRequestView,
+  type CustomerRequestProjection,
+} from '@/modules/customer-request/customer-projection'
 import { prepareCustomerRequestAction, type PreparedRouteCandidateSet } from '@/modules/customer-request/preparation'
 import { createKernelCustomerRequestActionRouter } from '@/modules/customer-request/kernel-router'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { preparedRouteCandidateSetValue } from '@/modules/customer-request/runtime'
+import type { PlanRevision } from '@/modules/customer-request/public'
 
-import { action } from './_generated/server'
+import { action, type ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { loadConvexCapabilityContractRegistry } from './customerRequestCapabilityContractRegistryAdapter'
 import { createConvexCustomerRequestCompilationStore } from './customerRequestCompilationStoreAdapter'
@@ -18,22 +26,43 @@ import { createConvexPreparationDisclosureStore } from './customerRequestPrepara
 import { createRegisteredRoutingKernel } from './routingKernel'
 
 const literalValue = v.union(v.string(), v.number(), v.boolean())
-const customerProjection = v.union(
-  v.object({
-    kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
-    status: v.union(v.literal('ready_to_compare'), v.literal('needs_information'), v.literal('unsupported')),
-    summary: v.string(), nextAction: v.union(v.literal('compare_options'), v.literal('provide_information'), v.literal('revise_request')),
-    missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })), stepCount: v.number(),
+const customerOption = v.object({
+  optionRef: v.string(), business: v.object({ name: v.string() }),
+  expectedCost: v.object({ currency: v.string(), amountMinor: v.number() }),
+  maximumCost: v.object({ currency: v.string(), amountMinor: v.number() }),
+  expectedLatencyMs: v.number(),
+  priceComponents: v.array(v.object({ label: v.string(), amountMinor: v.number() })),
+  comparableOutputs: v.array(v.object({ label: v.string(), value: literalValue })),
+  materialTerms: v.array(v.string()),
+  cancellation: v.object({
+    kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')),
+    summary: v.string(),
   }),
+  expiresAt: v.number(),
+})
+const customerView = v.object({
+  kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
+  state: v.union(
+    v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('preparing_options'),
+    v.literal('options_ready'), v.literal('unsupported'), v.literal('needs_attention'),
+  ),
+  summary: v.string(),
+  nextAction: v.union(
+    v.literal('provide_information'), v.literal('prepare_options'), v.literal('wait'),
+    v.literal('inspect_options'), v.literal('revise_request'), v.literal('retry'),
+  ),
+  missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })),
+  options: v.array(customerOption),
+})
+const customerProjection = v.union(
+  customerView,
   v.object({
     kind: v.literal('conflict'), requestRef: v.string(),
     reason: v.union(v.literal('revision_changed'), v.literal('identity_changed'), v.literal('idempotency_key_reused')),
   }),
 )
 const optionProjection = v.union(
-  v.object({ kind: v.literal('options'), requestRef: v.string(), revision: v.number(), options: preparedRouteCandidateSetValue }),
-  v.object({ kind: v.literal('checking'), requestRef: v.string(), revision: v.number(), nextAction: v.literal('check_again'), inspectionRef: v.optional(v.string()) }),
-  v.object({ kind: v.literal('unavailable'), requestRef: v.string(), revision: v.number(), nextAction: v.literal('revise_request'), explanation: v.string() }),
+  customerView,
   v.object({ kind: v.literal('conflict'), requestRef: v.string(), reason: v.union(v.literal('revision_changed'), v.literal('request_not_ready')) }),
   v.object({ kind: v.literal('refused'), reason: v.literal('authentication_required') }),
 )
@@ -60,6 +89,7 @@ export const submit = action({
     if (registry.list().length === 0) return { kind: 'refused' as const, reason: 'capabilities_unavailable' as const }
     const result = await compileCustomerRequest({
       ...args,
+      compilationKey: namespacedKey(identity.tokenIdentifier, 'submit', args.requestId, args.compilationKey),
       principalId: identity.tokenIdentifier,
     }, {
       interpreter: createJsonCustomerRequestInterpreter({
@@ -81,7 +111,7 @@ export const submit = action({
 })
 
 export const compare = action({
-  args: { requestRef: v.string(), revision: v.number(), idempotencyKey: v.string() },
+  args: { requestRef: v.string(), revision: v.number() },
   returns: optionProjection,
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity()
@@ -95,13 +125,15 @@ export const compare = action({
     const plan = await ctx.runQuery(internal.customerRequests.getPlanForRequestRevision, {
       requestId: args.requestRef, requestRevision: args.revision,
     })
-    const actionStep = plan?.actions.find((candidate) => candidate.dependsOn.length === 0)
+    const rootActions = plan?.actions.filter((candidate: PlanRevision['actions'][number]) => candidate.dependsOn.length === 0) ?? []
+    const actionStep = rootActions.length === 1 ? rootActions[0] : undefined
     if (plan === null || actionStep === undefined) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
     const resolvedInput = resolvePlanInput(actionStep.input, request.knownFacts)
     if (resolvedInput === undefined) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
     const registry = await loadConvexCapabilityContractRegistry(ctx)
     const result = await prepareCustomerRequestAction({
-      preparationKey: args.idempotencyKey, requestId: request.requestId, requestRevision: request.revision,
+      preparationKey: namespacedKey(identity.tokenIdentifier, 'prepare', request.requestId, String(request.revision)),
+      requestId: request.requestId, requestRevision: request.revision,
       planRevisionId: plan.planRevisionId, actionId: actionStep.actionId, resolvedInput,
     }, {
       store,
@@ -115,24 +147,144 @@ export const compare = action({
       now: Date.now,
       leaseMs: 30_000,
     })
-    if (result.kind === 'options_prepared') return {
-      kind: 'options' as const, requestRef: request.requestId, revision: request.revision,
-      options: writableCandidateSet(result.candidateSet),
-    }
-    if (result.kind === 'preparation_in_progress') return {
-      kind: 'checking' as const, requestRef: request.requestId, revision: request.revision, nextAction: 'check_again' as const,
-      ...(result.inspectionRef === undefined ? {} : { inspectionRef: result.inspectionRef }),
-    }
-    if (result.kind === 'prepared') return {
-      kind: 'unavailable' as const, requestRef: request.requestId, revision: request.revision, nextAction: 'revise_request' as const,
-      explanation: 'This request produced one prepared option; customer comparison projection is not available for this capability yet.',
-    }
-    return {
-      kind: 'unavailable' as const, requestRef: request.requestId, revision: request.revision, nextAction: 'revise_request' as const,
-      explanation: 'AE could not prepare comparable business options from the currently connected capabilities.',
-    }
+    const summary = request.understanding.outcome
+    if (result.kind === 'options_prepared') return writableView(projectOptionsReady({
+      requestRef: request.requestId, revision: request.revision, summary, candidateSet: result.candidateSet,
+    }))
+    if (result.kind === 'preparation_in_progress') return writableView(projectPreparingOptions({
+      requestRef: request.requestId, revision: request.revision, summary,
+    }))
+    return writableView(projectNeedsAttention({
+      requestRef: request.requestId, revision: request.revision, summary: result.kind === 'prepared'
+        ? 'One business option was prepared, but a comparable option set is not available.'
+        : 'Connected businesses could not prepare comparable options for this request.',
+    }))
   },
 })
+
+export const resume = action({
+  args: { requestRef: v.string() },
+  returns: v.union(customerView, v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found')) })),
+  handler: resumeHandler,
+})
+
+type ResumeResult = ReturnType<typeof writableView> | Readonly<{
+  kind: 'refused'
+  reason: 'authentication_required' | 'request_not_found'
+}>
+
+async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string }>): Promise<ResumeResult> {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
+    if (request === null || request.principalId !== identity.tokenIdentifier) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    const preparation = await ctx.runQuery(internal.customerRequests.getPreparationForRequestRevision, {
+      requestId: request.requestId, requestRevision: request.revision,
+    })
+    if (preparation?.status === 'options_prepared' && preparation.candidateSet !== undefined) {
+      const liveCandidates = preparation.candidateSet.candidates.filter((candidate) => candidate.expiresAt > Date.now())
+      if (liveCandidates.length === 0) return writableView(projectNeedsAttention({
+        requestRef: request.requestId, revision: request.revision,
+        summary: 'The prepared options have expired. Prepare this request again to get current options.',
+      }))
+      return writableView(projectOptionsReady({
+        requestRef: request.requestId, revision: request.revision,
+        summary: request.understanding.outcome,
+        candidateSet: { ...preparation.candidateSet, candidates: liveCandidates },
+      }))
+    }
+    if (preparation?.status === 'claimed') return writableView(projectPreparingOptions({
+      requestRef: request.requestId, revision: request.revision, summary: request.understanding.outcome,
+    }))
+    if (preparation?.status === 'refused' || preparation?.status === 'prepared') return writableView(projectNeedsAttention({
+      requestRef: request.requestId, revision: request.revision,
+      summary: 'This request needs attention before options can be prepared.',
+    }))
+    const compilation = await ctx.runQuery(internal.customerRequests.getCompilationForRequestRevision, {
+      requestId: request.requestId, requestRevision: request.revision,
+    })
+    if (compilation === null) return writableView(projectNeedsAttention({
+      requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
+    }))
+    if (compilation.outcome.kind === 'plan_ready') {
+      const planRevision = await ctx.runQuery(internal.customerRequests.getPlanForRequestRevision, {
+        requestId: request.requestId, requestRevision: request.revision,
+      })
+      if (planRevision === null) return writableView(projectNeedsAttention({
+        requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
+      }))
+      const projection = projectCustomerRequest({ kind: 'plan_ready', request, understanding: request.understanding, planRevision })
+      return projection.kind === 'request' ? writableView(projection) : writableView(projectNeedsAttention({
+        requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
+      }))
+    }
+    const projection = projectCustomerRequest(compilation.outcome.kind === 'needs_information'
+        ? { kind: 'needs_information', request, understanding: request.understanding, missingInformation: compilation.outcome.missingInformation }
+        : { kind: 'unsupported', request, reason: compilation.outcome.reason })
+    return projection.kind === 'request' ? writableView(projection) : writableView(projectNeedsAttention({
+      requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
+    }))
+}
+
+export const provideFacts = action({
+  args: {
+    requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(),
+    facts: v.record(v.string(), literalValue),
+  },
+  returns: v.union(
+    customerProjection,
+    v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable')) }),
+  ),
+  handler: provideFactsHandler,
+})
+
+type ProvideFactsResult = ReturnType<typeof writableProjection> | Readonly<{
+  kind: 'refused'
+  reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable' | 'capabilities_unavailable'
+}>
+
+async function provideFactsHandler(
+  ctx: ActionCtx,
+  args: Readonly<{
+    requestRef: string
+    expectedRevision: number
+    idempotencyKey: string
+    facts: Readonly<Record<string, string | number | boolean>>
+  }>,
+): Promise<ProvideFactsResult> {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
+    if (request === null || request.principalId !== identity.tokenIdentifier) return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    const compilation = await ctx.runQuery(internal.customerRequests.getCompilationForRequestRevision, {
+      requestId: request.requestId, requestRevision: request.revision,
+    })
+    const allowedFields = new Set(compilation?.outcome.kind === 'needs_information'
+      ? compilation.outcome.missingInformation.map((item: { field: string }) => item.field)
+      : [])
+    if (Object.keys(args.facts).length === 0 || Object.keys(args.facts).some((field) => !allowedFields.has(field))) {
+      return writableView(projectNeedsAttention({
+        requestRef: request.requestId, revision: request.revision,
+        summary: 'Only the requested information can be added at this point.',
+      }))
+    }
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim()
+    if (apiKey === undefined || apiKey.length === 0) return { kind: 'refused' as const, reason: 'interpreter_unavailable' as const }
+    const registry = await loadConvexCapabilityContractRegistry(ctx)
+    if (registry.list().length === 0) return { kind: 'refused' as const, reason: 'capabilities_unavailable' as const }
+    const result = await compileCustomerRequest({
+      compilationKey: namespacedKey(identity.tokenIdentifier, 'facts', request.requestId, args.idempotencyKey),
+      requestId: request.requestId, expectedRevision: args.expectedRevision,
+      principalId: identity.tokenIdentifier, delegatedAgentId: request.delegatedAgentId,
+      customerJob: request.intent, knownFacts: { ...request.knownFacts, ...args.facts }, routing: request.routing,
+    }, {
+      interpreter: customerRequestInterpreter(apiKey), registry,
+      store: createConvexCustomerRequestCompilationStore(ctx), now: Date.now,
+    })
+    return writableProjection(projectCustomerRequest(result))
+}
 
 function resolvePlanInput(
   input: Readonly<Record<string, Readonly<{ kind: 'literal'; value: string | number | boolean } | { kind: 'customer_fact'; fact: string } | { kind: 'action_output'; actionId: string; field: string }>>>,
@@ -163,5 +315,41 @@ function writableCandidateSet(candidateSet: PreparedRouteCandidateSet) {
 function writableProjection(projection: ReturnType<typeof projectCustomerRequest>) {
   return projection.kind === 'conflict' ? { ...projection } : {
     ...projection, missingFields: projection.missingFields.map((field) => ({ ...field })),
+    options: projection.options.map((option) => ({
+      ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
+      priceComponents: option.priceComponents.map((component) => ({ ...component })),
+      comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
+      materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation },
+    })),
   }
+}
+
+function writableView(view: CustomerRequestView) {
+  return {
+    ...view,
+    missingFields: view.missingFields.map((field) => ({ ...field })),
+    options: view.options.map((option) => ({
+      ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
+      priceComponents: option.priceComponents.map((component) => ({ ...component })),
+      comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
+      materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation },
+    })),
+  }
+}
+
+function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {
+  return `${operation}:${canonicalDigest({ principalId, requestRef, callerKey })}`
+}
+
+function customerRequestInterpreter(apiKey: string) {
+  return createJsonCustomerRequestInterpreter({
+    interpreterId: `openrouter:${process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'}`,
+    transport: createOpenRouterCustomerRequestTransport({
+      apiKey,
+      model: process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini',
+      ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
+    }),
+    timeoutMs: 20_000,
+    maximumResponseBytes: 64_000,
+  })
 }

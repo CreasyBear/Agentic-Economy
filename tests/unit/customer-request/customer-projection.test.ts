@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { projectCustomerRequest } from '@/modules/customer-request/customer-projection'
+import { projectCustomerRequest, projectNeedsAttention, projectOptionsReady, projectPreparingOptions } from '@/modules/customer-request/customer-projection'
 
 describe('customer request projection', () => {
   it('hides capability and protocol identifiers from a ready request', () => {
@@ -14,11 +14,36 @@ describe('customer request projection', () => {
       },
     })
     expect(projection).toEqual({
-      kind: 'request', requestRef: 'request:1', revision: 1, status: 'ready_to_compare', summary: 'Find a suitable option',
-      nextAction: 'compare_options', missingFields: [], stepCount: 1,
+      kind: 'request', requestRef: 'request:1', revision: 1, state: 'ready_to_compare', summary: 'Find a suitable option',
+      nextAction: 'prepare_options', missingFields: [], options: [],
     })
     expect(JSON.stringify(projection)).not.toContain('capability')
     expect(JSON.stringify(projection)).not.toContain('action:1')
+  })
+
+  it('uses the six canonical customer states and strips provider recovery references from options', () => {
+    const base = { requestRef: 'request:1', revision: 1, summary: 'Find an option' }
+    expect(projectPreparingOptions(base)).toMatchObject({ state: 'preparing_options', nextAction: 'wait' })
+    expect(projectNeedsAttention(base)).toMatchObject({ state: 'needs_attention', nextAction: 'retry' })
+    const options = projectOptionsReady({ ...base, candidateSet: {
+      inspectionRef: 'internal:set', attempts: [{ business: { name: 'Provider' }, status: 'uncertain', explanation: 'internal' }],
+      candidates: [{
+        optionRef: 'option:1', business: { name: 'Provider' }, expectedCost: { currency: 'AUD', amountMinor: 100 },
+        maximumCost: { currency: 'AUD', amountMinor: 100 }, expectedLatencyMs: 1, priceComponents: [], comparableOutputs: [],
+        materialTerms: [], cancellation: { kind: 'unsupported', summary: 'No commitment.' }, expiresAt: 10, inspectionRef: 'internal:evidence',
+      }],
+    } })
+    expect(options).toMatchObject({ state: 'options_ready', nextAction: 'inspect_options', options: [{ optionRef: 'option:1' }] })
+    expect(JSON.stringify(options)).not.toMatch(/internal:set|internal:evidence|attempts/)
+
+    const needsInformation = projectCustomerRequest({
+      kind: 'needs_information', request: { ...request(), compilationState: 'needs_information' }, understanding: request().understanding,
+      missingInformation: [{ field: 'destination', customerLabel: 'Destination', reason: 'required_for_registered_capability' }],
+    })
+    expect(needsInformation).toMatchObject({ state: 'needs_information', nextAction: 'provide_information' })
+    const unsupported = projectCustomerRequest({ kind: 'unsupported', request: { ...request(), compilationState: 'unsupported' }, reason: 'no_registered_capability' })
+    expect(unsupported).toMatchObject({ state: 'unsupported', nextAction: 'revise_request' })
+    expect(new Set(['needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'unsupported', 'needs_attention']).size).toBe(6)
   })
 })
 

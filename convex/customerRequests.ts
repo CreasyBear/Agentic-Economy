@@ -230,6 +230,41 @@ export const getPlanForRequestRevision = internalQuery({
   },
 })
 
+export const getCompilationForRequestRevision = internalQuery({
+  args: { requestId: v.string(), requestRevision: v.number() },
+  returns: v.union(v.null(), v.object({ outcome: compilationOutcome })),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestCompilationCommands')
+      .withIndex('by_requestId_and_requestRevision', (query) => query
+        .eq('requestId', args.requestId).eq('requestRevision', args.requestRevision))
+      .unique()
+    return row === null ? null : { outcome: row.outcome }
+  },
+})
+
+export const getPreparationForRequestRevision = internalQuery({
+  args: { requestId: v.string(), requestRevision: v.number() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      status: v.union(v.literal('claimed'), v.literal('options_prepared'), v.literal('prepared'), v.literal('refused')),
+      candidateSet: v.optional(preparedRouteCandidateSetValue),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('customerRequestPreparationCommands')
+      .withIndex('by_requestId_and_requestRevision', (query) => query
+        .eq('requestId', args.requestId).eq('requestRevision', args.requestRevision))
+      .collect()
+    const row = rows.sort((left, right) => right._creationTime - left._creationTime).at(0)
+    if (row === undefined) return null
+    return {
+      status: row.status,
+      ...(row.candidateSet === undefined ? {} : { candidateSet: row.candidateSet }),
+    }
+  },
+})
+
 export const claimPreparation = internalMutation({
   args: {
     preparationKey: v.string(), preparationScope: v.string(), commandDigest: v.string(),
