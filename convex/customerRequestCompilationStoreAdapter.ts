@@ -75,8 +75,7 @@ export function writableCompilationResult(result: CompileCustomerRequestResult) 
   if (result.kind === 'unsupported') return { kind: result.kind, request: writableRequest(result.request), reason: result.reason }
   if (result.kind === 'revision_conflict') return { kind: result.kind, requestId: result.requestId, expectedRevision: result.expectedRevision }
   if (result.kind === 'identity_conflict') return { kind: result.kind, requestId: result.requestId }
-  const kind: 'compilation_conflict' = 'compilation_conflict'
-  return { kind, requestId: result.requestId }
+  return { kind: 'compilation_conflict' as const, requestId: result.requestId }
 }
 
 function writableUnderstanding(understanding: CustomerRequest['understanding']) {

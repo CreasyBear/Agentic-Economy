@@ -59,7 +59,7 @@ export const listActiveInternal = internalQuery({
     const rows = await ctx.db.query('customerRequestCapabilityContracts')
       .withIndex('by_status_and_capabilityContractId', (query) => query.eq('status', 'active')).take(257)
     if (rows.length > 256) throw new Error('capability_contract_limit_exceeded')
-    const contracts = rows.map(({ _id: _id, _creationTime: _created, contractDigest: _digest, status: _status, registeredAt: _registered, updatedAt: _updated, ...contract }) => contract)
+    const contracts = rows.map(({ _id, _creationTime, contractDigest, status, registeredAt, updatedAt, ...contract }) => contract)
     return createCapabilityContractRegistry(contracts).list().map(writableContract)
   },
 })
