@@ -52,7 +52,7 @@ export async function verifyRoutingEdgeEnvelope(
   return { kind: 'verified', publicUrl: `https://${authority}${new URL(request.url).pathname}`, requestId }
 }
 
-async function hmacKey(value: string, usages: Array<'sign' | 'verify'>): Promise<CryptoKey> {
+async function hmacKey(value: string, usages: Array<'sign' | 'verify'>) {
   return await crypto.subtle.importKey('raw', new TextEncoder().encode(value), { name: 'HMAC', hash: 'SHA-256' }, false, usages)
 }
 
