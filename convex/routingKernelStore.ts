@@ -1,7 +1,7 @@
 import type { GenericDatabaseReader, GenericDatabaseWriter } from 'convex/server'
 import { type Infer, v } from 'convex/values'
 
-import { canonicalAuthorityDigest, isValidDisclosureGrant, isValidStepGrant, sameDisclosureGrant, sameStepGrant } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest, isValidDisclosureGrant, isValidStepGrant, sameDisclosureGrant, sameStepGrant } from '@/modules/routing-kernel/runtime'
 import type { DataModel, Doc } from './_generated/dataModel'
 import { internalMutation, internalQuery } from './_generated/server'
 import { consumeRecoveryGrantInTransaction, evaluateIncidentInTransaction } from './routingKernelIncidentControl'

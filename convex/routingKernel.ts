@@ -4,11 +4,10 @@ import { createRuntimeId } from '@/modules/common/runtime-id'
 import { authorizeRouteForPrincipal } from '@/modules/routing-kernel/authorization'
 import {
   createNeutralRoutingKernel,
-  type BindingRoutingEvidenceSnapshot,
-  type EvidenceStanding,
   type CapabilityBindingAdapter,
   type NeutralRoutingKernel,
-} from '@/modules/routing-kernel/public'
+} from '@/modules/routing-kernel/application'
+import type { BindingRoutingEvidenceSnapshot, EvidenceStanding } from '@/modules/routing-kernel/runtime'
 import { createHttpCapabilityBinding } from '@/modules/routing-kernel/http-capability-binding'
 
 import { action, internalAction, type ActionCtx } from './_generated/server'

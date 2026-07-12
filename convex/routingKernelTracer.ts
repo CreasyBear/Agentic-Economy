@@ -1,6 +1,6 @@
 import { type Infer, v } from 'convex/values'
 
-import type { ExecuteResult } from '@/modules/routing-kernel/public'
+import type { ExecuteResult } from '@/modules/routing-kernel/application'
 import { createRuntimeId } from '@/modules/common/runtime-id'
 
 import { internalAction, internalQuery } from './_generated/server'

@@ -7,7 +7,7 @@ import {
   resolveIncidentFactKeyring,
   signIncidentFact,
   verifyIncidentFact,
-} from '@/modules/routing-kernel/public'
+} from '@/modules/routing-kernel/runtime'
 import {
   INCIDENT_ACTION_CLASSES,
   incidentMatchingScopeKeys,

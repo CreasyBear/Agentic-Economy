@@ -1,4 +1,5 @@
-import { isCanonicalAuthorityDigest, type AuthorizeInput, type RouteAuthorization, type RouteQuote } from './public'
+import type { AuthorizeInput } from './application'
+import { isCanonicalAuthorityDigest, type RouteAuthorization, type RouteQuote } from './runtime'
 import { IncidentAuthorizationError } from './internal/kernel'
 
 export type AuthorizeRouteForPrincipalInput = AuthorizeInput & Readonly<{ now: number }>

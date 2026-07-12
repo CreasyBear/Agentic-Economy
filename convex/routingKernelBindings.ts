@@ -1,6 +1,6 @@
 import { v, type Infer } from 'convex/values'
 
-import { canonicalAuthorityDigest, isCanonicalAuthorityDigest } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest, isCanonicalAuthorityDigest } from '@/modules/routing-kernel/runtime'
 import { mutation, internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 

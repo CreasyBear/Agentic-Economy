@@ -1,4 +1,4 @@
-import type { CapabilityBindingAdapter } from '@/modules/routing-kernel/public'
+import type { CapabilityBindingAdapter } from '@/modules/routing-kernel/application'
 
 export function createParcelLabelSimulationBindings(): readonly CapabilityBindingAdapter[] {
   return Object.freeze([

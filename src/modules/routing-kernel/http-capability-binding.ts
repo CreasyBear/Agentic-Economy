@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import type { CapabilityBinding, CapabilityBindingAdapter } from './public'
+import type { CapabilityBinding, CapabilityBindingAdapter } from './application'
 
 const MAX_RESPONSE_BYTES = 64 * 1024
 const money = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict()

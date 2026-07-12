@@ -1,6 +1,6 @@
 import { type Infer, v } from "convex/values";
 
-import { createExecutionRequestDigest } from "@/modules/routing-kernel/public";
+import { createExecutionRequestDigest } from "@/modules/routing-kernel/runtime";
 
 import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";

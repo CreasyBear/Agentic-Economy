@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canonicalAuthorityDigest, createInMemoryKernelStore, createStepGrant, type RootRunSnapshot } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest, createInMemoryKernelStore, createStepGrant, type RootRunSnapshot } from '@/modules/routing-kernel/runtime'
 
 const quoteDigest = canonicalAuthorityDigest({ quote: 1 })
 const requestDigest = canonicalAuthorityDigest({ request: 1 })

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { handleRoutingKernelHttpRequest } from '@/modules/routing-kernel/http'
 import {
-  createInMemoryKernelStore,
   createNeutralRoutingKernel,
   type KernelIdFactory,
-} from '@/modules/routing-kernel/public'
+} from '@/modules/routing-kernel/application'
+import { createInMemoryKernelStore } from '@/modules/routing-kernel/runtime'
 import { createParcelLabelSimulationBindings } from '@/modules/routing-tracer/public'
 
 describe('routing-kernel HTTP/JSON projection', () => {

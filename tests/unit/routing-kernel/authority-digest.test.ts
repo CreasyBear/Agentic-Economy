@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canonicalAuthorityDigest } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest } from '@/modules/routing-kernel/runtime'
 
 describe('routing authority digest', () => {
   it('uses the SHA-256 known vector over canonical JSON', () => {

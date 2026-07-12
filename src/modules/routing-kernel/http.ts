@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
-import type { KernelCaller, NeutralRoutingKernel } from './public'
+import type { KernelCaller, NeutralRoutingKernel } from './application'
 import { ROUTING_PROTOCOL_VERSION, type RoutingOperation } from './contract'
 
 const MAX_BODY_BYTES = 64 * 1024

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { canonicalAuthorityDigest, createBindingRoutingEvidenceSnapshot } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest, createBindingRoutingEvidenceSnapshot } from '@/modules/routing-kernel/runtime'
 import { admitInternal, listCurrent } from '../../../convex/routingKernelEvidence'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }

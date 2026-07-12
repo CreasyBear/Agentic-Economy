@@ -5,7 +5,7 @@ import { authorizeRouteForPrincipal } from '@/modules/routing-kernel/authorizati
 import { handleRoutingKernelHttpRequest } from '@/modules/routing-kernel/http'
 import { handleRoutingKernelMcpRequest } from '@/modules/routing-kernel/mcp'
 import { handleRoutingKernelDescriptorRequest } from '@/modules/routing-kernel/descriptor'
-import { canonicalAuthorityDigest } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest } from '@/modules/routing-kernel/runtime'
 import { verifyRoutingEdgeEnvelope } from '@/modules/routing-kernel/routing-edge-envelope'
 
 import { httpAction } from './_generated/server'

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { authorizeRouteForPrincipal } from '@/modules/routing-kernel/authorization'
-import { canonicalAuthorityDigest, type AuthorizeInput, type RouteQuote } from '@/modules/routing-kernel/public'
+import type { AuthorizeInput } from '@/modules/routing-kernel/application'
+import { canonicalAuthorityDigest, type RouteQuote } from '@/modules/routing-kernel/runtime'
 
 const quoteDigest = canonicalAuthorityDigest({ quote: 1 })
 const incidentEpochDigest = canonicalAuthorityDigest({ incidentEpochs: [] })

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { authorizeProviderRelease, claimExecution, claimProviderCancellation, completeExecution, getProviderCancellation, putAuthorization, reconcileRun, requestCancellation, resolveDisclosureAttempt, resolveProviderCancellation } from '../../../convex/routingKernelStore'
-import { canonicalAuthorityDigest, createDisclosureGrant, createStepGrant, type DisclosureGrant, type RootRunSnapshot, type StepGrant } from '@/modules/routing-kernel/public'
-import { signIncidentFact } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest, createDisclosureGrant, createStepGrant, type DisclosureGrant, type RootRunSnapshot, type StepGrant } from '@/modules/routing-kernel/runtime'
+import { signIncidentFact } from '@/modules/routing-kernel/runtime'
 
 const quoteDigest = canonicalAuthorityDigest({ quote: 1 })
 const requestDigest = canonicalAuthorityDigest({ request: 1 })

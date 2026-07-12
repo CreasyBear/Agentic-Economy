@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createIncidentControlTestHarness } from '@/modules/routing-kernel/incident-control'
-import { createNeutralRoutingKernel, type CapabilityBindingAdapter } from '@/modules/routing-kernel/public'
+import { createNeutralRoutingKernel, type CapabilityBindingAdapter } from '@/modules/routing-kernel/application'
 
 const caller = { agentId: 'agent:external', principalId: 'principal:merchant' }
 

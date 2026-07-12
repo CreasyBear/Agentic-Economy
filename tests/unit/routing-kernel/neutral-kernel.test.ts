@@ -2,16 +2,18 @@ import { describe, expect, it, vi } from 'vitest'
 
 
 import {
-  createInMemoryKernelStore,
   createNeutralRoutingKernel,
-  createStepGrant,
-  canonicalAuthorityDigest,
   type CapabilityBindingAdapter,
   type KernelIdFactory,
+} from '@/modules/routing-kernel/application'
+import {
+  createInMemoryKernelStore,
+  createStepGrant,
+  canonicalAuthorityDigest,
   type KernelStore,
   type RootRunSnapshot,
   type RouteQuote,
-} from '@/modules/routing-kernel/public'
+} from '@/modules/routing-kernel/runtime'
 import { createIncidentControlTestHarness } from '@/modules/routing-kernel/incident-control'
 
 const ids = createSequentialIds()

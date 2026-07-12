@@ -1,6 +1,6 @@
 import { v } from 'convex/values'
 
-import { createBindingRoutingEvidenceSnapshot, isCanonicalAuthorityDigest } from '@/modules/routing-kernel/public'
+import { createBindingRoutingEvidenceSnapshot, isCanonicalAuthorityDigest } from '@/modules/routing-kernel/runtime'
 
 import { internalMutation, internalQuery } from './_generated/server'
 

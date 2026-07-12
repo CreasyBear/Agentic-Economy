@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createInMemoryKernelStore, createNeutralRoutingKernel, type CapabilityBindingAdapter, type KernelStore } from '@/modules/routing-kernel/public'
+import { createNeutralRoutingKernel, type CapabilityBindingAdapter } from '@/modules/routing-kernel/application'
+import { createInMemoryKernelStore, type KernelStore } from '@/modules/routing-kernel/runtime'
 
 describe('provider cancellation operation', () => {
   it('durably records an accepted cancellation request without rewriting the committed effect', async () => {

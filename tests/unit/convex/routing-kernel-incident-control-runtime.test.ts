@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { canonicalAuthorityDigest, createBindingRoutingEvidenceSnapshot } from '@/modules/routing-kernel/public'
+import { canonicalAuthorityDigest, createBindingRoutingEvidenceSnapshot } from '@/modules/routing-kernel/runtime'
 import { signIncidentFact } from '@/modules/routing-kernel/internal/incident-fact-signing'
 
 import {

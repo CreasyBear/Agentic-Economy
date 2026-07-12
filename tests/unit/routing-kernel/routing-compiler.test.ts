@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { compileRoutingSnapshot, createBindingRoutingEvidenceSnapshot } from '@/modules/routing-kernel/internal/routing-compiler'
-import { createNeutralRoutingKernel } from '@/modules/routing-kernel/public'
+import { createNeutralRoutingKernel } from '@/modules/routing-kernel/application'
 
 const caller = { agentId: 'agent:1', principalId: 'principal:1' }
 

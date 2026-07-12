@@ -1,4 +1,4 @@
-import type { CandidateGraphQuote, KernelStore, RootRunSnapshot, RouteQuote } from '@/modules/routing-kernel/public'
+import type { CandidateGraphQuote, KernelStore, RootRunSnapshot, RouteQuote } from '@/modules/routing-kernel/runtime'
 
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'
