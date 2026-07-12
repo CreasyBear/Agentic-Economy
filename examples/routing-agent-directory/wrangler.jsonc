@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "ae-routing-agent-directory",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "AGENT_PUBLIC_JWK_BASE64URL": "eyJrZXlfb3BzIjpbInZlcmlmeSJdLCJleHQiOnRydWUsImFsZyI6IkVkMjU1MTkiLCJjcnYiOiJFZDI1NTE5IiwieCI6IktrdEdPQnJiNVR2cWU3ZDAxbGFPXzJiNGhvUjdxX0hTMGZkbUFrb1JuX2ciLCJrdHkiOiJPS1AiLCJraWQiOiI2dXBHamVoZ3N0ZGtmM3Z0NW5EVjdNS0J4NjU3WnV6QWF3OHRMNFFZcVU0In0"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}
