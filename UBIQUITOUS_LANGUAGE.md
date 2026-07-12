@@ -32,6 +32,14 @@ _Avoid_: Tool success, run completed
 An exact, expiring business option with bound provider, cost, data use, terms, cancellation posture, evidence, and comparison context, ready for a customer decision.
 _Avoid_: Plan, quote preview
 
+**Preparation Authority**:
+Independently verified, expiring customer permission for AE to share named data categories with bounded connected businesses for a declared comparison purpose. It may be single-use or standing, but always has cumulative recipient, exposure, and operation limits.
+_Avoid_: Caller grant, consent flag, signed identity
+
+**Preparation Disclosure Allocation**:
+A durable, value-redacted reservation binding one preparation release to a concrete business, field set, purpose, Request revision, and idempotent operation before protected values cross the provider boundary.
+_Avoid_: Post-call disclosure record, provider log
+
 **Approval Grant**:
 Authenticated, expiring authority bound to one exact Prepared Action and its material consequences.
 _Avoid_: Confirmation flag, model approval

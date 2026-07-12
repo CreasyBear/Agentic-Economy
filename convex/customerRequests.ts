@@ -1,6 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { customerRequestDigest, planRevisionDigest, preparedActionDigest as computePreparedActionDigest } from '@/modules/customer-request/preparation'
+import type { PreparedAction } from '@/modules/customer-request/public'
 import {
   customerRequestValue,
   planRevisionValue,
@@ -25,7 +26,7 @@ const claimResult = v.union(
   v.object({ kind: v.literal('claimed'), claimToken: v.string(), routingRequestId: v.string(), claimedAt: v.number() }),
   v.object({ kind: v.literal('in_progress') }),
   v.object({ kind: v.literal('prepared'), preparedAction: preparedActionValue }),
-  v.object({ kind: v.literal('refused'), reason: preparationRefusalReason }),
+  v.object({ kind: v.literal('refused'), reason: preparationRefusalReason, inspectionRef: v.optional(v.string()) }),
   v.object({ kind: v.literal('conflict') }),
   v.object({ kind: v.literal('stale') }),
 )
@@ -239,33 +240,44 @@ export const completePreparation = internalMutation({
       return stripPreparedRow(existing)
     }
     if (command.status !== 'claimed' || command.claimToken !== args.claimToken) throw new Error('preparation_claim_lost')
-    if (command.requestId !== args.preparedAction.requestId || command.requestRevision !== args.preparedAction.requestRevision
-      || command.planRevisionId !== args.preparedAction.planRevisionId || command.actionId !== args.preparedAction.actionId) throw new Error('prepared_action_scope_mismatch')
-    const { preparedActionDigest, ...material } = args.preparedAction
+    const preparedAction = normalizePreparedActionContract(args.preparedAction)
+    const writablePreparedAction = writablePreparedActionContract(preparedAction)
+    if (command.requestId !== preparedAction.requestId || command.requestRevision !== preparedAction.requestRevision
+      || command.planRevisionId !== preparedAction.planRevisionId || command.actionId !== preparedAction.actionId) throw new Error('prepared_action_scope_mismatch')
+    const { preparedActionDigest, ...material } = preparedAction
     if (computePreparedActionDigest(material) !== preparedActionDigest) throw new Error('prepared_action_digest_invalid')
-    const existing = await ctx.db.query('customerRequestPreparedActions').withIndex('by_preparedActionId', (query) => query.eq('preparedActionId', args.preparedAction.preparedActionId)).unique()
+    const existing = await ctx.db.query('customerRequestPreparedActions').withIndex('by_preparedActionId', (query) => query.eq('preparedActionId', preparedAction.preparedActionId)).unique()
     if (existing !== null) {
       if (existing.preparedActionDigest !== preparedActionDigest) throw new Error('prepared_action_identity_conflict')
     } else {
-      await ctx.db.insert('customerRequestPreparedActions', { ...args.preparedAction, preparationScope: args.preparationScope, recordedAt: args.completedAt })
+      await ctx.db.insert('customerRequestPreparedActions', {
+        ...writablePreparedAction, preparationScope: args.preparationScope, recordedAt: args.completedAt,
+      })
     }
     await ctx.db.patch(command._id, {
-      status: 'prepared', preparedActionId: args.preparedAction.preparedActionId,
+      status: 'prepared', preparedActionId: preparedAction.preparedActionId,
       completedAt: args.completedAt, leaseExpiresAt: args.completedAt,
     })
-    return args.preparedAction
+    return writablePreparedAction
   },
 })
 
 export const refusePreparation = internalMutation({
-  args: { preparationScope: v.string(), claimToken: v.string(), reason: preparationRefusalReason, completedAt: v.number() },
+  args: {
+    preparationScope: v.string(), claimToken: v.string(), reason: preparationRefusalReason,
+    inspectionRef: v.optional(v.string()), completedAt: v.number(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const command = await ctx.db.query('customerRequestPreparationCommands').withIndex('by_preparationScope', (query) => query.eq('preparationScope', args.preparationScope)).unique()
     if (command === null) throw new Error('preparation_claim_not_found')
     if (command.status === 'refused' && command.refusalReason === args.reason) return null
     if (command.status !== 'claimed' || command.claimToken !== args.claimToken) throw new Error('preparation_claim_lost')
-    await ctx.db.patch(command._id, { status: 'refused', refusalReason: args.reason, completedAt: args.completedAt, leaseExpiresAt: args.completedAt })
+    await ctx.db.patch(command._id, {
+      status: 'refused', refusalReason: args.reason,
+      ...(args.inspectionRef === undefined ? {} : { refusalInspectionRef: args.inspectionRef }),
+      completedAt: args.completedAt, leaseExpiresAt: args.completedAt,
+    })
     return null
   },
 })
@@ -288,7 +300,10 @@ async function claimPreparationMutation(
       if (prepared === null) throw new Error('prepared_action_missing')
       return { kind: 'prepared', preparedAction: stripPreparedRow(prepared) }
     }
-    if (existing.status === 'refused' && existing.refusalReason !== undefined) return { kind: 'refused', reason: existing.refusalReason }
+    if (existing.status === 'refused' && existing.refusalReason !== undefined) return {
+      kind: 'refused', reason: existing.refusalReason,
+      ...(existing.refusalInspectionRef === undefined ? {} : { inspectionRef: existing.refusalInspectionRef }),
+    }
     if (existing.leaseExpiresAt > args.claimedAt) return { kind: 'in_progress' }
     const claimToken = `${existing.claimToken}:retry:${args.claimedAt}`
     await ctx.db.patch(existing._id, { claimToken, leaseExpiresAt: args.leaseExpiresAt })
@@ -306,6 +321,47 @@ async function claimPreparationMutation(
 function stripPreparedRow(row: PreparedActionValue & { _id: unknown; _creationTime: number; preparationScope: string; recordedAt: number }): PreparedActionValue {
   const { _id: _ignoredId, _creationTime: _ignoredCreationTime, preparationScope: _scope, recordedAt: _recordedAt, ...prepared } = row
   return prepared
+}
+
+function normalizePreparedActionContract(action: PreparedActionValue): PreparedAction {
+  return {
+    ...action,
+    disclosures: action.disclosures.map((disclosure) => ({
+      ...disclosure,
+      dataCategory: disclosure.dataCategory ?? disclosure.field,
+      purposeLabels: disclosure.purposeLabels ?? disclosure.purposes.map(customerPurposeLabel),
+      status: disclosure.status ?? (disclosure.timing === 'already_shared_to_prepare' ? 'released' : 'not_released'),
+      recordedAt: disclosure.recordedAt ?? action.preparedAt,
+      inspectionRef: disclosure.inspectionRef ?? action.preparedActionId,
+    })),
+  }
+}
+
+function writablePreparedActionContract(action: PreparedAction) {
+  return {
+    ...action,
+    selectedBusiness: { ...action.selectedBusiness },
+    alternatives: action.alternatives.map((item) => ({
+      ...item, business: { ...item.business }, expectedCost: { ...item.expectedCost }, maximumCost: { ...item.maximumCost },
+    })),
+    comparisonBasis: { ...action.comparisonBasis, selectedBecause: [...action.comparisonBasis.selectedBecause] },
+    allowedFallbacks: action.allowedFallbacks.map((item) => ({
+      ...item, business: { ...item.business }, maximumCost: { ...item.maximumCost },
+    })),
+    expectedCost: { ...action.expectedCost }, maximumGrossCost: { ...action.maximumGrossCost },
+    priceComponents: action.priceComponents.map((item) => ({ ...item })),
+    disclosures: action.disclosures.map((item) => ({
+      ...item, purposes: [...item.purposes], purposeLabels: [...item.purposeLabels],
+    })),
+    materialTerms: action.materialTerms.map((item) => ({ ...item })), cancellation: { ...action.cancellation },
+  }
+}
+
+function customerPurposeLabel(value: string) {
+  const words = value.replace(/[_-]+/g, ' ').trim()
+  if (words.length === 0) return 'Prepare this option'
+  const first = words.at(0)
+  return first === undefined ? 'Prepare this option' : `${first.toUpperCase()}${words.slice(1)}`
 }
 
 function stripRequestRevisionRow(row: Infer<typeof customerRequestValue> & {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createInMemoryCustomerRequestPreparationStore,
   prepareCustomerRequestAction,
+  projectPreparationRefusalForCustomer,
   projectPreparedActionForReview,
   type CustomerRequestActionRouter,
   type PreparedRouteQuote,
@@ -13,6 +14,12 @@ import {
   createPlanRevision,
   defineCapabilityContract,
 } from '@/modules/customer-request/public'
+import {
+  createInMemoryPreparationDisclosureStore,
+  preparationAuthorityDigest,
+  type VerifiedPreparationAuthority,
+} from '@/modules/customer-request/preparation-authority'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('prepare customer request action', () => {
   it('persists one decision-ready quote without creating execution authority', async () => {
@@ -103,7 +110,7 @@ describe('prepare customer request action', () => {
 
   it('requires bounded preparation authority before sharing non-public request data', async () => {
     const fixture = setup()
-    const { preparationGrant: _grant, ...withoutGrant } = command()
+    const { preparationAuthorityEvidenceRef: _authority, ...withoutGrant } = command()
 
     const result = await prepareCustomerRequestAction(withoutGrant, fixture.dependencies)
 
@@ -112,6 +119,36 @@ describe('prepare customer request action', () => {
       reason: 'preparation_authority_required',
     })
     expect(fixture.routeCalls).toBe(0)
+  })
+
+  it('turns authority refusal codes into a customer action instead of protocol copy', () => {
+    expect(projectPreparationRefusalForCustomer('authority_recipient_capacity_exceeded')).toEqual({
+      title: 'Sharing limit reached',
+      explanation: 'This comparison would contact more businesses than the customer allowed.',
+      nextAction: 'Reduce the businesses compared or ask the customer to raise the limit.',
+    })
+  })
+
+  it('keeps protected values behind the allocation-bound release port', async () => {
+    let observedInput: unknown
+    const fixture = setup({ onRouteInput: (input) => { observedInput = input } })
+
+    await prepareCustomerRequestAction(command(), fixture.dependencies)
+
+    expect(observedInput).toMatchObject({ publicInput: {}, releasePreparationData: expect.any(Function) })
+    expect(observedInput).not.toHaveProperty('resolvedInput')
+    expect(JSON.stringify(observedInput)).not.toContain('3000')
+  })
+
+  it('preserves an inspection reference when provider data release is uncertain', async () => {
+    const fixture = setup({ failDisclosureRelease: true })
+
+    const result = await prepareCustomerRequestAction(command(), fixture.dependencies)
+
+    expect(result).toMatchObject({
+      kind: 'preparation_refused', reason: 'preparation_data_release_uncertain',
+      inspectionRef: expect.stringMatching(/^preparation-allocation:/),
+    })
   })
 
   it('changes the prepared digest when any customer decision material changes', async () => {
@@ -141,8 +178,14 @@ describe('prepare customer request action', () => {
       whyThisOption: ['Lowest expected cost among the connected eligible options.'],
       fallbacks: [],
       dataUse: [
-        { field: 'destinationPostcode', timing: 'already_shared_to_prepare', recipientName: 'Courier A', purposes: ['shipping_rate_quote'] },
-        { field: 'destinationPostcode', timing: 'already_shared_to_prepare', recipientName: 'Courier B', purposes: ['shipping_rate_quote'] },
+        {
+          dataCategory: 'Destination postcode', timing: 'already_shared_to_prepare', recipientName: 'Courier A',
+          purposeLabels: ['Shipping rate quote'], status: 'released', recordedAt: 1_000,
+        },
+        {
+          dataCategory: 'Destination postcode', timing: 'already_shared_to_prepare', recipientName: 'Courier B',
+          purposeLabels: ['Shipping rate quote'], status: 'released', recordedAt: 1_000,
+        },
       ],
       actions: [
         { kind: 'approve', label: 'Approve this option' },
@@ -150,7 +193,7 @@ describe('prepare customer request action', () => {
         { kind: 'decline', label: 'Decline' },
       ],
     })
-    expect(JSON.stringify(review)).not.toMatch(/quoteId|quoteDigest|bindingId|routing|protocol|rootRun/i)
+    expect(JSON.stringify(review)).not.toMatch(/quoteId|quoteDigest|bindingId|routing|protocol|rootRun|destinationPostcode|shipping_rate_quote/i)
   })
 })
 
@@ -159,10 +202,13 @@ function setup(options: {
   routeResult?: Awaited<ReturnType<CustomerRequestActionRouter['route']>>
   beforeRouteReturn?: () => Promise<void>
   failFirstCommit?: boolean
+  failDisclosureRelease?: boolean
+  onRouteInput?: (input: Parameters<CustomerRequestActionRouter['route']>[0]) => void
 } = {}) {
   let now = 1_000
   let routeCalls = 0
   let providerQuoteCalls = 0
+  let providerDisclosureCalls = 0
   let failedCommit = false
   const quotes = new Map<string, PreparedRouteQuote>()
   const store = createInMemoryCustomerRequestPreparationStore()
@@ -175,13 +221,35 @@ function setup(options: {
   const router: CustomerRequestActionRouter = {
     route: async (input) => {
       routeCalls += 1
+      options.onRouteInput?.(input)
       await options.beforeRouteReturn?.()
       if (options.routeResult !== undefined) return options.routeResult
       const existing = quotes.get(input.routingRequestId)
-      if (existing !== undefined) return { kind: 'quoted', quote: existing }
-      providerQuoteCalls += 1
-      const value = options.quote ?? quote()
-      quotes.set(input.routingRequestId, value)
+      if (existing === undefined) providerQuoteCalls += 1
+      const value = existing ?? options.quote ?? quote()
+      for (const disclosure of value.preparationDisclosures) {
+        const definition = input.contract.input[disclosure.field]?.disclosure
+        if (definition === undefined || input.releasePreparationData === undefined) {
+          return { kind: 'no_route', reason: 'preparation_release_missing' }
+        }
+        for (const purpose of definition.purposes) {
+          const released = await input.releasePreparationData({
+            releaseKey: `${disclosure.recipient.bindingId}:${purpose}:${disclosure.field}`,
+            recipient: { ...disclosure.recipient, kind: definition.recipient },
+            purpose,
+            fields: [disclosure.field],
+            release: async () => {
+              providerDisclosureCalls += 1
+              if (options.failDisclosureRelease === true) throw new Error('provider_release_timeout')
+              return { kind: 'released', providerEvidenceRef: `provider:evidence:${disclosure.recipient.bindingId}:${purpose}` }
+            },
+          })
+          if (released.kind !== 'released') return {
+            kind: 'no_route', reason: released.kind === 'refused' ? released.reason : released.kind,
+          }
+        }
+      }
+      if (existing === undefined) quotes.set(input.routingRequestId, value)
       return { kind: 'quoted', quote: value }
     },
   }
@@ -192,12 +260,22 @@ function setup(options: {
       return commit(input)
     }
   }
-  const dependencies = { store, router, registry, now: () => now, leaseMs: 100 }
+  const preparationAuthority = authority()
+  const dependencies = {
+    store, router, registry,
+    preparationAuthorityVerifier: {
+      verify: async () => ({ kind: 'verified' as const, authority: preparationAuthority }),
+    },
+    preparationDisclosureStore: createInMemoryPreparationDisclosureStore([preparationAuthority]),
+    commitProtectedProjection: (input: Readonly<Record<string, string | number | boolean>>) => `hmac-sha256:${canonicalDigest(input).slice(7)}`,
+    now: () => now, leaseMs: 100,
+  }
   return {
     dependencies, router,
     setNow: (value: number) => { now = value },
     get routeCalls() { return routeCalls },
     get providerQuoteCalls() { return providerQuoteCalls },
+    get providerDisclosureCalls() { return providerDisclosureCalls },
   }
 }
 
@@ -207,13 +285,25 @@ function command(preparationKey = 'preparation:shipping:1') {
     requestId: 'request:shipping:1', requestRevision: 1,
     planRevisionId: 'plan:shipping:1', actionId: 'action:quote',
     resolvedInput: { destinationPostcode: '3000' },
-    preparationGrant: {
-      preparationGrantId: 'preparation-grant:1', requestId: 'request:shipping:1', requestRevision: 1,
-      principalId: 'principal:customer:1', allowedDataFields: ['destinationPostcode'],
-      allowedRecipientKinds: ['candidate_provider'] as const, allowedPurposes: ['shipping_rate_quote'],
-      maximumRecipients: 2, authenticationEvidenceRef: 'auth:evidence:1', expiresAt: 2_000, grantedAt: 900,
-    },
+    preparationAuthorityEvidenceRef: 'auth:evidence:1',
   } as const
+}
+
+function authority(): VerifiedPreparationAuthority {
+  const material: Omit<VerifiedPreparationAuthority, 'authorityDigest' | 'status' | 'verification'> = {
+    authorityId: 'preparation-authority:1', authorityVersion: 1,
+    principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
+    requestId: 'request:shipping:1', requestRevision: 1, mode: 'single_use' as const,
+    permittedFields: ['destinationPostcode'], permittedRecipientKinds: ['candidate_provider'],
+    permittedRecipientBindingIds: ['binding:courier-a', 'binding:courier-b'], permittedPurposes: ['shipping_rate_quote'],
+    maximumRecipients: 2, maximumExposures: 2, maximumOperations: 1, grantedAt: 900, expiresAt: 2_000,
+  }
+  return {
+    ...material, status: 'active', authorityDigest: preparationAuthorityDigest(material),
+    verification: {
+      evidenceRef: 'auth:evidence:1', issuerId: 'issuer:ae', signerId: 'signer:trusted', keyId: 'key:trusted:1',
+    },
+  }
 }
 
 function customerRequest() {

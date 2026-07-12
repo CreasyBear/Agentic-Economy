@@ -15,6 +15,8 @@ import type * as business from "../business.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as customerRequestCompilationStoreAdapter from "../customerRequestCompilationStoreAdapter.js";
+import type * as customerRequestPreparationAuthority from "../customerRequestPreparationAuthority.js";
+import type * as customerRequestPreparationAuthorityStoreAdapter from "../customerRequestPreparationAuthorityStoreAdapter.js";
 import type * as customerRequestStoreAdapter from "../customerRequestStoreAdapter.js";
 import type * as customerRequests from "../customerRequests.js";
 import type * as demand from "../demand.js";
@@ -57,6 +59,8 @@ declare const fullApi: ApiFromModules<{
   catalog: typeof catalog;
   crons: typeof crons;
   customerRequestCompilationStoreAdapter: typeof customerRequestCompilationStoreAdapter;
+  customerRequestPreparationAuthority: typeof customerRequestPreparationAuthority;
+  customerRequestPreparationAuthorityStoreAdapter: typeof customerRequestPreparationAuthorityStoreAdapter;
   customerRequestStoreAdapter: typeof customerRequestStoreAdapter;
   customerRequests: typeof customerRequests;
   demand: typeof demand;

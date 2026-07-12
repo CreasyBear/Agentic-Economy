@@ -75,6 +75,7 @@
   },
   "devDependencies": {
     "@astryxdesign/cli": "^0.1.2",
+    "@edge-runtime/vm": "^5.0.0",
     "@playwright/test": "1.61.1",
     "@sentry/vite-plugin": "^5.3.0",
     "@tailwindcss/vite": "4.3.1",
@@ -84,6 +85,7 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
+    "convex-test": "^0.0.54",
     "jsdom": "29.1.1",
     "nitro": "npm:nitro-nightly@^3.0.1-20260628-090458-3df69609",
     "oxlint": "^1.73.0",

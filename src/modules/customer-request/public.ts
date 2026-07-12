@@ -170,30 +170,21 @@ export type PreparedAction = Readonly<{
   priceComponents: readonly Readonly<{ kind: 'provider' | 'ae_fee' | 'tax'; label: string; amountMinor: number }>[]
   disclosures: readonly Readonly<{
     field: string
+    dataCategory: string
     timing: 'already_shared_to_prepare' | 'on_execution'
     recipientBindingId: string
     recipientName: string
     purposes: readonly string[]
+    purposeLabels: readonly string[]
+    status: 'released' | 'not_released' | 'uncertain'
+    recordedAt: number
+    inspectionRef: string
   }>[]
   materialTerms: readonly Readonly<{ key: string; label: string; value: string }>[]
   cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
   expectedBy?: number
   expiresAt: number
   preparedAt: number
-}>
-
-export type PreparationGrant = Readonly<{
-  preparationGrantId: string
-  requestId: string
-  requestRevision: number
-  principalId: string
-  allowedDataFields: readonly string[]
-  allowedRecipientKinds: readonly ('candidate_provider' | 'selected_provider' | 'offer_issuer' | 'named_recipient')[]
-  allowedPurposes: readonly string[]
-  maximumRecipients: number
-  authenticationEvidenceRef: string
-  expiresAt: number
-  grantedAt: number
 }>
 
 export type ApprovalGrant = Readonly<{

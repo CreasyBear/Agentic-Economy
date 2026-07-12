@@ -38,7 +38,10 @@ export function createConvexCustomerRequestPreparationStore(
         routingRequestId: `route:${canonicalDigest(claimMaterial)}`,
       })
       if (result.kind === 'prepared') return { kind: 'prepared', preparedAction: normalizePreparedAction(result.preparedAction) }
-      if (result.kind === 'refused') return { kind: 'refused', reason: normalizeRefusalReason(result.reason) }
+      if (result.kind === 'refused') return {
+        kind: 'refused', reason: normalizeRefusalReason(result.reason),
+        ...(result.inspectionRef === undefined ? {} : { inspectionRef: result.inspectionRef }),
+      }
       return result
     },
     completePreparation: async (input) => normalizePreparedAction(await ctx.runMutation(internal.customerRequests.completePreparation, {
@@ -92,7 +95,9 @@ function writablePreparedAction(action: PreparedAction) {
     })),
     expectedCost: { ...action.expectedCost }, maximumGrossCost: { ...action.maximumGrossCost },
     priceComponents: action.priceComponents.map((component) => ({ ...component })),
-    disclosures: action.disclosures.map((disclosure) => ({ ...disclosure, purposes: [...disclosure.purposes] })),
+    disclosures: action.disclosures.map((disclosure) => ({
+      ...disclosure, purposes: [...disclosure.purposes], purposeLabels: [...disclosure.purposeLabels],
+    })),
     materialTerms: action.materialTerms.map((term) => ({ ...term })),
     cancellation: { ...action.cancellation },
   }
@@ -114,7 +119,13 @@ function normalizePreparedAction(action: Infer<typeof preparedActionValue>): Pre
     cancellation: { ...action.cancellation, kind: cancellationKind },
     priceComponents: action.priceComponents.map((component) => ({ ...component, kind: normalizePriceKind(component.kind) })),
     disclosures: action.disclosures.map((disclosure) => ({
-      ...disclosure, timing: normalizeDisclosureTiming(disclosure.timing),
+      ...disclosure,
+      dataCategory: disclosure.dataCategory ?? disclosure.field,
+      purposeLabels: disclosure.purposeLabels ?? disclosure.purposes.map(customerPurposeLabel),
+      status: disclosure.status ?? (disclosure.timing === 'already_shared_to_prepare' ? 'released' : 'not_released'),
+      recordedAt: disclosure.recordedAt ?? action.preparedAt,
+      inspectionRef: disclosure.inspectionRef ?? action.preparedActionId,
+      timing: normalizeDisclosureTiming(disclosure.timing),
     })),
   }
 }
@@ -129,14 +140,27 @@ function normalizeDisclosureTiming(value: unknown): 'already_shared_to_prepare' 
   throw new Error('prepared_action_persistence_invalid')
 }
 
+function customerPurposeLabel(value: string) {
+  const words = value.replace(/[_-]+/g, ' ').trim()
+  if (words.length === 0) return 'Prepare this option'
+  const first = words.at(0)
+  return first === undefined ? 'Prepare this option' : `${first.toUpperCase()}${words.slice(1)}`
+}
+
 const PREPARATION_REFUSALS: readonly PreparationRefusalReason[] = [
   'request_not_found', 'request_revision_changed', 'plan_revision_not_found', 'plan_revision_changed', 'action_not_found',
   'capability_contract_not_found', 'action_input_unresolved', 'action_input_mismatch', 'preparation_authority_required',
-  'preparation_authority_invalid', 'no_connected_option', 'route_contract_mismatch', 'route_currency_mismatch',
+  'authority_evidence_invalid', 'authority_signer_mismatch', 'authority_principal_mismatch', 'authority_agent_mismatch', 'authority_request_mismatch',
+  'authority_request_revision_mismatch', 'authority_field_denied', 'authority_recipient_denied', 'authority_purpose_denied',
+  'authority_expired', 'authority_revoked', 'authority_not_yet_valid', 'authority_state_conflict',
+  'authority_recipient_capacity_exceeded', 'authority_exposure_capacity_exceeded', 'authority_operation_capacity_exceeded',
+  'authority_allocation_conflict', 'preparation_release_contract_mismatch', 'preparation_data_release_uncertain',
+  'no_connected_option', 'route_contract_mismatch', 'route_currency_mismatch',
   'route_spend_exceeded', 'route_data_contract_mismatch', 'route_recipient_limit_exceeded', 'route_quote_expired',
 ]
 
 function normalizeRefusalReason(value: unknown): PreparationRefusalReason {
+  if (value === 'preparation_authority_invalid') return 'authority_evidence_invalid'
   const reason = PREPARATION_REFUSALS.find((candidate) => candidate === value)
   if (reason === undefined) throw new Error('preparation_refusal_persistence_invalid')
   return reason

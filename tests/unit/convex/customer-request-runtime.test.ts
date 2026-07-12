@@ -168,7 +168,12 @@ function preparedAction(): PreparedAction {
     allowedFallbacks: [], expectedCost: { currency: 'AUD', amountMinor: 1_295 },
     maximumGrossCost: { currency: 'AUD', amountMinor: 1_295 },
     priceComponents: [{ kind: 'provider' as const, label: 'Provider price', amountMinor: 1_295 }],
-    disclosures: [{ field: 'destinationPostcode', timing: 'already_shared_to_prepare' as const, recipientBindingId: 'binding:courier-a', recipientName: 'Courier A', purposes: ['shipping_rate_quote'] }],
+    disclosures: [{
+      field: 'destinationPostcode', dataCategory: 'Destination postcode', timing: 'already_shared_to_prepare' as const,
+      recipientBindingId: 'binding:courier-a', recipientName: 'Courier A', purposes: ['shipping_rate_quote'],
+      purposeLabels: ['Shipping rate quote'], status: 'released' as const, recordedAt: 1_000,
+      inspectionRef: 'preparation-allocation:1',
+    }],
     materialTerms: [{ key: 'validity', label: 'Validity', value: 'Until expiry.' }],
     cancellation: { kind: 'unsupported' as const, summary: 'No booking was created.' }, expiresAt: 1_900, preparedAt: 1_000,
   }

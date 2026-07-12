@@ -6,10 +6,17 @@ import type {
   CapabilityContractRegistry,
   CustomerRequest,
   PlanRevision,
-  PreparationGrant,
   PreparedAction,
   ProposedAction,
 } from './public'
+import {
+  releasePreparationDisclosure,
+  type PreparationAuthorityRefusalReason,
+  type PreparationAuthorityVerifier,
+  type PreparationDisclosureResult,
+  type PreparationDisclosureStore,
+  type PreparationRecipient,
+} from './preparation-authority'
 
 type Money = Readonly<{ currency: string; amountMinor: number }>
 type PreparedBusiness = Readonly<{ nodeId: string; bindingId: string; name: string }>
@@ -41,11 +48,33 @@ export type PreparedRouteQuote = Readonly<{
 export type CustomerRequestActionRouter = Readonly<{
   route: (input: Readonly<{
     routingRequestId: string
-    request: CustomerRequest
-    planRevision: PlanRevision
-    action: ProposedAction
-    resolvedInput: Readonly<Record<string, string | number | boolean>>
-    preparationGrant?: PreparationGrant
+    request: Readonly<{
+      requestId: string
+      revision: number
+      principalId: string
+      delegatedAgentId: string
+      routing: CustomerRequest['routing']
+    }>
+    action: Readonly<{ actionId: string; capabilityContractId: string }>
+    contract: CapabilityContract
+    publicInput: Readonly<Record<string, string | number | boolean>>
+    releasePreparationData?: (input: Readonly<{
+      releaseKey: string
+      recipient: PreparationRecipient
+      purpose: string
+      fields: readonly string[]
+      release: (input: Readonly<{
+        allocationId: string
+        protectedValues: Readonly<Record<string, string | number | boolean>>
+      }>) => Promise<Readonly<{
+        kind: 'released'
+        providerEvidenceRef: string
+      }>>
+    }>) => Promise<PreparationDisclosureResult | Readonly<{
+      kind: 'refused'
+      reason: 'preparation_release_contract_mismatch'
+      nextAction: string
+    }>>
   }>) => Promise<
     | Readonly<{ kind: 'quoted'; quote: PreparedRouteQuote }>
     | Readonly<{ kind: 'no_route'; reason: string }>
@@ -80,11 +109,13 @@ export type CustomerRequestPreparationStore = {
     | PreparationClaim
     | Readonly<{ kind: 'in_progress' }>
     | Readonly<{ kind: 'prepared'; preparedAction: PreparedAction }>
-    | Readonly<{ kind: 'refused'; reason: PreparationRefusalReason }>
+    | Readonly<{ kind: 'refused'; reason: PreparationRefusalReason; inspectionRef?: string }>
     | Readonly<{ kind: 'conflict' }>
     | Readonly<{ kind: 'stale' }>>
   completePreparation: (input: Readonly<{ preparationScope: string; claimToken: string; preparedAction: PreparedAction }>) => Awaitable<PreparedAction>
-  refusePreparation: (input: Readonly<{ preparationScope: string; claimToken: string; reason: PreparationRefusalReason }>) => Awaitable<void>
+  refusePreparation: (input: Readonly<{
+    preparationScope: string; claimToken: string; reason: PreparationRefusalReason; inspectionRef?: string
+  }>) => Awaitable<void>
 }
 
 export type PrepareCustomerRequestActionCommand = Readonly<{
@@ -94,7 +125,7 @@ export type PrepareCustomerRequestActionCommand = Readonly<{
   planRevisionId: string
   actionId: string
   resolvedInput: Readonly<Record<string, string | number | boolean>>
-  preparationGrant?: PreparationGrant
+  preparationAuthorityEvidenceRef?: string
 }>
 
 export type PreparationRefusalReason =
@@ -107,7 +138,9 @@ export type PreparationRefusalReason =
   | 'action_input_unresolved'
   | 'action_input_mismatch'
   | 'preparation_authority_required'
-  | 'preparation_authority_invalid'
+  | PreparationAuthorityRefusalReason
+  | 'preparation_release_contract_mismatch'
+  | 'preparation_data_release_uncertain'
   | 'no_connected_option'
   | 'route_contract_mismatch'
   | 'route_currency_mismatch'
@@ -119,7 +152,9 @@ export type PreparationRefusalReason =
 export type PrepareCustomerRequestActionResult =
   | Readonly<{ kind: 'prepared'; preparedAction: PreparedAction }>
   | Readonly<{ kind: 'preparation_in_progress'; preparationScope: string }>
-  | Readonly<{ kind: 'preparation_refused'; preparationScope: string; reason: PreparationRefusalReason }>
+  | Readonly<{
+    kind: 'preparation_refused'; preparationScope: string; reason: PreparationRefusalReason; inspectionRef?: string
+  }>
   | Readonly<{ kind: 'preparation_conflict'; preparationScope: string }>
 
 export type PreparedActionReview = Readonly<{
@@ -130,7 +165,15 @@ export type PreparedActionReview = Readonly<{
   whyThisOption: readonly string[]
   alternatives: readonly Readonly<{ businessName: string; expectedAmountMinor: number; maximumAmountMinor: number; expectedLatencyMs: number }>[]
   fallbacks: readonly Readonly<{ businessName: string; trigger: 'effect_not_committed'; maximumAmountMinor: number }>[]
-  dataUse: readonly Readonly<{ field: string; timing: 'already_shared_to_prepare' | 'on_execution'; recipientName: string; purposes: readonly string[] }>[]
+  dataUse: readonly Readonly<{
+    dataCategory: string
+    timing: 'already_shared_to_prepare' | 'on_execution'
+    recipientName: string
+    purposeLabels: readonly string[]
+    status: 'released' | 'not_released' | 'uncertain'
+    recordedAt: number
+    inspectionRef: string
+  }>[]
   terms: readonly Readonly<{ label: string; value: string }>[]
   cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
   expiresAt: number
@@ -138,12 +181,68 @@ export type PreparedActionReview = Readonly<{
   inspectionRef: string
 }>
 
+export type PreparationRefusalCustomerProjection = Readonly<{
+  title: string
+  explanation: string
+  nextAction: string
+}>
+
+export function projectPreparationRefusalForCustomer(
+  reason: PreparationRefusalReason,
+): PreparationRefusalCustomerProjection {
+  if (reason === 'preparation_authority_required') return {
+    title: 'Permission needed',
+    explanation: 'AE needs permission to share the required information before businesses can prepare options.',
+    nextAction: 'Review the data categories, purpose, business limit, and expiry, then authorize or decline.',
+  }
+  if (reason === 'authority_recipient_capacity_exceeded') return {
+    title: 'Sharing limit reached',
+    explanation: 'This comparison would contact more businesses than the customer allowed.',
+    nextAction: 'Reduce the businesses compared or ask the customer to raise the limit.',
+  }
+  if (reason === 'authority_exposure_capacity_exceeded' || reason === 'authority_operation_capacity_exceeded') return {
+    title: 'Permission used',
+    explanation: 'The customer-approved sharing allowance has already been used.',
+    nextAction: 'Ask the customer before starting another comparison or sharing more information.',
+  }
+  if (reason === 'authority_expired' || reason === 'authority_revoked' || reason === 'authority_not_yet_valid') return {
+    title: reason === 'authority_revoked' ? 'Permission withdrawn' : 'Permission unavailable',
+    explanation: reason === 'authority_revoked'
+      ? 'The customer withdrew permission before this information was sent.'
+      : 'The customer permission is not currently active.',
+    nextAction: 'Ask the customer for current permission before contacting another business.',
+  }
+  if (reason === 'preparation_data_release_uncertain') return {
+    title: 'Sharing status needs checking',
+    explanation: 'AE cannot yet confirm whether a business received the information.',
+    nextAction: 'Wait for AE to reconcile the sharing record; do not send it again.',
+  }
+  if (reason === 'no_connected_option') return {
+    title: 'No connected option found',
+    explanation: 'AE could not find a registered business able to prepare this option.',
+    nextAction: 'Change the request or use a direct path outside AE.',
+  }
+  if (reason.startsWith('authority_') || reason === 'preparation_release_contract_mismatch') return {
+    title: 'Permission does not cover this comparison',
+    explanation: 'The requested information, business, or purpose is outside what the customer allowed.',
+    nextAction: 'Narrow the comparison or ask the customer for new permission.',
+  }
+  return {
+    title: 'Option could not be prepared',
+    explanation: 'AE could not prepare a reliable business option from the current request.',
+    nextAction: 'Review the request details and try a supported change.',
+  }
+}
+
 export async function prepareCustomerRequestAction(
   command: PrepareCustomerRequestActionCommand,
   dependencies: Readonly<{
     store: CustomerRequestPreparationStore
     router: CustomerRequestActionRouter
     registry: CapabilityContractRegistry
+    preparationAuthorityVerifier: PreparationAuthorityVerifier
+    preparationDisclosureStore: PreparationDisclosureStore
+    commitProtectedProjection: (input: Readonly<Record<string, string | number | boolean>>) => string
     now: () => number
     leaseMs: number
   }>,
@@ -153,8 +252,11 @@ export async function prepareCustomerRequestAction(
   const context = await resolveContext(command, dependencies.store, dependencies.registry)
   if ('reason' in context) return refusal(preparationScope, context.reason)
 
-  const authority = validatePreparationAuthority(command.preparationGrant, context.request, context.contract, command.resolvedInput, dependencies.now())
-  if (authority !== undefined) return refusal(preparationScope, authority)
+  const protectedFields = preparationProtectedFields(context.contract, command.resolvedInput)
+  const preparationAuthorityEvidenceRef = command.preparationAuthorityEvidenceRef
+  if (protectedFields.length > 0 && preparationAuthorityEvidenceRef === undefined) {
+    return refusal(preparationScope, 'preparation_authority_required')
+  }
   const commandDigest = canonicalDigest(commandMaterial(command, context.request, context.plan, context.action))
   const claimedAt = dependencies.now()
   const claim = await dependencies.store.claimPreparation({
@@ -169,23 +271,95 @@ export async function prepareCustomerRequestAction(
     leaseExpiresAt: claimedAt + dependencies.leaseMs,
   })
   if (claim.kind === 'prepared') return Object.freeze({ kind: 'prepared', preparedAction: claim.preparedAction })
-  if (claim.kind === 'refused') return refusal(preparationScope, claim.reason)
+  if (claim.kind === 'refused') return refusal(preparationScope, claim.reason, claim.inspectionRef)
   if (claim.kind === 'in_progress') return Object.freeze({ kind: 'preparation_in_progress', preparationScope })
   if (claim.kind === 'conflict' || claim.kind === 'stale') return Object.freeze({ kind: 'preparation_conflict', preparationScope })
 
+  let releaseRefusal: PreparationRefusalReason | undefined
+  let releaseInspectionRef: string | undefined
+  const releasedDisclosures = new Map<string, Readonly<{ allocationId: string; releasedAt: number }>>()
   const routed = await dependencies.router.route({
     routingRequestId: claim.routingRequestId,
-    request: context.request,
-    planRevision: context.plan,
-    action: context.action,
-    resolvedInput: command.resolvedInput,
-    ...(command.preparationGrant === undefined ? {} : { preparationGrant: command.preparationGrant }),
+    request: {
+      requestId: context.request.requestId, revision: context.request.revision,
+      principalId: context.request.principalId, delegatedAgentId: context.request.delegatedAgentId,
+      routing: context.request.routing,
+    },
+    action: { actionId: context.action.actionId, capabilityContractId: context.action.capabilityContractId },
+    contract: context.contract,
+    publicInput: publicPreparationInput(context.contract, command.resolvedInput),
+    ...(protectedFields.length === 0 ? {} : {
+      releasePreparationData: async (input) => {
+        const contractRefusal = validateReleaseRequest(input, context.contract, protectedFields)
+        if (contractRefusal !== undefined) {
+          releaseRefusal = contractRefusal
+          return {
+            kind: 'refused' as const, reason: contractRefusal,
+            nextAction: 'Use only the registered data categories, recipients, and purposes for this comparison.',
+          }
+        }
+        const protectedValues = selectProtectedValues(input.fields, command.resolvedInput)
+        if (protectedValues === undefined || preparationAuthorityEvidenceRef === undefined) {
+          releaseRefusal = 'preparation_release_contract_mismatch'
+          return {
+            kind: 'refused' as const, reason: 'preparation_release_contract_mismatch' as const,
+            nextAction: 'Use only the registered data categories for this comparison.',
+          }
+        }
+        const result = await releasePreparationDisclosure({
+          operationKey: `${preparationScope}:${input.releaseKey}`,
+          authorityUseKey: preparationScope,
+          authorityEvidenceRef: preparationAuthorityEvidenceRef,
+          principalId: context.request.principalId,
+          delegatedAgentId: context.request.delegatedAgentId,
+          requestId: context.request.requestId,
+          requestRevision: context.request.revision,
+          planRevisionId: context.plan.planRevisionId,
+          actionId: context.action.actionId,
+          capabilityContractId: context.contract.capabilityContractId,
+          resolvedInputDigest: canonicalDigest(stableRecord(command.resolvedInput)),
+          protectedProjectionCommitment: dependencies.commitProtectedProjection(protectedValues),
+          recipient: input.recipient,
+          purpose: input.purpose,
+          purposeLabel: customerPurposeLabel(input.purpose),
+          fields: input.fields,
+          fieldCategories: input.fields.map((field) => ({
+            field, label: context.contract.input[field]?.customerLabel ?? field,
+          })),
+          protectedValues,
+        }, {
+          verifier: dependencies.preparationAuthorityVerifier,
+          store: dependencies.preparationDisclosureStore,
+          now: dependencies.now,
+          release: async ({ allocationId, protectedValues: values }) => await input.release({ allocationId, protectedValues: values }),
+        })
+        if (result.kind === 'released') input.fields.forEach((field) => {
+          releasedDisclosures.set(disclosureKey(input.recipient.bindingId, input.purpose, [field]), {
+            allocationId: result.allocationId, releasedAt: result.releasedAt,
+          })
+        })
+        else {
+          releaseRefusal = result.kind === 'uncertain' ? 'preparation_data_release_uncertain' : result.reason
+          if (result.kind === 'uncertain') releaseInspectionRef = result.allocationId
+        }
+        return result
+      },
+    }),
   })
+  if (releaseRefusal !== undefined) {
+    await dependencies.store.refusePreparation({
+      preparationScope, claimToken: claim.claimToken, reason: releaseRefusal,
+      ...(releaseInspectionRef === undefined ? {} : { inspectionRef: releaseInspectionRef }),
+    })
+    return refusal(preparationScope, releaseRefusal, releaseInspectionRef)
+  }
   if (routed.kind === 'no_route') {
     await dependencies.store.refusePreparation({ preparationScope, claimToken: claim.claimToken, reason: 'no_connected_option' })
     return refusal(preparationScope, 'no_connected_option')
   }
-  const quoteRefusal = validateRouteQuote(routed.quote, context.request, context.contract, command.preparationGrant, dependencies.now())
+  const quoteRefusal = validateRouteQuote(
+    routed.quote, context.request, context.contract, new Set(releasedDisclosures.keys()), dependencies.now(),
+  )
   if (quoteRefusal !== undefined) {
     await dependencies.store.refusePreparation({ preparationScope, claimToken: claim.claimToken, reason: quoteRefusal })
     return refusal(preparationScope, quoteRefusal)
@@ -198,6 +372,7 @@ export async function prepareCustomerRequestAction(
     contract: context.contract,
     resolvedInput: command.resolvedInput,
     quote: routed.quote,
+    releaseEvidence: releasedDisclosures,
     preparedAt: claim.claimedAt,
   })
   const persisted = await dependencies.store.completePreparation({ preparationScope, claimToken: claim.claimToken, preparedAction })
@@ -217,6 +392,7 @@ export function createInMemoryCustomerRequestPreparationStore(): CustomerRequest
     leaseExpiresAt: number
     preparedAction?: PreparedAction
     refusalReason?: PreparationRefusalReason
+    refusalInspectionRef?: string
   }>
   const preparations = new Map<string, State>()
   const preparationKeys = new Map<string, string>()
@@ -243,7 +419,10 @@ export function createInMemoryCustomerRequestPreparationStore(): CustomerRequest
       if (existing !== undefined) {
         if (existing.commandDigest !== input.commandDigest) return { kind: 'conflict' }
         if (existing.status === 'prepared' && existing.preparedAction !== undefined) return { kind: 'prepared', preparedAction: existing.preparedAction }
-        if (existing.status === 'refused' && existing.refusalReason !== undefined) return { kind: 'refused', reason: existing.refusalReason }
+        if (existing.status === 'refused' && existing.refusalReason !== undefined) return {
+          kind: 'refused', reason: existing.refusalReason,
+          ...(existing.refusalInspectionRef === undefined ? {} : { inspectionRef: existing.refusalInspectionRef }),
+        }
         if (existing.leaseExpiresAt > input.claimedAt) return { kind: 'in_progress' }
         const renewed = Object.freeze({ ...existing, claimToken: `${existing.claimToken}:retry`, leaseExpiresAt: input.leaseExpiresAt })
         preparations.set(input.preparationScope, renewed)
@@ -269,7 +448,10 @@ export function createInMemoryCustomerRequestPreparationStore(): CustomerRequest
       const existing = preparations.get(input.preparationScope)
       if (existing?.status === 'refused' && existing.refusalReason === input.reason) return
       if (existing?.status !== 'claimed' || existing.claimToken !== input.claimToken) throw new Error('preparation_claim_lost')
-      preparations.set(input.preparationScope, Object.freeze({ ...existing, status: 'refused', refusalReason: input.reason }))
+      preparations.set(input.preparationScope, Object.freeze({
+        ...existing, status: 'refused', refusalReason: input.reason,
+        ...(input.inspectionRef === undefined ? {} : { refusalInspectionRef: input.inspectionRef }),
+      }))
     },
   }
 }
@@ -296,8 +478,9 @@ export function projectPreparedActionForReview(action: PreparedAction): Prepared
       businessName: fallback.business.name, trigger: fallback.trigger, maximumAmountMinor: fallback.maximumCost.amountMinor,
     })),
     dataUse: action.disclosures.map((disclosure) => ({
-      field: disclosure.field, timing: disclosure.timing,
-      recipientName: disclosure.recipientName, purposes: [...disclosure.purposes],
+      dataCategory: disclosure.dataCategory, timing: disclosure.timing,
+      recipientName: disclosure.recipientName, purposeLabels: [...disclosure.purposeLabels],
+      status: disclosure.status, recordedAt: disclosure.recordedAt, inspectionRef: disclosure.inspectionRef,
     })),
     terms: action.materialTerms.map((term) => ({ label: term.label, value: term.value })),
     cancellation: { ...action.cancellation },
@@ -332,33 +515,11 @@ async function resolveContext(
   return { request, plan, action, contract }
 }
 
-function validatePreparationAuthority(
-  grant: PreparationGrant | undefined,
-  request: CustomerRequest,
-  contract: CapabilityContract,
-  resolvedInput: Readonly<Record<string, string | number | boolean>>,
-  now: number,
-): PreparationRefusalReason | undefined {
-  const disclosures = Object.entries(contract.input).filter(([field, definition]) => resolvedInput[field] !== undefined
-    && definition.disclosure?.phase === 'preparation' && definition.disclosure.classification !== 'public')
-  if (disclosures.length === 0) return undefined
-  if (grant === undefined) return 'preparation_authority_required'
-  if (grant.requestId !== request.requestId || grant.requestRevision !== request.revision || grant.principalId !== request.principalId
-    || grant.expiresAt <= now || grant.grantedAt > now || grant.maximumRecipients < 1) return 'preparation_authority_invalid'
-  const allowedFields = new Set(grant.allowedDataFields)
-  const allowedRecipients = new Set(grant.allowedRecipientKinds)
-  const allowedPurposes = new Set(grant.allowedPurposes)
-  if (disclosures.some(([field, definition]) => !allowedFields.has(field)
-    || definition.disclosure === undefined || !allowedRecipients.has(definition.disclosure.recipient)
-    || definition.disclosure.purposes.some((purpose) => !allowedPurposes.has(purpose)))) return 'preparation_authority_invalid'
-  return undefined
-}
-
 function validateRouteQuote(
   quote: PreparedRouteQuote,
   request: CustomerRequest,
   contract: CapabilityContract,
-  grant: PreparationGrant | undefined,
+  releasedDisclosures: ReadonlySet<string>,
   now: number,
 ): PreparationRefusalReason | undefined {
   if (quote.capabilityContractId !== contract.capabilityContractId) return 'route_contract_mismatch'
@@ -371,9 +532,68 @@ function validateRouteQuote(
     || contract.input[field]?.disclosure?.phase !== 'execution'))) return 'route_data_contract_mismatch'
   if (quote.preparationDisclosures.some((disclosure) => !contractFields.has(disclosure.field)
     || contract.input[disclosure.field]?.disclosure?.phase !== 'preparation')) return 'route_data_contract_mismatch'
-  const disclosedRecipients = new Set(quote.preparationDisclosures.map((disclosure) => disclosure.recipient.bindingId))
-  if (disclosedRecipients.size > 0 && (grant === undefined || disclosedRecipients.size > grant.maximumRecipients)) return 'route_recipient_limit_exceeded'
+  const quoteDisclosures = new Set(quote.preparationDisclosures.flatMap((item) => {
+    const disclosure = contract.input[item.field]?.disclosure
+    return disclosure === undefined ? [] : disclosure.purposes.map((purpose) => disclosureKey(item.recipient.bindingId, purpose, [item.field]))
+  }))
+  if (quoteDisclosures.size !== releasedDisclosures.size
+    || [...quoteDisclosures].some((item) => !releasedDisclosures.has(item))) return 'route_data_contract_mismatch'
   return undefined
+}
+
+function preparationProtectedFields(
+  contract: CapabilityContract,
+  resolvedInput: Readonly<Record<string, string | number | boolean>>,
+): readonly string[] {
+  return Object.entries(contract.input).flatMap(([field, definition]) => resolvedInput[field] !== undefined
+    && definition.disclosure?.phase === 'preparation' && definition.disclosure.classification !== 'public' ? [field] : [])
+}
+
+function publicPreparationInput(
+  contract: CapabilityContract,
+  resolvedInput: Readonly<Record<string, string | number | boolean>>,
+) {
+  return Object.fromEntries(Object.entries(resolvedInput).filter(([field]) => {
+    const disclosure = contract.input[field]?.disclosure
+    return disclosure === undefined || disclosure.classification === 'public'
+  }))
+}
+
+function validateReleaseRequest(
+  input: Readonly<{ recipient: PreparationRecipient; purpose: string; fields: readonly string[] }>,
+  contract: CapabilityContract,
+  protectedFields: readonly string[],
+): 'preparation_release_contract_mismatch' | undefined {
+  if (input.fields.length === 0 || input.fields.some((field) => !protectedFields.includes(field))) return 'preparation_release_contract_mismatch'
+  if (input.fields.some((field) => {
+    const disclosure = contract.input[field]?.disclosure
+    return disclosure === undefined || disclosure.recipient !== input.recipient.kind || !disclosure.purposes.includes(input.purpose)
+  })) return 'preparation_release_contract_mismatch'
+  return undefined
+}
+
+function disclosureKey(recipientBindingId: string, purpose: string, fields: readonly string[]) {
+  return canonicalDigest({ recipientBindingId, purpose, fields: [...new Set(fields)].sort() })
+}
+
+function customerPurposeLabel(value: string) {
+  const words = value.replace(/[_-]+/g, ' ').trim()
+  if (words.length === 0) return 'Prepare this option'
+  const first = words.at(0)
+  return first === undefined ? 'Prepare this option' : `${first.toUpperCase()}${words.slice(1)}`
+}
+
+function selectProtectedValues(
+  fields: readonly string[],
+  resolvedInput: Readonly<Record<string, string | number | boolean>>,
+): Readonly<Record<string, string | number | boolean>> | undefined {
+  const entries: [string, string | number | boolean][] = []
+  for (const field of fields) {
+    const value = resolvedInput[field]
+    if (value === undefined) return undefined
+    entries.push([field, value])
+  }
+  return Object.fromEntries(entries)
 }
 
 function buildPreparedAction(input: Readonly<{
@@ -384,23 +604,32 @@ function buildPreparedAction(input: Readonly<{
   contract: CapabilityContract
   resolvedInput: Readonly<Record<string, string | number | boolean>>
   quote: PreparedRouteQuote
+  releaseEvidence: ReadonlyMap<string, Readonly<{ allocationId: string; releasedAt: number }>>
   preparedAt: number
 }>): PreparedAction {
   const executionCandidates = [input.quote.selected, ...input.quote.fallbacks.map((fallback) => fallback.candidate)]
   const preparationDisclosures = input.quote.preparationDisclosures.flatMap((item) => {
     const disclosure = input.contract.input[item.field]?.disclosure
-    return disclosure === undefined ? [] : [{
-      field: item.field, timing: 'already_shared_to_prepare' as const,
-      recipientBindingId: item.recipient.bindingId, recipientName: item.recipient.name,
-      purposes: Object.freeze([...disclosure.purposes].sort()),
-    }]
+    return disclosure === undefined ? [] : disclosure.purposes.flatMap((purpose) => {
+      const evidence = input.releaseEvidence.get(disclosureKey(item.recipient.bindingId, purpose, [item.field]))
+      return evidence === undefined ? [] : [{
+        field: item.field, dataCategory: input.contract.input[item.field]?.customerLabel ?? item.field,
+        timing: 'already_shared_to_prepare' as const,
+        recipientBindingId: item.recipient.bindingId, recipientName: item.recipient.name,
+        purposes: Object.freeze([purpose]), purposeLabels: Object.freeze([customerPurposeLabel(purpose)]),
+        status: 'released' as const, recordedAt: evidence.releasedAt, inspectionRef: evidence.allocationId,
+      }]
+    })
   })
   const executionDisclosures = executionCandidates.flatMap((candidate) => candidate.executionDataFields.flatMap((field) => {
     const disclosure = input.contract.input[field]?.disclosure
     return disclosure === undefined ? [] : [{
-      field, timing: 'on_execution' as const,
+      field, dataCategory: input.contract.input[field]?.customerLabel ?? field, timing: 'on_execution' as const,
       recipientBindingId: candidate.business.bindingId, recipientName: candidate.business.name,
       purposes: Object.freeze([...disclosure.purposes].sort()),
+      purposeLabels: Object.freeze(disclosure.purposes.map(customerPurposeLabel).sort()),
+      status: 'not_released' as const, recordedAt: input.preparedAt,
+      inspectionRef: `pending:${input.preparationScope}:${candidate.business.bindingId}:${field}`,
     }]
   }))
   const materialTerms = input.quote.selected.materialTerms?.length
@@ -495,8 +724,11 @@ export function preparedActionDigest(action: Omit<PreparedAction, 'preparedActio
     expectedCost: action.expectedCost, maximumGrossCost: action.maximumGrossCost,
     priceComponents: action.priceComponents.map((component) => ({ ...component })),
     disclosures: action.disclosures.map((disclosure) => ({
-      field: disclosure.field, timing: disclosure.timing, recipientBindingId: disclosure.recipientBindingId,
+      field: disclosure.field, dataCategory: disclosure.dataCategory, timing: disclosure.timing,
+      recipientBindingId: disclosure.recipientBindingId,
       recipientName: disclosure.recipientName, purposes: [...disclosure.purposes].sort(),
+      purposeLabels: [...disclosure.purposeLabels].sort(), status: disclosure.status,
+      recordedAt: disclosure.recordedAt, inspectionRef: disclosure.inspectionRef,
     })),
     materialTerms: action.materialTerms.map((term) => ({ ...term })), cancellation: action.cancellation,
     ...(action.expectedBy === undefined ? {} : { expectedBy: action.expectedBy }),
@@ -514,6 +746,9 @@ function commandMaterial(
     requestId: request.requestId, requestRevision: request.revision, planRevisionId: plan.planRevisionId,
     actionId: action.actionId, capabilityContractId: action.capabilityContractId,
     routing: request.routing, resolvedInput: command.resolvedInput,
+    ...(command.preparationAuthorityEvidenceRef === undefined ? {} : {
+      preparationAuthorityEvidenceRef: command.preparationAuthorityEvidenceRef,
+    }),
   } as StableHashValue
 }
 
@@ -525,8 +760,15 @@ function scopeFor(command: PrepareCustomerRequestActionCommand): string {
   return `${command.requestId}:${command.requestRevision}:${command.planRevisionId}:${command.actionId}`
 }
 
-function refusal(preparationScope: string, reason: PreparationRefusalReason): PrepareCustomerRequestActionResult {
-  return Object.freeze({ kind: 'preparation_refused', preparationScope, reason })
+function refusal(
+  preparationScope: string,
+  reason: PreparationRefusalReason,
+  inspectionRef?: string,
+): PrepareCustomerRequestActionResult {
+  return Object.freeze({
+    kind: 'preparation_refused', preparationScope, reason,
+    ...(inspectionRef === undefined ? {} : { inspectionRef }),
+  })
 }
 
 function deepFreeze(value: unknown): unknown {
