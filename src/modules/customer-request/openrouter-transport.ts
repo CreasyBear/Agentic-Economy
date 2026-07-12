@@ -1,0 +1,53 @@
+import type { CustomerRequestInterpretationTransport } from './interpreter'
+
+type OpenRouterConfiguration = Readonly<{
+  apiKey: string
+  model: string
+  apiBaseUrl?: string
+  siteUrl?: string
+}>
+
+const DEFAULT_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
+  if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
+  return Object.freeze({
+    generateJson: async ({ systemInstruction, payload, signal }) => {
+      const response = await fetch(config.apiBaseUrl ?? DEFAULT_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': config.siteUrl ?? 'https://agentic-economy-phi.vercel.app',
+          'X-Title': 'Agentic Economy',
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: JSON.stringify(payload) },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0,
+        }),
+        signal,
+      })
+      if (!response.ok) throw new Error(`customer_request_interpretation_provider_${response.status}`)
+      const body: unknown = await response.json()
+      const content = extractContent(body)
+      if (content === undefined) throw new Error('customer_request_interpretation_provider_invalid')
+      return { content }
+    },
+  })
+}
+
+function extractContent(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value.choices)) return undefined
+  const first: unknown = value.choices[0]
+  if (!isRecord(first) || !isRecord(first.message)) return undefined
+  return typeof first.message.content === 'string' ? first.message.content : undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}

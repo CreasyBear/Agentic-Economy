@@ -1,4 +1,6 @@
 export {
+  capabilityContractValue,
+  customerRequestCompilationResultValue,
   customerRequestValue,
   planRevisionValue,
   preparedActionValue,

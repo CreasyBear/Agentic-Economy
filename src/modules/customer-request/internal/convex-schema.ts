@@ -9,6 +9,35 @@ const planInput = v.union(
   v.object({ kind: v.literal('customer_fact'), fact: v.string() }),
 )
 const literalValue = v.union(v.string(), v.number(), v.boolean())
+const capabilityValueType = v.union(
+  v.literal('string'), v.literal('integer'), v.literal('boolean'), v.literal('url'), v.literal('money_minor'), v.literal('provider_offer_ref'),
+)
+const capabilityFieldDefinition = v.object({
+  valueType: capabilityValueType,
+  customerLabel: v.string(), required: v.boolean(),
+  decisionRelevance: v.optional(v.union(v.literal('option_selection'), v.literal('commitment'))),
+  disclosure: v.optional(v.object({
+    classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+    phase: v.union(v.literal('preparation'), v.literal('execution')),
+    recipient: v.union(v.literal('candidate_provider'), v.literal('selected_provider'), v.literal('offer_issuer'), v.literal('named_recipient')),
+    purposes: v.array(v.string()),
+  })),
+  evidenceRole: v.optional(v.union(v.literal('provider_offer'), v.literal('result_artifact'), v.literal('status'), v.literal('provider_report'))),
+})
+export const capabilityContractValue = v.object({
+  capabilityContractId: v.string(), name: v.string(),
+  operation: v.union(v.literal('query'), v.literal('quote'), v.literal('reserve'), v.literal('book'), v.literal('purchase'), v.literal('status'), v.literal('cancel')),
+  preparation: v.optional(v.object({ purpose: v.string(), customerLabel: v.string() })),
+  input: v.record(v.string(), capabilityFieldDefinition), output: v.record(v.string(), capabilityFieldDefinition),
+  consequence: v.object({
+    commitment: v.union(v.literal('none'), v.literal('hold'), v.literal('reservation'), v.literal('booking'), v.literal('purchase'), v.literal('cancellation')),
+    spend: v.union(v.literal('none'), v.literal('quoted'), v.literal('metered')),
+    reversibility: v.union(v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible')),
+    approval: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+  }),
+  applicability: v.optional(v.array(v.object({ field: v.string(), acceptedValues: v.array(literalValue) }))),
+  providerAffinity: v.optional(v.object({ kind: v.literal('offer_issuer'), inputField: v.string() })),
+})
 const requestRequirement = v.object({ field: v.string(), label: v.string(), value: literalValue })
 const requestUnderstanding = v.object({
   outcome: v.string(),
@@ -68,6 +97,15 @@ export const planRevisionValue = v.object({
     providerAffinity: v.optional(v.object({ kind: v.literal('offer_issuer'), inputField: v.string(), sourceActionId: v.string() })),
   })),
 })
+
+export const customerRequestCompilationResultValue = v.union(
+  v.object({ kind: v.literal('plan_ready'), request: customerRequestValue, understanding: requestUnderstanding, planRevision: planRevisionValue }),
+  v.object({ kind: v.literal('needs_information'), request: customerRequestValue, understanding: requestUnderstanding, missingInformation: v.array(missingInformation) }),
+  v.object({ kind: v.literal('unsupported'), request: customerRequestValue, reason: v.union(v.literal('no_registered_capability'), v.literal('unsafe_proposal')) }),
+  v.object({ kind: v.literal('revision_conflict'), requestId: v.string(), expectedRevision: v.number() }),
+  v.object({ kind: v.literal('identity_conflict'), requestId: v.string() }),
+  v.object({ kind: v.literal('compilation_conflict'), requestId: v.string() }),
+)
 
 export const preparedActionValue = v.object({
   preparedActionId: v.string(), requestId: v.string(), requestRevision: v.number(), planRevisionId: v.string(), actionId: v.string(),
@@ -134,6 +172,14 @@ export const preparationRefusalReason = v.union(
 )
 
 export const customerRequestTables = {
+  customerRequestCapabilityContracts: defineTable({
+    ...capabilityContractValue.fields,
+    contractDigest: v.string(), status: v.union(v.literal('active'), v.literal('retired')),
+    registeredAt: v.number(), updatedAt: v.number(),
+  })
+    .index('by_capabilityContractId', ['capabilityContractId'])
+    .index('by_status_and_capabilityContractId', ['status', 'capabilityContractId']),
+
   customerRequests: defineTable({
     requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
     compilationState: v.optional(v.union(

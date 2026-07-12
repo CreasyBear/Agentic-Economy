@@ -1,5 +1,6 @@
 import type { CustomerRequestCompilationStore } from '@/modules/customer-request/compiler'
 import { customerRequestValue } from '@/modules/customer-request/runtime'
+import type { CompileCustomerRequestResult } from '@/modules/customer-request/compiler'
 import type { CustomerRequest, PlanRevision } from '@/modules/customer-request/public'
 import type { Infer } from 'convex/values'
 
@@ -28,7 +29,7 @@ export function createConvexCustomerRequestCompilationStore(ctx: Context): Custo
   }
 }
 
-function writableRequest(request: CustomerRequest) {
+export function writableRequest(request: CustomerRequest) {
   return {
       ...request,
     understanding: {
@@ -42,7 +43,7 @@ function writableRequest(request: CustomerRequest) {
   }
 }
 
-function writablePlan(plan: PlanRevision) {
+export function writablePlan(plan: PlanRevision) {
   return {
     ...plan,
     completionEvidence: plan.completionEvidence.map((evidence) => ({ ...evidence })),
@@ -52,6 +53,39 @@ function writablePlan(plan: PlanRevision) {
       input: Object.fromEntries(Object.entries(action.input).map(([field, value]) => [field, { ...value }])),
       ...(action.providerAffinity === undefined ? {} : { providerAffinity: { ...action.providerAffinity } }),
     })),
+  }
+}
+
+export function writableCompilationResult(result: CompileCustomerRequestResult) {
+  if (result.kind === 'plan_ready') return {
+    kind: result.kind,
+    request: writableRequest(result.request),
+    understanding: writableUnderstanding(result.understanding),
+    planRevision: writablePlan(result.planRevision),
+  }
+  if (result.kind === 'needs_information') return {
+    kind: result.kind,
+    request: writableRequest(result.request),
+    understanding: writableUnderstanding(result.understanding),
+    missingInformation: result.missingInformation.map((item) => ({
+      field: item.field, customerLabel: item.customerLabel, reason: item.reason,
+      ...(item.candidateCapabilityContractIds === undefined ? {} : { candidateCapabilityContractIds: [...item.candidateCapabilityContractIds] }),
+    })),
+  }
+  if (result.kind === 'unsupported') return { kind: result.kind, request: writableRequest(result.request), reason: result.reason }
+  if (result.kind === 'revision_conflict') return { kind: result.kind, requestId: result.requestId, expectedRevision: result.expectedRevision }
+  if (result.kind === 'identity_conflict') return { kind: result.kind, requestId: result.requestId }
+  const kind: 'compilation_conflict' = 'compilation_conflict'
+  return { kind, requestId: result.requestId }
+}
+
+function writableUnderstanding(understanding: CustomerRequest['understanding']) {
+  return {
+    ...understanding,
+    hardConstraints: understanding.hardConstraints.map((item) => ({ ...item })),
+    preferences: understanding.preferences.map((item) => ({ ...item })),
+    substitutions: { ...understanding.substitutions, boundaries: [...understanding.substitutions.boundaries] },
+    completionRequirement: { ...understanding.completionRequirement },
   }
 }
 
