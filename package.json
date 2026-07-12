@@ -35,7 +35,7 @@
     "test:e2e:a11y": "playwright test tests/e2e/a11y",
     "test:a11y": "playwright test tests/e2e/a11y",
     "test:types": "vitest run tests/types",
-    "test:imports": "AE_SCAN_MODE=clean vitest run tests/imports/backup-imports.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts tests/imports/routing-authority-retirement.test.ts tests/imports/routing-kernel-boundaries.test.ts tests/imports/kernel-retirement-manifest.test.ts",
+    "test:imports": "AE_SCAN_MODE=clean vitest run tests/imports/backup-imports.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts tests/imports/routing-authority-retirement.test.ts tests/imports/routing-kernel-boundaries.test.ts tests/imports/customer-request-boundaries.test.ts tests/imports/kernel-retirement-manifest.test.ts",
     "test:imports:fixtures": "AE_SCAN_MODE=fixtures vitest run tests/imports/backup-imports.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts",
     "test:ts-standards": "AE_SCAN_MODE=clean vitest run tests/imports/ts-standards.test.ts",
     "test:ts-standards:fixtures": "AE_SCAN_MODE=fixtures vitest run tests/imports/ts-standards.test.ts",
