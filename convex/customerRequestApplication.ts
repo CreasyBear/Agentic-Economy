@@ -52,7 +52,6 @@ export const submit = action({
         transport: createOpenRouterCustomerRequestTransport({
           apiKey,
           model: process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini',
-          ...(process.env.AE_OPENROUTER_API_BASE_URL?.trim() ? { apiBaseUrl: process.env.AE_OPENROUTER_API_BASE_URL.trim() } : {}),
           ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
         }),
         timeoutMs: 20_000,

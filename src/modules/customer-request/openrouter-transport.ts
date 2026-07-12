@@ -3,17 +3,14 @@ import type { CustomerRequestInterpretationTransport } from './interpreter'
 type OpenRouterConfiguration = Readonly<{
   apiKey: string
   model: string
-  apiBaseUrl?: string
   siteUrl?: string
 }>
-
-const DEFAULT_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
   if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
   return Object.freeze({
     generateJson: async ({ systemInstruction, payload, signal }) => {
-      const response = await fetch(config.apiBaseUrl ?? DEFAULT_URL, {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
