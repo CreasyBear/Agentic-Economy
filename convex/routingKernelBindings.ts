@@ -11,7 +11,10 @@ const bindingRegistration = v.object({
   conformance: v.union(v.literal('conformant'), v.literal('not_conformant')),
   admissionEvidenceRefs: v.array(v.string()), conformanceEvidenceRefs: v.array(v.string()),
   queryTerms: v.array(v.string()),
-  adapterFeatures: v.object({ requestCancellation: v.union(v.literal('supported'), v.literal('unsupported')) }),
+  adapterFeatures: v.object({
+    requestCancellation: v.union(v.literal('supported'), v.literal('unsupported')),
+    quotePreparation: v.optional(v.union(v.literal('public_query'), v.literal('structured_authorized'))),
+  }),
   adapterFeatureEvidenceRefs: v.array(v.string()),
   endpointUrl: v.string(), credentialRef: v.string(),
 })
@@ -92,7 +95,7 @@ export const setEligibility = mutation({
       networkId: existing.networkId, capabilityContractId: existing.capabilityContractId,
       operation: existing.operation, queryTerms: existing.queryTerms, endpointUrl: existing.endpointUrl,
       credentialRef: existing.credentialRef, ...nextState,
-      adapterFeatures: existing.adapterFeatures ?? { requestCancellation: 'unsupported' as const },
+      adapterFeatures: existing.adapterFeatures ?? { requestCancellation: 'unsupported' as const, quotePreparation: 'public_query' as const },
       adapterFeatureEvidenceRefs: existing.adapterFeatureEvidenceRefs ?? ['legacy:feature-profile-unsupported'],
     })
     await ctx.db.patch(existing._id, { ...next, registrationHash })
@@ -142,7 +145,7 @@ export const listEligible = internalQuery({
       const { _id, _creationTime, registrationHash, registeredAt, businessId, ...registration } = row
       eligible.push({
         ...registration,
-        adapterFeatures: registration.adapterFeatures ?? { requestCancellation: 'unsupported' as const },
+        adapterFeatures: registration.adapterFeatures ?? { requestCancellation: 'unsupported' as const, quotePreparation: 'public_query' as const },
         adapterFeatureEvidenceRefs: registration.adapterFeatureEvidenceRefs ?? ['legacy:feature-profile-unsupported'],
         admission: 'admitted' as const,
         conformance: 'conformant' as const,
@@ -153,10 +156,37 @@ export const listEligible = internalQuery({
   },
 })
 
+export const getCurrentStructuredEvidence = internalQuery({
+  args: { bindingId: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('routingKernelBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', args.bindingId)).unique()
+    if (row === null) return null
+    const business = await ctx.db.get(row.businessId)
+    if (business === null || business.publicStatus !== 'published' || business.claimStatus !== 'published'
+      || business.suppressedAt !== undefined) return null
+    let environment: string
+    try { environment = new URL(row.endpointUrl).origin } catch { return null }
+    return {
+      bindingId: row.bindingId,
+      nodeId: row.nodeId,
+      networkId: row.networkId,
+      capabilityContractId: row.capabilityContractId,
+      admission: row.admission,
+      conformance: row.conformance,
+      registrationHash: row.registrationHash,
+      environment,
+      quotePreparation: row.adapterFeatures?.quotePreparation ?? 'public_query' as const,
+    }
+  },
+})
+
 export const setAdapterFeaturesInternal = internalMutation({
   args: {
     bindingId: v.string(), expectedRegistrationHash: v.string(),
-    adapterFeatures: v.object({ requestCancellation: v.union(v.literal('supported'), v.literal('unsupported')) }),
+    adapterFeatures: v.object({
+      requestCancellation: v.union(v.literal('supported'), v.literal('unsupported')),
+      quotePreparation: v.optional(v.union(v.literal('public_query'), v.literal('structured_authorized'))),
+    }),
     adapterFeatureEvidenceRefs: v.array(v.string()), updatedAt: v.number(),
   },
   handler: async (ctx, args) => {
@@ -192,7 +222,7 @@ export const migrateAuthorityDigests = internalMutation({
         conformance: row.conformance, admissionEvidenceRefs: row.admissionEvidenceRefs,
         conformanceEvidenceRefs: row.conformanceEvidenceRefs, queryTerms: row.queryTerms,
         endpointUrl: row.endpointUrl, credentialRef: row.credentialRef,
-        adapterFeatures: row.adapterFeatures ?? { requestCancellation: 'unsupported' as const },
+        adapterFeatures: row.adapterFeatures ?? { requestCancellation: 'unsupported' as const, quotePreparation: 'public_query' as const },
         adapterFeatureEvidenceRefs: row.adapterFeatureEvidenceRefs ?? ['legacy:feature-profile-unsupported'],
       })
       await ctx.db.patch(row._id, { registrationHash })

@@ -45,6 +45,7 @@ export type CapabilityContract = Readonly<{
   capabilityContractId: string
   name: string
   operation: 'query' | 'quote' | 'reserve' | 'book' | 'purchase' | 'status' | 'cancel'
+  preparation?: Readonly<{ purpose: string; customerLabel: string }>
   input: Readonly<Record<string, CapabilityFieldDefinition>>
   output: Readonly<Record<string, CapabilityFieldDefinition>>
   consequence: Readonly<{
@@ -276,6 +277,7 @@ const capabilityContractSchema = z.object({
   capabilityContractId: identifier.refine((value) => /:v[1-9]\d*$/.test(value)),
   name: z.string().trim().min(1).max(160),
   operation: z.enum(['query', 'quote', 'reserve', 'book', 'purchase', 'status', 'cancel']),
+  preparation: z.object({ purpose: identifier, customerLabel: z.string().trim().min(1).max(160) }).strict().optional(),
   input: z.record(identifier, fieldDefinitionSchema),
   output: z.record(identifier, fieldDefinitionSchema),
   consequence: z.object({
@@ -406,6 +408,12 @@ export function createPlanRevision(input: unknown, registry: CapabilityContractR
 function validateCapabilityContract(contract: z.infer<typeof capabilityContractSchema>): void {
   const inputFields = Object.entries(contract.input)
   const materialDisclosure = inputFields.some(([, field]) => field.disclosure !== undefined && field.disclosure.classification !== 'public')
+  const preparationFields = inputFields.filter(([, field]) => field.disclosure?.phase === 'preparation')
+  if (preparationFields.length > 0 && (contract.preparation === undefined
+    || preparationFields.some(([, field]) => !field.disclosure?.purposes.includes(contract.preparation!.purpose)))) {
+    throw new Error('capability_preparation_purpose_invalid')
+  }
+  if (preparationFields.length === 0 && contract.preparation !== undefined) throw new Error('capability_preparation_purpose_unused')
   const material = contract.consequence.commitment !== 'none' || contract.consequence.spend !== 'none' || materialDisclosure
   if (material && contract.consequence.approval === 'none') throw new Error('capability_material_consequence_requires_authority')
   const allowedCommitments: Readonly<Record<CapabilityContract['operation'], readonly CapabilityContract['consequence']['commitment'][]>> = {

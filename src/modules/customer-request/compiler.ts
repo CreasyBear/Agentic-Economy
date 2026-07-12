@@ -432,8 +432,9 @@ function validateAmbiguousQuestion(
   if (new Set(candidates.map((candidate) => candidate.operation)).size !== 1) return undefined
   const applicability = candidates.map((candidate) => candidate.applicability?.find((rule) => rule.field === proposal.field))
   if (applicability.some((rule) => rule === undefined)) return undefined
-  const fieldTypes = new Set(candidates.map((candidate) => candidate.input[proposal.field]?.valueType))
-  if (fieldTypes.size !== 1 || fieldTypes.has(undefined)) return undefined
+  if (candidates.some((candidate) => candidate.input[proposal.field] === undefined)) return undefined
+  const fieldTypes = new Set(candidates.map((candidate) => candidate.input[proposal.field]!.valueType))
+  if (fieldTypes.size !== 1) return undefined
   const acceptedValueSets = applicability.map((rule) => new Set((rule?.acceptedValues ?? []).map((value) => canonicalDigest({ value }))))
   for (let left = 0; left < acceptedValueSets.length; left += 1) {
     for (let right = left + 1; right < acceptedValueSets.length; right += 1) {

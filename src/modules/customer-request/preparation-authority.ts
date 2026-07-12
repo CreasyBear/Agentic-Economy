@@ -197,9 +197,12 @@ export type PreparationDisclosureAllocation = Readonly<{
   allocatedAt: number
   resolvedAt?: number
   providerEvidenceRef?: string
+  uncertainAt?: number
+  reconciledAt?: number
 }>
 
 export type PreparationDisclosureStore = Readonly<{
+  get: (allocationId: string) => Awaitable<PreparationDisclosureAllocation | undefined>
   allocate: (input: Readonly<{
     authority: VerifiedPreparationAuthority
     command: PreparationDisclosureCommand
@@ -213,6 +216,11 @@ export type PreparationDisclosureStore = Readonly<{
     disposition: 'released' | 'not_released' | 'uncertain'
     resolvedAt: number
     providerEvidenceRef?: string
+  }>) => Awaitable<PreparationDisclosureAllocation>
+  reconcileReleased: (input: Readonly<{
+    allocationId: string
+    providerEvidenceRef: string
+    reconciledAt: number
   }>) => Awaitable<PreparationDisclosureAllocation>
   authorizeRelease: (input: Readonly<{ allocationId: string; now: number }>) => Awaitable<
     | Readonly<{ kind: 'authorized'; allocation: PreparationDisclosureAllocation }>
@@ -239,6 +247,7 @@ export function createInMemoryPreparationDisclosureStore(
     operations: new Set<string>(),
   }]))
   return Object.freeze({
+    get: (allocationId) => allocations.get(allocationId),
     allocate: (input) => {
       const allocationDigest = canonicalDigest(allocationMaterial(input.authority, input.command))
       const existingId = operations.get(input.command.operationKey)
@@ -285,10 +294,27 @@ export function createInMemoryPreparationDisclosureStore(
         ...current,
         disposition: input.disposition,
         resolvedAt: input.resolvedAt,
+        ...(input.disposition === 'uncertain' ? { uncertainAt: input.resolvedAt } : {}),
         ...(input.providerEvidenceRef === undefined ? {} : { providerEvidenceRef: input.providerEvidenceRef }),
       })
       allocations.set(input.allocationId, resolved)
       return resolved
+    },
+    reconcileReleased: (input) => {
+      const current = allocations.get(input.allocationId)
+      if (current === undefined) throw new Error('preparation_allocation_not_found')
+      if (input.providerEvidenceRef.trim().length === 0) throw new Error('preparation_reconciliation_evidence_required')
+      if (current.disposition === 'released') {
+        if (current.providerEvidenceRef !== input.providerEvidenceRef) throw new Error('preparation_allocation_reconciliation_conflict')
+        return current
+      }
+      if (current.disposition !== 'uncertain') throw new Error('preparation_allocation_not_uncertain')
+      const reconciled = Object.freeze({
+        ...current, disposition: 'released' as const, providerEvidenceRef: input.providerEvidenceRef,
+        resolvedAt: input.reconciledAt, reconciledAt: input.reconciledAt,
+      })
+      allocations.set(input.allocationId, reconciled)
+      return reconciled
     },
     authorizeRelease: (input) => {
       const allocation = allocations.get(input.allocationId)

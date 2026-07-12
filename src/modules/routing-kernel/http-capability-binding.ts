@@ -5,10 +5,38 @@ import type { CapabilityBinding, CapabilityBindingAdapter } from './application'
 
 const MAX_RESPONSE_BYTES = 64 * 1024
 const money = z.object({ currency: z.string().regex(/^[A-Z]{3}$/), amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict()
+const structuredOfferOutput = z.object({
+  field: z.string().min(1).max(200), valueType: z.enum(['string', 'integer', 'boolean', 'url', 'money_minor']),
+  value: z.union([z.string().max(8_000), z.number().finite(), z.boolean()]),
+}).strict()
 const quoteResponse = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('quoted'), expectedCost: money, maximumCost: money, expectedLatencyMs: z.number().int().nonnegative(), dataFields: z.array(z.string().min(1).max(200)).max(128), disclosures: z.array(z.string().min(1).max(200)).max(64), providerQuoteRef: z.string().min(1).max(500).optional(), providerQuoteExpiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional() }).strict(),
   z.object({ kind: z.literal('refused'), reason: z.string().min(1).max(500) }).strict(),
 ])
+const structuredQuoteResponse = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('quoted'), issuerBindingId: z.string().min(1).max(200), issuerNodeId: z.string().min(1).max(200),
+    capabilityContractId: z.string().min(1).max(200), capabilityContractVersion: z.string().min(1).max(100),
+    registrationHash: z.string().min(1).max(500),
+    environment: z.string().min(1).max(100), expectedCost: money, maximumCost: money,
+    expectedLatencyMs: z.number().int().nonnegative(), dataFields: z.array(z.string().min(1).max(200)).max(128),
+    disclosures: z.array(z.string().min(1).max(200)).max(64), providerQuoteRef: z.string().min(1).max(500),
+    providerQuoteExpiresAt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    offerOutputs: z.array(structuredOfferOutput).max(128),
+    priceComponents: z.array(z.object({ label: z.string().min(1).max(200), amountMinor: z.number().int().nonnegative() }).strict()).max(64),
+    materialTerms: z.array(z.object({ key: z.string().min(1).max(200), label: z.string().min(1).max(200), value: z.string().min(1).max(2_000) }).strict()).min(1).max(64),
+    cancellation: z.object({ kind: z.enum(['supported', 'conditional', 'unsupported']), summary: z.string().min(1).max(2_000) }).strict(),
+  }).strict(),
+  z.object({ kind: z.literal('refused'), reason: z.string().min(1).max(500) }).strict(),
+])
+const structuredQuoteInput = z.object({
+  quoteAttemptId: z.string().min(1).max(200), allocationId: z.string().min(1).max(200),
+  recipient: z.object({ bindingId: z.string().min(1).max(200), nodeId: z.string().min(1).max(200) }).strict(),
+  capabilityContractId: z.string().min(1).max(200), capabilityContractVersion: z.string().min(1).max(100),
+  registrationHash: z.string().min(1).max(500),
+  environment: z.string().min(1).max(100),
+  data: z.record(z.string().min(1).max(200), z.union([z.string().max(8_000), z.number().finite(), z.boolean()])),
+}).strict()
 const executionResponse = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('effect_committed'), providerReference: z.string().min(1).max(500), outcome: z.record(z.string().min(1).max(200), z.string().max(8_000)), reportedCost: money.optional() }).strict(),
   z.object({ kind: z.literal('effect_not_committed'), reason: z.string().min(1).max(500), providerReference: z.string().min(1).max(500).optional() }).strict(),
@@ -48,10 +76,11 @@ export function createHttpCapabilityBinding(registration: HttpCapabilityRegistra
   if (endpoint.protocol !== 'https:') throw new Error('https_required')
   if (endpoint.username !== '' || endpoint.password !== '' || endpoint.hash !== '') throw new Error('endpoint_url_invalid')
 
-  async function call(operation: 'quote' | 'execute' | 'reconcile' | 'cancel', body: Record<string, unknown>, idempotencyKey?: string): Promise<unknown | undefined> {
-    if (!await dependencies.validateTarget(endpoint)) return operation === 'quote' ? { kind: 'refused', reason: 'endpoint_not_public' } : undefined
+  async function call(operation: 'quote' | 'structured_quote' | 'structured_quote_reconcile' | 'execute' | 'reconcile' | 'cancel', body: Record<string, unknown>, idempotencyKey?: string): Promise<unknown | undefined> {
+    const quoteOperation = operation === 'quote' || operation === 'structured_quote'
+    if (!await dependencies.validateTarget(endpoint)) return quoteOperation ? { kind: 'refused', reason: 'endpoint_not_public' } : undefined
     const credential = await dependencies.resolveCredential(registration.credentialRef)
-    if (credential === undefined || credential.length === 0) return operation === 'quote' ? { kind: 'refused', reason: 'credential_unavailable' } : undefined
+    if (credential === undefined || credential.length === 0) return quoteOperation ? { kind: 'refused', reason: 'credential_unavailable' } : undefined
     let response: Response
     const startedAt = (dependencies.now ?? Date.now)()
     let transportOutcome: 'returned' | 'indeterminate' = 'indeterminate'
@@ -62,12 +91,20 @@ export function createHttpCapabilityBinding(registration: HttpCapabilityRegistra
         body: JSON.stringify({ protocolVersion: 'ae-capability:v1', operation, bindingId: registration.binding.bindingId, ...body }),
       }))
       transportOutcome = 'returned'
-    } catch { return undefined }
+    } catch (error) {
+      if (operation !== 'structured_quote' && operation !== 'structured_quote_reconcile') return undefined
+      return {
+        kind: 'transport_uncertain',
+        reason: error instanceof DOMException && error.name === 'TimeoutError'
+          ? 'provider_quote_timeout'
+          : 'provider_quote_unknown',
+      }
+    }
     finally {
       try {
         await dependencies.observeProviderWait?.({
           bindingId: registration.binding.bindingId,
-          operation,
+          operation: operation === 'structured_quote' || operation === 'structured_quote_reconcile' ? 'quote' : operation,
           providerWaitMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
           outcome: transportOutcome,
         })
@@ -95,6 +132,62 @@ export function createHttpCapabilityBinding(registration: HttpCapabilityRegistra
         ...(providerQuoteRef === undefined ? {} : { providerQuoteRef }),
         ...(providerQuoteExpiresAt === undefined ? {} : { providerQuoteExpiresAt }),
       }
+    },
+    quoteStructured: async (candidate) => {
+      const input = structuredQuoteInput.safeParse(candidate)
+      if (!input.success || Object.keys(input.data.data).length > 128) {
+        return { kind: 'refused', reason: 'structured_quote_input_invalid' }
+      }
+      const binding = registration.binding
+      if (binding.registrationHash === undefined || binding.environment === undefined
+        || input.data.recipient.bindingId !== binding.bindingId || input.data.recipient.nodeId !== binding.nodeId
+        || input.data.capabilityContractId !== binding.capabilityContractId
+        || input.data.registrationHash !== binding.registrationHash || input.data.environment !== binding.environment) {
+        return { kind: 'refused', reason: 'structured_quote_recipient_mismatch' }
+      }
+      const idempotencyKey = `quote-attempt:${input.data.quoteAttemptId}:allocation:${input.data.allocationId}`
+      const response = await call('structured_quote', {
+        quoteAttemptId: input.data.quoteAttemptId, allocationId: input.data.allocationId,
+        recipient: input.data.recipient, capabilityContractId: input.data.capabilityContractId,
+        capabilityContractVersion: input.data.capabilityContractVersion,
+        registrationHash: input.data.registrationHash, environment: input.data.environment, data: input.data.data,
+      }, idempotencyKey)
+      if (isTransportUncertain(response)) return { kind: 'uncertain', reason: response.reason }
+      const parsed = structuredQuoteResponse.safeParse(response)
+      if (!parsed.success) return { kind: 'refused', reason: 'provider_quote_invalid' }
+      if (parsed.data.kind === 'refused') return parsed.data
+      if (parsed.data.issuerBindingId !== binding.bindingId || parsed.data.issuerNodeId !== binding.nodeId
+        || parsed.data.capabilityContractId !== binding.capabilityContractId
+        || parsed.data.capabilityContractVersion !== input.data.capabilityContractVersion
+        || parsed.data.registrationHash !== binding.registrationHash || parsed.data.environment !== binding.environment) {
+        return { kind: 'refused', reason: 'provider_quote_issuer_mismatch' }
+      }
+      return parsed.data
+    },
+    reconcileStructuredQuote: async (candidate) => {
+      const { data: _data, ...withoutData } = candidate as typeof candidate & { data?: never }
+      const input = structuredQuoteInput.omit({ data: true }).safeParse(withoutData)
+      if (!input.success) return { kind: 'refused', reason: 'structured_quote_reconcile_input_invalid' }
+      const binding = registration.binding
+      if (binding.registrationHash === undefined || binding.environment === undefined
+        || input.data.recipient.bindingId !== binding.bindingId || input.data.recipient.nodeId !== binding.nodeId
+        || input.data.capabilityContractId !== binding.capabilityContractId
+        || input.data.registrationHash !== binding.registrationHash || input.data.environment !== binding.environment) {
+        return { kind: 'refused', reason: 'structured_quote_recipient_mismatch' }
+      }
+      const idempotencyKey = `quote-attempt:${input.data.quoteAttemptId}:allocation:${input.data.allocationId}`
+      const response = await call('structured_quote_reconcile', input.data, idempotencyKey)
+      if (isTransportUncertain(response)) return { kind: 'uncertain', reason: response.reason }
+      const parsed = structuredQuoteResponse.safeParse(response)
+      if (!parsed.success) return { kind: 'refused', reason: 'provider_quote_invalid' }
+      if (parsed.data.kind === 'refused') return parsed.data
+      if (parsed.data.issuerBindingId !== binding.bindingId || parsed.data.issuerNodeId !== binding.nodeId
+        || parsed.data.capabilityContractId !== binding.capabilityContractId
+        || parsed.data.capabilityContractVersion !== input.data.capabilityContractVersion
+        || parsed.data.registrationHash !== binding.registrationHash || parsed.data.environment !== binding.environment) {
+        return { kind: 'refused', reason: 'provider_quote_issuer_mismatch' }
+      }
+      return parsed.data
     },
     execute: async (input) => {
       const parsed = executionResponse.safeParse(await call('execute', {
@@ -144,4 +237,14 @@ export function createHttpCapabilityBinding(registration: HttpCapabilityRegistra
       },
     }),
   } satisfies CapabilityBindingAdapter)
+}
+
+function isTransportUncertain(value: unknown): value is Readonly<{
+  kind: 'transport_uncertain'
+  reason: 'provider_quote_timeout' | 'provider_quote_unknown'
+}> {
+  if (typeof value !== 'object' || value === null) return false
+  const kind = Reflect.get(value, 'kind')
+  const reason = Reflect.get(value, 'reason')
+  return kind === 'transport_uncertain' && (reason === 'provider_quote_timeout' || reason === 'provider_quote_unknown')
 }

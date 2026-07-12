@@ -12,6 +12,7 @@ import { createHttpCapabilityBinding } from '@/modules/routing-kernel/http-capab
 
 import { action, internalAction, type ActionCtx } from './_generated/server'
 import { createConvexKernelStore } from './routingKernelStoreAdapter'
+import { createConvexStructuredQuotePreparationStore } from './routingKernelStructuredPreparationStoreAdapter'
 import { internal } from './_generated/api'
 
 const routeAuthorization = v.object({
@@ -118,7 +119,7 @@ export const authorizeRoute = action({
 type RegisteredBindingRow = {
   bindingId: string; nodeId: string; networkId: string; capabilityContractId: string; operation: string
   admission: 'admitted' | 'not_admitted'; conformance: 'conformant' | 'not_conformant'; queryTerms: string[]
-  adapterFeatures: { requestCancellation: 'supported' | 'unsupported' }
+  adapterFeatures: { requestCancellation: 'supported' | 'unsupported'; quotePreparation?: 'public_query' | 'structured_authorized' }
   endpointUrl: string; credentialRef: string; registrationHash: string
 }
 
@@ -134,7 +135,10 @@ export function createRegisteredRoutingKernel(
     const routingEvidenceSnapshots = rawRoutingEvidenceSnapshots.map(normalizeRoutingEvidence)
     const rows: RegisteredBindingRow[] = rawRows.map((row) => ({
       ...row,
-      adapterFeatures: { requestCancellation: row.adapterFeatures?.requestCancellation === 'supported' ? 'supported' as const : 'unsupported' as const },
+      adapterFeatures: {
+        requestCancellation: row.adapterFeatures?.requestCancellation === 'supported' ? 'supported' as const : 'unsupported' as const,
+        quotePreparation: row.adapterFeatures?.quotePreparation === 'structured_authorized' ? 'structured_authorized' as const : 'public_query' as const,
+      },
     }))
     const bindings: CapabilityBindingAdapter[] = rows.map((row) => createHttpCapabilityBinding({
       binding: { bindingId: row.bindingId, nodeId: row.nodeId, networkId: row.networkId, capabilityContractId: row.capabilityContractId, operation: row.operation, admission: row.admission, conformance: row.conformance, queryTerms: row.queryTerms, registrationHash: row.registrationHash, environment: new URL(row.endpointUrl).origin, adapterFeatures: row.adapterFeatures },
@@ -157,6 +161,10 @@ export function createRegisteredRoutingKernel(
       bindings,
       routingEvidenceSnapshots,
       store,
+      structuredPreparationStore: createConvexStructuredQuotePreparationStore(ctx),
+      resolveCurrentStructuredBinding: async (bindingId) => await ctx.runQuery(
+        internal.routingKernelBindings.getCurrentStructuredEvidence, { bindingId },
+      ) ?? undefined,
       incidentControl: {
         evaluate: async (scope, action) => await ctx.runQuery(internal.routingKernelIncidentControl.evaluate, { scope, action }),
         claimRecovery: async (input) => {
@@ -175,6 +183,7 @@ export function createRegisteredRoutingKernel(
   return {
     operations: {
       route: async (input: Parameters<ReturnType<typeof createNeutralRoutingKernel>['operations']['route']>[0]) => await (await kernelFor(input.networkId)).operations.route(input),
+      prepareStructuredQuotes: async (input: Parameters<ReturnType<typeof createNeutralRoutingKernel>['operations']['prepareStructuredQuotes']>[0]) => await (await kernelFor(input.networkId)).operations.prepareStructuredQuotes(input),
       execute: async (input: Parameters<ReturnType<typeof createNeutralRoutingKernel>['operations']['execute']>[0]) => { const quote = await store.getQuote(input.quoteId); return await (await kernelFor(quote?.networkId)).operations.execute(input) },
       inspect: async (input: Parameters<ReturnType<typeof createNeutralRoutingKernel>['operations']['inspect']>[0]) => await (await kernelFor()).operations.inspect(input),
       reconcileProviderOutcome: async (input: Parameters<ReturnType<typeof createNeutralRoutingKernel>['operations']['reconcileProviderOutcome']>[0]) => {

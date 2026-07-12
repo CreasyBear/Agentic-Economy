@@ -38,6 +38,8 @@ import type * as routingKernelHostedIncidentProof from "../routingKernelHostedIn
 import type * as routingKernelIncidentControl from "../routingKernelIncidentControl.js";
 import type * as routingKernelStore from "../routingKernelStore.js";
 import type * as routingKernelStoreAdapter from "../routingKernelStoreAdapter.js";
+import type * as routingKernelStructuredPreparation from "../routingKernelStructuredPreparation.js";
+import type * as routingKernelStructuredPreparationStoreAdapter from "../routingKernelStructuredPreparationStoreAdapter.js";
 import type * as routingKernelTracer from "../routingKernelTracer.js";
 import type * as routingKernelTransport from "../routingKernelTransport.js";
 import type * as security from "../security.js";
@@ -82,6 +84,8 @@ declare const fullApi: ApiFromModules<{
   routingKernelIncidentControl: typeof routingKernelIncidentControl;
   routingKernelStore: typeof routingKernelStore;
   routingKernelStoreAdapter: typeof routingKernelStoreAdapter;
+  routingKernelStructuredPreparation: typeof routingKernelStructuredPreparation;
+  routingKernelStructuredPreparationStoreAdapter: typeof routingKernelStructuredPreparationStoreAdapter;
   routingKernelTracer: typeof routingKernelTracer;
   routingKernelTransport: typeof routingKernelTransport;
   security: typeof security;

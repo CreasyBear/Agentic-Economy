@@ -65,6 +65,7 @@ describe('customer request contracts', () => {
       capabilityContractId: 'shipping.rate.query:v1',
       name: 'Query shipping rates',
       operation: 'query',
+      preparation: { purpose: 'shipping_rate_quote', customerLabel: 'Prepare shipping rates' },
       input: {
         destinationPostcode: {
           ...field('string', 'Destination postcode'),
@@ -236,6 +237,7 @@ function shippingRegistry() {
       capabilityContractId: 'shipping.rate.query:v1',
       name: 'Query shipping rates',
       operation: 'query',
+      preparation: { purpose: 'shipping_rate_quote', customerLabel: 'Prepare shipping rates' },
       input: {
         destinationPostcode: {
           ...field('string', 'Destination postcode'),

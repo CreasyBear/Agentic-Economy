@@ -22,6 +22,36 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 describe('prepare customer request action', () => {
+  it('persists and replays unranked customer options without inventing a recommendation', async () => {
+    const candidateSet = {
+      inspectionRef: 'prepared-options:opaque-1',
+      candidates: [{
+        optionRef: 'option:opaque-1', business: { name: 'Courier A' },
+        expectedCost: { currency: 'AUD', amountMinor: 1_200 }, maximumCost: { currency: 'AUD', amountMinor: 1_300 },
+        expectedLatencyMs: 500, priceComponents: [{ label: 'Service', amountMinor: 1_200 }],
+        comparableOutputs: [{ label: 'Service level', value: 'Tracked' }], materialTerms: ['Tracked service'],
+        cancellation: { kind: 'unsupported' as const, summary: 'No booking is created.' }, expiresAt: 2_000,
+        inspectionRef: 'evidence_opaque-1',
+      }],
+      attempts: [
+        { business: { name: 'Courier A' }, status: 'option_received' as const, explanation: 'This business returned a usable option.' },
+        { business: { name: 'Courier B' }, status: 'uncertain' as const, explanation: 'AE is checking this option.' },
+      ],
+    }
+    const fixture = setup({ routeResult: { kind: 'candidate_set', candidateSet } })
+
+    const first = await prepareCustomerRequestAction(command(), fixture.dependencies)
+    const replay = await prepareCustomerRequestAction(command(), fixture.dependencies)
+
+    expect(first).toEqual({
+      kind: 'options_prepared', preparationScope: 'request:shipping:1:1:plan:shipping:1:action:quote', candidateSet,
+    })
+    expect(replay).toEqual(first)
+    expect(fixture.routeCalls).toBe(1)
+    const visible = JSON.stringify(first)
+    expect(visible).not.toMatch(/selected|recommended|cheapest|best|bindingId|capabilityContractId|Digest|RootRun|grant/i)
+  })
+
   it('persists one decision-ready quote without creating execution authority', async () => {
     const fixture = setup()
 
@@ -146,7 +176,7 @@ describe('prepare customer request action', () => {
     const result = await prepareCustomerRequestAction(command(), fixture.dependencies)
 
     expect(result).toMatchObject({
-      kind: 'preparation_refused', reason: 'preparation_data_release_uncertain',
+      kind: 'preparation_in_progress',
       inspectionRef: expect.stringMatching(/^preparation-allocation:/),
     })
   })
@@ -237,6 +267,7 @@ function setup(options: {
             releaseKey: `${disclosure.recipient.bindingId}:${purpose}:${disclosure.field}`,
             recipient: { ...disclosure.recipient, kind: definition.recipient },
             purpose,
+            purposeLabel: input.contract.preparation!.customerLabel,
             fields: [disclosure.field],
             release: async () => {
               providerDisclosureCalls += 1
@@ -330,6 +361,7 @@ function planRevision(registry: ReturnType<typeof contracts>) {
 function contracts() {
   return createCapabilityContractRegistry([defineCapabilityContract({
     capabilityContractId: 'shipping.rate.query:v1', name: 'Query shipping rates', operation: 'query',
+    preparation: { purpose: 'shipping_rate_quote', customerLabel: 'Prepare shipping rates' },
     input: {
       destinationPostcode: {
         valueType: 'string', customerLabel: 'Destination postcode', required: true,

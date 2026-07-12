@@ -114,6 +114,13 @@ const durableTables = [
   'routingKernelRootRuns',
   'routingKernelLeafRuns',
   'routingKernelProtocolRecords',
+  'routingKernelPreparationCandidateSets',
+  'routingKernelPreparationCandidates',
+  'routingKernelPreparationQuoteAttempts',
+  'routingKernelPreparationQuoteAttemptFields',
+  'routingKernelProviderOffers',
+  'routingKernelProviderOfferExecutionFields',
+  'routingKernelProviderOfferMaterialTerms',
 ] as const
 
 const requiredIndexes = {
@@ -228,6 +235,15 @@ const requiredIndexes = {
   routingKernelRootRuns: ['by_rootRunId', 'by_quoteId'],
   routingKernelLeafRuns: ['by_rootRunId_leafRunId', 'by_rootRunId_bindingId'],
   routingKernelProtocolRecords: ['by_rootRunId_sequence', 'by_recordId'],
+  routingKernelPreparationCandidateSets: [
+    'by_preparationRequestId', 'by_candidateSetDigest', 'by_customerRequestId_planRevisionId_actionId_generation',
+  ],
+  routingKernelPreparationCandidates: ['by_preparationRequestId_and_position', 'by_candidateSetDigest_and_bindingId'],
+  routingKernelPreparationQuoteAttempts: ['by_quoteAttemptId', 'by_commandDigest', 'by_candidateSetDigest_and_recipientBindingId'],
+  routingKernelPreparationQuoteAttemptFields: ['by_quoteAttemptId_and_position'],
+  routingKernelProviderOffers: ['by_providerOfferId', 'by_quoteAttemptId', 'by_candidateSetDigest_and_issuerBindingId'],
+  routingKernelProviderOfferExecutionFields: ['by_providerOfferId_and_position'],
+  routingKernelProviderOfferMaterialTerms: ['by_providerOfferId_and_position'],
 } satisfies Record<string, readonly string[]>
 
 describe('Convex schema', () => {

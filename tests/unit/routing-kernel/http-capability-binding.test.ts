@@ -13,6 +13,115 @@ const registration = {
 }
 
 describe('BYO HTTP capability binding', () => {
+  it('sends a structured quote only in the POST body with allocation-bound idempotency', async () => {
+    let captured: Request | undefined
+    const structuredRegistration = registrationWithEvidence()
+    const binding = createHttpCapabilityBinding(structuredRegistration, {
+      ...dependencies(),
+      send: async (request) => {
+        captured = request
+        return Response.json({
+          kind: 'quoted', issuerBindingId: structuredRegistration.binding.bindingId,
+          issuerNodeId: structuredRegistration.binding.nodeId,
+          capabilityContractId: structuredRegistration.binding.capabilityContractId,
+          capabilityContractVersion: '1',
+          registrationHash: structuredRegistration.binding.registrationHash,
+          environment: structuredRegistration.binding.environment,
+          expectedCost: { currency: 'AUD', amountMinor: 1_100 },
+          maximumCost: { currency: 'AUD', amountMinor: 1_200 }, expectedLatencyMs: 800,
+          offerOutputs: [], priceComponents: [{ label: 'Service', amountMinor: 1_100 }],
+          materialTerms: [{ key: 'service', label: 'Service', value: 'Tracked service' }],
+          cancellation: { kind: 'unsupported', summary: 'No commitment is created by this quote.' },
+          dataFields: ['destinationPostcode'], disclosures: ['Destination postcode used to prepare this quote.'],
+          providerQuoteRef: 'offer:acme:1', providerQuoteExpiresAt: 1_750_000_030_000,
+        })
+      },
+    })
+
+    const result = await binding.quoteStructured?.(structuredQuoteInput())
+
+    expect(result).toMatchObject({ kind: 'quoted', issuerBindingId: structuredRegistration.binding.bindingId, providerQuoteRef: 'offer:acme:1' })
+    expect(captured?.method).toBe('POST')
+    expect(captured?.url).toBe(structuredRegistration.endpointUrl)
+    expect(captured?.headers.get('Idempotency-Key')).toBe('quote-attempt:attempt:quote:1:allocation:allocation:quote:1')
+    expect([...captured?.headers.entries() ?? []].map((entry) => entry.join(':'))).not.toContain('3000')
+    await expect(captured?.clone().json()).resolves.toEqual({
+      protocolVersion: 'ae-capability:v1', operation: 'structured_quote',
+      bindingId: structuredRegistration.binding.bindingId,
+      quoteAttemptId: 'attempt:quote:1', allocationId: 'allocation:quote:1',
+      recipient: { bindingId: structuredRegistration.binding.bindingId, nodeId: structuredRegistration.binding.nodeId },
+      capabilityContractId: structuredRegistration.binding.capabilityContractId,
+      capabilityContractVersion: '1',
+      registrationHash: structuredRegistration.binding.registrationHash,
+      environment: structuredRegistration.binding.environment,
+      data: { destinationPostcode: '3000', parcelWeightGrams: 750 },
+    })
+  })
+
+  it('refuses a structured quote whose claimed issuer or registration does not match the recipient', async () => {
+    const binding = createHttpCapabilityBinding(registrationWithEvidence(), {
+      ...dependencies(),
+      send: async () => Response.json({
+        kind: 'quoted', issuerBindingId: 'binding:attacker', issuerNodeId: 'business:attacker',
+        capabilityContractId: registration.binding.capabilityContractId,
+        capabilityContractVersion: '1',
+        registrationHash: 'sha256:' + 'a'.repeat(64), environment: 'production',
+        expectedCost: { currency: 'AUD', amountMinor: 1 }, maximumCost: { currency: 'AUD', amountMinor: 1 },
+        offerOutputs: [], priceComponents: [{ label: 'Service', amountMinor: 1 }],
+        materialTerms: [{ key: 'service', label: 'Service', value: 'Forged' }],
+        cancellation: { kind: 'unsupported', summary: 'No commitment.' },
+        expectedLatencyMs: 1, dataFields: [], disclosures: [], providerQuoteRef: 'offer:forged',
+        providerQuoteExpiresAt: 1_750_000_030_000,
+      }),
+    })
+
+    await expect(binding.quoteStructured?.(structuredQuoteInput())).resolves.toEqual({
+      kind: 'refused', reason: 'provider_quote_issuer_mismatch',
+    })
+  })
+
+  it('returns uncertain when structured quote transport fails after dispatch', async () => {
+    const binding = createHttpCapabilityBinding(registrationWithEvidence(), {
+      ...dependencies(), send: async () => { throw new DOMException('timed out', 'TimeoutError') },
+    })
+
+    await expect(binding.quoteStructured?.(structuredQuoteInput())).resolves.toEqual({
+      kind: 'uncertain', reason: 'provider_quote_timeout',
+    })
+  })
+
+  it('reconciles a dispatched structured quote without resending protected values', async () => {
+    let captured: Request | undefined
+    const structuredRegistration = registrationWithEvidence()
+    const binding = createHttpCapabilityBinding(structuredRegistration, {
+      ...dependencies(),
+      send: async (request) => {
+        captured = request
+        return Response.json({
+          kind: 'quoted', issuerBindingId: structuredRegistration.binding.bindingId,
+          issuerNodeId: structuredRegistration.binding.nodeId,
+          capabilityContractId: structuredRegistration.binding.capabilityContractId, capabilityContractVersion: '1',
+          registrationHash: structuredRegistration.binding.registrationHash, environment: structuredRegistration.binding.environment,
+          expectedCost: { currency: 'AUD', amountMinor: 1_100 }, maximumCost: { currency: 'AUD', amountMinor: 1_200 },
+          offerOutputs: [], priceComponents: [{ label: 'Service', amountMinor: 1_100 }],
+          materialTerms: [{ key: 'service', label: 'Service', value: 'Tracked service' }],
+          cancellation: { kind: 'unsupported', summary: 'No commitment is created by this quote.' },
+          expectedLatencyMs: 800, dataFields: [], disclosures: ['Tracked service'],
+          providerQuoteRef: 'offer:recovered:1', providerQuoteExpiresAt: 1_750_000_030_000,
+        })
+      },
+    })
+    const { data: _protected, ...reconcileInput } = structuredQuoteInput()
+
+    await expect(binding.reconcileStructuredQuote?.(reconcileInput)).resolves.toMatchObject({
+      kind: 'quoted', providerQuoteRef: 'offer:recovered:1',
+    })
+    const body = await captured?.json() as Record<string, unknown>
+    expect(body.operation).toBe('structured_quote_reconcile')
+    expect(body).not.toHaveProperty('data')
+    expect(captured?.headers.get('Idempotency-Key')).toBe('quote-attempt:attempt:quote:1:allocation:allocation:quote:1')
+  })
+
   it('quotes and executes through the registered endpoint without exposing its credential', async () => {
     const requests: Request[] = []
     const binding = createHttpCapabilityBinding(registration, {
@@ -118,4 +227,28 @@ describe('BYO HTTP capability binding', () => {
 
 function dependencies() {
   return { validateTarget: vi.fn(async () => true), resolveCredential: vi.fn(async () => 'secret'), send: vi.fn(async () => Response.json({ kind: 'refused', reason: 'no_quote' })) }
+}
+
+function registrationWithEvidence() {
+  return {
+    ...registration,
+    binding: {
+      ...registration.binding,
+      registrationHash: 'sha256:' + 'a'.repeat(64),
+      environment: 'production',
+    },
+  }
+}
+
+function structuredQuoteInput() {
+  const structuredRegistration = registrationWithEvidence()
+  return {
+    quoteAttemptId: 'attempt:quote:1', allocationId: 'allocation:quote:1',
+    recipient: { bindingId: structuredRegistration.binding.bindingId, nodeId: structuredRegistration.binding.nodeId },
+    capabilityContractId: structuredRegistration.binding.capabilityContractId,
+    capabilityContractVersion: '1',
+    registrationHash: structuredRegistration.binding.registrationHash,
+    environment: structuredRegistration.binding.environment,
+    data: { destinationPostcode: '3000', parcelWeightGrams: 750 },
+  }
 }

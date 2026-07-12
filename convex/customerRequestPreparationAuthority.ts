@@ -46,6 +46,7 @@ const storedAllocation = v.object({
   fieldCategories: v.array(v.object({ field: v.string(), label: v.string() })),
   disposition: v.union(v.literal('allocated'), v.literal('released'), v.literal('not_released'), v.literal('uncertain')),
   allocatedAt: v.number(), resolvedAt: v.optional(v.number()), providerEvidenceRef: v.optional(v.string()),
+  uncertainAt: v.optional(v.number()), reconciledAt: v.optional(v.number()),
 })
 const disclosureActivity = v.object({
   recipientName: v.string(), dataCategories: v.array(v.string()), purpose: v.string(),
@@ -254,12 +255,37 @@ export const resolve = internalMutation({
     }
     await ctx.db.patch(row._id, {
       disposition: args.disposition, resolvedAt: args.resolvedAt,
+      ...(args.disposition === 'uncertain' ? { uncertainAt: args.resolvedAt } : {}),
       ...(args.providerEvidenceRef === undefined ? {} : { providerEvidenceRef: args.providerEvidenceRef }),
     })
     return {
       ...allocationFromRow(row), disposition: args.disposition, resolvedAt: args.resolvedAt,
       ...(args.providerEvidenceRef === undefined ? {} : { providerEvidenceRef: args.providerEvidenceRef }),
     }
+  },
+})
+
+export const reconcileReleased = internalMutation({
+  args: { allocationId: v.string(), providerEvidenceRef: v.string(), reconciledAt: v.number() },
+  returns: storedAllocation,
+  handler: async (ctx, args) => {
+    if (args.providerEvidenceRef.trim().length === 0) throw new Error('preparation_reconciliation_evidence_required')
+    const row = await ctx.db.query('customerRequestPreparationDisclosureAllocations')
+      .withIndex('by_allocationId', (query) => query.eq('allocationId', args.allocationId)).unique()
+    if (row === null) throw new Error('preparation_allocation_not_found')
+    if (row.disposition === 'released') {
+      if (row.providerEvidenceRef !== args.providerEvidenceRef) throw new Error('preparation_allocation_reconciliation_conflict')
+      return allocationFromRow(row)
+    }
+    if (row.disposition !== 'uncertain') throw new Error('preparation_allocation_not_uncertain')
+    await ctx.db.patch(row._id, {
+      disposition: 'released', providerEvidenceRef: args.providerEvidenceRef,
+      resolvedAt: args.reconciledAt, reconciledAt: args.reconciledAt,
+    })
+    return allocationFromRow({
+      ...row, disposition: 'released', providerEvidenceRef: args.providerEvidenceRef,
+      resolvedAt: args.reconciledAt, reconciledAt: args.reconciledAt,
+    })
   },
 })
 
@@ -308,7 +334,7 @@ function allocationFromRow(row: {
   recipientKind: 'candidate_provider' | 'selected_provider' | 'offer_issuer' | 'named_recipient'
   purpose: string; purposeLabel: string; fields: string[]; fieldCategories: { field: string; label: string }[]
   disposition: 'allocated' | 'released' | 'not_released' | 'uncertain'
-  allocatedAt: number; resolvedAt?: number; providerEvidenceRef?: string
+  allocatedAt: number; resolvedAt?: number; providerEvidenceRef?: string; uncertainAt?: number; reconciledAt?: number
 }): Infer<typeof storedAllocation> {
   return {
     allocationId: row.allocationId, operationKey: row.operationKey, authorityUseKey: row.authorityUseKey, allocationDigest: row.allocationDigest,
@@ -322,5 +348,7 @@ function allocationFromRow(row: {
     fieldCategories: row.fieldCategories, disposition: row.disposition, allocatedAt: row.allocatedAt,
     ...(row.resolvedAt === undefined ? {} : { resolvedAt: row.resolvedAt }),
     ...(row.providerEvidenceRef === undefined ? {} : { providerEvidenceRef: row.providerEvidenceRef }),
+    ...(row.uncertainAt === undefined ? {} : { uncertainAt: row.uncertainAt }),
+    ...(row.reconciledAt === undefined ? {} : { reconciledAt: row.reconciledAt }),
   }
 }

@@ -19,6 +19,15 @@ import { createStepGrant } from './step-grant'
 import { createDisclosureGrant } from './disclosure-grant'
 import { compileRoutingSnapshot, type BindingRoutingEvidenceSnapshot, type RoutingPriority } from './routing-compiler'
 import { createAllowingIncidentEvaluator, type IncidentEvaluation, type IncidentEvaluator, type IncidentScope } from '../incident-control'
+import {
+  createStructuredQuotePreparationOperation,
+  type StructuredPreparationInput,
+  type StructuredPreparationResult,
+} from '../structured-quote-preparation'
+import {
+  createInMemoryStructuredQuotePreparationStore,
+  type StructuredQuotePreparationStore,
+} from '../structured-quote-preparation-store'
 
 const EXECUTION_RECOVERY_LEASE_MS = 30_000
 import { createInMemoryKernelStore, type KernelStore, type ProviderCancellation } from './store'
@@ -32,6 +41,8 @@ export type CreateNeutralRoutingKernelInput = Readonly<{
   routingEvidenceSnapshots?: readonly BindingRoutingEvidenceSnapshot[]
   store?: KernelStore
   incidentControl?: IncidentEvaluator
+  structuredPreparationStore?: StructuredQuotePreparationStore
+  resolveCurrentStructuredBinding?: Parameters<typeof createStructuredQuotePreparationOperation>[0]['resolveCurrentBinding']
   lifecycle?: Readonly<{
     afterRootAdmission?: (checkpoint: Readonly<{ rootRunId: string; leafRunId: string; bindingId: string }>) => Promise<void>
     afterProviderOutcome?: (checkpoint: Readonly<{ rootRunId: string; leafRunId: string; bindingId: string }>) => Promise<void>
@@ -145,6 +156,7 @@ export type ReconcileProviderCancellationResult =
 export type NeutralRoutingKernel = Readonly<{
   operations: Readonly<{
     route: (input: RouteInput) => Promise<RouteResult>
+    prepareStructuredQuotes: (input: StructuredPreparationInput) => Promise<StructuredPreparationResult>
     execute: (input: ExecuteInput) => Promise<ExecuteResult>
     inspect: (input: InspectInput) => Promise<InspectResult>
     reconcileProviderOutcome: (input: ReconcileProviderOutcomeInput) => Promise<ReconcileProviderOutcomeResult>
@@ -162,6 +174,13 @@ export function createNeutralRoutingKernel(input: CreateNeutralRoutingKernelInpu
     throw new Error('incident_control_required_for_live_execution')
   }
   const incidentControl = input.incidentControl ?? createAllowingIncidentEvaluator()
+  const prepareStructuredQuotes = createStructuredQuotePreparationOperation({
+    bindings: input.bindings,
+    store: input.structuredPreparationStore ?? createInMemoryStructuredQuotePreparationStore(),
+    incidentControl,
+    now: input.now,
+    ...(input.resolveCurrentStructuredBinding === undefined ? {} : { resolveCurrentBinding: input.resolveCurrentStructuredBinding }),
+  })
   const adapters = new Map(input.bindings.map((adapter) => [adapter.binding.bindingId, adapter]))
 
   async function route(request: RouteInput): Promise<RouteResult> {
@@ -188,6 +207,7 @@ export function createNeutralRoutingKernel(input: CreateNeutralRoutingKernelInpu
     const hardExcluded = new Set(initialCompilation.decision.factors.filter((factor) => factor.refusalReason === 'health_unavailable' || factor.refusalReason === 'incident_excluded').map((factor) => factor.bindingId))
     const candidates = (await Promise.all(input.bindings
       .filter((adapter) => relevantIds.has(adapter.binding.bindingId) && !hardExcluded.has(adapter.binding.bindingId))
+      .filter((adapter) => adapter.binding.adapterFeatures?.quotePreparation !== 'structured_authorized')
       .map(async (adapter) => {
         const decision = await incidentControl.evaluate(bindingScope(adapter.binding, request.caller), 'route')
         return decision.kind === 'allowed' ? adapter : undefined
@@ -726,7 +746,7 @@ export function createNeutralRoutingKernel(input: CreateNeutralRoutingKernelInpu
   }
 
   const kernel = {
-    operations: Object.freeze({ route, execute, inspect, reconcileProviderOutcome, cancel }),
+    operations: Object.freeze({ route, prepareStructuredQuotes, execute, inspect, reconcileProviderOutcome, cancel }),
     authority: Object.freeze({ authorize, reconcileProviderCancellation }),
   } satisfies NeutralRoutingKernel
   return Object.freeze(kernel)

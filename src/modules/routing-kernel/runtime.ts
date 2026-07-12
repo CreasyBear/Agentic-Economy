@@ -1,5 +1,9 @@
 export { createExecutionRequestDigest } from './internal/kernel'
 export { createInMemoryKernelStore, type KernelStore } from './internal/store'
+export {
+  createInMemoryStructuredQuotePreparationStore,
+  type StructuredQuotePreparationStore,
+} from './structured-quote-preparation-store'
 export { createStepGrant, isValidStepGrant, sameStepGrant } from './internal/step-grant'
 export { createDisclosureGrant, isValidDisclosureGrant, sameDisclosureGrant } from './internal/disclosure-grant'
 export { canonicalAuthorityDigest, isCanonicalAuthorityDigest } from './internal/authority-digest'

@@ -21,7 +21,10 @@ export type CapabilityBinding = Readonly<{
   queryTerms: readonly string[]
   registrationHash?: string
   environment?: string
-  adapterFeatures?: Readonly<{ requestCancellation: 'supported' | 'unsupported' }>
+  adapterFeatures?: Readonly<{
+    requestCancellation: 'supported' | 'unsupported'
+    quotePreparation?: 'public_query' | 'structured_authorized'
+  }>
 }>
 
 export type BindingCancellationResult =
@@ -43,6 +46,37 @@ export type BindingQuote = Readonly<{
 export type BindingQuoteRefusal = Readonly<{
   kind: 'refused'
   reason: string
+}>
+
+export type StructuredBindingQuoteInput = Readonly<{
+  quoteAttemptId: string
+  allocationId: string
+  recipient: Readonly<{ bindingId: string; nodeId: string }>
+  capabilityContractId: string
+  capabilityContractVersion: string
+  registrationHash: string
+  environment: string
+  data: Readonly<Record<string, string | number | boolean>>
+}>
+
+export type StructuredBindingQuoteReconcileInput = Readonly<Omit<StructuredBindingQuoteInput, 'data'>>
+
+export type StructuredBindingQuote = Readonly<BindingQuote & {
+  issuerBindingId: string
+  issuerNodeId: string
+  capabilityContractId: string
+  capabilityContractVersion: string
+  registrationHash: string
+  environment: string
+  offerOutputs: readonly Readonly<{ field: string; valueType: 'string' | 'integer' | 'boolean' | 'url' | 'money_minor'; value: string | number | boolean }>[]
+  priceComponents: readonly Readonly<{ label: string; amountMinor: number }>[]
+  materialTerms: readonly Readonly<{ key: string; label: string; value: string }>[]
+  cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
+}>
+
+export type StructuredBindingQuoteUncertain = Readonly<{
+  kind: 'uncertain'
+  reason: 'provider_quote_timeout' | 'provider_quote_unknown'
 }>
 
 export type BindingExecution = Readonly<{
@@ -73,6 +107,8 @@ export type BindingReconciliationPending = Readonly<{
 export type CapabilityBindingAdapter = Readonly<{
   binding: CapabilityBinding
   quote: (input: Readonly<{ query: string }>) => Promise<BindingQuote | BindingQuoteRefusal>
+  quoteStructured?: (input: StructuredBindingQuoteInput) => Promise<StructuredBindingQuote | BindingQuoteRefusal | StructuredBindingQuoteUncertain>
+  reconcileStructuredQuote?: (input: StructuredBindingQuoteReconcileInput) => Promise<StructuredBindingQuote | BindingQuoteRefusal | StructuredBindingQuoteUncertain>
   execute: (input: Readonly<{
     rootRunId: string
     leafRunId: string

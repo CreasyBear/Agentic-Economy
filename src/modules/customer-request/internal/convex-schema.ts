@@ -94,6 +94,27 @@ export const preparedActionValue = v.object({
   expectedBy: v.optional(v.number()), expiresAt: v.number(), preparedAt: v.number(),
 })
 
+export const preparedRouteCandidateSetValue = v.object({
+  inspectionRef: v.string(),
+  candidates: v.array(v.object({
+    optionRef: v.string(), business: v.object({ name: v.string() }),
+    expectedCost: money, maximumCost: money, expectedLatencyMs: v.number(),
+    priceComponents: v.array(v.object({ label: v.string(), amountMinor: v.number() })),
+    comparableOutputs: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number(), v.boolean()) })),
+    materialTerms: v.array(v.string()),
+    cancellation: v.object({ kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')), summary: v.string() }),
+    expiresAt: v.number(), inspectionRef: v.string(),
+  })),
+  attempts: v.array(v.object({
+    business: v.object({ name: v.string() }),
+    status: v.union(
+      v.literal('not_contacted'), v.literal('contact_pending'), v.literal('contacted'), v.literal('option_received'),
+      v.literal('unavailable'), v.literal('uncertain'),
+    ),
+    explanation: v.string(),
+  })),
+})
+
 export const preparationRefusalReason = v.union(
   v.literal('request_not_found'), v.literal('request_revision_changed'), v.literal('plan_revision_not_found'),
   v.literal('plan_revision_changed'), v.literal('action_not_found'), v.literal('capability_contract_not_found'),
@@ -107,8 +128,9 @@ export const preparationRefusalReason = v.union(
   v.literal('authority_exposure_capacity_exceeded'), v.literal('authority_operation_capacity_exceeded'),
   v.literal('authority_allocation_conflict'), v.literal('preparation_release_contract_mismatch'),
   v.literal('preparation_data_release_uncertain'), v.literal('no_connected_option'), v.literal('route_contract_mismatch'),
+  v.literal('preparation_purpose_not_composable'),
   v.literal('route_currency_mismatch'), v.literal('route_spend_exceeded'), v.literal('route_data_contract_mismatch'),
-  v.literal('route_recipient_limit_exceeded'), v.literal('route_quote_expired'),
+  v.literal('route_recipient_limit_exceeded'), v.literal('route_quote_expired'), v.literal('route_ranking_required'),
 )
 
 export const customerRequestTables = {
@@ -155,9 +177,10 @@ export const customerRequestTables = {
   customerRequestPreparationCommands: defineTable({
     preparationKey: v.string(), preparationScope: v.string(), commandDigest: v.string(),
     requestId: v.string(), requestRevision: v.number(), planRevisionId: v.string(), actionId: v.string(),
-    status: v.union(v.literal('claimed'), v.literal('prepared'), v.literal('refused')), claimToken: v.string(), routingRequestId: v.string(),
+    status: v.union(v.literal('claimed'), v.literal('options_prepared'), v.literal('prepared'), v.literal('refused')), claimToken: v.string(), routingRequestId: v.string(),
     claimedAt: v.number(), leaseExpiresAt: v.number(), completedAt: v.optional(v.number()),
     preparedActionId: v.optional(v.string()), refusalReason: v.optional(preparationRefusalReason),
+    candidateSet: v.optional(preparedRouteCandidateSetValue),
     refusalInspectionRef: v.optional(v.string()),
   })
     .index('by_preparationScope', ['preparationScope'])
@@ -198,6 +221,7 @@ export const customerRequestTables = {
     fieldCategories: v.array(v.object({ field: v.string(), label: v.string() })),
     disposition: preparationDisclosureDisposition,
     allocatedAt: v.number(), resolvedAt: v.optional(v.number()), providerEvidenceRef: v.optional(v.string()),
+    uncertainAt: v.optional(v.number()), reconciledAt: v.optional(v.number()),
   })
     .index('by_allocationId', ['allocationId'])
     .index('by_operationKey', ['operationKey'])

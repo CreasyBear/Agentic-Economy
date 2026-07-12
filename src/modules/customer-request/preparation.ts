@@ -45,6 +45,28 @@ export type PreparedRouteQuote = Readonly<{
   expiresAt: number
 }>
 
+export type PreparedRouteCandidateSet = Readonly<{
+  inspectionRef: string
+  candidates: readonly Readonly<{
+    optionRef: string
+    business: Readonly<{ name: string }>
+    expectedCost: Money
+    maximumCost: Money
+    expectedLatencyMs: number
+    priceComponents: readonly Readonly<{ label: string; amountMinor: number }>[]
+    comparableOutputs: readonly Readonly<{ label: string; value: string | number | boolean }>[]
+    materialTerms: readonly string[]
+    cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
+    expiresAt: number
+    inspectionRef: string
+  }>[]
+  attempts: readonly Readonly<{
+    business: Readonly<{ name: string }>
+    status: 'not_contacted' | 'contact_pending' | 'contacted' | 'option_received' | 'unavailable' | 'uncertain'
+    explanation: string
+  }>[]
+}>
+
 export type CustomerRequestActionRouter = Readonly<{
   route: (input: Readonly<{
     routingRequestId: string
@@ -56,12 +78,15 @@ export type CustomerRequestActionRouter = Readonly<{
       routing: CustomerRequest['routing']
     }>
     action: Readonly<{ actionId: string; capabilityContractId: string }>
+    planRevisionId: string
+    preparationGeneration: number
     contract: CapabilityContract
     publicInput: Readonly<Record<string, string | number | boolean>>
     releasePreparationData?: (input: Readonly<{
       releaseKey: string
       recipient: PreparationRecipient
       purpose: string
+      purposeLabel: string
       fields: readonly string[]
       release: (input: Readonly<{
         allocationId: string
@@ -75,8 +100,11 @@ export type CustomerRequestActionRouter = Readonly<{
       reason: 'preparation_release_contract_mismatch'
       nextAction: string
     }>>
+    reconcilePreparationData?: (input: Readonly<{ allocationId: string; providerEvidenceRef: string }>) => Promise<void>
   }>) => Promise<
     | Readonly<{ kind: 'quoted'; quote: PreparedRouteQuote }>
+    | Readonly<{ kind: 'candidate_set'; candidateSet: PreparedRouteCandidateSet }>
+    | Readonly<{ kind: 'preparation_pending'; inspectionRef: string }>
     | Readonly<{ kind: 'no_route'; reason: string }>
   >
 }>
@@ -109,10 +137,12 @@ export type CustomerRequestPreparationStore = {
     | PreparationClaim
     | Readonly<{ kind: 'in_progress' }>
     | Readonly<{ kind: 'prepared'; preparedAction: PreparedAction }>
+    | Readonly<{ kind: 'options_prepared'; candidateSet: PreparedRouteCandidateSet }>
     | Readonly<{ kind: 'refused'; reason: PreparationRefusalReason; inspectionRef?: string }>
     | Readonly<{ kind: 'conflict' }>
     | Readonly<{ kind: 'stale' }>>
   completePreparation: (input: Readonly<{ preparationScope: string; claimToken: string; preparedAction: PreparedAction }>) => Awaitable<PreparedAction>
+  completeOptions: (input: Readonly<{ preparationScope: string; claimToken: string; candidateSet: PreparedRouteCandidateSet }>) => Awaitable<PreparedRouteCandidateSet>
   refusePreparation: (input: Readonly<{
     preparationScope: string; claimToken: string; reason: PreparationRefusalReason; inspectionRef?: string
   }>) => Awaitable<void>
@@ -141,6 +171,7 @@ export type PreparationRefusalReason =
   | PreparationAuthorityRefusalReason
   | 'preparation_release_contract_mismatch'
   | 'preparation_data_release_uncertain'
+  | 'preparation_purpose_not_composable'
   | 'no_connected_option'
   | 'route_contract_mismatch'
   | 'route_currency_mismatch'
@@ -148,10 +179,12 @@ export type PreparationRefusalReason =
   | 'route_data_contract_mismatch'
   | 'route_recipient_limit_exceeded'
   | 'route_quote_expired'
+  | 'route_ranking_required'
 
 export type PrepareCustomerRequestActionResult =
   | Readonly<{ kind: 'prepared'; preparedAction: PreparedAction }>
-  | Readonly<{ kind: 'preparation_in_progress'; preparationScope: string }>
+  | Readonly<{ kind: 'options_prepared'; preparationScope: string; candidateSet: PreparedRouteCandidateSet }>
+  | Readonly<{ kind: 'preparation_in_progress'; preparationScope: string; inspectionRef?: string }>
   | Readonly<{
     kind: 'preparation_refused'; preparationScope: string; reason: PreparationRefusalReason; inspectionRef?: string
   }>
@@ -222,6 +255,16 @@ export function projectPreparationRefusalForCustomer(
     explanation: 'AE could not find a registered business able to prepare this option.',
     nextAction: 'Change the request or use a direct path outside AE.',
   }
+  if (reason === 'route_ranking_required') return {
+    title: 'Options found, comparison not ready',
+    explanation: 'AE found connected options but does not yet have enough registered evidence to recommend one safely.',
+    nextAction: 'Review the available option evidence or wait until AE can compare the material terms.',
+  }
+  if (reason === 'preparation_purpose_not_composable') return {
+    title: 'These options cannot be prepared safely',
+    explanation: 'The registered information would need to be shared for incompatible purposes in one provider request.',
+    nextAction: 'Split the request into separate supported steps or use a capability with one shared preparation purpose.',
+  }
   if (reason.startsWith('authority_') || reason === 'preparation_release_contract_mismatch') return {
     title: 'Permission does not cover this comparison',
     explanation: 'The requested information, business, or purpose is outside what the customer allowed.',
@@ -271,6 +314,7 @@ export async function prepareCustomerRequestAction(
     leaseExpiresAt: claimedAt + dependencies.leaseMs,
   })
   if (claim.kind === 'prepared') return Object.freeze({ kind: 'prepared', preparedAction: claim.preparedAction })
+  if (claim.kind === 'options_prepared') return Object.freeze({ kind: 'options_prepared', preparationScope, candidateSet: claim.candidateSet })
   if (claim.kind === 'refused') return refusal(preparationScope, claim.reason, claim.inspectionRef)
   if (claim.kind === 'in_progress') return Object.freeze({ kind: 'preparation_in_progress', preparationScope })
   if (claim.kind === 'conflict' || claim.kind === 'stale') return Object.freeze({ kind: 'preparation_conflict', preparationScope })
@@ -286,6 +330,8 @@ export async function prepareCustomerRequestAction(
       routing: context.request.routing,
     },
     action: { actionId: context.action.actionId, capabilityContractId: context.action.capabilityContractId },
+    planRevisionId: context.plan.planRevisionId,
+    preparationGeneration: context.request.revision,
     contract: context.contract,
     publicInput: publicPreparationInput(context.contract, command.resolvedInput),
     ...(protectedFields.length === 0 ? {} : {
@@ -321,7 +367,7 @@ export async function prepareCustomerRequestAction(
           protectedProjectionCommitment: dependencies.commitProtectedProjection(protectedValues),
           recipient: input.recipient,
           purpose: input.purpose,
-          purposeLabel: customerPurposeLabel(input.purpose),
+          purposeLabel: input.purposeLabel,
           fields: input.fields,
           fieldCategories: input.fields.map((field) => ({
             field, label: context.contract.input[field]?.customerLabel ?? field,
@@ -344,9 +390,20 @@ export async function prepareCustomerRequestAction(
         }
         return result
       },
+      reconcilePreparationData: async ({ allocationId, providerEvidenceRef }) => {
+        await dependencies.preparationDisclosureStore.reconcileReleased({
+          allocationId, providerEvidenceRef, reconciledAt: dependencies.now(),
+        })
+      },
     }),
   })
   if (releaseRefusal !== undefined) {
+    if (releaseRefusal === 'preparation_data_release_uncertain') {
+      return Object.freeze({
+        kind: 'preparation_in_progress', preparationScope,
+        ...(releaseInspectionRef === undefined ? {} : { inspectionRef: releaseInspectionRef }),
+      })
+    }
     await dependencies.store.refusePreparation({
       preparationScope, claimToken: claim.claimToken, reason: releaseRefusal,
       ...(releaseInspectionRef === undefined ? {} : { inspectionRef: releaseInspectionRef }),
@@ -354,8 +411,19 @@ export async function prepareCustomerRequestAction(
     return refusal(preparationScope, releaseRefusal, releaseInspectionRef)
   }
   if (routed.kind === 'no_route') {
-    await dependencies.store.refusePreparation({ preparationScope, claimToken: claim.claimToken, reason: 'no_connected_option' })
-    return refusal(preparationScope, 'no_connected_option')
+    const reason: PreparationRefusalReason = routed.reason === 'preparation_purpose_not_composable'
+      ? 'preparation_purpose_not_composable' : 'no_connected_option'
+    await dependencies.store.refusePreparation({ preparationScope, claimToken: claim.claimToken, reason })
+    return refusal(preparationScope, reason)
+  }
+  if (routed.kind === 'preparation_pending') {
+    return Object.freeze({ kind: 'preparation_in_progress', preparationScope, inspectionRef: routed.inspectionRef })
+  }
+  if (routed.kind === 'candidate_set') {
+    const candidateSet = await dependencies.store.completeOptions({
+      preparationScope, claimToken: claim.claimToken, candidateSet: routed.candidateSet,
+    })
+    return Object.freeze({ kind: 'options_prepared', preparationScope, candidateSet })
   }
   const quoteRefusal = validateRouteQuote(
     routed.quote, context.request, context.contract, new Set(releasedDisclosures.keys()), dependencies.now(),
@@ -385,12 +453,13 @@ export function createInMemoryCustomerRequestPreparationStore(): CustomerRequest
   type State = Readonly<{
     commandDigest: string
     requestRevision: number
-    status: 'claimed' | 'prepared' | 'refused'
+    status: 'claimed' | 'options_prepared' | 'prepared' | 'refused'
     claimToken: string
     routingRequestId: string
     claimedAt: number
     leaseExpiresAt: number
     preparedAction?: PreparedAction
+    candidateSet?: PreparedRouteCandidateSet
     refusalReason?: PreparationRefusalReason
     refusalInspectionRef?: string
   }>
@@ -419,6 +488,7 @@ export function createInMemoryCustomerRequestPreparationStore(): CustomerRequest
       if (existing !== undefined) {
         if (existing.commandDigest !== input.commandDigest) return { kind: 'conflict' }
         if (existing.status === 'prepared' && existing.preparedAction !== undefined) return { kind: 'prepared', preparedAction: existing.preparedAction }
+        if (existing.status === 'options_prepared' && existing.candidateSet !== undefined) return { kind: 'options_prepared', candidateSet: existing.candidateSet }
         if (existing.status === 'refused' && existing.refusalReason !== undefined) return {
           kind: 'refused', reason: existing.refusalReason,
           ...(existing.refusalInspectionRef === undefined ? {} : { inspectionRef: existing.refusalInspectionRef }),
@@ -443,6 +513,13 @@ export function createInMemoryCustomerRequestPreparationStore(): CustomerRequest
       if (existing?.status !== 'claimed' || existing.claimToken !== input.claimToken) throw new Error('preparation_claim_lost')
       preparations.set(input.preparationScope, Object.freeze({ ...existing, status: 'prepared', preparedAction: input.preparedAction }))
       return input.preparedAction
+    },
+    completeOptions: (input) => {
+      const existing = preparations.get(input.preparationScope)
+      if (existing?.status === 'options_prepared' && existing.candidateSet !== undefined) return existing.candidateSet
+      if (existing?.status !== 'claimed' || existing.claimToken !== input.claimToken) throw new Error('preparation_claim_lost')
+      preparations.set(input.preparationScope, Object.freeze({ ...existing, status: 'options_prepared', candidateSet: input.candidateSet }))
+      return input.candidateSet
     },
     refusePreparation: (input) => {
       const existing = preparations.get(input.preparationScope)
@@ -560,11 +637,14 @@ function publicPreparationInput(
 }
 
 function validateReleaseRequest(
-  input: Readonly<{ recipient: PreparationRecipient; purpose: string; fields: readonly string[] }>,
+  input: Readonly<{ recipient: PreparationRecipient; purpose: string; purposeLabel: string; fields: readonly string[] }>,
   contract: CapabilityContract,
   protectedFields: readonly string[],
 ): 'preparation_release_contract_mismatch' | undefined {
   if (input.fields.length === 0 || input.fields.some((field) => !protectedFields.includes(field))) return 'preparation_release_contract_mismatch'
+  if (contract.preparation?.purpose !== input.purpose || contract.preparation.customerLabel !== input.purposeLabel) {
+    return 'preparation_release_contract_mismatch'
+  }
   if (input.fields.some((field) => {
     const disclosure = contract.input[field]?.disclosure
     return disclosure === undefined || disclosure.recipient !== input.recipient.kind || !disclosure.purposes.includes(input.purpose)
@@ -680,27 +760,32 @@ export function customerRequestDigest(request: CustomerRequest): string {
   return canonicalDigest({
     requestId: request.requestId, principalId: request.principalId, delegatedAgentId: request.delegatedAgentId,
     intent: request.intent, revision: request.revision, routing: request.routing, createdAt: request.createdAt,
-  })
+  } as StableHashValue)
 }
 
 export function planRevisionDigest(plan: PlanRevision): string {
   return canonicalDigest({
     planRevisionId: plan.planRevisionId, requestId: plan.requestId, requestRevision: plan.requestRevision,
-    proposedByAgentId: plan.proposedByAgentId, proposalProvenance: plan.proposalProvenance, createdAt: plan.createdAt,
-    completionEvidence: plan.completionEvidence,
-    actions: plan.actions.map((action) => ({
+    proposedByAgentId: plan.proposedByAgentId, proposalProvenance: { ...plan.proposalProvenance }, createdAt: plan.createdAt,
+    completionEvidence: plan.completionEvidence.map((evidence) => ({ ...evidence })),
+    actions: plan.actions.map((action): StableHashValue => ({
       actionId: action.actionId, capabilityContractId: action.capabilityContractId,
       dependsOn: [...action.dependsOn].sort(),
-      input: Object.fromEntries(Object.entries(action.input).sort(([left], [right]) => left.localeCompare(right)).map(([field, value]) => [
-        field,
-        planInputDigestMaterial(value),
-      ])),
-      ...(action.providerAffinity === undefined ? {} : { providerAffinity: action.providerAffinity }),
+      input: planInputDigestRecord(action.input),
+      ...(action.providerAffinity === undefined ? {} : { providerAffinity: { ...action.providerAffinity } }),
     })),
   })
 }
 
-function planInputDigestMaterial(value: PlanRevision['actions'][number]['input'][string]) {
+function planInputDigestRecord(input: PlanRevision['actions'][number]['input']): StableHashValue {
+  const material: Record<string, StableHashValue> = {}
+  for (const [field, value] of Object.entries(input).sort(([left], [right]) => left.localeCompare(right))) {
+    material[field] = planInputDigestMaterial(value)
+  }
+  return material
+}
+
+function planInputDigestMaterial(value: PlanRevision['actions'][number]['input'][string]): StableHashValue {
   if (value?.kind === 'literal') return { kind: value.kind, value: value.value }
   if (value?.kind === 'action_output') return { kind: value.kind, actionId: value.actionId, field: value.field }
   if (value?.kind === 'customer_fact') return { kind: value.kind, fact: value.fact }

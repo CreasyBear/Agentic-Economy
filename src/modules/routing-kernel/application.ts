@@ -29,4 +29,14 @@ export type {
   KernelCaller,
   KernelIdFactory,
   Money,
+  RouteQuote,
+  StructuredBindingQuote,
+  StructuredBindingQuoteInput,
+  StructuredBindingQuoteReconcileInput,
+  StructuredBindingQuoteUncertain,
 } from './internal/model'
+export type {
+  StructuredPreparationInput,
+  StructuredPreparationResult,
+  StructuredPreparedCandidate,
+} from './structured-quote-preparation'

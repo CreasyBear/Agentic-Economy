@@ -6,6 +6,7 @@ import {
   customerRequestValue,
   planRevisionValue,
   preparedActionValue,
+  preparedRouteCandidateSetValue,
   preparationRefusalReason,
 } from '@/modules/customer-request/runtime'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
@@ -26,6 +27,7 @@ const claimResult = v.union(
   v.object({ kind: v.literal('claimed'), claimToken: v.string(), routingRequestId: v.string(), claimedAt: v.number() }),
   v.object({ kind: v.literal('in_progress') }),
   v.object({ kind: v.literal('prepared'), preparedAction: preparedActionValue }),
+  v.object({ kind: v.literal('options_prepared'), candidateSet: preparedRouteCandidateSetValue }),
   v.object({ kind: v.literal('refused'), reason: preparationRefusalReason, inspectionRef: v.optional(v.string()) }),
   v.object({ kind: v.literal('conflict') }),
   v.object({ kind: v.literal('stale') }),
@@ -262,6 +264,26 @@ export const completePreparation = internalMutation({
   },
 })
 
+export const completeOptions = internalMutation({
+  args: {
+    preparationScope: v.string(), claimToken: v.string(),
+    candidateSet: preparedRouteCandidateSetValue, completedAt: v.number(),
+  },
+  returns: preparedRouteCandidateSetValue,
+  handler: async (ctx, args) => {
+    const command = await ctx.db.query('customerRequestPreparationCommands')
+      .withIndex('by_preparationScope', (query) => query.eq('preparationScope', args.preparationScope)).unique()
+    if (command === null) throw new Error('preparation_claim_not_found')
+    if (command.status === 'options_prepared' && command.candidateSet !== undefined) return command.candidateSet
+    if (command.status !== 'claimed' || command.claimToken !== args.claimToken) throw new Error('preparation_claim_lost')
+    await ctx.db.patch(command._id, {
+      status: 'options_prepared', candidateSet: args.candidateSet,
+      completedAt: args.completedAt, leaseExpiresAt: args.completedAt,
+    })
+    return args.candidateSet
+  },
+})
+
 export const refusePreparation = internalMutation({
   args: {
     preparationScope: v.string(), claimToken: v.string(), reason: preparationRefusalReason,
@@ -299,6 +321,9 @@ async function claimPreparationMutation(
       const prepared = await ctx.db.query('customerRequestPreparedActions').withIndex('by_preparedActionId', (query) => query.eq('preparedActionId', preparedActionId)).unique()
       if (prepared === null) throw new Error('prepared_action_missing')
       return { kind: 'prepared', preparedAction: stripPreparedRow(prepared) }
+    }
+    if (existing.status === 'options_prepared' && existing.candidateSet !== undefined) {
+      return { kind: 'options_prepared', candidateSet: existing.candidateSet }
     }
     if (existing.status === 'refused' && existing.refusalReason !== undefined) return {
       kind: 'refused', reason: existing.refusalReason,

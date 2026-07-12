@@ -386,6 +386,17 @@ describe('preparation disclosure authority', () => {
     })
     expect(retry).toEqual(first)
     expect(providerCalls).toBe(1)
+
+    if (first.kind !== 'uncertain') throw new Error('expected_uncertain')
+    const reconciled = await store.reconcileReleased({
+      allocationId: first.allocationId, providerEvidenceRef: 'provider:quote:1', reconciledAt: 1_100,
+    })
+    expect(reconciled).toMatchObject({
+      disposition: 'released', providerEvidenceRef: 'provider:quote:1', uncertainAt: 1_000, reconciledAt: 1_100,
+    })
+    expect(() => store.reconcileReleased({
+      allocationId: first.allocationId, providerEvidenceRef: 'provider:quote:other', reconciledAt: 1_200,
+    })).toThrow('preparation_allocation_reconciliation_conflict')
   })
 })
 

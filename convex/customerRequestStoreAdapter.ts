@@ -38,6 +38,7 @@ export function createConvexCustomerRequestPreparationStore(
         routingRequestId: `route:${canonicalDigest(claimMaterial)}`,
       })
       if (result.kind === 'prepared') return { kind: 'prepared', preparedAction: normalizePreparedAction(result.preparedAction) }
+      if (result.kind === 'options_prepared') return { kind: 'options_prepared', candidateSet: result.candidateSet }
       if (result.kind === 'refused') return {
         kind: 'refused', reason: normalizeRefusalReason(result.reason),
         ...(result.inspectionRef === undefined ? {} : { inspectionRef: result.inspectionRef }),
@@ -47,6 +48,21 @@ export function createConvexCustomerRequestPreparationStore(
     completePreparation: async (input) => normalizePreparedAction(await ctx.runMutation(internal.customerRequests.completePreparation, {
       ...input, preparedAction: writablePreparedAction(input.preparedAction), completedAt: now(),
     })),
+    completeOptions: async (input) => await ctx.runMutation(internal.customerRequests.completeOptions, {
+      ...input,
+      candidateSet: {
+        ...input.candidateSet,
+        candidates: input.candidateSet.candidates.map((candidate) => ({
+          ...candidate, business: { ...candidate.business }, expectedCost: { ...candidate.expectedCost },
+          maximumCost: { ...candidate.maximumCost }, materialTerms: [...candidate.materialTerms],
+          priceComponents: candidate.priceComponents.map((component) => ({ ...component })),
+          comparableOutputs: candidate.comparableOutputs.map((output) => ({ ...output })),
+          cancellation: { ...candidate.cancellation },
+        })),
+        attempts: input.candidateSet.attempts.map((attempt) => ({ ...attempt, business: { ...attempt.business } })),
+      },
+      completedAt: now(),
+    }),
     refusePreparation: async (input) => {
       await ctx.runMutation(internal.customerRequests.refusePreparation, { ...input, completedAt: now() })
     },
@@ -157,6 +173,8 @@ const PREPARATION_REFUSALS: readonly PreparationRefusalReason[] = [
   'authority_allocation_conflict', 'preparation_release_contract_mismatch', 'preparation_data_release_uncertain',
   'no_connected_option', 'route_contract_mismatch', 'route_currency_mismatch',
   'route_spend_exceeded', 'route_data_contract_mismatch', 'route_recipient_limit_exceeded', 'route_quote_expired',
+  'route_ranking_required',
+  'preparation_purpose_not_composable',
 ]
 
 function normalizeRefusalReason(value: unknown): PreparationRefusalReason {

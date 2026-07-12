@@ -141,6 +141,25 @@ describe('durable preparation disclosure authority', () => {
     }])
     expect(JSON.stringify(activity)).not.toMatch(/destinationPostcode|shipping_rate_quote|authorityDigest|3000/)
   })
+
+  it('qualifies an uncertain release with provider evidence without erasing the uncertainty', async () => {
+    const t = convexTest(schema, modules)
+    await t.mutation(internal.customerRequestPreparationAuthority.recordAuthority, { authority: authority(), recordedAt: 1_000 })
+    const allocated = await t.mutation(internal.customerRequestPreparationAuthority.allocate, allocation('a'))
+    if (allocated.kind !== 'allocated') throw new Error(allocated.reason)
+    await t.mutation(internal.customerRequestPreparationAuthority.resolve, {
+      allocationId: allocated.allocationId, disposition: 'uncertain', resolvedAt: 1_010,
+    })
+    const reconciled = await t.mutation(internal.customerRequestPreparationAuthority.reconcileReleased, {
+      allocationId: allocated.allocationId, providerEvidenceRef: 'provider:quote:1', reconciledAt: 1_020,
+    })
+    expect(reconciled).toMatchObject({
+      disposition: 'released', providerEvidenceRef: 'provider:quote:1', uncertainAt: 1_010, reconciledAt: 1_020,
+    })
+    await expect(t.mutation(internal.customerRequestPreparationAuthority.reconcileReleased, {
+      allocationId: allocated.allocationId, providerEvidenceRef: 'provider:quote:other', reconciledAt: 1_030,
+    })).rejects.toThrow('preparation_allocation_reconciliation_conflict')
+  })
 })
 
 function authority() {

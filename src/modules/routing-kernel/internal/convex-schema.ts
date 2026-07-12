@@ -553,7 +553,10 @@ export const routingKernelTables = {
     admissionEvidenceRefs: v.array(v.string()),
     conformanceEvidenceRefs: v.array(v.string()),
     queryTerms: v.array(v.string()),
-    adapterFeatures: v.optional(v.object({ requestCancellation: literalUnion(['supported', 'unsupported'] as const) })),
+    adapterFeatures: v.optional(v.object({
+      requestCancellation: literalUnion(['supported', 'unsupported'] as const),
+      quotePreparation: v.optional(literalUnion(['public_query', 'structured_authorized'] as const)),
+    })),
     adapterFeatureEvidenceRefs: v.optional(v.array(v.string())),
     endpointUrl: v.string(),
     credentialRef: v.string(),
@@ -781,4 +784,74 @@ export const routingKernelTables = {
   })
     .index('by_rootRunId_sequence', ['rootRunId', 'sequence'])
     .index('by_recordId', ['recordId']),
+
+  routingKernelPreparationCandidateSets: defineTable({
+    preparationRequestId: v.string(), customerRequestId: v.string(), planRevisionId: v.string(), actionId: v.string(),
+    generation: v.number(), capabilityContractId: v.string(), capabilityContractVersion: v.string(),
+    createdAt: v.number(), candidateSetDigest: v.string(),
+  })
+    .index('by_preparationRequestId', ['preparationRequestId'])
+    .index('by_candidateSetDigest', ['candidateSetDigest'])
+    .index('by_customerRequestId_planRevisionId_actionId_generation', ['customerRequestId', 'planRevisionId', 'actionId', 'generation']),
+
+  routingKernelPreparationCandidates: defineTable({
+    preparationRequestId: v.string(), candidateSetDigest: v.string(), position: v.number(), bindingId: v.string(),
+    nodeId: v.string(), businessId: v.string(), recipientName: v.string(), presentationEvidenceDigest: v.string(),
+    capabilityContractId: v.string(), capabilityContractVersion: v.string(),
+    registrationEnvironment: v.string(), registrationHash: v.string(), registrationEvidenceDigest: v.string(),
+    incidentEpochDigest: v.string(), incidentEvidenceDigest: v.string(),
+    coverageDisposition: literalUnion(['eligible_not_contacted', 'registration_stale', 'incident_frozen', 'release_refused', 'allocated', 'dispatch_attempted', 'option_received', 'provider_refused', 'uncertain'] as const),
+    protectedDataDisposition: literalUnion(['not_released', 'released', 'uncertain'] as const),
+    providerContactDisposition: literalUnion(['none', 'attempted'] as const),
+    coverageReasonCode: v.string(), coverageRecordedAt: v.number(),
+  })
+    .index('by_preparationRequestId_and_position', ['preparationRequestId', 'position'])
+    .index('by_candidateSetDigest_and_bindingId', ['candidateSetDigest', 'bindingId']),
+
+  routingKernelPreparationQuoteAttempts: defineTable({
+    quoteAttemptId: v.string(), commandDigest: v.string(), preparationRequestId: v.string(), candidateSetDigest: v.string(),
+    recipientBindingId: v.string(), recipientNodeId: v.string(), recipientBusinessId: v.string(), purpose: v.string(),
+    capabilityContractId: v.string(), capabilityContractVersion: v.string(),
+    registrationHash: v.string(), registrationEnvironment: v.string(), registrationEvidenceDigest: v.string(),
+    allocationId: v.string(), claimedAt: v.number(),
+    disposition: literalUnion(['allocated', 'dispatched', 'quoted', 'refused', 'uncertain'] as const),
+    dispatchedAt: v.optional(v.number()), resolvedAt: v.optional(v.number()), reasonCode: v.optional(v.string()),
+    providerOfferId: v.optional(v.string()), resolutionDigest: v.optional(v.string()),
+    uncertainAt: v.optional(v.number()), uncertaintyDigest: v.optional(v.string()),
+  })
+    .index('by_quoteAttemptId', ['quoteAttemptId'])
+    .index('by_commandDigest', ['commandDigest'])
+    .index('by_candidateSetDigest_and_recipientBindingId', ['candidateSetDigest', 'recipientBindingId']),
+
+  routingKernelPreparationQuoteAttemptFields: defineTable({
+    quoteAttemptId: v.string(), commandDigest: v.string(), position: v.number(), fieldName: v.string(),
+  }).index('by_quoteAttemptId_and_position', ['quoteAttemptId', 'position']),
+
+  routingKernelProviderOffers: defineTable({
+    providerOfferId: v.string(), offerDigest: v.string(), quoteAttemptId: v.string(), commandDigest: v.string(),
+    candidateSetDigest: v.string(), issuerBindingId: v.string(), issuerNodeId: v.string(), issuerBusinessId: v.string(),
+    capabilityContractId: v.string(), capabilityContractVersion: v.string(), providerOfferRef: v.string(),
+    expectedCurrency: v.string(), expectedAmountMinor: v.number(), maximumCurrency: v.string(), maximumAmountMinor: v.number(),
+    expectedLatencyMs: v.number(), termsDigest: v.string(), cancellationTermsDigest: v.string(),
+    offerOutputs: v.array(v.object({
+      field: v.string(), valueType: literalUnion(['string', 'integer', 'boolean', 'url', 'money_minor'] as const),
+      value: v.union(v.string(), v.number(), v.boolean()),
+    })),
+    priceComponents: v.array(v.object({ label: v.string(), amountMinor: v.number() })),
+    cancellation: v.object({ kind: literalUnion(['supported', 'conditional', 'unsupported'] as const), summary: v.string() }),
+    offerOutputsDigest: v.string(),
+    providerEvidenceDigest: v.string(), issuedAt: v.number(), expiresAt: v.number(),
+  })
+    .index('by_providerOfferId', ['providerOfferId'])
+    .index('by_offerDigest', ['offerDigest'])
+    .index('by_quoteAttemptId', ['quoteAttemptId'])
+    .index('by_candidateSetDigest_and_issuerBindingId', ['candidateSetDigest', 'issuerBindingId']),
+
+  routingKernelProviderOfferExecutionFields: defineTable({
+    providerOfferId: v.string(), offerDigest: v.string(), position: v.number(), fieldName: v.string(),
+  }).index('by_providerOfferId_and_position', ['providerOfferId', 'position']),
+
+  routingKernelProviderOfferMaterialTerms: defineTable({
+    providerOfferId: v.string(), offerDigest: v.string(), position: v.number(), term: v.string(),
+  }).index('by_providerOfferId_and_position', ['providerOfferId', 'position']),
 } as const

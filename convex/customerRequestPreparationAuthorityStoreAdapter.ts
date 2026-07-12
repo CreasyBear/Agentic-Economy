@@ -12,6 +12,10 @@ type Context = Pick<ActionCtx, 'runQuery' | 'runMutation'>
 
 export function createConvexPreparationDisclosureStore(ctx: Context): PreparationDisclosureStore {
   return {
+    get: async (allocationId) => {
+      const stored = await ctx.runQuery(internal.customerRequestPreparationAuthority.getAllocation, { allocationId })
+      return stored === null ? undefined : normalizeAllocation(stored)
+    },
     allocate: async (input) => {
       const allocation = createPreparationDisclosureAllocation(input.authority, input.command, input.now)
       const result = await ctx.runMutation(internal.customerRequestPreparationAuthority.allocate, {
@@ -43,6 +47,10 @@ export function createConvexPreparationDisclosureStore(ctx: Context): Preparatio
     },
     resolve: async (input) => normalizeAllocation(await ctx.runMutation(
       internal.customerRequestPreparationAuthority.resolve,
+      input,
+    )),
+    reconcileReleased: async (input) => normalizeAllocation(await ctx.runMutation(
+      internal.customerRequestPreparationAuthority.reconcileReleased,
       input,
     )),
     authorizeRelease: async (input) => {
@@ -89,7 +97,7 @@ function normalizeAllocation(input: Readonly<{
   recipient: PreparationDisclosureAllocation['recipient']; purpose: string; purposeLabel: string; fields: string[]
   fieldCategories: { field: string; label: string }[]
   disposition: PreparationDisclosureAllocation['disposition']; allocatedAt: number
-  resolvedAt?: number; providerEvidenceRef?: string
+  resolvedAt?: number; providerEvidenceRef?: string; uncertainAt?: number; reconciledAt?: number
 }>): PreparationDisclosureAllocation {
   return {
     ...input,
