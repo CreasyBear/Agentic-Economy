@@ -89,6 +89,7 @@
     "jsdom": "29.1.1",
     "nitro": "npm:nitro-nightly@^3.0.1-20260628-090458-3df69609",
     "node-addon-api": "^8.9.0",
+    "node-gyp": "^12.4.0",
     "oxlint": "^1.73.0",
     "promptfoo": "^0.121.17",
     "react-doctor": "^0.7.1",
