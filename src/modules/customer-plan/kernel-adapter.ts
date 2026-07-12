@@ -50,7 +50,13 @@ export type ExecuteNextCustomerPlanActionResult =
         | 'authorization_expired'
         | 'execution_refused'
         | 'execution_failed'
+        | 'reconciliation_refused'
     }>
+
+export type ReconcileCustomerPlanActionDependencies = Readonly<{
+  kernel: NeutralRoutingKernel
+  now: () => number
+}>
 
 /**
  * Releases at most one Plan action. Composition stays in CustomerPlan; all
@@ -103,6 +109,9 @@ export async function executeNextCustomerPlanAction(
   if (authorizationExpiresAt <= occurredAt) return refused(plan, decision.actionId, 'authorization_expired')
 
   const authorization = await dependencies.kernel.authority.authorize({
+    authorizationRef: `route-authorization:${plan.planId}:${decision.actionId}:${quote.quoteDigest}`,
+    budgetAuthorityRef: `budget-authority:${plan.planId}:${decision.actionId}`,
+    dataAuthorizationBudgetRef: `data-budget:${plan.planId}:${decision.actionId}`,
     quoteId: quote.quoteId,
     quoteDigest: quote.quoteDigest,
     principalId: plan.principalId,
@@ -168,6 +177,66 @@ export async function executeNextCustomerPlanAction(
     return Object.freeze({
       kind: 'action_outcome_unknown', planId: plan.planId, actionId: decision.actionId,
       rootRunId: executed.run.rootRunId, plan: nextPlan,
+    })
+  }
+  return refused(plan, decision.actionId, 'execution_failed')
+}
+
+/** Reconciles an already released action; it never creates a second release. */
+export async function reconcileCustomerPlanAction(
+  plan: CustomerPlanSnapshot,
+  dependencies: ReconcileCustomerPlanActionDependencies,
+): Promise<ExecuteNextCustomerPlanActionResult> {
+  const decision = decideCustomerPlan(plan, dependencies.now())
+  if (decision.kind !== 'action_waiting' && decision.kind !== 'action_required') {
+    return Object.freeze({ kind: 'checkpoint', decision })
+  }
+  if (decision.kind === 'action_required' && decision.reason !== 'outcome_unknown') {
+    return Object.freeze({ kind: 'checkpoint', decision })
+  }
+
+  const reconciled = await dependencies.kernel.operations.reconcileProviderOutcome({
+    caller: { principalId: plan.principalId, agentId: plan.agentId },
+    rootRunId: decision.rootRunId,
+  })
+  if (reconciled.kind === 'provider_reconciliation_refused') {
+    return refused(plan, decision.actionId, 'reconciliation_refused')
+  }
+  if (reconciled.kind === 'provider_reconciliation_pending') {
+    return Object.freeze({
+      kind: decision.kind === 'action_waiting' ? 'action_waiting' : 'action_outcome_unknown',
+      planId: plan.planId,
+      actionId: decision.actionId,
+      rootRunId: decision.rootRunId,
+      plan,
+    })
+  }
+
+  const run = reconciled.run
+  if (run.state === 'completed') {
+    const nextPlan = advanceCustomerPlan(plan, {
+      type: 'action_reconciled', actionId: decision.actionId, rootRunId: run.rootRunId,
+      output: completedOutcome(run), occurredAt: dependencies.now(),
+    })
+    return Object.freeze({
+      kind: 'action_completed', planId: plan.planId, actionId: decision.actionId,
+      rootRunId: run.rootRunId, plan: nextPlan,
+    })
+  }
+  if (run.state === 'outcome_unknown') {
+    const nextPlan = decision.kind === 'action_required' ? plan : advanceCustomerPlan(plan, {
+      type: 'action_outcome_unknown', actionId: decision.actionId, rootRunId: run.rootRunId,
+      occurredAt: dependencies.now(),
+    })
+    return Object.freeze({
+      kind: 'action_outcome_unknown', planId: plan.planId, actionId: decision.actionId,
+      rootRunId: run.rootRunId, plan: nextPlan,
+    })
+  }
+  if (run.state === 'running') {
+    return Object.freeze({
+      kind: 'action_waiting', planId: plan.planId, actionId: decision.actionId,
+      rootRunId: run.rootRunId, plan,
     })
   }
   return refused(plan, decision.actionId, 'execution_failed')

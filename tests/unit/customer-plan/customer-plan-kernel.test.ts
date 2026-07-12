@@ -5,8 +5,8 @@ import {
   type CapabilityBindingAdapter,
   type KernelIdFactory,
 } from '@/modules/routing-kernel/application'
-import { createCustomerPlan, decideCustomerPlan, type CustomerPlanProposal } from '@/modules/customer-plan/public'
-import { executeNextCustomerPlanAction } from '@/modules/customer-plan/kernel-adapter'
+import { advanceCustomerPlan, createCustomerPlan, decideCustomerPlan, type CustomerPlanProposal } from '@/modules/customer-plan/public'
+import { executeNextCustomerPlanAction, reconcileCustomerPlanAction } from '@/modules/customer-plan/kernel-adapter'
 
 describe('customer plan kernel adapter', () => {
   it('executes one ready action through the neutral kernel and records its real run evidence', async () => {
@@ -66,6 +66,66 @@ describe('customer plan kernel adapter', () => {
       reason: 'capability_contract_mismatch',
     })
   })
+
+  it('composes quote and purchase runs while holding an unknown purchase for reconciliation', async () => {
+    const now = 1_750_000_000_000
+    let purchaseReconciliations = 0
+    const kernel = kernelFor([
+      binding({
+        capabilityContractId: 'courier.quote:v1', expectedCostMinor: 0,
+        dataFields: ['destinationPostcode'],
+        outcome: { providerQuoteRef: 'provider-quote:live-7', totalMinor: '1295' },
+      }),
+      binding({
+        capabilityContractId: 'courier.purchase-label:v1', expectedCostMinor: 1_295,
+        dataFields: ['providerQuoteRef'], outcome: {},
+        execute: async () => ({ kind: 'outcome_unknown', providerReference: 'provider-purchase:7' }),
+        reconcile: async () => {
+          purchaseReconciliations += 1
+          return {
+            kind: 'effect_committed', providerReference: 'provider-purchase:7',
+            outcome: { labelUrl: 'https://carrier.example/label/7', trackingNumber: 'TRACK7' },
+          }
+        },
+      }),
+    ], now)
+
+    const quoted = await executeNextCustomerPlanAction(createCustomerPlan(proposal, now), {
+      kernel, networkId: 'network:au-first', now: () => now, authorizationTtlMs: 30_000,
+    })
+    if (quoted.kind !== 'action_completed') throw new Error(quoted.kind)
+    const approval = decideCustomerPlan(quoted.plan, now)
+    if (approval.kind !== 'approval_required') throw new Error(approval.kind)
+    const approved = advanceCustomerPlan(quoted.plan, {
+      type: 'action_approved', actionId: approval.actionId,
+      approvedByPrincipalId: proposal.principalId, approvalDigest: approval.approvalDigest,
+      maximumSpendMinor: approval.maximumSpendMinor, currency: approval.currency,
+      allowedDataFields: approval.dataFields, expiresAt: now + 30_000, occurredAt: now,
+    })
+
+    const purchased = await executeNextCustomerPlanAction(approved, {
+      kernel, networkId: 'network:au-first', now: () => now, authorizationTtlMs: 30_000,
+    })
+    if (purchased.kind === 'action_refused') throw new Error(purchased.reason)
+    expect(purchased).toMatchObject({ kind: 'action_outcome_unknown' })
+    if (purchased.kind !== 'action_outcome_unknown') throw new Error(purchased.kind)
+    expect(decideCustomerPlan(purchased.plan, now)).toMatchObject({
+      kind: 'action_required', actionId: 'action:purchase', reason: 'outcome_unknown',
+    })
+
+    const reconciled = await reconcileCustomerPlanAction(purchased.plan, { kernel, now: () => now + 1_000 })
+    expect(purchaseReconciliations).toBe(1)
+    expect(reconciled.kind).toBe('action_completed')
+    if (reconciled.kind !== 'action_completed') throw new Error(reconciled.kind)
+    expect(decideCustomerPlan(reconciled.plan, now + 1_000)).toEqual({
+      kind: 'plan_completed',
+      planId: proposal.planId,
+      output: {
+        'action:quote': { providerQuoteRef: 'provider-quote:live-7', totalMinor: '1295' },
+        'action:purchase': { labelUrl: 'https://carrier.example/label/7', trackingNumber: 'TRACK7' },
+      },
+    })
+  })
 })
 
 const proposal: CustomerPlanProposal = {
@@ -93,7 +153,7 @@ const proposal: CustomerPlanProposal = {
   ],
 }
 
-function kernelFor(adapter: CapabilityBindingAdapter, now: number) {
+function kernelFor(adapter: CapabilityBindingAdapter | readonly CapabilityBindingAdapter[], now: number) {
   let sequence = 0
   const ids: KernelIdFactory = { next: (prefix) => `${prefix}:${++sequence}` }
   return createNeutralRoutingKernel({
@@ -101,7 +161,7 @@ function kernelFor(adapter: CapabilityBindingAdapter, now: number) {
     executionMode: 'simulation',
     ids,
     quoteTtlMs: 60_000,
-    bindings: [adapter],
+    bindings: Array.isArray(adapter) ? adapter : [adapter],
   })
 }
 
@@ -111,6 +171,8 @@ function binding(input: {
   dataFields: readonly string[]
   outcome: Readonly<Record<string, string>>
   queryTerms?: readonly string[]
+  execute?: CapabilityBindingAdapter['execute']
+  reconcile?: CapabilityBindingAdapter['reconcile']
 }): CapabilityBindingAdapter {
   return {
     binding: {
@@ -131,7 +193,7 @@ function binding(input: {
       dataFields: input.dataFields,
       disclosures: [],
     }),
-    execute: async () => ({ kind: 'effect_committed', providerReference: 'provider:run:1', outcome: input.outcome }),
-    reconcile: async () => ({ kind: 'reconciliation_pending' }),
+    execute: input.execute ?? (async () => ({ kind: 'effect_committed', providerReference: 'provider:run:1', outcome: input.outcome })),
+    reconcile: input.reconcile ?? (async () => ({ kind: 'reconciliation_pending' })),
   }
 }
