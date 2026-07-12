@@ -80,6 +80,39 @@ const organicDecisionV2 = v.object({
 })
 
 export const routingKernelTables = {
+  routingKernelAdmissionMeters: defineTable({
+    meterKey: v.string(),
+    requestId: v.string(),
+    operation: literalUnion(['route', 'authorize', 'execute', 'reconcile', 'inspect', 'cancel', 'mcp_control'] as const),
+    agentId: v.string(),
+    admittedAt: v.number(),
+  }).index('by_meterKey_and_admittedAt', ['meterKey', 'admittedAt']),
+
+  routingKernelAdmissionLeases: defineTable({
+    requestId: v.string(),
+    agentId: v.string(),
+    operation: literalUnion(['route', 'authorize', 'execute', 'reconcile', 'inspect', 'cancel', 'mcp_control'] as const),
+    status: literalUnion(['active', 'released'] as const),
+    admittedAt: v.number(),
+    expiresAt: v.number(),
+    releasedAt: v.optional(v.number()),
+  })
+    .index('by_requestId', ['requestId'])
+    .index('by_status_and_expiresAt', ['status', 'expiresAt'])
+    .index('by_agentId_and_status_and_expiresAt', ['agentId', 'status', 'expiresAt']),
+
+  routingKernelAdmissionDecisions: defineTable({
+    requestId: v.string(),
+    agentId: v.string(),
+    operation: literalUnion(['route', 'authorize', 'execute', 'reconcile', 'inspect', 'cancel', 'mcp_control'] as const),
+    disposition: literalUnion(['admitted', 'refused'] as const),
+    reason: v.optional(literalUnion(['duplicate_request', 'agent_quota_exceeded', 'global_quota_exceeded', 'agent_saturated', 'kernel_saturated'] as const)),
+    decidedAt: v.number(),
+    releasedAt: v.optional(v.number()),
+  })
+    .index('by_requestId', ['requestId'])
+    .index('by_disposition_and_decidedAt', ['disposition', 'decidedAt']),
+
   routingKernelIncidentScopeControls: defineTable({
     scopeKey: v.string(),
     networkId: v.optional(v.string()),
