@@ -6,4 +6,7 @@ export {
   preparedActionValue,
   preparedRouteCandidateSetValue,
   preparationRefusalReason,
+  requestEvaluationCandidateValue,
+  requestEvaluationValue,
+  requestSnapshotValue,
 } from './internal/convex-schema'

@@ -8,6 +8,9 @@ import {
   preparedActionValue,
   preparedRouteCandidateSetValue,
   preparationRefusalReason,
+  requestEvaluationCandidateValue,
+  requestEvaluationValue,
+  requestSnapshotValue,
 } from '@/modules/customer-request/runtime'
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 
@@ -65,6 +68,118 @@ const compilationLookupResult = v.union(
     outcome: compilationOutcome,
   }),
 )
+
+const requestSnapshotCommitResult = v.union(
+  v.object({ kind: v.literal('stored') }),
+  v.object({ kind: v.literal('replayed'), requestId: v.string(), revision: v.number() }),
+  v.object({ kind: v.literal('revision_conflict') }),
+  v.object({ kind: v.literal('identity_conflict') }),
+  v.object({ kind: v.literal('command_conflict') }),
+)
+const requestEvaluationWriteResult = v.union(
+  v.object({ kind: v.literal('stored') }),
+  v.object({ kind: v.literal('stale') }),
+  v.object({ kind: v.literal('conflict') }),
+)
+const currentRequestEvaluation = v.union(v.null(), v.object({
+  snapshot: requestSnapshotValue,
+  evaluation: requestEvaluationValue,
+  candidates: v.array(requestEvaluationCandidateValue),
+}))
+
+export const commitRequestSnapshot = internalMutation({
+  args: {
+    commandKey: v.string(), commandDigest: v.string(), expectedRevision: v.number(), snapshot: requestSnapshotValue,
+  },
+  returns: requestSnapshotCommitResult,
+  handler: async (ctx, args) => {
+    const prior = await ctx.db.query('customerRequestCommands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
+    if (prior !== null) {
+      if (prior.commandDigest !== args.commandDigest) return { kind: 'command_conflict' as const }
+      return { kind: 'replayed' as const, requestId: prior.requestId, revision: prior.resultingRevision }
+    }
+    const head = await ctx.db.query('customerRequestHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.snapshot.requestId)).unique()
+    if ((head?.currentRevision ?? 0) !== args.expectedRevision || args.snapshot.revision !== args.expectedRevision + 1) {
+      return { kind: 'revision_conflict' as const }
+    }
+    if (head !== null && (head.principalId !== args.snapshot.principalId
+      || head.delegatedAgentId !== args.snapshot.delegatedAgentId)) return { kind: 'identity_conflict' as const }
+    const existingSnapshot = await ctx.db.query('customerRequestSnapshots')
+      .withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', args.snapshot.requestId).eq('revision', args.snapshot.revision)).unique()
+    if (existingSnapshot !== null) return { kind: 'revision_conflict' as const }
+    if (head === null) {
+      await ctx.db.insert('customerRequestHeads', {
+        requestId: args.snapshot.requestId, principalId: args.snapshot.principalId,
+        delegatedAgentId: args.snapshot.delegatedAgentId, currentRevision: args.snapshot.revision,
+        createdAt: args.snapshot.recordedAt, updatedAt: args.snapshot.recordedAt,
+      })
+    } else {
+      await ctx.db.patch(head._id, {
+        currentRevision: args.snapshot.revision, currentEvaluationId: undefined, updatedAt: args.snapshot.recordedAt,
+      })
+    }
+    await ctx.db.insert('customerRequestSnapshots', args.snapshot)
+    await ctx.db.insert('customerRequestCommands', {
+      commandKey: args.commandKey, commandDigest: args.commandDigest, principalId: args.snapshot.principalId,
+      requestId: args.snapshot.requestId, expectedRevision: args.expectedRevision,
+      resultingRevision: args.snapshot.revision, committedAt: args.snapshot.recordedAt,
+    })
+    return { kind: 'stored' as const }
+  },
+})
+
+export const putRequestEvaluation = internalMutation({
+  args: { evaluation: requestEvaluationValue, candidates: v.array(requestEvaluationCandidateValue) },
+  returns: requestEvaluationWriteResult,
+  handler: async (ctx, args) => {
+    const head = await ctx.db.query('customerRequestHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.evaluation.requestId)).unique()
+    if (head === null || head.currentRevision !== args.evaluation.requestRevision) return { kind: 'stale' as const }
+    const existing = await ctx.db.query('customerRequestEvaluations')
+      .withIndex('by_evaluationId', (query) => query.eq('evaluationId', args.evaluation.evaluationId)).unique()
+    if (existing !== null) return existing.evaluationDigest === args.evaluation.evaluationDigest
+      ? { kind: 'stored' as const } : { kind: 'conflict' as const }
+    const forRevision = await ctx.db.query('customerRequestEvaluations')
+      .withIndex('by_requestId_and_requestRevision', (query) => query
+        .eq('requestId', args.evaluation.requestId).eq('requestRevision', args.evaluation.requestRevision)).unique()
+    if (forRevision !== null) return { kind: 'conflict' as const }
+    if (new Set(args.candidates.map((candidate) => candidate.candidateRef)).size !== args.candidates.length) {
+      throw new Error('request_evaluation_candidate_identity_duplicate')
+    }
+    await ctx.db.insert('customerRequestEvaluations', args.evaluation)
+    for (const candidate of args.candidates) {
+      await ctx.db.insert('customerRequestEvaluationCandidates', { evaluationId: args.evaluation.evaluationId, ...candidate })
+    }
+    await ctx.db.patch(head._id, { currentEvaluationId: args.evaluation.evaluationId, updatedAt: args.evaluation.evaluatedAt })
+    return { kind: 'stored' as const }
+  },
+})
+
+export const getCurrentRequestEvaluation = internalQuery({
+  args: { requestId: v.string() },
+  returns: currentRequestEvaluation,
+  handler: async (ctx, args) => {
+    const head = await ctx.db.query('customerRequestHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head === null || head.currentEvaluationId === undefined) return null
+    const snapshot = await ctx.db.query('customerRequestSnapshots')
+      .withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', args.requestId).eq('revision', head.currentRevision)).unique()
+    const evaluationId = head.currentEvaluationId
+    const evaluation = await ctx.db.query('customerRequestEvaluations')
+      .withIndex('by_evaluationId', (query) => query.eq('evaluationId', evaluationId)).unique()
+    if (snapshot === null || evaluation === null) throw new Error('current_request_evaluation_incomplete')
+    const candidateRows = await ctx.db.query('customerRequestEvaluationCandidates')
+      .withIndex('by_evaluationId', (query) => query.eq('evaluationId', evaluationId)).collect()
+    return {
+      snapshot: stripSystemFields(snapshot), evaluation: stripSystemFields(evaluation),
+      candidates: candidateRows.map(stripEvaluationCandidateRow).sort((left, right) => left.candidateRef.localeCompare(right.candidateRef)),
+    }
+  },
+})
 
 export const lookupCompilation = internalQuery({
   args: { compilationKey: v.string(), commandDigest: v.string() },
@@ -472,6 +587,18 @@ function stripPlanRow(row: Infer<typeof planRevisionValue> & {
 }): Infer<typeof planRevisionValue> {
   const { _id: _ignoredId, _creationTime: _ignoredCreationTime, planDigest: _digest, ...plan } = row
   return plan
+}
+
+function stripSystemFields<Value extends object>(row: Value & { _id: unknown; _creationTime: number }): Omit<Value, '_id' | '_creationTime'> {
+  const { _id: _ignoredId, _creationTime: _ignoredCreationTime, ...value } = row
+  return value
+}
+
+function stripEvaluationCandidateRow(row: Infer<typeof requestEvaluationCandidateValue> & {
+  _id: unknown; _creationTime: number; evaluationId: string
+}): Infer<typeof requestEvaluationCandidateValue> {
+  const { _id: _ignoredId, _creationTime: _ignoredCreationTime, evaluationId: _evaluationId, ...candidate } = row
+  return candidate
 }
 
 function normalizeCurrentRequestRow(row: {

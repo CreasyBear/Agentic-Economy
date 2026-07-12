@@ -67,6 +67,34 @@ const preparationDisclosureDisposition = v.union(
   v.literal('allocated'), v.literal('released'), v.literal('not_released'), v.literal('uncertain'),
 )
 
+const requestFactSource = v.union(
+  v.object({ kind: v.literal('customer'), assertionRef: v.string() }),
+  v.object({ kind: v.literal('agent_inference'), inferenceRef: v.string() }),
+)
+const requestFact = v.object({ value: literalValue, source: requestFactSource })
+export const requestSnapshotValue = v.object({
+  requestId: v.string(), revision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
+  intent: v.string(), facts: v.record(v.string(), requestFact), snapshotDigest: v.string(), recordedAt: v.number(),
+})
+const informationRequirementValue = v.object({
+  field: v.string(), customerLabel: v.string(), affectedCandidates: v.array(v.string()),
+  probesEnabled: v.array(v.string()), requirementDigest: v.string(),
+})
+export const requestEvaluationValue = v.object({
+  evaluationId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
+  factsDigest: v.string(), posture: v.union(
+    v.literal('progress_available'), v.literal('needs_information'), v.literal('unsupported'),
+  ),
+  nextRequirement: v.optional(informationRequirementValue), evaluationDigest: v.string(), evaluatedAt: v.number(),
+})
+export const requestEvaluationCandidateValue = v.object({
+  candidateRef: v.string(), businessId: v.string(), bindingId: v.string(), capabilityContractId: v.string(),
+  viability: v.union(
+    v.object({ kind: v.literal('viable') }),
+    v.object({ kind: v.literal('blocked_on_information'), fields: v.array(v.string()) }),
+  ),
+})
+
 export const customerRequestValue = v.object({
   requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
   compilationState: v.union(
@@ -185,6 +213,34 @@ export const customerRequestTables = {
   })
     .index('by_capabilityContractId', ['capabilityContractId'])
     .index('by_status_and_capabilityContractId', ['status', 'capabilityContractId']),
+
+  customerRequestHeads: defineTable({
+    requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), currentRevision: v.number(),
+    currentEvaluationId: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
+  }).index('by_requestId', ['requestId']),
+
+  customerRequestSnapshots: defineTable({
+    ...requestSnapshotValue.fields,
+  }).index('by_requestId_and_revision', ['requestId', 'revision']),
+
+  customerRequestCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+    expectedRevision: v.number(), resultingRevision: v.number(), committedAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_requestId_and_resultingRevision', ['requestId', 'resultingRevision']),
+
+  customerRequestEvaluations: defineTable({
+    ...requestEvaluationValue.fields,
+  })
+    .index('by_evaluationId', ['evaluationId'])
+    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
+
+  customerRequestEvaluationCandidates: defineTable({
+    evaluationId: v.string(), ...requestEvaluationCandidateValue.fields,
+  })
+    .index('by_evaluationId', ['evaluationId'])
+    .index('by_candidateRef', ['candidateRef']),
 
   customerRequests: defineTable({
     requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
