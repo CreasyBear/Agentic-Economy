@@ -156,6 +156,35 @@ export const listEligible = internalQuery({
   },
 })
 
+export const resolvePresentations = internalQuery({
+  args: { bindingIds: v.array(v.string()) },
+  returns: v.array(v.object({
+    bindingId: v.string(), nodeId: v.string(), businessName: v.string(),
+    cancellation: v.object({
+      kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')),
+      summary: v.string(),
+    }),
+  })),
+  handler: async (ctx, args) => {
+    const bindingIds = [...new Set(args.bindingIds)]
+    if (bindingIds.length > 256) throw new Error('binding_presentation_limit_exceeded')
+    const presentations = []
+    for (const bindingId of bindingIds) {
+      const row = await ctx.db.query('routingKernelBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId)).unique()
+      if (row === null) continue
+      const business = await ctx.db.get(row.businessId)
+      if (business === null || business.publicStatus !== 'published' || business.claimStatus !== 'published' || business.suppressedAt !== undefined) continue
+      presentations.push({
+        bindingId: row.bindingId, nodeId: row.nodeId, businessName: business.name,
+        cancellation: row.adapterFeatures?.requestCancellation === 'supported'
+          ? { kind: 'conditional' as const, summary: 'Cancellation depends on the selected business terms.' }
+          : { kind: 'unsupported' as const, summary: 'This registered capability does not expose cancellation.' },
+      })
+    }
+    return presentations
+  },
+})
+
 export const getCurrentStructuredEvidence = internalQuery({
   args: { bindingId: v.string() },
   handler: async (ctx, args) => {

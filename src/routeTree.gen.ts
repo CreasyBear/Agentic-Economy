@@ -59,6 +59,7 @@ import { Route as OperatorAdminInquiriesRouteImport } from './routes/_operator/a
 import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator/admin.index-health'
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
+import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
@@ -320,6 +321,12 @@ const OperatorAdminAuditEventsRoute =
     path: '/admin/audit-events',
     getParentRoute: () => OperatorRoute,
   } as any)
+const ApiRequestsRequestRefOptionsRoute =
+  ApiRequestsRequestRefOptionsRouteImport.update({
+    id: '/$requestRef/options',
+    path: '/$requestRef/options',
+    getParentRoute: () => ApiRequestsRoute,
+  } as any)
 const ApiAnswerThreadsThreadIdRoute =
   ApiAnswerThreadsThreadIdRouteImport.update({
     id: '/$threadId',
@@ -356,7 +363,7 @@ export interface FileRoutesByFullPath {
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/requests': typeof ApiRequestsRoute
+  '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -391,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -410,7 +418,7 @@ export interface FileRoutesByTo {
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/requests': typeof ApiRequestsRoute
+  '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -445,6 +453,7 @@ export interface FileRoutesByTo {
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -466,7 +475,7 @@ export interface FileRoutesById {
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/requests': typeof ApiRequestsRoute
+  '/api/requests': typeof ApiRequestsRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -501,6 +510,7 @@ export interface FileRoutesById {
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -557,6 +567,7 @@ export interface FileRouteTypes {
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/options'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -611,6 +622,7 @@ export interface FileRouteTypes {
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/options'
   id:
     | '__root__'
     | '/'
@@ -666,6 +678,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/options'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -685,7 +698,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
-  ApiRequestsRoute: typeof ApiRequestsRoute
+  ApiRequestsRoute: typeof ApiRequestsRouteWithChildren
   IThreadIdRoute: typeof IThreadIdRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
@@ -1058,6 +1071,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperatorAdminAuditEventsRouteImport
       parentRoute: typeof OperatorRoute
     }
+    '/api/requests/$requestRef/options': {
+      id: '/api/requests/$requestRef/options'
+      path: '/$requestRef/options'
+      fullPath: '/api/requests/$requestRef/options'
+      preLoaderRoute: typeof ApiRequestsRequestRefOptionsRouteImport
+      parentRoute: typeof ApiRequestsRoute
+    }
     '/api/answer/threads/$threadId': {
       id: '/api/answer/threads/$threadId'
       path: '/$threadId'
@@ -1182,6 +1202,18 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
+interface ApiRequestsRouteChildren {
+  ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
+}
+
+const ApiRequestsRouteChildren: ApiRequestsRouteChildren = {
+  ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,
+}
+
+const ApiRequestsRouteWithChildren = ApiRequestsRoute._addFileChildren(
+  ApiRequestsRouteChildren,
+)
+
 interface ApiAnswerThreadsRouteChildren {
   ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRoute
 }
@@ -1211,7 +1243,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
-  ApiRequestsRoute: ApiRequestsRoute,
+  ApiRequestsRoute: ApiRequestsRouteWithChildren,
   IThreadIdRoute: IThreadIdRoute,
   QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,

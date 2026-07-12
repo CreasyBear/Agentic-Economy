@@ -10,6 +10,57 @@ import {
 import { createNeutralRoutingKernel, type CapabilityBindingAdapter } from '@/modules/routing-kernel/application'
 
 describe('customer request kernel router', () => {
+  it('prepares comparable options from public inputs without inventing disclosure authority', async () => {
+    const contract = defineCapabilityContract({
+      capabilityContractId: 'sandbox.option.quote:v1', name: 'Prepare a sandbox option', operation: 'quote',
+      preparation: { purpose: 'sandbox_option_comparison', customerLabel: 'Compare sandbox options' },
+      input: { requestContext: {
+        valueType: 'string', customerLabel: 'Request details', required: true, decisionRelevance: 'option_selection',
+        disclosure: { classification: 'public', phase: 'preparation', recipient: 'candidate_provider', purposes: ['sandbox_option_comparison'] },
+      } },
+      output: { optionSummary: { valueType: 'string', customerLabel: 'Option', required: true, decisionRelevance: 'option_selection', evidenceRole: 'provider_offer' } },
+      consequence: { commitment: 'none', spend: 'quoted', reversibility: 'not_applicable', approval: 'explicit' },
+    })
+    let receivedData: Readonly<Record<string, string | number | boolean>> | undefined
+    const adapter: CapabilityBindingAdapter = {
+      binding: {
+        bindingId: 'sandbox.option.one:v1', nodeId: 'sandbox:option-one', networkId: 'ae:public', capabilityContractId: contract.capabilityContractId,
+        operation: 'quote', admission: 'admitted', conformance: 'conformant', queryTerms: ['sandbox option'],
+        registrationHash: 'sha256:sandbox-one', environment: 'production',
+        adapterFeatures: { requestCancellation: 'unsupported', quotePreparation: 'structured_authorized' },
+      },
+      quote: async () => ({ kind: 'refused', reason: 'structured_only' }),
+      quoteStructured: async (input) => {
+        receivedData = input.data
+        return {
+          kind: 'quoted', issuerBindingId: input.recipient.bindingId, issuerNodeId: input.recipient.nodeId,
+          capabilityContractId: input.capabilityContractId, capabilityContractVersion: input.capabilityContractVersion,
+          registrationHash: input.registrationHash, environment: input.environment,
+          expectedCost: { currency: 'AUD', amountMinor: 900 }, maximumCost: { currency: 'AUD', amountMinor: 900 }, expectedLatencyMs: 100,
+          providerQuoteRef: 'sandbox:offer:1', providerQuoteExpiresAt: 70_000,
+          offerOutputs: [{ field: 'optionSummary', valueType: 'string', value: 'Sandbox Option One' }],
+          priceComponents: [{ label: 'Sandbox amount', amountMinor: 900 }],
+          materialTerms: [{ key: 'sandbox', label: 'Supply status', value: 'Verification only' }],
+          cancellation: { kind: 'unsupported', summary: 'No effect.' }, dataFields: [], disclosures: [],
+        }
+      },
+      execute: async () => ({ kind: 'effect_not_committed', reason: 'sandbox' }),
+      reconcile: async () => ({ kind: 'reconciliation_pending' }),
+    }
+    const kernel = createNeutralRoutingKernel({
+      now: () => 1_000, executionMode: 'simulation', ids: { next: (prefix) => `${prefix}:1` }, quoteTtlMs: 60_000, bindings: [adapter],
+    })
+    const result = await createKernelCustomerRequestActionRouter(kernel, presentationDirectory()).route({
+      routingRequestId: 'route:sandbox:1', request: {
+        requestId: 'request:sandbox:1', revision: 1, principalId: 'principal:1', delegatedAgentId: 'agent:1',
+        routing: { networkId: 'ae:public', currency: 'AUD', maximumSpendMinor: 1_000, optimizeFor: 'cost' },
+      }, action: { actionId: 'action:quote', capabilityContractId: contract.capabilityContractId },
+      planRevisionId: 'plan:sandbox:1', preparationGeneration: 1, contract, publicInput: { requestContext: 'Compare options' },
+    })
+    expect(result).toMatchObject({ kind: 'candidate_set', candidateSet: { candidates: [{ expectedCost: { amountMinor: 900 } }] } })
+    expect(receivedData).toEqual({ requestContext: 'Compare options' })
+  })
+
   it('routes structured preparation through allocation-bound recipient releases without legacy query smuggling', async () => {
     let legacyQuoteCalls = 0
     let providerCalls = 0

@@ -586,8 +586,12 @@ async function resolveContext(
   if (action === undefined) return { reason: 'action_not_found' }
   const contract = registry.get(action.capabilityContractId)
   if (contract === undefined) return { reason: 'capability_contract_not_found' }
-  if (Object.values(action.input).some((input) => input.kind !== 'literal')) return { reason: 'action_input_unresolved' }
-  const expected = Object.fromEntries(Object.entries(action.input).map(([field, input]) => [field, input.kind === 'literal' ? input.value : undefined]))
+  if (Object.values(action.input).some((input) => input.kind === 'action_output')) return { reason: 'action_input_unresolved' }
+  const expected = Object.fromEntries(Object.entries(action.input).map(([field, input]) => [
+    field,
+    input.kind === 'literal' ? input.value : input.kind === 'customer_fact' ? request.knownFacts[input.fact] : undefined,
+  ]))
+  if (Object.values(expected).some((value) => value === undefined)) return { reason: 'action_input_unresolved' }
   if (canonicalDigest(stableRecord(expected)) !== canonicalDigest(stableRecord(command.resolvedInput))) return { reason: 'action_input_mismatch' }
   return { request, plan, action, contract }
 }

@@ -20,18 +20,21 @@ export function createKernelCustomerRequestActionRouter(
 ): CustomerRequestActionRouter {
   return Object.freeze({
     route: async (input) => {
-      const hasStructuredPreparationDisclosure = Object.values(input.contract.input)
-        .some((field) => field.disclosure?.phase === 'preparation')
-      if (hasStructuredPreparationDisclosure) {
-        if (input.releasePreparationData === undefined) {
-          return { kind: 'no_route' as const, reason: 'preparation_authority_required' }
-        }
-        const protectedFieldNames = Object.entries(input.contract.input)
+      const hasStructuredPreparation = input.contract.preparation !== undefined
+      if (hasStructuredPreparation) {
+        const preparationFieldNames = Object.entries(input.contract.input)
           .filter(([, field]) => field.disclosure?.phase === 'preparation')
           .map(([field]) => field)
           .sort()
+        const protectedFieldNames = Object.entries(input.contract.input)
+          .filter(([, field]) => field.disclosure?.phase === 'preparation' && field.disclosure.classification !== 'public')
+          .map(([field]) => field)
+          .sort()
+        if (protectedFieldNames.length > 0 && input.releasePreparationData === undefined) {
+          return { kind: 'no_route' as const, reason: 'preparation_authority_required' }
+        }
         const purpose = input.contract.preparation?.purpose
-        if (purpose === undefined || protectedFieldNames.some((field) => !input.contract.input[field]?.disclosure?.purposes.includes(purpose))) {
+        if (purpose === undefined || preparationFieldNames.some((field) => !input.contract.input[field]?.disclosure?.purposes.includes(purpose))) {
           return { kind: 'no_route' as const, reason: 'preparation_purpose_not_composable' }
         }
         const prepared = await kernel.operations.prepareStructuredQuotes({
@@ -47,7 +50,7 @@ export function createKernelCustomerRequestActionRouter(
           currency: input.request.routing.currency,
           maximumSpendMinor: input.request.routing.maximumSpendMinor,
           purpose,
-          protectedFieldNames,
+          protectedFieldNames: preparationFieldNames,
           allowedExecutionDataFields: Object.entries(input.contract.input)
             .filter(([, field]) => field.disclosure?.phase === 'execution')
             .map(([field]) => field)
@@ -71,7 +74,17 @@ export function createKernelCustomerRequestActionRouter(
             reconcileCandidateRelease: input.reconcilePreparationData,
           }),
           releaseForCandidate: async (release) => {
-            const result = await input.releasePreparationData!({
+            if (protectedFieldNames.length === 0) {
+              const released = await release.release({
+                allocationId: `public:${release.releaseKey}`,
+                protectedValues: input.publicInput,
+              })
+              return { kind: 'released' as const, allocationId: `public:${release.releaseKey}`, providerEvidenceRef: released.providerEvidenceRef, releasedAt: Date.now() }
+            }
+            if (input.releasePreparationData === undefined) return {
+              kind: 'refused' as const, reason: 'preparation_authority_required', nextAction: 'Ask the customer for permission to compare these options.',
+            }
+            const result = await input.releasePreparationData({
               releaseKey: release.releaseKey,
               recipient: {
                 nodeId: release.recipient.nodeId,
@@ -81,8 +94,10 @@ export function createKernelCustomerRequestActionRouter(
               },
               purpose: release.purpose,
               purposeLabel: input.contract.preparation!.customerLabel,
-              fields: release.fields,
-              release: release.release,
+              fields: release.fields.filter((field) => protectedFieldNames.includes(field)),
+              release: async ({ allocationId, protectedValues }) => await release.release({
+                allocationId, protectedValues: { ...input.publicInput, ...protectedValues },
+              }),
             })
             return result.kind === 'released'
               ? result

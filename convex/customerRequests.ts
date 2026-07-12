@@ -219,6 +219,17 @@ export const getPlanRevision = internalQuery({
   },
 })
 
+export const getPlanForRequestRevision = internalQuery({
+  args: { requestId: v.string(), requestRevision: v.number() },
+  returns: v.union(planRevisionValue, v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestPlanRevisions')
+      .withIndex('by_requestId_and_requestRevision', (query) => query.eq('requestId', args.requestId).eq('requestRevision', args.requestRevision))
+      .unique()
+    return row === null ? null : stripPlanRow(row)
+  },
+})
+
 export const claimPreparation = internalMutation({
   args: {
     preparationKey: v.string(), preparationScope: v.string(), commandDigest: v.string(),

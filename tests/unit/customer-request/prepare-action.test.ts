@@ -170,6 +170,12 @@ describe('prepare customer request action', () => {
     expect(JSON.stringify(observedInput)).not.toContain('3000')
   })
 
+  it('resolves customer-fact plan inputs from the persisted Request before preparation', async () => {
+    const fixture = setup({ useCustomerFact: true })
+    await expect(prepareCustomerRequestAction(command(), fixture.dependencies)).resolves.toMatchObject({ kind: 'prepared' })
+    expect(fixture.routeCalls).toBe(1)
+  })
+
   it('preserves an inspection reference when provider data release is uncertain', async () => {
     const fixture = setup({ failDisclosureRelease: true })
 
@@ -234,6 +240,7 @@ function setup(options: {
   failFirstCommit?: boolean
   failDisclosureRelease?: boolean
   onRouteInput?: (input: Parameters<CustomerRequestActionRouter['route']>[0]) => void
+  useCustomerFact?: boolean
 } = {}) {
   let now = 1_000
   let routeCalls = 0
@@ -242,9 +249,9 @@ function setup(options: {
   let failedCommit = false
   const quotes = new Map<string, PreparedRouteQuote>()
   const store = createInMemoryCustomerRequestPreparationStore()
-  const registry = contracts()
-  const request = customerRequest()
-  const plan = planRevision(registry)
+  const registry = contracts(options.useCustomerFact === true)
+  const request = customerRequest(options.useCustomerFact === true)
+  const plan = planRevision(registry, options.useCustomerFact === true)
   store.putRequest(request)
   store.putPlanRevision(plan)
 
@@ -337,15 +344,15 @@ function authority(): VerifiedPreparationAuthority {
   }
 }
 
-function customerRequest() {
+function customerRequest(withKnownFact = false) {
   return createCustomerRequest({
     requestId: 'request:shipping:1', principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
     intent: 'Compare courier prices.', routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' },
-    createdAt: 900,
+    ...(withKnownFact ? { knownFacts: { destinationPostcode: '3000' } } : {}), createdAt: 900,
   })
 }
 
-function planRevision(registry: ReturnType<typeof contracts>) {
+function planRevision(registry: ReturnType<typeof contracts>, useCustomerFact = false) {
   return createPlanRevision({
     planRevisionId: 'plan:shipping:1', requestId: 'request:shipping:1', requestRevision: 1,
     proposedByAgentId: 'agent:customer:1',
@@ -353,18 +360,19 @@ function planRevision(registry: ReturnType<typeof contracts>) {
     completionEvidence: [{ actionId: 'action:quote', field: 'offerRef' }],
     actions: [{
       actionId: 'action:quote', capabilityContractId: 'shipping.rate.query:v1', dependsOn: [],
-      input: { destinationPostcode: { kind: 'literal', value: '3000' } },
+      input: { destinationPostcode: useCustomerFact ? { kind: 'customer_fact', fact: 'destinationPostcode' } : { kind: 'literal', value: '3000' } },
     }],
   }, registry)
 }
 
-function contracts() {
+function contracts(customerFactAtPreparation = false) {
   return createCapabilityContractRegistry([defineCapabilityContract({
     capabilityContractId: 'shipping.rate.query:v1', name: 'Query shipping rates', operation: 'query',
     preparation: { purpose: 'shipping_rate_quote', customerLabel: 'Prepare shipping rates' },
     input: {
       destinationPostcode: {
         valueType: 'string', customerLabel: 'Destination postcode', required: true,
+        ...(customerFactAtPreparation ? { decisionRelevance: 'commitment' as const } : {}),
         disclosure: { classification: 'personal', phase: 'preparation', recipient: 'candidate_provider', purposes: ['shipping_rate_quote'] },
       },
     },

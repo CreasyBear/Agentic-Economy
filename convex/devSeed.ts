@@ -11,12 +11,15 @@ const sandboxCapabilityContract = {
   capabilityContractId: 'sandbox.option.quote:v1', name: 'Prepare a sandbox option', operation: 'quote' as const,
   preparation: { purpose: 'sandbox_option_comparison', customerLabel: 'Compare sandbox options' },
   input: {
-    requestContext: { valueType: 'string' as const, customerLabel: 'Request details', required: true, decisionRelevance: 'option_selection' as const },
+    requestContext: {
+      valueType: 'string' as const, customerLabel: 'Request details', required: false, decisionRelevance: 'option_selection' as const,
+      disclosure: { classification: 'public' as const, phase: 'preparation' as const, recipient: 'candidate_provider' as const, purposes: ['sandbox_option_comparison'] },
+    },
   },
   output: {
     optionSummary: { valueType: 'string' as const, customerLabel: 'Option', required: true, decisionRelevance: 'option_selection' as const, evidenceRole: 'provider_offer' as const },
   },
-  consequence: { commitment: 'none' as const, spend: 'quoted' as const, reversibility: 'not_applicable' as const, approval: 'none' as const },
+  consequence: { commitment: 'none' as const, spend: 'quoted' as const, reversibility: 'not_applicable' as const, approval: 'explicit' as const },
 }
 
 export const seedDevCatalog = internalMutation({

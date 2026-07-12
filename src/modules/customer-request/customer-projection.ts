@@ -1,4 +1,5 @@
 import type { CompileCustomerRequestResult } from './compiler'
+import type { PreparedRouteCandidateSet } from './preparation'
 
 export type CustomerRequestProjection =
   | Readonly<{
@@ -9,6 +10,13 @@ export type CustomerRequestProjection =
       stepCount: number
     }>
   | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'identity_changed' | 'idempotency_key_reused' }>
+
+export type CustomerOptionsProjection =
+  | Readonly<{ kind: 'options'; requestRef: string; revision: number; options: PreparedRouteCandidateSet }>
+  | Readonly<{ kind: 'checking'; requestRef: string; revision: number; nextAction: 'check_again'; inspectionRef?: string }>
+  | Readonly<{ kind: 'unavailable'; requestRef: string; revision: number; nextAction: 'revise_request'; explanation: string }>
+  | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'request_not_ready' }>
+  | Readonly<{ kind: 'refused'; reason: 'authentication_required' }>
 
 export function projectCustomerRequest(result: CompileCustomerRequestResult): CustomerRequestProjection {
   if (result.kind === 'plan_ready') return Object.freeze({
