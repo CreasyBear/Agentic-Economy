@@ -359,14 +359,16 @@ export function createStructuredQuotePreparationOperation(input: Readonly<{
       })
     }))
     const coverage = await input.store.listCandidateCoverage(candidateSet.candidateSetDigest)
-    return prepared.length === 0
-      ? reconciliationPending || attempts.some((attempt) => attempt.disposition === 'dispatched' || attempt.disposition === 'uncertain')
-        ? { kind: 'preparation_pending', candidateSetDigest: candidateSet.candidateSetDigest, attempts, coverage }
-        : { kind: 'insufficient_options', candidateSetDigest: candidateSet.candidateSetDigest, attempts, reason: 'no_structured_offer' }
-      : {
+    const hasUnresolvedAttempt = reconciliationPending
+      || attempts.some((attempt) => attempt.disposition === 'dispatched' || attempt.disposition === 'uncertain')
+    return hasUnresolvedAttempt
+      ? { kind: 'preparation_pending', candidateSetDigest: candidateSet.candidateSetDigest, attempts, coverage }
+      : prepared.length === 0
+        ? { kind: 'insufficient_options', candidateSetDigest: candidateSet.candidateSetDigest, attempts, reason: 'no_structured_offer' }
+        : {
           kind: 'candidates_prepared', candidateSetDigest: candidateSet.candidateSetDigest,
           candidates: prepared, attempts, coverage, frozenCandidates: candidateSet.candidates,
-        }
+          }
   }
 }
 

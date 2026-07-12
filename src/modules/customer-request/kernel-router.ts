@@ -75,11 +75,16 @@ export function createKernelCustomerRequestActionRouter(
           }),
           releaseForCandidate: async (release) => {
             if (protectedFieldNames.length === 0) {
-              const released = await release.release({
-                allocationId: `public:${release.releaseKey}`,
-                protectedValues: input.publicInput,
-              })
-              return { kind: 'released' as const, allocationId: `public:${release.releaseKey}`, providerEvidenceRef: released.providerEvidenceRef, releasedAt: Date.now() }
+              const allocationId = `public:${release.releaseKey}`
+              try {
+                const released = await release.release({ allocationId, protectedValues: input.publicInput })
+                return { kind: 'released' as const, allocationId, providerEvidenceRef: released.providerEvidenceRef, releasedAt: Date.now() }
+              } catch {
+                return {
+                  kind: 'uncertain' as const, allocationId,
+                  nextAction: 'Check this Request again before contacting the business or preparing another option.',
+                }
+              }
             }
             if (input.releasePreparationData === undefined) return {
               kind: 'refused' as const, reason: 'preparation_authority_required', nextAction: 'Ask the customer for permission to compare these options.',

@@ -22,7 +22,7 @@ describe('sandbox capability provider', () => {
 
     const execution = await handleSandboxCapabilityRequest(request('one', {
       operation: 'execute', bindingId: 'sandbox.option.one:v1', capabilityContractId: 'sandbox.option.quote:v1',
-    }), { providerKey: 'secret', now: () => 1_000 })
+    }), { providerKey: 'secret' })
     await expect(execution.json()).resolves.toMatchObject({ kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects' })
   })
 
@@ -40,10 +40,45 @@ describe('sandbox capability provider', () => {
     const quoted = results.filter((result) => result?.kind === 'quoted')
     expect(quoted.sort((left, right) => left.expectedCost.amountMinor - right.expectedCost.amountMinor)[0]?.issuerBindingId).toBe('sandbox.option.two:v1')
   })
+
+  it('exercises deterministic refusal, expiry, timeout and reconciliation through the production adapter', async () => {
+    const input = structuredInput('sandbox.option.one:v1', 'sandbox:option-one')
+    await expect(binding('one', 'sandbox.option.one:v1', 'sandbox:option-one', 'refusal').quoteStructured?.(input)).resolves.toEqual({
+      kind: 'refused', reason: 'sandbox_deterministic_refusal',
+    })
+    await expect(binding('one', 'sandbox.option.one:v1', 'sandbox:option-one', 'expired').quoteStructured?.(input)).resolves.toMatchObject({
+      kind: 'quoted', providerQuoteExpiresAt: 1,
+    })
+    const timed = binding('one', 'sandbox.option.one:v1', 'sandbox:option-one', 'timeout', async () => {
+      throw new DOMException('Timed out', 'TimeoutError')
+    })
+    await expect(timed.quoteStructured?.(input)).resolves.toEqual({ kind: 'uncertain', reason: 'provider_quote_timeout' })
+    const { data: _data, ...reconcileInput } = input
+    await expect(timed.reconcileStructuredQuote?.(reconcileInput)).resolves.toMatchObject({
+      kind: 'quoted', issuerBindingId: 'sandbox.option.one:v1',
+    })
+  })
+
+  it('returns materially identical responses for an identical duplicate command', async () => {
+    const body = {
+      operation: 'structured_quote', bindingId: 'sandbox.option.one:v1', capabilityContractId: 'sandbox.option.quote:v1',
+      capabilityContractVersion: 'v1', registrationHash: 'sha256:registration', environment: 'https://ae.test',
+      quoteAttemptId: 'attempt:duplicate', allocationId: 'allocation:duplicate',
+    }
+    const first = await handleSandboxCapabilityRequest(request('one', body, 'duplicate'), { providerKey: 'secret' })
+    const replay = await handleSandboxCapabilityRequest(request('one', body, 'duplicate'), { providerKey: 'secret' })
+    expect(await replay.json()).toEqual(await first.json())
+  })
 })
 
-function binding(profile: string, bindingId: string, nodeId: string) {
-  const endpointUrl = `https://ae.test/api/sandbox/capability?profile=${profile}`
+function binding(
+  profile: string,
+  bindingId: string,
+  nodeId: string,
+  scenario = 'success',
+  wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>,
+) {
+  const endpointUrl = `https://ae.test/api/sandbox/capability?profile=${profile}&scenario=${scenario}`
   return createHttpCapabilityBinding({
     endpointUrl, credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
     binding: {
@@ -57,7 +92,7 @@ function binding(profile: string, bindingId: string, nodeId: string) {
     now: () => 1_000,
     send: async (outbound) => await handleSandboxCapabilityRequest(new Request(endpointUrl, {
       method: 'POST', headers: outbound.headers, body: await outbound.text(),
-    }), { providerKey: 'secret', now: () => 1_000 }),
+    }), { providerKey: 'secret', ...(wait === undefined ? {} : { wait }) }),
   })
 }
 
@@ -65,12 +100,20 @@ async function call(profile: string, bindingId: string): Promise<Response> {
   return await handleSandboxCapabilityRequest(request(profile, {
     operation: 'structured_quote', bindingId, capabilityContractId: 'sandbox.option.quote:v1',
     capabilityContractVersion: 'v1', registrationHash: 'sha256:registration', environment: 'https://ae.test',
-  }), { providerKey: 'secret', now: () => 1_000 })
+  }), { providerKey: 'secret' })
 }
 
-function request(profile: string, body: Record<string, unknown>): Request {
-  return new Request(`https://ae.test/api/sandbox/capability?profile=${profile}`, {
+function request(profile: string, body: Record<string, unknown>, scenario = 'success'): Request {
+  return new Request(`https://ae.test/api/sandbox/capability?profile=${profile}&scenario=${scenario}`, {
     method: 'POST', headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
     body: JSON.stringify({ protocolVersion: 'ae-capability:v1', ...body }),
   })
+}
+
+function structuredInput(bindingId: string, nodeId: string) {
+  return {
+    quoteAttemptId: 'attempt:scenario', allocationId: 'allocation:scenario', recipient: { bindingId, nodeId },
+    capabilityContractId: 'sandbox.option.quote:v1', capabilityContractVersion: 'v1',
+    registrationHash: `sha256:${'one'.padEnd(64, '0')}`, environment: 'https://ae.test', data: { requestContext: 'Compare options' },
+  }
 }

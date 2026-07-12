@@ -14,6 +14,17 @@ const redactedJson = v.object({
 })
 
 export const inquiryTables = {
+  capabilityLaunchSupportRecords: defineTable({
+    supportRecordId: v.string(), businessId: v.id('businesses'), capability: v.literal('human_inquiry_owner_inbox'),
+    status: v.string(), reason: v.string(), evidenceRefs: v.array(v.string()),
+    primaryOwnerRef: v.string(), primaryAdminOperatorRef: v.string(), backupOwnerRef: v.string(), backupAdminOperatorRef: v.string(),
+    supportedStage: v.union(v.literal('manual_support'), v.literal('internal_alpha'), v.literal('public_alpha')),
+    supportedChannels: v.array(v.string()), capacityThresholdJson: v.string(), backlogAgeThresholdMs: v.number(),
+    phaseIncidentCountsJson: v.string(), supportEscalationPath: v.string(), claimDisablePath: v.string(),
+    perChannelKillRulesJson: v.string(), sourceHash: v.string(), correlationId: v.string(), lastReviewedAt: v.number(),
+    operatorNextAction: v.string(), createdAt: v.number(), updatedAt: v.number(),
+  }).index('by_supportRecordId', ['supportRecordId']),
+
   inquiryThreads: defineTable({
     threadId: v.string(),
     businessId: v.id('businesses'),
