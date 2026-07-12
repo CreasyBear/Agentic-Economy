@@ -406,7 +406,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             tabIndex={-1}
             onClick={closeMobileSidebar}
           />
-          <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-body shadow-sm">
+        <div className="absolute inset-y-0 left-0 flex w-80 max-w-full flex-col border-r border-border bg-body shadow-low">
             <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4">
               <h2 id="ae-thread-mobile-sidebar-title" className="font-heading text-base font-semibold text-primary">
                 Recent questions

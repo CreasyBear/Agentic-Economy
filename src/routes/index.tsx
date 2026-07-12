@@ -97,7 +97,7 @@ function HomeLanding() {
 
             <Card
               padding={3}
-              className={cn('w-full bg-card text-start shadow-lg', ENTER, 'motion-safe:delay-100')}
+              className={cn('w-full bg-card text-start shadow-high', ENTER, 'motion-safe:delay-100')}
               aria-label="Ask for a local business"
             >
               <AeAnswerPromptInput
@@ -115,7 +115,7 @@ function HomeLanding() {
                     <Link
                       href={`/registry?q=${encodeURIComponent(category.q)}`}
                       color="inherit"
-                      className="rounded-full border border-on-accent bg-card px-3 py-1 text-sm font-medium text-primary shadow-sm"
+                      className="rounded-full border border-on-accent bg-card px-3 py-1 text-sm font-medium text-primary shadow-low"
                     >
                       {category.label}
                     </Link>
@@ -145,7 +145,7 @@ function InquiryReceiptObject() {
   return (
     <Card
       padding={5}
-      className={cn('hidden w-full max-w-sm justify-self-end bg-card text-primary shadow-lg lg:block lg:-rotate-1', ENTER_SLOW, 'motion-safe:delay-150')}
+            className={cn('hidden w-full max-w-sm justify-self-end bg-card text-primary shadow-high lg:block lg:-rotate-1', ENTER_SLOW, 'motion-safe:delay-150')}
       aria-label="Example inquiry receipt"
     >
       <div className="grid gap-4">

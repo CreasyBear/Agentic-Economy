@@ -41,7 +41,7 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
   return (
     <Card
       padding={4}
-      className="group relative grid gap-4 shadow-sm motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-md motion-safe:hover:lift"
+      className="group relative grid gap-4 shadow-low motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-med motion-safe:hover:lift"
       data-variant="answer"
       id={`source-${source.citationIndex}`}
       aria-labelledby={`source-${source.citationIndex}-name`}
@@ -143,7 +143,7 @@ function AeProviderCardRegistry({ item }: { item: PublicBusinessCatalogApiDto })
   return (
     <Card
       padding={0}
-      className="group relative grid h-full overflow-hidden bg-card shadow-sm motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-lg motion-safe:hover:lift focus-within:shadow-lg"
+      className="group relative grid h-full overflow-hidden bg-card shadow-low motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-high motion-safe:hover:lift focus-within:shadow-high"
       data-variant="registry"
       aria-labelledby={`registry-card-${item.slug}`}
     >
