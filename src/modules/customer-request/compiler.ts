@@ -29,7 +29,7 @@ export type CustomerRequestInterpreter = Readonly<{
       name: string
       operation: CapabilityContract['operation']
       inputs: readonly Readonly<{ field: string; customerLabel: string; required: boolean; valueType: string }>[]
-      outputs: readonly Readonly<{ field: string; customerLabel: string; valueType: string }>[]
+      outputs: readonly Readonly<{ field: string; customerLabel: string; valueType: string; evidenceRole: string }>[]
       applicability: readonly Readonly<{ field: string; acceptedValues: readonly LiteralValue[] }>[]
     }>[]
   }>) => Promise<UntrustedCustomerRequestInterpretation>
@@ -535,9 +535,9 @@ function toInterpreterCapability(contract: CapabilityContract) {
     inputs: Object.entries(contract.input).map(([field, definition]) => ({
       field, customerLabel: definition.customerLabel, required: definition.required, valueType: definition.valueType,
     })),
-    outputs: Object.entries(contract.output).map(([field, definition]) => ({
-      field, customerLabel: definition.customerLabel, valueType: definition.valueType,
-    })),
+    outputs: Object.entries(contract.output).flatMap(([field, definition]) => definition.evidenceRole === undefined ? [] : [{
+      field, customerLabel: definition.customerLabel, valueType: definition.valueType, evidenceRole: definition.evidenceRole,
+    }]),
     applicability: (contract.applicability ?? []).map((rule) => ({
       field: rule.field, acceptedValues: [...rule.acceptedValues],
     })),

@@ -29,6 +29,9 @@ describe('customer request interpretation boundary', () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.systemInstruction).not.toContain(hostile)
+    expect(calls[0]?.systemInstruction).toContain('completionRequirement')
+    expect(calls[0]?.systemInstruction).toContain('exact selected output evidenceRole')
+    expect(calls[0]?.systemInstruction).toContain('Choose only capabilityContractId values present')
     expect(calls[0]?.payload.customerJob).toBe(hostile)
     expect(calls[0]?.payload.capabilities[0]?.name).toBe(hostile)
   })
