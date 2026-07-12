@@ -82,7 +82,7 @@ const informationRequirementValue = v.object({
 })
 export const requestEvaluationValue = v.object({
   evaluationId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
-  factsDigest: v.string(), posture: v.union(
+  factsDigest: v.string(), facts: v.optional(v.record(v.string(), requestFact)), posture: v.union(
     v.literal('progress_available'), v.literal('needs_information'), v.literal('unsupported'),
   ),
   nextRequirement: v.optional(informationRequirementValue), evaluationDigest: v.string(), evaluatedAt: v.number(),

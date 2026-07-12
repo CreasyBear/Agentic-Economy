@@ -1,5 +1,5 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -9,7 +9,9 @@ const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path,
 const identity = { subject: 'customer-facts', issuer: 'https://identity.test' }
 
 describe('Customer Request fact revision', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
   it('accepts only the kernel-selected fact and reevaluates without creating a Plan', async () => {
+    stubSemanticInterpreter('parcel.rate:v1')
     const backend = convexTest(schema, modules)
     await seedParcelRateSupply(backend)
     const customer = backend.withIdentity(identity)
@@ -48,7 +50,70 @@ describe('Customer Request fact revision', () => {
     expect(durable.evaluations.map((evaluation) => evaluation.requestRevision)).toEqual([1, 2])
     expect(durable.plans).toEqual([])
   })
+
+  it('turns natural language into registered candidates and durable evaluation facts without creating a Plan', async () => {
+    stubSemanticInterpreter('parcel.rate:v1', {
+      origin_postcode: '6000', destination_postcode: '2000', weight_grams: 1_250,
+    })
+    const backend = convexTest(schema, modules)
+    await seedParcelRateSupply(backend)
+    const customer = backend.withIdentity(identity)
+
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:parcel:natural:1', requestId: 'request:parcel:natural:1', delegatedAgentId: 'agent:customer:1',
+      customerJob: 'Compare delivery prices for a 1250 gram parcel from 6000 to 2000.',
+      knownFacts: {}, routing: { networkId: 'ae:public' },
+    })
+
+    expect(submitted).toMatchObject({ state: 'ready_to_compare', revision: 1, missingFields: [] })
+    const durable = await backend.run(async (ctx) => ({
+      evaluations: await ctx.db.query('customerRequestEvaluations').collect(),
+      candidates: await ctx.db.query('customerRequestEvaluationCandidates').collect(),
+      plans: await ctx.db.query('customerRequestPlanRevisions').collect(),
+    }))
+    expect(durable.evaluations[0]?.facts).toMatchObject({
+      origin_postcode: { value: '6000', source: { kind: 'agent_inference' } },
+      destination_postcode: { value: '2000', source: { kind: 'agent_inference' } },
+      weight_grams: { value: 1_250, source: { kind: 'agent_inference' } },
+    })
+    expect(durable.candidates).toHaveLength(2)
+    expect(durable.plans).toEqual([])
+  })
+
+  it('keeps a committed request recoverable when semantic interpretation is temporarily unavailable', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('provider unavailable')))
+    const backend = convexTest(schema, modules)
+    await seedParcelRateSupply(backend)
+    const customer = backend.withIdentity(identity)
+
+    await expect(customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:parcel:recovery:1', requestId: 'request:parcel:recovery:1', delegatedAgentId: 'agent:customer:1',
+      customerJob: 'Compare parcel rates',
+      knownFacts: { origin_postcode: '6000', destination_postcode: '2000', weight_grams: 1_250 },
+      routing: { networkId: 'ae:public' },
+    })).resolves.toEqual({ kind: 'refused', reason: 'interpreter_unavailable' })
+    await expect(backend.run(async (ctx) => await ctx.db.query('customerRequestSnapshots').collect()))
+      .resolves.toHaveLength(1)
+
+    stubSemanticInterpreter('parcel.rate:v1')
+    await expect(customer.action(api.customerRequestApplication.resume, { requestRef: 'request:parcel:recovery:1' }))
+      .resolves.toMatchObject({ state: 'ready_to_compare', revision: 1 })
+  })
 })
+
+function stubSemanticInterpreter(
+  capabilityContractId: string,
+  facts: Readonly<Record<string, string | number | boolean>> = {},
+) {
+  vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+    choices: [{ message: { content: JSON.stringify({
+      candidateCapabilityContractIds: [capabilityContractId],
+      facts: Object.entries(facts).map(([field, value]) => ({ capabilityContractId, field, value })),
+    }) } }],
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+}
 
 async function seedParcelRateSupply(backend: ReturnType<typeof convexTest>) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
@@ -59,7 +124,7 @@ async function seedParcelRateSupply(backend: ReturnType<typeof convexTest>) {
       input: {
         origin_postcode: input('Origin postcode'),
         destination_postcode: input('Destination postcode'),
-        weight_grams: input('Parcel weight'),
+        weight_grams: { ...input('Parcel weight'), valueType: 'integer' as const },
       },
       output: {
         total_price: { ...input('Total price', false), valueType: 'money_minor', evidenceRole: 'provider_offer' },

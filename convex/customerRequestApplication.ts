@@ -2,7 +2,11 @@ import { v, type Infer } from 'convex/values'
 
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import { createJsonCustomerRequestInterpreter } from '@/modules/customer-request/interpreter'
-import { createOpenRouterCustomerRequestTransport } from '@/modules/customer-request/openrouter-transport'
+import {
+  createOpenRouterCustomerRequestSemanticTransport,
+  createOpenRouterCustomerRequestTransport,
+} from '@/modules/customer-request/openrouter-transport'
+import { createJsonCustomerRequestSemanticInterpreter } from '@/modules/customer-request/semantic-interpreter'
 import {
   projectCustomerRequest,
   projectNeedsAttention,
@@ -102,6 +106,7 @@ type StoredEvaluation = Readonly<{
   evaluation: Readonly<{
     evaluationId: string
     requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
+    facts?: SnapshotValue['facts']
     posture: 'progress_available' | 'needs_information' | 'unsupported'
     nextRequirement?: Readonly<{
       field: string; customerLabel: string; affectedCandidates: readonly string[]
@@ -168,6 +173,9 @@ export const submit = action({
       kind: 'conflict' as const, requestRef: args.requestId, reason: 'identity_changed' as const,
     }
     const evaluated = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
+    if (evaluated.kind === 'interpreter_unavailable') return {
+      kind: 'refused' as const, reason: 'interpreter_unavailable' as const,
+    }
     if (evaluated.kind !== 'stored') return {
       kind: 'conflict' as const, requestRef: args.requestId, reason: 'revision_changed' as const,
     }
@@ -260,7 +268,8 @@ export const compare = action({
           allowedBindingIds: viable.map((candidate) => candidate.bindingId),
           preparationGeneration: args.revision,
           contract,
-          publicInput: Object.fromEntries(Object.entries(evaluated.snapshot.facts).map(([field, fact]) => [field, fact.value])),
+          publicInput: Object.fromEntries(Object.entries(evaluated.evaluation.facts ?? evaluated.snapshot.facts)
+            .map(([field, fact]) => [field, fact.value])),
         },
       )
       if (result.kind === 'candidate_set') {
@@ -393,6 +402,22 @@ async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string
       summary: 'Connected businesses could not prepare comparable options for this request.',
     }))
     return writableView(projectStoredEvaluation(evaluated))
+  }
+  const unevaluatedSnapshot: SnapshotValue | null = await ctx.runQuery(
+    internal.customerRequests.getCurrentRequestSnapshot, { requestId: args.requestRef },
+  )
+  if (unevaluatedSnapshot !== null) {
+    if (unevaluatedSnapshot.principalId !== caller.principalId) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    const recovered = await evaluateAndPersistSnapshot(ctx, unevaluatedSnapshot)
+    return recovered.kind === 'stored'
+      ? writableView(projectRequestEvaluation({ snapshot: unevaluatedSnapshot, evaluation: recovered.evaluation }))
+      : writableView(projectNeedsAttention({
+          requestRef: unevaluatedSnapshot.requestId,
+          revision: unevaluatedSnapshot.revision,
+          summary: 'Request understanding is temporarily unavailable. Retry to continue.',
+        }))
   }
   const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
     if (request === null || request.principalId !== caller.principalId) {
@@ -630,6 +655,7 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
     requestRevision: input.evaluation.requestRevision,
     registrySnapshotDigest: input.evaluation.registrySnapshotDigest,
     factsDigest: input.evaluation.factsDigest,
+    facts: input.evaluation.facts ?? input.snapshot.facts,
     candidates: input.candidates,
     ...(input.evaluation.nextRequirement === undefined ? {} : { nextRequirement: {
       field: input.evaluation.nextRequirement.field,
@@ -649,19 +675,50 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
 async function evaluateAndPersistSnapshot(
   ctx: ActionCtx,
   snapshot: SnapshotValue,
-): Promise<Readonly<{ kind: 'stored'; evaluation: RequestEvaluation }> | Readonly<{ kind: 'stale' | 'conflict' }>> {
+): Promise<Readonly<{ kind: 'stored'; evaluation: RequestEvaluation }> | Readonly<{
+  kind: 'stale' | 'conflict' | 'interpreter_unavailable'
+}>> {
   const registry = await loadConvexCapabilityContractRegistry(ctx)
   const bindings: EligibleBinding[] = await ctx.runQuery(
     internal.routingKernelBindings.listEligible, { networkId: snapshot.networkId },
   )
   const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
+  if (apiKey === undefined || apiKey.length === 0) return { kind: 'interpreter_unavailable' as const }
+  const model = process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'
+  const semanticInterpreter = createJsonCustomerRequestSemanticInterpreter({
+    interpreterId: `openrouter:${model}`,
+    transport: createOpenRouterCustomerRequestSemanticTransport({
+      apiKey, model, ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
+    }),
+    timeoutMs: 20_000,
+    maximumResponseBytes: 64_000,
+  })
+  let proposal
+  try { proposal = await semanticInterpreter.propose({
+    customerJob: snapshot.intent,
+    explicitFacts: Object.fromEntries(Object.entries(snapshot.facts).map(([field, fact]) => [field, fact.value])),
+    capabilities: registry.list().map((contract) => ({
+      capabilityContractId: contract.capabilityContractId,
+      name: contract.name,
+      operation: contract.operation,
+      description: contract.preparation?.customerLabel ?? contract.name,
+      input: Object.entries(contract.input).map(([field, definition]) => ({
+        field, customerLabel: definition.customerLabel, valueType: definition.valueType, required: definition.required,
+      })),
+      output: Object.entries(contract.output).map(([field, definition]) => ({
+        field, customerLabel: definition.customerLabel, valueType: definition.valueType, required: definition.required,
+      })),
+    })),
+  }) } catch { return { kind: 'interpreter_unavailable' as const } }
+  const evaluationFacts = Object.freeze({ ...proposal.facts, ...snapshot.facts })
   const candidateInputs = discoverRequestEvaluationCandidates({
-    intent: snapshot.intent, bindings,
+    candidateCapabilityContractIds: proposal.candidateCapabilityContractIds, bindings,
     resolveContract: (capabilityContractId) => registry.get(capabilityContractId),
   })
   const evaluation = evaluateCustomerRequestSnapshot({
     requestId: snapshot.requestId, requestRevision: snapshot.revision,
-    intent: snapshot.intent, facts: snapshot.facts, registrySnapshotDigest, candidates: candidateInputs,
+    intent: snapshot.intent, facts: evaluationFacts, registrySnapshotDigest, candidates: candidateInputs,
   })
   const persisted: Readonly<{ kind: 'stored' | 'stale' | 'conflict' }> = await ctx.runMutation(
     internal.customerRequests.putRequestEvaluation,
@@ -670,6 +727,7 @@ async function evaluateAndPersistSnapshot(
         evaluationId: `evaluation:${evaluation.evaluationDigest}`,
         requestId: evaluation.requestId, requestRevision: evaluation.requestRevision,
         registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
+        facts: evaluation.facts,
         posture: evaluation.posture,
         ...(evaluation.nextRequirement === undefined ? {} : { nextRequirement: {
           field: evaluation.nextRequirement.field, customerLabel: evaluation.nextRequirement.customerLabel,

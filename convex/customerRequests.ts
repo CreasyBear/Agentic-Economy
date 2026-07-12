@@ -200,6 +200,20 @@ export const getRequestSnapshot = internalQuery({
   },
 })
 
+export const getCurrentRequestSnapshot = internalQuery({
+  args: { requestId: v.string() },
+  returns: v.union(requestSnapshotValue, v.null()),
+  handler: async (ctx, args) => {
+    const head = await ctx.db.query('customerRequestHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head === null) return null
+    const row = await ctx.db.query('customerRequestSnapshots')
+      .withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', args.requestId).eq('revision', head.currentRevision)).unique()
+    return row === null ? null : stripSystemFields(row)
+  },
+})
+
 export const getRequestEvaluation = internalQuery({
   args: { requestId: v.string(), requestRevision: v.number() },
   returns: currentRequestEvaluation,

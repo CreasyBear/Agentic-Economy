@@ -53,6 +53,7 @@ export type RequestEvaluation = Readonly<{
   requestRevision: number
   registrySnapshotDigest: string
   factsDigest: string
+  facts: Readonly<Record<string, RequestFact>>
   candidates: readonly RequestEvaluationCandidate[]
   nextRequirement?: InformationRequirement
   posture: 'progress_available' | 'needs_information' | 'unsupported'
@@ -94,6 +95,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     intent: input.intent,
     registrySnapshotDigest: input.registrySnapshotDigest,
     factsDigest,
+    facts: input.facts,
     candidates,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
@@ -103,6 +105,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     requestRevision: input.requestRevision,
     registrySnapshotDigest: input.registrySnapshotDigest,
     factsDigest,
+    facts: input.facts,
     candidates: Object.freeze(candidates),
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
@@ -111,16 +114,13 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
 }
 
 export function discoverRequestEvaluationCandidates(input: Readonly<{
-  intent: string
+  candidateCapabilityContractIds: readonly string[]
   bindings: readonly RegisteredEvaluationBinding[]
   resolveContract: (capabilityContractId: string) => CapabilityContract | undefined
 }>): readonly RequestEvaluationCandidateInput[] {
-  const intentTokens = normalizedTokens(input.intent)
+  const admittedCapabilityContractIds = new Set(input.candidateCapabilityContractIds)
   return Object.freeze(input.bindings
-    .filter((binding) => binding.queryTerms.some((term) => {
-      const termTokens = normalizedTokens(term)
-      return termTokens.length > 0 && termTokens.every((token) => intentTokens.includes(token))
-    }))
+    .filter((binding) => admittedCapabilityContractIds.has(binding.capabilityContractId))
     .map((binding) => {
       const contract = input.resolveContract(binding.capabilityContractId)
       return contract === undefined ? undefined : Object.freeze({
@@ -180,9 +180,4 @@ function chooseNextRequirement(
     impact,
     requirementDigest: canonicalDigest({ field: selected.field, impact }),
   })
-}
-
-function normalizedTokens(value: string): readonly string[] {
-  return [...new Set(value.toLowerCase().match(/[a-z0-9]+/g)?.map((token) => token.length > 3 && token.endsWith('s')
-    ? token.slice(0, -1) : token) ?? [])]
 }

@@ -1,4 +1,5 @@
 import type { CustomerRequestInterpretationTransport } from './interpreter'
+import type { CustomerRequestSemanticInterpretationTransport } from './semantic-interpreter'
 
 type OpenRouterConfiguration = Readonly<{
   apiKey: string
@@ -7,6 +8,16 @@ type OpenRouterConfiguration = Readonly<{
 }>
 
 export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
+  return createOpenRouterJsonTransport(config)
+}
+
+export function createOpenRouterCustomerRequestSemanticTransport(config: OpenRouterConfiguration): CustomerRequestSemanticInterpretationTransport {
+  return createOpenRouterJsonTransport(config)
+}
+
+function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration): Readonly<{
+  generateJson: (input: Readonly<{ systemInstruction: string; payload: TPayload; signal: AbortSignal }>) => Promise<Readonly<{ content: string }>>
+}> {
   if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
   return Object.freeze({
     generateJson: async ({ systemInstruction, payload, signal }) => {

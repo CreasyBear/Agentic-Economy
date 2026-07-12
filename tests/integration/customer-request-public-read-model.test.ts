@@ -125,6 +125,12 @@ describe('production CustomerRequest read model', () => {
     const backend = convexTest(schema, modules)
     const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        candidateCapabilityContractIds: ['sandbox.option.quote:v1'], facts: [],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const authenticate = async () => ({
       isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_cold_submit', subject: 'user_owner_1',
