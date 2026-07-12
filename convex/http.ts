@@ -24,6 +24,10 @@ http.route({
 function routingDependencies(ctx: Parameters<Parameters<typeof httpAction>[0]>[0]) {
   return {
     operations: createRegisteredRoutingKernel(ctx).operations,
+    admission: {
+      admit: async (input: { requestId: string; agentId: string; operation: 'route' | 'authorize' | 'execute' | 'reconcile' | 'inspect' | 'cancel' | 'mcp_control'; admittedAt: number }) => await ctx.runMutation(internal.routingKernelAdmission.admit, input),
+      release: async (input: { requestId: string; releasedAt: number }) => { await ctx.runMutation(internal.routingKernelAdmission.release, input) },
+    },
     authenticate: async (candidate: Request, bodyText: string) => {
       const edgeKey = process.env.AE_EDGE_ORIGIN_HMAC_KEY?.trim()
       const requiredAuthority = process.env.AE_ROUTING_PUBLIC_AUTHORITY?.trim()

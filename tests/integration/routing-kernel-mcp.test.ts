@@ -68,6 +68,29 @@ describe('routing-kernel MCP projection', () => {
     expect(invoked).toBe(false)
   })
 
+  it('uses the same transactional admission contract for MCP tools', async () => {
+    let invoked = false
+    const kernel = createKernel()
+    const response = await handleRoutingKernelMcpRequest(mcpRequest({
+      jsonrpc: '2.0', id: 'busy-mcp', method: 'tools/call',
+      params: { name: 'ae.execute', arguments: {} },
+    }, { 'X-AE-Edge-Request-Id': 'edge-mcp-busy' }), {
+      operations: { ...kernel.operations, execute: async (input) => { invoked = true; return await kernel.operations.execute(input) } },
+      authenticate: async () => ({ kind: 'authenticated', caller: { agentId: 'agent:mcp-busy', principalId: 'principal:mcp-busy' } }),
+      admission: {
+        admit: async (input) => {
+          expect(input).toMatchObject({ requestId: 'edge-mcp-busy', agentId: 'agent:mcp-busy', operation: 'execute' })
+          return { kind: 'refused', reason: 'agent_quota_exceeded', retryAfterMs: 1_100 }
+        },
+        release: async () => { throw new Error('refused admission must not release') },
+      },
+    })
+    expect(response.status).toBe(429)
+    expect(response.headers.get('Retry-After')).toBe('2')
+    expect(await response.json()).toMatchObject({ error: { code: -32002, message: 'agent_quota_exceeded' } })
+    expect(invoked).toBe(false)
+  })
+
   it('runs one route through trusted authorization, MCP execute, and MCP inspect', async () => {
     const kernel = createKernel()
     const dependencies = { operations: kernel.operations, authenticate: async () => ({ kind: 'authenticated' as const, caller: { agentId: 'agent:mcp-1', principalId: 'principal:merchant-1' } }) }
@@ -199,12 +222,13 @@ describe('routing-kernel MCP projection', () => {
   })
 })
 
-function mcpRequest(body: unknown): Request {
+function mcpRequest(body: unknown, headers: Record<string, string> = {}): Request {
   const method = typeof body === 'object' && body !== null && 'method' in body ? (body as { method?: unknown }).method : undefined
   return new Request('https://ae.example/mcp', {
     method: 'POST', headers: {
       'Content-Type': 'application/json', Accept: 'application/json, text/event-stream',
       ...(method === 'initialize' ? {} : { 'MCP-Protocol-Version': '2025-06-18' }),
+      ...headers,
     }, body: JSON.stringify(body),
   })
 }

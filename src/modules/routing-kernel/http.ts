@@ -87,9 +87,17 @@ export type RoutingKernelHttpDependencies = Readonly<{
     idempotencyKey: string
     sourceGrantId: string
   }>) => Promise<Readonly<{ kind: 'authorized'; authorizationRef: string }> | Readonly<{ kind: 'authorization_refused'; reason: string }>>
+  admission?: Readonly<{
+    admit: (input: Readonly<{ requestId: string; agentId: string; operation: RoutingAdmissionOperation; admittedAt: number }>) => Promise<RoutingAdmissionResult>
+    release: (input: Readonly<{ requestId: string; releasedAt: number }>) => Promise<void>
+  }>
 }>
 
 type Operation = RoutingOperation
+export type RoutingAdmissionOperation = RoutingOperation | 'mcp_control'
+export type RoutingAdmissionResult =
+  | Readonly<{ kind: 'admitted'; requestId: string; expiresAt: number }>
+  | Readonly<{ kind: 'refused'; reason: string; retryAfterMs: number }>
 
 export async function handleRoutingKernelHttpRequest(
   request: Request,
@@ -112,14 +120,18 @@ export async function handleRoutingKernelHttpRequest(
     return errorResponse(operation, 'authentication_required', 401)
   }
 
-  let untrusted: unknown
-  try {
-    untrusted = JSON.parse(body.text)
-  } catch {
-    return errorResponse(operation, 'invalid_json', 400)
-  }
+  const admission = await admitRequest(request, dependencies, authentication.caller, operation)
+  if (admission.kind === 'refused') return admissionErrorResponse(operation, admission)
 
-  switch (operation) {
+  try {
+    let untrusted: unknown
+    try {
+      untrusted = JSON.parse(body.text)
+    } catch {
+      return errorResponse(operation, 'invalid_json', 400)
+    }
+
+    switch (operation) {
     case 'route': {
       const parsed = routeBody.safeParse(untrusted)
       if (!parsed.success) return errorResponse(operation, 'invalid_request', 400)
@@ -218,6 +230,30 @@ export async function handleRoutingKernelHttpRequest(
         rootRunId: parsed.data.rootRunId,
       }))
     }
+    }
+  } finally {
+    await releaseRequest(dependencies, admission)
+  }
+}
+
+export async function admitRequest(
+  request: Request,
+  dependencies: RoutingKernelHttpDependencies,
+  caller: KernelCaller,
+  operation: RoutingAdmissionOperation,
+): Promise<RoutingAdmissionResult> {
+  if (dependencies.admission === undefined) return { kind: 'admitted', requestId: request.headers.get('X-AE-Edge-Request-Id') ?? crypto.randomUUID(), expiresAt: Date.now() + 30_000 }
+  return await dependencies.admission.admit({
+    requestId: request.headers.get('X-AE-Edge-Request-Id') ?? crypto.randomUUID(),
+    agentId: caller.agentId,
+    operation,
+    admittedAt: Date.now(),
+  })
+}
+
+export async function releaseRequest(dependencies: RoutingKernelHttpDependencies, admission: RoutingAdmissionResult): Promise<void> {
+  if (admission.kind === 'admitted' && dependencies.admission !== undefined) {
+    await dependencies.admission.release({ requestId: admission.requestId, releasedAt: Date.now() })
   }
 }
 
@@ -243,6 +279,13 @@ function errorResponse(operation: Operation | 'unknown', code: string, status: n
     operation,
     error: { code, retryable: false },
   }, status)
+}
+
+function admissionErrorResponse(operation: Operation, admission: Extract<RoutingAdmissionResult, { kind: 'refused' }>): Response {
+  const status = admission.reason.includes('saturated') ? 503 : 429
+  const response = errorResponse(operation, admission.reason, status)
+  response.headers.set('Retry-After', String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))))
+  return response
 }
 
 function jsonResponse(body: unknown, status: number): Response {

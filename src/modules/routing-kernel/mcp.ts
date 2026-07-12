@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
-import type { RoutingKernelHttpDependencies } from './http'
+import { admitRequest, releaseRequest, type RoutingAdmissionOperation, type RoutingKernelHttpDependencies } from './http'
 import { ROUTING_MCP_PROTOCOL_VERSION, ROUTING_PROTOCOL_VERSION } from './contract'
 
 const MAX_BODY_BYTES = 64 * 1024
@@ -61,23 +61,26 @@ export async function handleRoutingKernelMcpRequest(request: Request, dependenci
   const envelope = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number(), z.null()]).optional(), method: z.string(), params: z.unknown().optional() }).strict().safeParse(message)
   if (!envelope.success) return jsonRpc({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid Request' } }, 400)
   const { id = null, method, params } = envelope.data
-  if (method === 'notifications/initialized') return new Response(null, { status: 202 })
-  if (method === 'initialize') {
+  const admission = await admitRequest(request, dependencies, authentication.caller, admissionOperation(method, params))
+  if (admission.kind === 'refused') return admissionRpcError(id, admission)
+  try {
+    if (method === 'notifications/initialized') return new Response(null, { status: 202 })
+    if (method === 'initialize') {
     const init = z.object({ protocolVersion: z.string(), capabilities: z.record(z.string(), z.unknown()), clientInfo: z.object({ name: z.string(), version: z.string() }).passthrough() }).passthrough().safeParse(params)
     if (!init.success) return rpcError(id, -32602, 'Invalid initialize parameters')
     return jsonRpc({ jsonrpc: '2.0', id, result: { protocolVersion: ROUTING_MCP_PROTOCOL_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'agentic-economy-routing-kernel', version: '0.1.0' }, instructions: 'Delegate route planning, authorization, execution, reconciliation, inspection, and cancellation through the six ae.* tools. Caller identity is supplied by the authenticated transport.' } })
-  }
-  if (request.headers.get('MCP-Protocol-Version') !== ROUTING_MCP_PROTOCOL_VERSION) return new Response(null, { status: 400 })
-  if (method === 'tools/list') return jsonRpc({ jsonrpc: '2.0', id, result: { tools } })
-  if (method !== 'tools/call') return rpcError(id, -32601, 'Method not found')
+    }
+    if (request.headers.get('MCP-Protocol-Version') !== ROUTING_MCP_PROTOCOL_VERSION) return new Response(null, { status: 400 })
+    if (method === 'tools/list') return jsonRpc({ jsonrpc: '2.0', id, result: { tools } })
+    if (method !== 'tools/call') return rpcError(id, -32601, 'Method not found')
 
-  const call = z.object({ name: z.string(), arguments: z.unknown().optional(), _meta: z.unknown().optional() }).strict().safeParse(params)
-  if (!call.success || !(call.data.name in schemas)) return rpcError(id, -32602, 'Unknown tool or invalid call parameters')
-  const name = call.data.name as keyof typeof schemas
-  try {
-    const caller = authentication.caller
-    let result: unknown
-    switch (name) {
+    const call = z.object({ name: z.string(), arguments: z.unknown().optional(), _meta: z.unknown().optional() }).strict().safeParse(params)
+    if (!call.success || !(call.data.name in schemas)) return rpcError(id, -32602, 'Unknown tool or invalid call parameters')
+    const name = call.data.name as keyof typeof schemas
+    try {
+      const caller = authentication.caller
+      let result: unknown
+      switch (name) {
       case 'ae.route': {
         const input = schemas[name].safeParse(call.data.arguments ?? {})
         if (!input.success) return toolError(id, 'Invalid tool arguments')
@@ -154,9 +157,33 @@ export async function handleRoutingKernelMcpRequest(request: Request, dependenci
         if (!input.success) return toolError(id, 'Invalid tool arguments')
         result = await dependencies.operations.cancel({ caller, rootRunId: input.data.rootRunId }); break
       }
-    }
-    return jsonRpc({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: false } })
-  } catch { return toolError(id, 'Kernel operation failed') }
+      }
+      return jsonRpc({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: false } })
+    } catch { return toolError(id, 'Kernel operation failed') }
+  } finally {
+    await releaseRequest(dependencies, admission)
+  }
+}
+
+function admissionOperation(method: string, params: unknown): RoutingAdmissionOperation {
+  if (method !== 'tools/call' || typeof params !== 'object' || params === null || Array.isArray(params)) return 'mcp_control'
+  const name = Reflect.get(params, 'name')
+  switch (name) {
+    case 'ae.route': return 'route'
+    case 'ae.authorize': return 'authorize'
+    case 'ae.execute': return 'execute'
+    case 'ae.reconcile': return 'reconcile'
+    case 'ae.inspect': return 'inspect'
+    case 'ae.cancel': return 'cancel'
+    default: return 'mcp_control'
+  }
+}
+
+function admissionRpcError(id: string | number | null, admission: { reason: string; retryAfterMs: number }): Response {
+  const status = admission.reason.includes('saturated') ? 503 : 429
+  const response = jsonRpc({ jsonrpc: '2.0', id, error: { code: -32002, message: admission.reason } }, status)
+  response.headers.set('Retry-After', String(Math.max(1, Math.ceil(admission.retryAfterMs / 1_000))))
+  return response
 }
 
 function tool(name: string, description: string, schema: z.ZodType) {

@@ -25,6 +25,7 @@ import type * as notificationOutbox from "../notificationOutbox.js";
 import type * as observability from "../observability.js";
 import type * as registry from "../registry.js";
 import type * as routingKernel from "../routingKernel.js";
+import type * as routingKernelAdmission from "../routingKernelAdmission.js";
 import type * as routingKernelAgentGrants from "../routingKernelAgentGrants.js";
 import type * as routingKernelBindings from "../routingKernelBindings.js";
 import type * as routingKernelEvidence from "../routingKernelEvidence.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   observability: typeof observability;
   registry: typeof registry;
   routingKernel: typeof routingKernel;
+  routingKernelAdmission: typeof routingKernelAdmission;
   routingKernelAgentGrants: typeof routingKernelAgentGrants;
   routingKernelBindings: typeof routingKernelBindings;
   routingKernelEvidence: typeof routingKernelEvidence;

@@ -74,6 +74,30 @@ describe('routing-kernel HTTP/JSON projection', () => {
     expect(invoked).toBe(false)
   })
 
+  it('projects transactional admission refusal before invoking the kernel', async () => {
+    let invoked = false
+    const kernel = createKernel()
+    const request = jsonRequest('/v1/inspect', { protocolVersion: 'ae-routing:v1', rootRunId: 'root-run:busy' }, {
+      'X-AE-Edge-Request-Id': 'edge-request-busy',
+    })
+    const response = await handleRoutingKernelHttpRequest(request, {
+      operations: { ...kernel.operations, inspect: async (input) => { invoked = true; return await kernel.operations.inspect(input) } },
+      authenticate: async () => ({ kind: 'authenticated', caller: { agentId: 'agent:busy', principalId: 'principal:busy' } }),
+      admission: {
+        admit: async (input) => {
+          expect(input).toMatchObject({ requestId: 'edge-request-busy', agentId: 'agent:busy', operation: 'inspect' })
+          return { kind: 'refused', reason: 'kernel_saturated', retryAfterMs: 2_100 }
+        },
+        release: async () => { throw new Error('refused admission must not release') },
+      },
+    })
+
+    expect(response.status).toBe(503)
+    expect(response.headers.get('Retry-After')).toBe('3')
+    expect(await response.json()).toMatchObject({ error: { code: 'kernel_saturated' } })
+    expect(invoked).toBe(false)
+  })
+
   it('preserves one semantic root across HTTP route, trusted authorization, execute, and inspect', async () => {
     const kernel = createKernel()
     const authenticate = async () => ({
@@ -258,10 +282,10 @@ describe('routing-kernel HTTP/JSON projection', () => {
   })
 })
 
-function jsonRequest(pathname: string, body: unknown): Request {
+function jsonRequest(pathname: string, body: unknown, headers: Record<string, string> = {}): Request {
   return new Request(`https://ae.example${pathname}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
 }
