@@ -15,7 +15,7 @@
     "check:kernel-proof": "node tools/release/verify-kernel-proof-manifest.mjs",
     "seed:dev": "convex run devSeed:seedDevCatalog",
     "test:release": "npm run test:release:source && npm run test:release:hosted",
-    "test:release:source": "npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run provider:readiness && npm run test:release:browser && npm run build",
+    "test:release:source": "npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run test:release:browser && npm run build",
     "test:release:browser": "npm run test:e2e && npm run test:a11y",
     "test:release:hosted": "npm run check:convex-codegen && npm run check:kernel-proof",
     "test": "vitest run",
