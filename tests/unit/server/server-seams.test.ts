@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto'
 
 import {
   ConvexSourceError,
+  callPublicSourceAction,
   callSourceMutation,
   createAuthenticatedConvexClient,
   createAuthenticatedSourceTransport,
@@ -14,6 +15,7 @@ import {
   sourceConvexFunctions,
   sourceMutation,
   sourceQuery,
+  sourceAction,
 } from '@/lib/server/convex-source'
 import {
   readRequiredSourceWriteSecret,
@@ -135,6 +137,20 @@ describe('server Convex source seam', () => {
     expect(calls.map((call) => call.url)).toEqual([`${convexUrl}/api/query`, `${convexUrl}/api/mutation`])
     expect(calls[0]?.init.headers).toMatchObject({ Authorization: 'Bearer owner.jwt' })
     expect(calls[1]?.init.headers).not.toMatchObject({ Authorization: expect.any(String) })
+  })
+
+  it('calls a public Convex action without manufacturing end-user JWT identity', async () => {
+    const calls: { url: string; init: RequestInit }[] = []
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      calls.push({ url: String(input), init: init ?? {} })
+      return new Response(JSON.stringify({ status: 'success', value: { kind: 'request' } }))
+    }
+    await expect(callPublicSourceAction(
+      sourceAction<{ serviceAuth: { signature: string } }, { kind: string }>('customerRequestApplication:resume'),
+      { serviceAuth: { signature: 'command-bound' } }, { env: { CONVEX_URL: convexUrl }, fetch },
+    )).resolves.toEqual({ kind: 'request' })
+    expect(calls[0]?.url).toBe(`${convexUrl}/api/action`)
+    expect(calls[0]?.init.headers).not.toMatchObject({ Authorization: expect.any(String) })
   })
 
   it('keeps source-owned function references available without generated Convex API output', () => {

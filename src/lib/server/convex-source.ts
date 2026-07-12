@@ -156,6 +156,16 @@ export async function callPublicSourceMutation<Mutation extends FunctionReferenc
   return createPublicSourceTransport(options).mutation(mutation, args)
 }
 
+export async function callPublicSourceAction<Action extends FunctionReference<'action'>>(
+  action: Action,
+  args: FunctionArgs<Action>,
+  options?: CreatePublicSourceActionOptions
+): Promise<FunctionReturnType<Action>> {
+  return createPublicSourceTransport(options).action(action, args)
+}
+
+export type CreatePublicSourceActionOptions = CreatePublicConvexClientOptions
+
 export async function callSourceAction<Action extends FunctionReference<'action'>>(
   action: Action,
   args: FunctionArgs<Action>,

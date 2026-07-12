@@ -1,5 +1,8 @@
 import { convexTest } from 'convex-test'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { handleAgentCustomerRequestGet, handleAgentCustomerRequestPost } from '@/lib/server/customer-request-agent-api'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -10,6 +13,7 @@ const identity = { subject: 'customer-1', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
 
 describe('production CustomerRequest read model', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals() })
   it('resumes a cold Request through ready, preparing and unranked-options states using only its opaque reference', async () => {
     const backend = convexTest(schema, modules)
     await seedReadyRequest(backend)
@@ -60,11 +64,120 @@ describe('production CustomerRequest read model', () => {
     await expect(stranger.action(api.customerRequestApplication.resume, { requestRef: 'request:missing' }))
       .resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
   })
+
+  it('accepts only a command-bound service assertion and persists the API-key principal separately from its owner', async () => {
+    const backend = convexTest(schema, modules)
+    const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    await seedReadyRequest(backend, 'clerk_api_key:ak_agent_1')
+    const principal = {
+      principalId: 'clerk_api_key:ak_agent_1', ownerId: 'user_owner_1', credentialId: 'ak_agent_1',
+      scopes: ['customer_requests:create'],
+    }
+    const serviceAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey, operation: 'resume', command: { requestRef: 'request:cold:1' }, principal, issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.resume, {
+      requestRef: 'request:cold:1', serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
+    })).resolves.toMatchObject({ state: 'ready_to_compare', requestRef: 'request:cold:1' })
+    const recorded = await backend.run(async (ctx) => await ctx.db.query('customerRequestAgentPrincipals').collect())
+    expect(recorded).toMatchObject([{
+      principalId: 'clerk_api_key:ak_agent_1', ownerId: 'user_owner_1', credentialId: 'ak_agent_1',
+      scopes: ['customer_requests:create'],
+    }])
+
+    const siblingKey = await createCustomerRequestServiceAssertion({
+      key: serviceKey, operation: 'resume', command: { requestRef: 'request:cold:1' },
+      principal: { ...principal, principalId: 'clerk_api_key:ak_agent_2', credentialId: 'ak_agent_2' }, issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.resume, {
+      requestRef: 'request:cold:1', serviceAuth: { ...siblingKey, scopes: [...siblingKey.scopes] },
+    })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+
+    await expect(backend.action(api.customerRequestApplication.resume, {
+      requestRef: 'request:cold:1', serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes], credentialId: 'ak_tampered' },
+    })).resolves.toEqual({ kind: 'refused', reason: 'authentication_required' })
+  })
+
+  it('carries a cold API-key agent through the production HTTP adapter into the real Convex application', async () => {
+    const backend = convexTest(schema, modules)
+    const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    await seedReadyRequest(backend, 'clerk_api_key:ak_cold_1')
+    const response = await handleAgentCustomerRequestGet('request:cold:1', {
+      authenticate: async () => ({
+        isAuthenticated: true, tokenType: 'api_key', id: 'ak_cold_1', subject: 'user_owner_1',
+        userId: 'user_owner_1', orgId: null, scopes: ['customer_requests:create'],
+      }),
+      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
+      callAction: async (name, args) => {
+        expect(name).toBe('customerRequestApplication:resume')
+        return await backend.action(api.customerRequestApplication.resume, args as never)
+      },
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      kind: 'request', requestRef: 'request:cold:1', state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
+  })
+
+  it('submits and replays from a cold API-key client through the real compiler and durable store', async () => {
+    const backend = convexTest(schema, modules)
+    const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    vi.stubEnv('OPENROUTER_API_KEY', 'openrouter-test-key')
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    vi.stubGlobal('fetch', vi.fn(async (input) => {
+      if (String(input) !== 'https://openrouter.ai/api/v1/chat/completions') throw new Error(`unexpected_fetch_${String(input)}`)
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        outcome: 'Comparable connected options', hardConstraints: [], preferences: [],
+        substitutions: { allowed: false, boundaries: [] }, completionCriterion: 'Return comparable options.',
+        completionRequirement: { evidenceRole: 'provider_offer', valueType: 'string' },
+        completionEvidence: [{ actionId: 'action:compare', field: 'optionSummary' }],
+        actions: [{
+          actionId: 'action:compare', capabilityContractId: 'sandbox.option.quote:v1', dependsOn: [],
+          input: { requestContext: { kind: 'known_fact', fact: 'requestContext' } },
+        }],
+      }) } }] })
+    }))
+    const authenticate = async () => ({
+      isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_cold_submit', subject: 'user_owner_1',
+      userId: 'user_owner_1', orgId: null, scopes: ['customer_requests:create'],
+    })
+    const callAction = async (name: string, args: Record<string, unknown>) => {
+      if (name === 'customerRequestApplication:submit') return await backend.action(api.customerRequestApplication.submit, args as never)
+      if (name === 'customerRequestApplication:resume') return await backend.action(api.customerRequestApplication.resume, args as never)
+      throw new Error(`unexpected_action_${name}`)
+    }
+    const body = {
+      idempotencyKey: 'submit:cold:1', requestRef: 'request:cold:agent:1', agentRef: 'ignored-by-admission',
+      request: 'Compare the connected sandbox options.', knownFacts: { requestContext: 'Compare the connected sandbox options.' },
+      routing: { network: 'ae:public', currency: 'AUD', maximumSpendMinor: 2_000, optimizeFor: 'cost' },
+    }
+    const first = await handleAgentCustomerRequestPost(agentRequest(body), {
+      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
+    })
+    const replay = await handleAgentCustomerRequestPost(agentRequest(body), {
+      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
+    })
+    expect(first.status).toBe(200)
+    expect(replay.status).toBe(200)
+    const firstBody = await first.json()
+    expect(await replay.json()).toEqual(firstBody)
+    expect(firstBody).toMatchObject({
+      requestRef: 'request:cold:agent:1', state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
+    const durable = await backend.run(async (ctx) => await ctx.db.query('customerRequests')
+      .withIndex('by_requestId', (query) => query.eq('requestId', 'request:cold:agent:1')).unique())
+    expect(durable).toMatchObject({
+      principalId: 'clerk_api_key:ak_cold_submit', delegatedAgentId: 'clerk_api_key:ak_cold_submit', revision: 1,
+    })
+  })
 })
 
-async function seedReadyRequest(backend: ReturnType<typeof convexTest>) {
+async function seedReadyRequest(backend: ReturnType<typeof convexTest>, requestPrincipalId = principalId) {
   const request = {
-    requestId: 'request:cold:1', principalId, delegatedAgentId: 'agent:external:1', intent: 'Find an available option',
+    requestId: 'request:cold:1', principalId: requestPrincipalId, delegatedAgentId: 'agent:external:1', intent: 'Find an available option',
     revision: 1, compilationState: 'plan_ready' as const,
     understanding: {
       outcome: 'Find an available option', hardConstraints: [], preferences: [],
@@ -83,5 +196,11 @@ async function seedReadyRequest(backend: ReturnType<typeof convexTest>) {
   await backend.mutation(internal.customerRequests.commitCompilation, {
     compilationKey: 'internal:compile:1', commandDigest: 'digest:compile', expectedRevision: 0,
     request, planRevision, outcome: { kind: 'plan_ready' },
+  })
+}
+
+function agentRequest(body: unknown): Request {
+  return new Request('https://ae.test/api/v1/requests', {
+    method: 'POST', headers: { Authorization: 'Bearer ak_test', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
 }

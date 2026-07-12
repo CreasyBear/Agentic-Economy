@@ -1,7 +1,7 @@
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
-type InspectResult = CustomerRequestView | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
+export type InspectResult = CustomerRequestView | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
 const inspectAction = sourceAction<Record<string, unknown>, InspectResult>('customerRequestApplication:resume')
 type HandlerOptions = Readonly<{ inspect?: (args: Record<string, unknown>) => Promise<InspectResult> }>
 

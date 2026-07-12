@@ -14,6 +14,8 @@ const productionAuthority = {
   submitHttp: 'src/lib/server/customer-request-api.ts',
   inspectHttp: 'src/lib/server/customer-request-inspect-api.ts',
   factsHttp: 'src/lib/server/customer-request-facts-api.ts',
+  agentAuth: 'src/lib/server/customer-request-agent-auth.ts',
+  agentHttp: 'src/lib/server/customer-request-agent-api.ts',
   optionsHttp: 'src/lib/server/customer-options-api.ts',
   humanUi: 'src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx',
 } as const
@@ -36,11 +38,18 @@ describe('CustomerRequest source completeness', () => {
     expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleCustomerOptionsPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleCustomerRequestGet/)
     expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleCustomerRequestFactsPost/)
+    expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toMatch(/handleAgentCustomerRequestPost/)
+    expect(readFileSync('src/routes/api.v1.requests.$requestRef.ts', 'utf8')).toMatch(/handleAgentCustomerRequestGet/)
+    expect(readFileSync('src/routes/api.v1.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleAgentCustomerRequestFactsPost/)
+    expect(readFileSync('src/routes/api.v1.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleAgentCustomerOptionsPost/)
     const ui = source('humanUi')
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
     expect(ui).toContain("fetch('/api/requests'")
     expect(ui).toContain('/options`')
-    for (const route of ['src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.options.ts']) {
+    for (const route of [
+      'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.options.ts',
+      'src/routes/api.v1.requests.ts', 'src/routes/api.v1.requests.$requestRef.ts', 'src/routes/api.v1.requests.$requestRef.facts.ts', 'src/routes/api.v1.requests.$requestRef.options.ts',
+    ]) {
       expect(readFileSync(route, 'utf8')).not.toMatch(/compileCustomerRequest|prepareCustomerRequestAction|createNeutralRoutingKernel/)
     }
   })

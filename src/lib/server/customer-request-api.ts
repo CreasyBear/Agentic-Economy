@@ -15,7 +15,7 @@ const bodySchema = z.object({
   }).default({ network: 'ae:public', currency: 'AUD', maximumSpendMinor: 0, optimizeFor: 'cost' }),
 }).strict()
 
-type SubmitResult = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'interpreter_unavailable' | 'capabilities_unavailable' }>
+export type SubmitResult = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'interpreter_unavailable' | 'capabilities_unavailable' }>
 const submitAction = sourceAction<Record<string, unknown>, SubmitResult>('customerRequestApplication:submit')
 type HandlerOptions = Readonly<{ submit?: (args: Record<string, unknown>) => Promise<SubmitResult> }>
 

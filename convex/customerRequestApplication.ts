@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import { createJsonCustomerRequestInterpreter } from '@/modules/customer-request/interpreter'
@@ -16,6 +16,7 @@ import { createKernelCustomerRequestActionRouter } from '@/modules/customer-requ
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { preparedRouteCandidateSetValue } from '@/modules/customer-request/runtime'
 import type { PlanRevision } from '@/modules/customer-request/public'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 import { action, type ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'
@@ -26,6 +27,10 @@ import { createConvexPreparationDisclosureStore } from './customerRequestPrepara
 import { createRegisteredRoutingKernel } from './routingKernel'
 
 const literalValue = v.union(v.string(), v.number(), v.boolean())
+const serviceAssertion = v.object({
+  principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
+  issuedAt: v.number(), signature: v.string(),
+})
 const customerOption = v.object({
   optionRef: v.string(), business: v.object({ name: v.string() }),
   expectedCost: v.object({ currency: v.string(), amountMinor: v.number() }),
@@ -74,23 +79,24 @@ export const submit = action({
     routing: v.object({
       networkId: v.string(), currency: v.string(), maximumSpendMinor: v.number(),
       optimizeFor: v.union(v.literal('cost'), v.literal('latency')),
-    }),
+    }), serviceAuth: v.optional(serviceAssertion),
   },
   returns: v.union(
     customerProjection,
     v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable')) }),
   ),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const command = submitCommand(args)
+    const caller = await resolveRequestCaller(ctx, 'submit', command, args.serviceAuth, args.delegatedAgentId)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
     const apiKey = process.env.OPENROUTER_API_KEY?.trim()
     if (apiKey === undefined || apiKey.length === 0) return { kind: 'refused' as const, reason: 'interpreter_unavailable' as const }
     const registry = await loadConvexCapabilityContractRegistry(ctx)
     if (registry.list().length === 0) return { kind: 'refused' as const, reason: 'capabilities_unavailable' as const }
     const result = await compileCustomerRequest({
-      ...args,
-      compilationKey: namespacedKey(identity.tokenIdentifier, 'submit', args.requestId, args.compilationKey),
-      principalId: identity.tokenIdentifier,
+      ...command,
+      compilationKey: namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey),
+      principalId: caller.principalId, delegatedAgentId: caller.delegatedAgentId,
     }, {
       interpreter: createJsonCustomerRequestInterpreter({
         interpreterId: `openrouter:${process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'}`,
@@ -111,14 +117,15 @@ export const submit = action({
 })
 
 export const compare = action({
-  args: { requestRef: v.string(), revision: v.number() },
+  args: { requestRef: v.string(), revision: v.number(), serviceAuth: v.optional(serviceAssertion) },
   returns: optionProjection,
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const command = { requestRef: args.requestRef, revision: args.revision }
+    const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
     const store = createConvexCustomerRequestPreparationStore(ctx)
     const request = await store.getRequest(args.requestRef)
-    if (request === undefined || request.principalId !== identity.tokenIdentifier) {
+    if (request === undefined || request.principalId !== caller.principalId) {
       return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
     }
     if (request.revision !== args.revision) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const }
@@ -132,7 +139,7 @@ export const compare = action({
     if (resolvedInput === undefined) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
     const registry = await loadConvexCapabilityContractRegistry(ctx)
     const result = await prepareCustomerRequestAction({
-      preparationKey: namespacedKey(identity.tokenIdentifier, 'prepare', request.requestId, String(request.revision)),
+      preparationKey: namespacedKey(caller.principalId, 'prepare', request.requestId, String(request.revision)),
       requestId: request.requestId, requestRevision: request.revision,
       planRevisionId: plan.planRevisionId, actionId: actionStep.actionId, resolvedInput,
     }, {
@@ -163,7 +170,7 @@ export const compare = action({
 })
 
 export const resume = action({
-  args: { requestRef: v.string() },
+  args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
   returns: v.union(customerView, v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found')) })),
   handler: resumeHandler,
 })
@@ -173,11 +180,11 @@ type ResumeResult = ReturnType<typeof writableView> | Readonly<{
   reason: 'authentication_required' | 'request_not_found'
 }>
 
-async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string }>): Promise<ResumeResult> {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string; serviceAuth?: Infer<typeof serviceAssertion> }>): Promise<ResumeResult> {
+    const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
     const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
-    if (request === null || request.principalId !== identity.tokenIdentifier) {
+    if (request === null || request.principalId !== caller.principalId) {
       return { kind: 'refused' as const, reason: 'request_not_found' as const }
     }
     const preparation = await ctx.runQuery(internal.customerRequests.getPreparationForRequestRevision, {
@@ -231,7 +238,7 @@ async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string
 export const provideFacts = action({
   args: {
     requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(),
-    facts: v.record(v.string(), literalValue),
+    facts: v.record(v.string(), literalValue), serviceAuth: v.optional(serviceAssertion),
   },
   returns: v.union(
     customerProjection,
@@ -252,12 +259,14 @@ async function provideFactsHandler(
     expectedRevision: number
     idempotencyKey: string
     facts: Readonly<Record<string, string | number | boolean>>
+    serviceAuth?: Infer<typeof serviceAssertion>
   }>,
 ): Promise<ProvideFactsResult> {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const command = factsCommand(args)
+    const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
     const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
-    if (request === null || request.principalId !== identity.tokenIdentifier) return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    if (request === null || request.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
     const compilation = await ctx.runQuery(internal.customerRequests.getCompilationForRequestRevision, {
       requestId: request.requestId, requestRevision: request.revision,
     })
@@ -275,9 +284,9 @@ async function provideFactsHandler(
     const registry = await loadConvexCapabilityContractRegistry(ctx)
     if (registry.list().length === 0) return { kind: 'refused' as const, reason: 'capabilities_unavailable' as const }
     const result = await compileCustomerRequest({
-      compilationKey: namespacedKey(identity.tokenIdentifier, 'facts', request.requestId, args.idempotencyKey),
+      compilationKey: namespacedKey(caller.principalId, 'facts', request.requestId, args.idempotencyKey),
       requestId: request.requestId, expectedRevision: args.expectedRevision,
-      principalId: identity.tokenIdentifier, delegatedAgentId: request.delegatedAgentId,
+      principalId: caller.principalId, delegatedAgentId: request.delegatedAgentId,
       customerJob: request.intent, knownFacts: { ...request.knownFacts, ...args.facts }, routing: request.routing,
     }, {
       interpreter: customerRequestInterpreter(apiKey), registry,
@@ -352,4 +361,57 @@ function customerRequestInterpreter(apiKey: string) {
     timeoutMs: 20_000,
     maximumResponseBytes: 64_000,
   })
+}
+
+type ServiceAssertion = Infer<typeof serviceAssertion>
+type RequestCaller = Readonly<{ principalId: string; delegatedAgentId: string }>
+
+async function resolveRequestCaller(
+  ctx: ActionCtx,
+  operation: 'submit' | 'compare' | 'resume' | 'facts',
+  command: Record<string, string | number | boolean | Record<string, unknown> | undefined>,
+  assertion: ServiceAssertion | undefined,
+  delegatedAgentId?: string,
+): Promise<RequestCaller | undefined> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity !== null) return { principalId: identity.tokenIdentifier, delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier }
+  const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  if (assertion === undefined || key === undefined || key.length < 32 || !assertion.scopes.includes('customer_requests:create')) return undefined
+  const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })
+  if (!verified) return undefined
+  const recorded = await ctx.runMutation(internal.customerRequests.recordAgentPrincipal, {
+    principalId: assertion.principalId, ownerId: assertion.ownerId, credentialId: assertion.credentialId,
+    scopes: [...assertion.scopes], seenAt: Date.now(),
+  })
+  if (recorded.kind !== 'recorded') return undefined
+  return { principalId: assertion.principalId, delegatedAgentId: assertion.principalId }
+}
+
+function submitCommand(args: Readonly<{
+  compilationKey: string
+  requestId: string
+  expectedRevision?: number
+  delegatedAgentId: string
+  customerJob: string
+  knownFacts: Record<string, string | number | boolean>
+  routing: { networkId: string; currency: string; maximumSpendMinor: number; optimizeFor: 'cost' | 'latency' }
+}>) {
+  return {
+    compilationKey: args.compilationKey, requestId: args.requestId,
+    ...(args.expectedRevision === undefined ? {} : { expectedRevision: args.expectedRevision }),
+    delegatedAgentId: args.delegatedAgentId, customerJob: args.customerJob,
+    knownFacts: args.knownFacts, routing: args.routing,
+  }
+}
+
+function factsCommand(args: Readonly<{
+  requestRef: string
+  expectedRevision: number
+  idempotencyKey: string
+  facts: Readonly<Record<string, string | number | boolean>>
+}>) {
+  return {
+    requestRef: args.requestRef, expectedRevision: args.expectedRevision,
+    idempotencyKey: args.idempotencyKey, facts: args.facts,
+  }
 }

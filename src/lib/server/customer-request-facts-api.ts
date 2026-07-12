@@ -10,7 +10,7 @@ const bodySchema = z.object({
   expectedRevision: z.number().int().positive(),
   facts: z.record(z.string().trim().min(1).max(200), literal).refine((facts) => Object.keys(facts).length > 0 && Object.keys(facts).length <= 64),
 }).strict()
-type FactsResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
+export type FactsResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
   kind: 'refused'
   reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable' | 'capabilities_unavailable'
 }>

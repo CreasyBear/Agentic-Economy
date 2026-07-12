@@ -8,7 +8,7 @@ import {
 } from '@/modules/discovery/public'
 
 const forbiddenDiscoveryOutputPattern =
-  /OpenAPI|API key|apiKey|payment handler|payment_handlers|provider webhook|protected action|callable=true|paymentRequired=true|\.well-known\/ucp/i
+  /OpenAPI|apiKey|payment handler|payment_handlers|provider webhook|protected action|callable=true|paymentRequired=true|\.well-known\/ucp/i
 
 describe('discovery output overclaim guardrail', () => {
   it('advertises the implemented routing surfaces without unsupported action or payment claims', () => {
@@ -23,6 +23,8 @@ describe('discovery output overclaim guardrail', () => {
     expect(outputs).toContain('/.well-known/ae-routing.json')
     expect(outputs).toContain('/v1/route')
     expect(outputs).toContain('/mcp')
+    expect(outputs).toContain('/api/v1/requests')
+    expect(outputs).toContain('Bearer AE API key with customer_requests:create')
     expect(outputs).toMatch(/listing endpoints publish business facts; they do not select or execute routes/i)
   })
 })

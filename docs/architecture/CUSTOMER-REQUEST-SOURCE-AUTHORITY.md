@@ -12,6 +12,7 @@ The production path is owned by these TypeScript sources:
 | Authenticated application composition | `convex/customerRequestApplication.ts` |
 | Durable Request and preparation state | `convex/customerRequests.ts` |
 | Machine submit, facts, resume and preparation boundaries | `src/lib/server/customer-request-api.ts`, `src/lib/server/customer-request-facts-api.ts`, `src/lib/server/customer-request-inspect-api.ts`, `src/lib/server/customer-options-api.ts` |
+| External-agent admission and service assertion | `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/service-auth-envelope.ts` |
 | Human Request workspace | `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` |
 | Registered provider protocol | `src/modules/routing-kernel/http-capability-binding.ts` |
 
@@ -27,5 +28,9 @@ An authenticated caller keeps one opaque `requestRef` and uses four HTTP operati
 - `GET /api/requests/:requestRef` resumes and inspects without contacting providers.
 
 Every successful operation returns the same `CustomerRequestView` with one of `needs_information`, `ready_to_compare`, `preparing_options`, `options_ready`, `unsupported`, or `needs_attention`. Options are unranked customer cards. Binding IDs, capability IDs, Plan graphs, digests, provider schemas, attempts, and recovery references never cross this boundary.
+
+Human sessions use `/api/requests`. External agents use the parallel versioned surface at `/api/v1/requests` with a Clerk API key carrying `customer_requests:create`. The server accepts only the `api_key` token type, derives the durable principal from the immutable key ID, and records the owning Clerk user or organization separately. It never forwards the API key to Convex.
+
+The TanStack server signs each verified agent command with a 30-second HMAC assertion bound to the operation, complete command digest, key principal, owner, credential ID, scopes, and issue time. Convex verifies that assertion before reading or writing, records the principal-to-owner relationship, and then calls the same CustomerRequest application used by human sessions. The shared service key never crosses the boundary or appears in the assertion.
 
 Caller idempotency material is namespaced by the authenticated principal, operation, and Request before persistence. Fact updates authorize ownership before interpreter use, accept only currently requested fields, and merge those fields with the durable Request; callers cannot replace identity, intent, routing, prior facts, Plan structure, or capability selection.
