@@ -31,6 +31,7 @@ export type CapabilityFieldDefinition = Readonly<{
   valueType: CapabilityValueType
   customerLabel: string
   required: boolean
+  decisionRelevance?: 'option_selection' | 'commitment'
   disclosure?: Readonly<{
     classification: DataClassification
     phase: 'preparation' | 'execution'
@@ -52,6 +53,10 @@ export type CapabilityContract = Readonly<{
     reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'
     approval: 'none' | 'explicit' | 'mandate_or_explicit'
   }>
+  applicability?: readonly Readonly<{
+    field: string
+    acceptedValues: readonly (string | number | boolean)[]
+  }>[]
   providerAffinity?: Readonly<{ kind: 'offer_issuer'; inputField: string }>
 }>
 
@@ -60,11 +65,33 @@ export type CapabilityContractRegistry = Readonly<{
   list: () => readonly CapabilityContract[]
 }>
 
+export type CustomerRequestRequirement = Readonly<{
+  field: string
+  label: string
+  value: string | number | boolean
+}>
+
+export type CustomerRequestUnderstanding = Readonly<{
+  outcome: string
+  hardConstraints: readonly CustomerRequestRequirement[]
+  preferences: readonly Readonly<CustomerRequestRequirement & { priority: number }>[]
+  substitutions: Readonly<{ allowed: boolean; boundaries: readonly string[] }>
+  completionCriterion: string
+  completionRequirement: Readonly<{
+    evidenceRole: 'provider_offer' | 'result_artifact' | 'status' | 'provider_report'
+    valueType: CapabilityValueType
+  }>
+  deadline?: number
+}>
+
 export type CustomerRequest = Readonly<{
   requestId: string
   principalId: string
   delegatedAgentId: string
   intent: string
+  compilationState: 'submitted' | 'needs_information' | 'plan_ready' | 'unsupported'
+  understanding: CustomerRequestUnderstanding
+  knownFacts: Readonly<Record<string, string | number | boolean>>
   routing: Readonly<{
     networkId: string
     currency: string
@@ -78,6 +105,7 @@ export type CustomerRequest = Readonly<{
 export type PlanInputValue =
   | Readonly<{ kind: 'literal'; value: string | number | boolean }>
   | Readonly<{ kind: 'action_output'; actionId: string; field: string }>
+  | Readonly<{ kind: 'customer_fact'; fact: string }>
 
 export type ProposedAction = Readonly<{
   actionId: string
@@ -96,6 +124,15 @@ export type PlanRevision = Readonly<{
   requestId: string
   requestRevision: number
   proposedByAgentId: string
+  proposalProvenance: Readonly<
+    | { kind: 'agent_interpretation'; proposalDigest: string; interpreterId: string }
+    | { kind: 'direct_structured'; proposalDigest: string }
+  >
+  completionEvidence: readonly Readonly<{
+    actionId: string
+    field: string
+    role: 'provider_offer' | 'result_artifact' | 'status' | 'provider_report'
+  }>[]
   createdAt: number
   actions: readonly ProposedAction[]
 }>
@@ -213,10 +250,29 @@ export type CustomerRequestProjection = Readonly<{
 
 const identifier = z.string().trim().min(1).max(200)
 const timestamp = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+const literalValueSchema = z.union([z.string().max(8_000), z.number().safe(), z.boolean()])
+const requirementSchema = z.object({
+  field: identifier,
+  label: z.string().trim().min(1).max(240),
+  value: literalValueSchema,
+}).strict()
+const understandingSchema = z.object({
+  outcome: z.string().trim().min(1).max(1_000),
+  hardConstraints: z.array(requirementSchema).max(64),
+  preferences: z.array(requirementSchema.extend({ priority: z.number().int().min(1).max(64) }).strict()).max(64),
+  substitutions: z.object({ allowed: z.boolean(), boundaries: z.array(z.string().trim().min(1).max(500)).max(32) }).strict(),
+  completionCriterion: z.string().trim().min(1).max(1_000),
+  completionRequirement: z.object({
+    evidenceRole: z.enum(['provider_offer', 'result_artifact', 'status', 'provider_report']),
+    valueType: z.enum(['string', 'integer', 'boolean', 'url', 'money_minor', 'provider_offer_ref']),
+  }).strict().optional(),
+  deadline: timestamp.optional(),
+}).strict()
 const fieldDefinitionSchema = z.object({
   valueType: z.enum(['string', 'integer', 'boolean', 'url', 'money_minor', 'provider_offer_ref']),
   customerLabel: z.string().trim().min(1).max(120),
   required: z.boolean(),
+  decisionRelevance: z.enum(['option_selection', 'commitment']).optional(),
   disclosure: z.object({
     classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
     phase: z.enum(['preparation', 'execution']),
@@ -237,6 +293,10 @@ const capabilityContractSchema = z.object({
     reversibility: z.enum(['not_applicable', 'reversible', 'conditional', 'irreversible']),
     approval: z.enum(['none', 'explicit', 'mandate_or_explicit']),
   }).strict(),
+  applicability: z.array(z.object({
+    field: identifier,
+    acceptedValues: z.array(literalValueSchema).min(1).max(32),
+  }).strict()).max(32).optional(),
   providerAffinity: z.object({ kind: z.literal('offer_issuer'), inputField: identifier }).strict().optional(),
 }).strict()
 const requestSchema = z.object({
@@ -244,6 +304,9 @@ const requestSchema = z.object({
   principalId: identifier,
   delegatedAgentId: identifier,
   intent: z.string().trim().min(1).max(2_000),
+  compilationState: z.enum(['submitted', 'needs_information', 'plan_ready', 'unsupported']).optional(),
+  understanding: understandingSchema.optional(),
+  knownFacts: z.record(identifier, literalValueSchema).optional(),
   routing: z.object({
     networkId: identifier,
     currency: z.string().regex(/^[A-Z]{3}$/),
@@ -255,6 +318,7 @@ const requestSchema = z.object({
 const planInputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('literal'), value: z.union([z.string().max(8_000), z.number().safe(), z.boolean()]) }).strict(),
   z.object({ kind: z.literal('action_output'), actionId: identifier, field: identifier }).strict(),
+  z.object({ kind: z.literal('customer_fact'), fact: identifier }).strict(),
 ])
 const planActionSchema = z.object({
   actionId: identifier,
@@ -267,6 +331,11 @@ const planRevisionSchema = z.object({
   requestId: identifier,
   requestRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   proposedByAgentId: identifier,
+  proposalProvenance: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('agent_interpretation'), proposalDigest: identifier, interpreterId: identifier }).strict(),
+    z.object({ kind: z.literal('direct_structured'), proposalDigest: identifier }).strict(),
+  ]),
+  completionEvidence: z.array(z.object({ actionId: identifier, field: identifier }).strict()).min(1).max(32),
   createdAt: timestamp,
   actions: z.array(planActionSchema).min(1).max(32),
 }).strict()
@@ -296,7 +365,26 @@ export function createCapabilityContractRegistry(contracts: readonly unknown[]):
 export function createCustomerRequest(input: unknown): CustomerRequest {
   const parsed = requestSchema.safeParse(input)
   if (!parsed.success) throw new Error('customer_request_invalid')
-  return deepFreeze({ ...parsed.data, revision: 1 }) as CustomerRequest
+  const understanding = parsed.data.understanding ?? {
+    outcome: parsed.data.intent,
+    hardConstraints: [],
+    preferences: [],
+    substitutions: { allowed: false, boundaries: [] },
+    completionCriterion: parsed.data.intent,
+    completionRequirement: { evidenceRole: 'status' as const, valueType: 'string' as const },
+  }
+  const normalizedUnderstanding = {
+    ...understanding,
+    completionRequirement: understanding.completionRequirement
+      ?? { evidenceRole: 'status' as const, valueType: 'string' as const },
+  }
+  return deepFreeze({
+    ...parsed.data,
+    compilationState: parsed.data.compilationState ?? 'submitted',
+    understanding: normalizedUnderstanding,
+    knownFacts: parsed.data.knownFacts ?? {},
+    revision: 1,
+  }) as CustomerRequest
 }
 
 export function createPlanRevision(input: unknown, registry: CapabilityContractRegistry): PlanRevision {
@@ -314,7 +402,14 @@ export function createPlanRevision(input: unknown, registry: CapabilityContractR
     const affinity = resolveProviderAffinity(action, contract)
     return deepFreeze({ ...action, ...(affinity === undefined ? {} : { providerAffinity: affinity }) }) as ProposedAction
   })
-  return deepFreeze({ ...proposed, actions }) as PlanRevision
+  const completionEvidence = proposed.completionEvidence.map((evidence) => {
+    const action = byActionId.get(evidence.actionId)
+    const contract = action === undefined ? undefined : registry.get(action.capabilityContractId)
+    const role = contract?.output[evidence.field]?.evidenceRole
+    if (role === undefined) throw new Error('plan_completion_evidence_invalid')
+    return { ...evidence, role }
+  })
+  return deepFreeze({ ...proposed, actions, completionEvidence }) as PlanRevision
 }
 
 function validateCapabilityContract(contract: z.infer<typeof capabilityContractSchema>): void {
@@ -330,6 +425,17 @@ function validateCapabilityContract(contract: z.infer<typeof capabilityContractS
   if (contract.providerAffinity !== undefined) {
     const affinityField = contract.input[contract.providerAffinity.inputField]
     if (affinityField?.valueType !== 'provider_offer_ref') throw new Error('capability_provider_affinity_invalid')
+  }
+  for (const applicability of contract.applicability ?? []) {
+    const field = contract.input[applicability.field]
+    const relevance = field?.decisionRelevance
+      ?? (contract.operation === 'query' || contract.operation === 'quote' || contract.operation === 'status'
+        ? 'option_selection'
+        : 'commitment')
+    if (field === undefined || relevance !== 'option_selection'
+      || applicability.acceptedValues.some((value) => !literalMatches(value, field.valueType))) {
+      throw new Error('capability_applicability_invalid')
+    }
   }
   for (const field of Object.values(contract.output)) {
     if (field.disclosure !== undefined) throw new Error('capability_output_disclosure_invalid')
@@ -371,6 +477,10 @@ function validateActionInput(
       if (definition.valueType === 'provider_offer_ref' || !literalMatches(value.value, definition.valueType)) throw new Error('plan_action_input_type_mismatch')
       continue
     }
+    if (value.kind === 'customer_fact') {
+      if (decisionRelevance(contract, definition) !== 'commitment') throw new Error('plan_customer_fact_required_before_options')
+      continue
+    }
     if (!action.dependsOn.includes(value.actionId)) throw new Error('plan_action_output_dependency_missing')
     const sourceAction = byActionId.get(value.actionId)
     if (sourceAction === undefined) throw new Error('plan_action_output_source_not_found')
@@ -382,6 +492,16 @@ function validateActionInput(
       throw new Error('plan_provider_affinity_evidence_required')
     }
   }
+}
+
+export function decisionRelevance(
+  contract: CapabilityContract,
+  field: CapabilityFieldDefinition,
+): 'option_selection' | 'commitment' {
+  if (field.decisionRelevance !== undefined) return field.decisionRelevance
+  return contract.operation === 'query' || contract.operation === 'quote' || contract.operation === 'status'
+    ? 'option_selection'
+    : 'commitment'
 }
 
 function resolveProviderAffinity(

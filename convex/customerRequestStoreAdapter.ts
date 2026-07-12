@@ -51,12 +51,24 @@ export function createConvexCustomerRequestPreparationStore(
 }
 
 function writableRequest(request: CustomerRequest) {
-  return { ...request, routing: { ...request.routing } }
+  return {
+    ...request,
+    understanding: {
+      ...request.understanding,
+      hardConstraints: request.understanding.hardConstraints.map((requirement) => ({ ...requirement })),
+      preferences: request.understanding.preferences.map((preference) => ({ ...preference })),
+      substitutions: { ...request.understanding.substitutions, boundaries: [...request.understanding.substitutions.boundaries] },
+    },
+    knownFacts: { ...request.knownFacts },
+    routing: { ...request.routing },
+  }
 }
 
 function writablePlan(plan: PlanRevision) {
   return {
     ...plan,
+    proposalProvenance: { ...plan.proposalProvenance },
+    completionEvidence: plan.completionEvidence.map((evidence) => ({ ...evidence })),
     actions: plan.actions.map((action) => ({
       ...action,
       dependsOn: [...action.dependsOn],

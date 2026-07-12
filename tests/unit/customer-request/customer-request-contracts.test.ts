@@ -23,6 +23,16 @@ describe('customer request contracts', () => {
       principalId: 'principal:customer:1',
       delegatedAgentId: 'agent:customer:1',
       intent: 'Compare a courier and buy one shipping label.',
+      compilationState: 'submitted',
+      understanding: {
+        outcome: 'Compare a courier and buy one shipping label.',
+        hardConstraints: [],
+        preferences: [],
+        substitutions: { allowed: false, boundaries: [] },
+        completionCriterion: 'Compare a courier and buy one shipping label.',
+        completionRequirement: { evidenceRole: 'status', valueType: 'string' },
+      },
+      knownFacts: {},
       routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' },
       revision: 1,
       createdAt: 1_000,
@@ -103,6 +113,8 @@ describe('customer request contracts', () => {
       requestId: customerRequest.requestId,
       requestRevision: customerRequest.revision,
       proposedByAgentId: customerRequest.delegatedAgentId,
+      proposalProvenance: directProposal(),
+      completionEvidence: [{ actionId: 'action:quote', field: 'offerRef' }],
       createdAt: 1_100,
       actions: [{
         actionId: 'action:quote',
@@ -121,6 +133,8 @@ describe('customer request contracts', () => {
       requestId: 'request:shipping:1',
       requestRevision: 1,
       proposedByAgentId: 'agent:customer:1',
+      proposalProvenance: directProposal(),
+      completionEvidence: [{ actionId: 'action:purchase', field: 'labelUrl' }],
       createdAt: 1_100,
       actions: [
         {
@@ -157,6 +171,8 @@ describe('customer request contracts', () => {
       requestId: 'request:shipping:1',
       requestRevision: 1,
       proposedByAgentId: 'agent:customer:1',
+      proposalProvenance: directProposal(),
+      completionEvidence: [{ actionId: 'action:purchase', field: 'labelUrl' }],
       createdAt: 1_100,
       actions: [
         {
@@ -190,7 +206,8 @@ describe('customer request contracts', () => {
 
     expect(() => createPlanRevision({
       planRevisionId: 'plan-revision:bad-affinity', requestId: 'request:shipping:1', requestRevision: 1,
-      proposedByAgentId: 'agent:customer:1', createdAt: 1_100,
+      proposedByAgentId: 'agent:customer:1', proposalProvenance: directProposal(), createdAt: 1_100,
+      completionEvidence: [{ actionId: 'action:purchase', field: 'labelUrl' }],
       actions: [
         { actionId: 'action:quote', capabilityContractId: 'shipping.rate.query:v2', dependsOn: [], input: {} },
         {
@@ -251,4 +268,8 @@ function shippingRegistry() {
 
 function field(valueType: 'string' | 'url' | 'provider_offer_ref', customerLabel: string) {
   return { valueType, customerLabel, required: true } as const
+}
+
+function directProposal() {
+  return { kind: 'direct_structured' as const, proposalDigest: 'sha256:' + '1'.repeat(64) }
 }

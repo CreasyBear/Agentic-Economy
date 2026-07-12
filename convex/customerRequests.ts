@@ -29,6 +29,132 @@ const claimResult = v.union(
   v.object({ kind: v.literal('conflict') }),
   v.object({ kind: v.literal('stale') }),
 )
+const compilationOutcome = v.union(
+      v.object({ kind: v.literal('plan_ready') }),
+      v.object({
+        kind: v.literal('needs_information'),
+        missingInformation: v.array(v.object({
+          field: v.string(), customerLabel: v.string(),
+          reason: v.union(v.literal('required_for_registered_capability'), v.literal('disambiguates_registered_capabilities')),
+          candidateCapabilityContractIds: v.optional(v.array(v.string())),
+        })),
+      }),
+      v.object({
+        kind: v.literal('unsupported'),
+        reason: v.union(v.literal('no_registered_capability'), v.literal('unsafe_proposal')),
+      }),
+)
+const compilationCommitResult = v.union(
+  v.object({ kind: v.literal('stored') }),
+  v.object({
+    kind: v.literal('replayed'), request: customerRequestValue, planRevision: v.optional(planRevisionValue),
+    outcome: compilationOutcome,
+  }),
+  v.object({ kind: v.literal('revision_conflict') }),
+  v.object({ kind: v.literal('identity_conflict') }),
+  v.object({ kind: v.literal('command_conflict') }),
+)
+const compilationLookupResult = v.union(
+  v.null(),
+  v.object({ kind: v.literal('command_conflict') }),
+  v.object({
+    kind: v.literal('replayed'), request: customerRequestValue, planRevision: v.optional(planRevisionValue),
+    outcome: compilationOutcome,
+  }),
+)
+
+export const lookupCompilation = internalQuery({
+  args: { compilationKey: v.string(), commandDigest: v.string() },
+  returns: compilationLookupResult,
+  handler: async (ctx, args) => {
+    const command = await ctx.db.query('customerRequestCompilationCommands')
+      .withIndex('by_compilationKey', (query) => query.eq('compilationKey', args.compilationKey)).unique()
+    if (command === null) return null
+    if (command.commandDigest !== args.commandDigest) return { kind: 'command_conflict' as const }
+    const revision = await ctx.db.query('customerRequestRevisions').withIndex('by_requestId_and_revision', (query) => query
+      .eq('requestId', command.requestId).eq('revision', command.requestRevision)).unique()
+    if (revision === null) throw new Error('customer_request_revision_missing')
+    const request = stripRequestRevisionRow(revision)
+    if (command.planRevisionId === undefined) return { kind: 'replayed' as const, request, outcome: command.outcome }
+    const planRevisionId = command.planRevisionId
+    const plan = await ctx.db.query('customerRequestPlanRevisions').withIndex('by_planRevisionId', (query) => query
+      .eq('planRevisionId', planRevisionId)).unique()
+    if (plan === null) throw new Error('plan_revision_missing')
+    return { kind: 'replayed' as const, request, planRevision: stripPlanRow(plan), outcome: command.outcome }
+  },
+})
+
+export const commitCompilation = internalMutation({
+  args: {
+    compilationKey: v.string(), commandDigest: v.string(), expectedRevision: v.number(),
+    request: customerRequestValue, planRevision: v.optional(planRevisionValue),
+    outcome: compilationOutcome,
+  },
+  returns: compilationCommitResult,
+  handler: async (ctx, args) => {
+    const priorCommand = await ctx.db.query('customerRequestCompilationCommands')
+      .withIndex('by_compilationKey', (query) => query.eq('compilationKey', args.compilationKey)).unique()
+    if (priorCommand !== null) {
+      if (priorCommand.commandDigest !== args.commandDigest) return { kind: 'command_conflict' as const }
+      const revision = await ctx.db.query('customerRequestRevisions').withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', priorCommand.requestId).eq('revision', priorCommand.requestRevision)).unique()
+      if (revision === null) throw new Error('customer_request_revision_missing')
+      const request = stripRequestRevisionRow(revision)
+      if (priorCommand.planRevisionId === undefined) return { kind: 'replayed' as const, request, outcome: priorCommand.outcome }
+      const planRevisionId = priorCommand.planRevisionId
+      const plan = await ctx.db.query('customerRequestPlanRevisions').withIndex('by_planRevisionId', (query) => query
+        .eq('planRevisionId', planRevisionId)).unique()
+      if (plan === null) throw new Error('plan_revision_missing')
+      return { kind: 'replayed' as const, request, planRevision: stripPlanRow(plan), outcome: priorCommand.outcome }
+    }
+
+    const current = await ctx.db.query('customerRequests').withIndex('by_requestId', (query) => query.eq('requestId', args.request.requestId)).unique()
+    if ((current?.revision ?? 0) !== args.expectedRevision || args.request.revision !== args.expectedRevision + 1) {
+      return { kind: 'revision_conflict' as const }
+    }
+    if (current !== null && (current.principalId !== args.request.principalId
+      || current.delegatedAgentId !== args.request.delegatedAgentId)) return { kind: 'identity_conflict' as const }
+    const requestDigest = customerRequestDigest(args.request)
+    const existingRevision = await ctx.db.query('customerRequestRevisions').withIndex('by_requestId_and_revision', (query) => query
+      .eq('requestId', args.request.requestId).eq('revision', args.request.revision)).unique()
+    if (existingRevision !== null) return { kind: 'revision_conflict' as const }
+    if (current !== null) {
+      const priorRevision = await ctx.db.query('customerRequestRevisions').withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', current.requestId).eq('revision', current.revision)).unique()
+      if (priorRevision === null) {
+        const normalized = normalizeCurrentRequestRow(current)
+        await ctx.db.insert('customerRequestRevisions', {
+          ...normalized, requestDigest: customerRequestDigest(normalized), recordedAt: current.createdAt,
+        })
+      }
+    }
+    if (args.planRevision !== undefined) {
+      if (args.planRevision.requestId !== args.request.requestId || args.planRevision.requestRevision !== args.request.revision) {
+        throw new Error('plan_revision_request_mismatch')
+      }
+      const existingPlan = await ctx.db.query('customerRequestPlanRevisions').withIndex('by_planRevisionId', (query) => query
+        .eq('planRevisionId', args.planRevision?.planRevisionId ?? '')).unique()
+      if (existingPlan !== null) throw new Error('plan_revision_identity_conflict')
+      await ctx.db.insert('customerRequestPlanRevisions', { ...args.planRevision, planDigest: planRevisionDigest(args.planRevision) })
+    }
+    if (current === null) {
+      await ctx.db.insert('customerRequests', { ...args.request, requestDigest, updatedAt: args.request.createdAt })
+    } else {
+      await ctx.db.patch(current._id, { ...args.request, requestDigest, updatedAt: args.request.createdAt })
+    }
+    await ctx.db.insert('customerRequestRevisions', {
+      ...args.request, requestDigest, recordedAt: args.request.createdAt,
+    })
+    await ctx.db.insert('customerRequestCompilationCommands', {
+      compilationKey: args.compilationKey, commandDigest: args.commandDigest,
+      requestId: args.request.requestId, requestRevision: args.request.revision,
+      ...(args.planRevision === undefined ? {} : { planRevisionId: args.planRevision.planRevisionId }),
+      committedAt: args.request.createdAt,
+      outcome: args.outcome,
+    })
+    return { kind: 'stored' as const }
+  },
+})
 
 export const putRequest = internalMutation({
   args: { request: customerRequestValue },
@@ -38,6 +164,9 @@ export const putRequest = internalMutation({
     const existing = await ctx.db.query('customerRequests').withIndex('by_requestId', (query) => query.eq('requestId', args.request.requestId)).unique()
     if (existing !== null) return existing.requestDigest === requestDigest ? { kind: 'stored' as const } : { kind: 'conflict' as const }
     await ctx.db.insert('customerRequests', { ...args.request, requestDigest, updatedAt: args.request.createdAt })
+    await ctx.db.insert('customerRequestRevisions', {
+      ...args.request, requestDigest, recordedAt: args.request.createdAt,
+    })
     return { kind: 'stored' as const }
   },
 })
@@ -62,8 +191,17 @@ export const getRequest = internalQuery({
   handler: async (ctx, args) => {
     const row = await ctx.db.query('customerRequests').withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
     if (row === null) return null
-    const { _id: _ignoredId, _creationTime: _ignoredCreationTime, requestDigest: _digest, updatedAt: _updatedAt, ...request } = row
-    return request
+    return normalizeCurrentRequestRow(row)
+  },
+})
+
+export const getRequestRevision = internalQuery({
+  args: { requestId: v.string(), revision: v.number() },
+  returns: v.union(customerRequestValue, v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestRevisions').withIndex('by_requestId_and_revision', (query) => query
+      .eq('requestId', args.requestId).eq('revision', args.revision)).unique()
+    return row === null ? null : stripRequestRevisionRow(row)
   },
 })
 
@@ -168,4 +306,39 @@ async function claimPreparationMutation(
 function stripPreparedRow(row: PreparedActionValue & { _id: unknown; _creationTime: number; preparationScope: string; recordedAt: number }): PreparedActionValue {
   const { _id: _ignoredId, _creationTime: _ignoredCreationTime, preparationScope: _scope, recordedAt: _recordedAt, ...prepared } = row
   return prepared
+}
+
+function stripRequestRevisionRow(row: Infer<typeof customerRequestValue> & {
+  _id: unknown; _creationTime: number; requestDigest: string; recordedAt: number
+}): Infer<typeof customerRequestValue> {
+  const { _id: _ignoredId, _creationTime: _ignoredCreationTime, requestDigest: _digest, recordedAt: _recordedAt, ...request } = row
+  return request
+}
+
+function stripPlanRow(row: Infer<typeof planRevisionValue> & {
+  _id: unknown; _creationTime: number; planDigest: string
+}): Infer<typeof planRevisionValue> {
+  const { _id: _ignoredId, _creationTime: _ignoredCreationTime, planDigest: _digest, ...plan } = row
+  return plan
+}
+
+function normalizeCurrentRequestRow(row: {
+  _id: unknown; _creationTime: number; requestDigest: string; updatedAt: number
+  requestId: string; principalId: string; delegatedAgentId: string; intent: string; revision: number
+  compilationState?: Infer<typeof customerRequestValue>['compilationState']
+  understanding?: Infer<typeof customerRequestValue>['understanding']
+  knownFacts?: Infer<typeof customerRequestValue>['knownFacts']
+  routing: Infer<typeof customerRequestValue>['routing']; createdAt: number
+}): Infer<typeof customerRequestValue> {
+  return {
+    requestId: row.requestId, principalId: row.principalId, delegatedAgentId: row.delegatedAgentId,
+    intent: row.intent, revision: row.revision, compilationState: row.compilationState ?? 'submitted',
+    understanding: row.understanding ?? {
+      outcome: row.intent, hardConstraints: [], preferences: [],
+      substitutions: { allowed: false, boundaries: [] }, completionCriterion: row.intent,
+      completionRequirement: { evidenceRole: 'status', valueType: 'string' },
+    },
+    knownFacts: row.knownFacts ?? {},
+    routing: row.routing, createdAt: row.createdAt,
+  }
 }

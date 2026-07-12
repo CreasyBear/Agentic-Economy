@@ -227,7 +227,9 @@ function customerRequest() {
 function planRevision(registry: ReturnType<typeof contracts>) {
   return createPlanRevision({
     planRevisionId: 'plan:shipping:1', requestId: 'request:shipping:1', requestRevision: 1,
-    proposedByAgentId: 'agent:customer:1', createdAt: 950,
+    proposedByAgentId: 'agent:customer:1',
+    proposalProvenance: { kind: 'direct_structured', proposalDigest: 'sha256:' + '1'.repeat(64) }, createdAt: 950,
+    completionEvidence: [{ actionId: 'action:quote', field: 'offerRef' }],
     actions: [{
       actionId: 'action:quote', capabilityContractId: 'shipping.rate.query:v1', dependsOn: [],
       input: { destinationPostcode: { kind: 'literal', value: '3000' } },

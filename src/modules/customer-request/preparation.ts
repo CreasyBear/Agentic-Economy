@@ -326,7 +326,7 @@ async function resolveContext(
   if (action === undefined) return { reason: 'action_not_found' }
   const contract = registry.get(action.capabilityContractId)
   if (contract === undefined) return { reason: 'capability_contract_not_found' }
-  if (Object.values(action.input).some((input) => input.kind === 'action_output')) return { reason: 'action_input_unresolved' }
+  if (Object.values(action.input).some((input) => input.kind !== 'literal')) return { reason: 'action_input_unresolved' }
   const expected = Object.fromEntries(Object.entries(action.input).map(([field, input]) => [field, input.kind === 'literal' ? input.value : undefined]))
   if (canonicalDigest(stableRecord(expected)) !== canonicalDigest(stableRecord(command.resolvedInput))) return { reason: 'action_input_mismatch' }
   return { request, plan, action, contract }
@@ -457,17 +457,25 @@ export function customerRequestDigest(request: CustomerRequest): string {
 export function planRevisionDigest(plan: PlanRevision): string {
   return canonicalDigest({
     planRevisionId: plan.planRevisionId, requestId: plan.requestId, requestRevision: plan.requestRevision,
-    proposedByAgentId: plan.proposedByAgentId, createdAt: plan.createdAt,
+    proposedByAgentId: plan.proposedByAgentId, proposalProvenance: plan.proposalProvenance, createdAt: plan.createdAt,
+    completionEvidence: plan.completionEvidence,
     actions: plan.actions.map((action) => ({
       actionId: action.actionId, capabilityContractId: action.capabilityContractId,
       dependsOn: [...action.dependsOn].sort(),
       input: Object.fromEntries(Object.entries(action.input).sort(([left], [right]) => left.localeCompare(right)).map(([field, value]) => [
         field,
-        value.kind === 'literal' ? { kind: value.kind, value: value.value } : { kind: value.kind, actionId: value.actionId, field: value.field },
+        planInputDigestMaterial(value),
       ])),
       ...(action.providerAffinity === undefined ? {} : { providerAffinity: action.providerAffinity }),
     })),
   })
+}
+
+function planInputDigestMaterial(value: PlanRevision['actions'][number]['input'][string]) {
+  if (value?.kind === 'literal') return { kind: value.kind, value: value.value }
+  if (value?.kind === 'action_output') return { kind: value.kind, actionId: value.actionId, field: value.field }
+  if (value?.kind === 'customer_fact') return { kind: value.kind, fact: value.fact }
+  throw new Error('plan_input_missing')
 }
 
 export function preparedActionDigest(action: Omit<PreparedAction, 'preparedActionDigest'>): string {

@@ -17,4 +17,10 @@ describe('customer request module boundaries', () => {
 
     expect(publicContract).not.toMatch(/modules\/routing-kernel|RootRunSnapshot|NeutralRoutingKernel/)
   })
+
+  it('keeps intent compilation structurally unable to call providers or grant approval', () => {
+    const compiler = readFileSync(join(root, 'src/modules/customer-request/compiler.ts'), 'utf8')
+
+    expect(compiler).not.toMatch(/modules\/routing-kernel|CustomerRequestActionRouter|ApprovalGrant|execute\s*:/)
+  })
 })

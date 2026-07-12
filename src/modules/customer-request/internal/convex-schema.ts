@@ -6,10 +6,37 @@ const business = v.object({ nodeId: v.string(), bindingId: v.string(), name: v.s
 const planInput = v.union(
   v.object({ kind: v.literal('literal'), value: v.union(v.string(), v.number(), v.boolean()) }),
   v.object({ kind: v.literal('action_output'), actionId: v.string(), field: v.string() }),
+  v.object({ kind: v.literal('customer_fact'), fact: v.string() }),
 )
+const literalValue = v.union(v.string(), v.number(), v.boolean())
+const requestRequirement = v.object({ field: v.string(), label: v.string(), value: literalValue })
+const requestUnderstanding = v.object({
+  outcome: v.string(),
+  hardConstraints: v.array(requestRequirement),
+  preferences: v.array(v.object({ field: v.string(), label: v.string(), value: literalValue, priority: v.number() })),
+  substitutions: v.object({ allowed: v.boolean(), boundaries: v.array(v.string()) }),
+  completionCriterion: v.string(),
+  completionRequirement: v.object({
+    evidenceRole: v.union(v.literal('provider_offer'), v.literal('result_artifact'), v.literal('status'), v.literal('provider_report')),
+    valueType: v.union(
+      v.literal('string'), v.literal('integer'), v.literal('boolean'), v.literal('url'), v.literal('money_minor'), v.literal('provider_offer_ref'),
+    ),
+  }),
+  deadline: v.optional(v.number()),
+})
+const missingInformation = v.object({
+  field: v.string(), customerLabel: v.string(),
+  reason: v.union(v.literal('required_for_registered_capability'), v.literal('disambiguates_registered_capabilities')),
+  candidateCapabilityContractIds: v.optional(v.array(v.string())),
+})
 
 export const customerRequestValue = v.object({
   requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
+  compilationState: v.union(
+    v.literal('submitted'), v.literal('needs_information'), v.literal('plan_ready'), v.literal('unsupported'),
+  ),
+  understanding: requestUnderstanding,
+  knownFacts: v.record(v.string(), literalValue),
   routing: v.object({
     networkId: v.string(), currency: v.string(), maximumSpendMinor: v.number(),
     optimizeFor: v.union(v.literal('cost'), v.literal('latency')),
@@ -19,6 +46,14 @@ export const customerRequestValue = v.object({
 
 export const planRevisionValue = v.object({
   planRevisionId: v.string(), requestId: v.string(), requestRevision: v.number(), proposedByAgentId: v.string(), createdAt: v.number(),
+  proposalProvenance: v.union(
+    v.object({ kind: v.literal('agent_interpretation'), proposalDigest: v.string(), interpreterId: v.string() }),
+    v.object({ kind: v.literal('direct_structured'), proposalDigest: v.string() }),
+  ),
+  completionEvidence: v.array(v.object({
+    actionId: v.string(), field: v.string(),
+    role: v.union(v.literal('provider_offer'), v.literal('result_artifact'), v.literal('status'), v.literal('provider_report')),
+  })),
   actions: v.array(v.object({
     actionId: v.string(), capabilityContractId: v.string(), dependsOn: v.array(v.string()),
     input: v.record(v.string(), planInput),
@@ -58,9 +93,37 @@ export const preparationRefusalReason = v.union(
 
 export const customerRequestTables = {
   customerRequests: defineTable({
-    ...customerRequestValue.fields,
+    requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
+    compilationState: v.optional(v.union(
+      v.literal('submitted'), v.literal('needs_information'), v.literal('plan_ready'), v.literal('unsupported'),
+    )),
+    understanding: v.optional(requestUnderstanding),
+    knownFacts: v.optional(v.record(v.string(), literalValue)),
+    routing: customerRequestValue.fields.routing,
+    createdAt: v.number(),
     requestDigest: v.string(), updatedAt: v.number(),
   }).index('by_requestId', ['requestId']),
+
+  customerRequestRevisions: defineTable({
+    ...customerRequestValue.fields,
+    requestDigest: v.string(), recordedAt: v.number(),
+  })
+    .index('by_requestId_and_revision', ['requestId', 'revision']),
+
+  customerRequestCompilationCommands: defineTable({
+    compilationKey: v.string(), commandDigest: v.string(), requestId: v.string(), requestRevision: v.number(),
+    planRevisionId: v.optional(v.string()), committedAt: v.number(),
+    outcome: v.union(
+      v.object({ kind: v.literal('plan_ready') }),
+      v.object({ kind: v.literal('needs_information'), missingInformation: v.array(missingInformation) }),
+      v.object({
+        kind: v.literal('unsupported'),
+        reason: v.union(v.literal('no_registered_capability'), v.literal('unsafe_proposal')),
+      }),
+    ),
+  })
+    .index('by_compilationKey', ['compilationKey'])
+    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
 
   customerRequestPlanRevisions: defineTable({
     ...planRevisionValue.fields,

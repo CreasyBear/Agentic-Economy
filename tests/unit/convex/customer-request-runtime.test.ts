@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { preparedActionDigest } from '@/modules/customer-request/preparation'
 import type { PreparedAction } from '@/modules/customer-request/public'
-import { claimPreparation, completePreparation, putPlanRevision, putRequest } from '../../../convex/customerRequests'
+import { claimPreparation, commitCompilation, completePreparation, getRequest, getRequestRevision, putPlanRevision, putRequest } from '../../../convex/customerRequests'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type Handler<Args> = (ctx: { db: FakeDb }, args: Args) => Promise<unknown>
@@ -13,8 +13,72 @@ const claimHandler = (claimPreparation as unknown as { _handler: Handler<ReturnT
 const completeHandler = (completePreparation as unknown as { _handler: Handler<{
   preparationScope: string; claimToken: string; preparedAction: PreparedAction; completedAt: number
 }> })._handler
+const commitCompilationHandler = (commitCompilation as unknown as { _handler: Handler<{
+  compilationKey: string; commandDigest: string; expectedRevision: number
+  request: ReturnType<typeof request>; planRevision?: ReturnType<typeof plan>
+  outcome: { kind: 'plan_ready' } | { kind: 'unsupported'; reason: 'unsafe_proposal' }
+}> })._handler
+const getRequestHandler = (getRequest as unknown as { _handler: Handler<{ requestId: string }> })._handler
+const getRequestRevisionHandler = (getRequestRevision as unknown as {
+  _handler: Handler<{ requestId: string; revision: number }>
+})._handler
 
 describe('customer request durable preparation store', () => {
+  it('atomically advances one Request revision and preserves immutable history', async () => {
+    const db = new FakeDb()
+    const firstRequest = request()
+    await expect(commitCompilationHandler({ db }, {
+      compilationKey: 'compile:1', commandDigest: 'sha256:' + '1'.repeat(64), expectedRevision: 0,
+      request: firstRequest, planRevision: plan(), outcome: { kind: 'plan_ready' },
+    })).resolves.toEqual({ kind: 'stored' })
+
+    const secondRequest = { ...firstRequest, revision: 2, intent: 'Compare express courier prices.' }
+    const winner = await commitCompilationHandler({ db }, {
+      compilationKey: 'compile:2:a', commandDigest: 'sha256:' + '2'.repeat(64), expectedRevision: 1,
+      request: secondRequest, outcome: { kind: 'unsupported', reason: 'unsafe_proposal' },
+    })
+    const stale = await commitCompilationHandler({ db }, {
+      compilationKey: 'compile:2:b', commandDigest: 'sha256:' + '3'.repeat(64), expectedRevision: 1,
+      request: { ...secondRequest, intent: 'Compare same-day courier prices.' },
+      outcome: { kind: 'unsupported', reason: 'unsafe_proposal' },
+    })
+
+    expect(winner).toEqual({ kind: 'stored' })
+    expect(stale).toEqual({ kind: 'revision_conflict' })
+    expect(db.rows('customerRequests')).toHaveLength(1)
+    expect(db.rows('customerRequestRevisions').map((row) => row.revision)).toEqual([1, 2])
+    expect(db.rows('customerRequestPlanRevisions')).toHaveLength(1)
+  })
+
+  it('normalizes legacy Request rows during the expand migration window', async () => {
+    const db = new FakeDb()
+    await db.insert('customerRequests', {
+      requestId: 'request:legacy', principalId: 'principal:1', delegatedAgentId: 'agent:1',
+      intent: 'Compare courier prices.', revision: 1,
+      routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' },
+      createdAt: 900, requestDigest: 'sha256:' + '1'.repeat(64), updatedAt: 900,
+    })
+
+    await expect(getRequestHandler({ db }, { requestId: 'request:legacy' })).resolves.toMatchObject({
+      requestId: 'request:legacy', knownFacts: {},
+      understanding: { outcome: 'Compare courier prices.', completionCriterion: 'Compare courier prices.' },
+    })
+
+    const revised = {
+      ...request(), requestId: 'request:legacy', revision: 2, intent: 'Compare express courier prices.',
+    }
+    await expect(commitCompilationHandler({ db }, {
+      compilationKey: 'compile:legacy:2', commandDigest: 'sha256:' + '2'.repeat(64), expectedRevision: 1,
+      request: revised, outcome: { kind: 'unsupported', reason: 'unsafe_proposal' },
+    })).resolves.toEqual({ kind: 'stored' })
+    await expect(getRequestRevisionHandler({ db }, { requestId: 'request:legacy', revision: 1 })).resolves.toMatchObject({
+      requestId: 'request:legacy', revision: 1, compilationState: 'submitted',
+    })
+    await expect(getRequestRevisionHandler({ db }, { requestId: 'request:legacy', revision: 2 })).resolves.toMatchObject({
+      requestId: 'request:legacy', revision: 2,
+    })
+  })
+
   it('uses Request revision and preparation scope as a CAS boundary for concurrent workers', async () => {
     const db = new FakeDb()
     await seed(db)
@@ -61,7 +125,13 @@ async function seed(db: FakeDb) {
 function request() {
   return {
     requestId: 'request:shipping:1', principalId: 'principal:1', delegatedAgentId: 'agent:1',
-    intent: 'Compare courier prices.', revision: 1,
+    intent: 'Compare courier prices.', revision: 1, compilationState: 'plan_ready' as const,
+    understanding: {
+      outcome: 'Comparable courier prices', hardConstraints: [], preferences: [],
+      substitutions: { allowed: false, boundaries: [] }, completionCriterion: 'Return comparable quotes.',
+      completionRequirement: { evidenceRole: 'provider_offer' as const, valueType: 'provider_offer_ref' as const },
+    },
+    knownFacts: { destinationPostcode: '3000' },
     routing: { networkId: 'network:au-first', currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'cost' as const },
     createdAt: 900,
   }
@@ -70,7 +140,9 @@ function request() {
 function plan() {
   return {
     planRevisionId: 'plan:shipping:1', requestId: 'request:shipping:1', requestRevision: 1,
-    proposedByAgentId: 'agent:1', createdAt: 950,
+    proposedByAgentId: 'agent:1',
+    proposalProvenance: { kind: 'direct_structured' as const, proposalDigest: 'sha256:' + '1'.repeat(64) }, createdAt: 950,
+    completionEvidence: [{ actionId: 'action:quote', field: 'offerRef', role: 'provider_offer' as const }],
     actions: [{
       actionId: 'action:quote', capabilityContractId: 'shipping.rate.query:v1', dependsOn: [],
       input: { destinationPostcode: { kind: 'literal' as const, value: '3000' } },
