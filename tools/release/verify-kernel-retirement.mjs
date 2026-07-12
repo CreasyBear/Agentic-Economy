@@ -25,7 +25,7 @@ export function verifyKernelRetirement(root = process.cwd()) {
   }
   for (const [kind, values] of Object.entries({
     route: kernelRetirementManifest.retired.routes,
-    table: kernelRetirementManifest.retired.tables,
+    quarantined_table: kernelRetirementManifest.retired.quarantinedReadOnlyTables,
     job: kernelRetirementManifest.retired.jobs,
     environment_key: kernelRetirementManifest.retired.environmentKeys,
     import: kernelRetirementManifest.retired.importTokens,

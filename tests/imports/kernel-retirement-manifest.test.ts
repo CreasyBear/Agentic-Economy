@@ -4,7 +4,7 @@ import { kernelRetirementManifest } from '../../tools/release/kernel-retirement-
 import { verifyKernelRetirement } from '../../tools/release/verify-kernel-retirement.mjs'
 
 describe('kernel retirement manifest', () => {
-  it('proves every retired path, route, table, job, key, and import is absent', () => {
+  it('proves every retired writer, route, job, key, import, and quarantined-table reference is absent', () => {
     expect(verifyKernelRetirement()).toEqual({ ok: true, errors: [] })
   })
 

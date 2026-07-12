@@ -29,10 +29,16 @@ export const kernelRetirementManifest = Object.freeze({
       'tests/integration/chat-models-route.test.ts',
     ]),
     routes: Object.freeze(['/api/agent/tools', '/api/answer', '/api/chat', '/api/chat/models']),
-    tables: Object.freeze([
-      'clearanceMandates', 'clearanceGreenlights', 'clearanceReceipts',
-      'procurementRequests', 'procurementQuotes', 'businessActionRequests',
-      'protectedActionRequests', 'actionReceipts',
+    quarantinedReadOnlyTables: Object.freeze([
+      'businessActionAuthorizationCheckpoints', 'businessActionBuyerMandates', 'businessActionCapabilityRequests',
+      'businessActionCards', 'businessActionExternalEvidenceEvents', 'businessActionGuardrailDecisionEvidence',
+      'businessActionNoRepairRecords', 'businessActionPrivateEvidenceRefs', 'businessActionReceipts',
+      'businessActionResultArtifacts', 'businessActionSupportRecords', 'clearanceMandates',
+      'handshakeGatewayChecks', 'handshakeIdempotencyLedger', 'handshakeIsolationStates', 'handshakeRecords',
+      'handshakeStreamEvents', 'procurementRequests', 'protectedActionAttempts',
+      'protectedActionGatewayAdmissions', 'protectedActionNoRepairRecords', 'protectedActionOwnerDecisions',
+      'protectedActionPolicyDecisions', 'protectedActionPrivateEvidenceRefs', 'protectedActionProposals',
+      'protectedActionReceipts', 'protectedActionSupportRecords',
     ]),
     jobs: Object.freeze(['cleanupLegacyClearance', 'repairProtectedActions', 'dispatchProcurementRequests']),
     environmentKeys: Object.freeze([

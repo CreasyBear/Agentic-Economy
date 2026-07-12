@@ -15,7 +15,7 @@ export const kernelRetirementManifest: Readonly<{
   retired: Readonly<{
     files: readonly string[]
     routes: readonly string[]
-    tables: readonly string[]
+    quarantinedReadOnlyTables: readonly string[]
     jobs: readonly string[]
     environmentKeys: readonly string[]
     importTokens: readonly string[]
