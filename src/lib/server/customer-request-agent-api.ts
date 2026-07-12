@@ -9,10 +9,12 @@ import { createCustomerRequestServiceAssertion } from '@/modules/customer-reques
 
 type HandlerOptions = Readonly<{
   authenticate?: NonNullable<Parameters<typeof authenticateCustomerRequestAgent>[0]>['authenticate']
-  callAction?: (name: string, args: Record<string, unknown>) => Promise<unknown>
+  callAction?: (name: string, args: Record<string, unknown>) => Promise<AgentActionResult>
   env?: Record<string, string | undefined>
   now?: () => number
 }>
+
+type AgentActionResult = SubmitResult | FactsResult | CustomerOptionsProjection | InspectResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })

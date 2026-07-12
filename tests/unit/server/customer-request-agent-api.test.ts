@@ -19,8 +19,8 @@ describe('agent-native customer Request API', () => {
     const callAction = vi.fn(async (name: string, args: Record<string, unknown>) => {
       calls.push({ name, args })
       return {
-        kind: 'request', requestRef: 'request:agent:1', revision: 1, state: 'ready_to_compare',
-        summary: 'Ready', nextAction: 'prepare_options', missingFields: [], options: [],
+        kind: 'request' as const, requestRef: 'request:agent:1', revision: 1, state: 'ready_to_compare' as const,
+        summary: 'Ready', nextAction: 'prepare_options' as const, missingFields: [], options: [],
       }
     })
     const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
@@ -41,9 +41,13 @@ describe('agent-native customer Request API', () => {
     const names: string[] = []
     const callAction = async (name: string) => {
       names.push(name)
+      if (name.endsWith(':compare')) return {
+        kind: 'request' as const, requestRef: 'request:agent:1', revision: 1, state: 'options_ready' as const,
+        summary: 'Ready', nextAction: 'inspect_options' as const, missingFields: [], options: [],
+      }
       return {
-        kind: 'request', requestRef: 'request:agent:1', revision: 1, state: name.endsWith(':compare') ? 'options_ready' : 'ready_to_compare',
-        summary: 'Ready', nextAction: name.endsWith(':compare') ? 'inspect_options' : 'prepare_options', missingFields: [], options: [],
+        kind: 'request' as const, requestRef: 'request:agent:1', revision: 1, state: 'ready_to_compare' as const,
+        summary: 'Ready', nextAction: 'prepare_options' as const, missingFields: [], options: [],
       }
     }
     expect((await handleAgentCustomerRequestGet('request:agent:1', {
