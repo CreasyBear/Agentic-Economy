@@ -1,3 +1,5 @@
+import { createRoutingEdgeEnvelope } from '../../../src/modules/routing-kernel/routing-edge-envelope'
+
 const MAX_BODY_BYTES = 64 * 1024
 const UPSTREAM_TIMEOUT_MS = 30_000
 const descriptorPath = '/.well-known/ae-routing.json'
@@ -32,7 +34,7 @@ export async function handleRoutingEdgeRequest(
   headers.set('X-AE-Edge-Request-Id', requestId)
   headers.set('X-AE-Edge-Source-Revision', env.AE_EDGE_SOURCE_REVISION)
   headers.set('X-AE-Edge-Timestamp', String(observedAt))
-  headers.set('X-AE-Edge-Signature', await signEnvelope({
+  const envelope = await createRoutingEdgeEnvelope({
     key: env.AE_EDGE_ORIGIN_HMAC_KEY,
     method: request.method,
     path: url.pathname,
@@ -40,7 +42,8 @@ export async function handleRoutingEdgeRequest(
     contentDigest: headers.get('Content-Digest') ?? '',
     requestId,
     timestamp: observedAt,
-  }))
+  })
+  headers.set('X-AE-Edge-Signature', envelope.signature)
   headers.delete('Host')
   headers.delete('Content-Length')
 
@@ -84,16 +87,6 @@ async function readBoundedBody(request: Request, maximumBytes: number): Promise<
   return { ok: true, bytes }
 }
 
-async function signEnvelope(input: { key: string; method: string; path: string; authority: string; contentDigest: string; requestId: string; timestamp: number }): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(input.key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(envelopeMaterial(input)))
-  return toBase64Url(new Uint8Array(signature))
-}
-
-function envelopeMaterial(input: { method: string; path: string; authority: string; contentDigest: string; requestId: string; timestamp: number }): string {
-  return [input.method, input.path, input.authority, input.contentDigest, input.requestId, String(input.timestamp)].join('\n')
-}
-
 function projectResponse(upstream: Response, requestId: string, edgeDurationMs: number): Response {
   const headers = new Headers(upstream.headers)
   headers.set('X-AE-Edge-Request-Id', requestId)
@@ -108,10 +101,3 @@ function edgeError(requestId: string, status: number, code: string): Response {
     headers: { 'Cache-Control': 'no-store', 'X-AE-Edge-Request-Id': requestId },
   })
 }
-
-function toBase64Url(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-}
-/// <reference path="../worker-configuration.d.ts" />
