@@ -51,7 +51,25 @@ describe('routing edge Fetch contract', () => {
       canonicalAuthority: { runtime: 'convex', origin: 'https://kernel.example' },
       admission: { authority: 'convex', contract: 'transactional-fixed-window-and-lease:v1' },
       telemetry: { protocolRecordsSeparated: true, providerWaitSeparated: true, retentionDays: 7 },
+      evidenceDomains: [
+        { id: 'protocol', authority: 'convex', retention: 'authoritative' },
+        { id: 'operational', authority: 'convex', retention: 'bounded', retentionDays: 7 },
+        { id: 'edge', authority: 'cloudflare', retention: 'platform-configured' },
+      ],
     })
     expect(raw).not.toContain(env.AE_EDGE_ORIGIN_HMAC_KEY)
+  })
+
+  it('returns a stable origin failure without leaking the upstream exception', async () => {
+    const response = await handleRoutingEdgeRequest(new Request('https://route.agentic-economy.test/v1/route', {
+      method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' },
+    }), env, async () => { throw new Error('private upstream detail') })
+
+    expect(response.status).toBe(502)
+    expect(await response.json()).toEqual({
+      protocolVersion: 'ae-routing:v1',
+      edge: { requestId: expect.any(String) },
+      error: { code: 'origin_unavailable', retryable: true },
+    })
   })
 })

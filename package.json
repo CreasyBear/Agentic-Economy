@@ -13,9 +13,10 @@
     "lint": "oxlint src convex tests tools examples --deny-warnings",
     "check:convex-codegen": "convex codegen --dry-run --typecheck=disable",
     "check:kernel-proof": "node tools/release/verify-kernel-proof-manifest.mjs",
+    "check:routing-edge": "cd examples/routing-edge && wrangler types --check && tsc -p tsconfig.json && wrangler deploy --dry-run --env=\"\"",
     "seed:dev": "convex run devSeed:seedDevCatalog",
     "test:release": "npm run test:release:source && npm run test:release:hosted",
-    "test:release:source": "npm run lint && npm run typecheck && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run build",
+    "test:release:source": "npm run lint && npm run typecheck && npm run check:routing-edge && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run build",
     "test:release:hosted": "npm run check:convex-codegen && npm run check:kernel-proof",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
@@ -92,7 +93,8 @@
     "tsx": "^4.20.5",
     "typescript": "6.0.3",
     "vite": "8.1.0",
-    "vitest": "4.1.9"
+    "vitest": "4.1.9",
+    "wrangler": "^4.110.0"
   },
   "overrides": {
     "@opentelemetry/exporter-trace-otlp-http": "0.219.0"

@@ -75,6 +75,11 @@ function topologyResponse(url: URL, env: RoutingEdgeEnv, requestId: string): Res
     canonicalAuthority: { runtime: 'convex', origin: env.AE_ROUTING_ORIGIN },
     admission: { authority: 'convex', contract: 'transactional-fixed-window-and-lease:v1' },
     telemetry: { protocolRecordsSeparated: true, providerWaitSeparated: true, retentionDays: 7 },
+    evidenceDomains: [
+      { id: 'protocol', authority: 'convex', retention: 'authoritative' },
+      { id: 'operational', authority: 'convex', retention: 'bounded', retentionDays: 7 },
+      { id: 'edge', authority: 'cloudflare', retention: 'platform-configured' },
+    ],
   }, { headers: { 'Cache-Control': 'no-store', 'X-AE-Edge-Request-Id': requestId } })
 }
 
