@@ -28,6 +28,11 @@ Assume AE shipped the current plan and failed twelve months later. The causes we
 
 ## Engineering gates before approval
 
+- Preparation follows one enforced sequence: value-free concrete-recipient discovery, independent authority verification, atomic durable allocation, allocation-bound release, then provider call. Post-call validation never counts as prevention.
+- Preparation commands carry an authority reference, never a caller-minted grant. Signed identity proves attribution only; a trusted verifier and current durable authority state prove permission.
+- Single-use and standing authority have explicit operation, recipient, exposure, expiry, and revocation semantics. Cumulative ceilings survive replanning, retries, leases, and preparation generations.
+- Exact release retries reuse one parameter-bound allocation; changed retries conflict; possibly released attempts remain consumed and indeterminate.
+- The disclosure ledger stores no values or deterministic low-entropy value hashes. Customer and support projections show categories, named recipients, purpose, time, and release certainty.
 - A Request revision mutation uses compare-and-swap, preserves history, and invalidates stale Plans, PreparedActions, and grants.
 - A `PreparationRevision` can supersede expired, refused, supply-changed, customer-changed, and terms-changed preparation without deleting history. Idempotency is scoped to one generation.
 - Preparation authority is verified independently. Field, recipient, purpose, expiry, and cumulative exposure budgets are claimed durably before any provider call.
