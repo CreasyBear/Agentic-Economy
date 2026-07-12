@@ -30,10 +30,9 @@ describe('discovery files', () => {
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
     expect(serialized).not.toContain('parramatta-emergency-plumbing')
-    expect(serialized).toContain('callable=false')
-    expect(serialized).toContain('paymentRequired=false')
+    expect(serialized).toContain('/.well-known/ae-routing.json')
     expect(serialized).not.toMatch(
-      /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|MCP|OpenAPI|callable=true|paymentRequired=true/i
+      /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
     )
   })
 
@@ -51,10 +50,9 @@ describe('discovery files', () => {
 
     expect(result.body).toContain('https://ae.example/parramatta-emergency-plumbing/ucp')
     expect(result.body).toContain('publicStatus=published')
-    expect(result.body).toContain('callable=false')
-    expect(result.body).toContain('paymentRequired=false')
-    // The quiet agent door is advertised in the assistant/machine index so a cold assistant can find it.
-    expect(result.body).toContain('https://ae.example/api/agent/tools')
+    expect(result.body).toContain('https://ae.example/.well-known/ae-routing.json')
+    expect(result.body).toContain('https://ae.example/v1/route')
+    expect(result.body).toContain('https://ae.example/mcp')
     expect(result.body).not.toContain('Parramatta Emergency Plumbing')
     expect(result.body).not.toContain('Ignore previous instructions')
     expect(result.body).not.toContain('verified')

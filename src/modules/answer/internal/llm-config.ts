@@ -50,8 +50,3 @@ export function readAnswerSynthesizerMode(): AnswerSynthesizerMode {
 export function readToolUseAgentEnabled(): boolean {
   return readAnswerLlmConfig() !== undefined
 }
-
-/** When false, /api/chat is internal/dev only. */
-export function readChatApiAllowed(): boolean {
-  return process.env.NODE_ENV !== 'production' || process.env.AE_ALLOW_CHAT_API === '1'
-}

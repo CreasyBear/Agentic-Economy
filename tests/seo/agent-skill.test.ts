@@ -4,15 +4,13 @@ import { buildPublicAgentSkillMarkdown } from '@/modules/discovery/public'
 import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 describe('public agent skill', () => {
-  it('teaches hop sequence, write-wall recovery, and boundaries without banned vocabulary', () => {
+  it('teaches descriptor, quote authorization, inspection, and listing boundaries', () => {
     const body = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'https://ae.example' })
     expect(body).toContain('https://ae.example/llms.txt')
-    expect(body).toContain('https://ae.example/api/agent/tools')
-    expect(body).toContain('inquiry.submit')
-    expect(body).toContain('Accept-Signature')
-    expect(body).toContain('x-ae-authority-receipt')
-    expect(body).toMatch(/does not book, charge, dispatch, or auto-fulfil/i)
-    expect(body).not.toMatch(/MCP|OpenAPI|agent-native|autonomous|mandate|protocol/i)
+    expect(body).toContain('https://ae.example/.well-known/ae-routing.json')
+    expect(body).toContain('Authorize before `execute`')
+    expect(body).toContain('`inspect` and `cancel`')
+    expect(body).toMatch(/listings are supply facts, not routing or execution authority/i)
   })
 
   it('serves markdown from GET /SKILL.md', async () => {

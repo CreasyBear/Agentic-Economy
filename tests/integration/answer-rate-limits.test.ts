@@ -2,11 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   ANSWER_FOLLOW_UP_CHIPS_RATE_LIMIT,
-  ANSWER_STREAM_RATE_LIMIT,
   ANSWER_TURN_RATE_LIMIT,
   resetAnswerTurnGuardForTests,
 } from '@/modules/answer-thread/testing'
-import { handleAnswerRequest } from '@/routes/api.answer'
 import { handleFollowUpChipsRequest } from '@/routes/api.answer.follow-up-chips'
 import { handleAnswerTurnRequest } from '@/routes/api.answer.turn'
 import { sessionCookieHeader } from '../helpers/answer-thread-test-port'
@@ -61,28 +59,6 @@ describe('answer HTTP rate limits', () => {
           cookie: sessionCookieHeader(session),
         },
         body: JSON.stringify({ query: 'plumber test limited' }),
-      }),
-    )
-
-    expect(limited.status).toBe(429)
-    expect(await limited.json()).toEqual({ error: 'rate_limited' })
-  })
-
-  it('returns 429 after legacy answer JSON limit', async () => {
-    const session = 'answer-json-rate-limit-session'
-
-    for (let index = 0; index < ANSWER_STREAM_RATE_LIMIT; index += 1) {
-      const response = await handleAnswerRequest(
-        new Request('https://ae.example/api/answer?q=plumber+cached', {
-          headers: { cookie: sessionCookieHeader(session) },
-        }),
-      )
-      expect(response.status).not.toBe(429)
-    }
-
-    const limited = await handleAnswerRequest(
-      new Request('https://ae.example/api/answer?q=plumber+limited', {
-        headers: { cookie: sessionCookieHeader(session) },
       }),
     )
 

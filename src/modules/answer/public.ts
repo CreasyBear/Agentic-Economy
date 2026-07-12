@@ -88,7 +88,6 @@ export {
   DEFAULT_OPENROUTER_MODEL,
   readAnswerLlmConfig,
   readToolUseAgentEnabled,
-  readChatApiAllowed,
   readAnswerSynthesizerMode,
   readAnswerEvalPassed,
   readLlmFollowUpChipsEnabled,
@@ -101,11 +100,6 @@ export {
   buildToolUseAgentSystemPrompt,
   buildToolUseAgentUserPrompt,
 } from './internal/answer-llm-prompts'
-export {
-  extractQueryFromChatBody,
-  extractModelFromChatBody,
-  synthesizeChatAnswer,
-} from './internal/chat-answer-stream'
 export {
   buildFallbackModels,
   fetchOpenRouterModels,

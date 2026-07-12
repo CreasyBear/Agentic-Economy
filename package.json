@@ -13,10 +13,11 @@
     "lint": "oxlint src convex tests tools examples --deny-warnings",
     "check:convex-codegen": "convex codegen --dry-run --typecheck=disable",
     "check:kernel-proof": "node tools/release/verify-kernel-proof-manifest.mjs",
+    "check:kernel-retirement": "node tools/release/verify-kernel-retirement.mjs",
     "check:routing-edge": "cd examples/routing-edge && wrangler types --check && tsc -p tsconfig.json && wrangler deploy --dry-run --env=\"\"",
     "seed:dev": "convex run devSeed:seedDevCatalog",
     "test:release": "npm run test:release:source && npm run test:release:hosted",
-    "test:release:source": "npm run lint && npm run typecheck && npm run check:routing-edge && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run build",
+    "test:release:source": "npm run lint && npm run typecheck && npm run check:routing-edge && npm run check:kernel-retirement && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run build",
     "test:release:hosted": "npm run check:convex-codegen && npm run check:kernel-proof",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
@@ -34,7 +35,7 @@
     "test:e2e:a11y": "playwright test tests/e2e/a11y",
     "test:a11y": "playwright test tests/e2e/a11y",
     "test:types": "vitest run tests/types",
-    "test:imports": "AE_SCAN_MODE=clean vitest run tests/imports/backup-imports.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts",
+    "test:imports": "AE_SCAN_MODE=clean vitest run tests/imports/backup-imports.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts tests/imports/routing-authority-retirement.test.ts tests/imports/routing-kernel-boundaries.test.ts tests/imports/kernel-retirement-manifest.test.ts",
     "test:imports:fixtures": "AE_SCAN_MODE=fixtures vitest run tests/imports/backup-imports.test.ts tests/imports/private-imports.test.ts tests/imports/route-boundary.test.ts",
     "test:ts-standards": "AE_SCAN_MODE=clean vitest run tests/imports/ts-standards.test.ts",
     "test:ts-standards:fixtures": "AE_SCAN_MODE=fixtures vitest run tests/imports/ts-standards.test.ts",
@@ -43,8 +44,7 @@
     "test:ui-contract": "AE_SCAN_MODE=clean vitest run tests/ui-contract",
     "test:all": "npm run typecheck && npm run check:convex-codegen && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run build",
     "doctor": "npx react-doctor@latest",
-    "audit:agent-experience": "node --import tsx examples/agent-experience/run-audit.ts --driver probe",
-    "audit:agent-experience:hermes": "node --import tsx examples/agent-experience/run-audit.ts --driver hermes"
+    "audit:agent-experience": "node examples/routing-provider/run-hosted-tracer.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "^0.1.2",

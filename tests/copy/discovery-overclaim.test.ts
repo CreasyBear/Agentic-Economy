@@ -8,10 +8,10 @@ import {
 } from '@/modules/discovery/public'
 
 const forbiddenDiscoveryOutputPattern =
-  /MCP|OpenAPI|API key|apiKey|payment handler|payment_handlers|provider webhook|protected action|callable=true|paymentRequired=true|agent-callable|\.well-known\/ucp/i
+  /OpenAPI|API key|apiKey|payment handler|payment_handlers|provider webhook|protected action|callable=true|paymentRequired=true|\.well-known\/ucp/i
 
 describe('discovery output overclaim guardrail', () => {
-  it('does not advertise unsupported protocol, action, or payment surfaces', () => {
+  it('advertises the implemented routing surfaces without unsupported action or payment claims', () => {
     const state = createDefaultDiscoverySourceState()
     const outputs = [
       buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' }).body,
@@ -20,7 +20,9 @@ describe('discovery output overclaim guardrail', () => {
     ].join('\n')
 
     expect(outputs).not.toMatch(forbiddenDiscoveryOutputPattern)
-    expect(outputs).toContain('callable=false')
-    expect(outputs).toContain('paymentRequired=false')
+    expect(outputs).toContain('/.well-known/ae-routing.json')
+    expect(outputs).toContain('/v1/route')
+    expect(outputs).toContain('/mcp')
+    expect(outputs).toMatch(/listing endpoints publish business facts; they do not select or execute routes/i)
   })
 })

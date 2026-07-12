@@ -209,7 +209,7 @@ function sourceWriteContext() {
     sourceWriteRequest: {
       method: 'POST',
       origin: 'https://ae.example',
-      pathname: '/api/agent/tools',
+      pathname: '/v1/route',
       bodyDigest: 'none',
     },
     agentToolAdmission: {

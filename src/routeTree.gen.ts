@@ -29,9 +29,7 @@ import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
-import { Route as ApiChatRouteImport } from './routes/api.chat'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
-import { Route as ApiAnswerRouteImport } from './routes/api.answer'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
@@ -43,7 +41,6 @@ import { Route as ApiNotificationNovuDispatchRouteImport } from './routes/api.no
 import { Route as ApiDiscoverySchemaRouteImport } from './routes/api.discovery.schema'
 import { Route as ApiDiscoveryFixturesRouteImport } from './routes/api.discovery.fixtures'
 import { Route as ApiDiscoveryExamplesRouteImport } from './routes/api.discovery.examples'
-import { Route as ApiChatModelsRouteImport } from './routes/api.chat.models'
 import { Route as ApiBusinessesSearchRouteImport } from './routes/api.businesses.search'
 import { Route as ApiBusinessesSlugRouteImport } from './routes/api.businesses.$slug'
 import { Route as ApiAnswerTurnRouteImport } from './routes/api.answer.turn'
@@ -162,19 +159,9 @@ const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
   path: '/success',
   getParentRoute: () => ClaimRoute,
 } as any)
-const ApiChatRoute = ApiChatRouteImport.update({
-  id: '/api/chat',
-  path: '/api/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
   id: '/api/businesses',
   path: '/api/businesses',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAnswerRoute = ApiAnswerRouteImport.update({
-  id: '/api/answer',
-  path: '/api/answer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DotwellKnownHttpMessageSignaturesDirectoryRoute =
@@ -237,11 +224,6 @@ const ApiDiscoveryExamplesRoute = ApiDiscoveryExamplesRouteImport.update({
   path: '/api/discovery/examples',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiChatModelsRoute = ApiChatModelsRouteImport.update({
-  id: '/models',
-  path: '/models',
-  getParentRoute: () => ApiChatRoute,
-} as any)
 const ApiBusinessesSearchRoute = ApiBusinessesSearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -253,24 +235,24 @@ const ApiBusinessesSlugRoute = ApiBusinessesSlugRouteImport.update({
   getParentRoute: () => ApiBusinessesRoute,
 } as any)
 const ApiAnswerTurnRoute = ApiAnswerTurnRouteImport.update({
-  id: '/turn',
-  path: '/turn',
-  getParentRoute: () => ApiAnswerRoute,
+  id: '/api/answer/turn',
+  path: '/api/answer/turn',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAnswerThreadsRoute = ApiAnswerThreadsRouteImport.update({
-  id: '/threads',
-  path: '/threads',
-  getParentRoute: () => ApiAnswerRoute,
+  id: '/api/answer/threads',
+  path: '/api/answer/threads',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAnswerFollowUpChipsRoute = ApiAnswerFollowUpChipsRouteImport.update({
-  id: '/follow-up-chips',
-  path: '/follow-up-chips',
-  getParentRoute: () => ApiAnswerRoute,
+  id: '/api/answer/follow-up-chips',
+  path: '/api/answer/follow-up-chips',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAnswerEvalStatusRoute = ApiAnswerEvalStatusRouteImport.update({
-  id: '/eval-status',
-  path: '/eval-status',
-  getParentRoute: () => ApiAnswerRoute,
+  id: '/api/answer/eval-status',
+  path: '/api/answer/eval-status',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const OperatorOwnerStatusRoute = OperatorOwnerStatusRouteImport.update({
   id: '/owner/status',
@@ -354,9 +336,7 @@ export interface FileRoutesByFullPath {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/chat': typeof ApiChatRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -379,7 +359,6 @@ export interface FileRoutesByFullPath {
   '/api/answer/turn': typeof ApiAnswerTurnRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
-  '/api/chat/models': typeof ApiChatModelsRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
@@ -408,9 +387,7 @@ export interface FileRoutesByTo {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/chat': typeof ApiChatRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -433,7 +410,6 @@ export interface FileRoutesByTo {
   '/api/answer/turn': typeof ApiAnswerTurnRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
-  '/api/chat/models': typeof ApiChatModelsRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
@@ -464,9 +440,7 @@ export interface FileRoutesById {
   '/$slug/inquiry': typeof SlugInquiryRoute
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  '/api/answer': typeof ApiAnswerRouteWithChildren
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
-  '/api/chat': typeof ApiChatRouteWithChildren
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -489,7 +463,6 @@ export interface FileRoutesById {
   '/api/answer/turn': typeof ApiAnswerTurnRoute
   '/api/businesses/$slug': typeof ApiBusinessesSlugRoute
   '/api/businesses/search': typeof ApiBusinessesSearchRoute
-  '/api/chat/models': typeof ApiChatModelsRoute
   '/api/discovery/examples': typeof ApiDiscoveryExamplesRoute
   '/api/discovery/fixtures': typeof ApiDiscoveryFixturesRoute
   '/api/discovery/schema': typeof ApiDiscoverySchemaRoute
@@ -520,9 +493,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
-    | '/api/answer'
     | '/api/businesses'
-    | '/api/chat'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -545,7 +516,6 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
-    | '/api/chat/models'
     | '/api/discovery/examples'
     | '/api/discovery/fixtures'
     | '/api/discovery/schema'
@@ -574,9 +544,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
-    | '/api/answer'
     | '/api/businesses'
-    | '/api/chat'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -599,7 +567,6 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
-    | '/api/chat/models'
     | '/api/discovery/examples'
     | '/api/discovery/fixtures'
     | '/api/discovery/schema'
@@ -629,9 +596,7 @@ export interface FileRouteTypes {
     | '/$slug/inquiry'
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
-    | '/api/answer'
     | '/api/businesses'
-    | '/api/chat'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -654,7 +619,6 @@ export interface FileRouteTypes {
     | '/api/answer/turn'
     | '/api/businesses/$slug'
     | '/api/businesses/search'
-    | '/api/chat/models'
     | '/api/discovery/examples'
     | '/api/discovery/fixtures'
     | '/api/discovery/schema'
@@ -683,14 +647,16 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
-  ApiAnswerRoute: typeof ApiAnswerRouteWithChildren
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
-  ApiChatRoute: typeof ApiChatRouteWithChildren
   IThreadIdRoute: typeof IThreadIdRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
   TThreadIdRoute: typeof TThreadIdRoute
+  ApiAnswerEvalStatusRoute: typeof ApiAnswerEvalStatusRoute
+  ApiAnswerFollowUpChipsRoute: typeof ApiAnswerFollowUpChipsRoute
+  ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
+  ApiAnswerTurnRoute: typeof ApiAnswerTurnRoute
   ApiDiscoveryExamplesRoute: typeof ApiDiscoveryExamplesRoute
   ApiDiscoveryFixturesRoute: typeof ApiDiscoveryFixturesRoute
   ApiDiscoverySchemaRoute: typeof ApiDiscoverySchemaRoute
@@ -843,25 +809,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClaimSuccessRouteImport
       parentRoute: typeof ClaimRoute
     }
-    '/api/chat': {
-      id: '/api/chat'
-      path: '/api/chat'
-      fullPath: '/api/chat'
-      preLoaderRoute: typeof ApiChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/businesses': {
       id: '/api/businesses'
       path: '/api/businesses'
       fullPath: '/api/businesses'
       preLoaderRoute: typeof ApiBusinessesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/answer': {
-      id: '/api/answer'
-      path: '/api/answer'
-      fullPath: '/api/answer'
-      preLoaderRoute: typeof ApiAnswerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.well-known/http-message-signatures-directory': {
@@ -941,13 +893,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscoveryExamplesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/chat/models': {
-      id: '/api/chat/models'
-      path: '/models'
-      fullPath: '/api/chat/models'
-      preLoaderRoute: typeof ApiChatModelsRouteImport
-      parentRoute: typeof ApiChatRoute
-    }
     '/api/businesses/search': {
       id: '/api/businesses/search'
       path: '/search'
@@ -964,31 +909,31 @@ declare module '@tanstack/react-router' {
     }
     '/api/answer/turn': {
       id: '/api/answer/turn'
-      path: '/turn'
+      path: '/api/answer/turn'
       fullPath: '/api/answer/turn'
       preLoaderRoute: typeof ApiAnswerTurnRouteImport
-      parentRoute: typeof ApiAnswerRoute
+      parentRoute: typeof rootRouteImport
     }
     '/api/answer/threads': {
       id: '/api/answer/threads'
-      path: '/threads'
+      path: '/api/answer/threads'
       fullPath: '/api/answer/threads'
       preLoaderRoute: typeof ApiAnswerThreadsRouteImport
-      parentRoute: typeof ApiAnswerRoute
+      parentRoute: typeof rootRouteImport
     }
     '/api/answer/follow-up-chips': {
       id: '/api/answer/follow-up-chips'
-      path: '/follow-up-chips'
+      path: '/api/answer/follow-up-chips'
       fullPath: '/api/answer/follow-up-chips'
       preLoaderRoute: typeof ApiAnswerFollowUpChipsRouteImport
-      parentRoute: typeof ApiAnswerRoute
+      parentRoute: typeof rootRouteImport
     }
     '/api/answer/eval-status': {
       id: '/api/answer/eval-status'
-      path: '/eval-status'
+      path: '/api/answer/eval-status'
       fullPath: '/api/answer/eval-status'
       preLoaderRoute: typeof ApiAnswerEvalStatusRouteImport
-      parentRoute: typeof ApiAnswerRoute
+      parentRoute: typeof rootRouteImport
     }
     '/_operator/owner/status': {
       id: '/_operator/owner/status'
@@ -1163,35 +1108,6 @@ const PrivacyRouteChildren: PrivacyRouteChildren = {
 const PrivacyRouteWithChildren =
   PrivacyRoute._addFileChildren(PrivacyRouteChildren)
 
-interface ApiAnswerThreadsRouteChildren {
-  ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRoute
-}
-
-const ApiAnswerThreadsRouteChildren: ApiAnswerThreadsRouteChildren = {
-  ApiAnswerThreadsThreadIdRoute: ApiAnswerThreadsThreadIdRoute,
-}
-
-const ApiAnswerThreadsRouteWithChildren =
-  ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
-
-interface ApiAnswerRouteChildren {
-  ApiAnswerEvalStatusRoute: typeof ApiAnswerEvalStatusRoute
-  ApiAnswerFollowUpChipsRoute: typeof ApiAnswerFollowUpChipsRoute
-  ApiAnswerThreadsRoute: typeof ApiAnswerThreadsRouteWithChildren
-  ApiAnswerTurnRoute: typeof ApiAnswerTurnRoute
-}
-
-const ApiAnswerRouteChildren: ApiAnswerRouteChildren = {
-  ApiAnswerEvalStatusRoute: ApiAnswerEvalStatusRoute,
-  ApiAnswerFollowUpChipsRoute: ApiAnswerFollowUpChipsRoute,
-  ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
-  ApiAnswerTurnRoute: ApiAnswerTurnRoute,
-}
-
-const ApiAnswerRouteWithChildren = ApiAnswerRoute._addFileChildren(
-  ApiAnswerRouteChildren,
-)
-
 interface ApiBusinessesRouteChildren {
   ApiBusinessesSlugRoute: typeof ApiBusinessesSlugRoute
   ApiBusinessesSearchRoute: typeof ApiBusinessesSearchRoute
@@ -1206,16 +1122,16 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
   ApiBusinessesRouteChildren,
 )
 
-interface ApiChatRouteChildren {
-  ApiChatModelsRoute: typeof ApiChatModelsRoute
+interface ApiAnswerThreadsRouteChildren {
+  ApiAnswerThreadsThreadIdRoute: typeof ApiAnswerThreadsThreadIdRoute
 }
 
-const ApiChatRouteChildren: ApiChatRouteChildren = {
-  ApiChatModelsRoute: ApiChatModelsRoute,
+const ApiAnswerThreadsRouteChildren: ApiAnswerThreadsRouteChildren = {
+  ApiAnswerThreadsThreadIdRoute: ApiAnswerThreadsThreadIdRoute,
 }
 
-const ApiChatRouteWithChildren =
-  ApiChatRoute._addFileChildren(ApiChatRouteChildren)
+const ApiAnswerThreadsRouteWithChildren =
+  ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -1233,14 +1149,16 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
-  ApiAnswerRoute: ApiAnswerRouteWithChildren,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
-  ApiChatRoute: ApiChatRouteWithChildren,
   IThreadIdRoute: IThreadIdRoute,
   QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
   TThreadIdRoute: TThreadIdRoute,
+  ApiAnswerEvalStatusRoute: ApiAnswerEvalStatusRoute,
+  ApiAnswerFollowUpChipsRoute: ApiAnswerFollowUpChipsRoute,
+  ApiAnswerThreadsRoute: ApiAnswerThreadsRouteWithChildren,
+  ApiAnswerTurnRoute: ApiAnswerTurnRoute,
   ApiDiscoveryExamplesRoute: ApiDiscoveryExamplesRoute,
   ApiDiscoveryFixturesRoute: ApiDiscoveryFixturesRoute,
   ApiDiscoverySchemaRoute: ApiDiscoverySchemaRoute,

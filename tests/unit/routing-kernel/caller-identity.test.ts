@@ -290,7 +290,7 @@ describe('verifyAgentIdentity Web Bot Auth contract', () => {
 })
 
 function unsignedRequest(headers: HeadersInit = {}): Request {
-  return new Request(`https://${EXPECTED_AUTHORITY}/api/agent/tools`, { headers })
+  return new Request(`https://${EXPECTED_AUTHORITY}/v1/route`, { headers })
 }
 
 async function signedRequest(input: {
@@ -317,7 +317,7 @@ async function signedRequest(input: {
   if (bodyText !== undefined) {
     headers.set('Content-Digest', sourceWriteContentDigestHeader(bodyText))
   }
-  const request = new Request(`https://${authority}/api/agent/tools`, {
+  const request = new Request(`https://${authority}/v1/route`, {
     method: bodyText === undefined ? 'GET' : 'POST',
     headers,
     ...(bodyText === undefined ? {} : { body: bodyText }),
