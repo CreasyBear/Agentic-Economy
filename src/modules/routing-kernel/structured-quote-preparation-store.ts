@@ -17,11 +17,17 @@ export type PreparationCandidate = Readonly<{
   incidentEvidenceDigest: string
 }>
 
-export type PreparationCandidateSet = Readonly<{
+export type PlanActionPreparationSource = Readonly<{
+  kind: 'plan_action'; planRevisionId: string; actionId: string
+}>
+export type RequestEvaluationPreparationSource = Readonly<{
+  kind: 'request_evaluation'; evaluationId: string; evaluationDigest: string
+}>
+export type PreparationSource = PlanActionPreparationSource | RequestEvaluationPreparationSource
+
+type PreparationCandidateSetBase = Readonly<{
   preparationRequestId: string
   customerRequestId: string
-  planRevisionId: string
-  actionId: string
   generation: number
   capabilityContractId: string
   capabilityContractVersion: string
@@ -29,6 +35,16 @@ export type PreparationCandidateSet = Readonly<{
   candidates: readonly PreparationCandidate[]
   candidateSetDigest: string
 }>
+
+export type PlanActionPreparationCandidateSet = PreparationCandidateSetBase & Readonly<{
+      source: PlanActionPreparationSource
+      planRevisionId: string
+      actionId: string
+    }>
+export type RequestEvaluationPreparationCandidateSet = PreparationCandidateSetBase & Readonly<{
+  source: RequestEvaluationPreparationSource
+}>
+export type PreparationCandidateSet = PlanActionPreparationCandidateSet | RequestEvaluationPreparationCandidateSet
 
 export type PreparationCandidateCoverage = Readonly<{
   candidateSetDigest: string
@@ -111,7 +127,18 @@ export type AttemptTransitionResult =
   | Readonly<{ kind: 'updated' | 'existing'; attempt: QuotePreparationAttempt }>
   | Readonly<{ kind: 'not_found' | 'conflict' | 'invalid_transition' }>
 
-type CandidateSetInput = Omit<PreparationCandidateSet, 'candidateSetDigest'> & Readonly<{ candidateSetDigest?: string }>
+type CandidateSetCommonInput = Omit<PreparationCandidateSetBase, 'candidateSetDigest'> & Readonly<{ candidateSetDigest?: string }>
+type PlanCandidateSetInput = CandidateSetCommonInput & Readonly<{
+  source?: PlanActionPreparationSource
+  planRevisionId: string
+  actionId: string
+}>
+type EvaluationCandidateSetInput = CandidateSetCommonInput & Readonly<{
+  source: RequestEvaluationPreparationSource
+  planRevisionId?: never
+  actionId?: never
+}>
+type CandidateSetInput = PlanCandidateSetInput | EvaluationCandidateSetInput
 type CommandInput = Omit<QuotePreparationCommand, 'commandDigest'> & Readonly<{ commandDigest?: string }>
 type OfferInput = Omit<ProviderOffer, 'offerDigest'> & Readonly<{ offerDigest?: string }>
 
@@ -150,9 +177,16 @@ export type ProviderOfferAffinityResult =
   | Readonly<{ kind: 'matched'; offer: ProviderOffer }>
   | Readonly<{ kind: 'refused'; reason: 'foreign' | 'stale' | 'expired' | 'issuer_mismatch' | 'lineage_mismatch' | 'contract_mismatch' | 'not_found' }>
 
+export function createPreparationCandidateSet(
+  input: PlanCandidateSetInput,
+): PlanActionPreparationCandidateSet
+export function createPreparationCandidateSet(
+  input: EvaluationCandidateSetInput,
+): RequestEvaluationPreparationCandidateSet
+export function createPreparationCandidateSet(input: CandidateSetInput): PreparationCandidateSet
 export function createPreparationCandidateSet(input: CandidateSetInput): PreparationCandidateSet {
-  assertExactKeys('preparation_candidate_set', input, [...candidateSetKeys, 'candidateSetDigest'])
-  assertStringFields('preparation_candidate_set', input, ['preparationRequestId', 'customerRequestId', 'planRevisionId', 'actionId', 'capabilityContractId', 'capabilityContractVersion'])
+  assertExactKeys('preparation_candidate_set', input, [...candidateSetKeys, 'source', 'candidateSetDigest'])
+  assertStringFields('preparation_candidate_set', input, ['preparationRequestId', 'customerRequestId', 'capabilityContractId', 'capabilityContractVersion'])
   assertNonEmpty(input.preparationRequestId, 'preparationRequestId')
   if (!Number.isSafeInteger(input.generation) || input.generation < 0) throw new Error('preparation_candidate_set_generation_invalid')
   if (input.candidates.length === 0 || input.candidates.length > 64) throw new Error('preparation_candidate_set_candidates_invalid')
@@ -161,15 +195,42 @@ export function createPreparationCandidateSet(input: CandidateSetInput): Prepara
     assertStringFields('preparation_candidate', candidate, candidateKeys)
     return Object.freeze({ ...candidate })
   })
-  const body = Object.freeze({
+  const source = normalizePreparationSource(input)
+  const common = {
     preparationRequestId: input.preparationRequestId, customerRequestId: input.customerRequestId,
-    planRevisionId: input.planRevisionId, actionId: input.actionId, generation: input.generation,
+    generation: input.generation,
     capabilityContractId: input.capabilityContractId, capabilityContractVersion: input.capabilityContractVersion,
     createdAt: input.createdAt, candidates: Object.freeze(candidates),
-  })
-  const digest = canonicalAuthorityDigest(body)
+  }
+  const digestMaterial = source.kind === 'plan_action'
+    ? { preparationRequestId: input.preparationRequestId, customerRequestId: input.customerRequestId,
+        planRevisionId: source.planRevisionId, actionId: source.actionId, generation: input.generation,
+        capabilityContractId: input.capabilityContractId, capabilityContractVersion: input.capabilityContractVersion,
+        createdAt: input.createdAt, candidates: Object.freeze(candidates) }
+    : { ...common, source }
+  const digest = canonicalAuthorityDigest(digestMaterial)
   if (input.candidateSetDigest !== undefined && input.candidateSetDigest !== digest) throw new Error('preparation_candidate_set_digest_mismatch')
-  return Object.freeze({ ...body, candidateSetDigest: digest })
+  return source.kind === 'plan_action'
+    ? Object.freeze({ ...common, source, planRevisionId: source.planRevisionId, actionId: source.actionId, candidateSetDigest: digest })
+    : Object.freeze({ ...common, source, candidateSetDigest: digest })
+}
+
+function normalizePreparationSource(input: CandidateSetInput): PreparationSource {
+  if (input.source?.kind === 'request_evaluation') {
+    assertExactKeys('preparation_source', input.source, ['kind', 'evaluationId', 'evaluationDigest'])
+    assertStringFields('preparation_source', input.source, ['evaluationId', 'evaluationDigest'])
+    if ('planRevisionId' in input || 'actionId' in input) throw new Error('preparation_source_lineage_conflict')
+    return Object.freeze({ ...input.source })
+  }
+  const planRevisionId = input.source?.kind === 'plan_action' ? input.source.planRevisionId : input.planRevisionId
+  const actionId = input.source?.kind === 'plan_action' ? input.source.actionId : input.actionId
+  if (typeof planRevisionId !== 'string' || planRevisionId.length === 0
+    || typeof actionId !== 'string' || actionId.length === 0) throw new Error('preparation_source_plan_action_invalid')
+  if (input.source !== undefined) {
+    assertExactKeys('preparation_source', input.source, ['kind', 'planRevisionId', 'actionId'])
+    if (input.planRevisionId !== planRevisionId || input.actionId !== actionId) throw new Error('preparation_source_lineage_conflict')
+  }
+  return Object.freeze({ kind: 'plan_action', planRevisionId, actionId })
 }
 
 export function createQuotePreparationCommand(input: CommandInput): QuotePreparationCommand {
@@ -177,7 +238,7 @@ export function createQuotePreparationCommand(input: CommandInput): QuotePrepara
   assertExactKeys('quote_preparation_recipient', input.recipient, recipientKeys)
   assertStringFields('quote_preparation_command', input, ['quoteAttemptId', 'preparationRequestId', 'candidateSetDigest', 'purpose', 'capabilityContractId', 'capabilityContractVersion', 'allocationId'])
   assertStringFields('quote_preparation_recipient', input.recipient, recipientKeys)
-  if (input.fieldNames.length === 0 || input.fieldNames.length > 64 || input.fieldNames.some((field) => typeof field !== 'string' || field.length === 0)) throw new Error('quote_preparation_command_field_name_invalid')
+  if (input.fieldNames.length > 64 || input.fieldNames.some((field) => typeof field !== 'string' || field.length === 0)) throw new Error('quote_preparation_command_field_name_invalid')
   if (new Set(input.fieldNames).size !== input.fieldNames.length) throw new Error('quote_preparation_command_field_names_invalid')
   const body = Object.freeze({
     quoteAttemptId: input.quoteAttemptId, preparationRequestId: input.preparationRequestId,
@@ -385,11 +446,13 @@ function resolveAffinity(
   if (offer === undefined) return { kind: 'refused', reason: 'not_found' }
   if (offer.candidateSetDigest !== input.candidateSetDigest) return { kind: 'refused', reason: 'foreign' }
   const set = candidateSetsByDigest.get(offer.candidateSetDigest)
-  if (set === undefined || set.customerRequestId !== input.customerRequestId || set.planRevisionId !== input.planRevisionId
-    || set.actionId !== input.sourceActionId) return { kind: 'refused', reason: 'lineage_mismatch' }
+  if (set === undefined || set.source.kind !== 'plan_action' || set.customerRequestId !== input.customerRequestId
+    || set.source.planRevisionId !== input.planRevisionId
+    || set.source.actionId !== input.sourceActionId) return { kind: 'refused', reason: 'lineage_mismatch' }
   const latestGeneration = Math.max(...[...candidateSets.values()]
     .filter((candidate) => candidate.customerRequestId === input.customerRequestId
-      && candidate.planRevisionId === input.planRevisionId && candidate.actionId === input.sourceActionId)
+      && candidate.source.kind === 'plan_action'
+      && candidate.source.planRevisionId === input.planRevisionId && candidate.source.actionId === input.sourceActionId)
     .map((candidate) => candidate.generation))
   if (latestGeneration > set.generation) return { kind: 'refused', reason: 'stale' }
   if (input.now >= offer.expiresAt) return { kind: 'refused', reason: 'expired' }

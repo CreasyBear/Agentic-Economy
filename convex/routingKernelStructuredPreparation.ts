@@ -20,8 +20,14 @@ const candidate = v.object({
   registrationEnvironment: v.string(), registrationHash: v.string(), registrationEvidenceDigest: v.string(),
   incidentEpochDigest: v.string(), incidentEvidenceDigest: v.string(),
 })
+const preparationSource = v.object({
+  kind: v.union(v.literal('plan_action'), v.literal('request_evaluation')),
+  planRevisionId: v.optional(v.string()), actionId: v.optional(v.string()),
+  evaluationId: v.optional(v.string()), evaluationDigest: v.optional(v.string()),
+})
 const candidateSet = v.object({
-  preparationRequestId: v.string(), customerRequestId: v.string(), planRevisionId: v.string(), actionId: v.string(),
+  preparationRequestId: v.string(), customerRequestId: v.string(), source: preparationSource,
+  planRevisionId: v.optional(v.string()), actionId: v.optional(v.string()),
   generation: v.number(), capabilityContractId: v.string(), capabilityContractVersion: v.string(), createdAt: v.number(),
   candidates: v.array(candidate), candidateSetDigest: v.string(),
 })
@@ -55,7 +61,20 @@ const affinity = v.object({
 export const putCandidateSet = internalMutation({
   args: { candidateSet },
   handler: async (ctx, args) => {
-    const exact = createPreparationCandidateSet(args.candidateSet)
+    const source = exactPreparationSource(args.candidateSet.source)
+    const common = {
+      preparationRequestId: args.candidateSet.preparationRequestId,
+      customerRequestId: args.candidateSet.customerRequestId,
+      generation: args.candidateSet.generation,
+      capabilityContractId: args.candidateSet.capabilityContractId,
+      capabilityContractVersion: args.candidateSet.capabilityContractVersion,
+      createdAt: args.candidateSet.createdAt,
+      candidates: args.candidateSet.candidates,
+      candidateSetDigest: args.candidateSet.candidateSetDigest,
+    }
+    const exact = source.kind === 'plan_action'
+      ? createPreparationCandidateSet({ ...common, source, planRevisionId: source.planRevisionId, actionId: source.actionId })
+      : createPreparationCandidateSet({ ...common, source })
     const existing = await ctx.db.query('routingKernelPreparationCandidateSets')
       .withIndex('by_preparationRequestId', (query) => query.eq('preparationRequestId', exact.preparationRequestId)).unique()
     if (existing !== null) {
@@ -66,8 +85,14 @@ export const putCandidateSet = internalMutation({
         : { kind: 'conflict' as const, existing: stored }
     }
     await ctx.db.insert('routingKernelPreparationCandidateSets', {
-      preparationRequestId: exact.preparationRequestId, customerRequestId: exact.customerRequestId, planRevisionId: exact.planRevisionId,
-      actionId: exact.actionId, generation: exact.generation, capabilityContractId: exact.capabilityContractId,
+      preparationRequestId: exact.preparationRequestId, customerRequestId: exact.customerRequestId,
+      sourceKind: exact.source.kind,
+      sourceRef: exact.source.kind === 'plan_action' ? exact.source.planRevisionId : exact.source.evaluationId,
+      ...(exact.source.kind === 'request_evaluation' ? { sourceDigest: exact.source.evaluationDigest } : {}),
+      ...(exact.source.kind === 'plan_action' ? {
+        planRevisionId: exact.source.planRevisionId, actionId: exact.source.actionId,
+      } : {}),
+      generation: exact.generation, capabilityContractId: exact.capabilityContractId,
       capabilityContractVersion: exact.capabilityContractVersion, createdAt: exact.createdAt, candidateSetDigest: exact.candidateSetDigest,
     })
     for (const [position, item] of exact.candidates.entries()) await ctx.db.insert('routingKernelPreparationCandidates', {
@@ -328,16 +353,36 @@ async function readCandidateSet(ctx: QueryCtx | MutationCtx, preparationRequestI
   const candidates = await ctx.db.query('routingKernelPreparationCandidates')
     .withIndex('by_preparationRequestId_and_position', (query) => query.eq('preparationRequestId', preparationRequestId)).take(65)
   if (candidates.length === 0 || candidates.length > 64) throw new Error('preparation_candidate_set_corrupt')
-  return createPreparationCandidateSet({
-    preparationRequestId: row.preparationRequestId, customerRequestId: row.customerRequestId, planRevisionId: row.planRevisionId,
-    actionId: row.actionId, generation: row.generation, capabilityContractId: row.capabilityContractId,
+  const source = row.sourceKind === 'request_evaluation'
+    ? { kind: 'request_evaluation' as const, evaluationId: row.sourceRef ?? '', evaluationDigest: row.sourceDigest ?? '' }
+    : { kind: 'plan_action' as const, planRevisionId: row.planRevisionId ?? row.sourceRef ?? '', actionId: row.actionId ?? '' }
+  const common = {
+    preparationRequestId: row.preparationRequestId, customerRequestId: row.customerRequestId,
+    generation: row.generation, capabilityContractId: row.capabilityContractId,
     capabilityContractVersion: row.capabilityContractVersion, createdAt: row.createdAt, candidateSetDigest: row.candidateSetDigest,
     candidates: candidates.map(({ bindingId, nodeId, businessId, recipientName, presentationEvidenceDigest, capabilityContractId, capabilityContractVersion, registrationEnvironment,
       registrationHash, registrationEvidenceDigest, incidentEpochDigest, incidentEvidenceDigest }) => ({
       bindingId, nodeId, businessId, recipientName, presentationEvidenceDigest, capabilityContractId, capabilityContractVersion, registrationEnvironment,
       registrationHash, registrationEvidenceDigest, incidentEpochDigest, incidentEvidenceDigest,
     })),
-  })
+  }
+  return source.kind === 'plan_action'
+    ? createPreparationCandidateSet({ ...common, source, planRevisionId: source.planRevisionId, actionId: source.actionId })
+    : createPreparationCandidateSet({ ...common, source })
+}
+
+function exactPreparationSource(source: {
+  kind: 'plan_action' | 'request_evaluation'
+  planRevisionId?: string; actionId?: string; evaluationId?: string; evaluationDigest?: string
+}) {
+  if (source.kind === 'plan_action') {
+    if (source.planRevisionId === undefined || source.actionId === undefined
+      || source.evaluationId !== undefined || source.evaluationDigest !== undefined) throw new Error('preparation_source_invalid')
+    return { kind: 'plan_action' as const, planRevisionId: source.planRevisionId, actionId: source.actionId }
+  }
+  if (source.evaluationId === undefined || source.evaluationDigest === undefined
+    || source.planRevisionId !== undefined || source.actionId !== undefined) throw new Error('preparation_source_invalid')
+  return { kind: 'request_evaluation' as const, evaluationId: source.evaluationId, evaluationDigest: source.evaluationDigest }
 }
 
 async function readAttempt(ctx: QueryCtx | MutationCtx, quoteAttemptId: string): Promise<QuotePreparationAttempt | undefined> {
@@ -346,7 +391,7 @@ async function readAttempt(ctx: QueryCtx | MutationCtx, quoteAttemptId: string):
   if (row === null) return undefined
   const fields = await ctx.db.query('routingKernelPreparationQuoteAttemptFields')
     .withIndex('by_quoteAttemptId_and_position', (query) => query.eq('quoteAttemptId', quoteAttemptId)).take(65)
-  if (fields.length === 0 || fields.length > 64) throw new Error('preparation_quote_attempt_corrupt')
+  if (fields.length > 64) throw new Error('preparation_quote_attempt_corrupt')
   const exactCommand = createQuotePreparationCommand({
     quoteAttemptId: row.quoteAttemptId, preparationRequestId: row.preparationRequestId, candidateSetDigest: row.candidateSetDigest,
     recipient: { bindingId: row.recipientBindingId, nodeId: row.recipientNodeId, businessId: row.recipientBusinessId }, purpose: row.purpose,

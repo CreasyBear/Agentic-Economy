@@ -19,7 +19,10 @@ import {
   type RequestEvaluation,
 } from '@/modules/customer-request/evaluation'
 import { prepareCustomerRequestAction, type PreparedRouteCandidateSet } from '@/modules/customer-request/preparation'
-import { createKernelCustomerRequestActionRouter } from '@/modules/customer-request/kernel-router'
+import {
+  createKernelCustomerRequestActionRouter,
+  prepareKernelCustomerRequestEvaluationOptions,
+} from '@/modules/customer-request/kernel-router'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { preparedRouteCandidateSetValue, requestSnapshotValue } from '@/modules/customer-request/runtime'
 import type { PlanRevision } from '@/modules/customer-request/public'
@@ -78,6 +81,7 @@ const optionProjection = v.union(
   v.object({ kind: v.literal('conflict'), requestRef: v.string(), reason: v.union(v.literal('revision_changed'), v.literal('request_not_ready')) }),
   v.object({ kind: v.literal('refused'), reason: v.literal('authentication_required') }),
 )
+type OptionActionResult = Infer<typeof optionProjection>
 const submitResultValue = v.union(
   customerProjection,
   v.object({ kind: v.literal('refused'), reason: v.union(
@@ -96,6 +100,7 @@ type EligibleBinding = Readonly<{
 type StoredEvaluation = Readonly<{
   snapshot: SnapshotValue
   evaluation: Readonly<{
+    evaluationId: string
     requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
     posture: 'progress_available' | 'needs_information' | 'unsupported'
     nextRequirement?: Readonly<{
@@ -105,6 +110,11 @@ type StoredEvaluation = Readonly<{
     evaluationDigest: string
   }>
   candidates: RequestEvaluation['candidates']
+}>
+type StoredEvaluationPreparation = Readonly<{
+  preparationKey: string; requestId: string; requestRevision: number; evaluationId: string; evaluationDigest: string
+  status: 'preparing' | 'options_prepared' | 'needs_attention'
+  candidateSet?: PreparedRouteCandidateSet; inspectionRef?: string; updatedAt: number
 }>
 
 export const submit = action({
@@ -168,10 +178,126 @@ export const submit = action({
 export const compare = action({
   args: { requestRef: v.string(), revision: v.number(), serviceAuth: v.optional(serviceAssertion) },
   returns: optionProjection,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<OptionActionResult> => {
     const command = { requestRef: args.requestRef, revision: args.revision }
     const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const evaluated: StoredEvaluation | null = await ctx.runQuery(
+      internal.customerRequests.getCurrentRequestEvaluation, { requestId: args.requestRef },
+    )
+    if (evaluated !== null) {
+      if (evaluated.snapshot.principalId !== caller.principalId) {
+        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
+      }
+      if (evaluated.snapshot.revision !== args.revision || evaluated.evaluation.requestRevision !== args.revision) {
+        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const }
+      }
+      const prior: StoredEvaluationPreparation | null = await ctx.runQuery(
+        internal.customerRequests.getRequestEvaluationPreparation,
+        { requestId: args.requestRef, requestRevision: args.revision },
+      )
+      if (prior?.status === 'options_prepared' && prior.candidateSet !== undefined) return writableView(projectOptionsReady({
+        requestRef: args.requestRef, revision: args.revision, summary: evaluated.snapshot.intent,
+        candidateSet: prior.candidateSet,
+      }))
+      if (prior?.status === 'needs_attention') return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.revision,
+        summary: 'Connected businesses could not prepare comparable options for this request.',
+      }))
+      if (evaluated.evaluation.nextRequirement !== undefined) {
+        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
+      }
+      const viable = evaluated.candidates.filter((candidate) => candidate.viability.kind === 'viable')
+      const capabilityContractIds = [...new Set(viable.map((candidate) => candidate.capabilityContractId))]
+      if (viable.length === 0 || capabilityContractIds.length !== 1) return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.revision,
+        summary: 'The registered options are not yet comparable as one customer decision.',
+      }))
+      const registry = await loadConvexCapabilityContractRegistry(ctx)
+      const contract = registry.get(capabilityContractIds[0]!)
+      if (contract === undefined) return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.revision,
+        summary: 'The registered capability changed before options could be prepared.',
+      }))
+      const preparationKey = namespacedKey(
+        caller.principalId, 'evaluation-options', args.requestRef,
+        `${args.revision}:${evaluated.evaluation.evaluationId}`,
+      )
+      const started = await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
+        preparation: {
+          preparationKey, requestId: args.requestRef, requestRevision: args.revision,
+          evaluationId: evaluated.evaluation.evaluationId,
+          evaluationDigest: evaluated.evaluation.evaluationDigest,
+          status: 'preparing', updatedAt: Date.now(),
+        },
+      })
+      if (started.kind === 'stale' || started.kind === 'conflict') return {
+        kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
+      }
+      const result = await prepareKernelCustomerRequestEvaluationOptions(
+        createRegisteredRoutingKernel(ctx),
+        {
+          resolve: async (bindingIds) => await ctx.runQuery(
+            internal.routingKernelBindings.resolvePresentations, { bindingIds: [...bindingIds] },
+          ),
+        },
+        {
+          preparationRequestId: preparationKey,
+          request: {
+            requestId: args.requestRef, revision: args.revision,
+            principalId: evaluated.snapshot.principalId, delegatedAgentId: evaluated.snapshot.delegatedAgentId,
+            networkId: evaluated.snapshot.networkId,
+          },
+          evaluation: {
+            evaluationId: evaluated.evaluation.evaluationId,
+            evaluationDigest: evaluated.evaluation.evaluationDigest,
+          },
+          allowedBindingIds: viable.map((candidate) => candidate.bindingId),
+          preparationGeneration: args.revision,
+          contract,
+          publicInput: Object.fromEntries(Object.entries(evaluated.snapshot.facts).map(([field, fact]) => [field, fact.value])),
+        },
+      )
+      if (result.kind === 'candidate_set') {
+        await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
+          preparation: {
+            preparationKey, requestId: args.requestRef, requestRevision: args.revision,
+            evaluationId: evaluated.evaluation.evaluationId,
+            evaluationDigest: evaluated.evaluation.evaluationDigest,
+            status: 'options_prepared', candidateSet: writableCandidateSet(result.candidateSet), updatedAt: Date.now(),
+          },
+        })
+        return writableView(projectOptionsReady({
+          requestRef: args.requestRef, revision: args.revision,
+          summary: evaluated.snapshot.intent, candidateSet: result.candidateSet,
+        }))
+      }
+      if (result.kind === 'preparation_pending') {
+        await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
+          preparation: {
+            preparationKey, requestId: args.requestRef, requestRevision: args.revision,
+            evaluationId: evaluated.evaluation.evaluationId,
+            evaluationDigest: evaluated.evaluation.evaluationDigest,
+            status: 'preparing', inspectionRef: result.inspectionRef, updatedAt: Date.now(),
+          },
+        })
+        return writableView(projectPreparingOptions({
+          requestRef: args.requestRef, revision: args.revision, summary: evaluated.snapshot.intent,
+        }))
+      }
+      await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
+        preparation: {
+          preparationKey, requestId: args.requestRef, requestRevision: args.revision,
+          evaluationId: evaluated.evaluation.evaluationId,
+          evaluationDigest: evaluated.evaluation.evaluationDigest,
+          status: 'needs_attention', updatedAt: Date.now(),
+        },
+      })
+      return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.revision,
+        summary: 'Connected businesses could not prepare comparable options for this request.',
+      }))
+    }
     const store = createConvexCustomerRequestPreparationStore(ctx)
     const request = await store.getRequest(args.requestRef)
     if (request === undefined || request.principalId !== caller.principalId) {
@@ -237,6 +363,30 @@ async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string
   )
   if (evaluated !== null) {
     if (evaluated.snapshot.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    const preparation: StoredEvaluationPreparation | null = await ctx.runQuery(
+      internal.customerRequests.getRequestEvaluationPreparation,
+      { requestId: evaluated.snapshot.requestId, requestRevision: evaluated.snapshot.revision },
+    )
+    if (preparation?.status === 'options_prepared' && preparation.candidateSet !== undefined) {
+      const liveCandidates = preparation.candidateSet.candidates.filter((candidate) => candidate.expiresAt > Date.now())
+      return liveCandidates.length === 0
+        ? writableView(projectNeedsAttention({
+            requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
+            summary: 'The prepared options expired. Prepare this request again to get current options.',
+          }))
+        : writableView(projectOptionsReady({
+            requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
+            summary: evaluated.snapshot.intent,
+            candidateSet: { ...preparation.candidateSet, candidates: liveCandidates },
+          }))
+    }
+    if (preparation?.status === 'preparing') return writableView(projectPreparingOptions({
+      requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision, summary: evaluated.snapshot.intent,
+    }))
+    if (preparation?.status === 'needs_attention') return writableView(projectNeedsAttention({
+      requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
+      summary: 'Connected businesses could not prepare comparable options for this request.',
+    }))
     return writableView(projectStoredEvaluation(evaluated))
   }
   const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })

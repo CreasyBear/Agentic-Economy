@@ -36,6 +36,24 @@ function commandFixture() {
 }
 
 describe('structured quote preparation store', () => {
+  it('binds exploratory preparation to an exact Request evaluation without Plan identifiers', () => {
+    const set = createPreparationCandidateSet({
+      preparationRequestId: 'preparation:evaluation:1', customerRequestId: 'request:1',
+      source: {
+        kind: 'request_evaluation', evaluationId: 'evaluation:1',
+        evaluationDigest: 'sha256:evaluation-1',
+      },
+      generation: 1, capabilityContractId: 'shipping.quote', capabilityContractVersion: '2',
+      createdAt: 1_000, candidates: [candidate],
+    } as never)
+
+    expect(set.source).toEqual({
+      kind: 'request_evaluation', evaluationId: 'evaluation:1', evaluationDigest: 'sha256:evaluation-1',
+    })
+    expect(set).not.toHaveProperty('planRevisionId')
+    expect(set).not.toHaveProperty('actionId')
+  })
+
   it('persists an exact evidence-bound candidate set and rejects identity reuse with different evidence', async () => {
     const store = createInMemoryStructuredQuotePreparationStore()
     const set = candidateSetFixture()

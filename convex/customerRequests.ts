@@ -86,6 +86,14 @@ const currentRequestEvaluation = v.union(v.null(), v.object({
   evaluation: requestEvaluationValue,
   candidates: v.array(requestEvaluationCandidateValue),
 }))
+const evaluationPreparationStatus = v.union(
+  v.literal('preparing'), v.literal('options_prepared'), v.literal('needs_attention'),
+)
+const evaluationPreparation = v.object({
+  preparationKey: v.string(), requestId: v.string(), requestRevision: v.number(),
+  evaluationId: v.string(), evaluationDigest: v.string(), status: evaluationPreparationStatus,
+  candidateSet: v.optional(preparedRouteCandidateSetValue), inspectionRef: v.optional(v.string()), updatedAt: v.number(),
+})
 
 export const commitRequestSnapshot = internalMutation({
   args: {
@@ -209,6 +217,53 @@ export const getRequestEvaluation = internalQuery({
       snapshot: stripSystemFields(snapshot), evaluation: stripSystemFields(evaluation),
       candidates: candidates.map(stripEvaluationCandidateRow).sort((left, right) => left.candidateRef.localeCompare(right.candidateRef)),
     }
+  },
+})
+
+export const putRequestEvaluationPreparation = internalMutation({
+  args: { preparation: evaluationPreparation },
+  returns: v.union(
+    v.object({ kind: v.literal('stored') }), v.object({ kind: v.literal('existing') }),
+    v.object({ kind: v.literal('stale') }), v.object({ kind: v.literal('conflict') }),
+  ),
+  handler: async (ctx, args) => {
+    const input = args.preparation
+    const evaluation = await ctx.db.query('customerRequestEvaluations')
+      .withIndex('by_evaluationId', (query) => query.eq('evaluationId', input.evaluationId)).unique()
+    if (evaluation === null || evaluation.requestId !== input.requestId
+      || evaluation.requestRevision !== input.requestRevision
+      || evaluation.evaluationDigest !== input.evaluationDigest) return { kind: 'stale' as const }
+    if (input.status === 'options_prepared' && input.candidateSet === undefined) throw new Error('evaluation_preparation_options_missing')
+    const existing = await ctx.db.query('customerRequestEvaluationPreparations')
+      .withIndex('by_preparationKey', (query) => query.eq('preparationKey', input.preparationKey)).unique()
+    if (existing !== null) {
+      if (existing.requestId !== input.requestId || existing.requestRevision !== input.requestRevision
+        || existing.evaluationId !== input.evaluationId || existing.evaluationDigest !== input.evaluationDigest) {
+        return { kind: 'conflict' as const }
+      }
+      if (existing.status === 'options_prepared' || existing.status === 'needs_attention') {
+        return existing.status === input.status ? { kind: 'existing' as const } : { kind: 'conflict' as const }
+      }
+      await ctx.db.patch(existing._id, {
+        status: input.status, updatedAt: input.updatedAt,
+        ...(input.candidateSet === undefined ? {} : { candidateSet: input.candidateSet }),
+        ...(input.inspectionRef === undefined ? {} : { inspectionRef: input.inspectionRef }),
+      })
+      return { kind: 'stored' as const }
+    }
+    await ctx.db.insert('customerRequestEvaluationPreparations', input)
+    return { kind: 'stored' as const }
+  },
+})
+
+export const getRequestEvaluationPreparation = internalQuery({
+  args: { requestId: v.string(), requestRevision: v.number() },
+  returns: v.union(evaluationPreparation, v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestEvaluationPreparations')
+      .withIndex('by_requestId_and_requestRevision', (query) => query
+        .eq('requestId', args.requestId).eq('requestRevision', args.requestRevision)).unique()
+    return row === null ? null : stripSystemFields(row)
   },
 })
 

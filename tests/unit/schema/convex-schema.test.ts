@@ -37,6 +37,7 @@ const durableTables = [
   'customerRequestCommands',
   'customerRequestEvaluations',
   'customerRequestEvaluationCandidates',
+  'customerRequestEvaluationPreparations',
   'customerRequests',
   'customerRequestRevisions',
   'customerRequestCompilationCommands',
@@ -141,6 +142,7 @@ const requiredIndexes = {
   customerRequestCommands: ['by_commandKey', 'by_requestId_and_resultingRevision'],
   customerRequestEvaluations: ['by_evaluationId', 'by_requestId_and_requestRevision'],
   customerRequestEvaluationCandidates: ['by_evaluationId', 'by_candidateRef'],
+  customerRequestEvaluationPreparations: ['by_preparationKey', 'by_requestId_and_requestRevision'],
   customerRequests: ['by_requestId'],
   customerRequestRevisions: ['by_requestId_and_revision'],
   customerRequestCompilationCommands: ['by_compilationKey', 'by_requestId_and_requestRevision'],
@@ -253,6 +255,7 @@ const requiredIndexes = {
   routingKernelProtocolRecords: ['by_rootRunId_sequence', 'by_recordId'],
   routingKernelPreparationCandidateSets: [
     'by_preparationRequestId', 'by_candidateSetDigest', 'by_customerRequestId_planRevisionId_actionId_generation',
+    'by_customerRequestId_sourceKind_sourceRef_generation',
   ],
   routingKernelPreparationCandidates: ['by_preparationRequestId_and_position', 'by_candidateSetDigest_and_bindingId'],
   routingKernelPreparationQuoteAttempts: ['by_quoteAttemptId', 'by_commandDigest', 'by_candidateSetDigest_and_recipientBindingId'],

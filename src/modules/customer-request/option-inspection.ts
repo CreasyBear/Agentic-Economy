@@ -35,8 +35,10 @@ export async function resolvePreparedOptionInspection(
   const offer = await dependencies.structuredStore.getProviderOfferByDigest(`sha256:${match[1]}`)
   if (offer === undefined) return { kind: 'not_found' }
   const candidateSet = await dependencies.structuredStore.getCandidateSetByDigest(offer.candidateSetDigest)
-  if (candidateSet === undefined || candidateSet.customerRequestId !== input.requestId
-    || candidateSet.planRevisionId !== input.planRevisionId || candidateSet.actionId !== input.actionId) return { kind: 'not_found' }
+  if (candidateSet === undefined || candidateSet.source.kind !== 'plan_action'
+    || candidateSet.customerRequestId !== input.requestId
+    || candidateSet.source.planRevisionId !== input.planRevisionId
+    || candidateSet.source.actionId !== input.actionId) return { kind: 'not_found' }
   const candidate = candidateSet.candidates.find((item) => item.bindingId === offer.issuerBindingId)
   const attempt = await dependencies.structuredStore.getQuoteAttempt(offer.quoteAttemptId)
   if (candidate === undefined || attempt?.disposition !== 'quoted' || attempt.offer.offerDigest !== offer.offerDigest) return { kind: 'not_found' }

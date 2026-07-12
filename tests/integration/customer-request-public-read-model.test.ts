@@ -172,6 +172,33 @@ describe('production CustomerRequest read model', () => {
     expect(durable.evaluations).toHaveLength(1)
     expect(durable.candidates).toHaveLength(2)
     expect(durable.plans).toEqual([])
+    const evaluation = durable.evaluations[0]
+    if (evaluation === undefined) throw new Error('evaluation_missing')
+    await backend.mutation(internal.customerRequests.putRequestEvaluationPreparation, {
+      preparation: {
+        preparationKey: 'evaluation-options:test:1', requestId: 'request:cold:agent:1', requestRevision: 1,
+        evaluationId: evaluation.evaluationId, evaluationDigest: evaluation.evaluationDigest,
+        status: 'options_prepared', updatedAt: Date.now(),
+        candidateSet: {
+          inspectionRef: 'internal:evaluation-options:1', attempts: [],
+          candidates: [{
+            optionRef: 'option:public:evaluation:1', business: { name: 'Sandbox Option One' },
+            expectedCost: { currency: 'AUD', amountMinor: 1_200 }, maximumCost: { currency: 'AUD', amountMinor: 1_200 },
+            expectedLatencyMs: 120, priceComponents: [{ label: 'Sandbox amount', amountMinor: 1_200 }],
+            comparableOutputs: [{ label: 'Option', value: 'Sandbox Option One' }],
+            materialTerms: ['Verification only'], cancellation: { kind: 'unsupported', summary: 'No effect exists.' },
+            expiresAt: Date.now() + 60_000, inspectionRef: 'internal:evidence:evaluation:1',
+          }],
+        },
+      },
+    })
+    const options = await handleAgentCustomerRequestGet('request:cold:agent:1', {
+      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
+    })
+    await expect(options.json()).resolves.toMatchObject({
+      state: 'options_ready', nextAction: 'inspect_options',
+      options: [{ optionRef: 'option:public:evaluation:1', business: { name: 'Sandbox Option One' } }],
+    })
   })
 })
 

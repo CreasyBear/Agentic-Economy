@@ -14,6 +14,95 @@ export type CustomerRequestBindingPresentationDirectory = Readonly<{
   resolve: (bindingIds: readonly string[]) => Promise<readonly CustomerRequestBindingPresentation[]>
 }>
 
+export type CustomerRequestEvaluationOptionResult =
+  | Readonly<{ kind: 'candidate_set'; candidateSet: PreparedRouteCandidateSet }>
+  | Readonly<{ kind: 'preparation_pending'; inspectionRef: string }>
+  | Readonly<{ kind: 'no_route'; reason: string }>
+
+export async function prepareKernelCustomerRequestEvaluationOptions(
+  kernel: NeutralRoutingKernel,
+  directory: CustomerRequestBindingPresentationDirectory,
+  input: Readonly<{
+    preparationRequestId: string
+    request: Readonly<{
+      requestId: string; revision: number; principalId: string; delegatedAgentId: string; networkId: string
+    }>
+    evaluation: Readonly<{ evaluationId: string; evaluationDigest: string }>
+    allowedBindingIds: readonly string[]
+    preparationGeneration: number
+    contract: Parameters<CustomerRequestActionRouter['route']>[0]['contract']
+    publicInput: Readonly<Record<string, string | number | boolean>>
+    currency?: string
+    maximumSpendMinor?: number
+  }>,
+): Promise<CustomerRequestEvaluationOptionResult> {
+  const purpose = input.contract.preparation?.purpose
+  if (purpose === undefined) return { kind: 'no_route', reason: 'structured_preparation_not_registered' }
+  const preparationFields = Object.entries(input.contract.input)
+    .filter(([, field]) => field.disclosure?.phase === 'preparation')
+  if (preparationFields.some(([, field]) => field.disclosure?.classification !== 'public')) {
+    return { kind: 'no_route', reason: 'preparation_authority_required' }
+  }
+  const requiredFields = preparationFields.filter(([, field]) => field.required).map(([field]) => field)
+  if (requiredFields.some((field) => input.publicInput[field] === undefined)) {
+    return { kind: 'no_route', reason: 'action_input_unresolved' }
+  }
+  const releasedFields = preparationFields.map(([field]) => field)
+    .filter((field) => input.publicInput[field] !== undefined).sort()
+  const prepared = await kernel.operations.prepareStructuredQuotes({
+    preparationRequestId: input.preparationRequestId,
+    customerRequestId: input.request.requestId,
+    source: {
+      kind: 'request_evaluation', evaluationId: input.evaluation.evaluationId,
+      evaluationDigest: input.evaluation.evaluationDigest,
+    },
+    allowedBindingIds: [...new Set(input.allowedBindingIds)].sort(),
+    generation: input.preparationGeneration,
+    networkId: input.request.networkId,
+    caller: { principalId: input.request.principalId, agentId: input.request.delegatedAgentId },
+    capabilityContractId: input.contract.capabilityContractId,
+    capabilityContractVersion: capabilityVersion(input.contract.capabilityContractId),
+    ...(input.currency === undefined ? {} : { currency: input.currency }),
+    ...(input.maximumSpendMinor === undefined ? {} : { maximumSpendMinor: input.maximumSpendMinor }),
+    purpose,
+    protectedFieldNames: releasedFields,
+    allowedExecutionDataFields: Object.entries(input.contract.input)
+      .filter(([, field]) => field.disclosure?.phase === 'execution')
+      .map(([field]) => field).sort(),
+    requiredOfferOutputs: Object.entries(input.contract.output)
+      .filter(([, field]) => field.required && field.decisionRelevance === 'option_selection'
+        && field.valueType !== 'provider_offer_ref')
+      .map(([field, definition]) => ({
+        field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor',
+      })).sort((left, right) => left.field.localeCompare(right.field)),
+    resolveCandidatePresentation: async ({ bindingId, nodeId }) => {
+      const [presentation] = await directory.resolve([bindingId])
+      if (presentation === undefined || presentation.nodeId !== nodeId) return undefined
+      return {
+        recipientName: presentation.businessName,
+        presentationEvidenceDigest: customerPresentationDigest(presentation),
+      }
+    },
+    releaseForCandidate: async (release) => {
+      const allocationId = `public:${release.releaseKey}`
+      try {
+        const released = await release.release({ allocationId, protectedValues: input.publicInput })
+        return { kind: 'released', allocationId, providerEvidenceRef: released.providerEvidenceRef, releasedAt: Date.now() }
+      } catch {
+        return {
+          kind: 'uncertain', allocationId,
+          nextAction: 'Check this Request again before preparing another option.',
+        }
+      }
+    },
+  })
+  if (prepared.kind === 'insufficient_options') return { kind: 'no_route', reason: prepared.reason }
+  if (prepared.kind === 'preparation_pending') return {
+    kind: 'preparation_pending', inspectionRef: customerReference('options', prepared.candidateSetDigest),
+  }
+  return { kind: 'candidate_set', candidateSet: await projectStructuredCandidates(prepared, input.contract) }
+}
+
 export function createKernelCustomerRequestActionRouter(
   kernel: NeutralRoutingKernel,
   directory: CustomerRequestBindingPresentationDirectory,

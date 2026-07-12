@@ -242,6 +242,16 @@ export const customerRequestTables = {
     .index('by_evaluationId', ['evaluationId'])
     .index('by_candidateRef', ['candidateRef']),
 
+  customerRequestEvaluationPreparations: defineTable({
+    preparationKey: v.string(), requestId: v.string(), requestRevision: v.number(),
+    evaluationId: v.string(), evaluationDigest: v.string(),
+    status: v.union(v.literal('preparing'), v.literal('options_prepared'), v.literal('needs_attention')),
+    candidateSet: v.optional(preparedRouteCandidateSetValue), inspectionRef: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index('by_preparationKey', ['preparationKey'])
+    .index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
+
   customerRequests: defineTable({
     requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), intent: v.string(), revision: v.number(),
     compilationState: v.optional(v.union(

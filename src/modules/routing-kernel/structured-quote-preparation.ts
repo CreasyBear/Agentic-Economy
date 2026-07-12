@@ -8,6 +8,7 @@ import {
   type ProviderOffer,
   type PreparationCandidateCoverage,
   type PreparationCandidate,
+  type PreparationSource,
   type QuotePreparationAttempt,
   type StructuredQuotePreparationStore,
 } from './structured-quote-preparation-store'
@@ -26,15 +27,17 @@ export type StructuredPreparationReleaseResult =
 export type StructuredPreparationInput = Readonly<{
   preparationRequestId: string
   customerRequestId: string
-  planRevisionId: string
-  actionId: string
+  source?: PreparationSource
+  planRevisionId?: string
+  actionId?: string
+  allowedBindingIds?: readonly string[]
   generation: number
   networkId: string
   caller: KernelCaller
   capabilityContractId: string
   capabilityContractVersion: string
-  currency: string
-  maximumSpendMinor: number
+  currency?: string
+  maximumSpendMinor?: number
   purpose: string
   protectedFieldNames: readonly string[]
   allowedExecutionDataFields: readonly string[]
@@ -126,17 +129,24 @@ export function createStructuredQuotePreparationOperation(input: Readonly<{
         registrationEvidenceDigest: registrationEvidenceDigest(adapter), incidentEpochDigest, incidentEvidenceDigest: incidentEpochDigest,
       }
     }))
-    const candidateSet = existingCandidateSet ?? createPreparationCandidateSet({
-      preparationRequestId: request.preparationRequestId,
-      customerRequestId: request.customerRequestId,
-      planRevisionId: request.planRevisionId,
-      actionId: request.actionId,
+    const candidateSetInput = {
+      preparationRequestId: request.preparationRequestId, customerRequestId: request.customerRequestId,
       generation: request.generation,
       capabilityContractId: request.capabilityContractId,
       capabilityContractVersion: request.capabilityContractVersion,
       createdAt: input.now(),
       candidates: discoveredCandidates,
-    })
+    }
+    const candidateSet = existingCandidateSet ?? (request.source?.kind === 'request_evaluation'
+      ? createPreparationCandidateSet({ ...candidateSetInput, source: request.source })
+      : request.source?.kind === 'plan_action'
+        ? createPreparationCandidateSet({
+            ...candidateSetInput, source: request.source,
+            planRevisionId: request.source.planRevisionId, actionId: request.source.actionId,
+          })
+        : createPreparationCandidateSet({
+            ...candidateSetInput, planRevisionId: request.planRevisionId ?? '', actionId: request.actionId ?? '',
+          }))
     const stored = await input.store.putCandidateSet(candidateSet)
     if (stored.kind === 'conflict') return { kind: 'insufficient_options', attempts: [], reason: 'candidate_set_conflict' }
     const existingCoverage = new Set((await input.store.listCandidateCoverage(candidateSet.candidateSetDigest)).map((item) => item.bindingId))
@@ -426,10 +436,11 @@ function structuredQuoteMatchesCandidate(
     && quote.capabilityContractVersion === request.capabilityContractVersion
     && quote.registrationHash === adapter.binding.registrationHash
     && quote.environment === adapter.binding.environment
-    && quote.expectedCost.currency === request.currency
-    && quote.maximumCost.currency === request.currency
+    && (request.currency === undefined || (quote.expectedCost.currency === request.currency
+      && quote.maximumCost.currency === request.currency))
+    && quote.expectedCost.currency === quote.maximumCost.currency
     && quote.expectedCost.amountMinor <= quote.maximumCost.amountMinor
-    && quote.maximumCost.amountMinor <= request.maximumSpendMinor
+    && (request.maximumSpendMinor === undefined || quote.maximumCost.amountMinor <= request.maximumSpendMinor)
     && quote.dataFields.every((field) => request.allowedExecutionDataFields.includes(field))
     && requiredOfferOutputsMatch(quote.offerOutputs, request.requiredOfferOutputs)
     && quote.priceComponents.reduce((total, component) => total + component.amountMinor, 0) <= quote.maximumCost.amountMinor
@@ -466,6 +477,7 @@ async function discoverCandidates(
     && adapter.binding.registrationHash !== undefined && adapter.binding.environment !== undefined
     && adapter.binding.networkId === request.networkId
     && adapter.binding.capabilityContractId === request.capabilityContractId
+    && (request.allowedBindingIds === undefined || request.allowedBindingIds.includes(adapter.binding.bindingId))
     && adapter.binding.admission === 'admitted'
     && adapter.binding.conformance === 'conformant')
   const evaluated = await Promise.all(eligible.map(async (adapter) => ({

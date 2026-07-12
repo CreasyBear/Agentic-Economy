@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { createKernelCustomerRequestActionRouter } from '@/modules/customer-request/kernel-router'
+import {
+  createKernelCustomerRequestActionRouter,
+  prepareKernelCustomerRequestEvaluationOptions,
+} from '@/modules/customer-request/kernel-router'
 import {
   createCapabilityContractRegistry,
   createCustomerRequest,
@@ -50,12 +53,14 @@ describe('customer request kernel router', () => {
     const kernel = createNeutralRoutingKernel({
       now: () => 1_000, executionMode: 'simulation', ids: { next: (prefix) => `${prefix}:1` }, quoteTtlMs: 60_000, bindings: [adapter],
     })
-    const result = await createKernelCustomerRequestActionRouter(kernel, presentationDirectory()).route({
-      routingRequestId: 'route:sandbox:1', request: {
+    const result = await prepareKernelCustomerRequestEvaluationOptions(kernel, presentationDirectory(), {
+      preparationRequestId: 'route:sandbox:1', request: {
         requestId: 'request:sandbox:1', revision: 1, principalId: 'principal:1', delegatedAgentId: 'agent:1',
-        routing: { networkId: 'ae:public', currency: 'AUD', maximumSpendMinor: 1_000, optimizeFor: 'cost' },
-      }, action: { actionId: 'action:quote', capabilityContractId: contract.capabilityContractId },
-      planRevisionId: 'plan:sandbox:1', preparationGeneration: 1, contract, publicInput: { requestContext: 'Compare options' },
+        networkId: 'ae:public',
+      },
+      evaluation: { evaluationId: 'evaluation:sandbox:1', evaluationDigest: 'sha256:evaluation-sandbox-1' },
+      allowedBindingIds: ['sandbox.option.one:v1'], preparationGeneration: 1,
+      contract, publicInput: { requestContext: 'Compare options' },
     })
     expect(result).toMatchObject({ kind: 'candidate_set', candidateSet: { candidates: [{ expectedCost: { amountMinor: 900 } }] } })
     expect(receivedData).toEqual({ requestContext: 'Compare options' })

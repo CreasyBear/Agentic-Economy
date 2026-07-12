@@ -786,13 +786,17 @@ export const routingKernelTables = {
     .index('by_recordId', ['recordId']),
 
   routingKernelPreparationCandidateSets: defineTable({
-    preparationRequestId: v.string(), customerRequestId: v.string(), planRevisionId: v.string(), actionId: v.string(),
+    preparationRequestId: v.string(), customerRequestId: v.string(),
+    sourceKind: v.optional(literalUnion(['plan_action', 'request_evaluation'] as const)),
+    sourceRef: v.optional(v.string()), sourceDigest: v.optional(v.string()),
+    planRevisionId: v.optional(v.string()), actionId: v.optional(v.string()),
     generation: v.number(), capabilityContractId: v.string(), capabilityContractVersion: v.string(),
     createdAt: v.number(), candidateSetDigest: v.string(),
   })
     .index('by_preparationRequestId', ['preparationRequestId'])
     .index('by_candidateSetDigest', ['candidateSetDigest'])
-    .index('by_customerRequestId_planRevisionId_actionId_generation', ['customerRequestId', 'planRevisionId', 'actionId', 'generation']),
+    .index('by_customerRequestId_planRevisionId_actionId_generation', ['customerRequestId', 'planRevisionId', 'actionId', 'generation'])
+    .index('by_customerRequestId_sourceKind_sourceRef_generation', ['customerRequestId', 'sourceKind', 'sourceRef', 'generation']),
 
   routingKernelPreparationCandidates: defineTable({
     preparationRequestId: v.string(), candidateSetDigest: v.string(), position: v.number(), bindingId: v.string(),
