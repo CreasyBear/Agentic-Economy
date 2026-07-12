@@ -221,6 +221,7 @@ export type DiscoveryHealthReadback = {
 
 export type BuildDiscoveryFileOptions = {
   canonicalBaseUrl: string
+  routingBaseUrl?: string
   now?: number
 }
 

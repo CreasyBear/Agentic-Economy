@@ -1,5 +1,6 @@
-export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: string }): string {
+export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: string; routingBaseUrl?: string }): string {
   const base = trimTrailingSlash(options.canonicalBaseUrl)
+  const routingBase = trimTrailingSlash(options.routingBaseUrl ?? options.canonicalBaseUrl)
   return [
     '# Agentic Economy — assistant setup',
     '',
@@ -14,7 +15,7 @@ export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: strin
     '## Hop sequence (do this in order)',
     '',
     `1. Read \`GET ${base}/llms.txt\` for the public surface index and catalog lines.`,
-    `2. Read \`GET ${base}/.well-known/ae-routing.json\` for HTTP and MCP projections.`,
+    `2. Read \`GET ${routingBase}/.well-known/ae-routing.json\` for HTTP and MCP projections.`,
     '3. Sign `route` with the declared caller-authentication profile.',
     '4. Review the quote, cost, effects, disclosures, expiry, and enforcement posture.',
     '5. Authorize before `execute`; use `inspect` and `cancel` on the resulting Root Run.',

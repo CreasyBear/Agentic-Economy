@@ -16,18 +16,21 @@ export const Route = createFileRoute('/llms.txt')({
 })
 
 export async function handleDurableLlmsTxtRequest(request: Request): Promise<Response> {
+  const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
   const result = await readPublicLlmsTxt({
-    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
+    canonicalBaseUrl,
+    routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || canonicalBaseUrl,
   })
 
   return discoveryTextResponse(result.body, 'text/plain; charset=utf-8')
 }
 
 export function handleLlmsTxtRequest(request: Request): Response {
+  const canonicalBaseUrl = resolveCanonicalBaseUrl(request).baseUrl
   const result = readFixtureLlmsTxt({
-    canonicalBaseUrl: resolveCanonicalBaseUrl(request).baseUrl,
+    canonicalBaseUrl,
+    routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || canonicalBaseUrl,
   })
 
   return discoveryTextResponse(result.body, 'text/plain; charset=utf-8')
 }
-

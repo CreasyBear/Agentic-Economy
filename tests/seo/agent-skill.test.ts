@@ -5,9 +5,9 @@ import { handlePublicAgentSkillRequest } from '@/routes/SKILL[.]md'
 
 describe('public agent skill', () => {
   it('teaches descriptor, quote authorization, inspection, and listing boundaries', () => {
-    const body = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'https://ae.example' })
+    const body = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: 'https://ae.example', routingBaseUrl: 'https://route.ae.example' })
     expect(body).toContain('https://ae.example/llms.txt')
-    expect(body).toContain('https://ae.example/.well-known/ae-routing.json')
+    expect(body).toContain('https://route.ae.example/.well-known/ae-routing.json')
     expect(body).toContain('Authorize before `execute`')
     expect(body).toContain('`inspect` and `cancel`')
     expect(body).toMatch(/listings are supply facts, not routing or execution authority/i)

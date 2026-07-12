@@ -361,6 +361,7 @@ export const readCatalogDiscoveryManifest = queryGeneric({
 export const readLlmsTxt = queryGeneric({
   args: {
     canonicalBaseUrl: v.optional(v.string()),
+    routingBaseUrl: v.optional(v.string()),
     now: v.optional(v.number()),
   },
   returns: discoveryFileResult,
@@ -368,6 +369,7 @@ export const readLlmsTxt = queryGeneric({
     const db = runtimeReader(ctx.db)
     return buildLlmsTxtFromCatalogs(await publicCatalogsForDiscovery(db), {
       canonicalBaseUrl: canonicalBaseUrl(args.canonicalBaseUrl),
+      routingBaseUrl: canonicalBaseUrl(args.routingBaseUrl),
     })
   },
 })
@@ -751,9 +753,10 @@ const publicSurfacePaths = [
 
 function buildLlmsTxtFromCatalogs(
   catalogs: readonly PublicCatalog[],
-  options: { canonicalBaseUrl: string }
+  options: { canonicalBaseUrl: string; routingBaseUrl: string }
 ): { body: string; urls: string[] } {
   const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const routingBaseUrl = trimTrailingSlash(options.routingBaseUrl)
   const urls = [
     ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
     ...catalogs.flatMap((catalog) => [
@@ -773,9 +776,9 @@ function buildLlmsTxtFromCatalogs(
     ...publicSurfacePaths.map((path) => `- ${canonicalBaseUrl}${path}`),
     '',
     'Routing kernel:',
-    `- descriptor=${canonicalBaseUrl}/.well-known/ae-routing.json`,
-    `- http=${canonicalBaseUrl}/v1/route`,
-    `- mcp=${canonicalBaseUrl}/mcp`,
+    `- descriptor=${routingBaseUrl}/.well-known/ae-routing.json`,
+    `- http=${routingBaseUrl}/v1/route`,
+    `- mcp=${routingBaseUrl}/mcp`,
     '',
     'Catalog entries:',
     ...(catalogLines.length === 0 ? ['- none'] : catalogLines),

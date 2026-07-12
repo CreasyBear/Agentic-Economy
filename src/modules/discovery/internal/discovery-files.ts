@@ -35,6 +35,7 @@ export function buildLlmsTxt(
   options: BuildDiscoveryFileOptions
 ): DiscoveryFileBuildResult {
   const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
+  const routingBaseUrl = trimTrailingSlash(options.routingBaseUrl ?? options.canonicalBaseUrl)
   const catalogs = readEligibleCatalogs(state)
   const urls = [
     ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
@@ -58,9 +59,9 @@ export function buildLlmsTxt(
     `- ${canonicalBaseUrl}/SKILL.md`,
     '',
     'Routing kernel:',
-    `- descriptor=${canonicalBaseUrl}/.well-known/ae-routing.json`,
-    `- http=${canonicalBaseUrl}/v1/route`,
-    `- mcp=${canonicalBaseUrl}/mcp`,
+    `- descriptor=${routingBaseUrl}/.well-known/ae-routing.json`,
+    `- http=${routingBaseUrl}/v1/route`,
+    `- mcp=${routingBaseUrl}/mcp`,
     '',
     'Hop recipe:',
     '1. Read /llms.txt (this file) and /.well-known/ae-routing.json.',

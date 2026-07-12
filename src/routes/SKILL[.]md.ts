@@ -14,6 +14,9 @@ export const Route = createFileRoute('/SKILL.md')({
 
 export function handlePublicAgentSkillRequest(request: Request): Response {
   const { baseUrl } = resolveCanonicalBaseUrl(request)
-  const body = buildPublicAgentSkillMarkdown({ canonicalBaseUrl: baseUrl })
+  const body = buildPublicAgentSkillMarkdown({
+    canonicalBaseUrl: baseUrl,
+    routingBaseUrl: process.env.AE_ROUTING_PUBLIC_BASE_URL?.trim() || baseUrl,
+  })
   return discoveryTextResponse(body, 'text/markdown; charset=utf-8')
 }
