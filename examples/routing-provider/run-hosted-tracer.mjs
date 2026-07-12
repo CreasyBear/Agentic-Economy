@@ -40,6 +40,7 @@ async function runHttp(scenario) {
   const executed = await post('/v1/execute', executeInput)
   const replayed = await post('/v1/execute', executeInput)
   const changed = await post('/v1/execute', { ...executeInput, data: { ...executeInput.data, primary_context: 'changed' } })
+  if (executed.result?.run === undefined) throw new Error(`http:${scenario.name}:execution_missing_run:${JSON.stringify(executed)}`)
   const reconciliation = scenario.name === 'unknown'
     ? await post('/v1/reconcile', { protocolVersion: 'ae-routing:v1', rootRunId: executed.result.run.rootRunId })
     : undefined
