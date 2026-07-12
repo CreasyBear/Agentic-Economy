@@ -77,7 +77,7 @@ function routingDependencies(ctx: Parameters<Parameters<typeof httpAction>[0]>[0
       const configuredAgents = (process.env.AE_ROUTING_SIGNATURE_AGENTS ?? '').split(',').map((value) => value.trim()).filter(Boolean)
       const allowedSignatureAgents = [...new Set(configuredAgents)]
       const agent = await verifyAgentIdentity(signedRequest, {
-        expectedAuthority: new URL(candidate.url).host, bodyText,
+        expectedAuthority: new URL(publicUrl).host, bodyText,
         allowedSignatureAgents, pretrustedDirectoryOrigins: allowedSignatureAgents,
         fetchDirectory: async (signatureAgent) => {
           try {
