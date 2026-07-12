@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { handleRoutingKernelMcpRequest } from '@/modules/routing-kernel/mcp'
 import { createNeutralRoutingKernel, type KernelIdFactory } from '@/modules/routing-kernel/application'
 import { createInMemoryKernelStore } from '@/modules/routing-kernel/runtime'
-import { createParcelLabelSimulationBindings } from '@/modules/routing-tracer/public'
+import { createReferenceCapabilityBindings } from '@/modules/routing-tracer/public'
 
 describe('routing-kernel MCP projection', () => {
   it('initializes and exposes the neutral kernel tools', async () => {
@@ -30,7 +30,7 @@ describe('routing-kernel MCP projection', () => {
         _meta: { progressToken: 'claude-host-route-1' },
         name: 'ae.route', arguments: {
           protocolVersion: 'ae-routing:v1', networkId: 'network:au-first',
-          query: 'Purchase one tracked domestic parcel label.',
+          query: 'Prepare one reference option.',
           constraints: { currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'latency' },
         },
       },
@@ -41,14 +41,14 @@ describe('routing-kernel MCP projection', () => {
       result: { structuredContent: { kind: 'quoted', quote: {
         routingSnapshot: { compilerVersion: 'routing-compiler:v2', constraints: { optimizeFor: 'latency' } },
         organicDecision: { optimizerVersion: 'organic-cost-latency-evidence:v2', optimizeFor: 'latency' },
-        selectedGraph: { bindingId: 'binding:parcel-sim-express:v1' },
+        selectedGraph: { bindingId: 'binding:reference-priority:v1' },
       } } },
     })
 
     const rejected = await handleRoutingKernelMcpRequest(mcpRequest({
       jsonrpc: '2.0', id: 3, method: 'tools/call', params: {
         name: 'ae.route', arguments: {
-          protocolVersion: 'ae-routing:v1', networkId: 'network:au-first', query: 'parcel label',
+          protocolVersion: 'ae-routing:v1', networkId: 'network:au-first', query: 'reference option',
           constraints: { currency: 'AUD', maximumSpendMinor: 1_500 }, caller: { agentId: 'forged' },
         },
       },
@@ -95,11 +95,11 @@ describe('routing-kernel MCP projection', () => {
   it('runs one route through trusted authorization, MCP execute, and MCP inspect', async () => {
     const kernel = createKernel()
     const dependencies = { operations: kernel.operations, authenticate: async () => ({ kind: 'authenticated' as const, caller: { agentId: 'agent:mcp-1', principalId: 'principal:merchant-1' } }) }
-    const routedResponse = await handleRoutingKernelMcpRequest(mcpRequest({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'ae.route', arguments: { protocolVersion: 'ae-routing:v1', networkId: 'network:au-first', query: 'Purchase one tracked domestic parcel label.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } } } }), dependencies)
+    const routedResponse = await handleRoutingKernelMcpRequest(mcpRequest({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'ae.route', arguments: { protocolVersion: 'ae-routing:v1', networkId: 'network:au-first', query: 'Prepare one reference option.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } } } }), dependencies)
     const routed = await routedResponse.json() as { result: { structuredContent: { quote: { quoteId: string; quoteDigest: string } } } }
     const quote = routed.result.structuredContent.quote
     const authorization = await kernel.authority.authorize({ quoteId: quote.quoteId, quoteDigest: quote.quoteDigest, principalId: 'principal:merchant-1', agentId: 'agent:mcp-1', maximumSpendMinor: 1_295, currency: 'AUD', expiresAt: 1_750_000_030_000 })
-    const executedResponse = await handleRoutingKernelMcpRequest(mcpRequest({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'ae.execute', arguments: { protocolVersion: 'ae-routing:v1', quoteId: quote.quoteId, quoteDigest: quote.quoteDigest, authorizationRef: authorization.authorizationRef, idempotencyKey: 'mcp:parcel:1' } } }), dependencies)
+    const executedResponse = await handleRoutingKernelMcpRequest(mcpRequest({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'ae.execute', arguments: { protocolVersion: 'ae-routing:v1', quoteId: quote.quoteId, quoteDigest: quote.quoteDigest, authorizationRef: authorization.authorizationRef, idempotencyKey: 'mcp:reference:1' } } }), dependencies)
     const executed = await executedResponse.json() as { result: { structuredContent: { run: { rootRunId: string; state: string } } } }
     expect(executed.result.structuredContent.run.state).toBe('completed')
     const inspectedResponse = await handleRoutingKernelMcpRequest(mcpRequest({ jsonrpc: '2.0', id: 12, method: 'tools/call', params: { name: 'ae.inspect', arguments: { protocolVersion: 'ae-routing:v1', rootRunId: executed.result.structuredContent.run.rootRunId } } }), dependencies)
@@ -109,7 +109,7 @@ describe('routing-kernel MCP projection', () => {
   it('accepts quote-bound inline approval through execute', async () => {
     const kernel = createKernel()
     const caller = { agentId: 'agent:mcp-approval', principalId: 'principal:merchant-1' }
-    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Purchase one tracked domestic parcel label.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
+    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Prepare one reference option.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
     expect(routed.kind).toBe('quoted')
     if (routed.kind !== 'quoted') return
     const response = await handleRoutingKernelMcpRequest(mcpRequest({ jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'ae.execute', arguments: {
@@ -154,7 +154,7 @@ describe('routing-kernel MCP projection', () => {
   it('projects the same quote-undeclared data refusal through MCP', async () => {
     const kernel = createKernel()
     const caller = { agentId: 'agent:mcp-disclosure', principalId: 'principal:merchant-1' }
-    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Purchase one tracked domestic parcel label.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
+    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Prepare one reference option.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
     if (routed.kind !== 'quoted') throw new Error(routed.kind)
     const authorization = await kernel.authority.authorize({
       quoteId: routed.quote.quoteId, quoteDigest: routed.quote.quoteDigest, principalId: caller.principalId, agentId: caller.agentId,
@@ -245,5 +245,5 @@ function authenticatedDependencies() {
 function createKernel() {
   let value = 0
   const ids: KernelIdFactory = { next: (prefix) => `${prefix}:${++value}` }
-  return createNeutralRoutingKernel({ now: () => 1_750_000_000_000, executionMode: 'simulation', ids, quoteTtlMs: 60_000, bindings: createParcelLabelSimulationBindings(), store: createInMemoryKernelStore() })
+  return createNeutralRoutingKernel({ now: () => 1_750_000_000_000, executionMode: 'simulation', ids, quoteTtlMs: 60_000, bindings: createReferenceCapabilityBindings(), store: createInMemoryKernelStore() })
 }

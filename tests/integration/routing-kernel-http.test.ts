@@ -6,7 +6,7 @@ import {
   type KernelIdFactory,
 } from '@/modules/routing-kernel/application'
 import { createInMemoryKernelStore } from '@/modules/routing-kernel/runtime'
-import { createParcelLabelSimulationBindings } from '@/modules/routing-tracer/public'
+import { createReferenceCapabilityBindings } from '@/modules/routing-tracer/public'
 
 describe('routing-kernel HTTP/JSON projection', () => {
   it('authenticates the caller and projects route without exposing a provider tool menu', async () => {
@@ -17,7 +17,7 @@ describe('routing-kernel HTTP/JSON projection', () => {
       body: JSON.stringify({
         protocolVersion: 'ae-routing:v1',
         networkId: 'network:au-first',
-        query: 'Purchase one tracked domestic parcel label.',
+        query: 'Prepare one reference option.',
         constraints: { currency: 'AUD', maximumSpendMinor: 1_500, optimizeFor: 'latency' },
       }),
     })
@@ -40,7 +40,7 @@ describe('routing-kernel HTTP/JSON projection', () => {
           executionMode: 'simulation',
           routingSnapshot: { compilerVersion: 'routing-compiler:v2', constraints: { optimizeFor: 'latency' } },
           organicDecision: { optimizerVersion: 'organic-cost-latency-evidence:v2', optimizeFor: 'latency' },
-          selectedGraph: { bindingId: 'binding:parcel-sim-express:v1' },
+          selectedGraph: { bindingId: 'binding:reference-priority:v1' },
         },
       },
     })
@@ -108,7 +108,7 @@ describe('routing-kernel HTTP/JSON projection', () => {
     const routeResponse = await handleRoutingKernelHttpRequest(jsonRequest('/v1/route', {
       protocolVersion: 'ae-routing:v1',
       networkId: 'network:au-first',
-      query: 'Purchase one tracked domestic parcel label.',
+      query: 'Prepare one reference option.',
       constraints: { currency: 'AUD', maximumSpendMinor: 1_500 },
     }), dependencies)
     const routed = await routeResponse.json() as {
@@ -152,7 +152,7 @@ describe('routing-kernel HTTP/JSON projection', () => {
   it('binds inline execute approval through the trusted authorization dependency', async () => {
     const kernel = createKernel()
     const caller = { agentId: 'agent:http-approval', principalId: 'principal:merchant-1' }
-    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Purchase one tracked domestic parcel label.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
+    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Prepare one reference option.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
     expect(routed.kind).toBe('quoted')
     if (routed.kind !== 'quoted') return
     const response = await handleRoutingKernelHttpRequest(jsonRequest('/v1/execute', {
@@ -174,7 +174,7 @@ describe('routing-kernel HTTP/JSON projection', () => {
     const kernel = createKernel()
     const caller = { agentId: 'agent:http-authorize', principalId: 'principal:merchant-1' }
     const routed = await kernel.operations.route({
-      caller, networkId: 'network:au-first', query: 'Purchase one tracked domestic parcel label.',
+      caller, networkId: 'network:au-first', query: 'Prepare one reference option.',
       constraints: { currency: 'AUD', maximumSpendMinor: 1_500 },
     })
     if (routed.kind !== 'quoted') throw new Error(routed.kind)
@@ -209,7 +209,7 @@ describe('routing-kernel HTTP/JSON projection', () => {
   it('projects quote-undeclared data refusal through HTTP without dispatching', async () => {
     const kernel = createKernel()
     const caller = { agentId: 'agent:http-disclosure', principalId: 'principal:merchant-1' }
-    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Purchase one tracked domestic parcel label.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
+    const routed = await kernel.operations.route({ caller, networkId: 'network:au-first', query: 'Prepare one reference option.', constraints: { currency: 'AUD', maximumSpendMinor: 1_500 } })
     if (routed.kind !== 'quoted') throw new Error(routed.kind)
     const authorization = await kernel.authority.authorize({
       quoteId: routed.quote.quoteId, quoteDigest: routed.quote.quoteDigest, principalId: caller.principalId, agentId: caller.agentId,
@@ -303,7 +303,7 @@ function createKernel() {
     executionMode: 'simulation',
     ids,
     quoteTtlMs: 60_000,
-    bindings: createParcelLabelSimulationBindings(),
+    bindings: createReferenceCapabilityBindings(),
     store: createInMemoryKernelStore(),
   })
 }

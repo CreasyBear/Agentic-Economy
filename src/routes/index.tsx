@@ -70,7 +70,7 @@ function Home() {
 function NeedObject() {
   return <Card padding={5} className="bg-card text-primary shadow-high" aria-label="Example request">
     <Text className="text-sm font-medium text-secondary">You ask</Text>
-    <Heading level={2} className="mt-3 text-2xl font-semibold">“Find a courier that can collect tomorrow, stay under $40, and send me the tracking link.”</Heading>
+    <Heading level={2} className="mt-3 text-2xl font-semibold">“Compare local printers for 200 cards by Friday. Show me the total cost and turnaround before I choose.”</Heading>
     <div className="mt-6 border-t border-border pt-5">
       <Text display="block" className="text-sm font-medium text-accent">Your agent can take it from here</Text>
       <Text display="block" color="secondary" className="mt-2">AE helps it compare connected businesses, bring back the important choices, and continue after you confirm.</Text>

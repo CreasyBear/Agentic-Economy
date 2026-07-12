@@ -20,7 +20,7 @@ export const DEFAULT_ROUTE_REQUEST = Object.freeze({
   operation: 'route',
   input: {
     networkId: 'network:au-first',
-    query: 'Purchase one parcel label.',
+    query: 'Compare options from registered businesses.',
     constraints: { currency: 'AUD', maximumSpendMinor: 1_500 },
   },
 })

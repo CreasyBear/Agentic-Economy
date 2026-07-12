@@ -17,7 +17,7 @@ export const Route = createFileRoute('/engine')({
 })
 
 function AskRoute() {
-  const [need, setNeed] = useState('Find a courier that can collect tomorrow and send me the tracking link.')
+  const [need, setNeed] = useState('')
   const [location, setLocation] = useState('Perth, WA')
   const [budget, setBudget] = useState('40.00')
   const [copied, setCopied] = useState(false)
@@ -44,7 +44,7 @@ function AskRoute() {
             <div className="grid gap-5">
               <Heading id="brief-heading" level={2} className="text-xl font-semibold">Your request</Heading>
               <label className="grid gap-2 text-sm font-medium">Tell your agent what needs doing
-                <textarea value={need} onChange={(event) => setNeed(event.target.value)} rows={6} maxLength={1000} className="min-h-36 rounded-md border border-border bg-card px-3 py-3 text-primary shadow-low outline-none focus:border-accent focus:ring-2 focus:ring-accent" />
+                <textarea value={need} onChange={(event) => setNeed(event.target.value)} rows={6} maxLength={1000} placeholder="For example: compare local printers for 200 cards by Friday, or find an available bookkeeper within my budget." className="min-h-36 rounded-md border border-border bg-card px-3 py-3 text-primary shadow-low outline-none focus:border-accent focus:ring-2 focus:ring-accent" />
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Where" value={location} onChange={setLocation} placeholder="Suburb, city, or online" />
