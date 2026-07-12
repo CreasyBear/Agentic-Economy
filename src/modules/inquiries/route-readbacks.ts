@@ -87,6 +87,7 @@ export type PublicInquiryRouteInput = {
   slug: string
   page?: PublicBusinessPageRouteReadbackResult
   state?: InquirySourceState
+  preferredServiceSlug?: string
 }
 
 export type PublicInquiryRouteSubmitInput = PublicInquiryFormInput & {
@@ -161,8 +162,11 @@ export function validatePublicInquiryFormInput(input: PublicInquiryFormInput): P
   }
 }
 
-export function buildPublicInquiryAffordance(catalog: PublicRouteCatalogContract): PublicInquiryAffordance {
-  const match = firstInquiryCapability(catalog)
+export function buildPublicInquiryAffordance(
+  catalog: PublicRouteCatalogContract,
+  preferredServiceSlug?: string,
+): PublicInquiryAffordance {
+  const match = firstInquiryCapability(catalog, preferredServiceSlug)
   if (match === undefined) {
     const serviceName = catalog.services[0]?.name
     return {
@@ -213,7 +217,7 @@ export function readPublicInquiryRouteReadback(input: PublicInquiryRouteInput): 
     }
   }
 
-  const affordance = buildPublicInquiryAffordance(page.catalog)
+  const affordance = buildPublicInquiryAffordance(page.catalog, input.preferredServiceSlug)
   if (affordance.kind === 'unavailable') {
     return {
       kind: 'unavailable',
@@ -410,14 +414,23 @@ function firstRequestForService(
 }
 
 function firstInquiryCapability(
-  catalog: PublicRouteCatalogContract
+  catalog: PublicRouteCatalogContract,
+  preferredServiceSlug?: string,
 ):
   | {
       service: PublicRouteServiceContract
       capability: PublicRouteCapabilityContract
     }
   | undefined {
-  for (const service of catalog.services) {
+  const services =
+    preferredServiceSlug === undefined
+      ? catalog.services
+      : [
+          ...catalog.services.filter((service) => String(service.serviceSlug) === preferredServiceSlug),
+          ...catalog.services.filter((service) => String(service.serviceSlug) !== preferredServiceSlug),
+        ]
+
+  for (const service of services) {
     const capability = service.capabilities.find(
       (candidate) =>
         candidate.kind === 'phone_inquiry' &&

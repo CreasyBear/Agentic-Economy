@@ -34,11 +34,6 @@ import {
   replyCurrentOwnerInquiryThroughSource,
 } from '@/modules/inquiries/inquiry.functions'
 import {
-  BillingProviderError,
-  readAutumnClientConfig,
-  verifyAutumnWebhook,
-} from '@/lib/server/billing-provider'
-import {
   NotificationProviderError,
   readClerkSecretKey,
   readNovuClientConfig,
@@ -51,7 +46,6 @@ import {
   triggerOwnerInquiryNovuWorkflow,
   verifyResendWebhook,
 } from '@/lib/server/notification-provider'
-import { handleBillingWebhookRequest } from '@/future-phases/05-paid-activation-money-rails/routes/api.billing.webhook'
 import { handleNovuDispatchRequest } from '@/routes/api.notification.novu-dispatch'
 import { handleResendDispatchRequest } from '@/routes/api.notification.resend-dispatch'
 import { handleResendWebhookRequest } from '@/routes/api.notification.resend-webhook'
@@ -250,17 +244,17 @@ describe('server Convex source seam', () => {
 
     const wrongFamilyUnsigned: Omit<SourceWriteAdmission, 'signature'> = {
       ...previousAdmission,
-      keyId: 'billing-active',
+      keyId: 'operator-active',
     }
     const wrongFamilyAdmission: SourceWriteAdmission = {
       ...wrongFamilyUnsigned,
-      signature: sourceWriteSignature('billing-secret', wrongFamilyUnsigned),
+      signature: sourceWriteSignature('operator-secret', wrongFamilyUnsigned),
     }
     expect(verifySourceWriteAdmission({
       admission: wrongFamilyAdmission,
       env: {
         AE_SOURCE_WRITE_KEY_INQUIRY: 'inquiry-active:inquiry-secret',
-        AE_SOURCE_WRITE_KEY_BILLING: 'billing-active:billing-secret',
+        AE_SOURCE_WRITE_KEY_OPERATOR: 'operator-active:operator-secret',
       },
       expected: {
         scope: 'public_inquiry',
@@ -276,7 +270,7 @@ describe('server Convex source seam', () => {
     const request = {
       method: 'POST',
       origin: 'https://ae.example',
-      pathname: '/api/agent/tools',
+      pathname: '/v1/execute',
       bodyDigest: sourceWriteBodyDigest('{"tool":"registry.search"}'),
     }
     const admission = createSourceWriteAdmission({
@@ -423,112 +417,6 @@ describe('server Convex source seam', () => {
         process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousBypass
       }
     }
-  })
-})
-
-describe('server billing provider seam', () => {
-  it('requires the Autumn secret key from server env', () => {
-    expect(() => readAutumnClientConfig({})).toThrow(BillingProviderError)
-    expect(() => readAutumnClientConfig({})).toThrow(expect.objectContaining({ code: 'missing_autumn_key', status: 500 }))
-  })
-
-  it('reads only server-side Autumn provider config', () => {
-    expect(
-      readAutumnClientConfig({
-        AUTUMN_SECRET_KEY: ' autumn_sk ',
-        AUTUMN_API_BASE_URL: ' https://sandbox.useautumn.com/ ',
-        AUTUMN_API_VERSION: ' 2.3.1 ',
-        [`${publicEnvPrefix}AUTUMN_SECRET_KEY`]: 'must-not-be-read',
-      })
-    ).toEqual({
-      secretKey: 'autumn_sk',
-      apiBaseUrl: 'https://sandbox.useautumn.com/',
-      apiVersion: '2.3.1',
-    })
-  })
-
-  it('verifies and redacts signed Autumn callbacks', () => {
-    const now = 1_777_000_000_000
-    const svixTimestamp = String(Math.floor(now / 1000))
-    const svixId = 'msg_autumn_evt_123'
-    const secret = `whsec_${Buffer.from('autumn-test-secret').toString('base64')}`
-    const rawBody = JSON.stringify({
-      type: 'checkout.completed',
-      data: {
-        customer_id: 'cust_123',
-        subscription_id: 'sub_123',
-        status: 'active',
-        plan_id: 'plan_basic',
-        metadata: {
-          ae_operation_id: 'billing_operation:demo',
-        },
-        invoice: {
-          stripe_id: 'in_123',
-          hosted_invoice_url: 'https://billing.example/in_123',
-          total: 9900,
-          currency: 'AUD',
-          status: 'paid',
-        },
-      },
-    })
-
-    expect(
-      verifyAutumnWebhook({
-        rawBody,
-        headers: signedResendHeaders(secret, rawBody, svixId, svixTimestamp),
-        secret,
-        now,
-      })
-    ).toMatchObject({
-      provider: 'autumn_cloud',
-      providerEventId: svixId,
-      eventType: 'checkout.completed',
-      providerCustomerId: 'cust_123',
-      providerSubscriptionId: 'sub_123',
-      operationId: 'billing_operation:demo',
-      providerStatus: 'active',
-      receipt: {
-        providerReceiptId: 'in_123',
-        status: 'paid',
-      },
-    })
-  })
-
-  it('returns a typed refusal from the webhook route without a configured secret', async () => {
-    const response = await handleBillingWebhookRequest(
-      new Request('https://agentic.test/api/billing/webhook', {
-        method: 'POST',
-        body: '{"id":"evt_1"}',
-        headers: { 'content-type': 'application/json' },
-      })
-    )
-
-    await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
-      code: 'missing_autumn_webhook_secret',
-      retryable: false,
-    })
-    expect(response.status).toBe(500)
-    expect(response.headers.get('Cache-Control')).toBe('no-store')
-  })
-
-  it('returns a typed refusal from the webhook route for unsigned raw-body callbacks', async () => {
-    const response = await handleBillingWebhookRequest(
-      new Request('https://agentic.test/api/billing/webhook', {
-        method: 'POST',
-        body: '{"id":"evt_1"}',
-        headers: { 'content-type': 'application/json' },
-      }),
-      { env: { AUTUMN_WEBHOOK_SECRET: `whsec_${Buffer.from('autumn-test-secret').toString('base64')}` } }
-    )
-
-    await expect(response.json()).resolves.toMatchObject({
-      kind: 'error',
-      code: 'missing_autumn_signature_headers',
-      retryable: false,
-    })
-    expect(response.status).toBe(400)
-    expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 })
 

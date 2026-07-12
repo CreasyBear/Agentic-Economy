@@ -1,6 +1,6 @@
 import { Agent } from 'undici'
 
-import { createStorefrontGuardedLookup, defaultStorefrontDnsResolver, isPublicHttpTarget, type StorefrontDnsResolver } from './network-guard'
+import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget, type DnsResolver } from '@/modules/network-guard/public'
 
 import type { PublicOwnerClaimFlowInput } from '@/modules/catalog/public'
 
@@ -58,7 +58,7 @@ type StorefrontImportFetchInit = RequestInit & {
 
 type StorefrontImportWebsiteOptions = {
   fetch?: StorefrontImportFetch
-  dns?: StorefrontDnsResolver
+  dns?: DnsResolver
   maxRedirects?: number
   maxResponseBytes?: number
   timeoutMs?: number
@@ -83,12 +83,12 @@ export async function importStorefrontDraftFromWebsite(
   }
 
   const fetchImpl = options.fetch ?? fetch
-  const dnsResolver = options.dns ?? defaultStorefrontDnsResolver
+  const dnsResolver = options.dns ?? defaultDnsResolver
   const maxRedirects = options.maxRedirects ?? StorefrontImportMaxRedirects
   const maxResponseBytes = options.maxResponseBytes ?? StorefrontImportMaxResponseBytes
   const timeoutMs = options.timeoutMs ?? StorefrontImportTimeoutMs
 
-  const dispatcher = options.fetch === undefined ? new Agent({ connect: { lookup: createStorefrontGuardedLookup(dnsResolver) } }) : undefined
+  const dispatcher = options.fetch === undefined ? new Agent({ connect: { lookup: createGuardedLookup(dnsResolver) } }) : undefined
 
   let currentUrl = parsedUrl
   let redirectsFollowed = 0

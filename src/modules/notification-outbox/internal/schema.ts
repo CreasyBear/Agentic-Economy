@@ -203,6 +203,7 @@ export const notificationOutboxTables = {
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
   })
+    .index('by_attemptId', ['attemptId'])
     .index('by_dispatch_startedAt', ['dispatchId', 'startedAt'])
     .index('by_provider_status', ['providerFamily', 'status']),
 
@@ -222,6 +223,7 @@ export const notificationOutboxTables = {
     correlationId: v.string(),
     receivedAt: v.number(),
   })
+    .index('by_webhookEventId', ['webhookEventId'])
     .index('by_provider_event', ['providerFamily', 'providerEventId'])
     .index('by_dispatch', ['dispatchId'])
     .index('by_status_receivedAt', ['status', 'receivedAt']),

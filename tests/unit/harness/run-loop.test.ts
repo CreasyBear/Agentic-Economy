@@ -105,7 +105,7 @@ describe('harness run loop', () => {
           const outcome = await loop.runTool({
             tool,
             input: { q: 'plumber' },
-            surface: 'agentTools',
+            surface: 'answerThread',
           })
           const output = outcome.result.output as { count?: unknown } | undefined
           return { count: typeof output?.count === 'number' ? output.count : state.count }
@@ -144,17 +144,17 @@ describe('harness run loop', () => {
       {
         tool: createBatchTool('tool.first', 'shared', 'first', first.promise, log),
         input: {},
-        surface: 'agentTools',
+        surface: 'answerThread',
       },
       {
         tool: createBatchTool('tool.second', 'exclusive', 'second', second.promise, log),
         input: {},
-        surface: 'agentTools',
+        surface: 'answerThread',
       },
       {
         tool: createBatchTool('tool.third', 'shared', 'third', third.promise, log),
         input: {},
-        surface: 'agentTools',
+        surface: 'answerThread',
       },
     ])
 
@@ -203,7 +203,7 @@ describe('harness run loop', () => {
           await loop.runTool({
             tool,
             input: { q: 42 } as unknown as { q: string },
-            surface: 'agentTools',
+            surface: 'answerThread',
           })
         },
         gate: ({ loop }) => loop.evaluateGate(
@@ -400,7 +400,7 @@ function createReadTool(clock: ReturnType<typeof createClock>): HarnessToolDefin
     summary: 'Search published listings.',
     boundaries: ['Read-only catalog facts.'],
     tier: 'read',
-    surfaces: ['agentTools'],
+    surfaces: ['answerThread'],
     inputSchema: z.object({ q: z.string() }),
     outputSchema: z.object({ kind: z.literal('ok'), count: z.number() }),
     async run() {
@@ -424,7 +424,7 @@ function createBatchTool(
     summary: 'Batch test tool.',
     boundaries: ['Read-only test fixture.'],
     tier: 'read',
-    surfaces: ['agentTools'],
+    surfaces: ['answerThread'],
     inputSchema: z.object({}) as z.ZodType<unknown>,
     outputSchema: z.object({ kind: z.literal('ok'), label: z.string() }) as z.ZodType<unknown>,
     approval: 'allow',

@@ -6,7 +6,6 @@ import type {
   ActionParameter,
   ActionSurface,
   AnyAction,
-  AgentToolDescriptor,
 } from '@/modules/common/action'
 import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
 
@@ -21,12 +20,6 @@ import {
   findStrictToolSchemaViolation,
   type StrictSchemaViolation,
 } from './strict-schema'
-
-export const PublicQuietAgentToolIds = [
-  'registry.search',
-  'registry.detail',
-  'inquiry.submit',
-] as const
 
 export const AnswerModelToolIds = [
   'registry.search',
@@ -48,7 +41,6 @@ export type HarnessApprovalDeclaration = {
 
 export type HarnessToolExposure = {
   surfaces: readonly ActionSurface[]
-  quietAgent: boolean
   answerModel: boolean
   publicProjection: 'none' | 'sanitized-counts' | 'receipt-status'
 }
@@ -101,8 +93,6 @@ export type HarnessToolContract<Input = unknown, Output = unknown> = {
   projection: HarnessToolProjection<Output>
 }
 
-export type HarnessQuietToolDescriptor = AgentToolDescriptor
-
 export type HarnessAnswerModelToolDescriptor = {
   type: 'function'
   function: {
@@ -130,7 +120,7 @@ export type HarnessToolEvalFixture = {
   schemaVersion: 1
   toolId: string
   descriptorHash: string
-  exposure: Pick<HarnessToolExposure, 'quietAgent' | 'answerModel' | 'publicProjection'>
+  exposure: Pick<HarnessToolExposure, 'answerModel' | 'publicProjection'>
   policy: Pick<HarnessToolPolicy, 'tier' | 'approval'>
   inputJsonSchema?: JSONSchema
   outputJsonSchema?: JSONSchema
@@ -235,27 +225,6 @@ export function describeHarnessToolExecutionValidation(
   }
 }
 
-export function describeHarnessToolForQuietAgent(
-  contract: HarnessToolContract,
-): HarnessDescriptorProjection<HarnessQuietToolDescriptor> {
-  const descriptor: HarnessQuietToolDescriptor = {
-    id: contract.id,
-    name: contract.name,
-    summary: contract.summary,
-    boundaries: contract.boundaries,
-    readOnly: contract.policy.tier === 'read',
-    parameters: contract.parameters,
-    ...(contract.schemas.inputJsonSchema === undefined ? {} : { inputJsonSchema: contract.schemas.inputJsonSchema }),
-    ...(contract.schemas.outputJsonSchema === undefined ? {} : { outputJsonSchema: contract.schemas.outputJsonSchema }),
-    hasOutputSchema: true,
-  }
-
-  return {
-    descriptor,
-    descriptorHash: contract.schemas.descriptorHash,
-  }
-}
-
 export function describeHarnessToolForAnswerModel(
   contract: HarnessToolContract,
 ): HarnessDescriptorProjection<HarnessAnswerModelToolDescriptor> {
@@ -288,7 +257,6 @@ export function buildHarnessToolEvalFixture(
     toolId: contract.id,
     descriptorHash: contract.schemas.descriptorHash,
     exposure: {
-      quietAgent: contract.exposure.quietAgent,
       answerModel: contract.exposure.answerModel,
       publicProjection: contract.exposure.publicProjection,
     },
@@ -308,12 +276,6 @@ export function buildHarnessToolContracts(
   return actions.map(actionToHarnessToolContract)
 }
 
-export function filterQuietAgentToolContracts(
-  contracts: readonly HarnessToolContract[],
-): readonly HarnessToolContract[] {
-  return sortContractsById(contracts.filter((contract) => contract.exposure.quietAgent), PublicQuietAgentToolIds)
-}
-
 export function filterAnswerModelToolContracts(
   contracts: readonly HarnessToolContract[],
 ): readonly HarnessToolContract[] {
@@ -324,7 +286,6 @@ export function filterAnswerModelToolContracts(
 }
 
 function exposureForAction(action: AnyAction): HarnessToolExposure {
-  const quietAgent = action.surfaces.includes('agentTools') && isPublicQuietAgentToolId(action.id)
   const answerModel = action.readOnly && isAnswerModelToolId(action.id)
   const publicProjection = action.readOnly
     ? 'sanitized-counts'
@@ -334,7 +295,6 @@ function exposureForAction(action: AnyAction): HarnessToolExposure {
 
   return {
     surfaces: action.surfaces,
-    quietAgent,
     answerModel,
     publicProjection,
   }
@@ -342,20 +302,6 @@ function exposureForAction(action: AnyAction): HarnessToolExposure {
 
 function policyForAction(action: AnyAction, exposure: HarnessToolExposure): HarnessToolPolicy {
   const tier: HarnessToolTier = action.readOnly ? 'read' : 'write'
-
-  if (tier === 'read' && exposure.quietAgent) {
-    return {
-      tier,
-      approval: {
-        mode: 'public-read',
-        policy: 'allow',
-        reason: 'read_tool_auto_allowed',
-      },
-      concurrency: 'shared',
-      interruptible: true,
-      loadMode: 'essential',
-    }
-  }
 
   if (action.id === 'inquiry.submit') {
     return {
@@ -383,10 +329,6 @@ function policyForAction(action: AnyAction, exposure: HarnessToolExposure): Harn
     loadMode: 'discoverable',
     hidden: true,
   }
-}
-
-function isPublicQuietAgentToolId(id: string): boolean {
-  return (PublicQuietAgentToolIds as readonly string[]).includes(id)
 }
 
 function isAnswerModelToolId(id: string): boolean {

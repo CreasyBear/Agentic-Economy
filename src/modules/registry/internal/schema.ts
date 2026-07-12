@@ -74,6 +74,7 @@ export const registryTables = {
     repairResult: literalUnion(RegistryRepairResultValues),
   })
     .index('by_business_status', ['businessId', 'status'])
+    .index('by_business_startedAt', ['businessId', 'startedAt'])
     .index('by_logicalKey', ['logicalKey']),
 
   registrySearchDocuments: defineTable({

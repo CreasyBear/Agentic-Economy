@@ -27,7 +27,9 @@ export const observabilityTables = {
     retryAfter: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index('by_actor_operation_key', ['actorRef', 'operationName', 'key']),
+  })
+    .index('by_actor_operation_key', ['actorRef', 'operationName', 'key'])
+    .index('by_scope_key', ['scope', 'key']),
 
   auditEvents: defineTable({
     eventId: v.string(),
@@ -68,6 +70,7 @@ export const observabilityTables = {
   }).index('by_key', ['key']),
 
   funnelEvents: defineTable({
+    eventId: v.optional(v.string()),
     eventType: literalUnion(FunnelEventTypeValues),
     source: v.string(),
     stage: literalUnion(ActivationStageValues),
@@ -86,6 +89,7 @@ export const observabilityTables = {
     .index('by_correlationId', ['correlationId'])
     .index('by_session_createdAt', ['pseudonymousSessionId', 'createdAt'])
     .index('by_business_createdAt', ['businessId', 'createdAt'])
+    .index('by_eventType_business_correlation_createdAt', ['eventType', 'businessId', 'correlationId', 'createdAt'])
     .index('by_source_stage', ['source', 'stage']),
 
   ownerActivationState: defineTable({

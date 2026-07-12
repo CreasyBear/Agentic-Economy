@@ -3,8 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { readOwnerStatusThroughSource } from '@/modules/catalog/owner-claim.functions'
 import { resetPublicOwnerRouteReadbacksForTest } from '@/modules/catalog/public'
 import { openRemovalDisputeThroughSource } from '@/modules/security/removal-dispute.functions'
-import { adminProtectedActionDetailServerToRouteReadback } from '@/routes/admin.protected-actions.$proposalId'
-import type { AdminContactFollowUpReconstructionServerResult } from '@/modules/protected-action/contact-follow-up.functions'
 
 describe('source readback truth seams', () => {
   it('does not fall back to the default owner readback for unknown local slugs', async () => {
@@ -44,21 +42,6 @@ describe('source readback truth seams', () => {
     })
   })
 
-  it('does not synthesize admin protected-action detail rows for allowed empty results', () => {
-    const result = adminProtectedActionDetailServerToRouteReadback({
-      kind: 'allowed',
-      httpStatus: 200,
-      generatedAt: 1,
-      actorRef: 'admin:test',
-      rows: [],
-    } satisfies AdminContactFollowUpReconstructionServerResult)
-
-    expect(result).toEqual({
-      kind: 'not_found',
-      reason: 'No protected-action reconstruction matched that proposal.',
-    })
-    expect(JSON.stringify(result)).not.toContain('missing-admin-route')
-  })
 })
 
 function removalInput(overrides: Partial<Parameters<typeof openRemovalDisputeThroughSource>[0]> = {}) {

@@ -4,29 +4,18 @@ import type { z } from 'zod'
 import { defineAction, listActions } from '@/modules/actions'
 import {
   AnswerModelToolIds,
-  PublicQuietAgentToolIds,
   actionToHarnessTool,
   actionToHarnessToolContract,
   buildHarnessToolContracts,
-  buildHarnessToolEvalFixture,
   describeHarnessToolExecutionValidation,
   describeHarnessToolForAnswerModel,
-  describeHarnessToolForQuietAgent,
   filterAnswerModelToolContracts,
-  filterQuietAgentToolContracts,
   harnessToolContractToDefinition,
 } from '@/modules/harness/public'
 
 type FakeActionResult = Readonly<{ kind: string } & Record<string, unknown>>
 
 describe('harness tool contract', () => {
-  it('keeps the quiet agent allowlist exact and canonically ordered', () => {
-    const contracts = buildHarnessToolContracts(listActions())
-    const quietContracts = filterQuietAgentToolContracts(contracts)
-
-    expect(quietContracts.map((contract) => contract.id)).toEqual([...PublicQuietAgentToolIds])
-  })
-
   it('filters answer-model descriptors to the registry read tools only', () => {
     const contracts = buildHarnessToolContracts(listActions())
     const answerContracts = filterAnswerModelToolContracts(contracts)
@@ -38,18 +27,14 @@ describe('harness tool contract', () => {
     expect(descriptors.every((projection) => projection.descriptor.type === 'function')).toBe(true)
   })
 
-  it('projects quiet and model descriptors from the same schema hash', () => {
+  it('projects answer-model descriptors from the canonical schema hash', () => {
     const contracts = filterAnswerModelToolContracts(buildHarnessToolContracts(listActions()))
 
     for (const contract of contracts) {
-      const quietProjection = describeHarnessToolForQuietAgent(contract)
       const modelProjection = describeHarnessToolForAnswerModel(contract)
-      const evalFixture = buildHarnessToolEvalFixture(contract)
 
-      expect(quietProjection.descriptorHash).toBe(contract.schemas.descriptorHash)
       expect(modelProjection.descriptorHash).toBe(contract.schemas.descriptorHash)
-      expect(evalFixture.descriptorHash).toBe(contract.schemas.descriptorHash)
-      expect(quietProjection.descriptor.inputJsonSchema).toEqual(modelProjection.descriptor.function.parameters)
+      expect(modelProjection.descriptor.function.parameters).toEqual(contract.schemas.inputJsonSchema)
     }
   })
 
@@ -81,7 +66,7 @@ describe('harness tool contract', () => {
       } as unknown as z.ZodType<FakeActionResult>,
       parameters: [],
       readOnly: true,
-      surfaces: ['agentTools'],
+      surfaces: ['answerThread'],
       run: async (): Promise<FakeActionResult> => ({ kind: 'ok' }),
     })
 
@@ -104,84 +89,4 @@ describe('harness tool contract', () => {
     expect(tool.strictOutputSchemaViolation).toBe(validation.strictOutputSchemaViolation)
   })
 
-  it('keeps actual quiet agent tool contracts strict and executable from their public payload shapes', () => {
-    const contracts = filterQuietAgentToolContracts(buildHarnessToolContracts(listActions()))
-    const validInputs: Record<string, unknown> = {
-      'inquiry.submit': {
-        target: {
-          businessSlug: 'demo-business',
-          serviceSlug: 'demo-service',
-          capabilityKind: 'phone_inquiry',
-        },
-        body: 'Need help comparing options.',
-        contact: {},
-      },
-      'businessAction.requestCapability': { businessId: 'business:example' },
-      'registry.detail': { slug: 'demo-business' },
-      'registry.search': { query: 'plumber', limit: 1 },
-    }
-
-    for (const contract of contracts) {
-      const validation = describeHarnessToolExecutionValidation(contract)
-      const tool = harnessToolContractToDefinition(contract)
-
-      expect(validation.strictInputSchemaViolation, contract.id).toBeUndefined()
-      expect(validation.strictOutputSchemaViolation, contract.id).toBeUndefined()
-      expect(validation.providerViolations, contract.id).toEqual([])
-      expect(tool.inputSchema.safeParse(validInputs[contract.id]).success, contract.id).toBe(true)
-    }
-  })
-
-  it('keeps raw internal fields out of the quiet descriptor projection', () => {
-    const contract = filterQuietAgentToolContracts(buildHarnessToolContracts(listActions()))[0]
-    expect(contract).toBeDefined()
-
-    const quietDescriptor = describeHarnessToolForQuietAgent(contract!).descriptor
-
-    expect(Object.keys(quietDescriptor).sort()).toEqual([
-      'boundaries',
-      'hasOutputSchema',
-      'id',
-      'inputJsonSchema',
-      'name',
-      'outputJsonSchema',
-      'parameters',
-      'readOnly',
-      'summary',
-    ])
-    for (const internalField of [
-      'descriptorHash',
-      'providerViolations',
-      'providerDiagnostics',
-      'inputSchema',
-      'outputSchema',
-      'execute',
-      'policy',
-      'exposure',
-      'approval',
-      'sourceWrite',
-    ]) {
-      expect(quietDescriptor).not.toHaveProperty(internalField)
-    }
-  })
-
-  it('builds eval fixtures from the same contract bundle without raw runners', () => {
-    const [contract] = filterQuietAgentToolContracts(buildHarnessToolContracts(listActions()))
-    expect(contract).toBeDefined()
-
-    const fixture = buildHarnessToolEvalFixture(contract!)
-
-    expect(fixture).toMatchObject({
-      schemaVersion: 1,
-      toolId: contract!.id,
-      descriptorHash: contract!.schemas.descriptorHash,
-      exposure: {
-        quietAgent: true,
-      },
-      policy: {
-        tier: contract!.policy.tier,
-      },
-    })
-    expect(JSON.stringify(fixture)).not.toMatch(/execute|inputSchema|outputSchema/)
-  })
 })

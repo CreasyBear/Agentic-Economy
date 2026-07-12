@@ -1,4 +1,5 @@
 import type { ActionContext, AnyAction } from '@/modules/common/action'
+import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { stableHash } from '@/modules/common/stable-hash'
 
 import {
@@ -28,7 +29,7 @@ export type RunHarnessToolInput = {
   input: unknown
   context?: ActionContext
   toolCallId?: string
-  surface?: 'ui' | 'http' | 'agentJson' | 'agentTools'
+  surface?: 'ui' | 'http' | 'agentJson' | 'answerThread'
   allowWrites?: boolean
   timeoutMs?: number
   signal?: AbortSignal
@@ -278,8 +279,7 @@ function normalizeToolAbortReason(reason: unknown): Error {
 }
 
 function buildToolCallId(toolId: string): string {
-  const safeToolId = toolId.replaceAll(/[^a-zA-Z0-9_-]/g, '-')
-  return `ht-${safeToolId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return createRuntimeId(createRuntimeIdPrefix('ht', toolId))
 }
 
 function elapsed(startedAt: number): number {

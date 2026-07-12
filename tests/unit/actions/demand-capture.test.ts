@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { findAction, listAgentToolActions } from '@/modules/actions'
+import { findAction } from '@/modules/actions'
 
 describe('demand.capture action', () => {
   it('is registered for UI/HTTP surfaces but not agent tools', () => {
@@ -8,7 +8,6 @@ describe('demand.capture action', () => {
 
     expect(action).toBeDefined()
     expect(action?.surfaces).toEqual(['ui', 'http'])
-    expect(listAgentToolActions().map((candidate) => candidate.id)).not.toContain('demand.capture')
   })
 
   it.each([

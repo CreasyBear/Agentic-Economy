@@ -19,13 +19,6 @@ crons.interval(
 )
 
 crons.interval(
-  'recheck due business capabilities',
-  { hours: 1 },
-  internal.capabilities.recheckDueBusinessCapabilities,
-  {}
-)
-
-crons.interval(
   'cleanup expired source write nonces',
   { hours: 1 },
   internal.sourceWriteAdmission.cleanupExpiredSourceWriteNonces,

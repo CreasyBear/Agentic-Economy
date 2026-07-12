@@ -5,7 +5,7 @@ export type BoundedRequestTextResult =
 const decoder = new TextDecoder()
 
 export async function readBoundedRequestText(
-  request: Request,
+  request: Pick<Request, 'body' | 'headers'>,
   maxBytes: number,
 ): Promise<BoundedRequestTextResult> {
   const declaredContentLength = Number(request.headers.get('content-length'))

@@ -14,7 +14,7 @@ import {
   extractStorefrontDraftFromHtml,
   importStorefrontDraftFromWebsite,
 } from '@/modules/storefront/public'
-import { createStorefrontGuardedLookup, isPublicHttpTarget } from '@/modules/storefront/internal/network-guard'
+import { createGuardedLookup, isPublicHttpTarget } from '@/modules/network-guard/public'
 import { handleImportStorefrontDraftRequest } from '@/routes/api.storefront.import-draft'
 
 const fixtureHtml = `<!doctype html>
@@ -54,8 +54,8 @@ async function runGuardedLookup(
   options: LookupOptions = {},
   hostname = 'northside.example'
 ): Promise<GuardedLookupCallbackResult> {
-  const { promise, resolve } = Promise.withResolvers<GuardedLookupCallbackResult>()
-  createStorefrontGuardedLookup(dns)(hostname, options, (err, address, family) => {
+  const { promise, resolve } = createDeferred<GuardedLookupCallbackResult>()
+  createGuardedLookup(dns)(hostname, options, (err, address, family) => {
     resolve({ err, address, family })
   })
   return promise
@@ -86,6 +86,16 @@ async function expectFetchRejected(websiteUrl: string, options: ImportOptions = 
   if (result.kind === 'error') {
     expect(result.reason).not.toMatch(/localhost|127\\.0\\.0\\.1|10\\.0\\.0\\.1|172\\.16\\.0\\.1|192\\.168\\.0\\.1|169\\.254\\.169\\.254|::1|fc00/i)
   }
+}
+
+function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (reason?: unknown) => void } {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
 }
 
 const literalNonPublicUrls = [
@@ -298,7 +308,7 @@ describe('storefront import draft', () => {
 
   it('rejects requests that time out', async () => {
     const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
-      const { promise, reject } = Promise.withResolvers<Response>()
+      const { promise, reject } = createDeferred<Response>()
       init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
       return promise
     })

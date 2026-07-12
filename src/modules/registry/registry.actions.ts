@@ -66,7 +66,6 @@ const registryDetailInputSchema = z.strictObject({
 })
 
 const publicBusinessCatalogApiDtoOutputSchema = z.strictObject({
-  businessId: z.string(),
   slug: z.string(),
   name: z.string(),
   category: z.string(),
@@ -229,7 +228,7 @@ export const registrySearchAction = defineAction({
   outputSchema: registryPageOutputSchema,
   parameters: searchParameters,
   readOnly: true,
-  surfaces: ['http', 'agentJson', 'agentTools'],
+  surfaces: ['http', 'agentJson', 'answerThread'],
   run: async ({ data, context }) => {
     const page = await readPublicRegistrySearchPage({
       query: data.query.trim(),
@@ -257,7 +256,7 @@ export const registryDetailAction = defineAction({
   outputSchema: registryDetailOutputSchema,
   parameters: detailParameters,
   readOnly: true,
-  surfaces: ['http', 'agentJson', 'agentTools'],
+  surfaces: ['http', 'agentJson', 'answerThread'],
   run: async ({ data }) => {
     const result = await readPublicRegistryBusinessDetail({ slug: data.slug.trim() })
     return result as PublicBusinessCatalogDetailResult

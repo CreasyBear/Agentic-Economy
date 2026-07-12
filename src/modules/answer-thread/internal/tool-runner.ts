@@ -1,5 +1,6 @@
 import { findAction } from '@/modules/actions'
 import type { ActionTimingSink } from '@/modules/common/action'
+import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 import { stableHash } from '@/modules/common/stable-hash'
 import { toAnswerSource } from '@/modules/answer/public'
 import type { AnswerSource } from '@/modules/answer/answer-synthesizer'
@@ -89,7 +90,7 @@ export async function runAnswerToolCall(
         tool,
         input: input.input,
         context: { timing: timings.sink },
-        surface: 'agentTools',
+        surface: 'answerThread',
         allowWrites: false,
         toolCallId,
       })
@@ -97,7 +98,7 @@ export async function runAnswerToolCall(
         tool,
         input: input.input,
         context: { timing: timings.sink },
-        surface: 'agentTools',
+        surface: 'answerThread',
         allowWrites: false,
         toolCallId,
       })
@@ -148,9 +149,7 @@ export function refuseAnswerToolCall(
 }
 
 function makeToolCallId(input: RunAnswerToolCallInput): string {
-  return `tc-${input.turnId}-${input.seq}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`
+  return createRuntimeId(createRuntimeIdPrefix('tc', input.turnId, String(input.seq)))
 }
 
 function refuse(

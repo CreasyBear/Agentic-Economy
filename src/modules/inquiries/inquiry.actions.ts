@@ -9,20 +9,20 @@ import {
   type PublicInquirySubmitServerResult,
 } from '@/modules/inquiries/inquiry.functions'
 
-const serverErrorOutputSchema = z.object({
+const serverErrorOutputSchema = z.strictObject({
   kind: z.literal('error'),
   code: z.string(),
   retryable: z.boolean(),
   reason: z.string(),
   field: z.string().optional(),
   retryAfter: z.number().optional(),
-}).strict()
+})
 
 const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
-  z.object({
+  z.strictObject({
     kind: z.literal('ok'),
     code: z.enum(['inquiry_submitted', 'inquiry_replayed']),
-    receipt: z.object({
+    receipt: z.strictObject({
       threadId: z.string(),
       businessId: z.string(),
       serviceId: z.string(),
@@ -31,8 +31,8 @@ const publicInquirySubmitOutputSchema = z.discriminatedUnion('kind', [
       notificationId: z.string(),
       notificationStatus: z.string(),
       accessKey: z.string(),
-    }).strict(),
-  }).strict(),
+    }),
+  }),
   serverErrorOutputSchema,
 ]) as z.ZodType<PublicInquirySubmitServerResult>
 
@@ -114,45 +114,45 @@ const submitParameters: readonly ActionParameter[] = [
 // a formatted international phone number, a normal display name).
 const agentToolInquirySubmitSchema = publicInquirySubmitSchema.extend({
   body: z.string().max(2_000),
-  contact: z.object({
+  contact: z.strictObject({
     name: z.string().max(200).optional(),
     email: z.string().max(254).optional(),
     phone: z.string().max(32).optional(),
-  }).strict(),
-}).strict()
+  }),
+})
 
 
-const readCustomerRecordInputSchema = z.object({
+const readCustomerRecordInputSchema = z.strictObject({
   threadId: z.string().trim().min(1).max(240),
   accessKey: z.string().trim().min(16).max(256),
-}).strict()
+})
 
 const customerRecordOutputSchema = z.discriminatedUnion('kind', [
-  z.object({
+  z.strictObject({
     kind: z.literal('ok'),
     code: z.literal('inquiry_customer_record_read'),
-    record: z.object({
+    record: z.strictObject({
       schemaVersion: z.literal('inquiry-customer-record:v1'),
       threadId: z.string(),
-      business: z.object({ name: z.string(), slug: z.string() }).strict(),
-      submitted: z.object({ messageSummary: z.string(), submittedAt: z.number() }).strict(),
-      delivery: z.object({
+      business: z.strictObject({ name: z.string(), slug: z.string() }),
+      submitted: z.strictObject({ messageSummary: z.string(), submittedAt: z.number() }),
+      delivery: z.strictObject({
         state: z.enum(['queued', 'sent', 'failed', 'held']),
         label: z.string(),
         updatedAt: z.number(),
-      }).strict(),
-      timeline: z.array(z.object({
+      }),
+      timeline: z.array(z.strictObject({
         key: z.enum(['received', 'sent_to_business', 'business_replied', 'closed']),
         label: z.string(),
         detail: z.string(),
         status: z.enum(['complete', 'current', 'pending']),
         timestamp: z.number().optional(),
-      }).strict()),
-      reply: z.object({ body: z.string(), createdAt: z.number() }).strict().optional(),
+      })),
+      reply: z.strictObject({ body: z.string(), createdAt: z.number() }).optional(),
       closedAt: z.number().optional(),
       updatedAt: z.number(),
-    }).strict(),
-  }).strict(),
+    }),
+  }),
   serverErrorOutputSchema,
 ]) as z.ZodType<CustomerInquiryRecordServerResult>
 
@@ -182,12 +182,13 @@ export const submitInquiryAction = defineAction({
     'Availability, quote, and job acceptance still need a human reply.',
     'Refuse to call this if the person wants instant booking, payment, or autonomous execution.',
     'Use one of phone_inquiry / quote_request / emergency_callout_interest / ae_hosted_discovery as the capability kind, matching what the listing publishes.',
+    'When the target names a business slug, a refusal returns a handoffUrl to that listing\'s inquiry form, prefilled with the message, so a person can send it for owner review.',
   ],
   schema: agentToolInquirySubmitSchema,
   outputSchema: publicInquirySubmitOutputSchema,
   parameters: submitParameters,
   readOnly: false,
-  surfaces: ['agentJson', 'agentTools'],
+  surfaces: ['agentJson'],
   run: async ({ data, context }) =>
     submitPublicInquiryThroughSource(data, context) as Promise<PublicInquirySubmitServerResult>,
 })

@@ -36,6 +36,7 @@ export const businessTables = {
     suppressedAt: v.optional(v.number()),
   })
     .index('by_slug', ['slug'])
+    .index('by_owner_updatedAt', ['ownerId', 'updatedAt'])
     .index('by_publicStatus_slug', ['publicStatus', 'slug']),
 
   businessContexts: defineTable({

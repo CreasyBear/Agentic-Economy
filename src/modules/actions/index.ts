@@ -12,7 +12,6 @@
  */
 
 import type { AnyAction } from '@/modules/common/action'
-import { requestCapabilityAction } from '@/modules/business-action/business-action.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
 import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 import {
@@ -25,7 +24,6 @@ import { storefrontImportDraftAction } from '@/modules/storefront/storefront.act
 
 const actions: readonly AnyAction[] = [
   submitInquiryAction,
-  requestCapabilityAction,
   readCustomerRecordAction,
   registryListAction,
   registrySearchAction,
@@ -39,10 +37,6 @@ assertUniqueActionIds(actions)
 
 export function listActions(): readonly AnyAction[] {
   return actions
-}
-
-export function listAgentToolActions(): readonly AnyAction[] {
-  return actions.filter((action) => action.surfaces.includes('agentTools'))
 }
 
 export function findAction(id: string): AnyAction | undefined {

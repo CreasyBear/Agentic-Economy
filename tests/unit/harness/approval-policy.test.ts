@@ -15,7 +15,7 @@ describe('AE harness approval policy', () => {
       expect(resolveHarnessApprovalPolicy({
         tool: readTool(),
         mode,
-        surface: 'agentTools',
+        surface: 'answerThread',
       })).toMatchObject({
         policy: 'allow',
         status: 'allowed',
@@ -44,7 +44,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: promptedRead,
       mode: 'public-read',
-      surface: 'agentTools',
+      surface: 'answerThread',
     })).toMatchObject({
       policy: 'prompt',
       status: 'blocked',
@@ -55,7 +55,7 @@ describe('AE harness approval policy', () => {
     const outcome = await runHarnessTool({
       tool: promptedRead,
       input: {},
-      surface: 'agentTools',
+      surface: 'answerThread',
       toolCallId: 'tc-public-prompt',
     })
 
@@ -69,7 +69,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: writeTool({ id: 'catalog.publish' }),
       mode: 'public-qualified-write',
-      surface: 'agentTools',
+      surface: 'answerThread',
       context: sourceWriteContext(),
     })).toMatchObject({
       policy: 'prompt',
@@ -83,7 +83,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: inquirySubmitTool(),
       mode: 'public-qualified-write',
-      surface: 'agentTools',
+      surface: 'answerThread',
     })).toMatchObject({
       policy: 'prompt',
       status: 'blocked',
@@ -93,24 +93,24 @@ describe('AE harness approval policy', () => {
     })
   })
 
-  it('allows inquiry-style source-write admission only in public-qualified-write mode', () => {
+  it('refuses the removed public-qualified-write mode', () => {
     const results = Object.fromEntries(
       HarnessApprovalModeValues.map((mode) => [
         mode,
         resolveHarnessApprovalPolicy({
           tool: inquirySubmitTool(),
           mode,
-          surface: 'agentTools',
+          surface: 'answerThread',
           context: sourceWriteContext(),
         }),
       ]),
     ) as Record<HarnessApprovalMode, ReturnType<typeof resolveHarnessApprovalPolicy>>
 
     expect(results['public-qualified-write']).toMatchObject({
-      policy: 'allow',
-      status: 'allowed',
+      policy: 'prompt',
+      status: 'blocked',
       sourceWriteScope: 'public_inquiry',
-      reason: 'write_source_admitted',
+      reason: 'agent_tool_admission_required',
     })
 
     for (const mode of HarnessApprovalModeValues.filter((mode) => mode !== 'public-qualified-write')) {
@@ -127,7 +127,7 @@ describe('AE harness approval policy', () => {
     expect(resolveHarnessApprovalPolicy({
       tool: readTool(),
       mode: 'public-read',
-      surface: 'agentTools',
+      surface: 'answerThread',
       overrides: { 'registry.search': 'deny' },
     })).toMatchObject({
       policy: 'deny',
@@ -155,7 +155,7 @@ function readTool(
   return tool({
     id: 'registry.search',
     tier: 'read',
-    surfaces: ['agentTools'],
+    surfaces: ['answerThread'],
     ...overrides,
   })
 }
@@ -163,7 +163,7 @@ function readTool(
 function inquirySubmitTool(): HarnessToolDefinition {
   return writeTool({
     id: 'inquiry.submit',
-    surfaces: ['agentTools'],
+    surfaces: ['answerThread'],
   })
 }
 
@@ -171,7 +171,7 @@ function execTool(): HarnessToolDefinition {
   return tool({
     id: 'internal.exec',
     tier: 'exec',
-    surfaces: ['agentTools'],
+    surfaces: ['answerThread'],
   })
 }
 
@@ -181,7 +181,7 @@ function writeTool(
   return tool({
     id: 'inquiry.submit',
     tier: 'write',
-    surfaces: ['agentTools'],
+    surfaces: ['answerThread'],
     ...overrides,
   })
 }
@@ -195,7 +195,7 @@ function tool(
     summary: overrides.summary ?? 'Test harness tool.',
     boundaries: overrides.boundaries ?? ['Test boundary.'],
     tier: overrides.tier,
-    surfaces: overrides.surfaces ?? ['agentTools'],
+    surfaces: overrides.surfaces ?? ['answerThread'],
     inputSchema: overrides.inputSchema ?? z.object({}),
     outputSchema: overrides.outputSchema ?? z.object({ kind: z.literal('ok') }),
     ...(overrides.approval === undefined ? {} : { approval: overrides.approval }),

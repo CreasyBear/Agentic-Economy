@@ -93,7 +93,9 @@ export const discoveryTables = {
       callable: v.literal(false),
       paymentRequired: v.literal(false),
     }),
-  }).index('by_business_version', ['businessId', 'ucpVersion']),
+  })
+    .index('by_business_version', ['businessId', 'ucpVersion'])
+    .index('by_business_generatedAt', ['businessId', 'generatedAt']),
 
   discoveryManifestAttempts: defineTable({
     attemptId: v.string(),
@@ -119,5 +121,6 @@ export const discoveryTables = {
     repairResult: literalUnion(DiscoveryRepairResultValues),
   })
     .index('by_attemptId', ['attemptId'])
+    .index('by_business_startedAt', ['businessId', 'startedAt'])
     .index('by_business_status', ['businessId', 'status']),
 } as const

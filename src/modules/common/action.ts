@@ -5,8 +5,7 @@ import { z } from 'zod'
  * Agent-native action contract for AE.
  *
  * One declaration fans out to every surface: the React UI, the HTTP API, the
- * agent JSON payload, and the quiet assistant tools door that stays out of
- * public human copy.
+ * agent JSON payload, and the internal answer-thread read-tool runner.
  *
  * Each action carries a boundary-honest `summary` and an explicit `boundaries`
  * list so an external assistant knows both *when* to call it and *what it must
@@ -24,7 +23,7 @@ import { z } from 'zod'
  * bundler tree-shakes bare side-effect imports.
  */
 
-export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'agentTools'
+export type ActionSurface = 'ui' | 'http' | 'agentJson' | 'answerThread'
 
 export type ActionSourceWriteRequest = {
   method: string
@@ -55,18 +54,12 @@ export type ActionAgentIdentity = {
 export type ActionContext = {
   /** Admission context for writes; built from the calling surface's request. */
   sourceWriteRequest?: ActionSourceWriteRequest
-  /** The raw incoming request, when available (HTTP / agent-tools surfaces). */
+  /** The raw incoming request, when available at an HTTP boundary. */
   request?: Request
   /** Internal timing sink used by answer turns; never exposed on human surfaces. */
   timing?: ActionTimingSink
   /** Signed request identity for attribution/quota/audit only; never write authority. */
   agentIdentity?: ActionAgentIdentity
-  /** Per-tool admission for signed agent writes; identity alone never grants this. */
-  agentToolAdmission?: {
-    toolId: string
-    scope: 'public_inquiry' | 'business_action_request'
-    principalId: string
-  }
   /** Harness-only approval authority for owner/admin-gated tools. */
   harnessApproval?: ActionHarnessApprovalContext
 }
@@ -119,7 +112,7 @@ export function defineAction<Input, Result extends ActionResult>(
   return def
 }
 
-/** Agent-facing description of an action, used by the agent-tools list surface. */
+/** Machine-readable description of an action. */
 export type AgentToolDescriptor = {
   id: string
   name: string

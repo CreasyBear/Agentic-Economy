@@ -11,24 +11,6 @@ export {
 } from './approval-policy'
 
 export {
-  AGENT_TOOL_WRITE_SCOPES,
-  declaredAgentToolWriteScope,
-  publicQuietAgentWriteScopeForTool,
-  type AgentToolWriteScope,
-  type AgentToolWriteToolId,
-} from './agent-tool-write-scope'
-
-export {
-  invokeQuietAgentTool,
-  listQuietAgentTools,
-  type QuietAgentDoorErrorCode,
-  type QuietAgentDoorFailure,
-  type QuietAgentDoorInvokeResult,
-  type QuietAgentDoorListResult,
-  type QuietAgentDoorSuccess,
-} from './agent-door'
-
-export {
   evaluateAgenticLoopProof,
   parseActReceiptFromInquirySubmitBody,
   parseDeliveryTrailFromDispatchReadback,
@@ -152,23 +134,19 @@ export {
 
 export {
   AnswerModelToolIds,
-  PublicQuietAgentToolIds,
   actionToHarnessToolContract,
   buildHarnessToolContracts,
   buildHarnessToolEvalFixture,
   buildHarnessToolSchemaBundle,
   describeHarnessToolExecutionValidation,
   describeHarnessToolForAnswerModel,
-  describeHarnessToolForQuietAgent,
   filterAnswerModelToolContracts,
-  filterQuietAgentToolContracts,
   harnessToolContractToDefinition,
   type HarnessAnswerModelToolDescriptor,
   type HarnessApprovalDeclaration,
   type HarnessApprovalMode,
   type HarnessDescriptorProjection,
   type HarnessExecuteArgs,
-  type HarnessQuietToolDescriptor,
   type HarnessToolContract,
   type HarnessToolEvalFixture,
   type HarnessToolExecutionValidationMetadata,

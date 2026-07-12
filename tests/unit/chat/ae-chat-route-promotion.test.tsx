@@ -95,7 +95,7 @@ describe('AeChat route promotion', () => {
   })
 
   it('keeps the active answer shell mounted while promoting a new home turn to its thread route', async () => {
-    testState.navigateResult = Promise.withResolvers<void>().promise
+    testState.navigateResult = createDeferred<void>().promise
 
     render(<AeChat />)
 
@@ -364,4 +364,14 @@ function providerWithoutInquiry(
 ): Extract<TestArtifact, { kind: 'provider-cards' }>['providers'][number] {
   const { inquiryUrl: _inquiryUrl, ...source } = provider(overrides)
   return source
+}
+
+function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T | PromiseLike<T>) => void; reject: (reason?: unknown) => void } {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
 }

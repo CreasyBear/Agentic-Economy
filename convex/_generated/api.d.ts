@@ -11,15 +11,8 @@
 import type * as answerThreads from "../answerThreads.js";
 import type * as authz from "../authz.js";
 import type * as authzMigration from "../authzMigration.js";
-import type * as billing from "../billing.js";
-import type * as billingStore from "../billingStore.js";
 import type * as business from "../business.js";
-import type * as businessActionStore from "../businessActionStore.js";
-import type * as businessActions from "../businessActions.js";
-import type * as capabilities from "../capabilities.js";
-import type * as capabilityCheck from "../capabilityCheck.js";
 import type * as catalog from "../catalog.js";
-import type * as clearance from "../clearance.js";
 import type * as crons from "../crons.js";
 import type * as demand from "../demand.js";
 import type * as devSeed from "../devSeed.js";
@@ -30,8 +23,6 @@ import type * as http from "../http.js";
 import type * as inquiries from "../inquiries.js";
 import type * as notificationOutbox from "../notificationOutbox.js";
 import type * as observability from "../observability.js";
-import type * as protectedActionStore from "../protectedActionStore.js";
-import type * as protectedActions from "../protectedActions.js";
 import type * as registry from "../registry.js";
 import type * as routingKernel from "../routingKernel.js";
 import type * as routingKernelAgentGrants from "../routingKernelAgentGrants.js";
@@ -47,7 +38,6 @@ import type * as security from "../security.js";
 import type * as settings from "../settings.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
 import type * as source_state from "../source_state.js";
-import type * as spikeHandshakeRuntime from "../spikeHandshakeRuntime.js";
 
 import type {
   ApiFromModules,
@@ -59,15 +49,8 @@ declare const fullApi: ApiFromModules<{
   answerThreads: typeof answerThreads;
   authz: typeof authz;
   authzMigration: typeof authzMigration;
-  billing: typeof billing;
-  billingStore: typeof billingStore;
   business: typeof business;
-  businessActionStore: typeof businessActionStore;
-  businessActions: typeof businessActions;
-  capabilities: typeof capabilities;
-  capabilityCheck: typeof capabilityCheck;
   catalog: typeof catalog;
-  clearance: typeof clearance;
   crons: typeof crons;
   demand: typeof demand;
   devSeed: typeof devSeed;
@@ -78,8 +61,6 @@ declare const fullApi: ApiFromModules<{
   inquiries: typeof inquiries;
   notificationOutbox: typeof notificationOutbox;
   observability: typeof observability;
-  protectedActionStore: typeof protectedActionStore;
-  protectedActions: typeof protectedActions;
   registry: typeof registry;
   routingKernel: typeof routingKernel;
   routingKernelAgentGrants: typeof routingKernelAgentGrants;
@@ -95,7 +76,6 @@ declare const fullApi: ApiFromModules<{
   settings: typeof settings;
   sourceWriteAdmission: typeof sourceWriteAdmission;
   source_state: typeof source_state;
-  spikeHandshakeRuntime: typeof spikeHandshakeRuntime;
 }>;
 
 /**

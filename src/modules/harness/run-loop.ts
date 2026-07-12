@@ -1,4 +1,5 @@
 import type { ActionContext, ActionSurface } from '@/modules/common/action'
+import { createRuntimeId, createRuntimeIdPrefix } from '@/modules/common/runtime-id'
 
 import {
   runHarnessTool,
@@ -719,13 +720,6 @@ export class HarnessRunLoopTimeoutError extends Error {
   }
 }
 
-export async function runHarnessRunLoop<State>(
-  options: HarnessRunLoopOptions,
-  input: HarnessRunLoopRunInput<State>,
-): Promise<HarnessRunLoopResult<State>> {
-  return new HarnessRunLoop(options).run(input)
-}
-
 function statusFromError(error: unknown): HarnessRunStatus {
   if (error instanceof HarnessRunLoopAbortError) {
     return 'aborted'
@@ -770,16 +764,15 @@ function statusPriority(status: HarnessRunStatus): number {
 }
 
 function createRunId(): string {
-  return `hr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return createRuntimeId('hr')
 }
 
 function createSessionId(): string {
-  return `hs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return createRuntimeId('hs')
 }
 
 function createToolCallId(toolId: string): string {
-  const safeToolId = toolId.replaceAll(/[^a-zA-Z0-9_-]/g, '-')
-  return `ht-${safeToolId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  return createRuntimeId(createRuntimeIdPrefix('ht', toolId))
 }
 
 function roundDuration(value: number): number {

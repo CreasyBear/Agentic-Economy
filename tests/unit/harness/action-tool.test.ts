@@ -21,14 +21,14 @@ describe('harness action tool adapter', () => {
       outputSchema: z.object({ kind: z.literal('ok'), total: z.number().int() }),
       parameters: [],
       readOnly: true,
-      surfaces: ['agentTools'],
+      surfaces: ['answerThread'],
       run: async ({ data }) => ({ kind: 'ok', total: data.limit ?? 1 }),
     })
 
     const tool = actionToHarnessTool(action)
     expect(tool.tier).toBe('read')
     expect(tool.inputJsonSchema).toMatchObject({ type: 'object' })
-    expect(resolveHarnessApproval({ tool, surface: 'agentTools' })).toMatchObject({
+    expect(resolveHarnessApproval({ tool, surface: 'answerThread' })).toMatchObject({
       policy: 'allow',
       reason: 'read_tool_auto_allowed',
     })
@@ -36,7 +36,7 @@ describe('harness action tool adapter', () => {
     const ok = await runHarnessTool({
       tool,
       input: { query: 'plumber', limit: 2 },
-      surface: 'agentTools',
+      surface: 'answerThread',
       toolCallId: 'tc-1',
     })
     expect(ok.result).toMatchObject({
@@ -49,7 +49,7 @@ describe('harness action tool adapter', () => {
     const invalid = await runHarnessTool({
       tool,
       input: { query: '' },
-      surface: 'agentTools',
+      surface: 'answerThread',
       toolCallId: 'tc-2',
     })
     expect(invalid.result).toMatchObject({
@@ -68,7 +68,7 @@ describe('harness action tool adapter', () => {
       outputSchema: z.object({ kind: z.literal('ok'), receiptId: z.string() }),
       parameters: [],
       readOnly: false,
-      surfaces: ['agentTools'],
+      surfaces: ['answerThread'],
       run: async () => ({ kind: 'ok', receiptId: 'receipt-1' }),
     })
     const tool = actionToHarnessTool(action)
@@ -76,7 +76,7 @@ describe('harness action tool adapter', () => {
     const withoutWriteAdmission = await runHarnessTool({
       tool,
       input: { body: 'Need help' },
-      surface: 'agentTools',
+      surface: 'answerThread',
       allowWrites: true,
       toolCallId: 'tc-write-1',
     })
@@ -92,28 +92,22 @@ describe('harness action tool adapter', () => {
     const admitted = await runHarnessTool({
       tool,
       input: { body: 'Need help' },
-      surface: 'agentTools',
+      surface: 'answerThread',
       allowWrites: true,
       toolCallId: 'tc-write-2',
       context: {
         sourceWriteRequest: {
           method: 'POST',
           origin: 'https://example.test',
-          pathname: '/api/agent/tools',
+          pathname: '/internal/answer-thread',
           bodyDigest: 'none',
-        },
-        agentToolAdmission: {
-          toolId: 'inquiry.submit',
-          scope: 'public_inquiry',
-          principalId: 'agent:test-principal',
         },
       },
     })
     expect(admitted.decision).toMatchObject({
-      policy: 'allow',
-      reason: 'write_source_admitted',
+      policy: 'prompt',
     })
-    expect(admitted.result.status).toBe('ok')
+    expect(admitted.result.status).toBe('blocked')
   })
 
   it('passes timeout abort signals into interruptible tool execution', async () => {
@@ -124,7 +118,7 @@ describe('harness action tool adapter', () => {
       summary: 'Search published listings.',
       boundaries: ['Read-only. Does not book, charge, dispatch, or send inquiries.'],
       tier: 'read',
-      surfaces: ['agentTools'],
+      surfaces: ['answerThread'],
       inputSchema: z.object({ query: z.string().min(1) }) as z.ZodType<unknown>,
       outputSchema: z.object({ kind: z.literal('ok') }) as z.ZodType<unknown>,
       approval: 'allow',
@@ -140,7 +134,7 @@ describe('harness action tool adapter', () => {
     const timedOut = await runHarnessTool({
       tool,
       input: { query: 'plumber' },
-      surface: 'agentTools',
+      surface: 'answerThread',
       timeoutMs: 1,
       toolCallId: 'tc-timeout',
     })

@@ -1,7 +1,5 @@
-import { useState } from 'react'
 import { ArrowLeftIcon } from 'lucide-react'
 import { Badge } from '@astryxdesign/core/Badge'
-import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Divider } from '@astryxdesign/core/Divider'
@@ -9,9 +7,7 @@ import { Grid } from '@astryxdesign/core/Grid'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Token } from '@astryxdesign/core/Token'
-import { useServerFn } from '@tanstack/react-start'
 
-import { useClientMounted } from '@/hooks/use-client-mounted'
 import { AeGenerativeMap, AeOfficeMap } from '@/components/ae/artifacts/AeGenerativeMap'
 import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
@@ -20,8 +16,6 @@ import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { buildProviderPresentation, pillToneForAvailabilityLabel, type ProviderPresentation } from '@/lib/ui/provider-presentation'
 import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
 import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
-import { resolveReserveBookingMode } from '@/modules/business-action/public'
-import { createReserveBookingProposalServer } from '@/modules/business-action/business-action.functions'
 
 export type AeProviderListingPageProps = {
   catalog: PublicRouteCatalogContract
@@ -97,7 +91,6 @@ export function AeProviderListingPage({
           </Grid>
 
           <CapabilityCardsSection catalog={catalog} inquiryAffordance={inquiryAffordance} inquiryHref={inquiryHref} />
-          <ReserveBookingCard catalog={catalog} />
 
           <WhatTheyOfferCard catalog={catalog} presentation={presentation} officeAddress={officeAddress} />
         </div>
@@ -196,90 +189,6 @@ function CapabilityCardsSection({
             )
           })}
         </Grid>
-      </VStack>
-    </Card>
-  )
-}
-
-function ReserveBookingCard({ catalog }: { catalog: PublicRouteCatalogContract }) {
-  const reserveBookingMode = resolveReserveBookingMode({})
-  const createReserveBookingProposal = useServerFn(createReserveBookingProposalServer)
-  const hydrated = useClientMounted()
-  const [pending, setPending] = useState(false)
-  const [receiptLine, setReceiptLine] = useState<string | undefined>()
-  const [error, setError] = useState<string | undefined>()
-  const submitted = receiptLine !== undefined
-  const modeLine = reserveBookingMode.mode === 'query'
-    ? "This business hasn't published a direct booking channel yet, so your request goes to them in writing."
-    : "This business has published a direct booking channel. The business still reviews and confirms the request."
-
-  async function requestBooking() {
-    if (pending || submitted) {
-      return
-    }
-
-    setPending(true)
-    setError(undefined)
-    setReceiptLine(undefined)
-
-    try {
-      const result = await createReserveBookingProposal({ data: { businessId: catalog.businessId } })
-      if (result.kind === 'ok') {
-        const requestId = typeof result.request?.id === 'string' ? result.request.id : undefined
-        setReceiptLine(
-          requestId === undefined
-            ? 'Booking request sent for owner review.'
-            : `Booking request sent for owner review. Request ${requestId}.`
-        )
-        return
-      }
-
-      setError(result.reason)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Booking request could not be sent.')
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <Card padding={6} aria-labelledby="reserve-booking-title">
-      <VStack gap={4}>
-        <div>
-          <Text id="reserve-booking-title" type="large" weight="semibold" color="primary" display="block">
-            Reserve a booking
-          </Text>
-          <Text color="secondary" display="block" className="text-pretty">
-            Propose a booking. {catalog.name} reviews and confirms — AE does not book, charge, or confirm.
-          </Text>
-        </div>
-
-        <Text type="supporting" color="secondary" display="block" className="text-pretty">
-          {modeLine}
-        </Text>
-
-        {error === undefined ? null : (
-          <Banner status="error" title="Booking request needs attention" description={error} />
-        )}
-
-        {receiptLine === undefined ? null : (
-          <Text type="supporting" color="primary" display="block" aria-live="polite">
-            {receiptLine}
-          </Text>
-        )}
-
-        <div>
-          <Button
-            label="Request a booking"
-            variant="primary"
-            type="button"
-            onClick={() => {
-              void requestBooking()
-            }}
-            isDisabled={!hydrated || pending || submitted}
-            isLoading={pending}
-          />
-        </div>
       </VStack>
     </Card>
   )

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { findAction, listAgentToolActions } from '@/modules/actions'
+import { findAction } from '@/modules/actions'
 import type { OwnerId } from '@/modules/common/ids'
 import {
   createEmptyOwnerSettingsSourceState,
@@ -16,7 +16,6 @@ describe('settings.updateNotificationPreferences action', () => {
     expect(action?.readOnly).toBe(false)
     expect(action?.surfaces).toEqual(['ui', 'http'])
     expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['newInquiryEmailEnabled'])
-    expect(listAgentToolActions().map((candidate) => candidate.id)).not.toContain('settings.updateNotificationPreferences')
   })
 
   it('defaults new-inquiry email on for an owner without preferences', () => {

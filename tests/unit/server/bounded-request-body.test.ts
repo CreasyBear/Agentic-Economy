@@ -3,6 +3,17 @@ import { describe, expect, it } from 'vitest'
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 
 describe('readBoundedRequestText', () => {
+  it('bounds response bodies through the same streaming contract', async () => {
+    const response = new Response(JSON.stringify({ kind: 'quoted' }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    await expect(readBoundedRequestText(response, 64)).resolves.toEqual({
+      ok: true,
+      text: '{"kind":"quoted"}',
+    })
+  })
+
   it('rejects an oversized stream without content-length or Request.text()', async () => {
     const encoder = new TextEncoder()
     const maxBytes = 8

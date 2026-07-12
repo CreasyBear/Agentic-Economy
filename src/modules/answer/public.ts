@@ -81,6 +81,10 @@ export {
   type InquiryHandoffResolution,
 } from './internal/inquiry-handoff-prose'
 export {
+  buildAnswerInquiryHref,
+  type AnswerInquiryHrefInput,
+} from './internal/inquiry-link'
+export {
   DEFAULT_OPENROUTER_MODEL,
   readAnswerLlmConfig,
   readToolUseAgentEnabled,

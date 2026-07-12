@@ -4,7 +4,6 @@ import {
   describeActionForAgent,
   findAction,
   listActions,
-  listAgentToolActions,
 } from '@/modules/actions'
 
 describe('action registry', () => {
@@ -33,9 +32,9 @@ describe('action registry', () => {
     expect(action?.parameters.map((parameter) => parameter.name)).toEqual(['websiteUrl', 'abn'])
   })
 
-  it('exposes only qualified inquiry submit and registry search/detail as quiet agent tools', () => {
-    const exposed = listAgentToolActions().map((action) => action.id)
-    expect(exposed).toEqual(['inquiry.submit', 'registry.search', 'registry.detail'])
+  it('exposes only registry search and detail to the internal answer thread', () => {
+    const exposed = listActions().filter((action) => action.surfaces.includes('answerThread')).map((action) => action.id)
+    expect(exposed).toEqual(['registry.search', 'registry.detail'])
   })
 
   it('carries output validation schemas on every action', () => {
@@ -44,9 +43,8 @@ describe('action registry', () => {
     }
   })
 
-  it('accepts public catalog DTOs that include businessId on search and detail outputs', () => {
+  it('accepts slug-addressed public catalog DTOs and rejects internal business identity', () => {
     const business = {
-      businessId: 'business:adelaide-emergency-plumbing',
       slug: 'adelaide-emergency-plumbing',
       name: 'Adelaide Emergency Plumbing',
       category: 'Emergency plumbing',
@@ -94,6 +92,12 @@ describe('action registry', () => {
       business,
     })
     expect(detail.success).toBe(true)
+
+    expect(findAction('registry.detail')!.outputSchema.safeParse({
+      kind: 'found',
+      schemaVersion: 'public-business-catalog-api:v1',
+      business: { ...business, businessId: 'business:adelaide-emergency-plumbing' },
+    }).success).toBe(false)
   })
 
   it('exposes schema metadata on agent-facing descriptors', () => {
@@ -117,19 +121,19 @@ describe('action registry', () => {
     expect(list).toBeDefined()
     expect(list?.readOnly).toBe(true)
     expect(list?.surfaces).toContain('agentJson')
-    expect(list?.surfaces).not.toContain('agentTools')
+    expect(list?.surfaces).not.toContain('answerThread')
 
     const search = findAction('registry.search')
     expect(search).toBeDefined()
     expect(search?.readOnly).toBe(true)
-    expect(search?.surfaces).toContain('agentTools')
+    expect(search?.surfaces).toContain('answerThread')
     expect(search?.boundaries.join(' ')).toMatch(/book|charge|dispatch|inquiry/i)
     expect(search?.parameters.map((p) => p.name)).toContain('query')
 
     const detail = findAction('registry.detail')
     expect(detail).toBeDefined()
     expect(detail?.readOnly).toBe(true)
-    expect(detail?.surfaces).toContain('agentTools')
+    expect(detail?.surfaces).toContain('answerThread')
     expect(detail?.parameters.map((p) => p.name)).toContain('slug')
   })
 
@@ -140,11 +144,11 @@ describe('action registry', () => {
     expect(joined).not.toMatch(/MCP|OpenAPI|callable|autonomous|agent-native|DTO|fixture/i)
   })
 
-  it('marks inquiry.submit as a non-read-only, admission-gated write', () => {
+  it('keeps inquiry.submit outside the internal answer-thread tools', () => {
     const action = findAction('inquiry.submit')
     expect(action).toBeDefined()
     expect(action?.readOnly).toBe(false)
-    expect(action?.surfaces).toContain('agentTools')
+    expect(action?.surfaces).not.toContain('answerThread')
   })
 
   it('carries boundary-honest descriptors on the agent-facing tool', () => {
