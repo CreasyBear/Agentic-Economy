@@ -39,6 +39,29 @@ describe('BYO HTTP capability binding', () => {
     expect(await binding.execute({ rootRunId: 'root:1', leafRunId: 'leaf:1', stepGrantId: 'grant:1', idempotencyKey: 'idem:1', data: {} })).toEqual({ kind: 'outcome_unknown' })
   })
 
+  it('reports provider wait independently for returned and indeterminate transport calls', async () => {
+    let now = 1_000
+    const measurements: unknown[] = []
+    const binding = createHttpCapabilityBinding(registration, {
+      validateTarget: async () => true,
+      resolveCredential: async () => 'secret',
+      now: () => now,
+      observeProviderWait: async (measurement) => { measurements.push(measurement) },
+      send: async (request) => {
+        now += 75
+        const body = await request.clone().json() as { operation: string }
+        if (body.operation === 'execute') throw new Error('indeterminate')
+        return Response.json({ kind: 'refused', reason: 'no_quote' })
+      },
+    })
+    await binding.quote({ query: 'parcel label' })
+    await binding.execute({ rootRunId: 'root:timed', leafRunId: 'leaf:timed', stepGrantId: 'grant:timed', idempotencyKey: 'timed:1', data: {} })
+    expect(measurements).toEqual([
+      { bindingId: registration.binding.bindingId, operation: 'quote', providerWaitMs: 75, outcome: 'returned' },
+      { bindingId: registration.binding.bindingId, operation: 'execute', providerWaitMs: 75, outcome: 'indeterminate' },
+    ])
+  })
+
   it('carries the exact expiring provider quote reference into execution and reconciliation', async () => {
     const bodies: Array<Record<string, unknown>> = []
     const binding = createHttpCapabilityBinding(registration, {

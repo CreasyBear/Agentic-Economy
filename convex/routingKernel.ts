@@ -126,6 +126,7 @@ type RegisteredBindingRow = {
 export function createRegisteredRoutingKernel(
   ctx: ActionCtx,
   lifecycle?: Parameters<typeof createNeutralRoutingKernel>[0]['lifecycle'],
+  observeProviderWait?: NonNullable<Parameters<typeof createHttpCapabilityBinding>[1]['observeProviderWait']>,
 ): NeutralRoutingKernel {
   const store = createConvexKernelStore(ctx)
   const kernelFor = async (networkId?: string): Promise<NeutralRoutingKernel> => {
@@ -142,6 +143,7 @@ export function createRegisteredRoutingKernel(
     }, {
       validateTarget: async () => true,
       resolveCredential: async (reference) => reference,
+      ...(observeProviderWait === undefined ? {} : { observeProviderWait }),
       send: async (request) => {
         const idempotencyKey = request.headers.get('Idempotency-Key')
         const result = await ctx.runAction(internal.routingKernelTransport.send, { endpointUrl: row.endpointUrl, credentialRef: row.credentialRef, bodyText: await request.text(), ...(idempotencyKey === null ? {} : { idempotencyKey }) })

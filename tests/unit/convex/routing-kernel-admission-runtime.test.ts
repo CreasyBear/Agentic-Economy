@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { admit, release } from '../../../convex/routingKernelAdmission'
+import { admit, recoverySnapshot, release } from '../../../convex/routingKernelAdmission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
 type Ctx = { db: FakeDb }
 const admitHandler = (admit as unknown as { _handler: (ctx: Ctx, args: AdmissionArgs) => Promise<AdmissionResult> })._handler
 const releaseHandler = (release as unknown as { _handler: (ctx: Ctx, args: { requestId: string; releasedAt: number }) => Promise<unknown> })._handler
+const recoverySnapshotHandler = (recoverySnapshot as unknown as { _handler: (ctx: Ctx, args: { observedAt: number }) => Promise<any> })._handler
 
 describe('routing-kernel transactional admission', () => {
   it('enforces per-agent saturation atomically and releases capacity explicitly', async () => {
@@ -19,6 +20,12 @@ describe('routing-kernel transactional admission', () => {
     await releaseHandler({ db }, { requestId: 'request-0', releasedAt: now + 11 })
     await expect(admitHandler({ db }, input('request-after-release', now + 12))).resolves.toMatchObject({ kind: 'admitted' })
     expect(db.rows('routingKernelAdmissionDecisions').at(-2)).toMatchObject({ disposition: 'refused', reason: 'agent_saturated' })
+    expect(db.rows('routingKernelAdmissionDecisions')[0]).toMatchObject({ originDurationMs: 11, providerWaitMs: 0, kernelTimeMs: 11 })
+    await expect(recoverySnapshotHandler({ db }, { observedAt: now + 12 })).resolves.toMatchObject({
+      schemaVersion: 'routing-admission-recovery:v1',
+      metrics: { sampleSize: 1, kernelTimeP95Ms: 11, providerWaitP95Ms: 0, saturationRefusals: 1 },
+      alerts: [{ code: 'kernel_saturated', severity: 'critical', observedValue: 1, threshold: 0 }],
+    })
   })
 
   it('enforces the fixed-window agent quota even after leases are released', async () => {
@@ -36,7 +43,7 @@ describe('routing-kernel transactional admission', () => {
 type AdmissionArgs = { requestId: string; agentId: string; operation: 'execute'; admittedAt: number }
 type AdmissionResult = { kind: 'admitted'; requestId: string; expiresAt: number } | { kind: 'refused'; reason: string; retryAfterMs: number }
 function input(requestId: string, admittedAt: number): AdmissionArgs { return { requestId, agentId: 'agent:test', operation: 'execute', admittedAt } }
-function database() { return new FakeDb({ routingKernelAdmissionMeters: [], routingKernelAdmissionLeases: [], routingKernelAdmissionDecisions: [] }) }
+function database() { return new FakeDb({ routingKernelAdmissionMeters: [], routingKernelAdmissionLeases: [], routingKernelAdmissionDecisions: [], routingKernelProviderTelemetry: [] }) }
 
 class FakeDb {
   private sequence = 0

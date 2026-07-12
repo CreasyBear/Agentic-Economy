@@ -22,11 +22,31 @@ http.route({
 })
 
 function routingDependencies(ctx: Parameters<Parameters<typeof httpAction>[0]>[0]) {
+  let admittedRequestId: string | undefined
+  let providerWaitMs = 0
+  let providerWaitSequence = 0
+  const operations = createRegisteredRoutingKernel(ctx, undefined, async (measurement) => {
+    if (admittedRequestId === undefined) return
+    providerWaitMs += measurement.providerWaitMs
+    providerWaitSequence += 1
+    await ctx.runMutation(internal.routingKernelAdmission.recordProviderWait, {
+      telemetryId: `${admittedRequestId}:${providerWaitSequence}`,
+      requestId: admittedRequestId,
+      ...measurement,
+      observedAt: Date.now(),
+    })
+  }).operations
   return {
-    operations: createRegisteredRoutingKernel(ctx).operations,
+    operations,
     admission: {
-      admit: async (input: { requestId: string; agentId: string; operation: 'route' | 'authorize' | 'execute' | 'reconcile' | 'inspect' | 'cancel' | 'mcp_control'; admittedAt: number }) => await ctx.runMutation(internal.routingKernelAdmission.admit, input),
-      release: async (input: { requestId: string; releasedAt: number }) => { await ctx.runMutation(internal.routingKernelAdmission.release, input) },
+      admit: async (input: { requestId: string; agentId: string; operation: 'route' | 'authorize' | 'execute' | 'reconcile' | 'inspect' | 'cancel' | 'mcp_control'; admittedAt: number }) => {
+        const result = await ctx.runMutation(internal.routingKernelAdmission.admit, input)
+        if (result.kind === 'admitted') admittedRequestId = result.requestId
+        return result
+      },
+      release: async (input: { requestId: string; releasedAt: number }) => {
+        await ctx.runMutation(internal.routingKernelAdmission.release, { ...input, providerWaitMs })
+      },
     },
     authenticate: async (candidate: Request, bodyText: string) => {
       const edgeKey = process.env.AE_EDGE_ORIGIN_HMAC_KEY?.trim()

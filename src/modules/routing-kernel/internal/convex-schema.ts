@@ -86,7 +86,9 @@ export const routingKernelTables = {
     operation: literalUnion(['route', 'authorize', 'execute', 'reconcile', 'inspect', 'cancel', 'mcp_control'] as const),
     agentId: v.string(),
     admittedAt: v.number(),
-  }).index('by_meterKey_and_admittedAt', ['meterKey', 'admittedAt']),
+  })
+    .index('by_meterKey_and_admittedAt', ['meterKey', 'admittedAt'])
+    .index('by_admittedAt', ['admittedAt']),
 
   routingKernelAdmissionLeases: defineTable({
     requestId: v.string(),
@@ -99,7 +101,8 @@ export const routingKernelTables = {
   })
     .index('by_requestId', ['requestId'])
     .index('by_status_and_expiresAt', ['status', 'expiresAt'])
-    .index('by_agentId_and_status_and_expiresAt', ['agentId', 'status', 'expiresAt']),
+    .index('by_agentId_and_status_and_expiresAt', ['agentId', 'status', 'expiresAt'])
+    .index('by_expiresAt', ['expiresAt']),
 
   routingKernelAdmissionDecisions: defineTable({
     requestId: v.string(),
@@ -109,9 +112,28 @@ export const routingKernelTables = {
     reason: v.optional(literalUnion(['duplicate_request', 'agent_quota_exceeded', 'global_quota_exceeded', 'agent_saturated', 'kernel_saturated'] as const)),
     decidedAt: v.number(),
     releasedAt: v.optional(v.number()),
+    originDurationMs: v.optional(v.number()),
+    providerWaitMs: v.optional(v.number()),
+    kernelTimeMs: v.optional(v.number()),
   })
     .index('by_requestId', ['requestId'])
-    .index('by_disposition_and_decidedAt', ['disposition', 'decidedAt']),
+    .index('by_disposition_and_decidedAt', ['disposition', 'decidedAt'])
+    .index('by_decidedAt', ['decidedAt']),
+
+  routingKernelProviderTelemetry: defineTable({
+    telemetryId: v.string(),
+    requestId: v.string(),
+    bindingId: v.string(),
+    operation: literalUnion(['quote', 'execute', 'reconcile', 'cancel'] as const),
+    providerWaitMs: v.number(),
+    outcome: literalUnion(['returned', 'indeterminate'] as const),
+    observedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index('by_telemetryId', ['telemetryId'])
+    .index('by_requestId', ['requestId'])
+    .index('by_bindingId_and_observedAt', ['bindingId', 'observedAt'])
+    .index('by_expiresAt', ['expiresAt']),
 
   routingKernelIncidentScopeControls: defineTable({
     scopeKey: v.string(),

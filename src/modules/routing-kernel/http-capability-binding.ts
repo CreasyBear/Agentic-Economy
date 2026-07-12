@@ -34,6 +34,13 @@ export type HttpCapabilityBindingDependencies = Readonly<{
   validateTarget: (url: URL) => Promise<boolean>
   resolveCredential: (credentialRef: string) => Promise<string | undefined>
   send: (request: Request) => Promise<Response>
+  now?: () => number
+  observeProviderWait?: (measurement: Readonly<{
+    bindingId: string
+    operation: 'quote' | 'execute' | 'reconcile' | 'cancel'
+    providerWaitMs: number
+    outcome: 'returned' | 'indeterminate'
+  }>) => Promise<void>
 }>
 
 export function createHttpCapabilityBinding(registration: HttpCapabilityRegistration, dependencies: HttpCapabilityBindingDependencies): CapabilityBindingAdapter {
@@ -46,13 +53,26 @@ export function createHttpCapabilityBinding(registration: HttpCapabilityRegistra
     const credential = await dependencies.resolveCredential(registration.credentialRef)
     if (credential === undefined || credential.length === 0) return operation === 'quote' ? { kind: 'refused', reason: 'credential_unavailable' } : undefined
     let response: Response
+    const startedAt = (dependencies.now ?? Date.now)()
+    let transportOutcome: 'returned' | 'indeterminate' = 'indeterminate'
     try {
       response = await dependencies.send(new Request(endpoint, {
         method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10_000),
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${credential}`, ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': idempotencyKey }) },
         body: JSON.stringify({ protocolVersion: 'ae-capability:v1', operation, bindingId: registration.binding.bindingId, ...body }),
       }))
+      transportOutcome = 'returned'
     } catch { return undefined }
+    finally {
+      try {
+        await dependencies.observeProviderWait?.({
+          bindingId: registration.binding.bindingId,
+          operation,
+          providerWaitMs: Math.max(0, (dependencies.now ?? Date.now)() - startedAt),
+          outcome: transportOutcome,
+        })
+      } catch { /* operational telemetry cannot change provider outcome semantics */ }
+    }
     if (response.status >= 300 && response.status < 400) return undefined
     if (!(response.headers.get('Content-Type') ?? '').toLowerCase().includes('application/json')) return undefined
     const bounded = await readBoundedRequestText(response, MAX_RESPONSE_BYTES)
