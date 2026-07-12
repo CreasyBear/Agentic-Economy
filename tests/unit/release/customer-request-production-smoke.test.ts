@@ -31,6 +31,10 @@ describe('customer Request production smoke', () => {
 
     await expect(runCustomerRequestProductionSmoke(config(fetch, false))).resolves.toBeUndefined()
     expect(fetch).toHaveBeenCalledTimes(7)
+    const submitted = JSON.parse(String(fetch.mock.calls[3]?.[1]?.body)) as Record<string, unknown>
+    expect(submitted).toMatchObject({ request: 'Compare registered sandbox options.' })
+    expect(submitted).not.toHaveProperty('knownFacts')
+    expect(submitted).not.toHaveProperty('routing')
     expect(fetch.mock.calls.at(-1)?.[0].toString()).toContain('/api/v1/requests/acceptance%3A')
   })
 })

@@ -50,8 +50,6 @@ export async function runCustomerRequestProductionSmoke(config: SmokeConfig): Pr
     requestRef,
     agentRef: 'external-agent:production-acceptance',
     request: config.requestText,
-    knownFacts: { requestContext: 'Production acceptance journey using registered sandbox providers.' },
-    routing: { network: 'ae:public', currency: 'AUD', maximumSpendMinor: 5_000, optimizeFor: 'cost' },
   } as const
 
   let view = await authenticatedRequest(config, '/api/v1/requests', { method: 'POST', body: submitBody })
