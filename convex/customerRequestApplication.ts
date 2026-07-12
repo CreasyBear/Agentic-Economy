@@ -214,7 +214,12 @@ export const compare = action({
         summary: 'The registered options are not yet comparable as one customer decision.',
       }))
       const registry = await loadConvexCapabilityContractRegistry(ctx)
-      const contract = registry.get(capabilityContractIds[0]!)
+      const [capabilityContractId] = capabilityContractIds
+      if (capabilityContractId === undefined) return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.revision,
+        summary: 'No registered capability remains available for this request.',
+      }))
+      const contract = registry.get(capabilityContractId)
       if (contract === undefined) return writableView(projectNeedsAttention({
         requestRef: args.requestRef, revision: args.revision,
         summary: 'The registered capability changed before options could be prepared.',
