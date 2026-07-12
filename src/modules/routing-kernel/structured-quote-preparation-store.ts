@@ -202,13 +202,19 @@ export function createPreparationCandidateSet(input: CandidateSetInput): Prepara
     capabilityContractId: input.capabilityContractId, capabilityContractVersion: input.capabilityContractVersion,
     createdAt: input.createdAt, candidates: Object.freeze(candidates),
   }
-  const digestMaterial = source.kind === 'plan_action'
-    ? { preparationRequestId: input.preparationRequestId, customerRequestId: input.customerRequestId,
+  const digest = source.kind === 'plan_action'
+    ? canonicalAuthorityDigest({ preparationRequestId: input.preparationRequestId, customerRequestId: input.customerRequestId,
         planRevisionId: source.planRevisionId, actionId: source.actionId, generation: input.generation,
         capabilityContractId: input.capabilityContractId, capabilityContractVersion: input.capabilityContractVersion,
-        createdAt: input.createdAt, candidates: Object.freeze(candidates) }
-    : { ...common, source }
-  const digest = canonicalAuthorityDigest(digestMaterial)
+        createdAt: input.createdAt, candidates: Object.freeze(candidates) })
+    : canonicalAuthorityDigest({
+        ...common,
+        source: {
+          kind: source.kind,
+          evaluationId: source.evaluationId,
+          evaluationDigest: source.evaluationDigest,
+        },
+      })
   if (input.candidateSetDigest !== undefined && input.candidateSetDigest !== digest) throw new Error('preparation_candidate_set_digest_mismatch')
   return source.kind === 'plan_action'
     ? Object.freeze({ ...common, source, planRevisionId: source.planRevisionId, actionId: source.actionId, candidateSetDigest: digest })

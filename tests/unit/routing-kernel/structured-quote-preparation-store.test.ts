@@ -45,7 +45,7 @@ describe('structured quote preparation store', () => {
       },
       generation: 1, capabilityContractId: 'shipping.quote', capabilityContractVersion: '2',
       createdAt: 1_000, candidates: [candidate],
-    } as never)
+    })
 
     expect(set.source).toEqual({
       kind: 'request_evaluation', evaluationId: 'evaluation:1', evaluationDigest: 'sha256:evaluation-1',
