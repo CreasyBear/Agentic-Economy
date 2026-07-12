@@ -20,6 +20,7 @@ describe('routing-kernel transactional admission', () => {
     await releaseHandler({ db }, { requestId: 'request-0', releasedAt: now + 11 })
     await expect(admitHandler({ db }, input('request-after-release', now + 12))).resolves.toMatchObject({ kind: 'admitted' })
     expect(db.rows('routingKernelAdmissionDecisions').at(-2)).toMatchObject({ disposition: 'refused', reason: 'agent_saturated' })
+    expect(db.rows('routingKernelAdmissionDecisions').every((decision) => decision.admittedAt === undefined)).toBe(true)
     expect(db.rows('routingKernelAdmissionDecisions')[0]).toMatchObject({ originDurationMs: 11, providerWaitMs: 0, kernelTimeMs: 11 })
     await expect(recoverySnapshotHandler({ db }, { observedAt: now + 12 })).resolves.toMatchObject({
       schemaVersion: 'routing-admission-recovery:v1',

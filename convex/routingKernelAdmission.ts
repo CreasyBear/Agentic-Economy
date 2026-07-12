@@ -66,7 +66,10 @@ export const admit = internalMutation({
     await ctx.db.insert('routingKernelAdmissionMeters', { meterKey: agentMeterKey, ...args })
     await ctx.db.insert('routingKernelAdmissionMeters', { meterKey: globalMeterKey, ...args })
     await ctx.db.insert('routingKernelAdmissionLeases', { ...args, status: 'active', expiresAt })
-    await ctx.db.insert('routingKernelAdmissionDecisions', { ...args, disposition: 'admitted', decidedAt: args.admittedAt })
+    await ctx.db.insert('routingKernelAdmissionDecisions', {
+      requestId: args.requestId, agentId: args.agentId, operation: args.operation,
+      disposition: 'admitted', decidedAt: args.admittedAt,
+    })
     return { kind: 'admitted' as const, requestId: args.requestId, expiresAt }
   },
 })
@@ -172,7 +175,10 @@ async function refuse(
   reason: 'duplicate_request' | 'agent_quota_exceeded' | 'global_quota_exceeded' | 'agent_saturated' | 'kernel_saturated',
   retryAfterMs: number,
 ) {
-  await db.insert('routingKernelAdmissionDecisions', { ...args, disposition: 'refused', reason, decidedAt: args.admittedAt })
+  await db.insert('routingKernelAdmissionDecisions', {
+    requestId: args.requestId, agentId: args.agentId, operation: args.operation,
+    disposition: 'refused', reason, decidedAt: args.admittedAt,
+  })
   return { kind: 'refused' as const, reason, retryAfterMs: Math.max(1, retryAfterMs) }
 }
 
