@@ -30,9 +30,6 @@ jobs:
       - name: Frozen dependency install
         run: npm ci
 
-      - name: Install browser runtime
-        run: npx playwright install --with-deps chromium
-
       - name: Run source release contract
         run: npm run test:release:source
 
