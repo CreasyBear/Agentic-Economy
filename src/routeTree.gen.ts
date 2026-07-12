@@ -30,6 +30,7 @@ import { Route as QAnswerIdRouteImport } from './routes/q.$answerId'
 import { Route as PrivacyRemoveBusinessRouteImport } from './routes/privacy.remove-business'
 import { Route as IThreadIdRouteImport } from './routes/i.$threadId'
 import { Route as ClaimSuccessRouteImport } from './routes/claim.success'
+import { Route as ApiRequestsRouteImport } from './routes/api.requests'
 import { Route as ApiBusinessesRouteImport } from './routes/api.businesses'
 import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from './routes/[.]well-known/http-message-signatures-directory'
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
@@ -165,6 +166,11 @@ const ClaimSuccessRoute = ClaimSuccessRouteImport.update({
   id: '/success',
   path: '/success',
   getParentRoute: () => ClaimRoute,
+} as any)
+const ApiRequestsRoute = ApiRequestsRouteImport.update({
+  id: '/api/requests',
+  path: '/api/requests',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBusinessesRoute = ApiBusinessesRouteImport.update({
   id: '/api/businesses',
@@ -350,6 +356,7 @@ export interface FileRoutesByFullPath {
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/requests': typeof ApiRequestsRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -403,6 +410,7 @@ export interface FileRoutesByTo {
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/requests': typeof ApiRequestsRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -458,6 +466,7 @@ export interface FileRoutesById {
   '/$slug/ucp': typeof SlugUcpRoute
   '/.well-known/http-message-signatures-directory': typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   '/api/businesses': typeof ApiBusinessesRouteWithChildren
+  '/api/requests': typeof ApiRequestsRoute
   '/claim/success': typeof ClaimSuccessRoute
   '/i/$threadId': typeof IThreadIdRoute
   '/privacy/remove-business': typeof PrivacyRemoveBusinessRoute
@@ -513,6 +522,7 @@ export interface FileRouteTypes {
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
     | '/api/businesses'
+    | '/api/requests'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -566,6 +576,7 @@ export interface FileRouteTypes {
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
     | '/api/businesses'
+    | '/api/requests'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -620,6 +631,7 @@ export interface FileRouteTypes {
     | '/$slug/ucp'
     | '/.well-known/http-message-signatures-directory'
     | '/api/businesses'
+    | '/api/requests'
     | '/claim/success'
     | '/i/$threadId'
     | '/privacy/remove-business'
@@ -673,6 +685,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   DotwellKnownHttpMessageSignaturesDirectoryRoute: typeof DotwellKnownHttpMessageSignaturesDirectoryRoute
   ApiBusinessesRoute: typeof ApiBusinessesRouteWithChildren
+  ApiRequestsRoute: typeof ApiRequestsRoute
   IThreadIdRoute: typeof IThreadIdRoute
   QAnswerIdRoute: typeof QAnswerIdRoute
   SignInSplatRoute: typeof SignInSplatRoute
@@ -841,6 +854,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/claim/success'
       preLoaderRoute: typeof ClaimSuccessRouteImport
       parentRoute: typeof ClaimRoute
+    }
+    '/api/requests': {
+      id: '/api/requests'
+      path: '/api/requests'
+      fullPath: '/api/requests'
+      preLoaderRoute: typeof ApiRequestsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/businesses': {
       id: '/api/businesses'
@@ -1191,6 +1211,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownHttpMessageSignaturesDirectoryRoute:
     DotwellKnownHttpMessageSignaturesDirectoryRoute,
   ApiBusinessesRoute: ApiBusinessesRouteWithChildren,
+  ApiRequestsRoute: ApiRequestsRoute,
   IThreadIdRoute: IThreadIdRoute,
   QAnswerIdRoute: QAnswerIdRoute,
   SignInSplatRoute: SignInSplatRoute,

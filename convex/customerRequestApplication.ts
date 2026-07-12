@@ -3,13 +3,25 @@ import { v } from 'convex/values'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import { createJsonCustomerRequestInterpreter } from '@/modules/customer-request/interpreter'
 import { createOpenRouterCustomerRequestTransport } from '@/modules/customer-request/openrouter-transport'
-import { customerRequestCompilationResultValue } from '@/modules/customer-request/runtime'
+import { projectCustomerRequest } from '@/modules/customer-request/customer-projection'
 
 import { action } from './_generated/server'
 import { loadConvexCapabilityContractRegistry } from './customerRequestCapabilityContractRegistryAdapter'
-import { createConvexCustomerRequestCompilationStore, writableCompilationResult } from './customerRequestCompilationStoreAdapter'
+import { createConvexCustomerRequestCompilationStore } from './customerRequestCompilationStoreAdapter'
 
 const literalValue = v.union(v.string(), v.number(), v.boolean())
+const customerProjection = v.union(
+  v.object({
+    kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
+    status: v.union(v.literal('ready_to_compare'), v.literal('needs_information'), v.literal('unsupported')),
+    summary: v.string(), nextAction: v.union(v.literal('compare_options'), v.literal('provide_information'), v.literal('revise_request')),
+    missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })), stepCount: v.number(),
+  }),
+  v.object({
+    kind: v.literal('conflict'), requestRef: v.string(),
+    reason: v.union(v.literal('revision_changed'), v.literal('identity_changed'), v.literal('idempotency_key_reused')),
+  }),
+)
 
 export const submit = action({
   args: {
@@ -21,7 +33,7 @@ export const submit = action({
     }),
   },
   returns: v.union(
-    customerRequestCompilationResultValue,
+    customerProjection,
     v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable')) }),
   ),
   handler: async (ctx, args) => {
@@ -50,6 +62,12 @@ export const submit = action({
       store: createConvexCustomerRequestCompilationStore(ctx),
       now: Date.now,
     })
-    return writableCompilationResult(result)
+    return writableProjection(projectCustomerRequest(result))
   },
 })
+
+function writableProjection(projection: ReturnType<typeof projectCustomerRequest>) {
+  return projection.kind === 'conflict' ? { ...projection } : {
+    ...projection, missingFields: projection.missingFields.map((field) => ({ ...field })),
+  }
+}

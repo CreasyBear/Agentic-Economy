@@ -1,0 +1,49 @@
+import { z } from 'zod'
+
+import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
+import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
+import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
+
+const bodySchema = z.object({
+  idempotencyKey: z.string().trim().min(1).max(200), requestRef: z.string().trim().min(1).max(200),
+  expectedRevision: z.number().int().nonnegative().optional(), agentRef: z.string().trim().min(1).max(200),
+  request: z.string().trim().min(1).max(2_000),
+  knownFacts: z.record(z.string().trim().min(1).max(200), z.union([z.string().max(8_000), z.number().finite(), z.boolean()])).default({}),
+  routing: z.object({
+    network: z.string().trim().min(1).max(200).default('ae:public'), currency: z.string().regex(/^[A-Z]{3}$/).default('AUD'),
+    maximumSpendMinor: z.number().int().nonnegative().default(0), optimizeFor: z.enum(['cost', 'latency']).default('cost'),
+  }).default({ network: 'ae:public', currency: 'AUD', maximumSpendMinor: 0, optimizeFor: 'cost' }),
+}).strict()
+
+type SubmitResult = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'interpreter_unavailable' | 'capabilities_unavailable' }>
+const submitAction = sourceAction<Record<string, unknown>, SubmitResult>('customerRequestApplication:submit')
+type HandlerOptions = Readonly<{ submit?: (args: Record<string, unknown>) => Promise<SubmitResult> }>
+
+export async function handleCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
+  const bounded = await readBoundedRequestText(request, 32 * 1024)
+  if (!bounded.ok) return response({ error: 'request_too_large' }, 413)
+  let unknownBody: unknown
+  try { unknownBody = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
+  const parsed = bodySchema.safeParse(unknownBody)
+  if (!parsed.success) return response({ error: 'invalid_request', fields: parsed.error.issues.map((issue) => issue.path.join('.')) }, 400)
+  try {
+    const args = {
+      compilationKey: parsed.data.idempotencyKey, requestId: parsed.data.requestRef,
+      ...(parsed.data.expectedRevision === undefined ? {} : { expectedRevision: parsed.data.expectedRevision }),
+      delegatedAgentId: parsed.data.agentRef, customerJob: parsed.data.request, knownFacts: parsed.data.knownFacts,
+      routing: { networkId: parsed.data.routing.network, currency: parsed.data.routing.currency,
+        maximumSpendMinor: parsed.data.routing.maximumSpendMinor, optimizeFor: parsed.data.routing.optimizeFor },
+    }
+    const result = await (options.submit ?? (async (input) => await callSourceAction(submitAction, input)))(args)
+    if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 503)
+    if (result.kind === 'conflict') return response(result, 409)
+    return response(result, 200)
+  } catch (error) {
+    if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
+    return response({ error: 'request_unavailable' }, 503)
+  }
+}
+
+function response(body: unknown, status: number): Response {
+  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
+}
