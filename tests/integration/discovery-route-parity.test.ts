@@ -33,6 +33,7 @@ import { handleRobotsTxtRequest } from '@/routes/robots[.]txt'
 import { handleSitemapXmlRequest } from '@/routes/sitemap[.]xml'
 import { handleUcpManifestRequest } from '@/routes/$slug.ucp'
 import { handleDeveloperDiscoveryFixturesRequest } from '@/routes/api.discovery.fixtures'
+import { handleAgentCustomerRequestPost } from '@/lib/server/customer-request-agent-api'
 
 
 beforeEach(() => {
@@ -258,6 +259,13 @@ async function resolveAdvertisedUrl(url: string): Promise<boolean> {
 
   if (path === '/api/businesses/search') {
     return handleSearchBusinessesRequest(new Request(url)).status === 200
+  }
+
+  if (path === '/api/v1/requests') {
+    const response = await handleAgentCustomerRequestPost(new Request(url, { method: 'POST', body: '{}' }), {
+      authenticate: async () => ({ isAuthenticated: false, tokenType: null, id: null, subject: null, scopes: null }),
+    })
+    return response.status === 401
   }
 
   const detailMatch = /^\/api\/businesses\/([^/]+)$/u.exec(path)
