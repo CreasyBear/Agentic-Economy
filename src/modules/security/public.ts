@@ -59,6 +59,8 @@ export const AdminActionValues = [
   'change_public_visibility',
   'close_dispute',
   'set_operator_control',
+  'register_capability_binding',
+  'control_kernel_incidents',
 ] as const
 export type AdminAction = (typeof AdminActionValues)[number]
 

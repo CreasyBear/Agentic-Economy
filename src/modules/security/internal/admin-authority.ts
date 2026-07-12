@@ -19,6 +19,8 @@ const AdminActionMatrix = {
     change_public_visibility: true,
     close_dispute: true,
     set_operator_control: true,
+    register_capability_binding: true,
+    control_kernel_incidents: true,
   },
   support: {
     read_admin_readbacks: true,
@@ -28,6 +30,8 @@ const AdminActionMatrix = {
     change_public_visibility: false,
     close_dispute: false,
     set_operator_control: false,
+    register_capability_binding: false,
+    control_kernel_incidents: false,
   },
   reviewer: {
     read_admin_readbacks: true,
@@ -37,6 +41,8 @@ const AdminActionMatrix = {
     change_public_visibility: false,
     close_dispute: false,
     set_operator_control: false,
+    register_capability_binding: false,
+    control_kernel_incidents: false,
   },
 } satisfies Record<AdminRole, Record<AdminAction, boolean>>
 

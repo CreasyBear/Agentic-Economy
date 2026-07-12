@@ -15,6 +15,7 @@ import { notificationOutboxTables } from '../src/modules/notification-outbox/int
 import { observabilityTables } from '../src/modules/observability/internal/schema'
 import { protectedActionTables } from '../src/modules/protected-action/internal/schema'
 import { registryTables } from '../src/modules/registry/internal/schema'
+import { routingKernelTables } from '../src/modules/routing-kernel/internal/convex-schema'
 import { securityTables } from '../src/modules/security/internal/schema'
 import { settingsTables } from '../src/modules/settings/internal/schema'
 
@@ -27,6 +28,7 @@ export default defineSchema({
   ...clearanceTables,
   ...catalogTables,
   ...registryTables,
+  ...routingKernelTables,
   ...demandTables,
   ...discoveryTables,
   ...harnessTables,
