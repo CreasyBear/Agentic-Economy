@@ -74,7 +74,7 @@ const requestFactSource = v.union(
 const requestFact = v.object({ value: literalValue, source: requestFactSource })
 export const requestSnapshotValue = v.object({
   requestId: v.string(), revision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
-  intent: v.string(), facts: v.record(v.string(), requestFact), snapshotDigest: v.string(), recordedAt: v.number(),
+  intent: v.string(), networkId: v.string(), facts: v.record(v.string(), requestFact), snapshotDigest: v.string(), recordedAt: v.number(),
 })
 const informationRequirementValue = v.object({
   field: v.string(), customerLabel: v.string(), affectedCandidates: v.array(v.string()),

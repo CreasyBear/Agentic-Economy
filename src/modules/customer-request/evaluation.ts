@@ -20,6 +20,14 @@ export type RequestEvaluationCandidateInput = Readonly<{
   contract: CapabilityContract
 }>
 
+export type RegisteredEvaluationBinding = Readonly<{
+  businessId: string
+  bindingId: string
+  capabilityContractId: string
+  queryTerms: readonly string[]
+  registrationHash: string
+}>
+
 export type RequestEvaluationCandidate = Readonly<{
   candidateRef: string
   businessId: string
@@ -102,6 +110,38 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   })
 }
 
+export function discoverRequestEvaluationCandidates(input: Readonly<{
+  intent: string
+  bindings: readonly RegisteredEvaluationBinding[]
+  resolveContract: (capabilityContractId: string) => CapabilityContract | undefined
+}>): readonly RequestEvaluationCandidateInput[] {
+  const intentTokens = normalizedTokens(input.intent)
+  return Object.freeze(input.bindings
+    .filter((binding) => binding.queryTerms.some((term) => {
+      const termTokens = normalizedTokens(term)
+      return termTokens.length > 0 && termTokens.every((token) => intentTokens.includes(token))
+    }))
+    .map((binding) => {
+      const contract = input.resolveContract(binding.capabilityContractId)
+      return contract === undefined ? undefined : Object.freeze({
+        businessId: binding.businessId,
+        bindingId: binding.bindingId,
+        contract,
+      })
+    })
+    .filter((candidate): candidate is RequestEvaluationCandidateInput => candidate !== undefined)
+    .sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
+}
+
+export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvaluationBinding[]): string {
+  return canonicalDigest([...bindings].map((binding) => ({
+    businessId: binding.businessId,
+    bindingId: binding.bindingId,
+    capabilityContractId: binding.capabilityContractId,
+    registrationHash: binding.registrationHash,
+  })).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
+}
+
 function chooseNextRequirement(
   inputs: readonly RequestEvaluationCandidateInput[],
   candidates: readonly RequestEvaluationCandidate[],
@@ -140,4 +180,9 @@ function chooseNextRequirement(
     impact,
     requirementDigest: canonicalDigest({ field: selected.field, impact }),
   })
+}
+
+function normalizedTokens(value: string): readonly string[] {
+  return [...new Set(value.toLowerCase().match(/[a-z0-9]+/g)?.map((token) => token.length > 3 && token.endsWith('s')
+    ? token.slice(0, -1) : token) ?? [])]
 }

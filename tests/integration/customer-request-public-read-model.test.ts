@@ -121,25 +121,11 @@ describe('production CustomerRequest read model', () => {
     })
   })
 
-  it('submits and replays from a cold API-key client through the real compiler and durable store', async () => {
+  it('submits, replays, and resumes from a cold API-key client through the registered kernel evaluation', async () => {
     const backend = convexTest(schema, modules)
     const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
     vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
-    vi.stubEnv('OPENROUTER_API_KEY', 'openrouter-test-key')
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
-    vi.stubGlobal('fetch', vi.fn(async (input) => {
-      if (String(input) !== 'https://openrouter.ai/api/v1/chat/completions') throw new Error(`unexpected_fetch_${String(input)}`)
-      return Response.json({ choices: [{ message: { content: JSON.stringify({
-        outcome: 'Comparable connected options', hardConstraints: [], preferences: [],
-        substitutions: { allowed: false, boundaries: [] }, completionCriterion: 'Return comparable options.',
-        completionRequirement: { evidenceRole: 'provider_offer', valueType: 'string' },
-        completionEvidence: [{ actionId: 'action:compare', field: 'optionSummary' }],
-        actions: [{
-          actionId: 'action:compare', capabilityContractId: 'sandbox.option.quote:v1', dependsOn: [],
-          input: { requestContext: { kind: 'known_fact', fact: 'requestContext' } },
-        }],
-      }) } }] })
-    }))
     const authenticate = async () => ({
       isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_cold_submit', subject: 'user_owner_1',
       userId: 'user_owner_1', orgId: null, scopes: ['customer_requests:create'],
@@ -151,8 +137,7 @@ describe('production CustomerRequest read model', () => {
     }
     const body = {
       idempotencyKey: 'submit:cold:1', requestRef: 'request:cold:agent:1', agentRef: 'ignored-by-admission',
-      request: 'Compare the connected sandbox options.', knownFacts: { requestContext: 'Compare the connected sandbox options.' },
-      routing: { network: 'ae:public', currency: 'AUD', maximumSpendMinor: 2_000, optimizeFor: 'cost' },
+      request: 'Compare the connected sandbox options.',
     }
     const first = await handleAgentCustomerRequestPost(agentRequest(body), {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
@@ -167,11 +152,26 @@ describe('production CustomerRequest read model', () => {
     expect(firstBody).toMatchObject({
       requestRef: 'request:cold:agent:1', state: 'ready_to_compare', nextAction: 'prepare_options',
     })
-    const durable = await backend.run(async (ctx) => await ctx.db.query('customerRequests')
-      .withIndex('by_requestId', (query) => query.eq('requestId', 'request:cold:agent:1')).unique())
-    expect(durable).toMatchObject({
-      principalId: 'clerk_api_key:ak_cold_submit', delegatedAgentId: 'clerk_api_key:ak_cold_submit', revision: 1,
+    const resumed = await handleAgentCustomerRequestGet('request:cold:agent:1', {
+      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
     })
+    expect(resumed.status).toBe(200)
+    await expect(resumed.json()).resolves.toEqual(firstBody)
+    const durable = await backend.run(async (ctx) => ({
+      head: await ctx.db.query('customerRequestHeads').withIndex('by_requestId', (query) => query
+        .eq('requestId', 'request:cold:agent:1')).unique(),
+      snapshots: await ctx.db.query('customerRequestSnapshots').collect(),
+      evaluations: await ctx.db.query('customerRequestEvaluations').collect(),
+      candidates: await ctx.db.query('customerRequestEvaluationCandidates').collect(),
+      plans: await ctx.db.query('customerRequestPlanRevisions').collect(),
+    }))
+    expect(durable.head).toMatchObject({
+      principalId: 'clerk_api_key:ak_cold_submit', delegatedAgentId: 'clerk_api_key:ak_cold_submit', currentRevision: 1,
+    })
+    expect(durable.snapshots).toHaveLength(1)
+    expect(durable.evaluations).toHaveLength(1)
+    expect(durable.candidates).toHaveLength(2)
+    expect(durable.plans).toEqual([])
   })
 })
 

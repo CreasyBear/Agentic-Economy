@@ -1,4 +1,5 @@
 import type { CompileCustomerRequestResult } from './compiler'
+import type { RequestEvaluation } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
 
 export type CustomerRequestState =
@@ -75,6 +76,38 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
   if (result.kind === 'revision_conflict') return Object.freeze({ kind: 'conflict', requestRef: result.requestId, reason: 'revision_changed' })
   if (result.kind === 'identity_conflict') return Object.freeze({ kind: 'conflict', requestRef: result.requestId, reason: 'identity_changed' })
   return Object.freeze({ kind: 'conflict', requestRef: result.requestId, reason: 'idempotency_key_reused' })
+}
+
+export function projectRequestEvaluation(input: Readonly<{
+  snapshot: Readonly<{ requestId: string; revision: number; intent: string }>
+  evaluation: RequestEvaluation
+}>): CustomerRequestView {
+  if (input.evaluation.posture === 'unsupported') return requestView({
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: 'No registered business capability currently matches this request.',
+    nextAction: 'revise_request',
+  })
+  if (input.evaluation.nextRequirement !== undefined) return requestView({
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'needs_information',
+    summary: input.snapshot.intent,
+    nextAction: 'provide_information',
+    missingFields: [{
+      field: input.evaluation.nextRequirement.field,
+      label: input.evaluation.nextRequirement.customerLabel,
+      explanation: 'This answer changes which registered options can be prepared now.',
+    }],
+  })
+  return requestView({
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'ready_to_compare',
+    summary: input.snapshot.intent,
+    nextAction: 'prepare_options',
+  })
 }
 
 export function projectPreparingOptions(input: Readonly<{

@@ -8,13 +8,20 @@ import {
   projectNeedsAttention,
   projectOptionsReady,
   projectPreparingOptions,
+  projectRequestEvaluation,
   type CustomerRequestView,
   type CustomerRequestProjection,
 } from '@/modules/customer-request/customer-projection'
+import {
+  discoverRequestEvaluationCandidates,
+  evaluateCustomerRequestSnapshot,
+  requestRegistrySnapshotDigest,
+  type RequestEvaluation,
+} from '@/modules/customer-request/evaluation'
 import { prepareCustomerRequestAction, type PreparedRouteCandidateSet } from '@/modules/customer-request/preparation'
 import { createKernelCustomerRequestActionRouter } from '@/modules/customer-request/kernel-router'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { preparedRouteCandidateSetValue } from '@/modules/customer-request/runtime'
+import { preparedRouteCandidateSetValue, requestSnapshotValue } from '@/modules/customer-request/runtime'
 import type { PlanRevision } from '@/modules/customer-request/public'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
@@ -71,48 +78,90 @@ const optionProjection = v.union(
   v.object({ kind: v.literal('conflict'), requestRef: v.string(), reason: v.union(v.literal('revision_changed'), v.literal('request_not_ready')) }),
   v.object({ kind: v.literal('refused'), reason: v.literal('authentication_required') }),
 )
+const submitResultValue = v.union(
+  customerProjection,
+  v.object({ kind: v.literal('refused'), reason: v.union(
+    v.literal('authentication_required'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
+  ) }),
+)
+type SubmitActionResult = Infer<typeof submitResultValue>
+type SnapshotValue = Infer<typeof requestSnapshotValue>
+type SnapshotCommitResult =
+  | Readonly<{ kind: 'stored' }>
+  | Readonly<{ kind: 'replayed'; requestId: string; revision: number }>
+  | Readonly<{ kind: 'revision_conflict' | 'identity_conflict' | 'command_conflict' }>
+type EligibleBinding = Readonly<{
+  businessId: string; bindingId: string; capabilityContractId: string; queryTerms: string[]; registrationHash: string
+}>
+type StoredEvaluation = Readonly<{
+  snapshot: SnapshotValue
+  evaluation: Readonly<{
+    requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
+    posture: 'progress_available' | 'needs_information' | 'unsupported'
+    nextRequirement?: Readonly<{
+      field: string; customerLabel: string; affectedCandidates: readonly string[]
+      probesEnabled: readonly string[]; requirementDigest: string
+    }>
+    evaluationDigest: string
+  }>
+  candidates: RequestEvaluation['candidates']
+}>
 
 export const submit = action({
   args: {
     compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()), delegatedAgentId: v.string(),
     customerJob: v.string(), knownFacts: v.record(v.string(), literalValue),
     routing: v.object({
-      networkId: v.string(), currency: v.string(), maximumSpendMinor: v.number(),
-      optimizeFor: v.union(v.literal('cost'), v.literal('latency')),
+      networkId: v.string(), currency: v.optional(v.string()), maximumSpendMinor: v.optional(v.number()),
+      optimizeFor: v.optional(v.union(v.literal('cost'), v.literal('latency'))),
     }), serviceAuth: v.optional(serviceAssertion),
   },
-  returns: v.union(
-    customerProjection,
-    v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable')) }),
-  ),
-  handler: async (ctx, args) => {
+  returns: submitResultValue,
+  handler: async (ctx, args): Promise<SubmitActionResult> => {
     const command = submitCommand(args)
     const caller = await resolveRequestCaller(ctx, 'submit', command, args.serviceAuth, args.delegatedAgentId)
     if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const apiKey = process.env.OPENROUTER_API_KEY?.trim()
-    if (apiKey === undefined || apiKey.length === 0) return { kind: 'refused' as const, reason: 'interpreter_unavailable' as const }
-    const registry = await loadConvexCapabilityContractRegistry(ctx)
-    if (registry.list().length === 0) return { kind: 'refused' as const, reason: 'capabilities_unavailable' as const }
-    const result = await compileCustomerRequest({
-      ...command,
-      compilationKey: namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey),
+    const expectedRevision = args.expectedRevision ?? 0
+    const recordedAt = Date.now()
+    const facts = Object.fromEntries(Object.entries(args.knownFacts).map(([field, value]) => [field, {
+      value,
+      source: { kind: 'customer' as const, assertionRef: `assertion:${canonicalDigest({ field, value })}` },
+    }]))
+    const snapshotMaterial = {
+      requestId: args.requestId, revision: expectedRevision + 1,
       principalId: caller.principalId, delegatedAgentId: caller.delegatedAgentId,
-    }, {
-      interpreter: createJsonCustomerRequestInterpreter({
-        interpreterId: `openrouter:${process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'}`,
-        transport: createOpenRouterCustomerRequestTransport({
-          apiKey,
-          model: process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini',
-          ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
-        }),
-        timeoutMs: 20_000,
-        maximumResponseBytes: 64_000,
-      }),
-      registry,
-      store: createConvexCustomerRequestCompilationStore(ctx),
-      now: Date.now,
+      intent: args.customerJob, networkId: args.routing.networkId, facts,
+    }
+    const snapshot = { ...snapshotMaterial, snapshotDigest: canonicalDigest(snapshotMaterial), recordedAt }
+    const committed: SnapshotCommitResult = await ctx.runMutation(internal.customerRequests.commitRequestSnapshot, {
+      commandKey: namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey),
+      commandDigest: canonicalDigest(command), expectedRevision, snapshot,
     })
-    return writableProjection(projectCustomerRequest(result))
+    if (committed.kind === 'revision_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestId, reason: 'revision_changed' as const,
+    }
+    if (committed.kind === 'identity_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestId, reason: 'identity_changed' as const,
+    }
+    if (committed.kind === 'command_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestId, reason: 'idempotency_key_reused' as const,
+    }
+    const requestRevision: number = committed.kind === 'replayed' ? committed.revision : snapshot.revision
+    const existing: StoredEvaluation | null = await ctx.runQuery(internal.customerRequests.getRequestEvaluation, {
+      requestId: args.requestId, requestRevision,
+    })
+    if (existing !== null) return writableView(projectStoredEvaluation(existing))
+    const durableSnapshot: SnapshotValue | null = committed.kind === 'replayed'
+      ? await ctx.runQuery(internal.customerRequests.getRequestSnapshot, { requestId: args.requestId, revision: requestRevision })
+      : snapshot
+    if (durableSnapshot === null || durableSnapshot.principalId !== caller.principalId) return {
+      kind: 'conflict' as const, requestRef: args.requestId, reason: 'identity_changed' as const,
+    }
+    const evaluated = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
+    if (evaluated.kind !== 'stored') return {
+      kind: 'conflict' as const, requestRef: args.requestId, reason: 'revision_changed' as const,
+    }
+    return writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: evaluated.evaluation }))
   },
 })
 
@@ -181,9 +230,16 @@ type ResumeResult = ReturnType<typeof writableView> | Readonly<{
 }>
 
 async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string; serviceAuth?: Infer<typeof serviceAssertion> }>): Promise<ResumeResult> {
-    const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
+  const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
+  if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+  const evaluated: StoredEvaluation | null = await ctx.runQuery(
+    internal.customerRequests.getCurrentRequestEvaluation, { requestId: args.requestRef },
+  )
+  if (evaluated !== null) {
+    if (evaluated.snapshot.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    return writableView(projectStoredEvaluation(evaluated))
+  }
+  const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
     if (request === null || request.principalId !== caller.principalId) {
       return { kind: 'refused' as const, reason: 'request_not_found' as const }
     }
@@ -262,10 +318,77 @@ async function provideFactsHandler(
     serviceAuth?: Infer<typeof serviceAssertion>
   }>,
 ): Promise<ProvideFactsResult> {
-    const command = factsCommand(args)
-    const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
+  const command = factsCommand(args)
+  const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
+  if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+  const evaluated: StoredEvaluation | null = await ctx.runQuery(
+    internal.customerRequests.getCurrentRequestEvaluation, { requestId: args.requestRef },
+  )
+  if (evaluated !== null) {
+    if (evaluated.snapshot.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    const selectedField = evaluated.evaluation.nextRequirement?.field
+    const suppliedFields = Object.keys(args.facts)
+    if (selectedField === undefined || suppliedFields.length !== 1 || suppliedFields[0] !== selectedField) {
+      return writableView(projectNeedsAttention({
+        requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
+        summary: 'Add only the information currently requested so the available options can be reevaluated.',
+      }))
+    }
+    const suppliedValue = args.facts[selectedField]
+    if (suppliedValue === undefined) return writableView(projectNeedsAttention({
+      requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
+      summary: 'The requested information was not supplied.',
+    }))
+    const recordedAt = Date.now()
+    const nextFacts = {
+      ...evaluated.snapshot.facts,
+      [selectedField]: {
+        value: suppliedValue,
+        source: { kind: 'customer' as const, assertionRef: `assertion:${canonicalDigest({
+          field: selectedField, value: suppliedValue, requestRevision: args.expectedRevision + 1,
+        })}` },
+      },
+    }
+    const snapshotMaterial = {
+      requestId: evaluated.snapshot.requestId, revision: args.expectedRevision + 1,
+      principalId: evaluated.snapshot.principalId, delegatedAgentId: evaluated.snapshot.delegatedAgentId,
+      intent: evaluated.snapshot.intent, networkId: evaluated.snapshot.networkId, facts: nextFacts,
+    }
+    const snapshot: SnapshotValue = {
+      ...snapshotMaterial, snapshotDigest: canonicalDigest(snapshotMaterial), recordedAt,
+    }
+    const committed: SnapshotCommitResult = await ctx.runMutation(internal.customerRequests.commitRequestSnapshot, {
+      commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest(command), expectedRevision: args.expectedRevision, snapshot,
+    })
+    if (committed.kind === 'revision_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
+    }
+    if (committed.kind === 'identity_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'identity_changed' as const,
+    }
+    if (committed.kind === 'command_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
+    }
+    const requestRevision = committed.kind === 'replayed' ? committed.revision : snapshot.revision
+    const existing: StoredEvaluation | null = await ctx.runQuery(internal.customerRequests.getRequestEvaluation, {
+      requestId: args.requestRef, requestRevision,
+    })
+    if (existing !== null) return writableView(projectStoredEvaluation(existing))
+    const durableSnapshot: SnapshotValue | null = committed.kind === 'replayed'
+      ? await ctx.runQuery(internal.customerRequests.getRequestSnapshot, { requestId: args.requestRef, revision: requestRevision })
+      : snapshot
+    if (durableSnapshot === null) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: requestRevision, summary: 'This request needs attention before it can continue.',
+    }))
+    const nextEvaluation = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
+    return nextEvaluation.kind === 'stored'
+      ? writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: nextEvaluation.evaluation }))
+      : writableView(projectNeedsAttention({
+          requestRef: args.requestRef, revision: requestRevision, summary: 'This request changed before reevaluation completed.',
+        }))
+  }
+  const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
     if (request === null || request.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
     const compilation = await ctx.runQuery(internal.customerRequests.getCompilationForRequestRevision, {
       requestId: request.requestId, requestRevision: request.revision,
@@ -346,6 +469,72 @@ function writableView(view: CustomerRequestView) {
   }
 }
 
+function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
+  const evaluation: RequestEvaluation = {
+    requestId: input.evaluation.requestId,
+    requestRevision: input.evaluation.requestRevision,
+    registrySnapshotDigest: input.evaluation.registrySnapshotDigest,
+    factsDigest: input.evaluation.factsDigest,
+    candidates: input.candidates,
+    ...(input.evaluation.nextRequirement === undefined ? {} : { nextRequirement: {
+      field: input.evaluation.nextRequirement.field,
+      customerLabel: input.evaluation.nextRequirement.customerLabel,
+      impact: {
+        affectedCandidates: input.evaluation.nextRequirement.affectedCandidates,
+        probesEnabled: input.evaluation.nextRequirement.probesEnabled,
+      },
+      requirementDigest: input.evaluation.nextRequirement.requirementDigest,
+    } }),
+    posture: input.evaluation.posture,
+    evaluationDigest: input.evaluation.evaluationDigest,
+  }
+  return projectRequestEvaluation({ snapshot: input.snapshot, evaluation })
+}
+
+async function evaluateAndPersistSnapshot(
+  ctx: ActionCtx,
+  snapshot: SnapshotValue,
+): Promise<Readonly<{ kind: 'stored'; evaluation: RequestEvaluation }> | Readonly<{ kind: 'stale' | 'conflict' }>> {
+  const registry = await loadConvexCapabilityContractRegistry(ctx)
+  const bindings: EligibleBinding[] = await ctx.runQuery(
+    internal.routingKernelBindings.listEligible, { networkId: snapshot.networkId },
+  )
+  const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)
+  const candidateInputs = discoverRequestEvaluationCandidates({
+    intent: snapshot.intent, bindings,
+    resolveContract: (capabilityContractId) => registry.get(capabilityContractId),
+  })
+  const evaluation = evaluateCustomerRequestSnapshot({
+    requestId: snapshot.requestId, requestRevision: snapshot.revision,
+    intent: snapshot.intent, facts: snapshot.facts, registrySnapshotDigest, candidates: candidateInputs,
+  })
+  const persisted: Readonly<{ kind: 'stored' | 'stale' | 'conflict' }> = await ctx.runMutation(
+    internal.customerRequests.putRequestEvaluation,
+    {
+      evaluation: {
+        evaluationId: `evaluation:${evaluation.evaluationDigest}`,
+        requestId: evaluation.requestId, requestRevision: evaluation.requestRevision,
+        registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
+        posture: evaluation.posture,
+        ...(evaluation.nextRequirement === undefined ? {} : { nextRequirement: {
+          field: evaluation.nextRequirement.field, customerLabel: evaluation.nextRequirement.customerLabel,
+          affectedCandidates: [...evaluation.nextRequirement.impact.affectedCandidates],
+          probesEnabled: [...evaluation.nextRequirement.impact.probesEnabled],
+          requirementDigest: evaluation.nextRequirement.requirementDigest,
+        } }),
+        evaluationDigest: evaluation.evaluationDigest, evaluatedAt: Date.now(),
+      },
+      candidates: evaluation.candidates.map((candidate) => ({
+        ...candidate,
+        viability: candidate.viability.kind === 'viable' ? { kind: 'viable' as const } : {
+          kind: 'blocked_on_information' as const, fields: [...candidate.viability.fields],
+        },
+      })),
+    },
+  )
+  return persisted.kind === 'stored' ? { kind: 'stored', evaluation } : { kind: persisted.kind }
+}
+
 function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {
   return `${operation}:${canonicalDigest({ principalId, requestRef, callerKey })}`
 }
@@ -394,7 +583,9 @@ function submitCommand(args: Readonly<{
   delegatedAgentId: string
   customerJob: string
   knownFacts: Record<string, string | number | boolean>
-  routing: { networkId: string; currency: string; maximumSpendMinor: number; optimizeFor: 'cost' | 'latency' }
+  routing: {
+    networkId: string; currency?: string; maximumSpendMinor?: number; optimizeFor?: 'cost' | 'latency'
+  }
 }>) {
   return {
     compilationKey: args.compilationKey, requestId: args.requestId,

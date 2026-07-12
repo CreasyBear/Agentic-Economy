@@ -181,6 +181,37 @@ export const getCurrentRequestEvaluation = internalQuery({
   },
 })
 
+export const getRequestSnapshot = internalQuery({
+  args: { requestId: v.string(), revision: v.number() },
+  returns: v.union(requestSnapshotValue, v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('customerRequestSnapshots')
+      .withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', args.requestId).eq('revision', args.revision)).unique()
+    return row === null ? null : stripSystemFields(row)
+  },
+})
+
+export const getRequestEvaluation = internalQuery({
+  args: { requestId: v.string(), requestRevision: v.number() },
+  returns: currentRequestEvaluation,
+  handler: async (ctx, args) => {
+    const snapshot = await ctx.db.query('customerRequestSnapshots')
+      .withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', args.requestId).eq('revision', args.requestRevision)).unique()
+    const evaluation = await ctx.db.query('customerRequestEvaluations')
+      .withIndex('by_requestId_and_requestRevision', (query) => query
+        .eq('requestId', args.requestId).eq('requestRevision', args.requestRevision)).unique()
+    if (snapshot === null || evaluation === null) return null
+    const candidates = await ctx.db.query('customerRequestEvaluationCandidates')
+      .withIndex('by_evaluationId', (query) => query.eq('evaluationId', evaluation.evaluationId)).collect()
+    return {
+      snapshot: stripSystemFields(snapshot), evaluation: stripSystemFields(evaluation),
+      candidates: candidates.map(stripEvaluationCandidateRow).sort((left, right) => left.candidateRef.localeCompare(right.candidateRef)),
+    }
+  },
+})
+
 export const lookupCompilation = internalQuery({
   args: { compilationKey: v.string(), commandDigest: v.string() },
   returns: compilationLookupResult,

@@ -10,9 +10,9 @@ const bodySchema = z.object({
   request: z.string().trim().min(1).max(2_000),
   knownFacts: z.record(z.string().trim().min(1).max(200), z.union([z.string().max(8_000), z.number().finite(), z.boolean()])).default({}),
   routing: z.object({
-    network: z.string().trim().min(1).max(200).default('ae:public'), currency: z.string().regex(/^[A-Z]{3}$/).default('AUD'),
-    maximumSpendMinor: z.number().int().nonnegative().default(0), optimizeFor: z.enum(['cost', 'latency']).default('cost'),
-  }).default({ network: 'ae:public', currency: 'AUD', maximumSpendMinor: 0, optimizeFor: 'cost' }),
+    network: z.string().trim().min(1).max(200).default('ae:public'), currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    maximumSpendMinor: z.number().int().nonnegative().optional(), optimizeFor: z.enum(['cost', 'latency']).optional(),
+  }).default({ network: 'ae:public' }),
 }).strict()
 
 export type SubmitResult = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'interpreter_unavailable' | 'capabilities_unavailable' }>
@@ -31,8 +31,12 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
       compilationKey: parsed.data.idempotencyKey, requestId: parsed.data.requestRef,
       ...(parsed.data.expectedRevision === undefined ? {} : { expectedRevision: parsed.data.expectedRevision }),
       delegatedAgentId: parsed.data.agentRef, customerJob: parsed.data.request, knownFacts: parsed.data.knownFacts,
-      routing: { networkId: parsed.data.routing.network, currency: parsed.data.routing.currency,
-        maximumSpendMinor: parsed.data.routing.maximumSpendMinor, optimizeFor: parsed.data.routing.optimizeFor },
+      routing: {
+        networkId: parsed.data.routing.network,
+        ...(parsed.data.routing.currency === undefined ? {} : { currency: parsed.data.routing.currency }),
+        ...(parsed.data.routing.maximumSpendMinor === undefined ? {} : { maximumSpendMinor: parsed.data.routing.maximumSpendMinor }),
+        ...(parsed.data.routing.optimizeFor === undefined ? {} : { optimizeFor: parsed.data.routing.optimizeFor }),
+      },
     }
     const result = await (options.submit ?? (async (input) => await callSourceAction(submitAction, input)))(args)
     if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 503)

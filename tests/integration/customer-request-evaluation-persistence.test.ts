@@ -13,7 +13,7 @@ describe('durable Customer Request evaluation', () => {
     const snapshot = {
       requestId: 'request:incomplete:1', revision: 1,
       principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
-      intent: 'Compare ways to send this parcel',
+      intent: 'Compare ways to send this parcel', networkId: 'ae:public',
       facts: {
         origin_postcode: { value: '6000', source: { kind: 'customer' as const, assertionRef: 'assertion:origin' } },
         destination_postcode: { value: '2000', source: { kind: 'customer' as const, assertionRef: 'assertion:destination' } },

@@ -16,7 +16,7 @@ describe('customer Request HTTP API', () => {
     expect(submit).toHaveBeenCalledWith({
       compilationKey: 'command:1', requestId: 'request:1', delegatedAgentId: 'agent:claude',
       customerJob: 'Find a suitable option', knownFacts: {},
-      routing: { networkId: 'ae:public', currency: 'AUD', maximumSpendMinor: 0, optimizeFor: 'cost' },
+      routing: { networkId: 'ae:public' },
     })
     await expect(response.json()).resolves.toMatchObject({ state: 'ready_to_compare', nextAction: 'prepare_options' })
   })
