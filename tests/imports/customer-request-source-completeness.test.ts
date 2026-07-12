@@ -54,6 +54,23 @@ describe('CustomerRequest source completeness', () => {
     }
   })
 
+  it('keeps fixture and durable discovery aligned on the agent request contract', () => {
+    const fixtureDiscovery = readFileSync('src/modules/discovery/internal/discovery-files.ts', 'utf8')
+    const durableDiscovery = readFileSync('convex/discovery.ts', 'utf8')
+    const requiredMarkers = [
+      '/api/v1/requests',
+      'customer_requests:create',
+      'needs_information | ready_to_compare | preparing_options | options_ready',
+      'Advanced routing kernel:',
+      'Treat options as proposals only',
+    ]
+
+    for (const marker of requiredMarkers) {
+      expect(fixtureDiscovery, `fixture discovery missing ${marker}`).toContain(marker)
+      expect(durableDiscovery, `durable discovery missing ${marker}`).toContain(marker)
+    }
+  })
+
   it('fails if support directories acquire canonical Request behavior or production imports them', () => {
     const supportFiles = findFiles([
       { root: 'examples', includeExtensions: ['.ts', '.tsx', '.js', '.mjs', '.mts'] },
