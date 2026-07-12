@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "off"
+  },
+  "plugins": ["typescript", "oxc"],
+  "rules": {
+    "no-debugger": "error",
+    "no-control-regex": "off",
+    "no-underscore-dangle": "off",
+    "no-unused-vars": "off",
+    "no-useless-escape": "off",
+    "typescript/triple-slash-reference": "off"
+  },
+  "ignorePatterns": [
+    "convex/_generated/**",
+    "examples/routing-agent-directory/worker-configuration.d.ts",
+    "tests/fixtures/**",
+    "vendor/**"
+  ]
+}

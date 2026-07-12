@@ -1,0 +1,62 @@
+name: Kernel release gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-proof:
+    name: Clean source, contract, browser, and build proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Install browser runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Run source release contract
+        run: npm run test:release:source
+
+  hosted-proof:
+    name: Deployment codegen and revision-bound Root Run proof
+    if: github.event_name != 'pull_request'
+    needs: source-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      AE_KERNEL_PROOF_MANIFEST_JSON: ${{ secrets.AE_KERNEL_PROOF_MANIFEST_JSON }}
+      AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Frozen dependency install
+        run: npm ci
+
+      - name: Verify deployment-bound release evidence
+        run: npm run test:release:hosted
