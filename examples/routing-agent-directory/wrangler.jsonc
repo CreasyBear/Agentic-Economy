@@ -5,7 +5,7 @@
   "compatibility_date": "2026-07-11",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "AGENT_PUBLIC_JWK_BASE64URL": "eyJrZXlfb3BzIjpbInZlcmlmeSJdLCJleHQiOnRydWUsImFsZyI6IkVkMjU1MTkiLCJjcnYiOiJFZDI1NTE5IiwieCI6IktrdEdPQnJiNVR2cWU3ZDAxbGFPXzJiNGhvUjdxX0hTMGZkbUFrb1JuX2ciLCJrdHkiOiJPS1AiLCJraWQiOiI2dXBHamVoZ3N0ZGtmM3Z0NW5EVjdNS0J4NjU3WnV6QWF3OHRMNFFZcVU0In0"
+    "AGENT_PUBLIC_JWK_BASE64URL": "eyJrdHkiOiJPS1AiLCJjcnYiOiJFZDI1NTE5IiwieCI6Ik9SOXV2aG1SNkpuWWRiZFhDYXg5Q0VURDYzR2hQazN4TlJyTFZNclRTLVEiLCJraWQiOiJjQWF1YllZc1gyRzFLWEs0TkRHTlF4S2lKSnFKRlJoRnp4dlhuMzR4V05NIiwiYWxnIjoiRWQyNTUxOSIsImtleV9vcHMiOlsidmVyaWZ5Il0sImV4dCI6dHJ1ZX0"
   },
   "observability": {
     "enabled": true,
