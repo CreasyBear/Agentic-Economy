@@ -18,7 +18,17 @@ const http = httpRouter()
 http.route({
   path: '/.well-known/ae-routing.json',
   method: 'GET',
-  handler: httpAction(async (_ctx, request) => handleRoutingKernelDescriptorRequest(request)),
+  handler: httpAction(async (_ctx, request) => {
+    const edgeKey = process.env.AE_EDGE_ORIGIN_HMAC_KEY?.trim()
+    if (edgeKey === undefined || edgeKey.length === 0) return handleRoutingKernelDescriptorRequest(request)
+    const requiredAuthority = process.env.AE_ROUTING_PUBLIC_AUTHORITY?.trim()
+    const edge = await verifyRoutingEdgeEnvelope(request, {
+      key: edgeKey,
+      ...(requiredAuthority === undefined || requiredAuthority.length === 0 ? {} : { requiredAuthority }),
+    })
+    if (edge.kind !== 'verified') return Response.json({ error: { code: edge.reason } }, { status: 401 })
+    return handleRoutingKernelDescriptorRequest(new Request(edge.publicUrl, { method: request.method, headers: request.headers }))
+  }),
 })
 
 function routingDependencies(ctx: Parameters<Parameters<typeof httpAction>[0]>[0]) {

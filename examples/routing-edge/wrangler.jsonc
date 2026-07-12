@@ -18,5 +18,18 @@
   "observability": {
     "logs": { "enabled": true, "head_sampling_rate": 1 },
     "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  },
+  "env": {
+    "production": {
+      "name": "ae-routing-edge-production",
+      "vars": {
+        "AE_ROUTING_ORIGIN": "https://formal-jaguar-441.convex.site",
+        "AE_EDGE_ENVIRONMENT": "production",
+        "AE_EDGE_SOURCE_REVISION": "unbound"
+      },
+      "secrets": {
+        "required": ["AE_EDGE_ORIGIN_HMAC_KEY"]
+      }
+    }
   }
 }

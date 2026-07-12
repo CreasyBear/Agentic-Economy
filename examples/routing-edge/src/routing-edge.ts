@@ -3,6 +3,7 @@ import { createRoutingEdgeEnvelope } from '../../../src/modules/routing-kernel/r
 const MAX_BODY_BYTES = 64 * 1024
 const UPSTREAM_TIMEOUT_MS = 30_000
 const descriptorPath = '/.well-known/ae-routing.json'
+const topologyPath = '/.well-known/ae-routing-topology.json'
 const postPaths = new Set(['/v1/route', '/v1/authorize', '/v1/execute', '/v1/reconcile', '/v1/inspect', '/v1/cancel', '/mcp'])
 
 type RoutingEdgeEnv = Readonly<Record<'AE_ROUTING_ORIGIN' | 'AE_EDGE_ENVIRONMENT' | 'AE_EDGE_SOURCE_REVISION' | 'AE_EDGE_ORIGIN_HMAC_KEY', string>>
@@ -16,6 +17,7 @@ export async function handleRoutingEdgeRequest(
   const startedAt = Date.now()
   const requestId = request.headers.get('CF-Ray') ?? crypto.randomUUID()
   const url = new URL(request.url)
+  if (url.pathname === topologyPath && request.method === 'GET') return topologyResponse(url, env, requestId)
   const methodAllowed = (url.pathname === descriptorPath && request.method === 'GET')
     || (postPaths.has(url.pathname) && request.method === 'POST')
   if (!methodAllowed) return edgeError(requestId, url.pathname === descriptorPath || postPaths.has(url.pathname) ? 405 : 404, url.pathname === descriptorPath || postPaths.has(url.pathname) ? 'method_not_allowed' : 'route_not_found')
@@ -62,6 +64,18 @@ export async function handleRoutingEdgeRequest(
     console.error(JSON.stringify({ event: 'routing_edge_upstream_failed', requestId, timeout, environment: env.AE_EDGE_ENVIRONMENT }))
     return edgeError(requestId, timeout ? 504 : 502, timeout ? 'origin_timeout' : 'origin_unavailable')
   }
+}
+
+function topologyResponse(url: URL, env: RoutingEdgeEnv, requestId: string): Response {
+  return Response.json({
+    schemaVersion: 'ae-routing-topology:v1',
+    environment: env.AE_EDGE_ENVIRONMENT,
+    sourceRevision: env.AE_EDGE_SOURCE_REVISION,
+    edge: { authority: url.host, state: 'stateless', requestId },
+    canonicalAuthority: { runtime: 'convex', origin: env.AE_ROUTING_ORIGIN },
+    admission: { authority: 'convex', contract: 'transactional-fixed-window-and-lease:v1' },
+    telemetry: { protocolRecordsSeparated: true, providerWaitSeparated: true, retentionDays: 7 },
+  }, { headers: { 'Cache-Control': 'no-store', 'X-AE-Edge-Request-Id': requestId } })
 }
 
 async function readBoundedBody(request: Request, maximumBytes: number): Promise<{ ok: true; bytes: Uint8Array } | { ok: false }> {

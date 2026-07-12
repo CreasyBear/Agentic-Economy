@@ -41,4 +41,17 @@ describe('routing edge Fetch contract', () => {
     expect([unknown.status, wrongMethod.status, oversized.status]).toEqual([404, 405, 413])
     expect(fetcher).not.toHaveBeenCalled()
   })
+
+  it('publishes source-bound topology without exposing the origin HMAC key', async () => {
+    const response = await handleRoutingEdgeRequest(new Request('https://route.agentic-economy.test/.well-known/ae-routing-topology.json'), env)
+    const raw = await response.clone().text()
+    expect(await response.json()).toEqual({
+      schemaVersion: 'ae-routing-topology:v1', environment: 'test', sourceRevision: 'revision:test',
+      edge: { authority: 'route.agentic-economy.test', state: 'stateless', requestId: expect.any(String) },
+      canonicalAuthority: { runtime: 'convex', origin: 'https://kernel.example' },
+      admission: { authority: 'convex', contract: 'transactional-fixed-window-and-lease:v1' },
+      telemetry: { protocolRecordsSeparated: true, providerWaitSeparated: true, retentionDays: 7 },
+    })
+    expect(raw).not.toContain(env.AE_EDGE_ORIGIN_HMAC_KEY)
+  })
 })
