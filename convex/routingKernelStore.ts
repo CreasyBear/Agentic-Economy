@@ -1056,7 +1056,11 @@ async function readRun(db: GenericDatabaseReader<DataModel>, rootRunId: string) 
       ...(item.outcome === undefined ? {} : { outcome: item.outcome }),
       ...(item.failureReason === undefined ? {} : { failureReason: item.failureReason }),
     })),
-    records: records.map((item) => ({
+    records: records.map((item) => {
+      if (item.incidentContract !== 'epoch_v1' || item.incidentEpochDigest === undefined) {
+        throw new Error('root_record_incident_epoch_missing')
+      }
+      return {
       recordId: item.recordId,
       type: item.type,
       rootRunId: item.rootRunId,
@@ -1080,14 +1084,15 @@ async function readRun(db: GenericDatabaseReader<DataModel>, rootRunId: string) 
       ...(item.cancellationRequestId === undefined ? {} : { cancellationRequestId: item.cancellationRequestId }),
       ...(item.cancellationDisposition === undefined ? {} : { cancellationDisposition: item.cancellationDisposition }),
       ...(item.cancellationReason === undefined ? {} : { cancellationReason: item.cancellationReason }),
-      incidentEpochDigest: item.incidentEpochDigest!,
+      incidentEpochDigest: item.incidentEpochDigest,
       ...(item.stepGrantDigest === undefined ? {} : { stepGrantDigest: item.stepGrantDigest }),
       ...(item.maximumCost === undefined ? {} : { maximumCost: item.maximumCost }),
       ...(item.attempt === undefined ? {} : { attempt: item.attempt }),
       ...(item.expiresAt === undefined ? {} : { expiresAt: item.expiresAt }),
       ...(item.enforcementPoint === undefined ? {} : { enforcementPoint: item.enforcementPoint }),
       occurredAt: item.occurredAt,
-    })),
+      }
+    }),
   }
 }
 

@@ -140,7 +140,7 @@ export function parseActReceiptFromInquirySubmitBody(body: unknown): ActReceiptP
 
 export function parseDeliveryTrailFromDispatchReadback(input: {
   dispatchId: string
-  status: string
+  status: unknown
   attemptCount: number
 }): DeliveryTrailProof | undefined {
   if (!isNotificationDispatchStatus(input.status)) {
@@ -254,6 +254,6 @@ function isInquiryNotificationStatus(value: string): value is InquiryNotificatio
   return (InquiryNotificationStatusValues as readonly string[]).includes(value)
 }
 
-function isNotificationDispatchStatus(value: string): value is NotificationDispatchStatus {
-  return (NotificationDispatchStatusValues as readonly string[]).includes(value)
+function isNotificationDispatchStatus(value: unknown): value is NotificationDispatchStatus {
+  return typeof value === 'string' && (NotificationDispatchStatusValues as readonly string[]).includes(value)
 }
