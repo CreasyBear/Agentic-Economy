@@ -62,7 +62,7 @@ describe('CustomerRequest source completeness', () => {
       'customer_requests:create',
       'needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready',
       'Advanced routing kernel:',
-      'Treat options as proposals only',
+      'optionSet.ordering: recommended includes its objective, reasons, tradeoffs and influence status',
     ]
 
     for (const marker of requiredMarkers) {
