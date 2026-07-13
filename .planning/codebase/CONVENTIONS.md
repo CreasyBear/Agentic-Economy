@@ -1,92 +1,103 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-07-11
+**Analysis Date:** 2026-07-13
 
 ## Naming Patterns
 
 **Files:**
-- Use kebab-case for general modules and components (`src/lib/server/bounded-request-body.ts`, `src/components/ae/answer/ae-provider-card.tsx`).
-- Domain modules use a public/internal split and role suffixes: `public.ts`, `*.actions.ts`, `*.functions.ts`, `internal/schema.ts`, and `internal/commands.ts` (for example `src/modules/inquiries/`).
-- TanStack file routes follow route IDs, including `$param`, `_operator`, and `-`-prefixed route-private helpers (`src/routes/$slug.inquiry.tsx`, `src/routes/_operator/owner.settings.tsx`, `src/routes/-registry-search-params.ts`).
-- React components and their files are mixed by boundary: shared AE component files are generally kebab-case while route components live in route-named files; test files are descriptive kebab-case under `tests/`.
+- Use kebab-case for general modules and utilities (`src/lib/server/bounded-request-body.ts`, `src/modules/common/stable-hash.ts`).
+- Domain modules use role suffixes and explicit surfaces: `public.ts`, `*.actions.ts`, `*.functions.ts`, plus `internal/` for owned implementation (`src/modules/inquiries/inquiry.actions.ts`, `src/modules/catalog/internal/publish.ts`).
+- TanStack file routes encode route IDs and parameters; `_operator` is a layout segment and `$name` is a parameter (`src/routes/_operator/owner.settings.tsx`, `src/routes/api.requests.$requestRef.facts.ts`).
+- React component files are mixed by established boundary: many legacy/shared AE components use PascalCase (`src/components/ae/chat/AeChat.tsx`), while module and primitive files are commonly kebab-case. Match the containing directory rather than renaming broadly.
+- Tests are descriptive kebab-case. Vitest uses `*.test.ts[x]`; Playwright uses `*.spec.ts` (`tests/unit/capability-supply/capability-supply-contract.test.ts`, `tests/e2e/landing-answer.spec.ts`).
 
 **Functions and Variables:**
-- Use camelCase for functions, variables, hooks, and event handlers (`handleAnswerTurnRequest`, `readOwnerNotificationPreferencesServer`).
-- Use PascalCase for React components (`OwnerSettingsRoute`) and UPPER_SNAKE_CASE for module constants (`MAX_ANSWER_TURN_BODY_BYTES`).
-- Boolean names state the predicate (`replayed`, `isAbortError`, `hasNoOverflow`); factory/build/read/resolve verbs make effects explicit.
-- Test-only seams are named plainly with `ForTests` or `Test` (`setAnswerThreadPortForTests`, `createAnswerThreadTestStore`).
+- Use camelCase for functions, variables, hooks, and handlers (`compileCustomerRequest`, `handleCustomerRequestPost`).
+- Use PascalCase for React components and UPPER_SNAKE_CASE for true module constants.
+- Name booleans as predicates and effects with specific verbs such as `read`, `resolve`, `validate`, `register`, `record`, `publish`, or `prepare`.
+- Test seams carry an explicit `ForTests` or `Test` marker (`setAnswerThreadPortForTests`, `createAnswerThreadTestStore`).
 
 **Types:**
-- Use PascalCase type aliases without `I` prefixes (`AnswerSnapshot`, `OwnerNotificationPreferencesReadResult`).
-- Prefer discriminated unions with literal `kind`, `code`, `status`, or `type` fields; derive literal unions from `as const` arrays where runtime values are also needed (`src/modules/answer/answer-synthesizer.ts`).
-- Use branded identifiers and precise readonly collections at domain boundaries; broad `any`, non-null assertions, and broad status strings are rejected by `tests/imports/ts-standards.test.ts`.
+- Use PascalCase type aliases and interfaces without `I` prefixes (`CapabilityOfferingRegistration`, `CustomerRequestProjection`).
+- Prefer readonly object types and discriminated unions with literal `kind`, `status`, `reason`, or `code` fields.
+- Derive runtime-backed unions from `as const` data or validators rather than duplicating loose strings.
+- Use branded/domain identifiers and exact records at boundaries. `tests/imports/ts-standards.test.ts` rejects broad `any`, unsafe assertions, non-null assertions, and overly broad domain status fields.
 
 ## Code Style
 
 **Formatting:**
-- TypeScript/TSX uses two-space indentation, single quotes, trailing commas in multiline constructs, and normally no semicolons.
-- There is no checked-in Prettier or ESLint configuration and no lint/format script in `package.json`; match surrounding source and rely on TypeScript plus source-scanning guardrails.
-- Keep multiline calls and object literals readable; long signatures and expressions are wrapped by hand rather than an enforced line-length rule.
+- TypeScript and TSX consistently use two-space indentation, single quotes, trailing commas in multiline constructs, and no semicolons.
+- No Prettier or ESLint configuration is checked in. Formatting is maintained by matching surrounding code; no hard line-length rule is configured.
+- Generated output such as `convex/_generated/**` and `src/routeTree.gen.ts` is tool-owned and must not be hand-edited.
 
-**Type Safety:**
-- `tsconfig.json` enables strict mode plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, and `noImplicitOverride`.
-- Validate unknown input at boundaries, commonly with Zod `safeParse`; narrow optional properties before constructing exact optional objects (`src/routes/api.answer.turn.ts`).
-- Avoid unchecked casts. Narrow unions through discriminator checks and use exhaustive domain return shapes instead of exceptions for expected outcomes.
-- Run `npm run typecheck`, `npm run check:convex-codegen`, and `npm run test:ts-standards` for source-level conformance.
+**Linting and Type Safety:**
+- Oxlint 1.73 is configured in `.oxlintrc.json`; correctness rules are errors, selected noisy rules are disabled, and generated/vendor/negative-fixture paths are ignored.
+- Run `npm run lint`; it scans `src`, `convex`, `tests`, `tools`, and `examples` with `--deny-warnings`.
+- `tsconfig.json` enables `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `useUnknownInCatchVariables`, `noImplicitOverride`, and `isolatedModules`.
+- Validate untrusted data at boundaries, commonly with Zod or explicit Convex validators. Narrow optional values before constructing exact-optional objects.
+- Run `npm run typecheck`, `npm run check:convex-codegen`, and `npm run test:ts-standards` for complementary compiler, generated-contract, and source-standard proof.
 
 ## Import Organization
 
 **Order:**
 1. Node built-ins and external packages.
-2. Blank line, then `@/` internal imports.
-3. Blank line, then relative imports for nearby implementation details.
+2. Blank line, then internal `@/` imports.
+3. Blank line, then relative imports for same-module or Convex-owned files.
 
 **Patterns:**
-- Use `import type` or inline `type` imports for type-only dependencies.
-- Use `@/*` for `src/*`; `~/*` is configured but `@/` is the dominant alias. Route-specific aliases in `tsconfig.json` normalize operator route paths.
-- Domain consumers import from module public surfaces such as `@/modules/answer/public`; private and route-boundary imports are enforced by `tests/imports/private-imports.test.ts` and `tests/imports/route-boundary.test.ts`.
-- Relative imports are appropriate inside a module and from tests into `tests/helpers/` or `eval/`; avoid new barrel files that bypass domain ownership.
+- Use `import type` or inline `type` modifiers for type-only imports.
+- `@/*` and `~/*` both resolve to `src/*`, but `@/` is the dominant alias. Additional aliases in `tsconfig.json` preserve operator-route import IDs.
+- Cross-domain consumers should import module-owned public surfaces instead of private internals. `tests/imports/private-imports.test.ts`, `tests/imports/route-boundary.test.ts`, and domain-specific boundary tests enforce this.
+- Relative imports are normal within `convex/`, within one module, and from tests into nearby helpers/fixtures. Avoid barrels that erase ownership boundaries.
 
 ## Error Handling
 
-**Patterns:**
-- Model expected domain failures as typed discriminated results (`kind: 'ok' | 'error'`, stable error `code`, `retryable`, and human-safe `reason`) rather than throwing (`src/modules/catalog/internal/publish.ts`).
-- At HTTP boundaries, bound request bodies, catch parse failures, validate schemas, and map failures to explicit status codes and stable JSON/SSE error codes (`src/routes/api.answer.turn.ts`).
-- Catch only at ownership boundaries. Abort and cancellation paths return quietly; unexpected streaming failures emit safe public errors without exposing exception details.
-- Use `try/finally` when temporarily mutating environment or installing test seams; restore all prior state (`tests/eval/answer-pipeline.test.ts`).
+**Expected Failures:**
+- Model expected domain refusal and unavailability as typed discriminated results, not exceptions (`kind: 'refused'`, stable `reason`, retryability or evidence where relevant).
+- Validate before persistence and fail closed on authorization, contract integrity, stale hashes, suppressed businesses, missing evidence, or invalid provider material (`src/modules/capability-supply/public.ts`, `convex/capabilitySupply.ts`).
+- Preserve idempotency with operation keys and deterministic digests; exact replay returns the prior result while changed retry material is a conflict.
 
-**Security and Integrity:**
-- Treat authentication, rate limiting, source-write admission, and authorization as explicit boundary checks before mutation.
-- Preserve idempotency with operation keys and deterministic hashes in write paths; distinguish replay from first execution (`src/modules/catalog/internal/publish.ts`).
-- Do not expose secrets or internal identifiers in public responses or copy. Dedicated source and copy scans live under `tests/unit/security/`, `tests/copy/`, and `tests/imports/`.
+**Boundary Failures:**
+- At HTTP boundaries, bound body sizes, parse defensively, validate schemas, and map failures to explicit statuses and stable public error codes (`src/lib/server/customer-request-api.ts`).
+- Catch errors at ownership boundaries. Abort/cancellation may return quietly; unexpected failures must not expose exception details, credentials, protected values, or internal identifiers.
+- Use `try/finally`, `afterEach`, or explicit restoration whenever environment, globals, clocks, ports, or mocks are temporarily replaced.
 
 ## Logging and Observability
 
 **Framework:**
-- There is no shared application logger convention. Production telemetry is routed through dedicated observability modules and providers (`src/modules/observability/`, Sentry, and PostHog), not scattered `console.log` calls.
-- Keep public errors stable and non-sensitive; attach operational facts at server/provider boundaries rather than logging arbitrary domain internals.
+- No single application logger is established. Sentry and PostHog integrations are centralized under `src/modules/observability/`; selected server/provider boundaries use console methods when the console output itself is the operational interface.
+- Prefer structured, redacted operational facts. Audit payloads and error telemetry must exclude secrets and customer-protected values (`src/modules/observability/internal/redaction.ts`).
+- Do not scatter diagnostic `console.log` calls through domain logic; Oxlint blocks `debugger`, while tests explicitly spy on console only where CLI/provider behavior is under test.
 
 ## Comments and Documentation
 
 **When to Comment:**
-- Explain authority boundaries, non-obvious safety constraints, compatibility seams, or why a fallback exists; do not narrate straightforward code.
-- Use TSDoc on public contracts when provenance or future substitution matters (`src/modules/answer/answer-synthesizer.ts`).
-- Generated files such as `src/routeTree.gen.ts` are explicitly exempt and must not be edited; tests pin that generated-only exception.
+- Explain authority boundaries, security invariants, protocol compatibility, generated ownership, or a non-obvious fallback; do not narrate straightforward statements.
+- Use TSDoc where a public contract, provenance rule, or substitutable port needs durable explanation. Most internal functions rely on precise types and names instead of boilerplate docs.
+- Keep TODOs actionable and preferably tied to an issue or planning artifact; do not use comments to normalize known unsafe behavior.
 
-## Function and Module Design
+## Function Design
 
-**Functions:**
-- Prefer guard clauses, explicit return types on exported and boundary functions, and small named helpers for protocol details.
-- Use a single options object for multi-field inputs and conditionally spread exact optional fields instead of passing explicit `undefined`.
-- Keep pure domain logic deterministic; inject ports, stores, clocks, requests, or provider seams at boundaries when effects are required.
+**Inputs and Returns:**
+- Prefer one typed options/input object for multi-field operations and explicit return types on exported or boundary functions.
+- Use guard clauses and exhaustive discriminator checks. Pure domain functions should remain deterministic; inject clocks, fetch implementations, stores, and provider adapters at effect boundaries.
+- Conditionally spread optional fields instead of assigning explicit `undefined` where `exactOptionalPropertyTypes` applies.
 
-**Modules:**
-- Prefer named exports. Default exports are reserved for framework-required configuration/schema entry points such as `vitest.config.ts` and `convex/schema.ts`.
-- Expose cross-module contracts through `public.ts`; keep storage, validators, schemas, and command machinery under `internal/`.
-- Compose Convex schema from module-owned table fragments in `convex/schema.ts`; do not centralize domain table definitions.
-- Keep route-local UI helpers `-`-prefixed so TanStack Router excludes them from route generation.
+**Convex Functions:**
+- Follow `convex/_generated/ai/guidelines.md`: declare `args` and `returns` validators, use the generated `query`/`mutation`/`action` wrappers, and type contexts with generated `QueryCtx`, `MutationCtx`, or `ActionCtx` rather than `any`.
+- Derive authorization identity with `ctx.auth.getUserIdentity()` and use `identity.tokenIdentifier` for stable auth-linked ownership; never accept a caller-supplied user ID as authorization authority.
+- Use indexed queries rather than filter scans, keep internal-only operations internal, and compose domain table fragments in `convex/schema.ts`.
+
+## Module Design
+
+**Exports and Ownership:**
+- Prefer named exports. Default exports are mainly framework-required configuration, schema, route, or cron objects (`vitest.config.ts`, `convex/schema.ts`).
+- Operations intended for shared surfaces are actions in `src/modules/*/*.actions.ts` and register through `src/modules/actions/index.ts`.
+- Expose cross-module contracts through `public.ts`; keep schemas, validators, storage commands, and adapters under the owning module or `internal/` directory.
+- Keep capability contract, commercial offering, transport binding, credential, and eligibility authority separate; do not collapse distinct identities into a convenience DTO (`src/modules/capability-supply/public.ts`).
+- Preserve the product boundary in code and copy: public/assistant behavior may read, compare, summarize, route, and submit a qualified inquiry, but must not imply booking, payment, dispatch, or autonomous fulfilment (`AGENTS.md`).
 
 ---
 
-*Convention analysis: 2026-07-11*
+*Convention analysis: 2026-07-13*
 *Update when patterns change*
