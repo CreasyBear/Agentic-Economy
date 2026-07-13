@@ -12,6 +12,7 @@ import type * as answerThreads from "../answerThreads.js";
 import type * as authz from "../authz.js";
 import type * as authzMigration from "../authzMigration.js";
 import type * as business from "../business.js";
+import type * as capabilityContractDocuments from "../capabilityContractDocuments.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as customerRequestApplication from "../customerRequestApplication.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   authz: typeof authz;
   authzMigration: typeof authzMigration;
   business: typeof business;
+  capabilityContractDocuments: typeof capabilityContractDocuments;
   catalog: typeof catalog;
   crons: typeof crons;
   customerRequestApplication: typeof customerRequestApplication;

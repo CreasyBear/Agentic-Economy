@@ -60,6 +60,7 @@ export const AdminActionValues = [
   'close_dispute',
   'set_operator_control',
   'register_capability_binding',
+  'register_capability_contract',
   'control_kernel_incidents',
 ] as const
 export type AdminAction = (typeof AdminActionValues)[number]

@@ -20,6 +20,7 @@ const AdminActionMatrix = {
     close_dispute: true,
     set_operator_control: true,
     register_capability_binding: true,
+    register_capability_contract: true,
     control_kernel_incidents: true,
   },
   support: {
@@ -31,6 +32,7 @@ const AdminActionMatrix = {
     close_dispute: false,
     set_operator_control: false,
     register_capability_binding: false,
+    register_capability_contract: false,
     control_kernel_incidents: false,
   },
   reviewer: {
@@ -42,6 +44,7 @@ const AdminActionMatrix = {
     close_dispute: false,
     set_operator_control: false,
     register_capability_binding: false,
+    register_capability_contract: false,
     control_kernel_incidents: false,
   },
 } satisfies Record<AdminRole, Record<AdminAction, boolean>>

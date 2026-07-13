@@ -27,6 +27,11 @@ describe('admin authority contract', () => {
       kind: 'denied',
       reason: 'action_not_allowed',
     })
+    expect(requireAdminAuthority(activeMembership('owner_admin'), 'register_capability_contract')).toMatchObject({ kind: 'allowed' })
+    expect(requireAdminAuthority(activeMembership('support'), 'register_capability_contract')).toEqual({
+      kind: 'denied',
+      reason: 'action_not_allowed',
+    })
   })
 
   it('allows bootstrap only for preauthorized principal while no owner admin exists', () => {
