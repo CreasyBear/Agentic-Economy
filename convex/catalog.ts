@@ -231,9 +231,28 @@ export const publishBusinessCatalog = mutationGeneric({
       return catalogError('catalog_publish_unauthenticated', 'Authentication is required to publish a business catalog.')
     }
 
-    const db = runtimeDb(ctx.db)
+    return publishBusinessCatalogCommand(runtimeDb(ctx.db), {
+      actor,
+      claimId: args.claimId,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+      services: args.services,
+    }, Date.now())
+  },
+})
 
-    const claim = await db.get(args.claimId)
+export async function publishBusinessCatalogCommand(
+  db: RuntimeDb,
+  command: {
+    actor: { kind: 'authenticated_owner'; clerkUserId: string }
+    claimId: string
+    operationKey: string
+    correlationId: string
+    services: readonly ServiceInput[]
+  },
+  now: number,
+) {
+    const claim = await db.get(command.claimId)
     if (claim === null) {
       return catalogError('catalog_publish_claim_not_found', 'Claim was not found.')
     }
@@ -250,7 +269,7 @@ export const publishBusinessCatalog = mutationGeneric({
     }
 
     const owner = await db.get(ownerId)
-    if (owner === null || stringField(owner, 'clerkUserId') !== actor.clerkUserId) {
+    if (owner === null || stringField(owner, 'clerkUserId') !== command.actor.clerkUserId) {
       return catalogError('catalog_publish_wrong_owner', 'Only the source-bound owner can publish this catalog.')
     }
 
@@ -266,7 +285,7 @@ export const publishBusinessCatalog = mutationGeneric({
     }
 
     const normalizedServices: ServiceCatalogInput[] = []
-    for (const service of args.services) {
+    for (const service of command.services) {
       const normalizedService = toServiceInput(service)
       if (normalizedService.kind === 'invalid') {
         return catalogError('catalog_publish_invalid_services', 'invalid_first_request')
@@ -279,7 +298,7 @@ export const publishBusinessCatalog = mutationGeneric({
     }
 
     const requestHash = stableHash({
-      claimId: args.claimId,
+      claimId: command.claimId,
       services: validation.services.map((service) => ({
         category: service.category,
         firstRequest: {
@@ -288,6 +307,7 @@ export const publishBusinessCatalog = mutationGeneric({
           publicChannel: service.firstRequest.publicChannel,
           publicDisclosure: service.firstRequest.publicDisclosure,
         },
+        hoursOrUnknown: service.hoursOrUnknown,
         name: service.name,
         serviceArea: service.serviceArea,
         summary: service.summary,
@@ -296,7 +316,7 @@ export const publishBusinessCatalog = mutationGeneric({
     const existingOperation = await db
       .query('operationKeys')
       .withIndex('by_actor_operation_key', (query) =>
-        query.eq('actorRef', ownerId).eq('operationName', 'publishBusinessCatalog').eq('key', args.operationKey)
+        query.eq('actorRef', ownerId).eq('operationName', 'publishBusinessCatalog').eq('key', command.operationKey)
       )
       .unique()
     if (existingOperation !== null) {
@@ -304,12 +324,15 @@ export const publishBusinessCatalog = mutationGeneric({
         return catalogError('catalog_publish_operation_conflict', 'Operation key is already reserved for a different publish request.')
       }
       const replayCatalog = await publicCatalogForBusiness(db, businessId)
-      const replayAudit = await findPublishAuditEvent(db, businessId, args.operationKey, args.correlationId)
+      if (stringField(existingOperation, 'sourceHash') !== stringField(business, 'sourceHash')) {
+        return catalogError('catalog_publish_operation_conflict', 'Published operation source no longer matches this business.')
+      }
+      const replayAudit = await findPublishAuditEvent(db, businessId, command.operationKey)
       if (replayCatalog === undefined || replayAudit === undefined) {
         return catalogError('catalog_publish_operation_conflict', 'Published operation readback is incomplete.')
       }
       const replayBusiness = publishedBusinessContract(businessId, business, nowFromDoc(existingOperation))
-      const replayClaim = publishedClaimContract(args.claimId, claim, businessId, nowFromDoc(existingOperation))
+      const replayClaim = publishedClaimContract(command.claimId, claim, businessId, nowFromDoc(existingOperation))
       return {
         kind: 'ok' as const,
         code: 'catalog_publish_replayed' as const,
@@ -322,13 +345,12 @@ export const publishBusinessCatalog = mutationGeneric({
       }
     }
 
-    const now = Date.now()
     const operationId = await db.insert('operationKeys', {
       scope: 'catalog',
       actorKind: 'owner',
       actorRef: ownerId,
       operationName: 'publishBusinessCatalog',
-      key: args.operationKey,
+      key: command.operationKey,
       requestHash,
       sourceHash: stringField(business, 'sourceHash'),
       status: 'in_progress',
@@ -338,14 +360,14 @@ export const publishBusinessCatalog = mutationGeneric({
     })
 
     await db.patch(businessId, { publicStatus: 'published', claimStatus: 'published', updatedAt: now })
-    await db.patch(args.claimId, { status: 'published', updatedAt: now })
+    await db.patch(command.claimId, { status: 'published', updatedAt: now })
     const services = await upsertServices(db, businessId, validation.services, now)
     const catalog = await publicCatalogForBusiness(db, businessId)
     if (catalog === undefined) {
       return catalogError('catalog_publish_invalid_services', 'no_published_services')
     }
 
-    const auditEvent = await ensurePublishAuditEvent(db, businessId, ownerId, stringField(business, 'slug'), args, now)
+    const auditEvent = await ensurePublishAuditEvent(db, businessId, ownerId, stringField(business, 'slug'), command, now)
     const registryAttempts = await ensureRegistryAttempts(db, businessId, stringField(business, 'sourceHash'), services, now)
     const discoveryAttempts = await ensureDiscoveryAttempt(db, businessId, stringField(business, 'sourceHash'), now)
     await upsertBusinessIndexStatus(db, businessId, stringField(business, 'sourceHash'), now)
@@ -357,7 +379,7 @@ export const publishBusinessCatalog = mutationGeneric({
     })
 
     const publishedBusiness = publishedBusinessContract(businessId, business, now)
-    const publishedClaim = publishedClaimContract(args.claimId, claim, businessId, now)
+    const publishedClaim = publishedClaimContract(command.claimId, claim, businessId, now)
     return {
       kind: 'ok' as const,
       code: 'catalog_published' as const,
@@ -368,8 +390,7 @@ export const publishBusinessCatalog = mutationGeneric({
       registryProjectionAttempts: registryAttempts,
       discoveryManifestAttempts: discoveryAttempts,
     }
-  },
-})
+}
 
 export const getPublicBusinessCatalogBySlug = queryGeneric({
   args: {
@@ -823,7 +844,7 @@ async function ensurePublishAuditEvent(
   now: number
 ): Promise<AuditEvent> {
   const eventId = `audit:claim.published:${businessId}:${args.operationKey}`
-  const existing = await findPublishAuditEvent(db, businessId, args.operationKey, args.correlationId)
+  const existing = await findPublishAuditEvent(db, businessId, args.operationKey)
   if (existing !== undefined) {
     return existing
   }
@@ -854,19 +875,18 @@ async function findPublishAuditEvent(
   db: RuntimeDb,
   businessId: string,
   operationKey: string,
-  correlationId: string
 ): Promise<AuditEvent | undefined> {
-  const events = await db
+  const eventId = `audit:claim.published:${businessId}:${operationKey}`
+  const event = await db
     .query('auditEvents')
-    .withIndex('by_correlationId', (query) => query.eq('correlationId', correlationId))
-    .collect()
-  const event = events.find(
-    (candidate) =>
-      stringField(candidate, 'businessId') === businessId &&
-      stringField(candidate, 'idempotencyKey') === operationKey &&
-      stringField(candidate, 'eventType') === 'claim.published'
-  )
-  if (event === undefined) {
+    .withIndex('by_eventId', (query) => query.eq('eventId', eventId))
+    .unique()
+  if (
+    event === null
+    || stringField(event, 'businessId') !== businessId
+    || stringField(event, 'idempotencyKey') !== operationKey
+    || stringField(event, 'eventType') !== 'claim.published'
+  ) {
     return undefined
   }
 

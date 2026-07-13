@@ -26,6 +26,16 @@ describe('capability supply boundaries', () => {
       expect(source).not.toMatch(/\b(?:shipping|booking|restaurant|accommodation|purchase)\b/i)
     }
   })
+
+  it('forces sandbox identity, publication, and eligibility through shared production commands', () => {
+    const seed = readFileSync('convex/devSeed.ts', 'utf8')
+
+    expect(seed).toContain('claimBusinessCommand')
+    expect(seed).toContain('publishBusinessCatalogCommand')
+    expect(seed).toContain('setCapabilitySupplyEligibilityCommand')
+    expect(seed).toContain('DEV_SEED_BUSINESS_FIXTURES.filter')
+    expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessServices|capabilityOfferings|capabilityTransportBindings)['"]/)
+  })
 })
 
 function sources(): string[] {

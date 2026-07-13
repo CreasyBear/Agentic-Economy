@@ -98,7 +98,8 @@ const claimErrorCode = v.union(
   v.literal('claim_duplicate_conflict'),
   v.literal('claim_pending_review'),
   v.literal('claim_csrf_rejected'),
-  v.literal('claim_rate_limited')
+  v.literal('claim_rate_limited'),
+  v.literal('claim_operation_conflict')
 )
 
 const claimErrorResult = v.object({
@@ -112,7 +113,7 @@ const claimErrorResult = v.object({
 
 const claimOkResult = v.object({
   kind: v.literal('ok'),
-  code: v.literal('claim_created'),
+  code: v.union(v.literal('claim_created'), v.literal('claim_replayed')),
   owner: ownerResult,
   business: businessResult,
   claim: claimResult,
@@ -194,189 +195,17 @@ export const claimBusiness = mutationGeneric({
       return claimError('claim_unauthenticated', 'Authentication is required to claim a business.')
     }
 
-    const runtimeCtx = { db: runtimeWriter(ctx.db) }
-    const now = Date.now()
-    const normalized = normalizeClaimFacts(args)
-    if (normalized.kind === 'invalid') {
-      return claimError('claim_invalid_facts', normalized.reason)
-    }
-
-    const existingBusiness = await ctx.db
-      .query('businesses')
-      .withIndex('by_slug', (query) => query.eq('slug', normalized.slug))
-      .unique()
-    if (existingBusiness !== null) {
-      return claimError('claim_slug_conflict', 'A business already owns this public slug.')
-    }
-
-    const [owner, rateLimited] = await Promise.all([
-      findOrCreateOwner(runtimeCtx, actor, now),
-      incrementClaimRateLimit(runtimeCtx, actor.clerkUserId, now),
-    ])
+    const db = runtimeWriter(ctx.db)
+    const rateLimited = await incrementClaimRateLimit({ db }, actor.clerkUserId, Date.now())
     if (rateLimited !== undefined) {
       return rateLimited
     }
-
-    const fingerprint = normalizeClaimFingerprint({
-      name: normalized.name,
-      category: normalized.category,
-      suburb: normalized.suburb,
-      stateTerritory: normalized.stateTerritory,
-    })
-    const existingFingerprints = await ctx.db
-      .query('claimFingerprints')
-      .withIndex('by_fingerprint_status', (query) => query.eq('fingerprint', fingerprint))
-      .collect()
-    const duplicate = existingFingerprints.at(0)
-    if (duplicate !== undefined) {
-      const duplicateOwnerRef = typeof duplicate.ownerRef === 'string' ? duplicate.ownerRef : undefined
-      if (duplicateOwnerRef === owner.ownerId) {
-        return claimError('claim_duplicate_conflict', 'This owner already has a claim for the normalized business identity.')
-      }
-
-      const contestedHash = stableHash({
-        category: normalized.category,
-        duplicate: 'duplicate_or_impersonation_review',
-        name: normalized.name,
-        slug: normalized.slug,
-        stateTerritory: normalized.stateTerritory,
-        suburb: normalized.suburb,
-      })
-      const claimId = await ctx.db.insert('claims', {
-        ownerId: owner.ownerId,
-        slug: normalized.slug,
-        status: 'contested',
-        submittedFactsHash: contestedHash,
-        createdAt: now,
-        updatedAt: now,
-      })
-      await ctx.db.insert('claimFingerprints', {
-        fingerprint,
-        status: 'duplicate_suspected',
-        businessSlug: normalized.slug,
-        ownerRef: owner.ownerId,
-        claimId,
-        createdAt: now,
-        updatedAt: now,
-      })
-      return {
-        kind: 'error' as const,
-        code: 'claim_pending_review' as const,
-        retryable: false,
-        reason: 'This claim needs owner review before it can publish.',
-        publicReason: 'duplicate_or_impersonation_review' as const,
-        claim: {
-          claimId,
-          ownerId: owner.ownerId,
-          slug: normalized.slug,
-          status: 'contested' as const,
-          submittedFactsHash: contestedHash,
-          createdAt: now,
-          updatedAt: now,
-        },
-      }
-    }
-
-    const sourceHash = stableHash({
-      category: normalized.category,
-      name: normalized.name,
-      slug: normalized.slug,
-      sourceRefs: normalized.sourceRefs,
-      stateTerritory: normalized.stateTerritory,
-      publishedPhone: normalized.publishedPhone ?? null,
-      suburb: normalized.suburb,
-    })
-    const businessId = await ctx.db.insert('businesses', {
-      ownerId: owner.ownerId,
-      slug: normalized.slug,
-      name: normalized.name,
-      normalizedName: normalized.name.toLowerCase(),
-      category: normalized.category,
-      suburb: normalized.suburb,
-      stateTerritory: normalized.stateTerritory,
-      ...(normalized.publishedPhone === undefined ? {} : { publishedPhone: normalized.publishedPhone }),
-      publicStatus: 'unpublished',
-      trustTier: 'claimed',
-      claimStatus: 'authenticated',
-      sourceHash,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await ctx.db.insert('businessContexts', {
-      businessId,
-      category: normalized.category,
-      suburb: normalized.suburb,
-      stateTerritory: normalized.stateTerritory,
-      ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
-      ...(normalized.photos === undefined || normalized.photos.length === 0 ? {} : { photos: normalized.photos }),
-      ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
-      sourceRefs: normalized.sourceRefs,
-      sourceHash,
-      approvedAt: now,
-    })
-    const claimId = await ctx.db.insert('claims', {
-      ownerId: owner.ownerId,
-      businessId,
-      slug: normalized.slug,
-      status: 'authenticated',
-      submittedFactsHash: sourceHash,
-      createdAt: now,
-      updatedAt: now,
-    })
-    await ctx.db.insert('claimFingerprints', {
-      fingerprint,
-      status: 'clear',
-      businessSlug: normalized.slug,
-      ownerRef: owner.ownerId,
-      claimId,
-      createdAt: now,
-      updatedAt: now,
-    })
-
-    return {
-      kind: 'ok' as const,
-      code: 'claim_created' as const,
-      owner,
-      business: {
-        businessId,
-        ownerId: owner.ownerId,
-        slug: normalized.slug,
-        name: normalized.name,
-        normalizedName: normalized.name.toLowerCase(),
-        category: normalized.category,
-        suburb: normalized.suburb,
-        stateTerritory: normalized.stateTerritory,
-        ...(normalized.publishedPhone === undefined ? {} : { publishedPhone: normalized.publishedPhone }),
-        publicStatus: 'unpublished' as const,
-        trustTier: 'claimed' as const,
-        claimStatus: 'authenticated' as const,
-        sourceHash,
-        createdAt: now,
-        updatedAt: now,
-      },
-      claim: {
-        claimId,
-        ownerId: owner.ownerId,
-        businessId,
-        slug: normalized.slug,
-        status: 'authenticated' as const,
-        submittedFactsHash: sourceHash,
-        createdAt: now,
-        updatedAt: now,
-      },
-      context: {
-        businessId,
-        category: normalized.category,
-        suburb: normalized.suburb,
-        stateTerritory: normalized.stateTerritory,
-        ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
-        ...(normalized.photos === undefined || normalized.photos.length === 0 ? {} : { photos: normalized.photos }),
-        ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
-        sourceRefs: normalized.sourceRefs,
-        sourceHash,
-        approvedAt: now,
-      },
-    }
+    return claimBusinessCommand(db, {
+      actor,
+      facts: args,
+      operationKey: args.operationKey,
+      correlationId: args.correlationId,
+    }, Date.now())
   },
 })
 
@@ -628,6 +457,361 @@ type OwnerContract = {
   updatedAt: number
 }
 
+export async function claimBusinessCommand(
+  db: RuntimeWriter,
+  command: {
+    actor: AuthenticatedOwnerActor
+    facts: ClaimBusinessArgs
+    operationKey: string
+    correlationId: string
+  },
+  now: number,
+) {
+  const normalized = normalizeClaimFacts(command.facts)
+  if (normalized.kind === 'invalid') {
+    return claimError('claim_invalid_facts', normalized.reason)
+  }
+  const sourceHash = stableHash({
+    category: normalized.category,
+    name: normalized.name,
+    slug: normalized.slug,
+    sourceRefs: normalized.sourceRefs,
+    stateTerritory: normalized.stateTerritory,
+    publishedPhone: normalized.publishedPhone ?? null,
+    suburb: normalized.suburb,
+  })
+
+  const existingOwner = await db
+    .query('owners')
+    .withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', command.actor.clerkUserId))
+    .unique()
+  if (existingOwner !== null) {
+    const owner = ownerContractFromDocument(existingOwner)
+    const requestHash = stableHash({ actorRef: owner.ownerId, facts: normalized })
+    const existingOperation = await db
+      .query('operationKeys')
+      .withIndex('by_actor_operation_key', (query) =>
+        query.eq('actorRef', owner.ownerId).eq('operationName', 'claimBusiness').eq('key', command.operationKey)
+      )
+      .unique()
+    if (existingOperation !== null) {
+      if (
+        documentString(existingOperation, 'requestHash') !== requestHash
+        || documentString(existingOperation, 'status') !== 'succeeded'
+      ) {
+        return claimError('claim_operation_conflict', 'Operation key is already reserved for a different claim request.')
+      }
+      const [businessId, claimId] = documentStringArray(existingOperation, 'effectRefs')
+      if (businessId === undefined || claimId === undefined) {
+        return claimError('claim_operation_conflict', 'Claim operation readback is incomplete.')
+      }
+      const [business, claim, context] = await Promise.all([
+        db.get(businessId),
+        db.get(claimId),
+        db.query('businessContexts').withIndex('by_business', (query) => query.eq('businessId', businessId)).unique(),
+      ])
+      if (
+        business === null
+        || claim === null
+        || context === null
+        || documentString(business, 'ownerId') !== owner.ownerId
+        || documentString(business, 'slug') !== normalized.slug
+        || documentString(business, 'sourceHash') !== sourceHash
+        || documentString(claim, 'ownerId') !== owner.ownerId
+        || documentString(claim, 'businessId') !== businessId
+        || documentString(claim, 'slug') !== normalized.slug
+        || documentString(claim, 'submittedFactsHash') !== sourceHash
+        || documentString(context, 'businessId') !== businessId
+        || documentString(context, 'sourceHash') !== sourceHash
+        || documentString(existingOperation, 'sourceHash') !== sourceHash
+        || documentString(existingOperation, 'resultHash') !== claimReceiptHash(businessId, claimId, business, claim, context)
+      ) {
+        return claimError('claim_operation_conflict', 'Claim operation readback is incomplete.')
+      }
+      return claimCommandResult('claim_replayed', owner, businessId, claimId, business, claim, context)
+    }
+  }
+
+  const owner = await findOrCreateOwner({ db }, command.actor, now)
+  const requestHash = stableHash({ actorRef: owner.ownerId, facts: normalized })
+
+  const existingBusiness = await db
+    .query('businesses')
+    .withIndex('by_slug', (query) => query.eq('slug', normalized.slug))
+    .unique()
+  if (existingBusiness !== null) {
+    return claimError('claim_slug_conflict', 'A business already owns this public slug.')
+  }
+
+  const fingerprint = normalizeClaimFingerprint({
+    name: normalized.name,
+    category: normalized.category,
+    suburb: normalized.suburb,
+    stateTerritory: normalized.stateTerritory,
+  })
+  const existingFingerprints = await db
+    .query('claimFingerprints')
+    .withIndex('by_fingerprint_status', (query) => query.eq('fingerprint', fingerprint))
+    .collect()
+  const duplicate = existingFingerprints.at(0)
+  if (duplicate !== undefined) {
+    const duplicateOwnerRef = typeof duplicate.ownerRef === 'string' ? duplicate.ownerRef : undefined
+    if (duplicateOwnerRef === owner.ownerId) {
+      return claimError('claim_duplicate_conflict', 'This owner already has a claim for the normalized business identity.')
+    }
+
+    const contestedHash = stableHash({
+      category: normalized.category,
+      duplicate: 'duplicate_or_impersonation_review',
+      name: normalized.name,
+      slug: normalized.slug,
+      stateTerritory: normalized.stateTerritory,
+      suburb: normalized.suburb,
+    })
+    const claimId = await db.insert('claims', {
+      ownerId: owner.ownerId,
+      slug: normalized.slug,
+      status: 'contested',
+      submittedFactsHash: contestedHash,
+      createdAt: now,
+      updatedAt: now,
+    })
+    await db.insert('claimFingerprints', {
+      fingerprint,
+      status: 'duplicate_suspected',
+      businessSlug: normalized.slug,
+      ownerRef: owner.ownerId,
+      claimId,
+      createdAt: now,
+      updatedAt: now,
+    })
+    return {
+      kind: 'error' as const,
+      code: 'claim_pending_review' as const,
+      retryable: false,
+      reason: 'This claim needs owner review before it can publish.',
+      publicReason: 'duplicate_or_impersonation_review' as const,
+      claim: {
+        claimId,
+        ownerId: owner.ownerId,
+        slug: normalized.slug,
+        status: 'contested' as const,
+        submittedFactsHash: contestedHash,
+        createdAt: now,
+        updatedAt: now,
+      },
+    }
+  }
+
+  const operationId = await db.insert('operationKeys', {
+    scope: 'business_claim',
+    actorKind: 'owner',
+    actorRef: owner.ownerId,
+    operationName: 'claimBusiness',
+    key: command.operationKey,
+    requestHash,
+    sourceHash,
+    status: 'in_progress',
+    effectRefs: [],
+    createdAt: now,
+    updatedAt: now,
+  })
+  const businessDocument = {
+    ownerId: owner.ownerId,
+    slug: normalized.slug,
+    name: normalized.name,
+    normalizedName: normalized.name.toLowerCase(),
+    category: normalized.category,
+    suburb: normalized.suburb,
+    stateTerritory: normalized.stateTerritory,
+    ...(normalized.publishedPhone === undefined ? {} : { publishedPhone: normalized.publishedPhone }),
+    publicStatus: 'unpublished',
+    trustTier: 'claimed',
+    claimStatus: 'authenticated',
+    sourceHash,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const businessId = await db.insert('businesses', businessDocument)
+  const contextDocument = {
+    businessId,
+    category: normalized.category,
+    suburb: normalized.suburb,
+    stateTerritory: normalized.stateTerritory,
+    ...(normalized.ownerMessage === undefined ? {} : { ownerMessage: normalized.ownerMessage }),
+    ...(normalized.photos === undefined || normalized.photos.length === 0 ? {} : { photos: normalized.photos }),
+    ...(normalized.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: normalized.responseTimeMinutes }),
+    sourceRefs: normalized.sourceRefs,
+    sourceHash,
+    approvedAt: now,
+  }
+  await db.insert('businessContexts', contextDocument)
+  const claimDocument = {
+    ownerId: owner.ownerId,
+    businessId,
+    slug: normalized.slug,
+    status: 'authenticated',
+    submittedFactsHash: sourceHash,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const claimId = await db.insert('claims', claimDocument)
+  await db.insert('claimFingerprints', {
+    fingerprint,
+    status: 'clear',
+    businessSlug: normalized.slug,
+    ownerRef: owner.ownerId,
+    claimId,
+    createdAt: now,
+    updatedAt: now,
+  })
+  await db.patch(operationId, {
+    status: 'succeeded',
+    resultHash: claimReceiptHash(businessId, claimId, businessDocument, claimDocument, contextDocument),
+    effectRefs: [businessId, claimId],
+    updatedAt: now,
+  })
+
+  return claimCommandResult('claim_created', owner, businessId, claimId, businessDocument, claimDocument, contextDocument)
+}
+
+function claimCommandResult(
+  code: 'claim_created' | 'claim_replayed',
+  owner: OwnerContract,
+  businessId: string,
+  claimId: string,
+  business: Record<string, unknown>,
+  claim: Record<string, unknown>,
+  context: Record<string, unknown>,
+) {
+  return {
+    kind: 'ok' as const,
+    code,
+    owner,
+    business: {
+      businessId,
+      ownerId: documentString(business, 'ownerId'),
+      slug: documentString(business, 'slug'),
+      name: documentString(business, 'name'),
+      normalizedName: documentString(business, 'normalizedName'),
+      category: documentString(business, 'category'),
+      suburb: documentString(business, 'suburb'),
+      stateTerritory: documentString(business, 'stateTerritory'),
+      ...(documentOptionalString(business, 'publishedPhone') === undefined ? {} : { publishedPhone: documentString(business, 'publishedPhone') }),
+      publicStatus: documentString(business, 'publicStatus') as 'unpublished' | 'published' | 'suppressed',
+      trustTier: documentString(business, 'trustTier') as 'claimed' | 'contact_confirmed' | 'listed' | 'registry_verified',
+      claimStatus: documentString(business, 'claimStatus') as 'draft' | 'authenticated' | 'published' | 'contested' | 'disputed' | 'suppressed',
+      sourceHash: documentString(business, 'sourceHash'),
+      createdAt: documentNumber(business, 'createdAt'),
+      updatedAt: documentNumber(business, 'updatedAt'),
+    },
+    claim: {
+      claimId,
+      ownerId: documentString(claim, 'ownerId'),
+      businessId,
+      slug: documentString(claim, 'slug'),
+      status: documentString(claim, 'status') as 'authenticated',
+      submittedFactsHash: documentString(claim, 'submittedFactsHash'),
+      createdAt: documentNumber(claim, 'createdAt'),
+      updatedAt: documentNumber(claim, 'updatedAt'),
+    },
+    context: {
+      businessId,
+      category: documentString(context, 'category'),
+      suburb: documentString(context, 'suburb'),
+      stateTerritory: documentString(context, 'stateTerritory'),
+      ...(documentOptionalString(context, 'ownerMessage') === undefined ? {} : { ownerMessage: documentString(context, 'ownerMessage') }),
+      sourceRefs: Array.isArray(context.sourceRefs) ? context.sourceRefs : [],
+      sourceHash: documentString(context, 'sourceHash'),
+      approvedAt: documentNumber(context, 'approvedAt'),
+    },
+  }
+}
+
+function claimReceiptHash(
+  businessId: string,
+  claimId: string,
+  business: Record<string, unknown>,
+  claim: Record<string, unknown>,
+  context: Record<string, unknown>,
+): string {
+  return stableHash({
+    business: {
+      businessId,
+      ownerId: documentString(business, 'ownerId'),
+      slug: documentString(business, 'slug'),
+      name: documentString(business, 'name'),
+      normalizedName: documentString(business, 'normalizedName'),
+      category: documentString(business, 'category'),
+      suburb: documentString(business, 'suburb'),
+      stateTerritory: documentString(business, 'stateTerritory'),
+      publishedPhone: documentOptionalString(business, 'publishedPhone') ?? '',
+      sourceHash: documentString(business, 'sourceHash'),
+      createdAt: documentNumber(business, 'createdAt'),
+    },
+    claim: {
+      claimId,
+      ownerId: documentString(claim, 'ownerId'),
+      businessId: documentString(claim, 'businessId'),
+      slug: documentString(claim, 'slug'),
+      submittedFactsHash: documentString(claim, 'submittedFactsHash'),
+      createdAt: documentNumber(claim, 'createdAt'),
+    },
+    context: {
+      businessId: documentString(context, 'businessId'),
+      category: documentString(context, 'category'),
+      suburb: documentString(context, 'suburb'),
+      stateTerritory: documentString(context, 'stateTerritory'),
+      ownerMessage: documentOptionalString(context, 'ownerMessage') ?? '',
+      sourceRefs: documentSourceRefs(context),
+      sourceHash: documentString(context, 'sourceHash'),
+      approvedAt: documentNumber(context, 'approvedAt'),
+    },
+  })
+}
+
+function documentSourceRefs(document: Record<string, unknown>): { label: string; evidenceRef: string; sourceHash: string }[] {
+  return Array.isArray(document.sourceRefs)
+    ? document.sourceRefs.map((sourceRef) => {
+        const record = typeof sourceRef === 'object' && sourceRef !== null ? sourceRef as Record<string, unknown> : {}
+        return {
+          label: documentString(record, 'label'),
+          evidenceRef: documentString(record, 'evidenceRef'),
+          sourceHash: documentString(record, 'sourceHash'),
+        }
+      })
+    : []
+}
+
+function documentString(document: Record<string, unknown>, field: string): string {
+  return typeof document[field] === 'string' ? document[field] : ''
+}
+
+function ownerContractFromDocument(owner: RuntimeDocument): OwnerContract {
+  return {
+    ownerId: String(owner._id),
+    clerkUserId: documentString(owner, 'clerkUserId'),
+    ...(documentOptionalString(owner, 'displayName') === undefined ? {} : { displayName: documentString(owner, 'displayName') }),
+    ...(documentOptionalString(owner, 'emailHash') === undefined ? {} : { emailHash: documentString(owner, 'emailHash') }),
+    createdAt: documentNumber(owner, 'createdAt'),
+    updatedAt: documentNumber(owner, 'updatedAt'),
+  }
+}
+
+function documentOptionalString(document: Record<string, unknown>, field: string): string | undefined {
+  const value = document[field]
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function documentNumber(document: Record<string, unknown>, field: string): number {
+  return typeof document[field] === 'number' ? document[field] : 0
+}
+
+function documentStringArray(document: Record<string, unknown>, field: string): string[] {
+  const value = document[field]
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
 function claimError(
   code:
     | 'claim_unauthenticated'
@@ -635,7 +819,8 @@ function claimError(
     | 'claim_slug_conflict'
     | 'claim_duplicate_conflict'
     | 'claim_csrf_rejected'
-    | 'claim_rate_limited',
+    | 'claim_rate_limited'
+    | 'claim_operation_conflict',
   reason: string,
   retryable = false
 ) {
@@ -706,18 +891,25 @@ async function findOrCreateOwner(ctx: RuntimeCtx, actor: AuthenticatedOwnerActor
 
   if (existing !== null) {
     const ownerId = String(existing._id)
-    await db.patch(ownerId, {
-      ...(displayName === undefined ? {} : { displayName }),
-      ...(emailHash === undefined ? {} : { emailHash }),
-      updatedAt: now,
-    })
+    const metadataPatch = {
+      ...(displayName === undefined || displayName === documentOptionalString(existing, 'displayName') ? {} : { displayName }),
+      ...(emailHash === undefined || emailHash === documentOptionalString(existing, 'emailHash') ? {} : { emailHash }),
+    }
+    const metadataChanged = Object.keys(metadataPatch).length > 0
+    if (metadataChanged) {
+      await db.patch(ownerId, { ...metadataPatch, updatedAt: now })
+    }
     return {
       ownerId,
       clerkUserId: actor.clerkUserId,
-      ...(displayName === undefined ? {} : { displayName }),
-      ...(emailHash === undefined ? {} : { emailHash }),
+      ...(documentOptionalString(existing, 'displayName') === undefined && displayName === undefined
+        ? {}
+        : { displayName: displayName ?? documentString(existing, 'displayName') }),
+      ...(documentOptionalString(existing, 'emailHash') === undefined && emailHash === undefined
+        ? {}
+        : { emailHash: emailHash ?? documentString(existing, 'emailHash') }),
       createdAt: typeof existing.createdAt === 'number' ? existing.createdAt : now,
-      updatedAt: now,
+      updatedAt: metadataChanged ? now : documentNumber(existing, 'updatedAt'),
     }
   }
 

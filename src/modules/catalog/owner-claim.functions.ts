@@ -85,7 +85,7 @@ type ClaimBusinessArgs = {
 type ClaimBusinessResult =
   | {
       kind: 'ok'
-      code: 'claim_created'
+      code: 'claim_created' | 'claim_replayed'
       claim: { claimId: string }
     }
   | {

@@ -134,6 +134,20 @@ describe('Convex Phase 1 runtime bridge', () => {
     expect(db.dump('businessContexts')).toHaveLength(1)
     expect(db.dump('claims')).toHaveLength(1)
 
+    const replayed = await claimHandler(
+      authCtx(db, sam()),
+      withSourceWrite('owner_claim', claimArgs('Sam Plumbing', 'sam-plumbing', 'claim-created'))
+    )
+    expect(replayed).toMatchObject({ kind: 'ok', code: 'claim_replayed', claim: { claimId: claim.claim.claimId } })
+    expect(db.dump('businesses')).toHaveLength(1)
+
+    const operationConflict = await claimHandler(
+      authCtx(db, sam()),
+      withSourceWrite('owner_claim', claimArgs('Changed Plumbing', 'changed-plumbing', 'claim-created'))
+    )
+    expect(operationConflict).toMatchObject({ kind: 'error', code: 'claim_operation_conflict' })
+    expect(db.dump('businesses')).toHaveLength(1)
+
     const duplicateSlug = await claimHandler(
       authCtx(db, sam()),
       withSourceWrite('owner_claim', claimArgs('Different Plumbing', 'sam-plumbing', 'claim-duplicate-slug'))

@@ -1,15 +1,24 @@
 import { internalMutation } from './_generated/server'
 import { v } from 'convex/values'
 
-import { buildDevSeedCatalogState } from '../src/modules/dev/public'
+import {
+  buildDevSeedCatalogState,
+  DEV_SEED_BUSINESS_FIXTURES,
+  DEV_SEED_OWNER_CLERK_USER_ID,
+  type DevSeedBusinessFixture,
+} from '../src/modules/dev/public'
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { runtimeDb } from './source_state'
+import { claimBusinessCommand } from './business'
+import { publishBusinessCatalogCommand } from './catalog'
 import { registerCapabilityContractDocument } from './capabilityContractDocuments'
 import {
   registerCapabilityBindingCommand,
   registerCapabilityOfferingCommand,
+  setCapabilitySupplyEligibilityCommand,
 } from './capabilitySupply'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
+import type { CapabilityContractRef } from '@/modules/capability-contract/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
   SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
@@ -26,26 +35,110 @@ export const seedDevCatalog = internalMutation({
     sandboxV2Bindings: v.array(v.string()),
   }),
   handler: async (ctx) => {
-    const bundle = buildDevSeedCatalogState()
-    const result = await persistDevSeedCatalogState(runtimeDb(ctx.db), bundle)
-    const sandboxV2Bindings = await registerSandboxV2Supply(ctx.db, Date.now())
+    const seedStartedAt = Date.now()
+    const ordinaryFixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => !isSandboxFixture(fixture))
+    const sandboxFixtures = DEV_SEED_BUSINESS_FIXTURES.filter(isSandboxFixture)
+    const bundle = buildDevSeedCatalogState(ordinaryFixtures)
+    const db = runtimeDb(ctx.db)
+    const result = await persistDevSeedCatalogState(db, bundle)
+    const sandboxBusinesses = await registerSandboxBusinesses(db, sandboxFixtures, seedStartedAt)
+    const sandboxRegistrations = await registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000)
+    const sandboxV2Bindings = await admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500)
     return {
       ...result,
-      seededSlugs: [...result.seededSlugs],
+      seededSlugs: [...result.seededSlugs, ...sandboxBusinesses.seededSlugs],
+      businessIdsBySlug: { ...result.businessIdsBySlug, ...sandboxBusinesses.businessIdsBySlug },
       sandboxV2Bindings,
     }
   },
 })
 
-async function registerSandboxV2Supply(
+function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
+  return fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+}
+
+export async function registerSandboxBusinesses(
+  db: ReturnType<typeof runtimeDb>,
+  fixtures: readonly DevSeedBusinessFixture[],
+  registeredAt: number,
+): Promise<{ seededSlugs: string[]; businessIdsBySlug: Record<string, string> }> {
+  const businessIdsBySlug: Record<string, string> = {}
+  for (const [index, fixture] of fixtures.entries()) {
+    const now = registeredAt + index * 1_000
+    const actor = {
+      kind: 'authenticated_owner' as const,
+      clerkUserId: DEV_SEED_OWNER_CLERK_USER_ID,
+      displayName: 'Dev Seed Owner',
+    }
+    const claim = await claimBusinessCommand(db, {
+      actor,
+      facts: {
+        name: fixture.businessName,
+        category: fixture.category,
+        suburb: fixture.suburb,
+        stateTerritory: fixture.stateTerritory,
+        requestedSlug: fixture.requestedSlug,
+        ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+        ownerMessage: fixture.ownerMessage,
+        sourceRefs: [{
+          label: fixture.sourceLabel,
+          evidenceRef: `private:evidence:dev-seed:${fixture.requestedSlug}`,
+          sourceHash: `hash:dev-seed:${fixture.requestedSlug}`,
+        }],
+      },
+      operationKey: `seed:claim:${fixture.requestedSlug}`,
+      correlationId: `seed:claim:${fixture.requestedSlug}`,
+    }, now)
+    if (claim.kind !== 'ok') throw new Error(`sandbox_business_claim_${claim.code}`)
+
+    const published = await publishBusinessCatalogCommand(db, {
+      actor,
+      claimId: claim.claim.claimId,
+      operationKey: `seed:catalog:${fixture.requestedSlug}`,
+      correlationId: `seed:catalog:${fixture.requestedSlug}`,
+      services: [{
+        name: fixture.serviceName,
+        category: fixture.serviceCategory,
+        summary: fixture.serviceSummary,
+        serviceArea: fixture.serviceArea,
+        hoursOrUnknown: fixture.hoursOrUnknown,
+        firstRequest: fixture.firstRequestMode === 'not_available_yet'
+          ? {
+              mode: fixture.firstRequestMode,
+              publicChannel: 'not_available',
+              noContactReason: fixture.noContactReason || 'Sandbox contact is unavailable.',
+            }
+          : {
+              mode: fixture.firstRequestMode,
+              publicChannel: 'ae_status_only',
+              publicDisclosure: fixture.publicDisclosure,
+            },
+      }],
+    }, now + 500)
+    if (published.kind !== 'ok') throw new Error(`sandbox_business_publish_${published.code}`)
+    businessIdsBySlug[fixture.requestedSlug] = published.business.businessId
+  }
+  return { seededSlugs: fixtures.map((fixture) => fixture.requestedSlug), businessIdsBySlug }
+}
+
+export type SandboxV2SupplyRegistration = {
+  slug: string
+  offeringId: string
+  bindingId: string
+  contractRef: CapabilityContractRef
+  offeringRegistrationHash: string
+  bindingRegistrationHash: string
+}
+
+export async function registerSandboxV2SupplyRegistrations(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registeredAt: number,
-): Promise<string[]> {
+): Promise<SandboxV2SupplyRegistration[]> {
   const encoded = encodeCapabilityContractDocument(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
   const contract = await registerCapabilityContractDocument(db, encoded.documentJson, registeredAt)
   if (contract.kind !== 'registered') throw new Error(`sandbox_v2_contract_registration_${contract.reason}`)
   const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
-  const registered: string[] = []
+  const registered: SandboxV2SupplyRegistration[] = []
   for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
     const business = await db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
     if (business === null) throw new Error(`sandbox_v2_business_missing_${profile.slug}`)
@@ -98,7 +191,46 @@ async function registerSandboxV2Supply(
       },
     }, registeredAt)
     if (binding.kind !== 'registered') throw new Error(`sandbox_v2_binding_registration_${binding.reason}`)
-    registered.push(binding.bindingId)
+    registered.push({
+      slug: profile.slug,
+      offeringId: profile.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: contract.ref,
+      offeringRegistrationHash: offering.registrationHash,
+      bindingRegistrationHash: binding.registrationHash,
+    })
   }
   return registered
+}
+
+export async function admitSandboxV2Supply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registrations: readonly SandboxV2SupplyRegistration[],
+  admittedAt: number,
+): Promise<string[]> {
+  const admitted: string[] = []
+  for (const registration of registrations) {
+    const eligibility = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: {
+        correlationId: `seed:capability-supply:${registration.slug}`,
+        operationKey: `seed:capability-eligibility:${registration.bindingId}`,
+        reasonCode: 'labelled_sandbox_source_registration',
+        evidenceRefs: ['seed:sandbox-labelled-business'],
+      },
+      eligibility: {
+        offeringId: registration.offeringId,
+        bindingId: registration.bindingId,
+        contractRef: registration.contractRef,
+        decision: 'admit',
+        expectedOfferingRegistrationHash: registration.offeringRegistrationHash,
+        expectedBindingRegistrationHash: registration.bindingRegistrationHash,
+        admissionEvidenceRefs: ['seed:sandbox-business-published', 'seed:sandbox-contract-reviewed'],
+        conformanceEvidenceRefs: ['seed:sandbox-http-json-conformance'],
+      },
+    }, admittedAt)
+    if (eligibility.kind !== 'eligible') throw new Error(`sandbox_v2_eligibility_${eligibility.kind}`)
+    admitted.push(registration.bindingId)
+  }
+  return admitted
 }
