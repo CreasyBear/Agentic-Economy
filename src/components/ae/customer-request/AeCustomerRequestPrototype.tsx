@@ -22,8 +22,8 @@ type PrototypeState = Readonly<{
 const variants: readonly CustomerRequestPrototypeVariant[] = ['A', 'B', 'C']
 const variantNames: Readonly<Record<CustomerRequestPrototypeVariant, string>> = {
   A: 'Conversation',
-  B: 'Editable brief',
-  C: 'Guided path',
+  B: 'Chat + live brief',
+  C: 'In-thread context',
 }
 
 export function AeCustomerRequestPrototype({
@@ -109,65 +109,60 @@ function ConversationVariant({ state, actions }: VariantProps) {
 
 function BriefVariant({ state, actions }: VariantProps) {
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 pb-40 sm:px-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,.9fr)] lg:py-16">
-      <section className="grid content-start gap-6">
-        <header className="grid gap-3">
-          <Text className="text-sm font-semibold text-accent">Your request</Text>
-          <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">Tell AE what needs doing.</Heading>
-          <Text type="large" color="secondary">AE turns your words into a brief you can correct before any business is contacted.</Text>
-        </header>
-        <Card padding={5}>
-          <Composer value={state.need} onChange={actions.setNeed} onSubmit={actions.interpret} label="What do you need?" button={state.stage === 'start' ? 'Build my brief' : 'Update brief'} />
-        </Card>
-      </section>
-      <aside aria-label="AE understanding" className="min-w-0">
-        <Card padding={5} className="min-h-80">
-          <div className="grid gap-5">
-            <div className="flex items-start justify-between gap-4">
-              <div><Text className="text-sm font-semibold text-accent">AE understanding</Text><Heading level={2} className="mt-1">Your brief</Heading></div>
-              {state.stage !== 'start' ? <button className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={actions.edit}>Edit</button> : null}
+    <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 pb-40 sm:px-6 lg:py-16">
+      <header className="grid max-w-3xl gap-3">
+        <Text className="text-sm font-semibold text-accent">Ask AE</Text>
+        <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">Talk it through. Keep the brief in view.</Heading>
+        <Text type="large" color="secondary">AE maintains a correctable understanding while the conversation stays primary.</Text>
+      </header>
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,.85fr)]">
+        <section aria-label="Request conversation" className="grid min-w-0 content-start gap-4">
+          <AssistantMessage title="What would you like to get done?">Describe the result in your own words. I’ll ask about anything that changes the options.</AssistantMessage>
+          {state.stage !== 'start' ? <CustomerMessage>{state.need}</CustomerMessage> : null}
+          {state.stage === 'start' ? <Card padding={4}><Composer value={state.need} onChange={actions.setNeed} onSubmit={actions.interpret} label="Message AE" button="Send" /></Card> : null}
+          {state.stage === 'clarify' ? <AssistantTurn title="Where should this happen?" detail="That changes which connected businesses can respond."><InlineAnswer value={state.location} onChange={actions.setLocation} onSubmit={actions.confirmLocation} /></AssistantTurn> : null}
+          {state.stage === 'ready' ? <AssistantMessage title="That’s enough to look.">I’ve updated the brief. Check it, then ask me to find available options.</AssistantMessage> : null}
+          {state.stage === 'finding' ? <FindingMessage /> : null}
+          {state.stage === 'unsupported' ? <Unsupported actions={actions} /> : null}
+          {state.stage === 'no_options' ? <NoOptions actions={actions} /> : null}
+        </section>
+        <aside aria-label="Live request brief" className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+          <Card padding={5}>
+            <div className="grid gap-5">
+              <div className="flex items-start justify-between gap-4"><div><Text className="text-sm font-semibold text-accent">Live brief</Text><Heading level={2} className="mt-1">What AE understands</Heading></div>{state.stage !== 'start' ? <button className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={actions.edit}>Correct</button> : null}</div>
+              {state.need ? <BriefRow label="Need" value={state.need} /> : <Text color="secondary">Your need will take shape here as you talk.</Text>}
+              {state.location ? <BriefRow label="Where" value={state.location} /> : state.stage !== 'start' ? <BriefRow label="Still needed" value="Where this should happen" /> : null}
+              <Text color="secondary">Nothing has been sent to a business.</Text>
+              {state.stage === 'ready' ? <Button label="Find available options" variant="primary" clickAction={actions.find} /> : null}
             </div>
-            {state.stage === 'start' ? <Text color="secondary">Your editable brief will appear here. Nothing is sent to a business yet.</Text> : null}
-            {state.stage === 'clarify' ? (
-              <div className="grid gap-5">
-                <BriefRow label="Need" value={state.need} />
-                <div className="border-t border-border pt-5"><InlineAnswer value={state.location} onChange={actions.setLocation} onSubmit={actions.confirmLocation} label="Where should this happen?" /></div>
-              </div>
-            ) : null}
-            {state.stage === 'ready' ? <Understanding state={state} actions={actions} /> : null}
-            {state.stage === 'finding' ? <FindingMessage /> : null}
-            {state.stage === 'unsupported' ? <Unsupported actions={actions} /> : null}
-            {state.stage === 'no_options' ? <NoOptions actions={actions} /> : null}
-          </div>
-        </Card>
-      </aside>
+          </Card>
+        </aside>
+      </div>
     </main>
   )
 }
 
 function GuidedVariant({ state, actions }: VariantProps) {
-  const step = state.stage === 'start' ? 1 : state.stage === 'clarify' ? 2 : 3
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 pb-40 sm:px-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:py-16">
-      <aside className="grid content-start gap-6 border-b border-border pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8" aria-label="Request progress">
-        <div><Text className="text-sm font-semibold text-accent">Ask AE</Text><Heading level={1} className="mt-2 text-3xl">One clear step at a time.</Heading></div>
-        <ol className="grid grid-cols-3 gap-2 text-sm lg:grid-cols-1 lg:gap-4">
-          <ProgressStep number={1} label="Your need" active={step === 1} complete={step > 1} />
-          <ProgressStep number={2} label="What matters" active={step === 2} complete={step > 2} />
-          <ProgressStep number={3} label="Find options" active={step === 3} complete={false} />
-        </ol>
-        {state.stage !== 'start' ? <button className="min-h-11 text-left text-sm font-semibold underline underline-offset-4" onClick={actions.restart}>Start over</button> : null}
-      </aside>
-      <section className="grid min-w-0 content-start gap-6" aria-label="Current request step">
-        {state.stage === 'start' ? <><Heading level={2} className="text-3xl">What needs doing?</Heading><Text color="secondary">Use your own words. You do not need to know which business or service to choose.</Text><Composer value={state.need} onChange={actions.setNeed} onSubmit={actions.interpret} label="Describe the result you want" button="Next" /></> : null}
-        {state.stage === 'clarify' ? <><Heading level={2} className="text-3xl">One thing will change the options.</Heading><Text color="secondary">AE needs a location to know which connected businesses are eligible.</Text><InlineAnswer value={state.location} onChange={actions.setLocation} onSubmit={actions.confirmLocation} label="Where should this happen?" /></> : null}
-        {state.stage === 'ready' ? <Understanding state={state} actions={actions} /> : null}
+    <main className="mx-auto grid w-full max-w-4xl gap-8 px-4 py-10 pb-40 sm:px-6 lg:py-16">
+      <header className="grid gap-3 text-center"><Text className="text-sm font-semibold text-accent">Ask AE</Text><Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">A conversation that stays grounded.</Heading><Text type="large" color="secondary">AE keeps its current understanding inside the thread, where you can correct it.</Text></header>
+      <section className="grid min-w-0 gap-4" aria-label="Contextual request conversation">
+        <AssistantMessage title="What are you trying to get done?">Start anywhere. I’ll keep track of what is settled and ask only about decisions that change the options.</AssistantMessage>
+        {state.stage !== 'start' ? <CustomerMessage>{state.need}</CustomerMessage> : null}
+        {state.stage === 'start' ? <Card padding={4}><Composer value={state.need} onChange={actions.setNeed} onSubmit={actions.interpret} label="Message AE" button="Send" /></Card> : null}
+        {state.stage === 'clarify' ? <ContextCard state={state} actions={actions} needsLocation /> : null}
+        {state.stage === 'ready' ? <ContextCard state={state} actions={actions} /> : null}
         {state.stage === 'finding' ? <FindingMessage /> : null}
         {state.stage === 'unsupported' ? <Unsupported actions={actions} /> : null}
         {state.stage === 'no_options' ? <NoOptions actions={actions} /> : null}
+        {state.stage !== 'start' ? <button className="min-h-11 justify-self-start text-sm font-semibold underline underline-offset-4" onClick={actions.restart}>Start a different request</button> : null}
       </section>
     </main>
   )
+}
+
+function ContextCard({ state, actions, needsLocation = false }: VariantProps & Readonly<{ needsLocation?: boolean }>) {
+  return <Card padding={5}><div className="grid gap-5"><div><Text className="text-sm font-semibold text-accent">AE’s working understanding</Text><Heading level={2} className="mt-1">{needsLocation ? 'One detail will change the options.' : 'Ready to look.'}</Heading></div><BriefRow label="Need" value={state.need} />{needsLocation ? <><BriefRow label="Still needed" value="Where this should happen" /><Text color="secondary">Location changes which connected businesses can respond.</Text><InlineAnswer value={state.location} onChange={actions.setLocation} onSubmit={actions.confirmLocation} label="Where should this happen?" /></> : <><BriefRow label="Where" value={state.location} /><Text color="secondary">If this is right, AE can check connected businesses. Nothing will be booked or purchased.</Text><div className="flex flex-wrap gap-3"><Button label="Find available options" variant="primary" clickAction={actions.find} /><Button label="Correct this" variant="secondary" clickAction={actions.edit} /></div></>}</div></Card>
 }
 
 function Understanding({ state, actions, compact = false }: VariantProps & Readonly<{ compact?: boolean }>) {
@@ -192,13 +187,12 @@ function InlineAnswer({ value, onChange, onSubmit, label = 'Your answer' }: Read
 function AssistantTurn({ title, detail, children }: Readonly<{ title: string; detail: string; children: React.ReactNode }>) {
   return <Card padding={5}><div className="grid gap-4"><div><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1">{title}</Heading><Text color="secondary" className="mt-2">{detail}</Text></div>{children}</div></Card>
 }
+function AssistantMessage({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) { return <div className="max-w-2xl border-l-2 border-accent pl-4"><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1 text-xl">{title}</Heading><Text color="secondary" className="mt-2">{children}</Text></div> }
 function CustomerMessage({ children }: Readonly<{ children: React.ReactNode }>) { return <div className="ml-auto max-w-[85%] rounded-md bg-accent px-4 py-3 text-on-accent"><p>{children}</p></div> }
 function BriefRow({ label, value }: Readonly<{ label: string; value: string }>) { return <div className="grid gap-1 sm:grid-cols-[7rem_1fr]"><Text className="text-sm font-semibold">{label}</Text><Text color="secondary">{value}</Text></div> }
 function FindingMessage() { return <Card padding={5} aria-live="polite"><div className="grid gap-3"><Text className="text-sm font-semibold text-accent">Checking connected businesses</Text><Heading level={2}>Finding options that match your brief…</Heading><Text color="secondary">This can take a moment. You can leave and return to this request. Nothing has been booked or purchased.</Text></div></Card> }
 function Unsupported({ actions }: Pick<VariantProps, 'actions'>) { return <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">Not supported yet</Text><Heading level={2}>AE cannot find a connected capability for this request.</Heading><Text color="secondary">Try changing the result you need. A business listing alone does not mean the business can respond through AE.</Text><Button label="Change my request" variant="primary" clickAction={actions.edit} /></div></Card> }
 function NoOptions({ actions }: Pick<VariantProps, 'actions'>) { return <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">No connected options</Text><Heading level={2}>No eligible business returned an option this time.</Heading><Text color="secondary">Nothing failed silently and nothing was booked. Change the request or try again later.</Text><Button label="Change my request" variant="primary" clickAction={actions.edit} /></div></Card> }
-function ProgressStep({ number, label, active, complete }: Readonly<{ number: number; label: string; active: boolean; complete: boolean }>) { return <li className={`flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 ${active ? 'border-accent bg-card' : 'border-transparent'}`} aria-current={active ? 'step' : undefined}><span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-border text-xs font-semibold">{complete ? '✓' : number}</span><span className="truncate font-medium">{label}</span></li> }
-
 function PrototypeStateReadback({ state }: Readonly<{ state: PrototypeState }>) {
   return <details className="fixed bottom-24 right-4 z-30 max-w-xs rounded-md border border-border bg-card p-3 text-xs shadow-lg"><summary className="cursor-pointer font-semibold">Prototype state</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap">{JSON.stringify({ ...state, nextAction: nextAction(state.stage) }, null, 2)}</pre></details>
 }
