@@ -38,6 +38,42 @@ describe('customer Request production smoke', () => {
     expect(fetch.mock.calls.at(-1)?.[0].toString()).toContain('/api/v1/requests/acceptance%3A')
   })
 
+  it('proves an evidence-bound recommendation survives cold resume', async () => {
+    const ready = view('ready_to_compare', 1, [])
+    const options = recommendedView(2)
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json(ready))
+      .mockResolvedValueOnce(Response.json(ready))
+      .mockResolvedValueOnce(Response.json(options))
+      .mockResolvedValueOnce(Response.json(options))
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    await expect(runCustomerRequestProductionSmoke({
+      ...config(fetch, false), expectedOrdering: 'recommended',
+    })).resolves.toBeUndefined()
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('lowest_maximum_price'))
+  })
+
+  it('passes an optional Vercel protection bypass without exposing it in the request body', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    await expect(runCustomerRequestProductionSmoke({
+      ...config(fetch, true), deploymentProtectionBypass: 'preview-secret',
+    })).resolves.toBeUndefined()
+    expect(fetch).toHaveBeenCalledTimes(3)
+    for (const call of fetch.mock.calls) {
+      expect(new Headers(call[1]?.headers).get('x-vercel-protection-bypass')).toBe('preview-secret')
+    }
+    expect(fetch.mock.calls[2]?.[1]?.body).toBe('{}')
+  })
+
   it('answers customer-semantic clarification through messages before preparing options', async () => {
     const clarification = {
       ...view('needs_information', 1, []),
@@ -94,7 +130,34 @@ describe('customer Request production smoke', () => {
 function config(fetch: typeof globalThis.fetch, preflightOnly: boolean) {
   return {
     baseUrl: 'https://ae.example', apiKey: preflightOnly ? undefined : 'ak_production', facts: {}, fetch,
+    deploymentProtectionBypass: undefined, expectedOrdering: undefined,
     messages: [], preflightOnly, requestText: 'Compare registered sandbox options.',
+  }
+}
+
+function recommendedView(revision: number) {
+  const options = [
+    { optionRef: 'option:one', provider: 'one' },
+    { optionRef: 'option:two', provider: 'two' },
+  ]
+  return {
+    ...view('options_ready', revision, options),
+    optionSet: {
+      cardinality: 'multiple', optionCount: 2,
+      ordering: {
+        kind: 'recommended', commercialInfluence: 'none', objective: 'lowest_maximum_price',
+        optionRef: 'option:two', evidenceRef: 'inference:price',
+        reasons: ['Lowest provider maximum.'], tradeoffs: ['Provider terms still apply.'],
+      },
+      coverage: {
+        evaluated: 2, optionsReceived: 2, unavailable: 0, pending: 0, uncertain: 0,
+        businesses: [
+          { name: 'One', status: 'option_received', explanation: 'Returned an option.' },
+          { name: 'Two', status: 'option_received', explanation: 'Returned an option.' },
+        ],
+      },
+      options,
+    },
   }
 }
 

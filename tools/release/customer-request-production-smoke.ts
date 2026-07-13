@@ -63,6 +63,8 @@ type RequestView = z.infer<typeof requestViewSchema>
 type SmokeConfig = Readonly<{
   baseUrl: string
   apiKey: string | undefined
+  deploymentProtectionBypass: string | undefined
+  expectedOrdering: 'recommended' | 'unranked' | undefined
   facts: Readonly<Record<string, string | number | boolean>>
   fetch: typeof globalThis.fetch
   messages: readonly string[]
@@ -77,6 +79,8 @@ export function customerRequestProductionSmokeConfigFromEnvironment(
   return {
     baseUrl: (env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/u, ''),
     apiKey,
+    deploymentProtectionBypass: optionalText(env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET),
+    expectedOrdering: parseExpectedOrdering(env.AE_CUSTOMER_REQUEST_EXPECTED_ORDERING),
     facts: parseFacts(env.AE_CUSTOMER_REQUEST_FACTS_JSON),
     fetch: globalThis.fetch,
     messages: parseMessages(env.AE_CUSTOMER_REQUEST_MESSAGES_JSON),
@@ -162,6 +166,7 @@ export async function runCustomerRequestProductionSmoke(config: SmokeConfig): Pr
   }
   if (view.state !== 'options_ready') throw new Error(`Expected options_ready after preparation, received ${view.state}`)
   if (view.options.length < 2) throw new Error(`Expected at least two registered options, received ${view.options.length}`)
+  assertExpectedOrdering(view, config.expectedOrdering)
 
   const durableRevision = view.revision
   // Resume is deliberately stateless: only the opaque reference and credential cross this boundary.
@@ -169,17 +174,23 @@ export async function runCustomerRequestProductionSmoke(config: SmokeConfig): Pr
   if (resumed.state !== 'options_ready' || resumed.revision !== durableRevision || resumed.options.length < 2) {
     throw new Error('Cold resume did not recover the durable options projection from requestRef alone')
   }
+  assertExpectedOrdering(resumed, config.expectedOrdering)
 
   console.log(JSON.stringify({
     result: 'PASS', requestRef, state: resumed.state, revision: resumed.revision,
-    optionCount: resumed.options.length, commitmentCreated: false,
+    optionCount: resumed.options.length, ordering: resumed.optionSet?.ordering,
+    commitmentCreated: false,
   }))
 }
 
 async function proveDiscovery(config: SmokeConfig): Promise<void> {
   const [llms, skill] = await Promise.all([
-    config.fetch(`${config.baseUrl}/llms.txt?acceptance=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } }),
-    config.fetch(`${config.baseUrl}/SKILL.md?acceptance=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } }),
+    config.fetch(`${config.baseUrl}/llms.txt?acceptance=${Date.now()}`, {
+      headers: requestHeaders(config, { 'Cache-Control': 'no-cache' }),
+    }),
+    config.fetch(`${config.baseUrl}/SKILL.md?acceptance=${Date.now()}`, {
+      headers: requestHeaders(config, { 'Cache-Control': 'no-cache' }),
+    }),
   ])
   if (!llms.ok || !skill.ok) throw new Error(`Discovery unavailable: llms=${llms.status}, skill=${skill.status}`)
   const discovery = `${await llms.text()}\n${await skill.text()}`
@@ -190,7 +201,7 @@ async function proveDiscovery(config: SmokeConfig): Promise<void> {
 
 async function proveAnonymousRefusal(config: SmokeConfig): Promise<void> {
   const response = await config.fetch(`${config.baseUrl}/api/v1/requests`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    method: 'POST', headers: requestHeaders(config, { 'Content-Type': 'application/json' }), body: '{}',
   })
   const body: unknown = await response.json()
   const refusal = z.object({ kind: z.literal('refused'), reason: z.literal('authentication_required') }).safeParse(body)
@@ -204,7 +215,9 @@ async function authenticatedRequest(
 ): Promise<RequestView> {
   const response = await config.fetch(`${config.baseUrl}${path}`, {
     method: input.method,
-    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+    headers: requestHeaders(config, {
+      Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json',
+    }),
     ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
   })
   const body: unknown = await response.json()
@@ -222,6 +235,31 @@ function assertSameProjection(first: RequestView, second: RequestView, label: st
   if (JSON.stringify(first) !== JSON.stringify(second)) throw new Error(`${label} changed the public projection`)
 }
 
+function assertExpectedOrdering(view: RequestView, expected: SmokeConfig['expectedOrdering']): void {
+  if (expected === undefined) return
+  const ordering = view.optionSet?.ordering
+  if (ordering?.kind !== expected) {
+    throw new Error(`Expected ${expected} option ordering, received ${ordering?.kind ?? 'missing'}`)
+  }
+  if (ordering.kind === 'recommended') {
+    if (ordering.reasons.length === 0 || ordering.tradeoffs.length === 0) {
+      throw new Error('Recommended ordering must explain both reasons and tradeoffs')
+    }
+    if (!view.options.some((option) => option.optionRef === ordering.optionRef)) {
+      throw new Error('Recommended option must belong to the returned option set')
+    }
+  }
+}
+
+function requestHeaders(config: SmokeConfig, headers: Readonly<Record<string, string>>): Record<string, string> {
+  return {
+    ...headers,
+    ...(config.deploymentProtectionBypass === undefined ? {} : {
+      'x-vercel-protection-bypass': config.deploymentProtectionBypass,
+    }),
+  }
+}
+
 function parseFacts(value: string | undefined): Readonly<Record<string, string | number | boolean>> {
   if (value === undefined || value.trim().length === 0) return {}
   const parsed = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).safeParse(JSON.parse(value))
@@ -234,6 +272,17 @@ function parseMessages(value: string | undefined): readonly string[] {
   const parsed = z.array(z.string().trim().min(1)).safeParse(JSON.parse(value))
   if (!parsed.success) throw new Error('AE_CUSTOMER_REQUEST_MESSAGES_JSON must be a JSON array of non-empty conversational answers')
   return parsed.data
+}
+
+function parseExpectedOrdering(value: string | undefined): SmokeConfig['expectedOrdering'] {
+  const parsed = z.enum(['recommended', 'unranked']).optional().safeParse(optionalText(value))
+  if (!parsed.success) throw new Error('AE_CUSTOMER_REQUEST_EXPECTED_ORDERING must be recommended or unranked')
+  return parsed.data
+}
+
+function optionalText(value: string | undefined): string | undefined {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
 }
 
 async function main(): Promise<void> {
