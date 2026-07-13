@@ -36,7 +36,8 @@ export const seedLabelledSandboxSupply = internalMutation({
           seededSlugs: fixtures.map((fixture) => fixture.requestedSlug),
           businessIdsBySlug: Object.fromEntries(fixtures.map((fixture, index) => {
             const business = existing[index]
-            if (business === null
+            if (business === undefined
+              || business === null
               || business.name !== fixture.businessName
               || business.category !== fixture.category
               || business.claimStatus !== 'published'
