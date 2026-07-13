@@ -197,6 +197,7 @@ describe('CustomerRequest source completeness', () => {
     expect(releaseReadback).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
 
     const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
+    expect(workflow.match(/npm install --global npm@11\.5\.1/g)).toHaveLength(2)
     expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
     expect(workflow).toContain('needs: source-proof')
     expect(workflow).toContain('cancel-in-progress: false')
