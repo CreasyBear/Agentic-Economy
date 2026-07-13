@@ -1,6 +1,7 @@
 import type { CompileCustomerRequestResult } from './compiler'
 import type { RequestEvaluation } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
+import { projectCustomerOptionSet, type CustomerOption, type CustomerOptionSet } from './customer-option-set'
 
 export type CustomerRequestState =
   | 'needs_information'
@@ -21,8 +22,7 @@ export type CustomerRequestNextAction =
   | 'review_disclosure'
   | 'retry'
 
-type PreparedCandidate = PreparedRouteCandidateSet['candidates'][number]
-export type CustomerOption = Readonly<Omit<PreparedCandidate, 'inspectionRef'>>
+export type { CustomerOption, CustomerOptionSet } from './customer-option-set'
 export type CustomerCriterion = Readonly<{
   label: string
   value: string | number | boolean
@@ -48,6 +48,7 @@ export type CustomerRequestView = Readonly<{
     | { kind: 'contract_fact'; field: string; prompt: string; answerKind: 'typed_value' }
   >
   options: readonly CustomerOption[]
+  optionSet?: CustomerOptionSet
 }>
 
 export type CustomerRequestProjection =
@@ -168,18 +169,29 @@ export function projectOptionsReady(input: Readonly<{
   criteria?: readonly CustomerCriterion[]
   candidateSet: PreparedRouteCandidateSet
 }>): CustomerRequestView {
-  if (input.candidateSet.candidates.length === 0) return requestView({
+  const optionSet = projectCustomerOptionSet(input.candidateSet)
+  if (optionSet.optionCount === 0 && (optionSet.coverage.pending > 0 || optionSet.coverage.uncertain > 0)) return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    state: 'needs_attention',
+    summary: input.summary,
+    nextAction: 'retry',
+    optionSet,
+  })
+  if (optionSet.optionCount === 0) return requestView({
     requestRef: input.requestRef,
     revision: input.revision,
     state: 'no_options',
     summary: input.summary,
     nextAction: 'revise_request',
+    optionSet,
   })
   return requestView({
     ...input,
     state: 'options_ready',
     nextAction: 'inspect_options',
-    options: input.candidateSet.candidates.map(({ inspectionRef: _inspectionRef, ...option }) => option),
+    optionSet,
+    options: optionSet.options,
   })
 }
 
@@ -203,6 +215,7 @@ function requestView(input: Readonly<{
   criteria?: readonly CustomerCriterion[]
   disclosureReview?: CustomerRequestView['disclosureReview']
   options?: readonly CustomerOption[]
+  optionSet?: CustomerOptionSet
 }>): CustomerRequestView {
   return Object.freeze({
     kind: 'request',
@@ -218,6 +231,7 @@ function requestView(input: Readonly<{
       categories: Object.freeze(input.disclosureReview.categories.map((category) => Object.freeze({ ...category }))),
     }) }),
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
+    ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })
 }

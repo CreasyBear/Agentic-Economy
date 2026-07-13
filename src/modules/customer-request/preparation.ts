@@ -57,6 +57,7 @@ export type PreparedRouteCandidateSet = Readonly<{
     comparableOutputs: readonly Readonly<{ label: string; value: string | number | boolean }>[]
     materialTerms: readonly string[]
     cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
+    issuedAt?: number
     expiresAt: number
     inspectionRef: string
   }>[]

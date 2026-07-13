@@ -186,7 +186,7 @@ export const preparedRouteCandidateSetValue = v.object({
     comparableOutputs: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number(), v.boolean()) })),
     materialTerms: v.array(v.string()),
     cancellation: v.object({ kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')), summary: v.string() }),
-    expiresAt: v.number(), inspectionRef: v.string(),
+    issuedAt: v.optional(v.number()), expiresAt: v.number(), inspectionRef: v.string(),
   })),
   attempts: v.array(v.object({
     business: v.object({ name: v.string() }),

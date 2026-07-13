@@ -68,6 +68,26 @@ const customerOption = v.object({
     summary: v.string(),
   }),
   expiresAt: v.number(),
+  provenance: v.object({
+    kind: v.literal('provider_assertion'), observedAt: v.optional(v.number()), validUntil: v.number(),
+  }),
+})
+const coverageStatus = v.union(
+  v.literal('not_contacted'), v.literal('contact_pending'), v.literal('contacted'),
+  v.literal('option_received'), v.literal('unavailable'), v.literal('uncertain'),
+)
+const customerOptionSet = v.object({
+  cardinality: v.union(v.literal('none'), v.literal('single'), v.literal('multiple')),
+  optionCount: v.number(),
+  ordering: v.union(
+    v.object({ kind: v.literal('not_applicable'), commercialInfluence: v.literal('unknown') }),
+    v.object({ kind: v.literal('unranked'), commercialInfluence: v.literal('unknown') }),
+  ),
+  coverage: v.object({
+    evaluated: v.number(), optionsReceived: v.number(), unavailable: v.number(), pending: v.number(), uncertain: v.number(),
+    businesses: v.array(v.object({ name: v.string(), status: coverageStatus, explanation: v.string() })),
+  }),
+  options: v.array(customerOption),
 })
 const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
@@ -97,6 +117,7 @@ const customerView = v.object({
     v.object({ kind: v.literal('contract_fact'), field: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
   )),
   options: v.array(customerOption),
+  optionSet: v.optional(customerOptionSet),
 })
 const customerProjection = v.union(
   customerView,
@@ -888,7 +909,7 @@ function writableProjection(projection: ReturnType<typeof projectCustomerRequest
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, ...viewWithoutDisclosure } = view
+  const { disclosureReview, optionSet, ...viewWithoutDisclosure } = view
   return {
     ...viewWithoutDisclosure,
     missingFields: view.missingFields.map((field) => ({ ...field })),
@@ -897,12 +918,25 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       ...disclosureReview,
       categories: disclosureReview.categories.map((category) => ({ ...category })),
     } }),
-    options: view.options.map((option) => ({
-      ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
-      priceComponents: option.priceComponents.map((component) => ({ ...component })),
-      comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
-      materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation },
-    })),
+    options: view.options.map(writableCustomerOption),
+    ...(optionSet === undefined ? {} : { optionSet: {
+      ...optionSet,
+      ordering: { ...optionSet.ordering },
+      coverage: {
+        ...optionSet.coverage,
+        businesses: optionSet.coverage.businesses.map((business) => ({ ...business })),
+      },
+      options: optionSet.options.map(writableCustomerOption),
+    } }),
+  }
+}
+
+function writableCustomerOption(option: CustomerRequestView['options'][number]) {
+  return {
+    ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
+    priceComponents: option.priceComponents.map((component) => ({ ...component })),
+    comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
+    materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation }, provenance: { ...option.provenance },
   }
 }
 

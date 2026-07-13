@@ -286,6 +286,7 @@ async function projectStructuredCandidates(
         })),
         materialTerms: candidate.disclosures,
         cancellation: candidate.offer.cancellation,
+        issuedAt: candidate.offer.issuedAt,
         expiresAt: candidate.offer.expiresAt,
         inspectionRef: customerReference('evidence', candidate.offer.offerDigest),
       }

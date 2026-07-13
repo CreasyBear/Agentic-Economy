@@ -33,11 +33,28 @@ describe('customer request projection', () => {
         materialTerms: [], cancellation: { kind: 'unsupported', summary: 'No commitment.' }, expiresAt: 10, inspectionRef: 'internal:evidence',
       }],
     } })
-    expect(options).toMatchObject({ state: 'options_ready', nextAction: 'inspect_options', options: [{ optionRef: 'option:1' }] })
+    expect(options).toMatchObject({
+      state: 'options_ready', nextAction: 'inspect_options', options: [{ optionRef: 'option:1' }],
+      optionSet: {
+        cardinality: 'single', optionCount: 1,
+        ordering: { kind: 'not_applicable', commercialInfluence: 'unknown' },
+        coverage: { evaluated: 1, optionsReceived: 1, unavailable: 0, pending: 0, uncertain: 1 },
+      },
+    })
     expect(JSON.stringify(options)).not.toMatch(/internal:set|internal:evidence|attempts/)
     expect(projectOptionsReady({ ...base, candidateSet: {
       inspectionRef: 'internal:empty', attempts: [], candidates: [],
-    } })).toMatchObject({ state: 'no_options', nextAction: 'revise_request', options: [] })
+    } })).toMatchObject({
+      state: 'no_options', nextAction: 'revise_request', options: [],
+      optionSet: { cardinality: 'none', optionCount: 0, coverage: { evaluated: 0, uncertain: 0, pending: 0 } },
+    })
+    expect(projectOptionsReady({ ...base, candidateSet: {
+      inspectionRef: 'internal:unresolved', candidates: [],
+      attempts: [{ business: { name: 'Provider' }, status: 'uncertain', explanation: 'AE is still reconciling this response.' }],
+    } })).toMatchObject({
+      state: 'needs_attention', nextAction: 'retry',
+      optionSet: { cardinality: 'none', coverage: { uncertain: 1 } },
+    })
 
     const needsInformation = projectCustomerRequest({
       kind: 'needs_information', request: { ...request(), compilationState: 'needs_information' }, understanding: request().understanding,

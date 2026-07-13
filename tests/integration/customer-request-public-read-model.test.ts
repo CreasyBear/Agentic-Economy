@@ -54,6 +54,15 @@ describe('production CustomerRequest read model', () => {
     expect(ready).toMatchObject({
       state: 'options_ready', nextAction: 'inspect_options',
       options: [{ optionRef: 'option:public:1', business: { name: 'Registered Test Business' } }],
+      optionSet: {
+        cardinality: 'single', optionCount: 1,
+        ordering: { kind: 'not_applicable', commercialInfluence: 'unknown' },
+        coverage: { evaluated: 1, optionsReceived: 1 },
+        options: [{
+          optionRef: 'option:public:1',
+          provenance: { kind: 'provider_assertion', validUntil: expect.any(Number) },
+        }],
+      },
     })
     expect(JSON.stringify(ready)).not.toMatch(/internal:set|internal:evidence|bindingId|capabilityContractId|planRevisionId|digest|attempts/)
   })
@@ -208,6 +217,10 @@ describe('production CustomerRequest read model', () => {
     await expect(options.json()).resolves.toMatchObject({
       state: 'options_ready', nextAction: 'inspect_options',
       options: [{ optionRef: 'option:public:evaluation:1', business: { name: 'Sandbox Option One' } }],
+      optionSet: {
+        cardinality: 'single', optionCount: 1,
+        ordering: { kind: 'not_applicable', commercialInfluence: 'unknown' },
+      },
     })
   })
 

@@ -29,7 +29,18 @@ describe('customer Request workspace', () => {
           priceComponents: [{ label: 'Sandbox amount', amountMinor: 900 }], comparableOutputs: [{ label: 'Option', value: 'Sandbox verification only' }],
           materialTerms: ['Verification only; no real service or fulfilment.'], cancellation: { kind: 'unsupported', summary: 'No effect.' },
           expiresAt: 10_000, inspectionRef: 'evidence_1',
-        }],
+        }], optionSet: {
+          cardinality: 'single', optionCount: 1,
+          ordering: { kind: 'not_applicable', commercialInfluence: 'unknown' },
+          coverage: {
+            evaluated: 2, optionsReceived: 1, unavailable: 1, pending: 0, uncertain: 0,
+            businesses: [
+              { name: 'Sandbox Option Two', status: 'option_received', explanation: 'This business returned an option.' },
+              { name: 'Sandbox Option One', status: 'unavailable', explanation: 'This business did not return an option.' },
+            ],
+          },
+          options: [],
+        },
       }))
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
@@ -40,6 +51,10 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show available options' }))
 
     await screen.findByRole('heading', { name: 'Sandbox Option Two' })
+    expect(screen.getByRole('heading', { name: 'One registered option matched.' })).toBeTruthy()
+    expect(screen.getByText('This is not a comparison or recommendation. Nothing has been selected, booked, or purchased.')).toBeTruthy()
+    expect(screen.getByText(/AE evaluated 2 connected businesses/)).toBeTruthy()
+    expect(screen.getByText('Provider-reported option')).toBeTruthy()
     expect(screen.getByText('$9.00')).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/requests', expect.objectContaining({ method: 'POST' }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/options', expect.objectContaining({ method: 'POST' }))

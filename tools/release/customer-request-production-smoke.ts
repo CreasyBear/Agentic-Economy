@@ -35,6 +35,22 @@ const requestViewSchema = z.object({
     }),
   ]).optional(),
   options: z.array(z.record(z.string(), z.unknown())),
+  optionSet: z.object({
+    cardinality: z.enum(['none', 'single', 'multiple']), optionCount: z.number().int().nonnegative(),
+    ordering: z.union([
+      z.object({ kind: z.literal('not_applicable'), commercialInfluence: z.literal('unknown') }),
+      z.object({ kind: z.literal('unranked'), commercialInfluence: z.literal('unknown') }),
+    ]),
+    coverage: z.object({
+      evaluated: z.number().int().nonnegative(), optionsReceived: z.number().int().nonnegative(),
+      unavailable: z.number().int().nonnegative(), pending: z.number().int().nonnegative(), uncertain: z.number().int().nonnegative(),
+      businesses: z.array(z.object({
+        name: z.string(), status: z.enum(['not_contacted', 'contact_pending', 'contacted', 'option_received', 'unavailable', 'uncertain']),
+        explanation: z.string(),
+      })),
+    }),
+    options: z.array(z.record(z.string(), z.unknown())),
+  }).optional(),
 }).strict()
 
 type RequestView = z.infer<typeof requestViewSchema>
