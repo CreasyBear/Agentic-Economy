@@ -199,6 +199,7 @@ describe('CustomerRequest source completeness', () => {
     const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
     expect(workflow.match(/npm install --global npm@11\.5\.1/g)).toHaveLength(2)
     expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
+    expect(workflow).not.toContain('CONVEX_DEPLOY_KEY')
     expect(workflow).toContain('needs: source-proof')
     expect(workflow).toContain('cancel-in-progress: false')
     expect(workflow).toContain('tsx tools/release/deploy-customer-request-git-source.ts')
@@ -210,7 +211,7 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
 
     const packageJson = readFileSync('package.json', 'utf8')
-    expect(packageJson).toContain('tsx tools/release/verify-customer-request-release-credential.ts')
+    expect(packageJson).toContain('"test:release:hosted": "tsx tools/release/verify-customer-request-release-credential.ts"')
     expect(packageJson).not.toContain('AE_KERNEL_PROOF_MANIFEST_JSON')
   })
 

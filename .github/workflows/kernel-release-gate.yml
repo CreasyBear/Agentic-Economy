@@ -44,7 +44,6 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
       CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
       AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
