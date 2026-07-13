@@ -14,7 +14,6 @@ import {
   type DurableActionPreparation,
   type VerifiedActionPreparationApprovalActor,
 } from '@/modules/customer-request/action-preparation'
-import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
 import {
   durableActionPreparationV2Value,
@@ -109,7 +108,7 @@ export const prepare = internalMutation({
         .eq('requestId', args.requestId).eq('requestRevision', args.expectedRevision).eq('actionId', args.actionId))
       .unique()
     const projected = projectActionPreparation({
-      aggregate: current.aggregate as unknown as CustomerRequestV2Aggregate,
+      aggregate: current.aggregate,
       actionId: args.actionId,
       model,
       now: existing?.recordedAt ?? args.now,
@@ -261,7 +260,7 @@ export const resume = internalQuery({
     const model = await loadCurrentActionModel(ctx.db, revision.aggregate, action)
     if (model === undefined) return { kind: 'stale' as const }
     const projected = projectActionPreparation({
-      aggregate: revision.aggregate as unknown as CustomerRequestV2Aggregate,
+      aggregate: revision.aggregate,
       actionId: args.actionId,
       model,
       now: row.recordedAt,
@@ -364,21 +363,60 @@ function projectionIdentity(preparation: StoredPreparation | DurableActionPrepar
 }
 
 function asDomainPreparation(value: StoredPreparation): DurableActionPreparation {
-  return structuredClone(value) as unknown as DurableActionPreparation
+  return structuredClone(value)
 }
 
 function asStoredPreparation(value: DurableActionPreparation): StoredPreparation {
-  return structuredClone(value) as unknown as StoredPreparation
+  const base = {
+    preparationRef: value.preparationRef,
+    preparationDigest: value.preparationDigest,
+    lineage: asStoredLineage(value.lineage),
+    ...(value.projectedInputDigest === undefined ? {} : { projectedInputDigest: value.projectedInputDigest }),
+    authorityScope: {
+      declarations: value.authorityScope.declarations.map((declaration) => ({
+        ...declaration,
+        recipient: { ...declaration.recipient },
+        purposes: [...declaration.purposes],
+        effect: { ...declaration.effect },
+        inputs: declaration.inputs.map((item) => ({ ...item })),
+      })),
+      authorityScopeDigest: value.authorityScope.authorityScopeDigest,
+    },
+    disclosureReview: asStoredReview(value.disclosureReview),
+    preparedAt: value.preparedAt,
+  }
+  if (value.kind === 'needs_information') return {
+    ...base, kind: value.kind, missing: value.missing.map((item) => ({ ...item })),
+  }
+  if (value.kind === 'needs_authority') return { ...base, kind: value.kind }
+  return {
+    ...base,
+    kind: value.kind,
+    ...(value.authorityReservation === undefined
+      ? {}
+      : { authorityReservation: asStoredReservation(value.authorityReservation) }),
+  }
 }
 
 function asStoredLineage(value: DurableActionPreparation['lineage']): StoredLineage {
-  return structuredClone(value) as unknown as StoredLineage
+  return { ...value, contractRef: { ...value.contractRef } }
 }
 
 function asStoredReview(value: DurableActionPreparation['disclosureReview']): StoredReview {
-  return structuredClone(value) as unknown as StoredReview
+  return {
+    ...value,
+    lineage: asStoredLineage(value.lineage),
+    categories: value.categories.map((category) => ({ ...category })),
+    purposes: [...value.purposes],
+    recipients: value.recipients.map((recipient) => ({ ...recipient })),
+    effectRequirements: value.effectRequirements.map((effect) => ({ ...effect })),
+  }
 }
 
 function asStoredReservation(value: NonNullable<Extract<DurableActionPreparation, { kind: 'ready_for_routing' }>['authorityReservation']>): StoredReservation {
-  return structuredClone(value) as unknown as StoredReservation
+  return {
+    ...value,
+    lineage: asStoredLineage(value.lineage),
+    verification: { ...value.verification },
+  }
 }

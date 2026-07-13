@@ -1,13 +1,59 @@
 import {
   sameCapabilityContractRef,
+  isBoundedJsonValue,
   type CapabilityContractRef,
   type CapabilityDecisionModel,
-  type CapabilityPreparationDataUse,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
-import type { CustomerRequestV2Aggregate } from './compiler'
+type ActionPreparationDataUse = Readonly<{
+  declarationKey: string
+  effectId: string
+  inputPointer: string
+  schemaIdentity: string
+  classification: 'public' | 'personal' | 'sensitive' | 'credential'
+  phase: 'preparation' | 'execution'
+  recipient: Readonly<{ kind: 'candidate_binding' | 'selected_binding' } | { kind: 'named_recipient'; recipientId: string }>
+  purposes: readonly string[]
+  effect: Readonly<{
+    effectId: string
+    class: 'data_release' | 'financial_exposure' | 'external_state_change'
+    authority: 'none' | 'explicit' | 'mandate_or_explicit'
+    reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'
+  }>
+  inputs: readonly Readonly<{
+    inputKey: string
+    inputPointer: string
+    label: string
+    schemaIdentity: string
+  }>[]
+}>
+
+type ActionPreparationAggregate = Readonly<{
+  snapshot: Readonly<{
+    requestId: string
+    revision: number
+    principalId: string
+    delegatedAgentId: string
+  }>
+  plan: Readonly<{
+    planRevisionId: string
+    planDigest: string
+    actions: readonly Readonly<{
+      actionId: string
+      contractRef: CapabilityContractRef
+      selectionKey: string
+      semanticDigest: string
+      inputs: readonly Readonly<{
+        inputKey: string
+        inputPointer: string
+        schemaIdentity: string
+        value: unknown
+      }>[]
+    }>[]
+  }>
+}>
 
 export type ActionPreparationLineage = Readonly<{
   requestId: string
@@ -23,7 +69,7 @@ export type ActionPreparationLineage = Readonly<{
 }>
 
 export type ActionPreparationAuthorityScope = Readonly<{
-  declarations: readonly CapabilityPreparationDataUse[]
+  declarations: readonly ActionPreparationDataUse[]
   authorityScopeDigest: string
 }>
 
@@ -36,11 +82,11 @@ export type ActionPreparationDisclosureReview = Readonly<{
     inputPointer: string
     schemaIdentity: string
     label: string
-    classification: CapabilityPreparationDataUse['classification']
+    classification: ActionPreparationDataUse['classification']
   }>[]
   purposes: readonly string[]
-  recipients: readonly CapabilityPreparationDataUse['recipient'][]
-  effectRequirements: readonly CapabilityPreparationDataUse['effect'][]
+  recipients: readonly ActionPreparationDataUse['recipient'][]
+  effectRequirements: readonly ActionPreparationDataUse['effect'][]
 }>
 
 export type VerifiedActionPreparationApprovalActor = Readonly<{
@@ -126,7 +172,7 @@ export type ProjectActionPreparationResult = DurableActionPreparation
   | Readonly<{ kind: 'refused'; reason: 'action_not_found' | 'preparation_incompatible' }>
 
 export function projectActionPreparation(input: Readonly<{
-  aggregate: CustomerRequestV2Aggregate
+  aggregate: ActionPreparationAggregate
   actionId: string
   model: CapabilityDecisionModel
   now: number
@@ -138,15 +184,19 @@ export function projectActionPreparation(input: Readonly<{
     || action.semanticDigest !== input.model.semanticDigest) {
     return { kind: 'stale', reason: 'capability_authority_changed' }
   }
+  const facts = action.inputs.map((fact) => {
+    const semantic = input.model.inputs.find((candidate) => candidate.key === fact.inputKey
+      && candidate.inputPointer === fact.inputPointer && candidate.schemaIdentity === fact.schemaIdentity)
+    return semantic === undefined || !isBoundedJsonValue(fact.value)
+      ? undefined
+      : { input: semantic.key, inputPointer: semantic.inputPointer, value: fact.value }
+  })
+  if (facts.some((fact) => fact === undefined)) return { kind: 'refused', reason: 'preparation_incompatible' }
   const projection = input.model.projectPreparation({
     contractRef: action.contractRef,
-    selectionKey: action.selectionKey,
+    selectionKey: input.model.selectionKey,
     semanticDigest: action.semanticDigest,
-    facts: action.inputs.map((fact) => ({
-      input: fact.inputKey,
-      inputPointer: fact.inputPointer,
-      value: fact.value,
-    })),
+    facts: facts.flatMap((fact) => fact === undefined ? [] : [fact]),
   })
   if (projection.kind === 'incompatible') return { kind: 'refused', reason: 'preparation_incompatible' }
   const lineage: ActionPreparationLineage = freeze({
@@ -256,7 +306,7 @@ export function authorizeActionPreparation(input: Readonly<{
 }
 
 function actionPreparationAuthorityScope(
-  declarations: readonly CapabilityPreparationDataUse[],
+  declarations: readonly ActionPreparationDataUse[],
 ): ActionPreparationAuthorityScope {
   const normalized = declarations.map((declaration) => ({
     ...declaration,
@@ -278,8 +328,8 @@ function actionPreparationDisclosureReview(
 ): ActionPreparationDisclosureReview {
   const categories = new Map<string, ActionPreparationDisclosureReview['categories'][number]>()
   const purposes = new Set<string>()
-  const recipients = new Map<string, CapabilityPreparationDataUse['recipient']>()
-  const effects = new Map<string, CapabilityPreparationDataUse['effect']>()
+  const recipients = new Map<string, ActionPreparationDataUse['recipient']>()
+  const effects = new Map<string, ActionPreparationDataUse['effect']>()
   for (const declaration of authorityScope.declarations) {
     for (const item of declaration.inputs) categories.set(`${item.inputKey}\u0000${item.inputPointer}`, {
       inputKey: item.inputKey,
