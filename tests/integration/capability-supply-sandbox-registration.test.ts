@@ -33,6 +33,21 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
+  it('adopts exact pre-existing labelled sandbox identities without overwriting their claim history', async () => {
+    const backend = convexTest(schema, modules)
+    const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+      fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+    ))
+    const existing = await backend.run((ctx) => (
+      registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+    ))
+
+    const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+
+    expect(result.businessIdsBySlug).toEqual(existing.businessIdsBySlug)
+    expect(result.sandboxV2Bindings).toHaveLength(2)
+  })
+
   it('keeps normally registered sandbox bindings ineligible until explicit evidence-bound admission', async () => {
     const backend = convexTest(schema, modules)
     const registrations = await backend.run(async (ctx) => {
