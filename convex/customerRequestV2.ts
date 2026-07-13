@@ -174,7 +174,7 @@ export const getCommandReplay = internalQuery({
   },
 })
 
-function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRevision: number): boolean {
+export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRevision: number): boolean {
   const { aggregateDigest: _aggregateDigest, ...material } = aggregate
   const outcome = aggregate.evaluation.posture === 'unsupported'
     ? 'unsupported'

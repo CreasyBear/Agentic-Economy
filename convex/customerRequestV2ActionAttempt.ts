@@ -295,6 +295,39 @@ async function replayAttempt(
   return attempt
 }
 
+export async function openExactAdmittedActionAttempt(
+  db: MutationCtx['db'], actionAttemptRef: string,
+): Promise<
+  | Readonly<{
+      kind: 'found'
+      attempt: Doc<'customerRequestV2ActionAttempts'>['actionAttempt']
+      providerReleaseGrant: Doc<'customerRequestV2ProviderReleaseGrants'>['grant']
+      disclosureGrant: Doc<'customerRequestV2ActionDisclosureGrants'>['grant']
+    }>
+  | Readonly<{ kind: 'unavailable' }>
+> {
+  const command = await db.query('customerRequestV2ActionAttemptAdmissionCommands')
+    .withIndex('by_resultRef', (query) => query.eq('resultRef', actionAttemptRef)).unique()
+  if (command === null) return { kind: 'unavailable' }
+  try {
+    const attempt = await replayAttempt(db, command)
+    const [providerRelease, disclosure] = await Promise.all([
+      db.query('customerRequestV2ProviderReleaseGrants')
+        .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', actionAttemptRef)).unique(),
+      db.query('customerRequestV2ActionDisclosureGrants')
+        .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', actionAttemptRef)).unique(),
+    ])
+    if (providerRelease === null || disclosure === null) return { kind: 'unavailable' }
+    return {
+      kind: 'found', attempt,
+      providerReleaseGrant: providerRelease.grant,
+      disclosureGrant: disclosure.grant,
+    }
+  } catch {
+    return { kind: 'unavailable' }
+  }
+}
+
 function sameStableValue(left: unknown, right: unknown): boolean {
   return canonicalDigest(left as StableHashValue) === canonicalDigest(right as StableHashValue)
 }
@@ -325,6 +358,60 @@ function validLinkedRecord(
 
 function replayIntegrityFailure(): Error {
   return new Error('customer_request_v2_action_attempt_replay_integrity_failure')
+}
+
+export type OpenedActionAttemptForRelease =
+  | Readonly<{
+      kind: 'ready'
+      attempt: Doc<'customerRequestV2ActionAttempts'>['actionAttempt']
+      providerReleaseGrant: Doc<'customerRequestV2ProviderReleaseGrants'>['grant']
+      disclosureGrant: Doc<'customerRequestV2ActionDisclosureGrants'>['grant']
+      approval: Extract<Awaited<ReturnType<typeof openExactApprovalGrantForAdmission>>, { kind: 'ready' }>
+    }>
+  | Readonly<{
+      kind: 'refused'
+      reason: 'action_attempt_not_found' | 'action_attempt_expired' | 'authority_changed'
+    }>
+
+export async function openExactActionAttemptForRelease(
+  db: MutationCtx['db'],
+  expected: Readonly<{ actionAttemptRef: string; now: number }>,
+): Promise<OpenedActionAttemptForRelease> {
+  const row = await db.query('customerRequestV2ActionAttempts')
+    .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', expected.actionAttemptRef)).unique()
+  if (row === null) return { kind: 'refused', reason: 'action_attempt_not_found' }
+  const command = await db.query('customerRequestV2ActionAttemptAdmissionCommands')
+    .withIndex('by_resultRef', (query) => query.eq('resultRef', expected.actionAttemptRef)).unique()
+  if (command === null) return { kind: 'refused', reason: 'authority_changed' }
+  let attempt: Doc<'customerRequestV2ActionAttempts'>['actionAttempt']
+  try {
+    attempt = await replayAttempt(db, command)
+  } catch {
+    return { kind: 'refused', reason: 'authority_changed' }
+  }
+  if (attempt.expiresAt <= expected.now) return { kind: 'refused', reason: 'action_attempt_expired' }
+  const [providerRelease, disclosure, approval] = await Promise.all([
+    db.query('customerRequestV2ProviderReleaseGrants')
+      .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', attempt.actionAttemptRef)).unique(),
+    db.query('customerRequestV2ActionDisclosureGrants')
+      .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', attempt.actionAttemptRef)).unique(),
+    openExactApprovalGrantForAdmission(db, {
+      approvalGrantRef: attempt.approvalGrantRef,
+      principalId: attempt.lineage.principalId,
+      now: expected.now,
+    }),
+  ])
+  if (providerRelease === null || disclosure === null || approval.kind !== 'ready'
+    || canonicalDigest(approval.approvalGrant as StableHashValue)
+      !== canonicalDigest(attempt.authority as StableHashValue)) {
+    return { kind: 'refused', reason: 'authority_changed' }
+  }
+  return {
+    kind: 'ready', attempt,
+    providerReleaseGrant: providerRelease.grant,
+    disclosureGrant: disclosure.grant,
+    approval,
+  }
 }
 
 function writableAttempt(attempt: ActionAttemptV2): Infer<typeof actionAttemptV2Value> {

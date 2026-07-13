@@ -118,6 +118,7 @@ type OpenedApprovalMaterial =
       preparedAction: Doc<'customerRequestV2PreparedActions'>['preparedAction']
       preparation: Doc<'customerRequestV2ActionPreparations'>['preparation']
       contract: ReturnType<typeof encodeCapabilityContractDocumentJson>['contract']
+      action: Doc<'customerRequestV2Revisions'>['aggregate']['plan']['actions'][number]
     }>
   | Readonly<{
       kind: 'refused'
@@ -125,7 +126,14 @@ type OpenedApprovalMaterial =
     }>
 
 export type OpenedApprovalGrantForAdmission =
-  | Readonly<{ kind: 'ready'; approvalGrant: Doc<'customerRequestV2ApprovalGrants'>['approvalGrant'] }>
+  | Readonly<{
+      kind: 'ready'
+      approvalGrant: Doc<'customerRequestV2ApprovalGrants'>['approvalGrant']
+      preparedAction: Doc<'customerRequestV2PreparedActions'>['preparedAction']
+      preparation: Doc<'customerRequestV2ActionPreparations'>['preparation']
+      contract: ReturnType<typeof encodeCapabilityContractDocumentJson>['contract']
+      action: Doc<'customerRequestV2Revisions'>['aggregate']['plan']['actions'][number]
+    }>
   | Readonly<{
       kind: 'refused'
       reason: 'approval_grant_not_found' | 'approval_grant_expired' | 'approval_authority_changed'
@@ -176,7 +184,11 @@ export async function openExactApprovalGrantForAdmission(
     || reissued.approvalGrant.approvalGrantDigest !== row.approvalGrantDigest) {
     return { kind: 'refused', reason: 'approval_authority_changed' }
   }
-  return { kind: 'ready', approvalGrant: row.approvalGrant }
+  return {
+    kind: 'ready', approvalGrant: row.approvalGrant,
+    preparedAction: material.preparedAction, preparation: material.preparation,
+    contract: material.contract, action: material.action,
+  }
 }
 
 async function openExactApprovalMaterial(
@@ -246,7 +258,10 @@ async function openExactApprovalMaterial(
       !== canonicalDigest(row.preparedAction.binding.registrationEvidenceRefs as StableHashValue)) {
     return { kind: 'refused', reason: 'capability_authority_changed' }
   }
-  return { kind: 'ready', preparedAction: row.preparedAction, preparation: preparationRow.preparation, contract }
+  return {
+    kind: 'ready', preparedAction: row.preparedAction,
+    preparation: preparationRow.preparation, contract, action,
+  }
 }
 
 async function recordCommand(

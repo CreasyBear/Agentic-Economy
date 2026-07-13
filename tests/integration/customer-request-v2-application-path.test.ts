@@ -7,6 +7,10 @@ import { admitActionAttemptV2 } from '@/modules/customer-request/public'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 import { persistActionAttemptAdmissionBundle } from '../../convex/customerRequestV2ActionAttempt'
+import {
+  recordProviderOutcomeTransaction,
+  releaseProviderTransaction,
+} from '../../convex/customerRequestV2ProviderExecution'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -868,6 +872,317 @@ describe('current V2 Customer Request application path', () => {
         releases: 1, disclosures: 1, commands: 1,
         legacyClaims: 0, legacyRuns: 0, legacyReleases: 0,
       })
+    if (admitted.kind !== 'accepted') throw new Error('action attempt missing')
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'revoke',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:release-stale'], conformanceEvidenceRefs: ['test:release-stale'],
+      }, providerNow + 33)
+      if (result.kind !== 'ineligible') throw new Error('pre-release supply revoke failed')
+    })
+    const releaseCommand = {
+      commandKey: 'provider-release:v2:one',
+      commandDigest: canonicalDigest({ actionAttemptRef: admitted.actionAttemptRef }),
+      actionAttemptRef: admitted.actionAttemptRef,
+      now: providerNow + 42,
+    }
+    await expect(backend.mutation(
+      internal.customerRequestV2ProviderExecution.release, releaseCommand,
+    )).resolves.toEqual({ kind: 'refused', reason: 'authority_changed' })
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'admit',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:release-restored'],
+        conformanceEvidenceRefs: ['test:release-restored'],
+      }, providerNow + 34)
+      if (result.kind !== 'eligible') throw new Error('pre-release supply restore failed')
+    })
+    await expect(backend.mutation(internal.customerRequestV2ProviderExecution.release, {
+      ...releaseCommand, now: admitted.expiresAt,
+    })).resolves.toEqual({ kind: 'refused', reason: 'action_attempt_expired' })
+    await expect(backend.run(async (ctx) => {
+      const approvalRow = await ctx.db.query('customerRequestV2ApprovalGrants')
+        .withIndex('by_approvalGrantRef', (query) => query.eq('approvalGrantRef', approved.approvalRef)).unique()
+      if (approvalRow === null) throw new Error('approval row missing')
+      await ctx.db.patch(approvalRow._id, {
+        approvalGrant: {
+          ...approvalRow.approvalGrant,
+          spend: {
+            ...approvalRow.approvalGrant.spend,
+            maximumAmountMinor: approvalRow.approvalGrant.spend.maximumAmountMinor + 1,
+          },
+        },
+      })
+      await expect(releaseProviderTransaction(ctx.db, releaseCommand))
+        .resolves.toEqual({ kind: 'refused', reason: 'authority_changed' })
+      throw new Error('rollback_tampered_approval')
+    })).rejects.toThrow('rollback_tampered_approval')
+    await expect(backend.run(async (ctx) => {
+      const preparedRow = await ctx.db.query('customerRequestV2PreparedActions')
+        .withIndex('by_preparedActionRef', (query) => query.eq(
+          'preparedActionRef', prepared.preparedAction.preparedActionRef,
+        )).unique()
+      if (preparedRow === null) throw new Error('prepared row missing')
+      await ctx.db.patch(preparedRow._id, { preparedActionDigest: canonicalDigest({ tampered: 'prepared' }) })
+      await expect(releaseProviderTransaction(ctx.db, releaseCommand))
+        .resolves.toEqual({ kind: 'refused', reason: 'authority_changed' })
+      throw new Error('rollback_tampered_prepared')
+    })).rejects.toThrow('rollback_tampered_prepared')
+    await expect(backend.run(async (ctx) => {
+      const grantRow = await ctx.db.query('customerRequestV2ProviderReleaseGrants')
+        .withIndex('by_actionAttemptRef', (query) => query.eq(
+          'actionAttemptRef', admitted.actionAttemptRef,
+        )).unique()
+      if (grantRow === null) throw new Error('provider release grant missing')
+      await ctx.db.patch(grantRow._id, {
+        grant: { ...grantRow.grant, providerReleaseGrantDigest: canonicalDigest({ tampered: 'provider-grant' }) },
+      })
+      await expect(releaseProviderTransaction(ctx.db, releaseCommand))
+        .resolves.toEqual({ kind: 'refused', reason: 'authority_changed' })
+      throw new Error('rollback_tampered_provider_grant')
+    })).rejects.toThrow('rollback_tampered_provider_grant')
+    await expect(backend.run(async (ctx) => {
+      const grantRow = await ctx.db.query('customerRequestV2ActionDisclosureGrants')
+        .withIndex('by_actionAttemptRef', (query) => query.eq(
+          'actionAttemptRef', admitted.actionAttemptRef,
+        )).unique()
+      if (grantRow === null) throw new Error('disclosure grant missing')
+      await ctx.db.patch(grantRow._id, {
+        grant: { ...grantRow.grant, scopeDigest: canonicalDigest({ tampered: 'disclosure-scope' }) },
+      })
+      await expect(releaseProviderTransaction(ctx.db, releaseCommand))
+        .resolves.toEqual({ kind: 'refused', reason: 'authority_changed' })
+      throw new Error('rollback_tampered_disclosure_grant')
+    })).rejects.toThrow('rollback_tampered_disclosure_grant')
+    await expect(backend.run(async (ctx) => ctx.db.query(
+      'customerRequestV2ActionAttemptReleases',
+    ).collect())).resolves.toHaveLength(0)
+    await expect(backend.run(async (ctx) => {
+      const result = await releaseProviderTransaction(ctx.db, releaseCommand)
+      expect(result.kind).toBe('released')
+      throw new Error('injected_after_provider_release_write')
+    })).rejects.toThrow('injected_after_provider_release_write')
+    await expect(backend.run(async (ctx) => ctx.db.query(
+      'customerRequestV2ActionAttemptReleases',
+    ).collect())).resolves.toHaveLength(0)
+    const released = await backend.mutation(
+      internal.customerRequestV2ProviderExecution.release, releaseCommand,
+    )
+    expect(released).toMatchObject({
+      kind: 'released',
+      envelope: {
+        format: 'ae.provider-invocation-envelope:v2', state: 'ready_for_provider',
+        providerIdempotencyKey: expect.stringMatching(/^provider-idempotency:v2:/),
+        lineage: {
+          requestId: review.requestRef, requestRevision: review.revision,
+          planDigest: aggregate.aggregate.plan.planDigest,
+          preparedActionRef: prepared.preparedAction.preparedActionRef,
+          approvalGrantRef: approved.approvalRef,
+          actionAttemptRef: admitted.actionAttemptRef,
+          contractRef: model.contractRef,
+          businessId: selectedOperation.businessId,
+          offeringId: selectedOperation.offeringId,
+          bindingId: selectedOperation.bindingId,
+        },
+        input: {
+          schemaIdentity: canonicalDigest(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.inputSchema),
+          value: { requestContext: 'Find the cheapest sandbox option' },
+        },
+        output: {
+          schemaIdentity: canonicalDigest(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.outputSchema),
+        },
+        spend: { currency: 'AUD', maximumAmountMinor: 900 },
+        recovery: {
+          unknownOutcome: 'reconcile_only', automaticRetry: false,
+          registeredLifecycle: { idempotency: 'required', recovery: 'retry_safe' },
+        },
+      },
+    })
+    await expect(backend.mutation(
+      internal.customerRequestV2ProviderExecution.release, releaseCommand,
+    )).resolves.toEqual(released)
+    await expect(backend.mutation(internal.customerRequestV2ProviderExecution.release, {
+      ...releaseCommand, commandDigest: canonicalDigest({ changed: true }),
+    })).resolves.toEqual({ kind: 'conflict', reason: 'idempotency_key_reused' })
+    if (released.kind !== 'released') throw new Error('provider release missing')
+    await expect(backend.run(async (ctx) => ctx.db.query('customerRequestV2ActionAttemptReleases')
+      .withIndex('by_actionAttemptRef', (query) => query.eq(
+        'actionAttemptRef', admitted.actionAttemptRef,
+      )).unique())).resolves.toMatchObject({
+        release: {
+          format: 'ae.action-attempt-release:v2', state: 'released',
+          actionAttemptRef: admitted.actionAttemptRef,
+          envelopeRef: released.envelope.envelopeRef,
+          providerIdempotencyKey: released.envelope.providerIdempotencyKey,
+        },
+      })
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'revoke',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:post-release-revoke'],
+        conformanceEvidenceRefs: ['test:post-release-revoke'],
+      }, providerNow + 43)
+      if (result.kind !== 'ineligible') throw new Error('post-release supply revoke failed')
+    })
+    const providerEcho = {
+      envelopeRef: released.envelope.envelopeRef,
+      envelopeDigest: released.envelope.envelopeDigest,
+      actionAttemptRef: released.envelope.lineage.actionAttemptRef,
+      actionAttemptDigest: released.envelope.lineage.actionAttemptDigest,
+      authorityLineageDigest: released.envelope.lineage.authorityLineageDigest,
+      providerIdempotencyKey: released.envelope.providerIdempotencyKey,
+    }
+    await expect(backend.run(async (ctx) => {
+      const releaseRow = await ctx.db.query('customerRequestV2ActionAttemptReleases')
+        .withIndex('by_actionAttemptRef', (query) => query.eq(
+          'actionAttemptRef', admitted.actionAttemptRef,
+        )).unique()
+      if (releaseRow === null) throw new Error('release row missing')
+      const envelope = {
+        ...releaseRow.envelope,
+        spend: { ...releaseRow.envelope.spend, maximumAmountMinor: 1 },
+        releasedAt: releaseRow.envelope.releasedAt + 1,
+      }
+      const envelopeDigest = canonicalDigest(Object.fromEntries(
+        Object.entries(envelope).filter(([key]) => key !== 'envelopeDigest'),
+      ))
+      const release = {
+        ...releaseRow.release, envelopeDigest,
+        releaseRef: `action-attempt-release:v2:${canonicalDigest({ tampered: 'release-ref' })}`,
+        releasedAt: releaseRow.release.releasedAt + 1,
+      }
+      const releaseDigest = canonicalDigest(Object.fromEntries(
+        Object.entries(release).filter(([key]) => key !== 'releaseDigest'),
+      ))
+      await ctx.db.patch(releaseRow._id, {
+        envelope: { ...envelope, envelopeDigest }, envelopeDigest,
+        releaseRef: release.releaseRef, release: { ...release, releaseDigest }, releaseDigest,
+      })
+      const result = await recordProviderOutcomeTransaction(ctx.db, {
+        commandKey: 'provider-outcome:v2:tampered-release',
+        commandDigest: canonicalDigest({ tampered: 'release-envelope' }),
+        actionAttemptRef: admitted.actionAttemptRef,
+        response: {
+          format: 'ae.provider-result:v2', echo: providerEcho,
+          output: { optionSummary: 'Must not succeed' },
+        },
+        now: providerNow + 43,
+      })
+      expect(result).toEqual({ kind: 'refused', reason: 'release_integrity_failure' })
+      throw new Error('rollback_tampered_release_envelope')
+    })).rejects.toThrow('rollback_tampered_release_envelope')
+    const mismatchedResponse = {
+      format: 'ae.provider-result:v2' as const,
+      echo: { ...providerEcho, actionAttemptRef: 'action-attempt:v2:mismatched' },
+      output: { optionSummary: 'Untrusted mismatched response' },
+    }
+    await expect(backend.run(async (ctx) => {
+      const result = await recordProviderOutcomeTransaction(ctx.db, {
+        commandKey: 'provider-outcome:v2:rollback-unknown',
+        commandDigest: canonicalDigest(mismatchedResponse),
+        actionAttemptRef: admitted.actionAttemptRef,
+        response: mismatchedResponse,
+        now: providerNow + 43,
+      })
+      expect(result).toMatchObject({
+        kind: 'recorded', outcome: {
+          state: 'unknown_external_state', reason: 'provider_echo_mismatch',
+          recovery: { kind: 'reconcile_required', automaticRetry: false },
+        },
+      })
+      throw new Error('injected_after_all_provider_outcome_writes')
+    })).rejects.toThrow('injected_after_all_provider_outcome_writes')
+    const rowsAfterOutcomeRollback = await backend.run(async (ctx) => ({
+      outcomes: await ctx.db.query('customerRequestV2ProviderOutcomes').collect(),
+      rootRuns: await ctx.db.query('customerRequestV2ProviderRootRuns').collect(),
+      leafRuns: await ctx.db.query('customerRequestV2ProviderLeafRuns').collect(),
+      protocolEvidence: await ctx.db.query('customerRequestV2ProviderProtocolEvidence').collect(),
+    }))
+    expect(Object.values(rowsAfterOutcomeRollback).map((rows) => rows.length)).toEqual([0, 0, 0, 0])
+    const exactResponse = {
+      format: 'ae.provider-result:v2' as const,
+      echo: providerEcho,
+      output: { optionSummary: 'Provider-completed result' },
+    }
+    const outcomeCommand = {
+      commandKey: 'provider-outcome:v2:one', commandDigest: canonicalDigest(exactResponse),
+      actionAttemptRef: admitted.actionAttemptRef, response: exactResponse, now: providerNow + 44,
+    }
+    const recordedOutcome = await backend.mutation(
+      internal.customerRequestV2ProviderExecution.recordOutcome, outcomeCommand,
+    )
+    expect(recordedOutcome).toMatchObject({
+      kind: 'recorded', outcome: {
+        format: 'ae.provider-outcome:v2', state: 'succeeded',
+        output: { optionSummary: 'Provider-completed result' },
+        lineage: {
+          requestId: review.requestRef, actionAttemptRef: admitted.actionAttemptRef,
+          contractRef: model.contractRef, offeringId: selectedOperation.offeringId,
+          bindingId: selectedOperation.bindingId,
+        },
+      },
+    })
+    await expect(backend.mutation(
+      internal.customerRequestV2ProviderExecution.recordOutcome, {
+        ...outcomeCommand, now: outcomeCommand.now + 1_000,
+      },
+    )).resolves.toEqual(recordedOutcome)
+    await expect(backend.mutation(internal.customerRequestV2ProviderExecution.recordOutcome, {
+      ...outcomeCommand,
+      response: { ...exactResponse, output: { optionSummary: 'Changed provider result' } },
+    })).resolves.toEqual({ kind: 'conflict', reason: 'idempotency_key_reused' })
+    await expect(backend.mutation(internal.customerRequestV2ProviderExecution.recordOutcome, {
+      ...outcomeCommand, commandDigest: canonicalDigest({ changed: true }),
+    })).resolves.toEqual({ kind: 'conflict', reason: 'idempotency_key_reused' })
+    await expect(backend.mutation(internal.customerRequestV2ProviderExecution.recordOutcome, {
+      ...outcomeCommand,
+      commandKey: 'provider-outcome:v2:second',
+      commandDigest: canonicalDigest({ second: true }),
+    })).resolves.toEqual({ kind: 'conflict', reason: 'outcome_already_recorded' })
+    const providerOutcomeRows = await backend.run(async (ctx) => ({
+      outcomes: await ctx.db.query('customerRequestV2ProviderOutcomes').collect(),
+      rootRuns: await ctx.db.query('customerRequestV2ProviderRootRuns').collect(),
+      leafRuns: await ctx.db.query('customerRequestV2ProviderLeafRuns').collect(),
+      protocolEvidence: await ctx.db.query('customerRequestV2ProviderProtocolEvidence').collect(),
+      legacyRootRuns: await ctx.db.query('routingKernelRootRuns').collect(),
+      legacyLeafRuns: await ctx.db.query('routingKernelLeafRuns').collect(),
+      legacyProtocol: await ctx.db.query('routingKernelProtocolRecords').collect(),
+    }))
+    expect(Object.fromEntries(Object.entries(providerOutcomeRows).map(([key, rows]) => [key, rows.length])))
+      .toEqual({
+        outcomes: 1, rootRuns: 1, leafRuns: 1, protocolEvidence: 1,
+        legacyRootRuns: 0, legacyLeafRuns: 0, legacyProtocol: 0,
+      })
+    expect(new Set([
+      providerOutcomeRows.outcomes[0]?.authorityLineageDigest,
+      providerOutcomeRows.rootRuns[0]?.authorityLineageDigest,
+      providerOutcomeRows.leafRuns[0]?.authorityLineageDigest,
+      providerOutcomeRows.protocolEvidence[0]?.authorityLineageDigest,
+    ])).toEqual(new Set([released.envelope.lineageDigest]))
+    expect(providerOutcomeRows.protocolEvidence[0]?.protocolEvidence).toMatchObject({
+      disposition: 'validated_result',
+      providerResult: exactResponse,
+    })
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'admit',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:post-outcome-restore'],
+        conformanceEvidenceRefs: ['test:post-outcome-restore'],
+      }, providerNow + 45)
+      if (result.kind !== 'eligible') throw new Error('post-outcome supply restore failed')
+    })
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
     })).resolves.toMatchObject({

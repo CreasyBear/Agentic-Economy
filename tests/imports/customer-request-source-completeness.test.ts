@@ -14,6 +14,8 @@ const productionAuthority = {
   approvalPersistence: 'convex/customerRequestV2ApprovalGrant.ts',
   attemptDomain: 'src/modules/customer-request/action-attempt-v2.ts',
   attemptPersistence: 'convex/customerRequestV2ActionAttempt.ts',
+  providerExecutionDomain: 'src/modules/customer-request/provider-execution-v2.ts',
+  providerExecutionPersistence: 'convex/customerRequestV2ProviderExecution.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
@@ -61,6 +63,8 @@ describe('CustomerRequest source completeness', () => {
       'convex/customerRequestV2ApprovalGrant.ts',
       'src/modules/customer-request/action-attempt-v2.ts',
       'convex/customerRequestV2ActionAttempt.ts',
+      'src/modules/customer-request/provider-execution-v2.ts',
+      'convex/customerRequestV2ProviderExecution.ts',
       'convex/customerRequestApplication.ts',
     ]
     const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/
@@ -73,6 +77,9 @@ describe('CustomerRequest source completeness', () => {
       .not.toMatch(/routingKernelAuthorizations|customerRequestPreparedActions|\bfetch\s*\(/)
     expect(readFileSync('convex/customerRequestV2ActionAttempt.ts', 'utf8'))
       .not.toMatch(/routingKernelExecutionClaims|routingKernelRootRuns|routingKernelLeafRuns|routingKernelStepReleases|routingKernelDisclosureAttempts|\bfetch\s*\(/)
+    expect(source('providerExecutionPersistence'))
+      .not.toMatch(/routingKernelExecutionClaims|routingKernelRootRuns|routingKernelLeafRuns|routingKernelStepReleases|routingKernelDisclosureAttempts|\bfetch\s*\(/)
+    expect(source('providerExecutionDomain')).not.toMatch(/provider-integrations|shipping|freight|booking/)
     const approvalPersistence = source('approvalPersistence')
     expect(approvalPersistence).not.toContain('listEligibleCapabilitySupply')
     expect(approvalPersistence).toContain('getEligibleExactCapabilitySupply')

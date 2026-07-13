@@ -213,6 +213,29 @@ export async function getActiveExactCapabilityContract(
   }
 }
 
+/** Reopens an immutable registered contract snapshot for post-release evidence validation. */
+export async function getExactRegisteredCapabilityContract(
+  db: QueryCtx['db'],
+  ref: Readonly<{ capabilityId: string; version: number; contractDigest: string }>,
+) {
+  const existing = await db.query('capabilityContractDocuments')
+    .withIndex('by_capabilityId_and_version', (query) => (
+      query.eq('capabilityId', ref.capabilityId).eq('version', ref.version)
+    ))
+    .unique()
+  if (existing === null) return { kind: 'unavailable' as const, reason: 'not_found' as const }
+  try {
+    const encoded = encodeCapabilityContractDocumentJson(existing.documentJson)
+    if (!sameCapabilityContractRef(encoded.contract.ref, ref)
+      || encoded.contract.ref.contractDigest !== existing.contractDigest) {
+      return { kind: 'unavailable' as const, reason: 'integrity_failure' as const }
+    }
+    return { kind: 'found' as const, contract: encoded.contract, registeredAt: existing.registeredAt }
+  } catch {
+    return { kind: 'unavailable' as const, reason: 'integrity_failure' as const }
+  }
+}
+
 function toDurableRecord(input: {
   capabilityId: string
   version: number

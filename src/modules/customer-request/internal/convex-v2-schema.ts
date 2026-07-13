@@ -311,6 +311,98 @@ export const actionDisclosureGrantV2Value = v.object({
   authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value,
   issuedAt: v.number(), expiresAt: v.number(),
 })
+export const providerExecutionLineageV2Value = v.object({
+  requestId: v.string(), requestRevision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
+  planRevisionId: v.string(), planDigest: v.string(), actionId: v.string(),
+  preparedActionRef: v.string(), preparedActionDigest: v.string(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  actionAttemptRef: v.string(), actionAttemptDigest: v.string(), authorityLineageDigest: v.string(),
+  contractRef: capabilityContractRefV2Value, selectionKey: v.string(), semanticDigest: v.string(),
+  businessId: v.string(), offeringId: v.string(), offeringRegistrationHash: v.string(),
+  bindingId: v.string(), bindingRegistrationHash: v.string(),
+})
+export const providerInvocationEnvelopeV2Value = v.object({
+  format: v.literal('ae.provider-invocation-envelope:v2'),
+  envelopeRef: v.string(), envelopeDigest: v.string(), state: v.literal('ready_for_provider'),
+  providerIdempotencyKey: v.string(), lineage: providerExecutionLineageV2Value, lineageDigest: v.string(),
+  providerReleaseGrantRef: v.string(), providerReleaseGrantDigest: v.string(),
+  disclosureGrantRef: v.string(), disclosureGrantDigest: v.string(),
+  input: v.object({ schemaIdentity: v.string(), value: v.any(), valueDigest: v.string() }),
+  output: v.object({ schemaIdentity: v.string() }),
+  spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
+  dataScope: v.array(approvalGrantDataUseV2Value), dataScopeDigest: v.string(),
+  effectScope: v.array(capabilityEffectV2Value), evidenceScope: v.array(approvalGrantEvidenceScopeV2Value),
+  authorityScopeDigest: v.string(),
+  recovery: v.object({
+    unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false),
+    registeredLifecycle: v.object({
+      idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
+      recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    }),
+  }),
+  releasedAt: v.number(), expiresAt: v.number(),
+})
+export const actionAttemptReleaseV2Value = v.object({
+  format: v.literal('ae.action-attempt-release:v2'),
+  releaseRef: v.string(), releaseDigest: v.string(), state: v.literal('released'),
+  actionAttemptRef: v.string(), actionAttemptDigest: v.string(),
+  providerReleaseGrantRef: v.string(), providerReleaseGrantDigest: v.string(),
+  disclosureGrantRef: v.string(), disclosureGrantDigest: v.string(),
+  envelopeRef: v.string(), envelopeDigest: v.string(), authorityLineageDigest: v.string(),
+  providerIdempotencyKey: v.string(), releasedAt: v.number(),
+})
+export const providerResultEchoV2Value = v.object({
+  envelopeRef: v.string(), envelopeDigest: v.string(),
+  actionAttemptRef: v.string(), actionAttemptDigest: v.string(),
+  authorityLineageDigest: v.string(), providerIdempotencyKey: v.string(),
+})
+export const providerResultV2Value = v.object({
+  format: v.literal('ae.provider-result:v2'), echo: providerResultEchoV2Value, output: v.any(),
+})
+export const providerOutcomeV2Value = v.union(
+  v.object({
+    format: v.literal('ae.provider-outcome:v2'), outcomeRef: v.string(), outcomeDigest: v.string(),
+    state: v.literal('succeeded'), envelopeRef: v.string(), envelopeDigest: v.string(), responseDigest: v.string(),
+    output: v.any(), outputDigest: v.string(), lineage: providerExecutionLineageV2Value, lineageDigest: v.string(),
+    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
+    observedAt: v.number(),
+  }),
+  v.object({
+    format: v.literal('ae.provider-outcome:v2'), outcomeRef: v.string(), outcomeDigest: v.string(),
+    state: v.literal('unknown_external_state'),
+    reason: v.union(
+      v.literal('provider_response_invalid'), v.literal('provider_echo_mismatch'),
+      v.literal('provider_output_invalid'),
+    ),
+    envelopeRef: v.string(), envelopeDigest: v.string(), responseDigest: v.string(),
+    lineage: providerExecutionLineageV2Value, lineageDigest: v.string(),
+    recovery: v.object({ kind: v.literal('reconcile_required'), automaticRetry: v.literal(false) }),
+    observedAt: v.number(),
+  }),
+)
+export const providerRootRunV2Value = v.object({
+  format: v.literal('ae.provider-root-run:v2'), rootRunRef: v.string(), rootRunDigest: v.string(),
+  state: v.union(v.literal('succeeded'), v.literal('unknown_external_state')),
+  outcomeRef: v.string(), outcomeDigest: v.string(), envelopeRef: v.string(), envelopeDigest: v.string(),
+  lineage: providerExecutionLineageV2Value, lineageDigest: v.string(), recordedAt: v.number(),
+})
+export const providerLeafRunV2Value = v.object({
+  format: v.literal('ae.provider-leaf-run:v2'), leafRunRef: v.string(), leafRunDigest: v.string(),
+  state: v.union(v.literal('succeeded'), v.literal('unknown_external_state')),
+  outcomeRef: v.string(), outcomeDigest: v.string(), envelopeRef: v.string(), envelopeDigest: v.string(),
+  businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
+  lineage: providerExecutionLineageV2Value, lineageDigest: v.string(), recordedAt: v.number(),
+})
+export const providerProtocolEvidenceV2Value = v.object({
+  format: v.literal('ae.provider-protocol-evidence:v2'),
+  protocolEvidenceRef: v.string(), protocolEvidenceDigest: v.string(),
+  disposition: v.union(v.literal('validated_result'), v.literal('unknown_external_state')),
+  outcomeRef: v.string(), outcomeDigest: v.string(), envelopeRef: v.string(), envelopeDigest: v.string(),
+  responseDigest: v.string(), outputDigest: v.optional(v.string()),
+  providerResult: v.optional(providerResultV2Value),
+  observedEcho: v.optional(providerResultEchoV2Value),
+  lineage: providerExecutionLineageV2Value, lineageDigest: v.string(), recordedAt: v.number(),
+})
 export const preparedActionRecoveryReasonV2Value = v.union(
   v.literal('options_pending'), v.literal('disclosure_not_released'), v.literal('disclosure_uncertain'),
   v.literal('provider_response_invalid'), v.literal('provider_echo_mismatch'),
@@ -627,10 +719,58 @@ export const customerRequestV2Tables = {
     .index('by_disclosureGrantRef', ['disclosureGrantRef'])
     .index('by_actionAttemptRef', ['actionAttemptRef']),
 
+  customerRequestV2ActionAttemptReleases: defineTable({
+    commandKey: v.string(), commandDigest: v.string(),
+    actionAttemptRef: v.string(), actionAttemptDigest: v.string(),
+    providerReleaseGrantRef: v.string(), disclosureGrantRef: v.string(),
+    envelopeRef: v.string(), envelopeDigest: v.string(), authorityLineageDigest: v.string(),
+    releaseRef: v.string(), releaseDigest: v.string(), release: actionAttemptReleaseV2Value,
+    envelope: providerInvocationEnvelopeV2Value, committedAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_actionAttemptRef', ['actionAttemptRef'])
+    .index('by_providerReleaseGrantRef', ['providerReleaseGrantRef'])
+    .index('by_disclosureGrantRef', ['disclosureGrantRef'])
+    .index('by_envelopeRef', ['envelopeRef']),
+
+  customerRequestV2ProviderOutcomes: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), actionAttemptRef: v.string(),
+    envelopeRef: v.string(), envelopeDigest: v.string(), outcomeRef: v.string(), outcomeDigest: v.string(),
+    authorityLineageDigest: v.string(), responseDigest: v.string(),
+    outcome: providerOutcomeV2Value, committedAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_actionAttemptRef', ['actionAttemptRef'])
+    .index('by_outcomeRef', ['outcomeRef']),
+
+  customerRequestV2ProviderRootRuns: defineTable({
+    rootRunRef: v.string(), rootRunDigest: v.string(), outcomeRef: v.string(), actionAttemptRef: v.string(),
+    authorityLineageDigest: v.string(), rootRun: providerRootRunV2Value, recordedAt: v.number(),
+  })
+    .index('by_rootRunRef', ['rootRunRef'])
+    .index('by_outcomeRef', ['outcomeRef']),
+
+  customerRequestV2ProviderLeafRuns: defineTable({
+    leafRunRef: v.string(), leafRunDigest: v.string(), outcomeRef: v.string(), actionAttemptRef: v.string(),
+    authorityLineageDigest: v.string(), leafRun: providerLeafRunV2Value, recordedAt: v.number(),
+  })
+    .index('by_leafRunRef', ['leafRunRef'])
+    .index('by_outcomeRef', ['outcomeRef']),
+
+  customerRequestV2ProviderProtocolEvidence: defineTable({
+    protocolEvidenceRef: v.string(), protocolEvidenceDigest: v.string(),
+    outcomeRef: v.string(), actionAttemptRef: v.string(), authorityLineageDigest: v.string(),
+    protocolEvidence: providerProtocolEvidenceV2Value, recordedAt: v.number(),
+  })
+    .index('by_protocolEvidenceRef', ['protocolEvidenceRef'])
+    .index('by_outcomeRef', ['outcomeRef']),
+
   customerRequestV2ActionAttemptAdmissionCommands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
     requestId: v.string(), requestRevision: v.number(),
     approvalGrantRef: v.string(), authorityLineageDigest: v.string(),
     resultRef: v.string(), resultDigest: v.string(), committedAt: v.number(),
-  }).index('by_commandKey', ['commandKey']),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_resultRef', ['resultRef']),
 } as const

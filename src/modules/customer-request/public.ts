@@ -75,3 +75,23 @@ export {
   type ApprovalGrantConsumptionV2,
   type ProviderReleaseGrantV2,
 } from './action-attempt-v2'
+export {
+  actionAttemptReleaseV2Digest,
+  providerInvocationEnvelopeV2Digest,
+  providerInvocationEnvelopeIntegrityValid,
+  providerOutcomeV2Digest,
+  recordProviderOutcomeV2,
+  releaseProviderInvocationV2,
+  type ProviderExecutionLineageV2,
+  type ActionAttemptReleaseV2,
+  type ProviderInvocationEnvelopeV2,
+  type ProviderLeafRunV2,
+  type ProviderOutcomeEvidenceBundleV2,
+  type ProviderOutcomeV2,
+  type ProviderProtocolEvidenceV2,
+  type ProviderResultEchoV2,
+  type ProviderResultV2,
+  type ProviderRootRunV2,
+  type RecordProviderOutcomeV2Result,
+  type ReleaseProviderInvocationV2Result,
+} from './provider-execution-v2'
