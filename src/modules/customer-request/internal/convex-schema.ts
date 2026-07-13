@@ -76,10 +76,13 @@ export const requestSnapshotValue = v.object({
   requestId: v.string(), revision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
   intent: v.string(), networkId: v.string(), facts: v.record(v.string(), requestFact), snapshotDigest: v.string(), recordedAt: v.number(),
 })
-const informationRequirementValue = v.object({
-  field: v.string(), customerLabel: v.string(), affectedCandidates: v.array(v.string()),
-  probesEnabled: v.array(v.string()), requirementDigest: v.string(),
-})
+const informationRequirementValue = v.union(
+  v.object({
+    kind: v.optional(v.literal('contract_fact')), field: v.string(), customerLabel: v.string(), affectedCandidates: v.array(v.string()),
+    probesEnabled: v.array(v.string()), requirementDigest: v.string(),
+  }),
+  v.object({ kind: v.literal('intent_direction'), prompt: v.string(), requirementDigest: v.string() }),
+)
 export const requestEvaluationValue = v.object({
   evaluationId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
   factsDigest: v.string(), facts: v.optional(v.record(v.string(), requestFact)), posture: v.union(

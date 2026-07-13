@@ -29,6 +29,10 @@ export type CustomerRequestView = Readonly<{
   summary: string
   nextAction: CustomerRequestNextAction
   missingFields: readonly Readonly<{ field: string; label: string; explanation: string }>[]
+  clarification?: Readonly<
+    | { kind: 'intent_direction'; prompt: string; answerKind: 'natural_language' }
+    | { kind: 'contract_fact'; field: string; prompt: string; answerKind: 'typed_value' }
+  >
   options: readonly CustomerOption[]
 }>
 
@@ -95,11 +99,17 @@ export function projectRequestEvaluation(input: Readonly<{
     state: 'needs_information',
     summary: input.snapshot.intent,
     nextAction: 'provide_information',
-    missingFields: [{
+    missingFields: input.evaluation.nextRequirement.kind === 'contract_fact' ? [{
       field: input.evaluation.nextRequirement.field,
       label: input.evaluation.nextRequirement.customerLabel,
       explanation: 'This answer changes which registered options can be prepared now.',
-    }],
+    }] : [],
+    clarification: input.evaluation.nextRequirement.kind === 'intent_direction'
+      ? { kind: 'intent_direction', prompt: input.evaluation.nextRequirement.prompt, answerKind: 'natural_language' }
+      : {
+          kind: 'contract_fact', field: input.evaluation.nextRequirement.field,
+          prompt: input.evaluation.nextRequirement.customerLabel, answerKind: 'typed_value',
+        },
   })
   return requestView({
     requestRef: input.snapshot.requestId,
@@ -147,6 +157,7 @@ function requestView(input: Readonly<{
   summary: string
   nextAction: CustomerRequestNextAction
   missingFields?: readonly Readonly<{ field: string; label: string; explanation: string }>[]
+  clarification?: CustomerRequestView['clarification']
   options?: readonly CustomerOption[]
 }>): CustomerRequestView {
   return Object.freeze({
@@ -157,6 +168,7 @@ function requestView(input: Readonly<{
     summary: input.summary,
     nextAction: input.nextAction,
     missingFields: Object.freeze((input.missingFields ?? []).map((field) => Object.freeze({ ...field }))),
+    ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })
 }

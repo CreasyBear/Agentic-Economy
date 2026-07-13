@@ -37,6 +37,8 @@ describe('Customer Request semantic interpreter', () => {
       ],
     })
 
+    expect(proposal.kind).toBe('capability_candidates')
+    if (proposal.kind !== 'capability_candidates') throw new Error('capability_proposal_expected')
     expect(proposal.candidateCapabilityContractIds).toEqual(['parcel.rate:v1'])
     expect(proposal.facts).toEqual({
       weight_grams: {
@@ -67,6 +69,8 @@ describe('Customer Request semantic interpreter', () => {
       ],
     })
 
+    expect(proposal.kind).toBe('capability_candidates')
+    if (proposal.kind !== 'capability_candidates') throw new Error('capability_proposal_expected')
     expect(proposal.facts).toEqual({})
   })
 })

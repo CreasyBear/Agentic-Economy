@@ -19,6 +19,7 @@ import {
 import {
   discoverRequestEvaluationCandidates,
   evaluateCustomerRequestSnapshot,
+  evaluateIntentDirectionRequestSnapshot,
   requestRegistrySnapshotDigest,
   type RequestEvaluation,
 } from '@/modules/customer-request/evaluation'
@@ -71,6 +72,10 @@ const customerView = v.object({
     v.literal('inspect_options'), v.literal('revise_request'), v.literal('retry'),
   ),
   missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })),
+  clarification: v.optional(v.union(
+    v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
+    v.object({ kind: v.literal('contract_fact'), field: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
+  )),
   options: v.array(customerOption),
 })
 const customerProjection = v.union(
@@ -108,10 +113,12 @@ type StoredEvaluation = Readonly<{
     requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
     facts?: SnapshotValue['facts']
     posture: 'progress_available' | 'needs_information' | 'unsupported'
-    nextRequirement?: Readonly<{
-      field: string; customerLabel: string; affectedCandidates: readonly string[]
-      probesEnabled: readonly string[]; requirementDigest: string
-    }>
+    nextRequirement?:
+      | Readonly<{
+          kind?: 'contract_fact'; field: string; customerLabel: string; affectedCandidates: readonly string[]
+          probesEnabled: readonly string[]; requirementDigest: string
+        }>
+      | Readonly<{ kind: 'intent_direction'; prompt: string; requirementDigest: string }>
     evaluationDigest: string
   }>
   candidates: RequestEvaluation['candidates']
@@ -506,7 +513,8 @@ async function provideFactsHandler(
   )
   if (evaluated !== null) {
     if (evaluated.snapshot.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    const selectedField = evaluated.evaluation.nextRequirement?.field
+    const requirement = evaluated.evaluation.nextRequirement
+    const selectedField = requirement?.kind === 'intent_direction' ? undefined : requirement?.field
     const suppliedFields = Object.keys(args.facts)
     if (selectedField === undefined || suppliedFields.length !== 1 || suppliedFields[0] !== selectedField) {
       return writableView(projectNeedsAttention({
@@ -657,15 +665,23 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
     factsDigest: input.evaluation.factsDigest,
     facts: input.evaluation.facts ?? input.snapshot.facts,
     candidates: input.candidates,
-    ...(input.evaluation.nextRequirement === undefined ? {} : { nextRequirement: {
-      field: input.evaluation.nextRequirement.field,
-      customerLabel: input.evaluation.nextRequirement.customerLabel,
-      impact: {
-        affectedCandidates: input.evaluation.nextRequirement.affectedCandidates,
-        probesEnabled: input.evaluation.nextRequirement.probesEnabled,
-      },
-      requirementDigest: input.evaluation.nextRequirement.requirementDigest,
-    } }),
+    ...(input.evaluation.nextRequirement === undefined ? {} : {
+      nextRequirement: input.evaluation.nextRequirement.kind === 'intent_direction'
+        ? {
+            kind: 'intent_direction' as const, prompt: input.evaluation.nextRequirement.prompt,
+            requirementDigest: input.evaluation.nextRequirement.requirementDigest,
+          }
+        : {
+            kind: 'contract_fact' as const,
+            field: input.evaluation.nextRequirement.field,
+            customerLabel: input.evaluation.nextRequirement.customerLabel,
+            impact: {
+              affectedCandidates: input.evaluation.nextRequirement.affectedCandidates,
+              probesEnabled: input.evaluation.nextRequirement.probesEnabled,
+            },
+            requirementDigest: input.evaluation.nextRequirement.requirementDigest,
+          },
+    }),
     posture: input.evaluation.posture,
     evaluationDigest: input.evaluation.evaluationDigest,
   }
@@ -711,15 +727,20 @@ async function evaluateAndPersistSnapshot(
       })),
     })),
   }) } catch { return { kind: 'interpreter_unavailable' as const } }
-  const evaluationFacts = Object.freeze({ ...proposal.facts, ...snapshot.facts })
-  const candidateInputs = discoverRequestEvaluationCandidates({
-    candidateCapabilityContractIds: proposal.candidateCapabilityContractIds, bindings,
-    resolveContract: (capabilityContractId) => registry.get(capabilityContractId),
-  })
-  const evaluation = evaluateCustomerRequestSnapshot({
-    requestId: snapshot.requestId, requestRevision: snapshot.revision,
-    intent: snapshot.intent, facts: evaluationFacts, registrySnapshotDigest, candidates: candidateInputs,
-  })
+  const evaluation = proposal.kind === 'needs_intent_direction'
+    ? evaluateIntentDirectionRequestSnapshot({
+        requestId: snapshot.requestId, requestRevision: snapshot.revision,
+        intent: snapshot.intent, facts: snapshot.facts, registrySnapshotDigest, prompt: proposal.prompt,
+      })
+    : evaluateCustomerRequestSnapshot({
+        requestId: snapshot.requestId, requestRevision: snapshot.revision,
+        intent: snapshot.intent, facts: Object.freeze({ ...proposal.facts, ...snapshot.facts }),
+        registrySnapshotDigest,
+        candidates: discoverRequestEvaluationCandidates({
+          candidateCapabilityContractIds: proposal.candidateCapabilityContractIds, bindings,
+          resolveContract: (capabilityContractId) => registry.get(capabilityContractId),
+        }),
+      })
   const persisted: Readonly<{ kind: 'stored' | 'stale' | 'conflict' }> = await ctx.runMutation(
     internal.customerRequests.putRequestEvaluation,
     {
@@ -729,12 +750,20 @@ async function evaluateAndPersistSnapshot(
         registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
         facts: evaluation.facts,
         posture: evaluation.posture,
-        ...(evaluation.nextRequirement === undefined ? {} : { nextRequirement: {
-          field: evaluation.nextRequirement.field, customerLabel: evaluation.nextRequirement.customerLabel,
-          affectedCandidates: [...evaluation.nextRequirement.impact.affectedCandidates],
-          probesEnabled: [...evaluation.nextRequirement.impact.probesEnabled],
-          requirementDigest: evaluation.nextRequirement.requirementDigest,
-        } }),
+        ...(evaluation.nextRequirement === undefined ? {} : {
+          nextRequirement: evaluation.nextRequirement.kind === 'intent_direction'
+            ? {
+                kind: 'intent_direction' as const, prompt: evaluation.nextRequirement.prompt,
+                requirementDigest: evaluation.nextRequirement.requirementDigest,
+              }
+            : {
+                kind: 'contract_fact' as const,
+                field: evaluation.nextRequirement.field, customerLabel: evaluation.nextRequirement.customerLabel,
+                affectedCandidates: [...evaluation.nextRequirement.impact.affectedCandidates],
+                probesEnabled: [...evaluation.nextRequirement.impact.probesEnabled],
+                requirementDigest: evaluation.nextRequirement.requirementDigest,
+              },
+        }),
         evaluationDigest: evaluation.evaluationDigest, evaluatedAt: Date.now(),
       },
       candidates: evaluation.candidates.map((candidate) => ({

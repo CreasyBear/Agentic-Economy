@@ -38,7 +38,8 @@ export type RequestEvaluationCandidate = Readonly<{
     | Readonly<{ kind: 'blocked_on_information'; fields: readonly string[] }>
 }>
 
-export type InformationRequirement = Readonly<{
+export type ContractFactInformationRequirement = Readonly<{
+  kind: 'contract_fact'
   field: string
   customerLabel: string
   impact: Readonly<{
@@ -47,6 +48,12 @@ export type InformationRequirement = Readonly<{
   }>
   requirementDigest: string
 }>
+export type IntentDirectionInformationRequirement = Readonly<{
+  kind: 'intent_direction'
+  prompt: string
+  requirementDigest: string
+}>
+export type InformationRequirement = ContractFactInformationRequirement | IntentDirectionInformationRequirement
 
 export type RequestEvaluation = Readonly<{
   requestId: string
@@ -113,6 +120,37 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   })
 }
 
+export function evaluateIntentDirectionRequestSnapshot(input: Readonly<{
+  requestId: string
+  requestRevision: number
+  intent: string
+  facts: Readonly<Record<string, RequestFact>>
+  registrySnapshotDigest: string
+  prompt: string
+}>): RequestEvaluation {
+  const factsDigest = canonicalDigest(input.facts)
+  const nextRequirement: IntentDirectionInformationRequirement = Object.freeze({
+    kind: 'intent_direction',
+    prompt: input.prompt,
+    requirementDigest: canonicalDigest({
+      requestId: input.requestId, requestRevision: input.requestRevision,
+      intent: input.intent, registrySnapshotDigest: input.registrySnapshotDigest,
+      kind: 'intent_direction', prompt: input.prompt,
+    }),
+  })
+  const digestMaterial = {
+    requestId: input.requestId, requestRevision: input.requestRevision, intent: input.intent,
+    registrySnapshotDigest: input.registrySnapshotDigest, factsDigest, facts: input.facts,
+    candidates: [], nextRequirement, posture: 'needs_information' as const,
+  }
+  return Object.freeze({
+    requestId: input.requestId, requestRevision: input.requestRevision,
+    registrySnapshotDigest: input.registrySnapshotDigest, factsDigest, facts: input.facts,
+    candidates: Object.freeze([]), nextRequirement, posture: 'needs_information' as const,
+    evaluationDigest: canonicalDigest(digestMaterial),
+  })
+}
+
 export function discoverRequestEvaluationCandidates(input: Readonly<{
   candidateCapabilityContractIds: readonly string[]
   bindings: readonly RegisteredEvaluationBinding[]
@@ -175,6 +213,7 @@ function chooseNextRequirement(
     probesEnabled: Object.freeze(selected.probesEnabled),
   })
   return Object.freeze({
+    kind: 'contract_fact' as const,
     field: selected.field,
     customerLabel: labels.get(selected.field) ?? selected.field,
     impact,

@@ -27,10 +27,16 @@ export type CustomerRequestSemanticInterpreterInput = Readonly<{
   }>[]
 }>
 
-export type CustomerRequestSemanticProposal = Readonly<{
+export type CustomerRequestCapabilityProposal = Readonly<{
+  kind: 'capability_candidates'
   candidateCapabilityContractIds: readonly string[]
   facts: Readonly<Record<string, RequestFact>>
 }>
+export type CustomerRequestIntentDirectionProposal = Readonly<{
+  kind: 'needs_intent_direction'
+  prompt: string
+}>
+export type CustomerRequestSemanticProposal = CustomerRequestCapabilityProposal | CustomerRequestIntentDirectionProposal
 
 export type CustomerRequestSemanticInterpretationTransport = Readonly<{
   generateJson: (input: Readonly<{
@@ -47,10 +53,16 @@ export type CustomerRequestSemanticInterpreter = Readonly<{
 
 const identifier = z.string().trim().min(1).max(200)
 const literal = z.union([z.string().max(8_000), z.number().safe(), z.boolean()])
-const proposalSchema = z.object({
+const capabilityProposalSchema = z.object({
+  kind: z.literal('capability_candidates').optional(),
   candidateCapabilityContractIds: z.array(identifier).max(64),
   facts: z.array(z.object({ capabilityContractId: identifier, field: identifier, value: literal }).strict()).max(64),
 }).strict()
+const intentDirectionProposalSchema = z.object({
+  kind: z.literal('needs_intent_direction'),
+  prompt: z.string().trim().min(1).max(240),
+}).strict()
+const proposalSchema = z.union([capabilityProposalSchema, intentDirectionProposalSchema])
 
 const SYSTEM_INSTRUCTION = [
   'Interpret the customer request using only the registered capabilities supplied in capabilities.',
@@ -60,8 +72,9 @@ const SYSTEM_INSTRUCTION = [
   'Do not infer missing values, preferences, budgets, identities, providers, prices, permissions, commitments, or outcomes.',
   'Do not repeat facts already present in explicitFacts.',
   'Do not construct steps, calls, routes, approvals, or execution instructions.',
-  'Return exactly {"candidateCapabilityContractIds":["registered.id"],"facts":[{"capabilityContractId":"registered.id","field":"registered_field","value":"explicit value"}]}.',
-  'Return empty arrays when the registry provides no supported capability or the request states no registered fact.',
+  'When the request is a meaningful place, destination, or broad context but does not yet say what operation or service is wanted, return exactly {"kind":"needs_intent_direction","prompt":"one plain-language question that asks what the customer wants there"}.',
+  'Otherwise return exactly {"kind":"capability_candidates","candidateCapabilityContractIds":["registered.id"],"facts":[{"capabilityContractId":"registered.id","field":"registered_field","value":"explicit value"}]}.',
+  'Return capability_candidates with empty arrays when the registry provides no supported capability.',
   'Return one JSON object only.',
 ].join(' ')
 const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v1'
@@ -99,10 +112,17 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         }
         const parsed = proposalSchema.safeParse(unknownValue)
         if (!parsed.success) throw new Error('customer_request_semantic_interpretation_invalid')
+        if (parsed.data.kind === 'needs_intent_direction') {
+          return Object.freeze({ kind: 'needs_intent_direction' as const, prompt: parsed.data.prompt })
+        }
         const proposalDigest = canonicalDigest({
           systemInstructionVersion: SYSTEM_INSTRUCTION_VERSION,
           registeredCapabilities: payload.capabilities,
-          rawProposal: parsed.data,
+          rawProposal: {
+            kind: 'capability_candidates',
+            candidateCapabilityContractIds: parsed.data.candidateCapabilityContractIds,
+            facts: parsed.data.facts,
+          },
         })
 
         const capabilityIds = new Set(payload.capabilities.map((capability) => capability.capabilityContractId))
@@ -138,6 +158,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           })
         }
         return Object.freeze({
+          kind: 'capability_candidates' as const,
           candidateCapabilityContractIds: Object.freeze(selectedIds),
           facts: Object.freeze(facts),
         })

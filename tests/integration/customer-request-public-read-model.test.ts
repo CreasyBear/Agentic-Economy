@@ -206,6 +206,47 @@ describe('production CustomerRequest read model', () => {
       options: [{ optionRef: 'option:public:evaluation:1', business: { name: 'Sandbox Option One' } }],
     })
   })
+
+  it('keeps a sparse place anchor as one durable Request and asks for intent direction', async () => {
+    const backend = convexTest(schema, modules)
+    const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'needs_intent_direction',
+        prompt: 'What are you looking for there?',
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    const response = await handleAgentCustomerRequestPost(agentRequest({
+      idempotencyKey: 'submit:place:1', requestRef: 'request:place:1', agentRef: 'ignored-by-admission',
+      request: 'Fremantle',
+    }), {
+      authenticate: async () => ({
+        isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_place', subject: 'user_owner_1',
+        userId: 'user_owner_1', orgId: null, scopes: ['customer_requests:create'],
+      }),
+      callAction: async (name, args) => {
+        expect(name).toBe('customerRequestApplication:submit')
+        return await backend.action(api.customerRequestApplication.submit, args as never)
+      },
+      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
+    })
+
+    expect(response.status).toBe(200)
+    const view = await response.json()
+    expect(view).toMatchObject({
+      kind: 'request', requestRef: 'request:place:1', revision: 1,
+      state: 'needs_information', nextAction: 'provide_information',
+      clarification: {
+        kind: 'intent_direction',
+        prompt: 'What are you looking for there?',
+        answerKind: 'natural_language',
+      },
+    })
+    expect(JSON.stringify(view)).not.toMatch(/capabilityContractId|bindingId|planRevision|candidateCapability/)
+  })
 })
 
 async function seedReadyRequest(backend: ReturnType<typeof convexTest>, requestPrincipalId = principalId) {
