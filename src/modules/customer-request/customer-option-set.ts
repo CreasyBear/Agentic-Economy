@@ -18,6 +18,15 @@ export type CustomerOptionSet = Readonly<{
   ordering: Readonly<
     | { kind: 'not_applicable'; commercialInfluence: 'none' | 'disclosed' | 'unknown' }
     | { kind: 'unranked'; commercialInfluence: 'none' | 'disclosed' | 'unknown' }
+    | {
+        kind: 'recommended'
+        commercialInfluence: 'none' | 'disclosed'
+        objective: 'lowest_maximum_price'
+        optionRef: string
+        evidenceRef: string
+        reasons: readonly string[]
+        tradeoffs: readonly string[]
+      }
   >
   coverage: Readonly<{
     evaluated: number
@@ -38,9 +47,7 @@ export function projectCustomerOptionSet(candidateSet: PreparedRouteCandidateSet
   return Object.freeze({
     cardinality,
     optionCount,
-    ordering: Object.freeze(cardinality === 'multiple'
-      ? { kind: 'unranked' as const, commercialInfluence }
-      : { kind: 'not_applicable' as const, commercialInfluence }),
+    ordering: Object.freeze(projectOrdering(candidateSet, cardinality, commercialInfluence)),
     coverage: Object.freeze({
       evaluated: Math.max(candidateSet.attempts.length, optionCount),
       ...counts,
@@ -62,6 +69,82 @@ export function projectCustomerOptionSet(candidateSet: PreparedRouteCandidateSet
       })
     })),
   })
+}
+
+function projectOrdering(
+  candidateSet: PreparedRouteCandidateSet,
+  cardinality: CustomerOptionSet['cardinality'],
+  commercialInfluence: 'none' | 'disclosed' | 'unknown',
+): CustomerOptionSet['ordering'] {
+  if (cardinality !== 'multiple') return { kind: 'not_applicable', commercialInfluence }
+  const preference = candidateSet.decisionPreference
+  if (preference === undefined || commercialInfluence === 'unknown'
+    || candidateSet.candidates.some((candidate) => candidate.commercialInfluence?.status === 'disclosed'
+      && (candidate.commercialInfluence.influencesEligibility
+        || candidate.commercialInfluence.influencesInclusion
+        || candidate.commercialInfluence.influencesOrder))
+    || !hasComparableShape(candidateSet.candidates)) return { kind: 'unranked', commercialInfluence }
+  const ordered = [...candidateSet.candidates].sort((left, right) => left.maximumCost.amountMinor - right.maximumCost.amountMinor)
+  const selected = ordered[0]
+  const next = ordered[1]
+  if (selected === undefined || next === undefined
+    || selected.maximumCost.amountMinor === next.maximumCost.amountMinor) return { kind: 'unranked', commercialInfluence }
+  const currency = selected.maximumCost.currency
+  const difference = next.maximumCost.amountMinor - selected.maximumCost.amountMinor
+  const tradeoffs = comparableOutputTradeoffs(selected, ordered.slice(1))
+  return {
+    kind: 'recommended', commercialInfluence, objective: preference.objective,
+    optionRef: selected.optionRef, evidenceRef: preference.evidenceRef,
+    reasons: Object.freeze([
+      `Lowest provider maximum at ${formatMinor(currency, selected.maximumCost.amountMinor)}.`,
+      `${formatMinor(currency, difference)} below the next-lowest provider maximum.`,
+    ]),
+    tradeoffs: Object.freeze(tradeoffs.length === 0
+      ? ['No differing registered comparison outputs were reported.']
+      : tradeoffs),
+  }
+}
+
+function hasComparableShape(candidates: PreparedRouteCandidateSet['candidates']): boolean {
+  const first = candidates[0]
+  if (first === undefined) return false
+  const currency = first.maximumCost.currency
+  const signature = outputSignature(first)
+  return candidates.every((candidate) => validNormalizedPrice(candidate)
+    && candidate.expectedCost.currency === currency
+    && candidate.maximumCost.currency === currency
+    && outputSignature(candidate) === signature)
+}
+
+function validNormalizedPrice(candidate: PreparedRouteCandidateSet['candidates'][number]): boolean {
+  const expected = candidate.expectedCost.amountMinor
+  const maximum = candidate.maximumCost.amountMinor
+  const componentTotal = candidate.priceComponents.reduce((total, component) => total + component.amountMinor, 0)
+  return Number.isSafeInteger(expected) && expected >= 0
+    && Number.isSafeInteger(maximum) && maximum >= expected
+    && candidate.priceComponents.every((component) => Number.isSafeInteger(component.amountMinor) && component.amountMinor >= 0)
+    && Number.isSafeInteger(componentTotal) && componentTotal <= maximum
+    && new Set(candidate.comparableOutputs.map((output) => output.label)).size === candidate.comparableOutputs.length
+}
+
+function outputSignature(candidate: PreparedRouteCandidateSet['candidates'][number]): string {
+  return JSON.stringify(candidate.comparableOutputs.map((output) => ({ label: output.label, type: typeof output.value }))
+    .sort((left, right) => left.label.localeCompare(right.label)))
+}
+
+function comparableOutputTradeoffs(
+  selected: PreparedRouteCandidateSet['candidates'][number],
+  alternatives: readonly PreparedRouteCandidateSet['candidates'][number][],
+): string[] {
+  const selectedOutputs = new Map(selected.comparableOutputs.map((output) => [output.label, output.value]))
+  return alternatives.flatMap((alternative) => alternative.comparableOutputs.flatMap((output) => {
+    const selectedValue = selectedOutputs.get(output.label)
+    return selectedValue === output.value ? [] : [`${output.label}: ${String(selectedValue)} versus ${String(output.value)} from ${alternative.business.name}.`]
+  }))
+}
+
+function formatMinor(currency: string, amountMinor: number): string {
+  return `${currency} ${(amountMinor / 100).toFixed(2)}`
 }
 
 function optionCommercialInfluence(candidates: PreparedRouteCandidateSet['candidates']): 'none' | 'disclosed' | 'unknown' {

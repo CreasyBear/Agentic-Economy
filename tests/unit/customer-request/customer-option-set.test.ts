@@ -44,6 +44,96 @@ describe('customer option set', () => {
     expect(JSON.stringify(result)).not.toMatch(/best|recommended|cheapest|winner/i)
   })
 
+  it('recommends the unique lowest maximum only from an explicit customer preference and like-for-like evidence', () => {
+    const result = projectCustomerOptionSet(candidateSet({
+      decisionPreference: {
+        objective: 'lowest_maximum_price', basis: 'extracted_from_request', evidenceRef: 'inference:customer-price-priority',
+      },
+      candidates: [
+        candidate('one', 1_200, { status: 'none', summary: 'No commercial relationship.' }),
+        candidate('two', 900, { status: 'none', summary: 'No commercial relationship.' }),
+      ],
+      attempts: [attempt('One', 'option_received'), attempt('Two', 'option_received')],
+    }))
+
+    expect(result.ordering).toEqual({
+      kind: 'recommended', commercialInfluence: 'none', objective: 'lowest_maximum_price',
+      optionRef: 'option:two', evidenceRef: 'inference:customer-price-priority',
+      reasons: ['Lowest provider maximum at AUD 9.00.', 'AUD 3.00 below the next-lowest provider maximum.'],
+      tradeoffs: ['No differing registered comparison outputs were reported.'],
+    })
+  })
+
+  it('may recommend with a disclosed relationship only when registration says it affected no decision stage', () => {
+    const result = projectCustomerOptionSet(candidateSet({
+      decisionPreference: {
+        objective: 'lowest_maximum_price', basis: 'extracted_from_request', evidenceRef: 'inference:customer-price-priority',
+      },
+      candidates: [
+        candidate('one', 1_200, { status: 'none', summary: 'No commercial relationship.' }),
+        candidate('two', 900, {
+          status: 'disclosed', relationship: 'commission', summary: 'AE may receive a referral fee.', payerName: 'Two',
+          beneficiaryName: 'AE', compensationBasis: 'Fixed fee', influencesEligibility: false, influencesInclusion: false,
+          influencesOrder: false,
+        }),
+      ],
+      attempts: [attempt('One', 'option_received'), attempt('Two', 'option_received')],
+    }))
+
+    expect(result.ordering).toMatchObject({
+      kind: 'recommended', commercialInfluence: 'disclosed', optionRef: 'option:two',
+    })
+  })
+
+  it.each([
+    ['commercially influenced ordering', {
+      decisionPreference: { objective: 'lowest_maximum_price' as const, basis: 'extracted_from_request' as const, evidenceRef: 'inference:price' },
+      candidates: [
+        candidate('one', 1_200, { status: 'none', summary: 'None.' }),
+        candidate('two', 900, {
+          status: 'disclosed', relationship: 'commission', summary: 'Paid relationship.', payerName: 'Two',
+          beneficiaryName: 'AE', compensationBasis: 'Fee', influencesEligibility: false, influencesInclusion: false, influencesOrder: true,
+        }),
+      ],
+    }],
+    ['an unresolved commercial relationship', {
+      decisionPreference: { objective: 'lowest_maximum_price' as const, basis: 'extracted_from_request' as const, evidenceRef: 'inference:price' },
+      candidates: [candidate('one', 1_200), candidate('two', 900, { status: 'none', summary: 'None.' })],
+    }],
+    ['a tied lowest maximum', {
+      decisionPreference: { objective: 'lowest_maximum_price' as const, basis: 'extracted_from_request' as const, evidenceRef: 'inference:price' },
+      candidates: [
+        candidate('one', 900, { status: 'none', summary: 'None.' }),
+        candidate('two', 900, { status: 'none', summary: 'None.' }),
+      ],
+    }],
+  ])('refuses to recommend with %s', (_case, input) => {
+    const result = projectCustomerOptionSet(candidateSet({
+      ...input, attempts: [attempt('One', 'option_received'), attempt('Two', 'option_received')],
+    }))
+    expect(result.ordering.kind).toBe('unranked')
+  })
+
+  it.each([
+    ['different currencies', {
+      ...candidate('two', 900, { status: 'none', summary: 'None.' }),
+      expectedCost: { currency: 'USD', amountMinor: 900 }, maximumCost: { currency: 'USD', amountMinor: 900 },
+    }],
+    ['different registered output shapes', {
+      ...candidate('two', 900, { status: 'none', summary: 'None.' }),
+      comparableOutputs: [{ label: 'Different service', value: 'Registered service' }],
+    }],
+  ])('refuses to call options comparable when they have %s', (_case, second) => {
+    const result = projectCustomerOptionSet(candidateSet({
+      decisionPreference: {
+        objective: 'lowest_maximum_price', basis: 'extracted_from_request', evidenceRef: 'inference:price',
+      },
+      candidates: [candidate('one', 1_200, { status: 'none', summary: 'None.' }), second],
+      attempts: [attempt('One', 'option_received'), attempt('Two', 'option_received')],
+    }))
+    expect(result.ordering.kind).toBe('unranked')
+  })
+
   it('preserves registered commercial relationships without allowing them to create rank', () => {
     const result = projectCustomerOptionSet(candidateSet({
       candidates: [
@@ -102,7 +192,7 @@ function attempt(name: string, status: PreparedRouteCandidateSet['attempts'][num
   return { business: { name }, status, explanation: descriptions[status] }
 }
 
-function candidateSet(input: Pick<PreparedRouteCandidateSet, 'candidates' | 'attempts'>): PreparedRouteCandidateSet {
+function candidateSet(input: Pick<PreparedRouteCandidateSet, 'candidates' | 'attempts'> & Partial<Pick<PreparedRouteCandidateSet, 'decisionPreference'>>): PreparedRouteCandidateSet {
   return { inspectionRef: 'options:evidence', ...input }
 }
 

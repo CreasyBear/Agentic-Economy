@@ -40,6 +40,11 @@ const requestViewSchema = z.object({
     ordering: z.union([
       z.object({ kind: z.literal('not_applicable'), commercialInfluence: z.enum(['none', 'disclosed', 'unknown']) }),
       z.object({ kind: z.literal('unranked'), commercialInfluence: z.enum(['none', 'disclosed', 'unknown']) }),
+      z.object({
+        kind: z.literal('recommended'), commercialInfluence: z.enum(['none', 'disclosed']),
+        objective: z.literal('lowest_maximum_price'), optionRef: z.string(), evidenceRef: z.string(),
+        reasons: z.array(z.string()), tradeoffs: z.array(z.string()),
+      }),
     ]),
     coverage: z.object({
       evaluated: z.number().int().nonnegative(), optionsReceived: z.number().int().nonnegative(),

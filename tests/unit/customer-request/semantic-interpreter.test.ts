@@ -7,6 +7,7 @@ describe('Customer Request semantic interpreter', () => {
     const generateJson = vi.fn().mockResolvedValue({
       content: JSON.stringify({
         candidateCapabilityContractIds: ['parcel.rate:v1', 'invented.purchase:v1'],
+        decisionPreference: 'lowest_maximum_price',
         facts: [
           { capabilityContractId: 'parcel.rate:v1', field: 'weight_grams', value: 1_250 },
           { capabilityContractId: 'invented.purchase:v1', field: 'maximumSpendMinor', value: 0 },
@@ -45,6 +46,9 @@ describe('Customer Request semantic interpreter', () => {
         value: 1_250,
         source: { kind: 'agent_inference', inferenceRef: expect.stringMatching(/^inference:/) },
       },
+    })
+    expect(proposal.decisionPreference).toEqual({
+      objective: 'lowest_maximum_price', basis: 'extracted_from_request', evidenceRef: expect.stringMatching(/^inference:/),
     })
     expect(JSON.stringify(generateJson.mock.calls[0])).not.toMatch(/planRevision|maximumSpendMinor|approvalGrant/)
   })

@@ -10,7 +10,15 @@ export function createConvexStructuredQuotePreparationStore(ctx: Context): Struc
     putCandidateSet: async (candidateSet) => await ctx.runMutation(internal.routingKernelStructuredPreparation.putCandidateSet, {
       candidateSet: {
         ...candidateSet,
-        candidates: candidateSet.candidates.map((candidate) => ({ ...candidate })),
+        candidates: candidateSet.candidates.map((candidate) => {
+          const { commercialRelationship, ...candidateWithoutRelationship } = candidate
+          return {
+            ...candidateWithoutRelationship,
+            ...(commercialRelationship === undefined ? {} : { commercialRelationship: {
+              ...commercialRelationship, evidenceRefs: [...commercialRelationship.evidenceRefs],
+            } }),
+          }
+        }),
       },
     }),
     getCandidateSet: async (preparationRequestId) => await ctx.runQuery(

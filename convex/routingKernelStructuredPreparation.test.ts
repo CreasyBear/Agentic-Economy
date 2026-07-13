@@ -18,6 +18,11 @@ const modules = import.meta.glob('./**/*.ts')
 const boundCandidate = {
   bindingId: 'binding:carrier-a', nodeId: 'node:carrier-a', businessId: 'business:carrier-a',
   recipientName: 'Carrier A', presentationEvidenceDigest: 'sha256:presentation-a',
+  commercialRelationship: {
+    kind: 'none', summary: 'No registered commercial relationship.',
+    influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+    evidenceRefs: ['registration:carrier-a:commercial'],
+  },
   capabilityContractId: 'shipping.quote', capabilityContractVersion: '2', registrationEnvironment: 'production',
   registrationHash: 'sha256:registration-a', registrationEvidenceDigest: 'sha256:registration-evidence-a',
   incidentEpochDigest: 'sha256:incident-epoch-a', incidentEvidenceDigest: 'sha256:incident-evidence-a',
@@ -176,7 +181,15 @@ function providerOffer(exactCommand: ReturnType<typeof command>) {
 }
 
 function writableSet(set: ReturnType<typeof candidateSet>) {
-  return { ...set, candidates: set.candidates.map((candidate) => ({ ...candidate })) }
+  return { ...set, candidates: set.candidates.map((candidate) => {
+    const { commercialRelationship, ...candidateWithoutRelationship } = candidate
+    return {
+      ...candidateWithoutRelationship,
+      ...(commercialRelationship === undefined ? {} : { commercialRelationship: {
+        ...commercialRelationship, evidenceRefs: [...commercialRelationship.evidenceRefs],
+      } }),
+    }
+  }) }
 }
 
 function writableCommand(exactCommand: ReturnType<typeof command>) {

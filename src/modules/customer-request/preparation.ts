@@ -47,6 +47,11 @@ export type PreparedRouteQuote = Readonly<{
 
 export type PreparedRouteCandidateSet = Readonly<{
   inspectionRef: string
+  decisionPreference?: Readonly<{
+    objective: 'lowest_maximum_price'
+    basis: 'extracted_from_request'
+    evidenceRef: string
+  }>
   candidates: readonly Readonly<{
     optionRef: string
     business: Readonly<{ name: string }>

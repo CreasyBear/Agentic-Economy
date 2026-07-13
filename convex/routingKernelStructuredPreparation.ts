@@ -6,6 +6,7 @@ import {
   createProviderOffer,
   createQuotePreparationCommand,
   type PreparationCandidateSet,
+  type FrozenCommercialRelationship,
   type ProviderOffer,
   type QuotePreparationAttempt,
   type PreparationCandidateCoverage,
@@ -14,8 +15,18 @@ import {
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import { internalMutation, internalQuery } from './_generated/server'
 
+const commercialRelationship = v.object({
+  kind: v.union(
+    v.union(v.literal('none'), v.literal('commission'), v.literal('sponsorship'), v.literal('rebate')),
+    v.literal('ownership'), v.literal('other'),
+  ),
+  summary: v.string(), payerName: v.optional(v.string()), beneficiaryName: v.optional(v.string()),
+  compensationBasis: v.optional(v.string()), influencesEligibility: v.boolean(), influencesInclusion: v.boolean(),
+  influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
+})
 const candidate = v.object({
   bindingId: v.string(), nodeId: v.string(), businessId: v.string(), recipientName: v.string(), presentationEvidenceDigest: v.string(),
+  commercialRelationship: v.optional(commercialRelationship),
   capabilityContractId: v.string(), capabilityContractVersion: v.string(),
   registrationEnvironment: v.string(), registrationHash: v.string(), registrationEvidenceDigest: v.string(),
   incidentEpochDigest: v.string(), incidentEvidenceDigest: v.string(),
@@ -69,7 +80,15 @@ export const putCandidateSet = internalMutation({
       capabilityContractId: args.candidateSet.capabilityContractId,
       capabilityContractVersion: args.candidateSet.capabilityContractVersion,
       createdAt: args.candidateSet.createdAt,
-      candidates: args.candidateSet.candidates,
+      candidates: args.candidateSet.candidates.map((item) => {
+        const { commercialRelationship: relationship, ...itemWithoutRelationship } = item
+        return {
+          ...itemWithoutRelationship,
+          ...(relationship === undefined ? {} : { commercialRelationship: {
+            ...relationship, evidenceRefs: [...relationship.evidenceRefs],
+          } }),
+        }
+      }),
       candidateSetDigest: args.candidateSet.candidateSetDigest,
     }
     const exact = source.kind === 'plan_action'
@@ -95,11 +114,18 @@ export const putCandidateSet = internalMutation({
       generation: exact.generation, capabilityContractId: exact.capabilityContractId,
       capabilityContractVersion: exact.capabilityContractVersion, createdAt: exact.createdAt, candidateSetDigest: exact.candidateSetDigest,
     })
-    for (const [position, item] of exact.candidates.entries()) await ctx.db.insert('routingKernelPreparationCandidates', {
-      preparationRequestId: exact.preparationRequestId, candidateSetDigest: exact.candidateSetDigest, position, ...item,
-      coverageDisposition: 'eligible_not_contacted', protectedDataDisposition: 'not_released',
-      providerContactDisposition: 'none', coverageReasonCode: 'eligible_not_contacted', coverageRecordedAt: exact.createdAt,
-    })
+    for (const [position, item] of exact.candidates.entries()) {
+      const { commercialRelationship: relationship, ...itemWithoutRelationship } = item
+      await ctx.db.insert('routingKernelPreparationCandidates', {
+        preparationRequestId: exact.preparationRequestId, candidateSetDigest: exact.candidateSetDigest, position,
+        ...itemWithoutRelationship,
+        ...(relationship === undefined ? {} : { commercialRelationship: {
+          ...relationship, evidenceRefs: [...relationship.evidenceRefs],
+        } }),
+        coverageDisposition: 'eligible_not_contacted', protectedDataDisposition: 'not_released',
+        providerContactDisposition: 'none', coverageReasonCode: 'eligible_not_contacted', coverageRecordedAt: exact.createdAt,
+      })
+    }
     return { kind: 'stored' as const, candidateSet: exact }
   },
 })
@@ -360,15 +386,39 @@ async function readCandidateSet(ctx: QueryCtx | MutationCtx, preparationRequestI
     preparationRequestId: row.preparationRequestId, customerRequestId: row.customerRequestId,
     generation: row.generation, capabilityContractId: row.capabilityContractId,
     capabilityContractVersion: row.capabilityContractVersion, createdAt: row.createdAt, candidateSetDigest: row.candidateSetDigest,
-    candidates: candidates.map(({ bindingId, nodeId, businessId, recipientName, presentationEvidenceDigest, capabilityContractId, capabilityContractVersion, registrationEnvironment,
-      registrationHash, registrationEvidenceDigest, incidentEpochDigest, incidentEvidenceDigest }) => ({
-      bindingId, nodeId, businessId, recipientName, presentationEvidenceDigest, capabilityContractId, capabilityContractVersion, registrationEnvironment,
-      registrationHash, registrationEvidenceDigest, incidentEpochDigest, incidentEvidenceDigest,
-    })),
+    candidates: candidates.map(({ bindingId, nodeId, businessId, recipientName, presentationEvidenceDigest, commercialRelationship: frozenCommercialRelationship, capabilityContractId, capabilityContractVersion, registrationEnvironment,
+      registrationHash, registrationEvidenceDigest, incidentEpochDigest, incidentEvidenceDigest }) => {
+      const normalizedRelationship = normalizeFrozenCommercialRelationship(frozenCommercialRelationship)
+      return {
+        bindingId, nodeId, businessId, recipientName, presentationEvidenceDigest, capabilityContractId, capabilityContractVersion, registrationEnvironment,
+        ...(normalizedRelationship === undefined ? {} : { commercialRelationship: normalizedRelationship }),
+        registrationHash, registrationEvidenceDigest, incidentEpochDigest, incidentEvidenceDigest,
+      }
+    }),
   }
   return source.kind === 'plan_action'
     ? createPreparationCandidateSet({ ...common, source, planRevisionId: source.planRevisionId, actionId: source.actionId })
     : createPreparationCandidateSet({ ...common, source })
+}
+
+function normalizeFrozenCommercialRelationship(
+  input: {
+    kind?: unknown; summary: string; payerName?: string; beneficiaryName?: string; compensationBasis?: string
+    influencesEligibility: boolean; influencesInclusion: boolean; influencesOrder: boolean; evidenceRefs: string[]
+  } | undefined,
+): FrozenCommercialRelationship | undefined {
+  if (input === undefined) return undefined
+  const kind = input.kind
+  if (kind !== 'none' && kind !== 'commission' && kind !== 'sponsorship' && kind !== 'rebate'
+    && kind !== 'ownership' && kind !== 'other') throw new Error('preparation_candidate_commercial_relationship_invalid')
+  return {
+    kind, summary: input.summary,
+    ...(input.payerName === undefined ? {} : { payerName: input.payerName }),
+    ...(input.beneficiaryName === undefined ? {} : { beneficiaryName: input.beneficiaryName }),
+    ...(input.compensationBasis === undefined ? {} : { compensationBasis: input.compensationBasis }),
+    influencesEligibility: input.influencesEligibility, influencesInclusion: input.influencesInclusion,
+    influencesOrder: input.influencesOrder, evidenceRefs: [...input.evidenceRefs],
+  }
 }
 
 function exactPreparationSource(source: {

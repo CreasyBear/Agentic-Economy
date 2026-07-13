@@ -2,12 +2,25 @@ import { canonicalAuthorityDigest } from './internal/authority-digest'
 
 type Awaitable<T> = T | Promise<T>
 
+export type FrozenCommercialRelationship = Readonly<{
+  kind: 'none' | 'commission' | 'sponsorship' | 'rebate' | 'ownership' | 'other'
+  summary: string
+  payerName?: string
+  beneficiaryName?: string
+  compensationBasis?: string
+  influencesEligibility: boolean
+  influencesInclusion: boolean
+  influencesOrder: boolean
+  evidenceRefs: readonly string[]
+}>
+
 export type PreparationCandidate = Readonly<{
   bindingId: string
   nodeId: string
   businessId: string
   recipientName: string
   presentationEvidenceDigest: string
+  commercialRelationship?: FrozenCommercialRelationship
   capabilityContractId: string
   capabilityContractVersion: string
   registrationEnvironment: string
@@ -192,8 +205,15 @@ export function createPreparationCandidateSet(input: CandidateSetInput): Prepara
   if (input.candidates.length === 0 || input.candidates.length > 64) throw new Error('preparation_candidate_set_candidates_invalid')
   const candidates = input.candidates.map((candidate) => {
     assertExactKeys('preparation_candidate', candidate, candidateKeys)
-    assertStringFields('preparation_candidate', candidate, candidateKeys)
-    return Object.freeze({ ...candidate })
+    assertStringFields('preparation_candidate', candidate, candidateStringKeys)
+    if (candidate.commercialRelationship !== undefined) assertCommercialRelationship(candidate.commercialRelationship)
+    return Object.freeze({
+      ...candidate,
+      ...(candidate.commercialRelationship === undefined ? {} : { commercialRelationship: Object.freeze({
+        ...candidate.commercialRelationship,
+        evidenceRefs: Object.freeze([...candidate.commercialRelationship.evidenceRefs]),
+      }) }),
+    })
   })
   const source = normalizePreparationSource(input)
   const common = {
@@ -492,7 +512,8 @@ function assertNonEmpty(value: string, field: string): void {
 }
 
 const candidateSetKeys = ['preparationRequestId', 'customerRequestId', 'planRevisionId', 'actionId', 'generation', 'capabilityContractId', 'capabilityContractVersion', 'createdAt', 'candidates'] as const
-const candidateKeys = ['bindingId', 'nodeId', 'businessId', 'recipientName', 'presentationEvidenceDigest', 'capabilityContractId', 'capabilityContractVersion', 'registrationEnvironment', 'registrationHash', 'registrationEvidenceDigest', 'incidentEpochDigest', 'incidentEvidenceDigest'] as const
+const candidateStringKeys = ['bindingId', 'nodeId', 'businessId', 'recipientName', 'presentationEvidenceDigest', 'capabilityContractId', 'capabilityContractVersion', 'registrationEnvironment', 'registrationHash', 'registrationEvidenceDigest', 'incidentEpochDigest', 'incidentEvidenceDigest'] as const
+const candidateKeys = [...candidateStringKeys, 'commercialRelationship'] as const
 const commandKeys = ['quoteAttemptId', 'preparationRequestId', 'candidateSetDigest', 'recipient', 'purpose', 'fieldNames', 'capabilityContractId', 'capabilityContractVersion', 'registrationHash', 'registrationEnvironment', 'registrationEvidenceDigest', 'allocationId', 'claimedAt'] as const
 const recipientKeys = ['bindingId', 'nodeId', 'businessId'] as const
 const offerKeys = ['providerOfferId', 'quoteAttemptId', 'commandDigest', 'candidateSetDigest', 'issuerBindingId', 'issuerNodeId', 'issuerBusinessId', 'capabilityContractId', 'capabilityContractVersion', 'providerOfferRef', 'expectedCost', 'maximumCost', 'expectedLatencyMs', 'executionDataFields', 'materialTerms', 'offerOutputs', 'priceComponents', 'cancellation', 'offerOutputsDigest', 'termsDigest', 'cancellationTermsDigest', 'providerEvidenceDigest', 'issuedAt', 'expiresAt'] as const
@@ -500,6 +521,32 @@ const priceKeys = ['currency', 'amountMinor'] as const
 const offerOutputKeys = ['field', 'valueType', 'value'] as const
 const priceComponentKeys = ['label', 'amountMinor'] as const
 const cancellationKeys = ['kind', 'summary'] as const
+
+function assertCommercialRelationship(input: FrozenCommercialRelationship): void {
+  assertExactKeys('preparation_candidate_commercial_relationship', input, [
+    'kind', 'summary', 'payerName', 'beneficiaryName', 'compensationBasis',
+    'influencesEligibility', 'influencesInclusion', 'influencesOrder', 'evidenceRefs',
+  ])
+  if (!['none', 'commission', 'sponsorship', 'rebate', 'ownership', 'other'].includes(input.kind)
+    || input.summary.trim().length === 0 || input.summary.length > 1_000
+    || typeof input.influencesEligibility !== 'boolean' || typeof input.influencesInclusion !== 'boolean'
+    || typeof input.influencesOrder !== 'boolean' || input.evidenceRefs.length === 0
+    || input.evidenceRefs.some((reference) => reference.trim().length === 0)) {
+    throw new Error('preparation_candidate_commercial_relationship_invalid')
+  }
+  if (input.kind === 'none') {
+    if (input.payerName !== undefined || input.beneficiaryName !== undefined || input.compensationBasis !== undefined
+      || input.influencesEligibility || input.influencesInclusion || input.influencesOrder) {
+      throw new Error('preparation_candidate_commercial_relationship_invalid')
+    }
+    return
+  }
+  if (input.payerName === undefined || input.payerName.trim().length === 0
+    || input.beneficiaryName === undefined || input.beneficiaryName.trim().length === 0
+    || input.compensationBasis === undefined || input.compensationBasis.trim().length === 0) {
+    throw new Error('preparation_candidate_commercial_relationship_invalid')
+  }
+}
 
 function validOfferOutput(output: ProviderOffer['offerOutputs'][number]): boolean {
   if (output.field.trim().length === 0) return false

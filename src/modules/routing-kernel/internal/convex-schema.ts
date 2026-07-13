@@ -808,6 +808,12 @@ export const routingKernelTables = {
   routingKernelPreparationCandidates: defineTable({
     preparationRequestId: v.string(), candidateSetDigest: v.string(), position: v.number(), bindingId: v.string(),
     nodeId: v.string(), businessId: v.string(), recipientName: v.string(), presentationEvidenceDigest: v.string(),
+    commercialRelationship: v.optional(v.object({
+      kind: literalUnion(['none', 'commission', 'sponsorship', 'rebate', 'ownership', 'other'] as const),
+      summary: v.string(), payerName: v.optional(v.string()), beneficiaryName: v.optional(v.string()),
+      compensationBasis: v.optional(v.string()), influencesEligibility: v.boolean(), influencesInclusion: v.boolean(),
+      influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
+    })),
     capabilityContractId: v.string(), capabilityContractVersion: v.string(),
     registrationEnvironment: v.string(), registrationHash: v.string(), registrationEvidenceDigest: v.string(),
     incidentEpochDigest: v.string(), incidentEvidenceDigest: v.string(),

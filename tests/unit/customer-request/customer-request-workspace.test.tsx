@@ -68,6 +68,50 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/options', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('explains an evidence-bound price recommendation without implying commitment', async () => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
+    const option = (key: string, name: string, amountMinor: number) => ({
+      optionRef: `option_${key}`, business: { name },
+      expectedCost: { currency: 'AUD', amountMinor }, maximumCost: { currency: 'AUD', amountMinor }, expectedLatencyMs: 180,
+      priceComponents: [{ label: 'Provider amount', amountMinor }], comparableOutputs: [{ label: 'Service', value: 'Registered service' }],
+      materialTerms: ['Provider term'], cancellation: { kind: 'unsupported', summary: 'No cancellation.' },
+      commercialInfluence: { status: 'none', summary: 'No registered commercial relationship.' },
+      expiresAt: 10_000, provenance: { kind: 'provider_assertion', observedAt: 1_000, validUntil: 10_000 },
+    })
+    const options = [option('one', 'Option One', 1_200), option('two', 'Option Two', 900)]
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'ready_to_compare',
+        summary: 'Find the cheapest option', nextAction: 'prepare_options', missingFields: [], options: [],
+      }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'options_ready',
+        summary: 'Find the cheapest option', nextAction: 'inspect_options', missingFields: [], options,
+        optionSet: {
+          cardinality: 'multiple', optionCount: 2,
+          ordering: {
+            kind: 'recommended', commercialInfluence: 'none', objective: 'lowest_maximum_price',
+            optionRef: 'option_two', evidenceRef: 'inference:price',
+            reasons: ['Lowest provider maximum at AUD 9.00.', 'AUD 3.00 below the next-lowest provider maximum.'],
+            tradeoffs: ['No differing registered comparison outputs were reported.'],
+          },
+          coverage: { evaluated: 2, optionsReceived: 2, unavailable: 0, pending: 0, uncertain: 0, businesses: [] },
+          options,
+        },
+      })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Find the cheapest option' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
+
+    expect(await screen.findByRole('heading', { name: 'AE recommends Option Two.' })).toBeTruthy()
+    expect(screen.getByText('Recommended for your price priority')).toBeTruthy()
+    expect(screen.getByText('AUD 3.00 below the next-lowest provider maximum.')).toBeTruthy()
+    expect(screen.getByText(/Nothing has been selected, booked, or purchased/)).toBeTruthy()
+  })
+
   it('keeps contextual clarification inside the Request conversation', async () => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })

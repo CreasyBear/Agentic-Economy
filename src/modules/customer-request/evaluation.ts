@@ -78,6 +78,11 @@ export type RequestEvaluation = Readonly<{
   factsDigest: string
   facts: Readonly<Record<string, RequestFact>>
   criteria: readonly UnderstoodCriterion[]
+  decisionPreference?: Readonly<{
+    objective: 'lowest_maximum_price'
+    basis: 'extracted_from_request'
+    evidenceRef: string
+  }>
   preparationDisclosure?: PreparationDisclosurePreview
   candidates: readonly RequestEvaluationCandidate[]
   nextRequirement?: InformationRequirement
@@ -92,6 +97,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   facts: Readonly<Record<string, RequestFact>>
   registrySnapshotDigest: string
   candidates: readonly RequestEvaluationCandidateInput[]
+  decisionPreference?: RequestEvaluation['decisionPreference']
 }>): RequestEvaluation {
   const candidates = input.candidates.map((candidate): RequestEvaluationCandidate => {
     const missingFields = Object.entries(candidate.contract.input)
@@ -124,6 +130,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     factsDigest,
     facts: input.facts,
     criteria,
+    ...(input.decisionPreference === undefined ? {} : { decisionPreference: input.decisionPreference }),
     ...(preparationDisclosure === undefined ? {} : { preparationDisclosure }),
     candidates,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
@@ -136,6 +143,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     factsDigest,
     facts: input.facts,
     criteria,
+    ...(input.decisionPreference === undefined ? {} : { decisionPreference: input.decisionPreference }),
     ...(preparationDisclosure === undefined ? {} : { preparationDisclosure }),
     candidates: Object.freeze(candidates),
     ...(nextRequirement === undefined ? {} : { nextRequirement }),

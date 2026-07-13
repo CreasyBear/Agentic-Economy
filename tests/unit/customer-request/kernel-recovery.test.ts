@@ -83,6 +83,11 @@ describe('Customer Request structured preparation recovery', () => {
     const router = createKernelCustomerRequestActionRouter(kernel, {
       resolve: async () => presentationAvailable ? [{
         bindingId: 'binding:room-a', nodeId: 'node:room-a', businessName: 'Gather Rooms',
+        commercialRelationship: {
+          kind: 'none', summary: 'No registered commercial relationship.',
+          influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+          evidenceRefs: ['registration:room-a:commercial'],
+        },
         cancellation: { kind: 'conditional', summary: 'Cancel without charge up to 24 hours before start.' },
       }] : [],
     })
@@ -149,7 +154,10 @@ describe('Customer Request structured preparation recovery', () => {
     const replay = await prepareCustomerRequestAction(command, dependencies)
 
     expect(resumed).toMatchObject({
-      kind: 'options_prepared', candidateSet: { candidates: [{ business: { name: 'Gather Rooms' } }] },
+      kind: 'options_prepared', candidateSet: { candidates: [{
+        business: { name: 'Gather Rooms' },
+        commercialInfluence: { status: 'none', summary: 'No registered commercial relationship.' },
+      }] },
     })
     expect(replay).toEqual(resumed)
     expect(providerEffects).toBe(1)

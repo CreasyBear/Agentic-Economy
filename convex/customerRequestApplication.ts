@@ -92,6 +92,11 @@ const customerOptionSet = v.object({
   ordering: v.union(
     v.object({ kind: v.literal('not_applicable'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')) }),
     v.object({ kind: v.literal('unranked'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')) }),
+    v.object({
+      kind: v.literal('recommended'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed')),
+      objective: v.literal('lowest_maximum_price'), optionRef: v.string(), evidenceRef: v.string(),
+      reasons: v.array(v.string()), tradeoffs: v.array(v.string()),
+    }),
   ),
   coverage: v.object({
     evaluated: v.number(), optionsReceived: v.number(), unavailable: v.number(), pending: v.number(), uncertain: v.number(),
@@ -168,6 +173,7 @@ type StoredEvaluation = Readonly<{
     requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
     facts?: SnapshotValue['facts']
     criteria?: RequestEvaluation['criteria']
+    decisionPreference?: RequestEvaluation['decisionPreference']
     preparationDisclosure?: RequestEvaluation['preparationDisclosure']
     posture: 'progress_available' | 'needs_information' | 'unsupported'
     nextRequirement?:
@@ -549,18 +555,24 @@ export const compare = action({
         },
       )
       if (result.kind === 'candidate_set') {
+        const candidateSet: PreparedRouteCandidateSet = {
+          ...result.candidateSet,
+          ...(evaluated.evaluation.decisionPreference === undefined ? {} : {
+            decisionPreference: evaluated.evaluation.decisionPreference,
+          }),
+        }
         await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
           preparation: {
             preparationKey, requestId: args.requestRef, requestRevision: args.revision,
             evaluationId: evaluated.evaluation.evaluationId,
             evaluationDigest: evaluated.evaluation.evaluationDigest,
-            status: 'options_prepared', candidateSet: writableCandidateSet(result.candidateSet), updatedAt: Date.now(),
+            status: 'options_prepared', candidateSet: writableCandidateSet(candidateSet), updatedAt: Date.now(),
           },
         })
         return writableView(projectOptionsReady({
           requestRef: args.requestRef, revision: args.revision,
           summary: evaluated.snapshot.intent, criteria: customerCriteria(evaluated.evaluation.criteria),
-          candidateSet: result.candidateSet,
+          candidateSet,
         }))
       }
       if (result.kind === 'preparation_pending') {
@@ -905,6 +917,7 @@ function resolvePlanInput(
 function writableCandidateSet(candidateSet: PreparedRouteCandidateSet) {
   return {
     ...candidateSet,
+    ...(candidateSet.decisionPreference === undefined ? {} : { decisionPreference: { ...candidateSet.decisionPreference } }),
     candidates: candidateSet.candidates.map((candidate) => ({
       ...candidate, business: { ...candidate.business }, expectedCost: { ...candidate.expectedCost }, maximumCost: { ...candidate.maximumCost },
       priceComponents: candidate.priceComponents.map((component) => ({ ...component })),
@@ -931,7 +944,9 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
     options: view.options.map(writableCustomerOption),
     ...(optionSet === undefined ? {} : { optionSet: {
       ...optionSet,
-      ordering: { ...optionSet.ordering },
+      ordering: optionSet.ordering.kind === 'recommended'
+        ? { ...optionSet.ordering, reasons: [...optionSet.ordering.reasons], tradeoffs: [...optionSet.ordering.tradeoffs] }
+        : { ...optionSet.ordering },
       coverage: {
         ...optionSet.coverage,
         businesses: optionSet.coverage.businesses.map((business) => ({ ...business })),
@@ -947,6 +962,7 @@ function writableCustomerOption(option: CustomerRequestView['options'][number]) 
     priceComponents: option.priceComponents.map((component) => ({ ...component })),
     comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
     materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation }, provenance: { ...option.provenance },
+    commercialInfluence: { ...option.commercialInfluence },
   }
 }
 
@@ -958,6 +974,9 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
     factsDigest: input.evaluation.factsDigest,
     facts: input.evaluation.facts ?? input.snapshot.facts,
     criteria: input.evaluation.criteria ?? [],
+    ...(input.evaluation.decisionPreference === undefined ? {} : {
+      decisionPreference: input.evaluation.decisionPreference,
+    }),
     ...(input.evaluation.preparationDisclosure === undefined ? {} : {
       preparationDisclosure: input.evaluation.preparationDisclosure,
     }),
@@ -1041,6 +1060,7 @@ async function evaluateAndPersistSnapshot(
         requestId: snapshot.requestId, requestRevision: snapshot.revision,
         intent: snapshot.intent, facts: Object.freeze({ ...proposal.facts, ...snapshot.facts }),
         registrySnapshotDigest,
+        ...(proposal.decisionPreference === undefined ? {} : { decisionPreference: proposal.decisionPreference }),
         candidates: discoverRequestEvaluationCandidates({
           candidateCapabilityContractIds: proposal.candidateCapabilityContractIds, bindings,
           resolveContract: (capabilityContractId) => registry.get(capabilityContractId),
@@ -1055,6 +1075,9 @@ async function evaluateAndPersistSnapshot(
         registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
         facts: evaluation.facts,
         criteria: evaluation.criteria.map((criterion) => ({ ...criterion })),
+        ...(evaluation.decisionPreference === undefined ? {} : {
+          decisionPreference: { ...evaluation.decisionPreference },
+        }),
         ...(evaluation.preparationDisclosure === undefined ? {} : {
           preparationDisclosure: {
             ...evaluation.preparationDisclosure,

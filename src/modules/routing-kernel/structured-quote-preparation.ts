@@ -8,6 +8,7 @@ import {
   type ProviderOffer,
   type PreparationCandidateCoverage,
   type PreparationCandidate,
+  type FrozenCommercialRelationship,
   type PreparationSource,
   type QuotePreparationAttempt,
   type StructuredQuotePreparationStore,
@@ -49,6 +50,7 @@ export type StructuredPreparationInput = Readonly<{
   resolveCandidatePresentation?: (input: Readonly<{ bindingId: string; nodeId: string }>) => Promise<Readonly<{
     recipientName: string
     presentationEvidenceDigest: string
+    commercialRelationship?: FrozenCommercialRelationship
   }> | undefined>
   releaseForCandidate: (input: Readonly<{
     releaseKey: string
@@ -128,6 +130,9 @@ export function createStructuredQuotePreparationOperation(input: Readonly<{
         recipientName: presentation?.recipientName ?? adapter.binding.nodeId,
         presentationEvidenceDigest: presentation?.presentationEvidenceDigest
           ?? canonicalAuthorityDigest({ bindingId: adapter.binding.bindingId, nodeId: adapter.binding.nodeId }),
+        ...(presentation?.commercialRelationship === undefined ? {} : {
+          commercialRelationship: presentation.commercialRelationship,
+        }),
         capabilityContractId: request.capabilityContractId, capabilityContractVersion: request.capabilityContractVersion,
         registrationEnvironment: adapter.binding.environment, registrationHash: adapter.binding.registrationHash,
         registrationEvidenceDigest: registrationEvidenceDigest(adapter), incidentEpochDigest, incidentEvidenceDigest: incidentEpochDigest,

@@ -142,6 +142,7 @@ describe('production CustomerRequest read model', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({
         candidateCapabilityContractIds: ['sandbox.option.quote:v1'], facts: [],
+        decisionPreference: 'lowest_maximum_price',
       }) } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
@@ -156,7 +157,7 @@ describe('production CustomerRequest read model', () => {
     }
     const body = {
       idempotencyKey: 'submit:cold:1', requestRef: 'request:cold:agent:1', agentRef: 'ignored-by-admission',
-      request: 'Compare the connected sandbox options.',
+      request: 'Find the cheapest connected sandbox option.',
     }
     const first = await handleAgentCustomerRequestPost(agentRequest(body), {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now,
@@ -193,6 +194,11 @@ describe('production CustomerRequest read model', () => {
     expect(durable.plans).toEqual([])
     const evaluation = durable.evaluations[0]
     if (evaluation === undefined) throw new Error('evaluation_missing')
+    expect(evaluation.decisionPreference).toMatchObject({
+      objective: 'lowest_maximum_price', basis: 'extracted_from_request', evidenceRef: expect.stringMatching(/^inference:/),
+    })
+    const decisionPreference = evaluation.decisionPreference
+    if (decisionPreference === undefined) throw new Error('decision_preference_missing')
     await backend.mutation(internal.customerRequests.putRequestEvaluationPreparation, {
       preparation: {
         preparationKey: 'evaluation-options:test:1', requestId: 'request:cold:agent:1', requestRevision: 1,
@@ -200,13 +206,23 @@ describe('production CustomerRequest read model', () => {
         status: 'options_prepared', updatedAt: Date.now(),
         candidateSet: {
           inspectionRef: 'internal:evaluation-options:1', attempts: [],
+          decisionPreference,
           candidates: [{
             optionRef: 'option:public:evaluation:1', business: { name: 'Sandbox Option One' },
             expectedCost: { currency: 'AUD', amountMinor: 1_200 }, maximumCost: { currency: 'AUD', amountMinor: 1_200 },
             expectedLatencyMs: 120, priceComponents: [{ label: 'Sandbox amount', amountMinor: 1_200 }],
             comparableOutputs: [{ label: 'Option', value: 'Sandbox Option One' }],
             materialTerms: ['Verification only'], cancellation: { kind: 'unsupported', summary: 'No effect exists.' },
+            commercialInfluence: { status: 'none', summary: 'No registered commercial relationship.' },
             expiresAt: Date.now() + 60_000, inspectionRef: 'internal:evidence:evaluation:1',
+          }, {
+            optionRef: 'option:public:evaluation:2', business: { name: 'Sandbox Option Two' },
+            expectedCost: { currency: 'AUD', amountMinor: 900 }, maximumCost: { currency: 'AUD', amountMinor: 900 },
+            expectedLatencyMs: 140, priceComponents: [{ label: 'Sandbox amount', amountMinor: 900 }],
+            comparableOutputs: [{ label: 'Option', value: 'Sandbox Option Two' }],
+            materialTerms: ['Verification only'], cancellation: { kind: 'unsupported', summary: 'No effect exists.' },
+            commercialInfluence: { status: 'none', summary: 'No registered commercial relationship.' },
+            expiresAt: Date.now() + 60_000, inspectionRef: 'internal:evidence:evaluation:2',
           }],
         },
       },
@@ -216,10 +232,14 @@ describe('production CustomerRequest read model', () => {
     })
     await expect(options.json()).resolves.toMatchObject({
       state: 'options_ready', nextAction: 'inspect_options',
-      options: [{ optionRef: 'option:public:evaluation:1', business: { name: 'Sandbox Option One' } }],
+      options: [{ optionRef: 'option:public:evaluation:1' }, { optionRef: 'option:public:evaluation:2' }],
       optionSet: {
-        cardinality: 'single', optionCount: 1,
-        ordering: { kind: 'not_applicable', commercialInfluence: 'unknown' },
+        cardinality: 'multiple', optionCount: 2,
+        ordering: {
+          kind: 'recommended', commercialInfluence: 'none', objective: 'lowest_maximum_price',
+          optionRef: 'option:public:evaluation:2', evidenceRef: decisionPreference.evidenceRef,
+          reasons: ['Lowest provider maximum at AUD 9.00.', 'AUD 3.00 below the next-lowest provider maximum.'],
+        },
       },
     })
   })

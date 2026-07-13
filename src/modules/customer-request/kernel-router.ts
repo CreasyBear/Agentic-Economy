@@ -86,6 +86,9 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
       return {
         recipientName: presentation.businessName,
         presentationEvidenceDigest: customerPresentationDigest(presentation),
+        ...(presentation.commercialRelationship === undefined ? {} : {
+          commercialRelationship: presentation.commercialRelationship,
+        }),
       }
     },
     releaseForCandidate: async (release) => {
@@ -127,7 +130,7 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
   if (prepared.kind === 'preparation_pending') return {
     kind: 'preparation_pending', inspectionRef: customerReference('options', prepared.candidateSetDigest),
   }
-  return { kind: 'candidate_set', candidateSet: await projectStructuredCandidates(prepared, input.contract, directory) }
+  return { kind: 'candidate_set', candidateSet: await projectStructuredCandidates(prepared, input.contract) }
 }
 
 export function createKernelCustomerRequestActionRouter(
@@ -184,6 +187,9 @@ export function createKernelCustomerRequestActionRouter(
             return {
               recipientName: presentation.businessName,
               presentationEvidenceDigest: customerPresentationDigest(presentation),
+              ...(presentation.commercialRelationship === undefined ? {} : {
+                commercialRelationship: presentation.commercialRelationship,
+              }),
             }
           },
           ...(input.reconcilePreparationData === undefined ? {} : {
@@ -233,7 +239,7 @@ export function createKernelCustomerRequestActionRouter(
         }
         return {
           kind: 'candidate_set' as const,
-          candidateSet: await projectStructuredCandidates(prepared, input.contract, directory),
+          candidateSet: await projectStructuredCandidates(prepared, input.contract),
         }
       }
       const routed = await kernel.operations.route({
@@ -269,10 +275,8 @@ function customerPresentationDigest(presentation: CustomerRequestBindingPresenta
 async function projectStructuredCandidates(
   prepared: Extract<Awaited<ReturnType<NeutralRoutingKernel['operations']['prepareStructuredQuotes']>>, { kind: 'candidates_prepared' }>,
   contract: Parameters<CustomerRequestActionRouter['route']>[0]['contract'],
-  directory: CustomerRequestBindingPresentationDirectory,
 ): Promise<PreparedRouteCandidateSet> {
-  const presentations = new Map((await directory.resolve(prepared.frozenCandidates.map((candidate) => candidate.bindingId)))
-    .map((presentation) => [presentation.bindingId, presentation]))
+  const presentations = new Map(prepared.frozenCandidates.map((candidate) => [candidate.bindingId, candidate]))
   return {
     inspectionRef: customerReference('options', prepared.candidateSetDigest),
     candidates: prepared.candidates.map((candidate) => {
@@ -280,7 +284,7 @@ async function projectStructuredCandidates(
       if (presentation === undefined) throw new Error('prepared_route_business_identity_missing')
       return {
         optionRef: customerReference('option', candidate.offer.offerDigest),
-        business: { name: presentation.businessName },
+        business: { name: presentation.recipientName },
         expectedCost: candidate.expectedCost,
         maximumCost: candidate.maximumCost,
         expectedLatencyMs: candidate.expectedLatencyMs,
@@ -297,7 +301,7 @@ async function projectStructuredCandidates(
       }
     }),
     attempts: prepared.coverage.map((item) => ({
-      business: { name: presentations.get(item.bindingId)?.businessName ?? 'Previously connected business' },
+      business: { name: presentations.get(item.bindingId)?.recipientName ?? 'Previously connected business' },
       status: customerAttemptStatus(item.disposition),
       explanation: customerCoverageExplanation(item.disposition),
     })),

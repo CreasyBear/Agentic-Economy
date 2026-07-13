@@ -99,6 +99,9 @@ export const requestEvaluationValue = v.object({
   evaluationId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
   factsDigest: v.string(), facts: v.optional(v.record(v.string(), requestFact)),
   criteria: v.optional(v.array(understoodCriterionValue)),
+  decisionPreference: v.optional(v.object({
+    objective: v.literal('lowest_maximum_price'), basis: v.literal('extracted_from_request'), evidenceRef: v.string(),
+  })),
   preparationDisclosure: v.optional(preparationDisclosurePreviewValue), posture: v.union(
     v.literal('progress_available'), v.literal('needs_information'), v.literal('unsupported'),
   ),
@@ -179,6 +182,9 @@ export const preparedActionValue = v.object({
 
 export const preparedRouteCandidateSetValue = v.object({
   inspectionRef: v.string(),
+  decisionPreference: v.optional(v.object({
+    objective: v.literal('lowest_maximum_price'), basis: v.literal('extracted_from_request'), evidenceRef: v.string(),
+  })),
   candidates: v.array(v.object({
     optionRef: v.string(), business: v.object({ name: v.string() }),
     expectedCost: money, maximumCost: money, expectedLatencyMs: v.number(),

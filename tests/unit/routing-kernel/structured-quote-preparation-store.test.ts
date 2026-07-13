@@ -164,6 +164,17 @@ describe('structured quote preparation store', () => {
       .toThrow('preparation_candidate_set_unexpected_field:customerData')
     expect(() => createQuotePreparationCommand({ ...commandFixture(), fieldNames: ['destination.postcode', { value: '6000' }] } as never))
       .toThrow('quote_preparation_command_field_name_invalid')
+    const { candidateSetDigest: _digest, ...set } = candidateSetFixture()
+    expect(() => createPreparationCandidateSet({
+      ...set,
+      candidates: [{
+        ...candidate,
+        commercialRelationship: {
+          kind: 'commission', summary: 'A fee may be paid.', influencesEligibility: false,
+          influencesInclusion: false, influencesOrder: false, evidenceRefs: ['registration:commercial'],
+        },
+      }],
+    } as never)).toThrow('preparation_candidate_commercial_relationship_invalid')
   })
 
   it('resolves only a current exact issuer-bound offer affinity', async () => {

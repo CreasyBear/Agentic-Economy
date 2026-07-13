@@ -31,6 +31,11 @@ export type CustomerRequestCapabilityProposal = Readonly<{
   kind: 'capability_candidates'
   candidateCapabilityContractIds: readonly string[]
   facts: Readonly<Record<string, RequestFact>>
+  decisionPreference?: Readonly<{
+    objective: 'lowest_maximum_price'
+    basis: 'extracted_from_request'
+    evidenceRef: string
+  }>
 }>
 export type CustomerRequestIntentDirectionProposal = Readonly<{
   kind: 'needs_intent_direction'
@@ -57,6 +62,7 @@ const capabilityProposalSchema = z.object({
   kind: z.literal('capability_candidates').optional(),
   candidateCapabilityContractIds: z.array(identifier).max(64),
   facts: z.array(z.object({ capabilityContractId: identifier, field: identifier, value: literal }).strict()).max(64),
+  decisionPreference: z.literal('lowest_maximum_price').optional(),
 }).strict()
 const intentDirectionProposalSchema = z.object({
   kind: z.literal('needs_intent_direction'),
@@ -70,6 +76,7 @@ const SYSTEM_INSTRUCTION = [
   'Select every capability that can materially serve the request, using only exact capabilityContractId values supplied in capabilities.',
   'Extract only facts explicitly stated by the customer, binding each fact to the exact selected capabilityContractId and input field it describes.',
   'Do not infer missing values, preferences, budgets, identities, providers, prices, permissions, commitments, or outcomes.',
+  'Set decisionPreference to "lowest_maximum_price" only when the customer explicitly asks to prioritize the cheapest, lowest-price, or lowest-maximum-price option; otherwise omit it.',
   'Do not repeat facts already present in explicitFacts.',
   'Do not construct steps, calls, routes, approvals, or execution instructions.',
   'When the request is a meaningful place, destination, or broad context but does not yet say what operation or service is wanted, return exactly {"kind":"needs_intent_direction","prompt":"one plain-language question that asks what the customer wants there"}.',
@@ -122,6 +129,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
             kind: 'capability_candidates',
             candidateCapabilityContractIds: parsed.data.candidateCapabilityContractIds,
             facts: parsed.data.facts,
+            ...(parsed.data.decisionPreference === undefined ? {} : { decisionPreference: parsed.data.decisionPreference }),
           },
         })
 
@@ -161,6 +169,14 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           kind: 'capability_candidates' as const,
           candidateCapabilityContractIds: Object.freeze(selectedIds),
           facts: Object.freeze(facts),
+          ...(parsed.data.decisionPreference === undefined ? {} : { decisionPreference: Object.freeze({
+            objective: parsed.data.decisionPreference,
+            basis: 'extracted_from_request' as const,
+            evidenceRef: `inference:${canonicalDigest({
+              interpreterId: input.interpreterId, customerJob: payload.customerJob,
+              objective: parsed.data.decisionPreference, proposalDigest,
+            })}`,
+          }) }),
         })
       } finally {
         if (timeout !== undefined) clearTimeout(timeout)
