@@ -72,6 +72,33 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('distinguishes revising the same Request from starting a new one', async () => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
+    const projection = {
+      kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'unsupported',
+      summary: 'No registered capability', nextAction: 'revise_request', missingFields: [], options: [],
+    } as const
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(projection))
+      .mockResolvedValueOnce(Response.json({ ...projection, revision: 2, state: 'ready_to_compare', nextAction: 'prepare_options' }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Fremantle' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    await screen.findByRole('button', { name: 'Edit this Request' })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit this Request' }))
+    await screen.findByText('Editing revision 1 of this Request.')
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Lunch in Fremantle' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    await screen.findByRole('button', { name: 'Show available options' })
+    const secondBody = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))
+    expect(secondBody).toMatchObject({ requestRef: 'request:uuid-1', expectedRevision: 1, request: 'Lunch in Fremantle' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new Request' }))
+    await waitFor(() => expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value).toBe(''))
+  })
+
   it('shows authentication as a customer action rather than a protocol error', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'missing_auth' }, { status: 401 })))

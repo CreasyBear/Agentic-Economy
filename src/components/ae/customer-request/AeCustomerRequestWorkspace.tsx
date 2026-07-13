@@ -19,6 +19,7 @@ export function AeCustomerRequestWorkspace() {
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([])
+  const [editingRevision, setEditingRevision] = useState<number | undefined>()
   const [requestIdentity, setRequestIdentity] = useState<Readonly<{ requestRef: string; agentRef: string }> | undefined>()
 
   async function submit() {
@@ -30,7 +31,8 @@ export function AeCustomerRequestWorkspace() {
       const response = await fetch('/api/requests', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          idempotencyKey: `submit:${identity.requestRef}`, requestRef: identity.requestRef, agentRef: identity.agentRef,
+          idempotencyKey: `submit:${identity.requestRef}:${editingRevision ?? 0}`, requestRef: identity.requestRef, agentRef: identity.agentRef,
+          ...(editingRevision === undefined ? {} : { expectedRevision: editingRevision }),
           request: need.trim(), knownFacts: {}, routing: { network: 'ae:public' },
         }),
       })
@@ -43,10 +45,25 @@ export function AeCustomerRequestWorkspace() {
         { speaker: 'customer', text: need.trim() },
         ...(result.clarification?.prompt ? [{ speaker: 'ae' as const, text: result.clarification.prompt }] : []),
       ])
+      setEditingRevision(undefined)
       setState({ kind: 'request', projection: result })
     } catch {
       setState({ kind: 'error', message: 'AE could not be reached. Your request was not submitted.', authenticationRequired: false })
     }
+  }
+
+  function edit(projection: CustomerRequestView) {
+    setEditingRevision(projection.revision)
+    setState({ kind: 'idle' })
+  }
+
+  function restart() {
+    setNeed('')
+    setAnswer('')
+    setTurns([])
+    setEditingRevision(undefined)
+    setRequestIdentity(undefined)
+    setState({ kind: 'idle' })
   }
 
   async function continueRequest(projection: CustomerRequestView) {
@@ -111,26 +128,28 @@ export function AeCustomerRequestWorkspace() {
           <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Explore</button>
         </form>
         <Text type="supporting" color="secondary" className="text-center">No budget or full specification required to start.</Text>
-        {state.kind === 'error' ? <RequestResult state={state} compare={compare} continueRequest={continueRequest} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
-      </section> : <RequestResult state={state} compare={compare} continueRequest={continueRequest} answer={answer} setAnswer={setAnswer} turns={turns} />}
+        {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
+        {state.kind === 'error' ? <RequestResult state={state} compare={compare} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
+      </section> : <RequestResult state={state} compare={compare} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
     </main>
   )
 }
 
-function RequestResult({ state, compare, continueRequest, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
+function RequestResult({ state, compare, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
-  if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} />
-  if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} />
-  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} />{state.projection.clarification ? <Clarification projection={state.projection} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a supported decision from the registered businesses for this request yet.</Text>}</div></Card>}</section>
+  if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
+  if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
+  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} />{state.projection.clarification ? <Clarification projection={state.projection} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a supported decision from the registered businesses for this request yet.</Text>}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
   if (state.kind === 'submitting' || state.kind === 'comparing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : 'Comparing available options…'}</Heading><Text color="secondary" className="mt-2">No purchase or booking occurs during this step.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
 }
 
-function OptionsCard({ projection, turns }: { projection: CustomerRequestView; turns: readonly ConversationTurn[] }) {
-  return <section className="grid gap-6" aria-live="polite"><Conversation turns={turns} /><div className="grid gap-2"><Text className="text-sm font-semibold text-accent">Available options</Text><Heading level={2} className="text-3xl">Compare what matters</Heading><Text color="secondary">Prepared from eligible registered businesses for this Request. Nothing has been selected, booked, or purchased.</Text></div><div className="grid gap-4 md:grid-cols-2">{projection.options.length === 0 ? <Card padding={5}><Text color="secondary">No comparable options were returned.</Text></Card> : projection.options.map((candidate) => <Card key={candidate.optionRef} padding={5}><article className="grid gap-3"><Heading level={3}>{candidate.business.name}</Heading><Text type="large" weight="semibold">{formatMoney(candidate.expectedCost.currency, candidate.expectedCost.amountMinor)}</Text>{candidate.comparableOutputs.map((output) => <Text key={output.label} color="secondary"><strong>{output.label}:</strong> {String(output.value)}</Text>)}{candidate.materialTerms.map((term) => <Text key={term} color="secondary">{term}</Text>)}<Text type="supporting" color="secondary">Cancellation: {candidate.cancellation.summary}</Text></article></Card>)}</div></section>
+function OptionsCard({ projection, turns, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; edit: () => void; restart: () => void }) {
+  return <section className="grid gap-6" aria-live="polite"><Conversation turns={turns} /><div className="grid gap-2"><Text className="text-sm font-semibold text-accent">Available options</Text><Heading level={2} className="text-3xl">Compare what matters</Heading><Text color="secondary">Prepared from eligible registered businesses for this Request. Nothing has been selected, booked, or purchased.</Text></div><div className="grid gap-4 md:grid-cols-2">{projection.options.length === 0 ? <Card padding={5}><Text color="secondary">No comparable options were returned.</Text></Card> : projection.options.map((candidate) => <Card key={candidate.optionRef} padding={5}><article className="grid gap-3"><Heading level={3}>{candidate.business.name}</Heading><Text type="large" weight="semibold">{formatMoney(candidate.expectedCost.currency, candidate.expectedCost.amountMinor)}</Text>{candidate.comparableOutputs.map((output) => <Text key={output.label} color="secondary"><strong>{output.label}:</strong> {String(output.value)}</Text>)}{candidate.materialTerms.map((term) => <Text key={term} color="secondary">{term}</Text>)}<Text type="supporting" color="secondary">Cancellation: {candidate.cancellation.summary}</Text></article></Card>)}</div><RecoveryActions edit={edit} restart={restart} /></section>
 }
 
-function NoOptions({ projection, turns }: { projection: CustomerRequestView; turns: readonly ConversationTurn[] }) { return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">No connected options</Text><Heading level={2}>Nothing eligible returned an option.</Heading><Text color="secondary">Your Request is preserved. You can change what matters, try again later, or stop; AE will not invent availability.</Text><Text type="supporting" color="secondary">Request revision {projection.revision}</Text></div></Card></section> }
+function NoOptions({ projection, turns, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; edit: () => void; restart: () => void }) { return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">No connected options</Text><Heading level={2}>Nothing eligible returned an option.</Heading><Text color="secondary">Your Request is preserved. You can change what matters, try again later, or stop; AE will not invent availability.</Text><Text type="supporting" color="secondary">Request revision {projection.revision}</Text><RecoveryActions edit={edit} restart={restart} /></div></Card></section> }
+function RecoveryActions({ edit, restart }: { edit: () => void; restart: () => void }) { return <div className="flex flex-wrap gap-3 border-t border-border pt-4"><Button label="Edit this Request" variant="secondary" clickAction={edit} /><Button label="Start a new Request" variant="ghost" clickAction={restart} /></div> }
 
 function StartExamples() { return <div className="grid gap-2 border-t border-border pt-6 sm:grid-cols-4"><Example label="Place" value="Fremantle" /><Example label="Business type" value="Electrician" /><Example label="Situation" value="A quiet dinner with my parents" /><Example label="Detailed" value="Dog-friendly stay near the beach" /></div> }
 function Example({ label, value }: { label: string; value: string }) { return <div className="rounded-md bg-surface p-4"><Text type="supporting" weight="semibold">{label}</Text><Text color="secondary" className="mt-1">{value}</Text></div> }
