@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import { nitro } from 'nitro/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim()
 const sentryOrg = process.env.SENTRY_ORG?.trim()
@@ -13,6 +13,22 @@ const sentryRelease =
   process.env.VERCEL_GIT_COMMIT_SHA?.trim() ??
   process.env.GITHUB_SHA?.trim()
 const sentryPluginEnabled = sentryAuthToken !== undefined && sentryOrg !== undefined && sentryProject !== undefined
+
+function localDiscoveryPathCompatibility(): Plugin {
+  return {
+    name: 'ae-local-discovery-path-compatibility',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((request, _response, next) => {
+        const url = request.url
+        if (url === '/SKILL.md' || url?.startsWith('/SKILL.md?') === true) {
+          request.url = url.replace('/SKILL.md', '/SKILL.md/')
+        }
+        next()
+      })
+    },
+  }
+}
 
 export default defineConfig({
   server: {
@@ -56,6 +72,7 @@ export default defineConfig({
     sourcemap: sentryPluginEnabled,
   },
   plugins: [
+    localDiscoveryPathCompatibility(),
     tanstackStart(),
     nitro({
       // Scope 1 pins Vercel Node serverless, not edge: existing webhook routes
