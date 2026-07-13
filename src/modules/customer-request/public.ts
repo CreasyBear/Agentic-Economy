@@ -95,3 +95,15 @@ export {
   type RecordProviderOutcomeV2Result,
   type ReleaseProviderInvocationV2Result,
 } from './provider-execution-v2'
+export {
+  actionAttemptResolutionV2Digest,
+  reconcileProviderOutcomeV2,
+  reconciliationObservationV2Digest,
+  type ActionAttemptResolutionV2,
+  type ProviderIdentityV2,
+  type ProviderReconciliationEvidenceV2,
+  type ProviderReconciliationObservationV2,
+  type ProviderReconciliationReportV2,
+  type ProviderReconciliationUnknownReasonV2,
+  type ReconcileProviderOutcomeV2Result,
+} from './provider-reconciliation-v2'

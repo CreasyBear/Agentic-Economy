@@ -327,7 +327,7 @@ export const providerInvocationEnvelopeV2Value = v.object({
   providerIdempotencyKey: v.string(), lineage: providerExecutionLineageV2Value, lineageDigest: v.string(),
   providerReleaseGrantRef: v.string(), providerReleaseGrantDigest: v.string(),
   disclosureGrantRef: v.string(), disclosureGrantDigest: v.string(),
-  input: v.object({ schemaIdentity: v.string(), value: v.any(), valueDigest: v.string() }),
+  input: v.object({ schemaIdentity: v.string(), value: v.any(), valueDigest: v.string() }), // runtime-validated JsonValue boundary
   output: v.object({ schemaIdentity: v.string() }),
   spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
   dataScope: v.array(approvalGrantDataUseV2Value), dataScopeDigest: v.string(),
@@ -357,13 +357,13 @@ export const providerResultEchoV2Value = v.object({
   authorityLineageDigest: v.string(), providerIdempotencyKey: v.string(),
 })
 export const providerResultV2Value = v.object({
-  format: v.literal('ae.provider-result:v2'), echo: providerResultEchoV2Value, output: v.any(),
+  format: v.literal('ae.provider-result:v2'), echo: providerResultEchoV2Value, output: v.any(), // runtime-validated JsonValue boundary
 })
 export const providerOutcomeV2Value = v.union(
   v.object({
     format: v.literal('ae.provider-outcome:v2'), outcomeRef: v.string(), outcomeDigest: v.string(),
     state: v.literal('succeeded'), envelopeRef: v.string(), envelopeDigest: v.string(), responseDigest: v.string(),
-    output: v.any(), outputDigest: v.string(), lineage: providerExecutionLineageV2Value, lineageDigest: v.string(),
+    output: v.any(), outputDigest: v.string(), lineage: providerExecutionLineageV2Value, lineageDigest: v.string(), // runtime-validated JsonValue boundary
     recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
     observedAt: v.number(),
   }),
@@ -402,6 +402,46 @@ export const providerProtocolEvidenceV2Value = v.object({
   providerResult: v.optional(providerResultV2Value),
   observedEcho: v.optional(providerResultEchoV2Value),
   lineage: providerExecutionLineageV2Value, lineageDigest: v.string(), recordedAt: v.number(),
+})
+export const providerReconciliationEvidenceV2Value = v.object({
+  evidenceId: v.string(), purpose: v.union(v.literal('completion'), v.literal('recovery')),
+  outputPointer: v.string(), schemaIdentity: v.string(), value: v.any(), valueDigest: v.string(), // runtime-validated JsonValue boundary
+})
+const providerReconciliationTerminalV2Value = v.object({
+  providerResult: providerResultV2Value, output: v.any(), outputDigest: v.string(), // runtime-validated JsonValue boundary
+  evidence: v.array(providerReconciliationEvidenceV2Value),
+})
+export const providerReconciliationUnknownReasonV2Value = v.union(
+  v.literal('provider_pending'), v.literal('evidence_invalid'),
+  v.literal('provider_identity_mismatch'), v.literal('provider_echo_mismatch'),
+  v.literal('provider_output_invalid'), v.literal('terminal_evidence_missing'),
+)
+export const providerReconciliationObservationV2Value = v.object({
+  format: v.literal('ae.provider-reconciliation-observation:v2'),
+  observationRef: v.string(), observationDigest: v.string(),
+  state: v.union(v.literal('unknown_external_state'), v.literal('succeeded'), v.literal('failed')),
+  reason: v.optional(providerReconciliationUnknownReasonV2Value),
+  originOutcomeRef: v.string(), originOutcomeDigest: v.string(),
+  envelopeRef: v.string(), envelopeDigest: v.string(), providerEvidenceRef: v.optional(v.string()),
+  providerEvidenceIdentityDigest: v.optional(v.string()),
+  report: v.any(), reportDigest: v.string(), lineage: providerExecutionLineageV2Value, // runtime-validated JsonValue boundary
+  lineageDigest: v.string(), terminal: v.optional(providerReconciliationTerminalV2Value),
+  recovery: v.object({
+    kind: v.union(v.literal('reconcile_required'), v.literal('terminal')),
+    automaticRetry: v.literal(false),
+  }),
+  observedAt: v.number(),
+})
+export const actionAttemptResolutionV2Value = v.object({
+  format: v.literal('ae.action-attempt-resolution:v2'),
+  resolutionRef: v.string(), resolutionDigest: v.string(),
+  state: v.union(v.literal('unknown_external_state'), v.literal('succeeded'), v.literal('failed')),
+  actionAttemptRef: v.string(), actionAttemptDigest: v.string(),
+  originOutcomeRef: v.string(), originOutcomeDigest: v.string(),
+  latestObservationRef: v.string(), latestObservationDigest: v.string(),
+  lineage: providerExecutionLineageV2Value, lineageDigest: v.string(),
+  terminal: v.optional(providerReconciliationTerminalV2Value),
+  automaticRetry: v.literal(false), updatedAt: v.number(),
 })
 export const preparedActionRecoveryReasonV2Value = v.union(
   v.literal('options_pending'), v.literal('disclosure_not_released'), v.literal('disclosure_uncertain'),
@@ -764,6 +804,32 @@ export const customerRequestV2Tables = {
   })
     .index('by_protocolEvidenceRef', ['protocolEvidenceRef'])
     .index('by_outcomeRef', ['outcomeRef']),
+
+  customerRequestV2ProviderReconciliationObservations: defineTable({
+    observationRef: v.string(), observationDigest: v.string(), actionAttemptRef: v.string(),
+    originOutcomeRef: v.string(), providerEvidenceRef: v.optional(v.string()),
+    providerEvidenceIdentityDigest: v.optional(v.string()), authorityLineageDigest: v.string(),
+    observation: providerReconciliationObservationV2Value, recordedAt: v.number(),
+  })
+    .index('by_observationRef', ['observationRef'])
+    .index('by_providerEvidenceIdentityDigest', ['providerEvidenceIdentityDigest'])
+    .index('by_actionAttemptRef_and_recordedAt', ['actionAttemptRef', 'recordedAt']),
+
+  customerRequestV2ActionAttemptResolutions: defineTable({
+    resolutionRef: v.string(), resolutionDigest: v.string(), actionAttemptRef: v.string(),
+    requestId: v.string(), requestRevision: v.number(), actionId: v.string(), principalId: v.string(),
+    state: v.union(v.literal('unknown_external_state'), v.literal('succeeded'), v.literal('failed')),
+    authorityLineageDigest: v.string(), resolution: actionAttemptResolutionV2Value, updatedAt: v.number(),
+  })
+    .index('by_resolutionRef', ['resolutionRef'])
+    .index('by_actionAttemptRef', ['actionAttemptRef'])
+    .index('by_requestId_and_requestRevision_and_actionId', ['requestId', 'requestRevision', 'actionId']),
+
+  customerRequestV2ProviderReconciliationCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), actionAttemptRef: v.string(),
+    reportDigest: v.string(), observationRef: v.string(), observationDigest: v.string(),
+    resolutionRef: v.string(), resolutionDigest: v.string(), committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
 
   customerRequestV2ActionAttemptAdmissionCommands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),

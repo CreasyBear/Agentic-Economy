@@ -13,6 +13,9 @@ export type CustomerRequestState =
   | 'needs_authorization'
   | 'unsupported'
   | 'needs_attention'
+  | 'outcome_unknown'
+  | 'completed'
+  | 'failed'
 
 export type CustomerRequestNextAction =
   | 'provide_information'
@@ -22,6 +25,7 @@ export type CustomerRequestNextAction =
   | 'revise_request'
   | 'review_disclosure'
   | 'retry'
+  | 'none'
 
 export type { CustomerOption, CustomerOptionSet } from './customer-option-set'
 export type CustomerCriterion = Readonly<{
@@ -51,6 +55,13 @@ export type CustomerRequestView = Readonly<{
   >
   options: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
+  action?: Readonly<{
+    state: 'unknown' | 'completed' | 'failed'
+    resolution: 'awaiting_evidence' | 'provider_result' | 'reconciled'
+    automaticRetry: false
+    result?: JsonValue
+    observedAt: number
+  }>
 }>
 
 export type CustomerRequestProjection =
@@ -188,6 +199,55 @@ export function projectNeedsAttention(input: Readonly<{
   return requestView({ ...input, state: 'needs_attention', nextAction: 'retry' })
 }
 
+export function projectCustomerActionStatus(input: Readonly<{
+  requestRef: string
+  revision: number
+  criteria?: readonly CustomerCriterion[]
+  status:
+    | Readonly<{ kind: 'unknown'; reason: string; observedAt: number; automaticRetry: false }>
+    | Readonly<{
+        kind: 'completed'; resolution: 'provider_result' | 'reconciled'; result: JsonValue
+        resolvedAt: number; automaticRetry: false
+      }>
+    | Readonly<{
+        kind: 'failed'; resolution: 'reconciled'; result: JsonValue
+        resolvedAt: number; automaticRetry: false
+      }>
+}>): CustomerRequestView {
+  if (input.status.kind === 'unknown') return requestView({
+    requestRef: input.requestRef, revision: input.revision,
+    state: 'outcome_unknown', nextAction: 'wait',
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+    summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+    action: {
+      state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
+      observedAt: input.status.observedAt,
+    },
+  })
+  if (input.status.kind === 'completed') return requestView({
+    requestRef: input.requestRef, revision: input.revision,
+    state: 'completed', nextAction: 'none',
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+    summary: input.status.resolution === 'reconciled'
+      ? 'The business has now confirmed the result.'
+      : 'The business confirmed the result.',
+    action: {
+      state: 'completed', resolution: input.status.resolution, automaticRetry: false,
+      result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
+    },
+  })
+  return requestView({
+    requestRef: input.requestRef, revision: input.revision,
+    state: 'failed', nextAction: 'none',
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+    summary: 'The business confirmed that it could not complete this action. AE did not try it again.',
+    action: {
+      state: 'failed', resolution: 'reconciled', automaticRetry: false,
+      result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
+    },
+  })
+}
+
 function requestView(input: Readonly<{
   requestRef: string
   revision: number
@@ -201,6 +261,7 @@ function requestView(input: Readonly<{
   preparationRef?: string
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
+  action?: CustomerRequestView['action']
 }>): CustomerRequestView {
   return Object.freeze({
     kind: 'request',
@@ -218,6 +279,10 @@ function requestView(input: Readonly<{
     ...(input.preparationRef === undefined ? {} : { preparationRef: input.preparationRef }),
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
+    ...(input.action === undefined ? {} : { action: Object.freeze({
+      ...input.action,
+      ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),
+    }) }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })
 }

@@ -500,11 +500,16 @@ function validLinkedGrant(
   digestKey: 'providerReleaseGrantDigest' | 'disclosureGrantDigest',
   attempt: ActionAttemptV2,
 ): boolean {
-  const record = grant as unknown as Record<string, unknown>
-  const storedDigest = record[digestKey]
-  const material = Object.fromEntries(Object.entries(record).filter(([key]) => key !== digestKey))
-  return typeof storedDigest === 'string' && isCanonicalDigest(storedDigest)
-    && canonicalDigest(material as StableHashValue) === storedDigest
+  const validDigest = 'providerReleaseGrantDigest' in grant
+    ? digestKey === 'providerReleaseGrantDigest'
+      && isCanonicalDigest(grant.providerReleaseGrantDigest)
+      && canonicalDigest((({ providerReleaseGrantDigest: _digest, ...material }) => material)(grant) as StableHashValue)
+        === grant.providerReleaseGrantDigest
+    : digestKey === 'disclosureGrantDigest'
+      && isCanonicalDigest(grant.disclosureGrantDigest)
+      && canonicalDigest((({ disclosureGrantDigest: _digest, ...material }) => material)(grant) as StableHashValue)
+        === grant.disclosureGrantDigest
+  return validDigest
     && grant.approvalGrantRef === attempt.approvalGrantRef
     && grant.approvalGrantDigest === attempt.approvalGrantDigest
     && grant.authorityLineageDigest === attempt.authorityLineageDigest

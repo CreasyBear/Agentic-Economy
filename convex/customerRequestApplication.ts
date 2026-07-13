@@ -24,6 +24,7 @@ import {
   preparedActionV2Value,
 } from '@/modules/customer-request/runtime'
 import {
+  projectCustomerActionStatus,
   projectNeedsAttention,
   projectRequestEvaluation,
   type CustomerRequestView,
@@ -38,6 +39,7 @@ import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-reques
 
 import { internal } from './_generated/api'
 import { action, type ActionCtx } from './_generated/server'
+import type { CustomerActionStatusV2 } from './customerRequestV2ProviderReconciliation'
 
 const serviceAssertion = v.object({
   principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
@@ -140,11 +142,13 @@ const customerView = v.object({
     v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('preparing_options'),
     v.literal('options_ready'), v.literal('no_options'), v.literal('needs_authorization'),
     v.literal('unsupported'), v.literal('needs_attention'),
+    v.literal('outcome_unknown'), v.literal('completed'), v.literal('failed'),
   ),
   summary: v.string(),
   nextAction: v.union(
     v.literal('provide_information'), v.literal('prepare_options'), v.literal('wait'),
     v.literal('inspect_options'), v.literal('revise_request'), v.literal('review_disclosure'), v.literal('retry'),
+    v.literal('none'),
   ),
   missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })),
   criteria: v.array(v.object({
@@ -167,6 +171,13 @@ const customerView = v.object({
   options: v.array(customerOption),
   optionSet: v.optional(customerOptionSet),
   preparedAction: v.optional(customerPreparedAction),
+  action: v.optional(v.object({
+    state: v.union(v.literal('unknown'), v.literal('completed'), v.literal('failed')),
+    resolution: v.union(
+      v.literal('awaiting_evidence'), v.literal('provider_result'), v.literal('reconciled'),
+    ),
+    automaticRetry: v.literal(false), result: v.optional(v.any()), observedAt: v.number(), // runtime-validated JsonValue boundary
+  })),
 })
 const conflict = v.object({
   kind: v.literal('conflict'), requestRef: v.string(),
@@ -381,6 +392,31 @@ export const resume = action({
     }))
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.plan.actions.length === 1) {
+      const action = current.aggregate.plan.actions[0]
+      if (action !== undefined) {
+        const status: CustomerActionStatusV2 = await ctx.runQuery(
+          internal.customerRequestV2ProviderReconciliation.getActionStatus,
+          {
+            requestId: current.aggregate.snapshot.requestId,
+            requestRevision: current.aggregate.snapshot.revision,
+            actionId: action.actionId,
+            principalId: caller.principalId,
+          },
+        )
+        if (status.kind === 'integrity_failure') return writableView(projectNeedsAttention({
+          requestRef: current.aggregate.snapshot.requestId,
+          revision: current.aggregate.snapshot.revision,
+          summary: 'AE could not verify the business result. The action will not be sent again.',
+        }))
+        if (status.kind !== 'none') return writableView(projectCustomerActionStatus({
+          requestRef: current.aggregate.snapshot.requestId,
+          revision: current.aggregate.snapshot.revision,
+          criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+          status,
+        }))
+      }
     }
     const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
     if (recoveryBlock !== undefined) return recoveryBlock

@@ -16,6 +16,8 @@ const productionAuthority = {
   attemptPersistence: 'convex/customerRequestV2ActionAttempt.ts',
   providerExecutionDomain: 'src/modules/customer-request/provider-execution-v2.ts',
   providerExecutionPersistence: 'convex/customerRequestV2ProviderExecution.ts',
+  providerReconciliationDomain: 'src/modules/customer-request/provider-reconciliation-v2.ts',
+  providerReconciliationPersistence: 'convex/customerRequestV2ProviderReconciliation.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
@@ -45,6 +47,7 @@ describe('CustomerRequest source completeness', () => {
     expect(application).toContain('customerRequestV2PreparationEgress.run')
     expect(application).toContain('customerRequestV2ApprovalGrant.issue')
     expect(application).toContain('customerRequestV2ActionAttempt.admit')
+    expect(application).toContain('customerRequestV2ProviderReconciliation.getActionStatus')
     expect(application).toContain('bindCustomerCapabilityDescriptor')
   })
 
@@ -65,6 +68,8 @@ describe('CustomerRequest source completeness', () => {
       'convex/customerRequestV2ActionAttempt.ts',
       'src/modules/customer-request/provider-execution-v2.ts',
       'convex/customerRequestV2ProviderExecution.ts',
+      'src/modules/customer-request/provider-reconciliation-v2.ts',
+      'convex/customerRequestV2ProviderReconciliation.ts',
       'convex/customerRequestApplication.ts',
     ]
     const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/
@@ -80,6 +85,10 @@ describe('CustomerRequest source completeness', () => {
     expect(source('providerExecutionPersistence'))
       .not.toMatch(/routingKernelExecutionClaims|routingKernelRootRuns|routingKernelLeafRuns|routingKernelStepReleases|routingKernelDisclosureAttempts|\bfetch\s*\(/)
     expect(source('providerExecutionDomain')).not.toMatch(/provider-integrations|shipping|freight|booking/)
+    expect(source('providerReconciliationDomain'))
+      .not.toMatch(/provider-integrations|shipping|freight|booking|\bfetch\s*\(/)
+    expect(source('providerReconciliationPersistence'))
+      .not.toMatch(/routingKernelRootRuns|routingKernelLeafRuns|routingKernelProtocolRecords|\bfetch\s*\(/)
     const approvalPersistence = source('approvalPersistence')
     expect(approvalPersistence).not.toContain('listEligibleCapabilitySupply')
     expect(approvalPersistence).toContain('getEligibleExactCapabilitySupply')

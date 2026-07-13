@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { admitActionAttemptV2 } from '@/modules/customer-request/public'
+import {
+  actionAttemptResolutionV2Digest,
+  admitActionAttemptV2,
+  reconciliationObservationV2Digest,
+  type ProviderReconciliationObservationV2,
+} from '@/modules/customer-request/public'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 import { persistActionAttemptAdmissionBundle } from '../../convex/customerRequestV2ActionAttempt'
@@ -11,6 +16,10 @@ import {
   recordProviderOutcomeTransaction,
   releaseProviderTransaction,
 } from '../../convex/customerRequestV2ProviderExecution'
+import {
+  getCustomerActionStatus,
+  reconcileProviderOutcomeTransaction,
+} from '../../convex/customerRequestV2ProviderReconciliation'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -550,6 +559,8 @@ describe('current V2 Customer Request application path', () => {
       }) } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const serviceKey = 'external-agent-readback-key-that-is-long-enough'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
     const customer = backend.withIdentity(identity)
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:prepared-action', requestId: 'request:v2:prepared-action',
@@ -1080,6 +1091,54 @@ describe('current V2 Customer Request application path', () => {
       expect(result).toEqual({ kind: 'refused', reason: 'release_integrity_failure' })
       throw new Error('rollback_tampered_release_envelope')
     })).rejects.toThrow('rollback_tampered_release_envelope')
+    const exactResponse = {
+      format: 'ae.provider-result:v2' as const,
+      echo: providerEcho,
+      output: { optionSummary: 'Reconciled provider result' },
+    }
+    await expect(backend.run(async (ctx) => {
+      const recorded = await recordProviderOutcomeTransaction(ctx.db, {
+        commandKey: 'provider-outcome:v2:rollback-success',
+        commandDigest: canonicalDigest(exactResponse),
+        actionAttemptRef: admitted.actionAttemptRef,
+        response: exactResponse,
+        now: providerNow + 43,
+      })
+      expect(recorded).toMatchObject({ kind: 'recorded', outcome: { state: 'succeeded' } })
+      await expect(getCustomerActionStatus(ctx.db, {
+        requestId: review.requestRef, requestRevision: review.revision,
+        actionId: aggregate.aggregate.plan.actions[0]?.actionId ?? '', principalId,
+      })).resolves.toMatchObject({ kind: 'completed', resolution: 'provider_result' })
+      const rootRow = await ctx.db.query('customerRequestV2ProviderRootRuns').unique()
+      if (rootRow === null) throw new Error('provider root evidence missing')
+      const { rootRunDigest: _rootRunDigest, ...rootRunMaterial } = {
+        ...rootRow.rootRun, envelopeRef: 'provider-invocation:v2:self-consistent-rewrite',
+      }
+      const rootRun = { ...rootRunMaterial, rootRunDigest: canonicalDigest(rootRunMaterial) }
+      await ctx.db.patch(rootRow._id, { rootRun, rootRunDigest: rootRun.rootRunDigest })
+      await expect(getCustomerActionStatus(ctx.db, {
+        requestId: review.requestRef, requestRevision: review.revision,
+        actionId: aggregate.aggregate.plan.actions[0]?.actionId ?? '', principalId,
+      })).resolves.toEqual({ kind: 'integrity_failure' })
+      await ctx.db.patch(rootRow._id, {
+        rootRun: rootRow.rootRun, rootRunDigest: rootRow.rootRunDigest,
+      })
+      const row = await ctx.db.query('customerRequestV2ProviderOutcomes')
+        .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', admitted.actionAttemptRef))
+        .unique()
+      if (row === null || row.outcome.state !== 'succeeded') throw new Error('successful outcome missing')
+      const output = { optionSummary: 'Self-consistently rewritten result' }
+      const { outcomeDigest: _outcomeDigest, ...outcomeMaterial } = {
+        ...row.outcome, output, outputDigest: canonicalDigest(output),
+      }
+      const outcome = { ...outcomeMaterial, outcomeDigest: canonicalDigest(outcomeMaterial) }
+      await ctx.db.patch(row._id, { outcome, outcomeDigest: outcome.outcomeDigest })
+      await expect(getCustomerActionStatus(ctx.db, {
+        requestId: review.requestRef, requestRevision: review.revision,
+        actionId: aggregate.aggregate.plan.actions[0]?.actionId ?? '', principalId,
+      })).resolves.toEqual({ kind: 'integrity_failure' })
+      throw new Error('rollback_self_consistent_provider_outcome_tamper')
+    })).rejects.toThrow('rollback_self_consistent_provider_outcome_tamper')
     const mismatchedResponse = {
       format: 'ae.provider-result:v2' as const,
       echo: { ...providerEcho, actionAttemptRef: 'action-attempt:v2:mismatched' },
@@ -1108,22 +1167,17 @@ describe('current V2 Customer Request application path', () => {
       protocolEvidence: await ctx.db.query('customerRequestV2ProviderProtocolEvidence').collect(),
     }))
     expect(Object.values(rowsAfterOutcomeRollback).map((rows) => rows.length)).toEqual([0, 0, 0, 0])
-    const exactResponse = {
-      format: 'ae.provider-result:v2' as const,
-      echo: providerEcho,
-      output: { optionSummary: 'Provider-completed result' },
-    }
     const outcomeCommand = {
-      commandKey: 'provider-outcome:v2:one', commandDigest: canonicalDigest(exactResponse),
-      actionAttemptRef: admitted.actionAttemptRef, response: exactResponse, now: providerNow + 44,
+      commandKey: 'provider-outcome:v2:one', commandDigest: canonicalDigest(mismatchedResponse),
+      actionAttemptRef: admitted.actionAttemptRef, response: mismatchedResponse, now: providerNow + 44,
     }
     const recordedOutcome = await backend.mutation(
       internal.customerRequestV2ProviderExecution.recordOutcome, outcomeCommand,
     )
     expect(recordedOutcome).toMatchObject({
       kind: 'recorded', outcome: {
-        format: 'ae.provider-outcome:v2', state: 'succeeded',
-        output: { optionSummary: 'Provider-completed result' },
+        format: 'ae.provider-outcome:v2', state: 'unknown_external_state',
+        reason: 'provider_echo_mismatch',
         lineage: {
           requestId: review.requestRef, actionAttemptRef: admitted.actionAttemptRef,
           contractRef: model.contractRef, offeringId: selectedOperation.offeringId,
@@ -1138,7 +1192,7 @@ describe('current V2 Customer Request application path', () => {
     )).resolves.toEqual(recordedOutcome)
     await expect(backend.mutation(internal.customerRequestV2ProviderExecution.recordOutcome, {
       ...outcomeCommand,
-      response: { ...exactResponse, output: { optionSummary: 'Changed provider result' } },
+      response: { ...mismatchedResponse, output: { optionSummary: 'Changed provider result' } },
     })).resolves.toEqual({ kind: 'conflict', reason: 'idempotency_key_reused' })
     await expect(backend.mutation(internal.customerRequestV2ProviderExecution.recordOutcome, {
       ...outcomeCommand, commandDigest: canonicalDigest({ changed: true }),
@@ -1146,7 +1200,7 @@ describe('current V2 Customer Request application path', () => {
     await expect(backend.mutation(internal.customerRequestV2ProviderExecution.recordOutcome, {
       ...outcomeCommand,
       commandKey: 'provider-outcome:v2:second',
-      commandDigest: canonicalDigest({ second: true }),
+      commandDigest: canonicalDigest(mismatchedResponse),
     })).resolves.toEqual({ kind: 'conflict', reason: 'outcome_already_recorded' })
     const providerOutcomeRows = await backend.run(async (ctx) => ({
       outcomes: await ctx.db.query('customerRequestV2ProviderOutcomes').collect(),
@@ -1169,9 +1223,184 @@ describe('current V2 Customer Request application path', () => {
       providerOutcomeRows.protocolEvidence[0]?.authorityLineageDigest,
     ])).toEqual(new Set([released.envelope.lineageDigest]))
     expect(providerOutcomeRows.protocolEvidence[0]?.protocolEvidence).toMatchObject({
-      disposition: 'validated_result',
-      providerResult: exactResponse,
+      disposition: 'unknown_external_state',
     })
+    expect(providerOutcomeRows.protocolEvidence[0]?.protocolEvidence).not.toHaveProperty('providerResult')
+    await expect(backend.query(internal.customerRequestV2ProviderReconciliation.getActionStatus, {
+      requestId: review.requestRef, requestRevision: review.revision,
+      actionId: aggregate.aggregate.plan.actions[0]?.actionId ?? '', principalId,
+    })).resolves.toMatchObject({ kind: 'unknown', automaticRetry: false })
+    const unknownCustomerView = await customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })
+    expect(unknownCustomerView).toMatchObject({
+      kind: 'request', state: 'outcome_unknown', nextAction: 'wait',
+      action: {
+        state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
+      },
+    })
+    const unknownAgentAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey, operation: 'resume', command: { requestRef: review.requestRef },
+      principal: {
+        principalId, ownerId: identity.subject, credentialId: 'credential:external-readback',
+        scopes: ['customer_requests:create'],
+      },
+      issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+      serviceAuth: { ...unknownAgentAuth, scopes: [...unknownAgentAuth.scopes] },
+    })).resolves.toEqual(unknownCustomerView)
+    const provider = {
+      businessId: released.envelope.lineage.businessId,
+      offeringId: released.envelope.lineage.offeringId,
+      offeringRegistrationHash: released.envelope.lineage.offeringRegistrationHash,
+      bindingId: released.envelope.lineage.bindingId,
+      bindingRegistrationHash: released.envelope.lineage.bindingRegistrationHash,
+    }
+    const pendingReport = {
+      format: 'ae.provider-reconciliation-report:v2' as const,
+      providerEvidenceRef: 'provider-evidence:sandbox:pending', provider,
+      disposition: 'pending' as const, echo: providerEcho,
+    }
+    const pendingCommand = {
+      commandKey: 'provider-reconciliation:v2:pending', commandDigest: canonicalDigest(pendingReport),
+      actionAttemptRef: admitted.actionAttemptRef, report: pendingReport, now: providerNow + 45,
+    }
+    let rolledBackObservation: ProviderReconciliationObservationV2 | undefined
+    await expect(backend.run(async (ctx) => {
+      const result = await reconcileProviderOutcomeTransaction(ctx.db, pendingCommand)
+      expect(result).toMatchObject({ kind: 'observed', observation: { reason: 'provider_pending' } })
+      if (result.kind === 'observed') rolledBackObservation = result.observation
+      throw new Error('injected_after_all_provider_reconciliation_writes')
+    })).rejects.toThrow('injected_after_all_provider_reconciliation_writes')
+    const rolledBackReconciliation = await backend.run(async (ctx) => ({
+      observations: await ctx.db.query('customerRequestV2ProviderReconciliationObservations').collect(),
+      resolutions: await ctx.db.query('customerRequestV2ActionAttemptResolutions').collect(),
+      commands: await ctx.db.query('customerRequestV2ProviderReconciliationCommands').collect(),
+    }))
+    expect(Object.values(rolledBackReconciliation).map((rows) => rows.length)).toEqual([0, 0, 0])
+    if (rolledBackObservation === undefined) throw new Error('rolled-back reconciliation observation missing')
+    const otherLineage = {
+      ...rolledBackObservation.lineage,
+      actionAttemptRef: 'action-attempt:v2:other-attempt',
+      actionAttemptDigest: canonicalDigest('other-attempt'),
+    }
+    const otherObservationMaterial = {
+      ...rolledBackObservation,
+      observationRef: `provider-reconciliation-observation:v2:${canonicalDigest('other-attempt')}`,
+      observationDigest: '', lineage: otherLineage, lineageDigest: canonicalDigest(otherLineage),
+    }
+    const otherObservation = {
+      ...otherObservationMaterial,
+      observationDigest: reconciliationObservationV2Digest(otherObservationMaterial),
+    }
+    const crossAttemptProviderEvidenceRef = otherObservation.providerEvidenceRef
+    const crossAttemptProviderEvidenceIdentityDigest = otherObservation.providerEvidenceIdentityDigest
+    if (crossAttemptProviderEvidenceRef === undefined
+      || crossAttemptProviderEvidenceIdentityDigest === undefined) {
+      throw new Error('provider evidence identity missing')
+    }
+    const crossAttemptEvidenceRow = await backend.run(async (ctx) => await ctx.db.insert(
+      'customerRequestV2ProviderReconciliationObservations',
+      {
+        observationRef: otherObservation.observationRef,
+        observationDigest: otherObservation.observationDigest,
+        actionAttemptRef: otherObservation.lineage.actionAttemptRef,
+        originOutcomeRef: otherObservation.originOutcomeRef,
+        providerEvidenceRef: crossAttemptProviderEvidenceRef,
+        providerEvidenceIdentityDigest: crossAttemptProviderEvidenceIdentityDigest,
+        authorityLineageDigest: otherObservation.lineageDigest,
+        observation: otherObservation, recordedAt: otherObservation.observedAt,
+      },
+    ))
+    await expect(backend.mutation(
+      internal.customerRequestV2ProviderReconciliation.reconcile, pendingCommand,
+    )).resolves.toEqual({ kind: 'conflict', reason: 'evidence_already_observed' })
+    await backend.run(async (ctx) => await ctx.db.delete(crossAttemptEvidenceRow))
+    const pending = await backend.mutation(
+      internal.customerRequestV2ProviderReconciliation.reconcile, pendingCommand,
+    )
+    expect(pending).toMatchObject({
+      kind: 'observed', observation: {
+        state: 'unknown_external_state', reason: 'provider_pending',
+      }, resolution: { state: 'unknown_external_state', automaticRetry: false },
+    })
+    await expect(backend.query(internal.customerRequestV2ProviderReconciliation.getActionStatus, {
+      requestId: review.requestRef, requestRevision: review.revision,
+      actionId: aggregate.aggregate.plan.actions[0]?.actionId ?? '', principalId,
+    })).resolves.toMatchObject({
+      kind: 'unknown', reason: 'provider_pending', automaticRetry: false,
+    })
+    const pendingResolution = await backend.run(async (ctx) => ctx.db
+      .query('customerRequestV2ActionAttemptResolutions')
+      .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', admitted.actionAttemptRef))
+      .unique())
+    expect(pendingResolution).toMatchObject({
+      actionAttemptRef: released.envelope.lineage.actionAttemptRef,
+      requestId: released.envelope.lineage.requestId,
+      requestRevision: released.envelope.lineage.requestRevision,
+      actionId: released.envelope.lineage.actionId,
+      principalId: released.envelope.lineage.principalId,
+      state: 'unknown_external_state',
+      authorityLineageDigest: released.envelope.lineageDigest,
+      resolution: {
+        actionAttemptRef: released.envelope.lineage.actionAttemptRef,
+        actionAttemptDigest: released.envelope.lineage.actionAttemptDigest,
+        lineageDigest: released.envelope.lineageDigest,
+      },
+    })
+    await expect(backend.mutation(
+      internal.customerRequestV2ProviderReconciliation.reconcile,
+      { ...pendingCommand, now: pendingCommand.now + 1_000 },
+    )).resolves.toEqual(pending)
+    await expect(backend.mutation(internal.customerRequestV2ProviderReconciliation.reconcile, {
+      ...pendingCommand, report: { ...pendingReport, providerEvidenceRef: 'provider-evidence:changed' },
+    })).resolves.toEqual({ kind: 'conflict', reason: 'idempotency_key_reused' })
+    await expect(backend.mutation(internal.customerRequestV2ProviderReconciliation.reconcile, {
+      commandKey: 'provider-reconciliation:v2:duplicate-evidence',
+      commandDigest: canonicalDigest({ duplicate: true }),
+      actionAttemptRef: admitted.actionAttemptRef,
+      report: {
+        ...pendingReport,
+        echo: { ...providerEcho, providerIdempotencyKey: 'provider-idempotency:changed' },
+      },
+      now: providerNow + 46,
+    })).resolves.toEqual({ kind: 'conflict', reason: 'evidence_already_observed' })
+    await expect(backend.mutation(internal.customerRequestV2ProviderReconciliation.reconcile, {
+      commandKey: 'provider-reconciliation:v2:out-of-order',
+      commandDigest: canonicalDigest({ outOfOrder: true }),
+      actionAttemptRef: admitted.actionAttemptRef,
+      report: { ...pendingReport, providerEvidenceRef: 'provider-evidence:sandbox:out-of-order' },
+      now: pendingCommand.now - 1,
+    })).resolves.toEqual({ kind: 'refused', reason: 'report_invalid' })
+    const successReport = {
+      format: 'ae.provider-reconciliation-report:v2' as const,
+      providerEvidenceRef: 'provider-evidence:sandbox:completed', provider,
+      disposition: 'succeeded' as const, result: exactResponse,
+    }
+    const completed = await backend.mutation(
+      internal.customerRequestV2ProviderReconciliation.reconcile,
+      {
+        commandKey: 'provider-reconciliation:v2:success', commandDigest: canonicalDigest(successReport),
+        actionAttemptRef: admitted.actionAttemptRef, report: successReport, now: providerNow + 47,
+      },
+    )
+    expect(completed).toMatchObject({
+      kind: 'observed', observation: {
+        state: 'succeeded', terminal: { providerResult: exactResponse },
+      }, resolution: {
+        state: 'succeeded', terminal: { output: { optionSummary: 'Reconciled provider result' } },
+      },
+    })
+    await expect(backend.mutation(internal.customerRequestV2ProviderReconciliation.reconcile, {
+      commandKey: 'provider-reconciliation:v2:after-terminal',
+      commandDigest: canonicalDigest({ after: 'terminal' }),
+      actionAttemptRef: admitted.actionAttemptRef, report: pendingReport, now: providerNow + 48,
+    })).resolves.toEqual({ kind: 'conflict', reason: 'terminal_outcome_already_recorded' })
+    await expect(backend.mutation(internal.customerRequestV2ProviderReconciliation.reconcile, {
+      ...pendingCommand, now: providerNow + 49,
+    })).resolves.toEqual(pending)
     await backend.run(async (ctx) => {
       const result = await setCapabilitySupplyEligibility(ctx.db, {
         offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
@@ -1180,25 +1409,98 @@ describe('current V2 Customer Request application path', () => {
         expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
         admissionEvidenceRefs: ['test:post-outcome-restore'],
         conformanceEvidenceRefs: ['test:post-outcome-restore'],
-      }, providerNow + 45)
+      }, providerNow + 48)
       if (result.kind !== 'eligible') throw new Error('post-outcome supply restore failed')
     })
-    await expect(customer.action(api.customerRequestApplication.resume, {
+    const completedCustomerView = await customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
-    })).resolves.toMatchObject({
-      kind: 'request', state: 'options_ready', nextAction: 'inspect_options',
-      preparedAction: {
-        actionRef: prepared.kind === 'prepared' ? prepared.preparedAction.preparedActionRef : '',
-        businessName: 'Sandbox Option Two', offeringLabel: 'Sandbox Option Two',
-        price: { currency: 'AUD', minimumAmountMinor: 900, maximumAmountMinor: 900 },
-        materialTerms: [{ label: 'Environment', value: 'Sandbox only; not real supply.' }],
-        cancellation: { kind: 'unsupported' }, validUntil: providerNow + 60_000,
-        selection: { basis: 'lowest_maximum_price', alternativeCount: 1 },
-        alternatives: [{
-          businessName: 'Sandbox Option One', price: { currency: 'AUD', maximumAmountMinor: 1_200 },
-        }],
+    })
+    expect(completedCustomerView).toMatchObject({
+      kind: 'request', state: 'completed', nextAction: 'none',
+      action: {
+        state: 'completed', resolution: 'reconciled', automaticRetry: false,
+        result: { optionSummary: 'Reconciled provider result' },
       },
     })
+    const completedAgentAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey, operation: 'resume', command: { requestRef: review.requestRef },
+      principal: {
+        principalId, ownerId: identity.subject, credentialId: 'credential:external-readback',
+        scopes: ['customer_requests:create'],
+      },
+      issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+      serviceAuth: { ...completedAgentAuth, scopes: [...completedAgentAuth.scopes] },
+    })).resolves.toEqual(completedCustomerView)
+    await expect(backend.run(async (ctx) => {
+      const resolutionRow = await ctx.db.query('customerRequestV2ActionAttemptResolutions')
+        .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', admitted.actionAttemptRef))
+        .unique()
+      if (resolutionRow === null || resolutionRow.resolution.terminal === undefined) {
+        throw new Error('terminal resolution missing')
+      }
+      const observationRow = await ctx.db.query('customerRequestV2ProviderReconciliationObservations')
+        .withIndex('by_observationRef', (query) => query
+          .eq('observationRef', resolutionRow.resolution.latestObservationRef)).unique()
+      if (observationRow === null || observationRow.observation.terminal === undefined) {
+        throw new Error('terminal observation missing')
+      }
+      const output = { optionSummary: 'Self-consistently rewritten reconciliation' }
+      const outputDigest = canonicalDigest(output)
+      const evidence = observationRow.observation.terminal.evidence.map((item) => ({
+        ...item, value: 'Self-consistently rewritten reconciliation',
+        valueDigest: canonicalDigest('Self-consistently rewritten reconciliation'),
+      }))
+      const terminal = {
+        ...observationRow.observation.terminal,
+        providerResult: {
+          ...observationRow.observation.terminal.providerResult, output,
+        },
+        output, outputDigest, evidence,
+      }
+      const observationWithoutDigest = {
+        ...observationRow.observation, terminal, observationDigest: '',
+      }
+      const observation = {
+        ...observationWithoutDigest,
+        observationDigest: reconciliationObservationV2Digest(observationWithoutDigest),
+      }
+      const resolutionWithoutDigest = {
+        ...resolutionRow.resolution, terminal,
+        latestObservationDigest: observation.observationDigest, resolutionDigest: '',
+      }
+      const resolution = {
+        ...resolutionWithoutDigest,
+        resolutionDigest: actionAttemptResolutionV2Digest(resolutionWithoutDigest),
+      }
+      await ctx.db.patch(observationRow._id, {
+        observation, observationDigest: observation.observationDigest,
+      })
+      await ctx.db.patch(resolutionRow._id, {
+        resolution, resolutionDigest: resolution.resolutionDigest,
+      })
+      await expect(getCustomerActionStatus(ctx.db, {
+        requestId: review.requestRef, requestRevision: review.revision,
+        actionId: aggregate.aggregate.plan.actions[0]?.actionId ?? '', principalId,
+      })).resolves.toEqual({ kind: 'integrity_failure' })
+      throw new Error('rollback_self_consistent_reconciliation_tamper')
+    })).rejects.toThrow('rollback_self_consistent_reconciliation_tamper')
+    const reconciliationRows = await backend.run(async (ctx) => ({
+      observations: await ctx.db.query('customerRequestV2ProviderReconciliationObservations').collect(),
+      resolutions: await ctx.db.query('customerRequestV2ActionAttemptResolutions').collect(),
+      commands: await ctx.db.query('customerRequestV2ProviderReconciliationCommands').collect(),
+      providerOutcomes: await ctx.db.query('customerRequestV2ProviderOutcomes').collect(),
+      legacyRootRuns: await ctx.db.query('routingKernelRootRuns').collect(),
+      legacyLeafRuns: await ctx.db.query('routingKernelLeafRuns').collect(),
+      legacyProtocol: await ctx.db.query('routingKernelProtocolRecords').collect(),
+    }))
+    expect(Object.fromEntries(Object.entries(reconciliationRows).map(([key, rows]) => [key, rows.length])))
+      .toEqual({
+        observations: 2, resolutions: 1, commands: 2, providerOutcomes: 1,
+        legacyRootRuns: 0, legacyLeafRuns: 0, legacyProtocol: 0,
+      })
 
     await backend.run(async (ctx) => {
       const result = await setCapabilitySupplyEligibility(ctx.db, {

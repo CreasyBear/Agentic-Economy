@@ -15,7 +15,7 @@ import {
 import { actionAttemptV2Value } from '@/modules/customer-request/runtime'
 
 import type { Doc } from './_generated/dataModel'
-import { internalMutation, type MutationCtx } from './_generated/server'
+import { internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
 import { openExactApprovalGrantForAdmission } from './customerRequestV2ApprovalGrant'
 
 const resultValue = v.union(
@@ -177,7 +177,7 @@ export async function persistActionAttemptAdmissionBundle(
 }
 
 async function replayAttempt(
-  db: MutationCtx['db'], command: Doc<'customerRequestV2ActionAttemptAdmissionCommands'>,
+  db: QueryCtx['db'], command: Doc<'customerRequestV2ActionAttemptAdmissionCommands'>,
 ): Promise<Doc<'customerRequestV2ActionAttempts'>['actionAttempt']> {
   const row = await db.query('customerRequestV2ActionAttempts')
     .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', command.resultRef)).unique()
@@ -296,7 +296,7 @@ async function replayAttempt(
 }
 
 export async function openExactAdmittedActionAttempt(
-  db: MutationCtx['db'], actionAttemptRef: string,
+  db: QueryCtx['db'], actionAttemptRef: string,
 ): Promise<
   | Readonly<{
       kind: 'found'

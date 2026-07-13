@@ -32,6 +32,7 @@ import type * as customerRequestV2PreparationEgress from "../customerRequestV2Pr
 import type * as customerRequestV2PreparationEgressState from "../customerRequestV2PreparationEgressState.js";
 import type * as customerRequestV2PreparedAction from "../customerRequestV2PreparedAction.js";
 import type * as customerRequestV2ProviderExecution from "../customerRequestV2ProviderExecution.js";
+import type * as customerRequestV2ProviderReconciliation from "../customerRequestV2ProviderReconciliation.js";
 import type * as customerRequests from "../customerRequests.js";
 import type * as demand from "../demand.js";
 import type * as devSeed from "../devSeed.js";
@@ -92,6 +93,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestV2PreparationEgressState: typeof customerRequestV2PreparationEgressState;
   customerRequestV2PreparedAction: typeof customerRequestV2PreparedAction;
   customerRequestV2ProviderExecution: typeof customerRequestV2ProviderExecution;
+  customerRequestV2ProviderReconciliation: typeof customerRequestV2ProviderReconciliation;
   customerRequests: typeof customerRequests;
   demand: typeof demand;
   devSeed: typeof devSeed;

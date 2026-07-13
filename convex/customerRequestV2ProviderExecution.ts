@@ -23,7 +23,7 @@ import {
 } from '@/modules/customer-request/runtime'
 
 import type { Doc } from './_generated/dataModel'
-import { internalMutation, type MutationCtx } from './_generated/server'
+import { internalMutation, type MutationCtx, type QueryCtx } from './_generated/server'
 import { getExactRegisteredCapabilityContract } from './capabilityContractDocuments'
 import { aggregateIsInternallyConsistent } from './customerRequestV2'
 import {
@@ -83,7 +83,7 @@ export const release = internalMutation({
 export const recordOutcome = internalMutation({
   args: {
     commandKey: v.string(), commandDigest: v.string(), actionAttemptRef: v.string(),
-    response: v.any(), now: v.number(),
+    response: v.any(), now: v.number(), // runtime-validated JsonValue boundary
   },
   returns: outcomeResultValue,
   handler: async (ctx, args): Promise<OutcomeResult> => await recordProviderOutcomeTransaction(ctx.db, args),
@@ -172,6 +172,9 @@ export async function recordProviderOutcomeTransaction(
     }
     return { kind: 'recorded', outcome: await replayOutcome(db, replay, expected.bundle) }
   }
+  if (args.commandDigest !== canonicalDigest(args.response as StableHashValue)) {
+    return { kind: 'refused', reason: 'response_invalid' }
+  }
   const recorded = recordProviderOutcomeV2({
     envelope: material.envelope, contract: material.contract,
     response: args.response, observedAt: args.now,
@@ -218,7 +221,7 @@ export async function persistProviderOutcomeBundle(
 }
 
 async function openReleaseMaterial(
-  db: MutationCtx['db'], actionAttemptRef: string,
+  db: QueryCtx['db'], actionAttemptRef: string,
 ): Promise<
   | Readonly<{
       kind: 'ready'
@@ -241,6 +244,135 @@ async function openReleaseMaterial(
     return { kind: 'refused', reason: 'release_integrity_failure' }
   }
   return { kind: 'ready', envelope: row.envelope as ProviderInvocationEnvelopeV2, contract: contract.contract }
+}
+
+export async function openExactProviderOutcomeForReconciliation(
+  db: QueryCtx['db'], actionAttemptRef: string,
+): Promise<
+  | Readonly<{
+      kind: 'ready'
+      outcome: Doc<'customerRequestV2ProviderOutcomes'>['outcome']
+      envelope: ProviderInvocationEnvelopeV2
+      contract: Extract<Awaited<ReturnType<typeof getExactRegisteredCapabilityContract>>, { kind: 'found' }>['contract']
+    }>
+  | Readonly<{ kind: 'unavailable'; reason: 'outcome_not_found' | 'integrity_failure' }>
+> {
+  const row = await db.query('customerRequestV2ProviderOutcomes')
+    .withIndex('by_actionAttemptRef', (query) => query.eq('actionAttemptRef', actionAttemptRef)).unique()
+  if (row === null) return { kind: 'unavailable', reason: 'outcome_not_found' }
+  const release = await openReleaseMaterial(db, actionAttemptRef)
+  if (release.kind !== 'ready') return { kind: 'unavailable', reason: 'integrity_failure' }
+  const [root, leaf, protocol] = await Promise.all([
+    db.query('customerRequestV2ProviderRootRuns')
+      .withIndex('by_outcomeRef', (query) => query.eq('outcomeRef', row.outcomeRef)).unique(),
+    db.query('customerRequestV2ProviderLeafRuns')
+      .withIndex('by_outcomeRef', (query) => query.eq('outcomeRef', row.outcomeRef)).unique(),
+    db.query('customerRequestV2ProviderProtocolEvidence')
+      .withIndex('by_outcomeRef', (query) => query.eq('outcomeRef', row.outcomeRef)).unique(),
+  ])
+  if (root === null || leaf === null || protocol === null
+    || row.actionAttemptRef !== release.envelope.lineage.actionAttemptRef
+    || row.envelopeRef !== release.envelope.envelopeRef
+    || row.envelopeDigest !== release.envelope.envelopeDigest
+    || row.outcomeRef !== row.outcome.outcomeRef
+    || row.outcomeDigest !== row.outcome.outcomeDigest
+    || row.outcomeDigest !== providerOutcomeV2Digest(row.outcome as ProviderOutcomeEvidenceBundleV2['outcome'])
+    || row.commandDigest !== row.responseDigest
+    || row.authorityLineageDigest !== release.envelope.lineageDigest
+    || !storedProviderEvidenceIntegrityValid(row, root, leaf, protocol, release.envelope, release.contract)) {
+    return { kind: 'unavailable', reason: 'integrity_failure' }
+  }
+  return {
+    kind: 'ready', outcome: row.outcome,
+    envelope: release.envelope, contract: release.contract,
+  }
+}
+
+function storedProviderEvidenceIntegrityValid(
+  outcome: Doc<'customerRequestV2ProviderOutcomes'>,
+  root: Doc<'customerRequestV2ProviderRootRuns'>,
+  leaf: Doc<'customerRequestV2ProviderLeafRuns'>,
+  protocol: Doc<'customerRequestV2ProviderProtocolEvidence'>,
+  envelope: ProviderInvocationEnvelopeV2,
+  contract: Extract<Awaited<ReturnType<typeof getExactRegisteredCapabilityContract>>, { kind: 'found' }>['contract'],
+): boolean {
+  const linked = [root, leaf, protocol]
+  const outcomeLink = { outcomeRef: outcome.outcomeRef, outcomeDigest: outcome.outcomeDigest }
+  const linkDigest = canonicalDigest(outcomeLink as StableHashValue)
+  const commonPayloadLinksValid = [root.rootRun, leaf.leafRun, protocol.protocolEvidence].every((evidence) => (
+    evidence.outcomeRef === outcome.outcomeRef
+      && evidence.outcomeDigest === outcome.outcomeDigest
+      && evidence.envelopeRef === envelope.envelopeRef
+      && evidence.envelopeDigest === envelope.envelopeDigest
+      && evidence.lineageDigest === envelope.lineageDigest
+      && evidence.recordedAt === outcome.outcome.observedAt
+      && sameStable(evidence.lineage, envelope.lineage)
+  ))
+  const succeededBundle = outcome.outcome.state === 'succeeded' && protocol.protocolEvidence.providerResult !== undefined
+    ? recordProviderOutcomeV2({
+        envelope, contract, response: protocol.protocolEvidence.providerResult,
+        observedAt: outcome.outcome.observedAt,
+      })
+    : undefined
+  const terminalEvidenceValid = succeededBundle?.kind === 'recorded'
+    ? sameStable(succeededBundle.bundle.outcome, outcome.outcome)
+      && sameStable(succeededBundle.bundle.rootRun, root.rootRun)
+      && sameStable(succeededBundle.bundle.leafRun, leaf.leafRun)
+      && sameStable(succeededBundle.bundle.protocolEvidence, protocol.protocolEvidence)
+    : outcome.outcome.state === 'unknown_external_state'
+      && unknownProtocolEvidenceValid(outcome.outcome, protocol.protocolEvidence, envelope)
+  return linked.every((row) => row.outcomeRef === outcome.outcomeRef
+      && row.actionAttemptRef === outcome.actionAttemptRef
+      && row.authorityLineageDigest === outcome.authorityLineageDigest)
+    && commonPayloadLinksValid
+    && terminalEvidenceValid
+    && root.rootRunRef === root.rootRun.rootRunRef
+    && root.rootRunRef === `provider-root-run:v2:${linkDigest}`
+    && root.rootRunDigest === root.rootRun.rootRunDigest
+    && root.rootRun.state === outcome.outcome.state
+    && digestWithout(root.rootRun, 'rootRunDigest') === root.rootRunDigest
+    && leaf.leafRunRef === leaf.leafRun.leafRunRef
+    && leaf.leafRunRef === `provider-leaf-run:v2:${linkDigest}`
+    && leaf.leafRunDigest === leaf.leafRun.leafRunDigest
+    && leaf.leafRun.state === outcome.outcome.state
+    && leaf.leafRun.businessId === envelope.lineage.businessId
+    && leaf.leafRun.offeringId === envelope.lineage.offeringId
+    && leaf.leafRun.bindingId === envelope.lineage.bindingId
+    && digestWithout(leaf.leafRun, 'leafRunDigest') === leaf.leafRunDigest
+    && protocol.protocolEvidenceRef === protocol.protocolEvidence.protocolEvidenceRef
+    && protocol.protocolEvidenceRef === `provider-protocol-evidence:v2:${linkDigest}`
+    && protocol.protocolEvidenceDigest === protocol.protocolEvidence.protocolEvidenceDigest
+    && digestWithout(protocol.protocolEvidence, 'protocolEvidenceDigest') === protocol.protocolEvidenceDigest
+}
+
+function unknownProtocolEvidenceValid(
+  outcome: Extract<ProviderOutcomeEvidenceBundleV2['outcome'], { state: 'unknown_external_state' }>,
+  protocol: Doc<'customerRequestV2ProviderProtocolEvidence'>['protocolEvidence'],
+  envelope: ProviderInvocationEnvelopeV2,
+): boolean {
+  const exactEcho = {
+    envelopeRef: envelope.envelopeRef, envelopeDigest: envelope.envelopeDigest,
+    actionAttemptRef: envelope.lineage.actionAttemptRef,
+    actionAttemptDigest: envelope.lineage.actionAttemptDigest,
+    authorityLineageDigest: envelope.lineage.authorityLineageDigest,
+    providerIdempotencyKey: envelope.providerIdempotencyKey,
+  }
+  const echoMatches = protocol.observedEcho !== undefined && sameStable(protocol.observedEcho, exactEcho)
+  return protocol.disposition === 'unknown_external_state'
+    && protocol.responseDigest === outcome.responseDigest
+    && protocol.providerResult === undefined
+    && protocol.outputDigest === undefined
+    && (outcome.reason === 'provider_response_invalid'
+      ? protocol.observedEcho === undefined
+      : outcome.reason === 'provider_echo_mismatch'
+        ? protocol.observedEcho !== undefined && !echoMatches
+        : echoMatches)
+}
+
+function digestWithout(value: Record<string, unknown>, digestKey: string): string {
+  return canonicalDigest(Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== digestKey),
+  ) as StableHashValue)
 }
 
 function releaseRowIntegrityValid(
@@ -287,7 +419,7 @@ function releaseRowIntegrityValid(
 }
 
 async function rederiveProviderRelease(
-  db: MutationCtx['db'],
+  db: QueryCtx['db'],
   opened: Extract<Awaited<ReturnType<typeof openExactAdmittedActionAttempt>>, { kind: 'found' }>,
   contract: Extract<Awaited<ReturnType<typeof getExactRegisteredCapabilityContract>>, { kind: 'found' }>['contract'],
   releasedAt: number,
