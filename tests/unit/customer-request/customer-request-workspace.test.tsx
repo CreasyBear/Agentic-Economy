@@ -57,6 +57,7 @@ describe('customer Request workspace', () => {
       .mockResolvedValueOnce(Response.json({
         kind: 'request', requestRef: 'request:uuid-1', revision: 2, state: 'ready_to_compare',
         summary: 'Fremantle for lunch', nextAction: 'prepare_options', missingFields: [], options: [],
+        criteria: [{ label: 'Area', value: 'Fremantle', basis: 'extracted_from_request' }],
       }))
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
@@ -69,6 +70,9 @@ describe('customer Request workspace', () => {
 
     await screen.findByRole('button', { name: 'Show available options' })
     expect(screen.getByText('Somewhere relaxed for lunch.')).toBeTruthy()
+    expect(screen.getByText(/Area:/)).toBeTruthy()
+    expect(screen.getByText(/from your request/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Correct' })).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({ method: 'POST' }))
   })
 

@@ -15,7 +15,7 @@ describe('customer request projection', () => {
     })
     expect(projection).toEqual({
       kind: 'request', requestRef: 'request:1', revision: 1, state: 'ready_to_compare', summary: 'Find a suitable option',
-      nextAction: 'prepare_options', missingFields: [], options: [],
+      nextAction: 'prepare_options', missingFields: [], criteria: [], options: [],
     })
     expect(JSON.stringify(projection)).not.toContain('capability')
     expect(JSON.stringify(projection)).not.toContain('action:1')

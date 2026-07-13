@@ -262,7 +262,8 @@ describe('production CustomerRequest read model', () => {
         kind: 'needs_intent_direction', prompt: 'What are you looking for there?',
       }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-        kind: 'capability_candidates', candidateCapabilityContractIds: ['sandbox.option.quote:v1'], facts: [],
+        kind: 'capability_candidates', candidateCapabilityContractIds: ['sandbox.option.quote:v1'],
+        facts: [{ capabilityContractId: 'sandbox.option.quote:v1', field: 'requestContext', value: 'Somewhere relaxed for lunch.' }],
       }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
@@ -293,6 +294,7 @@ describe('production CustomerRequest read model', () => {
     expect(refinedView).toMatchObject({
       kind: 'request', requestRef: 'request:place:refine:1', revision: 2,
       state: 'ready_to_compare', nextAction: 'prepare_options',
+      criteria: [{ label: 'Request details', value: 'Somewhere relaxed for lunch.', basis: 'extracted_from_request' }],
     })
     const replay = await handleAgentCustomerRequestMessagePost(
       new Request(messageRequest.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: messageBody }),
@@ -310,6 +312,7 @@ describe('production CustomerRequest read model', () => {
     expect(durable.snapshots).toHaveLength(2)
     expect(durable.snapshots[0]?.intent).toBe('Fremantle')
     expect(durable.snapshots[1]?.intent).toContain('Somewhere relaxed for lunch.')
+    expect(JSON.stringify(refinedView)).not.toMatch(/requestContext|criterionDigest|capabilityContractId/)
   })
 })
 

@@ -54,6 +54,13 @@ export type IntentDirectionInformationRequirement = Readonly<{
   requirementDigest: string
 }>
 export type InformationRequirement = ContractFactInformationRequirement | IntentDirectionInformationRequirement
+export type UnderstoodCriterion = Readonly<{
+  field: string
+  label: string
+  value: LiteralValue
+  basis: 'customer_provided' | 'extracted_from_request'
+  criterionDigest: string
+}>
 
 export type RequestEvaluation = Readonly<{
   requestId: string
@@ -61,6 +68,7 @@ export type RequestEvaluation = Readonly<{
   registrySnapshotDigest: string
   factsDigest: string
   facts: Readonly<Record<string, RequestFact>>
+  criteria: readonly UnderstoodCriterion[]
   candidates: readonly RequestEvaluationCandidate[]
   nextRequirement?: InformationRequirement
   posture: 'progress_available' | 'needs_information' | 'unsupported'
@@ -92,6 +100,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     })
   })
   const nextRequirement = chooseNextRequirement(input.candidates, candidates)
+  const criteria = projectUnderstoodCriteria(input.facts, input.candidates)
   const posture = candidates.length === 0
     ? 'unsupported' as const
     : nextRequirement === undefined ? 'progress_available' as const : 'needs_information' as const
@@ -103,6 +112,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     registrySnapshotDigest: input.registrySnapshotDigest,
     factsDigest,
     facts: input.facts,
+    criteria,
     candidates,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
@@ -113,6 +123,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     registrySnapshotDigest: input.registrySnapshotDigest,
     factsDigest,
     facts: input.facts,
+    criteria,
     candidates: Object.freeze(candidates),
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
@@ -141,14 +152,33 @@ export function evaluateIntentDirectionRequestSnapshot(input: Readonly<{
   const digestMaterial = {
     requestId: input.requestId, requestRevision: input.requestRevision, intent: input.intent,
     registrySnapshotDigest: input.registrySnapshotDigest, factsDigest, facts: input.facts,
-    candidates: [], nextRequirement, posture: 'needs_information' as const,
+    candidates: [], criteria: [], nextRequirement, posture: 'needs_information' as const,
   }
   return Object.freeze({
     requestId: input.requestId, requestRevision: input.requestRevision,
     registrySnapshotDigest: input.registrySnapshotDigest, factsDigest, facts: input.facts,
-    candidates: Object.freeze([]), nextRequirement, posture: 'needs_information' as const,
+    candidates: Object.freeze([]), criteria: Object.freeze([]), nextRequirement, posture: 'needs_information' as const,
     evaluationDigest: canonicalDigest(digestMaterial),
   })
+}
+
+function projectUnderstoodCriteria(
+  facts: Readonly<Record<string, RequestFact>>,
+  candidates: readonly RequestEvaluationCandidateInput[],
+): readonly UnderstoodCriterion[] {
+  return Object.freeze(Object.entries(facts).sort(([left], [right]) => left.localeCompare(right)).flatMap(([field, fact]) => {
+    const labels = [...new Set(candidates.flatMap((candidate) => {
+      const definition = candidate.contract.input[field]
+      return definition === undefined ? [] : [definition.customerLabel]
+    }))]
+    const label = labels.length === 1 ? labels[0] : undefined
+    if (label === undefined) return []
+    const basis = fact.source.kind === 'customer' ? 'customer_provided' as const : 'extracted_from_request' as const
+    return [Object.freeze({
+      field, label, value: fact.value, basis,
+      criterionDigest: canonicalDigest({ field, label, value: fact.value, basis }),
+    })]
+  }))
 }
 
 export function discoverRequestEvaluationCandidates(input: Readonly<{

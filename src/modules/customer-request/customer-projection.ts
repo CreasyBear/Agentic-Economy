@@ -21,6 +21,11 @@ export type CustomerRequestNextAction =
 
 type PreparedCandidate = PreparedRouteCandidateSet['candidates'][number]
 export type CustomerOption = Readonly<Omit<PreparedCandidate, 'inspectionRef'>>
+export type CustomerCriterion = Readonly<{
+  label: string
+  value: string | number | boolean
+  basis: 'customer_provided' | 'extracted_from_request'
+}>
 
 export type CustomerRequestView = Readonly<{
   kind: 'request'
@@ -30,6 +35,7 @@ export type CustomerRequestView = Readonly<{
   summary: string
   nextAction: CustomerRequestNextAction
   missingFields: readonly Readonly<{ field: string; label: string; explanation: string }>[]
+  criteria?: readonly CustomerCriterion[]
   clarification?: Readonly<
     | { kind: 'intent_direction'; prompt: string; answerKind: 'natural_language' }
     | { kind: 'contract_fact'; field: string; prompt: string; answerKind: 'typed_value' }
@@ -87,12 +93,14 @@ export function projectRequestEvaluation(input: Readonly<{
   snapshot: Readonly<{ requestId: string; revision: number; intent: string }>
   evaluation: RequestEvaluation
 }>): CustomerRequestView {
+  const criteria = input.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
   if (input.evaluation.posture === 'unsupported') return requestView({
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
     summary: 'No registered business capability currently matches this request.',
     nextAction: 'revise_request',
+    criteria,
   })
   if (input.evaluation.nextRequirement !== undefined) return requestView({
     requestRef: input.snapshot.requestId,
@@ -111,6 +119,7 @@ export function projectRequestEvaluation(input: Readonly<{
           kind: 'contract_fact', field: input.evaluation.nextRequirement.field,
           prompt: input.evaluation.nextRequirement.customerLabel, answerKind: 'typed_value',
         },
+    criteria,
   })
   return requestView({
     requestRef: input.snapshot.requestId,
@@ -118,6 +127,7 @@ export function projectRequestEvaluation(input: Readonly<{
     state: 'ready_to_compare',
     summary: input.snapshot.intent,
     nextAction: 'prepare_options',
+    criteria,
   })
 }
 
@@ -125,6 +135,7 @@ export function projectPreparingOptions(input: Readonly<{
   requestRef: string
   revision: number
   summary: string
+  criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
   return requestView({ ...input, state: 'preparing_options', nextAction: 'wait' })
 }
@@ -133,6 +144,7 @@ export function projectOptionsReady(input: Readonly<{
   requestRef: string
   revision: number
   summary: string
+  criteria?: readonly CustomerCriterion[]
   candidateSet: PreparedRouteCandidateSet
 }>): CustomerRequestView {
   if (input.candidateSet.candidates.length === 0) return requestView({
@@ -154,6 +166,7 @@ export function projectNeedsAttention(input: Readonly<{
   requestRef: string
   revision: number
   summary: string
+  criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
   return requestView({ ...input, state: 'needs_attention', nextAction: 'retry' })
 }
@@ -166,6 +179,7 @@ function requestView(input: Readonly<{
   nextAction: CustomerRequestNextAction
   missingFields?: readonly Readonly<{ field: string; label: string; explanation: string }>[]
   clarification?: CustomerRequestView['clarification']
+  criteria?: readonly CustomerCriterion[]
   options?: readonly CustomerOption[]
 }>): CustomerRequestView {
   return Object.freeze({
@@ -176,6 +190,7 @@ function requestView(input: Readonly<{
     summary: input.summary,
     nextAction: input.nextAction,
     missingFields: Object.freeze((input.missingFields ?? []).map((field) => Object.freeze({ ...field }))),
+    criteria: Object.freeze((input.criteria ?? []).map((criterion) => Object.freeze({ ...criterion }))),
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })

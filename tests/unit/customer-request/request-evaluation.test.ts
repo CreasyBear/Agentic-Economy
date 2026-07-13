@@ -31,6 +31,10 @@ describe('customer Request evaluation', () => {
           probesEnabled: ['candidate:binding:parcel-one', 'candidate:binding:parcel-two'],
         },
       },
+      criteria: [
+        { label: 'Destination postcode', value: '2000', basis: 'customer_provided' },
+        { label: 'Origin postcode', value: '6000', basis: 'customer_provided' },
+      ],
       candidates: [
         { candidateRef: 'candidate:binding:parcel-one', viability: { kind: 'blocked_on_information', fields: ['weight_grams'] } },
         { candidateRef: 'candidate:binding:parcel-two', viability: { kind: 'blocked_on_information', fields: ['weight_grams'] } },

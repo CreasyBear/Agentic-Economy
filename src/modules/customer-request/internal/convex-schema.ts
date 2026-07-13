@@ -83,9 +83,15 @@ const informationRequirementValue = v.union(
   }),
   v.object({ kind: v.literal('intent_direction'), prompt: v.string(), requirementDigest: v.string() }),
 )
+const understoodCriterionValue = v.object({
+  field: v.string(), label: v.string(), value: literalValue,
+  basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+  criterionDigest: v.string(),
+})
 export const requestEvaluationValue = v.object({
   evaluationId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
-  factsDigest: v.string(), facts: v.optional(v.record(v.string(), requestFact)), posture: v.union(
+  factsDigest: v.string(), facts: v.optional(v.record(v.string(), requestFact)),
+  criteria: v.optional(v.array(understoodCriterionValue)), posture: v.union(
     v.literal('progress_available'), v.literal('needs_information'), v.literal('unsupported'),
   ),
   nextRequirement: v.optional(informationRequirementValue), evaluationDigest: v.string(), evaluatedAt: v.number(),

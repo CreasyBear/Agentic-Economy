@@ -72,6 +72,10 @@ const customerView = v.object({
     v.literal('inspect_options'), v.literal('revise_request'), v.literal('retry'),
   ),
   missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })),
+  criteria: v.array(v.object({
+    label: v.string(), value: literalValue,
+    basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+  })),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
     v.object({ kind: v.literal('contract_fact'), field: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
@@ -113,6 +117,7 @@ type StoredEvaluation = Readonly<{
     evaluationId: string
     requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
     facts?: SnapshotValue['facts']
+    criteria?: RequestEvaluation['criteria']
     posture: 'progress_available' | 'needs_information' | 'unsupported'
     nextRequirement?:
       | Readonly<{
@@ -286,6 +291,7 @@ export const compare = action({
       )
       if (prior?.status === 'options_prepared' && prior.candidateSet !== undefined) return writableView(projectOptionsReady({
         requestRef: args.requestRef, revision: args.revision, summary: evaluated.snapshot.intent,
+        criteria: customerCriteria(evaluated.evaluation.criteria),
         candidateSet: prior.candidateSet,
       }))
       if (prior?.status === 'needs_attention') return writableView(projectNeedsAttention({
@@ -363,7 +369,8 @@ export const compare = action({
         })
         return writableView(projectOptionsReady({
           requestRef: args.requestRef, revision: args.revision,
-          summary: evaluated.snapshot.intent, candidateSet: result.candidateSet,
+          summary: evaluated.snapshot.intent, criteria: customerCriteria(evaluated.evaluation.criteria),
+          candidateSet: result.candidateSet,
         }))
       }
       if (result.kind === 'preparation_pending') {
@@ -377,6 +384,7 @@ export const compare = action({
         })
         return writableView(projectPreparingOptions({
           requestRef: args.requestRef, revision: args.revision, summary: evaluated.snapshot.intent,
+          criteria: customerCriteria(evaluated.evaluation.criteria),
         }))
       }
       await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
@@ -464,22 +472,26 @@ async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string
     if (preparation?.status === 'options_prepared' && preparation.candidateSet !== undefined) {
       const liveCandidates = preparation.candidateSet.candidates.filter((candidate) => candidate.expiresAt > Date.now())
       return liveCandidates.length === 0
-        ? writableView(projectNeedsAttention({
+          ? writableView(projectNeedsAttention({
             requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
             summary: 'The prepared options expired. Prepare this request again to get current options.',
+            criteria: customerCriteria(evaluated.evaluation.criteria),
           }))
         : writableView(projectOptionsReady({
             requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
             summary: evaluated.snapshot.intent,
+            criteria: customerCriteria(evaluated.evaluation.criteria),
             candidateSet: { ...preparation.candidateSet, candidates: liveCandidates },
           }))
     }
     if (preparation?.status === 'preparing') return writableView(projectPreparingOptions({
       requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision, summary: evaluated.snapshot.intent,
+      criteria: customerCriteria(evaluated.evaluation.criteria),
     }))
     if (preparation?.status === 'needs_attention') return writableView(projectNeedsAttention({
       requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
       summary: 'Connected businesses could not prepare comparable options for this request.',
+      criteria: customerCriteria(evaluated.evaluation.criteria),
     }))
     return writableView(projectStoredEvaluation(evaluated))
   }
@@ -708,6 +720,7 @@ function writableCandidateSet(candidateSet: PreparedRouteCandidateSet) {
 function writableProjection(projection: ReturnType<typeof projectCustomerRequest>) {
   return projection.kind === 'conflict' ? { ...projection } : {
     ...projection, missingFields: projection.missingFields.map((field) => ({ ...field })),
+    criteria: (projection.criteria ?? []).map((criterion) => ({ ...criterion })),
     options: projection.options.map((option) => ({
       ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
       priceComponents: option.priceComponents.map((component) => ({ ...component })),
@@ -721,6 +734,7 @@ function writableView(view: CustomerRequestView) {
   return {
     ...view,
     missingFields: view.missingFields.map((field) => ({ ...field })),
+    criteria: (view.criteria ?? []).map((criterion) => ({ ...criterion })),
     options: view.options.map((option) => ({
       ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
       priceComponents: option.priceComponents.map((component) => ({ ...component })),
@@ -737,6 +751,7 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
     registrySnapshotDigest: input.evaluation.registrySnapshotDigest,
     factsDigest: input.evaluation.factsDigest,
     facts: input.evaluation.facts ?? input.snapshot.facts,
+    criteria: input.evaluation.criteria ?? [],
     candidates: input.candidates,
     ...(input.evaluation.nextRequirement === undefined ? {} : {
       nextRequirement: input.evaluation.nextRequirement.kind === 'intent_direction'
@@ -822,6 +837,7 @@ async function evaluateAndPersistSnapshot(
         requestId: evaluation.requestId, requestRevision: evaluation.requestRevision,
         registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
         facts: evaluation.facts,
+        criteria: evaluation.criteria.map((criterion) => ({ ...criterion })),
         posture: evaluation.posture,
         ...(evaluation.nextRequirement === undefined ? {} : {
           nextRequirement: evaluation.nextRequirement.kind === 'intent_direction'
@@ -892,7 +908,11 @@ async function resolveRequestCaller(
 }
 
 function refinedIntent(intent: string, message: string): string {
-  return `Initial request:\n${intent.trim()}\n\nCustomer clarification:\n${message.trim()}`
+  return `${intent.trim()}\n${message.trim()}`
+}
+
+function customerCriteria(criteria: RequestEvaluation['criteria'] | undefined) {
+  return (criteria ?? []).map(({ label, value, basis }) => ({ label, value, basis }))
 }
 
 function submitCommand(args: Readonly<{
