@@ -65,6 +65,7 @@ import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.req
 import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
 import { Route as ApiRequestsRequestRefMessagesRouteImport } from './routes/api.requests.$requestRef.messages'
 import { Route as ApiRequestsRequestRefFactsRouteImport } from './routes/api.requests.$requestRef.facts'
+import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
@@ -362,6 +363,12 @@ const ApiRequestsRequestRefFactsRoute =
     path: '/facts',
     getParentRoute: () => ApiRequestsRequestRefRoute,
   } as any)
+const ApiRequestsRequestRefAuthorizationRoute =
+  ApiRequestsRequestRefAuthorizationRouteImport.update({
+    id: '/authorization',
+    path: '/authorization',
+    getParentRoute: () => ApiRequestsRequestRefRoute,
+  } as any)
 const ApiAnswerThreadsThreadIdRoute =
   ApiAnswerThreadsThreadIdRouteImport.update({
     id: '/$threadId',
@@ -453,6 +460,7 @@ export interface FileRoutesByFullPath {
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
@@ -516,6 +524,7 @@ export interface FileRoutesByTo {
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
@@ -581,6 +590,7 @@ export interface FileRoutesById {
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
+  '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
@@ -646,6 +656,7 @@ export interface FileRouteTypes {
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
@@ -709,6 +720,7 @@ export interface FileRouteTypes {
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
@@ -773,6 +785,7 @@ export interface FileRouteTypes {
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
+    | '/api/requests/$requestRef/authorization'
     | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
@@ -1215,6 +1228,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRequestsRequestRefFactsRouteImport
       parentRoute: typeof ApiRequestsRequestRefRoute
     }
+    '/api/requests/$requestRef/authorization': {
+      id: '/api/requests/$requestRef/authorization'
+      path: '/authorization'
+      fullPath: '/api/requests/$requestRef/authorization'
+      preLoaderRoute: typeof ApiRequestsRequestRefAuthorizationRouteImport
+      parentRoute: typeof ApiRequestsRequestRefRoute
+    }
     '/api/answer/threads/$threadId': {
       id: '/api/answer/threads/$threadId'
       path: '/$threadId'
@@ -1361,12 +1381,15 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
 )
 
 interface ApiRequestsRequestRefRouteChildren {
+  ApiRequestsRequestRefAuthorizationRoute: typeof ApiRequestsRequestRefAuthorizationRoute
   ApiRequestsRequestRefFactsRoute: typeof ApiRequestsRequestRefFactsRoute
   ApiRequestsRequestRefMessagesRoute: typeof ApiRequestsRequestRefMessagesRoute
   ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
 }
 
 const ApiRequestsRequestRefRouteChildren: ApiRequestsRequestRefRouteChildren = {
+  ApiRequestsRequestRefAuthorizationRoute:
+    ApiRequestsRequestRefAuthorizationRoute,
   ApiRequestsRequestRefFactsRoute: ApiRequestsRequestRefFactsRoute,
   ApiRequestsRequestRefMessagesRoute: ApiRequestsRequestRefMessagesRoute,
   ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,

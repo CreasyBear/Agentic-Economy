@@ -32,13 +32,22 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { preparedRouteCandidateSetValue, requestSnapshotValue } from '@/modules/customer-request/runtime'
 import type { PlanRevision } from '@/modules/customer-request/public'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import {
+  createProtectedProjectionCommitter,
+  preparationAuthorityDigest,
+  releasePreparationDisclosure,
+  type VerifiedPreparationAuthority,
+} from '@/modules/customer-request/preparation-authority'
 
 import { action, type ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'
 import { loadConvexCapabilityContractRegistry } from './customerRequestCapabilityContractRegistryAdapter'
 import { createConvexCustomerRequestCompilationStore } from './customerRequestCompilationStoreAdapter'
 import { createConvexCustomerRequestPreparationStore } from './customerRequestStoreAdapter'
-import { createConvexPreparationDisclosureStore } from './customerRequestPreparationAuthorityStoreAdapter'
+import {
+  createConvexPreparationDisclosureStore,
+  recordConvexVerifiedPreparationAuthority,
+} from './customerRequestPreparationAuthorityStoreAdapter'
 import { createRegisteredRoutingKernel } from './routingKernel'
 
 const literalValue = v.union(v.string(), v.number(), v.boolean())
@@ -110,6 +119,9 @@ const submitResultValue = v.union(
   ) }),
 )
 type SubmitActionResult = Infer<typeof submitResultValue>
+type AuthorizePreparationResult = Infer<typeof customerView>
+  | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' }>
+  | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
 type SnapshotValue = Infer<typeof requestSnapshotValue>
 type SnapshotCommitResult =
   | Readonly<{ kind: 'stored' }>
@@ -276,6 +288,88 @@ export const refine = action({
   },
 })
 
+export const authorizePreparation = action({
+  args: { requestRef: v.string(), revision: v.number(), idempotencyKey: v.string() },
+  returns: v.union(
+    customerView,
+    v.object({ kind: v.literal('conflict'), requestRef: v.string(), reason: v.literal('revision_changed') }),
+    v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found')) }),
+  ),
+  handler: async (ctx, args): Promise<AuthorizePreparationResult> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const evaluated: StoredEvaluation | null = await ctx.runQuery(
+      internal.customerRequests.getRequestEvaluation,
+      { requestId: args.requestRef, requestRevision: args.revision },
+    )
+    if (evaluated === null || evaluated.snapshot.principalId !== identity.tokenIdentifier) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    if (evaluated.snapshot.revision !== args.revision) return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
+    }
+    const disclosure = evaluated.evaluation.preparationDisclosure
+    const viable = evaluated.candidates.filter((candidate) => candidate.viability.kind === 'viable')
+    const contractIds = [...new Set(viable.map((candidate) => candidate.capabilityContractId))]
+    const registry = await loadConvexCapabilityContractRegistry(ctx)
+    const contract = contractIds.length === 1 && contractIds[0] !== undefined ? registry.get(contractIds[0]) : undefined
+    if (disclosure === undefined || contract?.preparation === undefined || viable.length === 0) return {
+      kind: 'refused' as const, reason: 'request_not_found' as const,
+    }
+    const protectedDefinitions = Object.entries(contract.input).flatMap(([field, definition]) => {
+      const fieldDisclosure = definition.disclosure
+      return evaluated.evaluation.facts?.[field] === undefined || fieldDisclosure?.phase !== 'preparation'
+        || fieldDisclosure.classification === 'public' ? [] : [{
+          field, label: definition.customerLabel, classification: fieldDisclosure.classification,
+        }]
+    }).sort((left, right) => left.field.localeCompare(right.field))
+    if (contract.preparation.customerLabel !== disclosure.purposeLabel
+      || canonicalDigest(protectedDefinitions) !== canonicalDigest(disclosure.categories)) return {
+      kind: 'refused' as const, reason: 'request_not_found' as const,
+    }
+    const active: VerifiedPreparationAuthority | null = await ctx.runQuery(
+      internal.customerRequestPreparationAuthority.getActiveForRequestRevision,
+      { requestId: args.requestRef, requestRevision: args.revision, now: Date.now() },
+    )
+    if (active !== null) return writableView(projectAuthorizedEvaluation(evaluated))
+    const grantedAt = Date.now()
+    const authorityMaterial = {
+      authorityId: `preparation-authority:${canonicalDigest({
+        principalId: identity.tokenIdentifier, requestId: args.requestRef,
+        requestRevision: args.revision, idempotencyKey: args.idempotencyKey,
+      })}`,
+      authorityVersion: 1,
+      principalId: identity.tokenIdentifier,
+      delegatedAgentId: evaluated.snapshot.delegatedAgentId,
+      requestId: args.requestRef,
+      requestRevision: args.revision,
+      mode: 'single_use' as const,
+      permittedFields: disclosure.categories.map((category) => category.field),
+      permittedRecipientKinds: ['candidate_provider' as const],
+      permittedRecipientBindingIds: viable.map((candidate) => candidate.bindingId),
+      permittedPurposes: [contract.preparation.purpose],
+      maximumRecipients: new Set(viable.map((candidate) => candidate.businessId)).size,
+      maximumExposures: viable.length * disclosure.categories.length,
+      maximumOperations: 1,
+      grantedAt,
+      expiresAt: grantedAt + 10 * 60_000,
+    }
+    const authority: VerifiedPreparationAuthority = {
+      ...authorityMaterial,
+      authorityDigest: preparationAuthorityDigest(authorityMaterial),
+      status: 'active',
+      verification: {
+        evidenceRef: `authenticated-customer:${canonicalDigest({
+          authorityId: authorityMaterial.authorityId, principalId: identity.tokenIdentifier, grantedAt,
+        })}`,
+        issuerId: 'ae:customer-request', signerId: identity.tokenIdentifier, keyId: 'clerk-session',
+      },
+    }
+    await recordConvexVerifiedPreparationAuthority(ctx, authority, grantedAt)
+    return writableView(projectAuthorizedEvaluation(evaluated))
+  },
+})
+
 export const compare = action({
   args: { requestRef: v.string(), revision: v.number(), serviceAuth: v.optional(serviceAssertion) },
   returns: optionProjection,
@@ -309,8 +403,15 @@ export const compare = action({
       if (evaluated.evaluation.nextRequirement !== undefined) {
         return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
       }
+      let preparationAuthority: VerifiedPreparationAuthority | null = null
       if (evaluated.evaluation.preparationDisclosure !== undefined) {
-        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
+        preparationAuthority = await ctx.runQuery(
+          internal.customerRequestPreparationAuthority.getActiveForRequestRevision,
+          { requestId: args.requestRef, requestRevision: args.revision, now: Date.now() },
+        )
+        if (preparationAuthority === null) {
+          return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
+        }
       }
       const viable = evaluated.candidates.filter((candidate) => candidate.viability.kind === 'viable')
       const capabilityContractIds = [...new Set(viable.map((candidate) => candidate.capabilityContractId))]
@@ -329,6 +430,14 @@ export const compare = action({
         requestRef: args.requestRef, revision: args.revision,
         summary: 'The registered capability changed before options could be prepared.',
       }))
+      const commitmentSecret = process.env.AE_PREPARATION_PROJECTION_SECRET?.trim()
+      if (preparationAuthority !== null && (commitmentSecret === undefined || commitmentSecret.length < 32)) {
+        return writableView(projectNeedsAttention({
+          requestRef: args.requestRef, revision: args.revision,
+          summary: 'Protected-data preparation is temporarily unavailable. Nothing was shared.',
+          criteria: customerCriteria(evaluated.evaluation.criteria),
+        }))
+      }
       const preparationKey = namespacedKey(
         caller.principalId, 'evaluation-options', args.requestRef,
         `${args.revision}:${evaluated.evaluation.evaluationId}`,
@@ -344,6 +453,8 @@ export const compare = action({
       if (started.kind === 'stale' || started.kind === 'conflict') return {
         kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
       }
+      const evaluationInput = Object.fromEntries(Object.entries(evaluated.evaluation.facts ?? evaluated.snapshot.facts)
+        .map(([field, fact]) => [field, fact.value]))
       const result = await prepareKernelCustomerRequestEvaluationOptions(
         createRegisteredRoutingKernel(ctx),
         {
@@ -365,8 +476,45 @@ export const compare = action({
           allowedBindingIds: viable.map((candidate) => candidate.bindingId),
           preparationGeneration: args.revision,
           contract,
-          publicInput: Object.fromEntries(Object.entries(evaluated.evaluation.facts ?? evaluated.snapshot.facts)
-            .map(([field, fact]) => [field, fact.value])),
+          publicInput: evaluationInput,
+          ...(preparationAuthority === null || commitmentSecret === undefined ? {} : {
+            releasePreparationData: async (releaseInput) => {
+              const protectedValues = Object.fromEntries(releaseInput.fields.flatMap((field) => {
+                const value = evaluationInput[field]
+                return value === undefined ? [] : [[field, value]]
+              }))
+              const result = await releasePreparationDisclosure({
+                operationKey: `${preparationKey}:${releaseInput.releaseKey}`,
+                authorityUseKey: preparationKey,
+                authorityEvidenceRef: preparationAuthority.verification.evidenceRef,
+                principalId: evaluated.snapshot.principalId,
+                delegatedAgentId: evaluated.snapshot.delegatedAgentId,
+                requestId: args.requestRef,
+                requestRevision: args.revision,
+                planRevisionId: evaluated.evaluation.evaluationId,
+                actionId: `evaluation-options:${capabilityContractId}`,
+                capabilityContractId,
+                resolvedInputDigest: canonicalDigest(evaluationInput),
+                protectedProjectionCommitment: createProtectedProjectionCommitter(commitmentSecret)(protectedValues),
+                recipient: releaseInput.recipient,
+                purpose: releaseInput.purpose,
+                purposeLabel: releaseInput.purposeLabel,
+                fields: releaseInput.fields,
+                fieldCategories: releaseInput.fields.map((field) => ({
+                  field, label: contract.input[field]?.customerLabel ?? field,
+                })),
+                protectedValues,
+              }, {
+                verifier: { verify: async ({ authorityEvidenceRef }) => authorityEvidenceRef === preparationAuthority.verification.evidenceRef
+                  ? { kind: 'verified' as const, authority: preparationAuthority }
+                  : { kind: 'refused' as const, reason: 'authority_evidence_invalid' as const } },
+                store: createConvexPreparationDisclosureStore(ctx),
+                now: Date.now,
+                release: async ({ allocationId, protectedValues: values }) => await releaseInput.release({ allocationId, protectedValues: values }),
+              })
+              return result
+            },
+          }),
         },
       )
       if (result.kind === 'candidate_set') {
@@ -504,6 +652,13 @@ async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string
       summary: 'Connected businesses could not prepare comparable options for this request.',
       criteria: customerCriteria(evaluated.evaluation.criteria),
     }))
+    if (evaluated.evaluation.preparationDisclosure !== undefined) {
+      const authority: VerifiedPreparationAuthority | null = await ctx.runQuery(
+        internal.customerRequestPreparationAuthority.getActiveForRequestRevision,
+        { requestId: evaluated.snapshot.requestId, requestRevision: evaluated.snapshot.revision, now: Date.now() },
+      )
+      if (authority !== null) return writableView(projectAuthorizedEvaluation(evaluated))
+    }
     return writableView(projectStoredEvaluation(evaluated))
   }
   const unevaluatedSnapshot: SnapshotValue | null = await ctx.runQuery(
@@ -784,6 +939,14 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
     evaluationDigest: input.evaluation.evaluationDigest,
   }
   return projectRequestEvaluation({ snapshot: input.snapshot, evaluation })
+}
+
+function projectAuthorizedEvaluation(input: StoredEvaluation): CustomerRequestView {
+  const { preparationDisclosure: _preparationDisclosure, ...evaluation } = input.evaluation
+  return projectStoredEvaluation({
+    ...input,
+    evaluation,
+  })
 }
 
 async function evaluateAndPersistSnapshot(

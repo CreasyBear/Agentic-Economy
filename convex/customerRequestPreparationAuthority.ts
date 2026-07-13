@@ -82,6 +82,29 @@ export const recordAuthority = internalMutation({
   },
 })
 
+export const getActiveForRequestRevision = internalQuery({
+  args: { requestId: v.string(), requestRevision: v.number(), now: v.number() },
+  returns: v.union(authority, v.null()),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('customerRequestPreparationAuthorities')
+      .withIndex('by_requestId_and_status', (query) => query.eq('requestId', args.requestId).eq('status', 'active'))
+      .collect()
+    const row = rows.filter((candidate) => candidate.requestRevision === args.requestRevision && candidate.expiresAt > args.now)
+      .sort((left, right) => right.grantedAt - left.grantedAt)[0]
+    if (row === undefined) return null
+    return {
+      authorityId: row.authorityId, authorityVersion: row.authorityVersion, authorityDigest: row.authorityDigest,
+      principalId: row.principalId, delegatedAgentId: row.delegatedAgentId,
+      requestId: row.requestId, requestRevision: row.requestRevision, mode: row.mode, status: row.status,
+      verification: { ...row.verification }, permittedFields: [...row.permittedFields],
+      permittedRecipientKinds: [...row.permittedRecipientKinds],
+      permittedRecipientBindingIds: [...row.permittedRecipientBindingIds], permittedPurposes: [...row.permittedPurposes],
+      maximumRecipients: row.maximumRecipients, maximumExposures: row.maximumExposures,
+      maximumOperations: row.maximumOperations, grantedAt: row.grantedAt, expiresAt: row.expiresAt,
+    }
+  },
+})
+
 export const allocate = internalMutation({
   args: allocation,
   returns: allocationResult,

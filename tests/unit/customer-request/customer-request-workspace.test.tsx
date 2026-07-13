@@ -105,14 +105,20 @@ describe('customer Request workspace', () => {
 
   it('explains protected data sharing before any provider preparation', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-protected' })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
-      kind: 'request', requestRef: 'request:protected', revision: 1, state: 'needs_authorization',
-      summary: 'Send my parcel', nextAction: 'review_disclosure', missingFields: [], criteria: [], options: [],
-      disclosureReview: {
-        purpose: 'Compare parcel services', maximumRecipients: 2,
-        categories: [{ label: 'Origin postcode', classification: 'personal' }],
-      },
-    })))
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:protected', revision: 1, state: 'needs_authorization',
+        summary: 'Send my parcel', nextAction: 'review_disclosure', missingFields: [], criteria: [], options: [],
+        disclosureReview: {
+          purpose: 'Compare parcel services', maximumRecipients: 2,
+          categories: [{ label: 'Origin postcode', classification: 'personal' }],
+        },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:protected', revision: 1, state: 'ready_to_compare',
+        summary: 'Send my parcel', nextAction: 'prepare_options', missingFields: [], criteria: [], options: [],
+      }))
+    vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Send my parcel' } })
     fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
@@ -121,6 +127,9 @@ describe('customer Request workspace', () => {
     expect(screen.getByText(/up to 2 eligible registered businesses/)).toBeTruthy()
     expect(screen.getByText(/Nothing has been shared/)).toBeTruthy()
     expect(screen.queryByText('origin_postcode')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Allow this comparison' }))
+    await screen.findByRole('button', { name: 'Show available options' })
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aprotected/authorization', expect.objectContaining({ method: 'POST' }))
   })
 
   it('shows authentication as a customer action rather than a protocol error', async () => {

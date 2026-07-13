@@ -32,6 +32,7 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
     preparationGeneration: number
     contract: Parameters<CustomerRequestActionRouter['route']>[0]['contract']
     publicInput: Readonly<Record<string, string | number | boolean>>
+    releasePreparationData?: NonNullable<Parameters<CustomerRequestActionRouter['route']>[0]['releasePreparationData']>
     currency?: string
     maximumSpendMinor?: number
   }>,
@@ -40,7 +41,10 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
   if (purpose === undefined) return { kind: 'no_route', reason: 'structured_preparation_not_registered' }
   const preparationFields = Object.entries(input.contract.input)
     .filter(([, field]) => field.disclosure?.phase === 'preparation')
-  if (preparationFields.some(([, field]) => field.disclosure?.classification !== 'public')) {
+  const protectedFieldNames = preparationFields
+    .filter(([, field]) => field.disclosure?.classification !== 'public')
+    .map(([field]) => field)
+  if (protectedFieldNames.length > 0 && input.releasePreparationData === undefined) {
     return { kind: 'no_route', reason: 'preparation_authority_required' }
   }
   const requiredFields = preparationFields.filter(([, field]) => field.required).map(([field]) => field)
@@ -84,6 +88,28 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
       }
     },
     releaseForCandidate: async (release) => {
+      if (protectedFieldNames.length > 0) {
+        if (input.releasePreparationData === undefined) return {
+          kind: 'refused' as const, reason: 'preparation_authority_required',
+          nextAction: 'Ask the customer for permission to compare these options.',
+        }
+        const result = await input.releasePreparationData({
+          releaseKey: release.releaseKey,
+          recipient: {
+            nodeId: release.recipient.nodeId, bindingId: release.recipient.bindingId,
+            name: release.recipient.name, kind: 'candidate_provider',
+          },
+          purpose: release.purpose,
+          purposeLabel: input.contract.preparation!.customerLabel,
+          fields: release.fields.filter((field) => protectedFieldNames.includes(field)),
+          release: async ({ allocationId, protectedValues }) => await release.release({ allocationId, protectedValues }),
+        })
+        return result.kind === 'released'
+          ? result
+          : result.kind === 'uncertain'
+            ? { kind: result.kind, allocationId: result.allocationId, nextAction: result.nextAction }
+            : { kind: result.kind, reason: result.reason, nextAction: result.nextAction }
+      }
       const allocationId = `public:${release.releaseKey}`
       try {
         const released = await release.release({ allocationId, protectedValues: input.publicInput })

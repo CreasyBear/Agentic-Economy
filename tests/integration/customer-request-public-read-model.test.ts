@@ -314,6 +314,70 @@ describe('production CustomerRequest read model', () => {
     expect(durable.snapshots[1]?.intent).toContain('Somewhere relaxed for lunch.')
     expect(JSON.stringify(refinedView)).not.toMatch(/requestContext|criterionDigest|capabilityContractId/)
   })
+
+  it('records one bounded customer permission before protected preparation can become ready', async () => {
+    const backend = convexTest(schema, modules)
+    const customer = backend.withIdentity(identity)
+    const contract = {
+      capabilityContractId: 'protected.compare:v1', name: 'Protected comparison', operation: 'quote' as const,
+      preparation: { purpose: 'protected_comparison', customerLabel: 'Compare protected options' },
+      input: { area: {
+        valueType: 'string' as const, customerLabel: 'Area', required: true, decisionRelevance: 'option_selection' as const,
+        disclosure: {
+          classification: 'personal' as const, phase: 'preparation' as const,
+          recipient: 'candidate_provider' as const, purposes: ['protected_comparison'],
+        },
+      } },
+      output: { result: {
+        valueType: 'string' as const, customerLabel: 'Result', required: true,
+        decisionRelevance: 'option_selection' as const, evidenceRole: 'provider_offer' as const,
+      } },
+      consequence: { commitment: 'none' as const, spend: 'quoted' as const, reversibility: 'not_applicable' as const, approval: 'explicit' as const },
+    }
+    await backend.mutation(internal.customerRequestCapabilityContracts.registerInternal, { contract, registeredAt: 1_000 })
+    const snapshotMaterial = {
+      requestId: 'request:protected:1', revision: 1, principalId, delegatedAgentId: principalId,
+      intent: 'Compare options in Fremantle', networkId: 'ae:public',
+      facts: { area: { value: 'Fremantle', source: { kind: 'customer' as const, assertionRef: 'assertion:area' } } },
+    }
+    await backend.mutation(internal.customerRequests.commitRequestSnapshot, {
+      commandKey: 'submit:protected:1', commandDigest: 'digest:submit:protected:1', expectedRevision: 0,
+      snapshot: { ...snapshotMaterial, snapshotDigest: 'digest:snapshot:protected:1', recordedAt: 1_000 },
+    })
+    await backend.mutation(internal.customerRequests.putRequestEvaluation, {
+      evaluation: {
+        evaluationId: 'evaluation:protected:1', requestId: 'request:protected:1', requestRevision: 1,
+        registrySnapshotDigest: 'registry:protected:1', factsDigest: 'facts:protected:1', facts: snapshotMaterial.facts,
+        criteria: [{
+          field: 'area', label: 'Area', value: 'Fremantle', basis: 'customer_provided' as const,
+          criterionDigest: 'criterion:area:1',
+        }],
+        preparationDisclosure: {
+          purposeLabel: 'Compare protected options', maximumRecipients: 1,
+          categories: [{ field: 'area', label: 'Area', classification: 'personal' as const }],
+        },
+        posture: 'progress_available' as const, evaluationDigest: 'digest:evaluation:protected:1', evaluatedAt: 1_000,
+      },
+      candidates: [{
+        candidateRef: 'candidate:protected:1', businessId: 'business:protected:1', bindingId: 'binding:protected:1',
+        capabilityContractId: contract.capabilityContractId, viability: { kind: 'viable' as const },
+      }],
+    })
+
+    await expect(customer.action(api.customerRequestApplication.resume, { requestRef: 'request:protected:1' }))
+      .resolves.toMatchObject({ state: 'needs_authorization', nextAction: 'review_disclosure' })
+    const command = { requestRef: 'request:protected:1', revision: 1, idempotencyKey: 'authorize:protected:1' }
+    await expect(customer.action(api.customerRequestApplication.authorizePreparation, command))
+      .resolves.toMatchObject({ state: 'ready_to_compare', nextAction: 'prepare_options' })
+    await expect(customer.action(api.customerRequestApplication.authorizePreparation, command))
+      .resolves.toMatchObject({ state: 'ready_to_compare', nextAction: 'prepare_options' })
+    const authorities = await backend.run(async (ctx) => await ctx.db.query('customerRequestPreparationAuthorities').collect())
+    expect(authorities).toHaveLength(1)
+    expect(authorities[0]).toMatchObject({
+      principalId, requestId: 'request:protected:1', requestRevision: 1, mode: 'single_use',
+      permittedFields: ['area'], permittedRecipientBindingIds: ['binding:protected:1'], maximumRecipients: 1, maximumOperations: 1,
+    })
+  })
 })
 
 async function seedReadyRequest(backend: ReturnType<typeof convexTest>, requestPrincipalId = principalId) {

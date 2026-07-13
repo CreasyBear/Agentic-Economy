@@ -64,6 +64,39 @@ describe('customer request kernel router', () => {
     })
     expect(result).toMatchObject({ kind: 'candidate_set', candidateSet: { candidates: [{ expectedCost: { amountMinor: 900 } }] } })
     expect(receivedData).toEqual({ requestContext: 'Compare options' })
+
+    const protectedContract = defineCapabilityContract({
+      ...contract,
+      input: { requestContext: {
+        ...contract.input.requestContext,
+        disclosure: {
+          classification: 'personal', phase: 'preparation', recipient: 'candidate_provider',
+          purposes: ['sandbox_option_comparison'],
+        },
+      } },
+    })
+    const releases: string[] = []
+    receivedData = undefined
+    const protectedResult = await prepareKernelCustomerRequestEvaluationOptions(kernel, presentationDirectory(), {
+      preparationRequestId: 'route:sandbox:protected:1', request: {
+        requestId: 'request:sandbox:protected:1', revision: 1, principalId: 'principal:1', delegatedAgentId: 'agent:1',
+        networkId: 'ae:public',
+      },
+      evaluation: { evaluationId: 'evaluation:sandbox:protected:1', evaluationDigest: 'sha256:evaluation-protected-1' },
+      allowedBindingIds: ['sandbox.option.one:v1'], preparationGeneration: 1,
+      contract: protectedContract, publicInput: { requestContext: 'Compare protected options' },
+      releasePreparationData: async (release) => {
+        releases.push(release.recipient.bindingId)
+        const provider = await release.release({
+          allocationId: `allocation:${release.recipient.bindingId}`,
+          protectedValues: { requestContext: 'Compare protected options' },
+        })
+        return { ...provider, kind: 'released', allocationId: `allocation:${release.recipient.bindingId}`, disposition: 'released', releasedAt: 1_100 }
+      },
+    })
+    expect(protectedResult.kind).toBe('candidate_set')
+    expect(releases).toEqual(['sandbox.option.one:v1'])
+    expect(receivedData).toEqual({ requestContext: 'Compare protected options' })
   })
 
   it('routes structured preparation through allocation-bound recipient releases without legacy query smuggling', async () => {
