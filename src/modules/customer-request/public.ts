@@ -59,3 +59,19 @@ export {
   type IssueApprovalGrantV2Result,
   type VerifiedApprovalGrantActor,
 } from './approval-grant-v2'
+export {
+  actionAttemptV2Digest,
+  actionAuthorityBudgetV2Digest,
+  actionAuthorityBudgetV2Ref,
+  admitActionAttemptV2,
+  type ActionAttemptV2,
+  type ActionAuthorityBudgetV2,
+  type ActionAttemptAdmissionBundleV2,
+  type ActionAttemptDataReservationV2,
+  type ActionAttemptIdempotencyClaimV2,
+  type ActionAttemptSpendReservationV2,
+  type ActionDisclosureGrantV2,
+  type AdmitActionAttemptV2Result,
+  type ApprovalGrantConsumptionV2,
+  type ProviderReleaseGrantV2,
+} from './action-attempt-v2'

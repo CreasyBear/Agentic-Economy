@@ -16,6 +16,7 @@ import {
 } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
 import {
+  actionAttemptV2Value,
   approvalGrantV2Value,
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
@@ -199,6 +200,22 @@ const approvalActionResult = v.union(
   }),
 )
 type ApprovalActionResult = Infer<typeof approvalActionResult>
+const actionAttemptAdmissionResult = v.union(
+  v.object({
+    kind: v.literal('accepted'), requestRef: v.string(), revision: v.number(),
+    actionAttemptRef: v.string(), state: v.literal('admitted'), expiresAt: v.number(),
+    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
+  }),
+  v.object({
+    kind: v.literal('conflict'), requestRef: v.string(),
+    reason: v.union(v.literal('revision_changed'), v.literal('idempotency_key_reused'), v.literal('approval_used')),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(v.literal('authentication_required'), v.literal('request_not_found'), v.literal('admission_invalid')),
+  }),
+)
+type ActionAttemptAdmissionResult = Infer<typeof actionAttemptAdmissionResult>
 
 export const submit = action({
   args: {
@@ -582,6 +599,68 @@ export const approvePreparedAction = action({
   },
 })
 
+export const admitApprovedAction = action({
+  args: {
+    requestRef: v.string(), revision: v.number(), approvalGrantRef: v.string(), idempotencyKey: v.string(),
+  },
+  returns: actionAttemptAdmissionResult,
+  handler: async (ctx, args): Promise<ActionAttemptAdmissionResult> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
+    if (args.requestRef.trim().length === 0 || args.requestRef.length > 200
+      || !Number.isSafeInteger(args.revision) || args.revision < 1
+      || !args.approvalGrantRef.startsWith('approval-grant:v2:') || args.approvalGrantRef.length > 500
+      || args.idempotencyKey.trim().length === 0 || args.idempotencyKey.length > 200) {
+      return { kind: 'refused', reason: 'admission_invalid' }
+    }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
+    const requestPrincipalId = current.aggregate.snapshot.principalId
+    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
+    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(
+      internal.customerRequestPrincipals.getAgentPrincipal,
+      { principalId: requestPrincipalId },
+    )
+    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.revision !== args.revision) return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
+    }
+    const command = {
+      requestRef: args.requestRef, revision: args.revision,
+      approvalGrantRef: args.approvalGrantRef, idempotencyKey: args.idempotencyKey,
+    }
+    const result: ActionAttemptMutationResult = await ctx.runMutation(
+      internal.customerRequestV2ActionAttempt.admit,
+      {
+        commandKey: namespacedKey(requestPrincipalId, 'admit', args.requestRef, args.idempotencyKey),
+        commandDigest: canonicalDigest(command), principalId: requestPrincipalId,
+        expectedRequestId: args.requestRef, expectedRequestRevision: args.revision,
+        approvalGrantRef: args.approvalGrantRef, now: Date.now(),
+      },
+    )
+    if (result.kind === 'conflict') return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
+    }
+    if (result.kind === 'refused') return result.reason === 'approval_grant_consumed'
+      ? { kind: 'conflict', requestRef: args.requestRef, reason: 'approval_used' }
+      : {
+          kind: 'refused',
+          reason: result.reason === 'approval_grant_not_found' ? 'request_not_found' : 'admission_invalid',
+        }
+    return {
+      kind: 'accepted',
+      requestRef: result.actionAttempt.lineage.requestId,
+      revision: result.actionAttempt.lineage.requestRevision,
+      actionAttemptRef: result.actionAttempt.actionAttemptRef,
+      state: result.actionAttempt.state,
+      expiresAt: result.actionAttempt.expiresAt,
+      recovery: result.actionAttempt.recovery,
+    }
+  },
+})
+
 async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   commandKey: string
   commandDigest: string
@@ -827,6 +906,16 @@ type ApprovalGrantMutationResult = Readonly<
       kind: 'refused'
       reason: 'prepared_action_not_found' | 'prepared_action_expired' | 'spend_scope_invalid'
         | 'expiry_scope_invalid' | 'approval_material_invalid' | 'capability_authority_changed'
+    }
+>
+type ActionAttemptMutationResult = Readonly<
+  | { kind: 'admitted' | 'replayed'; actionAttempt: Infer<typeof actionAttemptV2Value> }
+  | { kind: 'conflict'; reason: 'idempotency_key_reused' }
+  | {
+      kind: 'refused'
+      reason: 'approval_grant_not_found' | 'approval_grant_expired' | 'approval_authority_changed'
+        | 'approval_grant_consumed' | 'cumulative_authority_changed'
+        | 'cumulative_authority_exhausted' | 'admission_material_invalid'
     }
 >
 

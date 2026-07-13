@@ -242,6 +242,75 @@ export const approvalGrantV2Value = v.object({
   }),
   issuedAt: v.number(), expiresAt: v.number(),
 })
+const actionAttemptLinkV2Value = v.object({ actionAttemptRef: v.string(), actionAttemptDigest: v.string() })
+export const actionAttemptV2Value = v.object({
+  format: v.literal('ae.action-attempt:v2'),
+  actionAttemptRef: v.string(), actionAttemptDigest: v.string(), state: v.literal('admitted'),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(), authority: approvalGrantV2Value,
+  authorityLineageDigest: v.string(), authorityBudgetRef: v.string(),
+  admissionKeyDigest: v.string(), lineage: actionPreparationLineageV2Value,
+  maximumSpend: v.object({ currency: v.string(), amountMinor: v.number() }),
+  recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
+  idempotencyClaimRef: v.string(), spendReservationRef: v.string(), dataReservationRef: v.string(),
+  providerReleaseGrantRef: v.string(), disclosureGrantRef: v.string(),
+  admittedAt: v.number(), expiresAt: v.number(),
+})
+export const actionAuthorityBudgetV2Value = v.object({
+  format: v.literal('ae.action-authority-budget:v2'),
+  authorityBudgetRef: v.string(), authorityBudgetDigest: v.string(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(), authorityLineageDigest: v.string(),
+  state: v.union(v.literal('available'), v.literal('exhausted')),
+  currency: v.string(), maximumSpendMinor: v.number(), reservedSpendMinor: v.number(),
+  executionScopeDigest: v.string(), maximumExposureCount: v.number(), reservedExposureCount: v.number(),
+  updatedAt: v.number(), expiresAt: v.number(),
+})
+export const approvalGrantConsumptionV2Value = v.object({
+  format: v.literal('ae.approval-grant-consumption:v2'),
+  consumptionRef: v.string(), consumptionDigest: v.string(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value, consumedAt: v.number(),
+})
+export const actionAttemptIdempotencyClaimV2Value = v.object({
+  format: v.literal('ae.action-attempt-idempotency-claim:v2'),
+  idempotencyClaimRef: v.string(), idempotencyClaimDigest: v.string(), admissionKeyDigest: v.string(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(), authorityLineageDigest: v.string(),
+  attempt: actionAttemptLinkV2Value, claimedAt: v.number(),
+})
+export const actionAttemptSpendReservationV2Value = v.object({
+  format: v.literal('ae.action-attempt-spend-reservation:v2'),
+  spendReservationRef: v.string(), spendReservationDigest: v.string(), authorityBudgetRef: v.string(),
+  state: v.literal('reserved'), currency: v.string(), amountMinor: v.number(),
+  reservedBeforeMinor: v.number(), reservedAfterMinor: v.number(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value,
+  reservedAt: v.number(), expiresAt: v.number(),
+})
+export const actionAttemptDataReservationV2Value = v.object({
+  format: v.literal('ae.action-attempt-data-reservation:v2'),
+  dataReservationRef: v.string(), dataReservationDigest: v.string(), authorityBudgetRef: v.string(),
+  state: v.literal('reserved'), scope: v.array(approvalGrantDataUseV2Value), scopeDigest: v.string(),
+  exposureDigest: v.string(), declarationCount: v.number(), exposureCount: v.number(),
+  reservedExposureBefore: v.number(), reservedExposureAfter: v.number(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value,
+  reservedAt: v.number(), expiresAt: v.number(),
+})
+export const providerReleaseGrantV2Value = v.object({
+  format: v.literal('ae.provider-release-grant:v2'),
+  providerReleaseGrantRef: v.string(), providerReleaseGrantDigest: v.string(), state: v.literal('unreleased'),
+  businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value,
+  issuedAt: v.number(), expiresAt: v.number(),
+})
+export const actionDisclosureGrantV2Value = v.object({
+  format: v.literal('ae.disclosure-grant:v2'),
+  disclosureGrantRef: v.string(), disclosureGrantDigest: v.string(), state: v.literal('unreleased'),
+  bindingId: v.string(), scope: v.array(approvalGrantDataUseV2Value), scopeDigest: v.string(),
+  exposureDigest: v.string(), approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  authorityLineageDigest: v.string(), attempt: actionAttemptLinkV2Value,
+  issuedAt: v.number(), expiresAt: v.number(),
+})
 export const preparedActionRecoveryReasonV2Value = v.union(
   v.literal('options_pending'), v.literal('disclosure_not_released'), v.literal('disclosure_uncertain'),
   v.literal('provider_response_invalid'), v.literal('provider_echo_mismatch'),
@@ -494,6 +563,74 @@ export const customerRequestV2Tables = {
   customerRequestV2ApprovalGrantCommands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
     requestId: v.string(), requestRevision: v.number(), preparedActionRef: v.string(),
+    resultRef: v.string(), resultDigest: v.string(), committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
+  customerRequestV2ActionAttempts: defineTable({
+    actionAttemptRef: v.string(), actionAttemptDigest: v.string(), approvalGrantRef: v.string(),
+    requestId: v.string(), requestRevision: v.number(), actionId: v.string(), principalId: v.string(),
+    actionAttempt: actionAttemptV2Value, recordedAt: v.number(),
+  })
+    .index('by_actionAttemptRef', ['actionAttemptRef'])
+    .index('by_approvalGrantRef', ['approvalGrantRef'])
+    .index('by_requestId_and_requestRevision_and_actionId', ['requestId', 'requestRevision', 'actionId']),
+
+  customerRequestV2ActionAuthorityBudgets: defineTable({
+    authorityBudgetRef: v.string(), authorityBudgetDigest: v.string(),
+    approvalGrantRef: v.string(), requestId: v.string(), requestRevision: v.number(), actionId: v.string(),
+    authorityLineageDigest: v.string(), budget: actionAuthorityBudgetV2Value, recordedAt: v.number(),
+  })
+    .index('by_authorityBudgetRef', ['authorityBudgetRef'])
+    .index('by_requestId_and_requestRevision_and_actionId', ['requestId', 'requestRevision', 'actionId']),
+
+  customerRequestV2ApprovalGrantConsumptions: defineTable({
+    consumptionRef: v.string(), consumptionDigest: v.string(), approvalGrantRef: v.string(),
+    actionAttemptRef: v.string(), authorityLineageDigest: v.string(),
+    consumption: approvalGrantConsumptionV2Value, recordedAt: v.number(),
+  })
+    .index('by_consumptionRef', ['consumptionRef'])
+    .index('by_approvalGrantRef', ['approvalGrantRef']),
+
+  customerRequestV2ActionAttemptIdempotencyClaims: defineTable({
+    idempotencyClaimRef: v.string(), idempotencyClaimDigest: v.string(), admissionKeyDigest: v.string(),
+    actionAttemptRef: v.string(), authorityLineageDigest: v.string(),
+    idempotencyClaim: actionAttemptIdempotencyClaimV2Value, recordedAt: v.number(),
+  })
+    .index('by_idempotencyClaimRef', ['idempotencyClaimRef'])
+    .index('by_admissionKeyDigest', ['admissionKeyDigest']),
+
+  customerRequestV2ActionAttemptSpendReservations: defineTable({
+    spendReservationRef: v.string(), spendReservationDigest: v.string(), actionAttemptRef: v.string(),
+    authorityLineageDigest: v.string(), reservation: actionAttemptSpendReservationV2Value, recordedAt: v.number(),
+  })
+    .index('by_spendReservationRef', ['spendReservationRef'])
+    .index('by_actionAttemptRef', ['actionAttemptRef']),
+
+  customerRequestV2ActionAttemptDataReservations: defineTable({
+    dataReservationRef: v.string(), dataReservationDigest: v.string(), actionAttemptRef: v.string(),
+    authorityLineageDigest: v.string(), reservation: actionAttemptDataReservationV2Value, recordedAt: v.number(),
+  })
+    .index('by_dataReservationRef', ['dataReservationRef'])
+    .index('by_actionAttemptRef', ['actionAttemptRef']),
+
+  customerRequestV2ProviderReleaseGrants: defineTable({
+    providerReleaseGrantRef: v.string(), providerReleaseGrantDigest: v.string(), actionAttemptRef: v.string(),
+    authorityLineageDigest: v.string(), grant: providerReleaseGrantV2Value, recordedAt: v.number(),
+  })
+    .index('by_providerReleaseGrantRef', ['providerReleaseGrantRef'])
+    .index('by_actionAttemptRef', ['actionAttemptRef']),
+
+  customerRequestV2ActionDisclosureGrants: defineTable({
+    disclosureGrantRef: v.string(), disclosureGrantDigest: v.string(), actionAttemptRef: v.string(),
+    authorityLineageDigest: v.string(), grant: actionDisclosureGrantV2Value, recordedAt: v.number(),
+  })
+    .index('by_disclosureGrantRef', ['disclosureGrantRef'])
+    .index('by_actionAttemptRef', ['actionAttemptRef']),
+
+  customerRequestV2ActionAttemptAdmissionCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
+    requestId: v.string(), requestRevision: v.number(),
+    approvalGrantRef: v.string(), authorityLineageDigest: v.string(),
     resultRef: v.string(), resultDigest: v.string(), committedAt: v.number(),
   }).index('by_commandKey', ['commandKey']),
 } as const

@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { admitActionAttemptV2 } from '@/modules/customer-request/public'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
+import { persistActionAttemptAdmissionBundle } from '../../convex/customerRequestV2ActionAttempt'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -718,6 +720,154 @@ describe('current V2 Customer Request application path', () => {
     expect(approvalRows.current).toHaveLength(1)
     expect(approvalRows.commands).toHaveLength(1)
     expect(approvalRows.legacy).toEqual([])
+    if (approved.kind !== 'approved') throw new Error('approval missing')
+    await expect(customer.action(api.customerRequestApplication.admitApprovedAction, {
+      requestRef: otherRequest.requestRef, revision: otherRequest.revision,
+      approvalGrantRef: approved.approvalRef, idempotencyKey: 'admit:v2:cross-request',
+    })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+    const selectedOperation = operations.find(({ offeringId }) => (
+      offeringId === 'offering:sandbox-option-two:reference-lookup'
+    ))
+    if (selectedOperation === undefined) throw new Error('selected operation missing')
+    await expect(backend.mutation(internal.customerRequestV2ActionAttempt.admit, {
+      commandKey: 'action-attempt:v2:expired', commandDigest: 'sha256:' + '8'.repeat(64), principalId,
+      expectedRequestId: review.requestRef, expectedRequestRevision: review.revision,
+      approvalGrantRef: approved.approvalRef, now: providerNow + 50_000,
+    })).resolves.toEqual({ kind: 'refused', reason: 'approval_grant_expired' })
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'revoke',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:admission-stale'], conformanceEvidenceRefs: ['test:admission-stale'],
+      }, providerNow + 31)
+      if (result.kind !== 'ineligible') throw new Error('pre-admission supply revoke failed')
+    })
+    await expect(customer.action(api.customerRequestApplication.admitApprovedAction, {
+      requestRef: review.requestRef, revision: review.revision,
+      approvalGrantRef: approved.approvalRef, idempotencyKey: 'admit:v2:stale-before-write',
+    })).resolves.toEqual({ kind: 'refused', reason: 'admission_invalid' })
+    expect(await backend.run(async (ctx) => (
+      (await ctx.db.query('customerRequestV2ActionAttempts').collect()).length
+      + (await ctx.db.query('customerRequestV2ApprovalGrantConsumptions').collect()).length
+      + (await ctx.db.query('customerRequestV2ProviderReleaseGrants').collect()).length
+      + (await ctx.db.query('customerRequestV2ActionDisclosureGrants').collect()).length
+    ))).toBe(0)
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'admit',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:admission-restored'],
+        conformanceEvidenceRefs: ['test:admission-restored'],
+      }, providerNow + 32)
+      if (result.kind !== 'eligible') throw new Error('pre-admission supply restore failed')
+    })
+    const storedApproval = await backend.run(async (ctx) => ctx.db.query('customerRequestV2ApprovalGrants')
+      .withIndex('by_approvalGrantRef', (query) => query.eq('approvalGrantRef', approved.approvalRef)).unique())
+    if (storedApproval === null) throw new Error('stored approval missing')
+    const rollbackBundle = admitActionAttemptV2({
+      approvalGrant: storedApproval.approvalGrant,
+      admissionKey: 'action-attempt:v2:injected-failure',
+      admittedAt: providerNow + 41,
+      currentAuthorityBudget: null,
+    })
+    if (rollbackBundle.kind !== 'admitted') throw new Error('rollback bundle missing')
+    await expect(backend.run(async (ctx) => {
+      await persistActionAttemptAdmissionBundle(ctx.db, {
+        commandKey: 'action-attempt:v2:injected-failure', commandDigest: 'sha256:' + 'b'.repeat(64),
+        principalId, expectedRequestId: review.requestRef, expectedRequestRevision: review.revision,
+        approvalGrantRef: approved.approvalRef, now: providerNow + 41,
+      }, rollbackBundle.bundle)
+      throw new Error('injected_after_all_admission_writes')
+    })).rejects.toThrow('injected_after_all_admission_writes')
+    const rowsAfterRollback = await backend.run(async (ctx) => ({
+      attempts: await ctx.db.query('customerRequestV2ActionAttempts').collect(),
+      budgets: await ctx.db.query('customerRequestV2ActionAuthorityBudgets').collect(),
+      consumptions: await ctx.db.query('customerRequestV2ApprovalGrantConsumptions').collect(),
+      claims: await ctx.db.query('customerRequestV2ActionAttemptIdempotencyClaims').collect(),
+      spend: await ctx.db.query('customerRequestV2ActionAttemptSpendReservations').collect(),
+      data: await ctx.db.query('customerRequestV2ActionAttemptDataReservations').collect(),
+      releases: await ctx.db.query('customerRequestV2ProviderReleaseGrants').collect(),
+      disclosures: await ctx.db.query('customerRequestV2ActionDisclosureGrants').collect(),
+      commands: await ctx.db.query('customerRequestV2ActionAttemptAdmissionCommands').collect(),
+    }))
+    expect(Object.values(rowsAfterRollback).map((rows) => rows.length)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0])
+    const admissionRequest = {
+      requestRef: review.requestRef, revision: review.revision,
+      approvalGrantRef: approved.approvalRef, idempotencyKey: 'admit:v2:one',
+    }
+    const admitted = await customer.action(api.customerRequestApplication.admitApprovedAction, admissionRequest)
+    expect(admitted).toMatchObject({
+      kind: 'accepted', requestRef: review.requestRef, revision: review.revision,
+      actionAttemptRef: expect.stringMatching(/^action-attempt:v2:/), state: 'admitted',
+      expiresAt: providerNow + 50_000,
+      recovery: { unknownOutcome: 'reconcile_only', automaticRetry: false },
+    })
+    await expect(customer.action(
+      api.customerRequestApplication.admitApprovedAction, admissionRequest,
+    )).resolves.toEqual(admitted)
+    const spendBeforeCorruption = await backend.run(async (ctx) => ctx.db
+      .query('customerRequestV2ActionAttemptSpendReservations')
+      .withIndex('by_actionAttemptRef', (query) => query.eq(
+        'actionAttemptRef', admitted.kind === 'accepted' ? admitted.actionAttemptRef : '',
+    )).unique())
+    if (spendBeforeCorruption === null) throw new Error('spend reservation missing')
+    const { spendReservationDigest: _originalDigest, ...corruptedSpendMaterial } = {
+      ...spendBeforeCorruption.reservation,
+      amountMinor: spendBeforeCorruption.reservation.amountMinor + 1,
+    }
+    const corruptedSpend = {
+      ...corruptedSpendMaterial,
+      spendReservationDigest: canonicalDigest(corruptedSpendMaterial),
+    }
+    await backend.run(async (ctx) => await ctx.db.patch(spendBeforeCorruption._id, {
+      spendReservationDigest: corruptedSpend.spendReservationDigest,
+      reservation: corruptedSpend,
+    }))
+    await expect(customer.action(
+      api.customerRequestApplication.admitApprovedAction, admissionRequest,
+    )).rejects.toThrow('customer_request_v2_action_attempt_replay_integrity_failure')
+    await backend.run(async (ctx) => await ctx.db.patch(spendBeforeCorruption._id, {
+      spendReservationDigest: spendBeforeCorruption.spendReservationDigest,
+      reservation: spendBeforeCorruption.reservation,
+    }))
+    await expect(customer.action(
+      api.customerRequestApplication.admitApprovedAction, admissionRequest,
+    )).resolves.toEqual(admitted)
+    await expect(customer.action(api.customerRequestApplication.admitApprovedAction, {
+      ...admissionRequest, approvalGrantRef: 'approval-grant:v2:changed',
+    })).resolves.toEqual({
+      kind: 'conflict', requestRef: review.requestRef, reason: 'idempotency_key_reused',
+    })
+    await expect(customer.action(api.customerRequestApplication.admitApprovedAction, {
+      ...admissionRequest, idempotencyKey: 'admit:v2:second',
+    })).resolves.toEqual({ kind: 'conflict', requestRef: review.requestRef, reason: 'approval_used' })
+    await expect(stranger.action(api.customerRequestApplication.admitApprovedAction, {
+      ...admissionRequest, idempotencyKey: 'admit:v2:stranger',
+    })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+    const admissionRows = await backend.run(async (ctx) => ({
+      attempts: await ctx.db.query('customerRequestV2ActionAttempts').collect(),
+      budgets: await ctx.db.query('customerRequestV2ActionAuthorityBudgets').collect(),
+      consumptions: await ctx.db.query('customerRequestV2ApprovalGrantConsumptions').collect(),
+      claims: await ctx.db.query('customerRequestV2ActionAttemptIdempotencyClaims').collect(),
+      spend: await ctx.db.query('customerRequestV2ActionAttemptSpendReservations').collect(),
+      data: await ctx.db.query('customerRequestV2ActionAttemptDataReservations').collect(),
+      releases: await ctx.db.query('customerRequestV2ProviderReleaseGrants').collect(),
+      disclosures: await ctx.db.query('customerRequestV2ActionDisclosureGrants').collect(),
+      commands: await ctx.db.query('customerRequestV2ActionAttemptAdmissionCommands').collect(),
+      legacyClaims: await ctx.db.query('routingKernelExecutionClaims').collect(),
+      legacyRuns: await ctx.db.query('routingKernelRootRuns').collect(),
+      legacyReleases: await ctx.db.query('routingKernelStepReleases').collect(),
+    }))
+    expect(Object.fromEntries(Object.entries(admissionRows).map(([key, rows]) => [key, rows.length])))
+      .toEqual({
+        attempts: 1, budgets: 1, consumptions: 1, claims: 1, spend: 1, data: 1,
+        releases: 1, disclosures: 1, commands: 1,
+        legacyClaims: 0, legacyRuns: 0, legacyReleases: 0,
+      })
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
     })).resolves.toMatchObject({
@@ -735,10 +885,6 @@ describe('current V2 Customer Request application path', () => {
       },
     })
 
-    const selectedOperation = operations.find(({ offeringId }) => (
-      offeringId === 'offering:sandbox-option-two:reference-lookup'
-    ))
-    if (selectedOperation === undefined) throw new Error('selected operation missing')
     await backend.run(async (ctx) => {
       const result = await setCapabilitySupplyEligibility(ctx.db, {
         offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,

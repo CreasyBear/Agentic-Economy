@@ -124,6 +124,61 @@ type OpenedApprovalMaterial =
       reason: 'prepared_action_not_found' | 'capability_authority_changed'
     }>
 
+export type OpenedApprovalGrantForAdmission =
+  | Readonly<{ kind: 'ready'; approvalGrant: Doc<'customerRequestV2ApprovalGrants'>['approvalGrant'] }>
+  | Readonly<{
+      kind: 'refused'
+      reason: 'approval_grant_not_found' | 'approval_grant_expired' | 'approval_authority_changed'
+    }>
+
+export async function openExactApprovalGrantForAdmission(
+  db: MutationCtx['db'],
+  expected: Readonly<{ approvalGrantRef: string; principalId: string; now: number }>,
+): Promise<OpenedApprovalGrantForAdmission> {
+  const row = await db.query('customerRequestV2ApprovalGrants')
+    .withIndex('by_approvalGrantRef', (query) => query.eq('approvalGrantRef', expected.approvalGrantRef)).unique()
+  if (row === null || row.principalId !== expected.principalId || !approvalGrantRowIntegrityValid(row)) {
+    return { kind: 'refused', reason: 'approval_grant_not_found' }
+  }
+  if (row.approvalGrant.expiresAt <= expected.now) {
+    return { kind: 'refused', reason: 'approval_grant_expired' }
+  }
+  const material = await openExactApprovalMaterial(db, {
+    preparedActionRef: row.preparedActionRef,
+    principalId: expected.principalId,
+    expectedRequestId: row.requestId,
+    expectedRequestRevision: row.requestRevision,
+  })
+  if (material.kind !== 'ready'
+    || material.preparedAction.preparedActionDigest !== row.preparedActionDigest) {
+    return { kind: 'refused', reason: 'approval_authority_changed' }
+  }
+  const reissued = issueApprovalGrantV2({
+    preparedAction: material.preparedAction,
+    contract: material.contract,
+    preparation: {
+      reviewRef: row.approvalGrant.disclosure.reviewRef,
+      reviewDigest: row.approvalGrant.disclosure.reviewDigest,
+      authorityScopeDigest: row.approvalGrant.disclosure.authorityScopeDigest,
+    },
+    actor: {
+      kind: row.approvalGrant.actor.kind,
+      requestPrincipalId: row.approvalGrant.actor.principalId,
+      ownerId: row.approvalGrant.actor.ownerId,
+      credentialId: row.approvalGrant.actor.credentialId,
+      authenticationEvidenceRef: row.approvalGrant.actor.authenticationEvidenceRef,
+    },
+    maximumSpendMinor: row.approvalGrant.spend.maximumAmountMinor,
+    expiresAt: row.approvalGrant.expiresAt,
+    now: row.approvalGrant.issuedAt,
+  })
+  if (reissued.kind !== 'issued'
+    || reissued.approvalGrant.approvalGrantDigest !== row.approvalGrantDigest) {
+    return { kind: 'refused', reason: 'approval_authority_changed' }
+  }
+  return { kind: 'ready', approvalGrant: row.approvalGrant }
+}
+
 async function openExactApprovalMaterial(
   db: MutationCtx['db'],
   expected: Readonly<{

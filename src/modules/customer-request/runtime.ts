@@ -11,7 +11,15 @@ export {
   requestSnapshotValue,
 } from './internal/convex-schema'
 export {
+  actionAttemptDataReservationV2Value,
+  actionAuthorityBudgetV2Value,
+  actionAttemptIdempotencyClaimV2Value,
+  actionAttemptSpendReservationV2Value,
+  actionAttemptV2Value,
+  actionDisclosureGrantV2Value,
+  approvalGrantConsumptionV2Value,
   approvalGrantV2Value,
+  providerReleaseGrantV2Value,
   actionPreparationApprovalEvidenceV2Value,
   actionPreparationLineageV2Value,
   capabilityContractRefV2Value,
