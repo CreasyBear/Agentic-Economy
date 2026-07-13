@@ -25,11 +25,4 @@ crons.interval(
   {}
 )
 
-crons.interval(
-  'cleanup expired routing kernel operational rows',
-  { hours: 1 },
-  internal.routingKernelAdmission.cleanupOperationalRows,
-  {}
-)
-
 export default crons

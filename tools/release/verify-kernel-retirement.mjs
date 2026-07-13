@@ -16,8 +16,8 @@ export function verifyKernelRetirement(root = process.cwd()) {
     .filter((path) => !path.endsWith('tools/release/verify-kernel-retirement.mjs'))
   const activeText = activeFiles.map((path) => [path, readFileSync(join(root, path), 'utf8')])
 
-  for (const [role, path] of Object.entries(kernelRetirementManifest.canonicalAuthority)) {
-    if (!existsSync(join(root, path))) errors.push(`canonical_authority_missing:${role}:${path}`)
+  for (const [role, path] of Object.entries(kernelRetirementManifest.retainedHistoricalSurfaces)) {
+    if (!existsSync(join(root, path))) errors.push(`retained_historical_surface_missing:${role}:${path}`)
   }
 
   for (const path of kernelRetirementManifest.retired.files) {

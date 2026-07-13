@@ -1,16 +1,11 @@
-export const KERNEL_RETIREMENT_MANIFEST_VERSION: 'ae-kernel-retirement:v1'
+export const KERNEL_RETIREMENT_MANIFEST_VERSION: 'ae-kernel-retirement:v2'
 
 export const kernelRetirementManifest: Readonly<{
   schemaVersion: typeof KERNEL_RETIREMENT_MANIFEST_VERSION
-  canonicalAuthority: Readonly<{
-    contract: string
-    application: string
-    runtime: string
-    ingress: string
-    durableRuntime: string
-    persistence: string
-    schema: string
-    scheduler: string
+  retainedHistoricalSurfaces: Readonly<{
+    ingressRetirement: string
+    historicalReadback: string
+    historicalSchema: string
   }>
   retired: Readonly<{
     files: readonly string[]

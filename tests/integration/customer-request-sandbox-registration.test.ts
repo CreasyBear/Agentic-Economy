@@ -46,7 +46,12 @@ describe('V2-only sandbox supply registration', () => {
       })
     })
 
-    const eligible = await backend.query(internal.routingKernelBindings.listEligible, { networkId: 'ae:public' })
+    const eligible = await backend.run(async (ctx) => await ctx.db.query('routingKernelBindings')
+      .withIndex('by_networkId_admission_conformance', (query) => query
+        .eq('networkId', 'ae:public')
+        .eq('admission', 'admitted')
+        .eq('conformance', 'conformant'))
+      .take(1))
     expect(eligible).toEqual([])
   })
 })

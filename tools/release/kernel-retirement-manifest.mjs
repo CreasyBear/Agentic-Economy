@@ -1,20 +1,29 @@
-export const KERNEL_RETIREMENT_MANIFEST_VERSION = 'ae-kernel-retirement:v1'
+export const KERNEL_RETIREMENT_MANIFEST_VERSION = 'ae-kernel-retirement:v2'
 
 export const kernelRetirementManifest = Object.freeze({
   schemaVersion: KERNEL_RETIREMENT_MANIFEST_VERSION,
-  canonicalAuthority: Object.freeze({
-    contract: 'src/modules/routing-kernel/contract.ts',
-    application: 'src/modules/routing-kernel/application.ts',
-    runtime: 'src/modules/routing-kernel/runtime.ts',
-    ingress: 'convex/http.ts',
-    durableRuntime: 'convex/routingKernel.ts',
-    persistence: 'convex/routingKernelStore.ts',
-    schema: 'src/modules/routing-kernel/internal/convex-schema.ts',
-    scheduler: 'convex/crons.ts',
+  retainedHistoricalSurfaces: Object.freeze({
+    ingressRetirement: 'convex/http.ts',
+    historicalReadback: 'convex/routingKernelV1History.ts',
+    historicalSchema: 'src/modules/routing-kernel/internal/convex-schema.ts',
   }),
   retired: Object.freeze({
     files: Object.freeze([
       'convex/clearance.ts',
+      'convex/routingKernel.ts',
+      'convex/routingKernelAdmission.ts',
+      'convex/routingKernelAgentGrants.ts',
+      'convex/routingKernelBindings.ts',
+      'convex/routingKernelEvidence.ts',
+      'convex/routingKernelHostedIncidentProof.ts',
+      'convex/routingKernelIncidentControl.ts',
+      'convex/routingKernelStore.ts',
+      'convex/routingKernelStoreAdapter.ts',
+      'convex/routingKernelStructuredPreparation.test.ts',
+      'convex/routingKernelStructuredPreparation.ts',
+      'convex/routingKernelStructuredPreparationStoreAdapter.ts',
+      'convex/routingKernelTracer.ts',
+      'convex/routingKernelTransport.ts',
       'convex/spikeHandshakeRuntime.ts',
       'src/modules/clearance',
       'src/modules/harness/agent-door.ts',
@@ -40,7 +49,10 @@ export const kernelRetirementManifest = Object.freeze({
       'protectedActionPolicyDecisions', 'protectedActionPrivateEvidenceRefs', 'protectedActionProposals',
       'protectedActionReceipts', 'protectedActionSupportRecords',
     ]),
-    jobs: Object.freeze(['cleanupLegacyClearance', 'repairProtectedActions', 'dispatchProcurementRequests']),
+    jobs: Object.freeze([
+      'cleanupLegacyClearance', 'repairProtectedActions', 'dispatchProcurementRequests',
+      'cleanup expired routing kernel operational rows', 'cleanupOperationalRows',
+    ]),
     environmentKeys: Object.freeze([
       'AE_ALLOW_CHAT_API', 'AE_SOURCE_WRITE_KEY_CLEARANCE', 'AE_SOURCE_WRITE_KEY_BUSINESS_ACTION',
       'AE_SOURCE_WRITE_KEY_PROTECTED_ACTION', 'AE_SOURCE_WRITE_KEY_PROCUREMENT',
