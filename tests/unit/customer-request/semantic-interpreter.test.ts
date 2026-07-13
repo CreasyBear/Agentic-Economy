@@ -77,4 +77,53 @@ describe('Customer Request semantic interpreter', () => {
     if (proposal.kind !== 'capability_candidates') throw new Error('capability_proposal_expected')
     expect(proposal.facts).toEqual({})
   })
+
+  it('preserves an explicit cheapest priority when the model omits it', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:test',
+      transport: { generateJson: vi.fn().mockResolvedValue({ content: JSON.stringify({
+        candidateCapabilityContractIds: ['sandbox.option.quote:v1'], facts: [],
+      }) }) },
+      timeoutMs: 1_000, maximumResponseBytes: 8_000,
+    })
+
+    const proposal = await interpreter.propose({
+      customerJob: 'Find the cheapest connected sandbox option.', explicitFacts: {},
+      capabilities: [{
+        capabilityContractId: 'sandbox.option.quote:v1', name: 'Sandbox option', operation: 'quote',
+        description: 'Returns a sandbox option.', input: [], output: [],
+      }],
+    })
+
+    expect(proposal.kind).toBe('capability_candidates')
+    if (proposal.kind !== 'capability_candidates') throw new Error('capability_proposal_expected')
+    expect(proposal.decisionPreference).toEqual({
+      objective: 'lowest_maximum_price', basis: 'extracted_from_request', evidenceRef: expect.stringMatching(/^inference:/),
+    })
+  })
+
+  it.each([
+    'Do not prioritize the cheapest option.',
+    "The cheapest option isn't necessarily the best.",
+    'Compare quality rather than the lowest price.',
+  ])('does not invent a price priority from negated customer language: %s', async (customerJob) => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:test',
+      transport: { generateJson: vi.fn().mockResolvedValue({ content: JSON.stringify({
+        candidateCapabilityContractIds: ['sandbox.option.quote:v1'], facts: [],
+      }) }) },
+      timeoutMs: 1_000, maximumResponseBytes: 8_000,
+    })
+
+    const proposal = await interpreter.propose({
+      customerJob, explicitFacts: {}, capabilities: [{
+        capabilityContractId: 'sandbox.option.quote:v1', name: 'Sandbox option', operation: 'quote',
+        description: 'Returns a sandbox option.', input: [], output: [],
+      }],
+    })
+
+    expect(proposal.kind).toBe('capability_candidates')
+    if (proposal.kind !== 'capability_candidates') throw new Error('capability_proposal_expected')
+    expect(proposal.decisionPreference).toBeUndefined()
+  })
 })

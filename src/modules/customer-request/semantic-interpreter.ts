@@ -85,6 +85,7 @@ const SYSTEM_INSTRUCTION = [
   'Return one JSON object only.',
 ].join(' ')
 const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v1'
+const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 
 export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
   interpreterId: string
@@ -132,6 +133,8 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
             ...(parsed.data.decisionPreference === undefined ? {} : { decisionPreference: parsed.data.decisionPreference }),
           },
         })
+        const decisionPreference = parsed.data.decisionPreference
+          ?? detectExplicitLowestMaximumPricePriority(payload.customerJob)
 
         const capabilityIds = new Set(payload.capabilities.map((capability) => capability.capabilityContractId))
         const selectedIds = [...new Set(parsed.data.candidateCapabilityContractIds)]
@@ -169,12 +172,13 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           kind: 'capability_candidates' as const,
           candidateCapabilityContractIds: Object.freeze(selectedIds),
           facts: Object.freeze(facts),
-          ...(parsed.data.decisionPreference === undefined ? {} : { decisionPreference: Object.freeze({
-            objective: parsed.data.decisionPreference,
+          ...(decisionPreference === undefined ? {} : { decisionPreference: Object.freeze({
+            objective: decisionPreference,
             basis: 'extracted_from_request' as const,
             evidenceRef: `inference:${canonicalDigest({
               interpreterId: input.interpreterId, customerJob: payload.customerJob,
-              objective: parsed.data.decisionPreference, proposalDigest,
+              objective: decisionPreference, proposalDigest,
+              explicitPricePriorityVersion: EXPLICIT_PRICE_PRIORITY_VERSION,
             })}`,
           }) }),
         })
@@ -183,6 +187,17 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
       }
     },
   })
+}
+
+function detectExplicitLowestMaximumPricePriority(customerJob: string): 'lowest_maximum_price' | undefined {
+  const normalized = customerJob.normalize('NFKC').toLocaleLowerCase('en')
+  const match = /\b(?:cheapest|lowest(?:[\s-]+maximum)?[\s-]+price)\b/u.exec(normalized)
+  if (match === null) return undefined
+  const before = normalized.slice(Math.max(0, match.index - 48), match.index)
+  const after = normalized.slice(match.index + match[0].length, match.index + match[0].length + 48)
+  const negatesBefore = /\b(?:do\s+not|don't|not|never|without|instead\s+of|rather\s+than)\b[^.!?]{0,32}$/u.test(before)
+  const negatesAfter = /^[^.!?]{0,24}\b(?:is\s+not|isn't|does\s+not|doesn't|should\s+not|shouldn't)\b/u.test(after)
+  return negatesBefore || negatesAfter ? undefined : 'lowest_maximum_price'
 }
 
 function hasCompatibleSharedField(
