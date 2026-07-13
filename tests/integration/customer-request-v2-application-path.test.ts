@@ -423,9 +423,11 @@ describe('current V2 Customer Request application path', () => {
       currentRevision: originalHead.revision, currentAggregateDigest: originalHead.aggregateDigest,
     }))
 
-    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+    const dispatch = await backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
       operationRef: firstOperationRef, principalId, now: 2_040,
-    })).resolves.toMatchObject({ kind: 'dispatch', adapterId: 'http-json:v1' })
+    })
+    expect(dispatch).toMatchObject({ kind: 'dispatch', adapterId: 'http-json:v1' })
+    if (dispatch.kind !== 'dispatch') throw new Error('dispatch missing')
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
       operationRef: firstOperationRef, principalId, now: 2_050,
     })).resolves.toEqual({ kind: 'in_flight' })
@@ -440,32 +442,313 @@ describe('current V2 Customer Request application path', () => {
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
       operationRef: firstOperationRef, principalId, now: 152_050,
     })).resolves.toEqual({ kind: 'terminal', state: 'uncertain' })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:uncertain', commandDigest: 'sha256:' + '5'.repeat(64), principalId,
+      preparationRef: review.preparationRef,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: 152_060,
+    })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'disclosure_uncertain' })
     const reconciliationEvidence = {
-      operationRef: firstOperationRef, disposition: 'released',
+      operationRef: firstOperationRef, disposition: 'not_released',
       providerEvidenceRef: 'provider-evidence:operation-observed', responseDigest: 'sha256:' + '9'.repeat(64),
     } as const
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.reconcileUncertain, {
       ...reconciliationEvidence, evidenceDigest: canonicalDigest(reconciliationEvidence), observedAt: 2_070,
-    })).resolves.toBe('released')
+    })).resolves.toBe('not_released')
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
       operationRef: firstOperationRef, principalId, now: 2_080,
-    })).resolves.toEqual({ kind: 'terminal', state: 'released' })
+    })).resolves.toEqual({ kind: 'terminal', state: 'not_released' })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:not-released', commandDigest: 'sha256:' + '6'.repeat(64), principalId,
+      preparationRef: review.preparationRef,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: 152_080,
+    })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'disclosure_not_released' })
     expect(await backend.run(async (ctx) => (
       ctx.db.query('customerRequestV2PreparationReconciliationObservations').collect()
     ))).toMatchObject([{
-      operationRef: firstOperationRef, disposition: 'released',
+      operationRef: firstOperationRef, disposition: 'not_released',
       providerEvidenceRef: reconciliationEvidence.providerEvidenceRef,
       responseDigest: reconciliationEvidence.responseDigest,
       bindingId: expect.stringMatching(/^binding:/),
     }])
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
-    })).resolves.toMatchObject({ kind: 'request', state: 'preparing_options' })
+    })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention', nextAction: 'revise_request' })
+    const staleTerminalDigest = await backend.query(
+      internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+      { preparationRef: review.preparationRef, principalId },
+    )
+    const lateOperation = await backend.run(async (ctx) => ctx.db.query('customerRequestV2PreparationEgressOperations')
+      .withIndex('by_operationRef', (query) => query.eq('operationRef', firstOperationRef)).unique())
+    if (lateOperation === null) throw new Error('late operation missing')
+    const lateNow = Date.now()
+    const lateEnvelope = {
+      format: 'ae.provider-option:v1', operationRef: firstOperationRef, contractRef: model.contractRef,
+      offeringId: lateOperation.offeringId, bindingId: lateOperation.bindingId,
+      assertionRef: 'provider-assertion:late-release', assertedAt: lateNow, validUntil: lateNow + 60_000,
+      output: { optionSummary: 'Late provider response' },
+    }
+    const lateBodyText = JSON.stringify(lateEnvelope)
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.resolveDispatch, {
+      operationRef: firstOperationRef, dispatchAttemptRef: dispatch.dispatchAttemptRef,
+      state: 'released', evidenceRef: 'provider-evidence:late-release', now: lateNow,
+      responseStatus: 200, responseContentType: 'application/json',
+      responseBodyText: lateBodyText, responseBodyDigest: canonicalDigest(lateBodyText),
+    })).resolves.toBe('released')
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:stale-terminal-snapshot', commandDigest: 'sha256:' + 'a'.repeat(64),
+      principalId, preparationRef: review.preparationRef, preparationMaterialDigest: staleTerminalDigest,
+      now: lateNow,
+    })).resolves.toEqual({ kind: 'conflict', reason: 'prepared_action_material_changed' })
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'options_ready',
+      preparedAction: { selection: { unavailableCount: 1 } },
+    })
     expect(await backend.run(async (ctx) => (
       ctx.db.query('customerRequestV2PreparationEgressOperations').collect()
     ))).toEqual(expect.arrayContaining([
       expect.objectContaining({ operationRef: firstOperationRef, state: 'released' }),
       expect.objectContaining({ operationRef: secondOperationRef, state: 'not_released' }),
+    ]))
+    expect(await backend.run(async (ctx) => (
+      ctx.db.query('customerRequestV2PreparedActionRecoveries').collect()
+    ))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'disclosure_uncertain' }),
+      expect.objectContaining({ reason: 'disclosure_not_released' }),
+    ]))
+  })
+
+  it('persists and replays one exact V2 Prepared Action from validated released options', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: input.key, value: 'Find the cheapest sandbox option' }],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:prepared-action', requestId: 'request:v2:prepared-action',
+      delegatedAgentId: 'agent:prepared-action', customerJob: 'Find the cheapest sandbox option',
+      routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error('request missing')
+    const review = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef, revision: submitted.revision,
+      idempotencyKey: 'prepare:v2:prepared-action',
+    })
+    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation missing')
+    const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: review.requestRef,
+    })
+    if (aggregate.kind !== 'current' || aggregate.aggregate.plan.actions[0] === undefined) {
+      throw new Error('aggregate missing')
+    }
+    expect(aggregate.aggregate.evaluation.decisionPreference).toMatchObject({
+      objective: 'lowest_maximum_price', basis: 'extracted_from_request',
+    })
+    const authorized = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
+      commandKey: 'authorize:internal:prepared-action', commandDigest: 'sha256:' + '2'.repeat(64), principalId,
+      requestId: review.requestRef, expectedRevision: review.revision,
+      actionId: aggregate.aggregate.plan.actions[0].actionId, preparationRef: review.preparationRef,
+      approvalActor: {
+        kind: 'clerk_owner', requestPrincipalId: principalId, ownerId: identity.subject,
+        credentialId: principalId, authenticationEvidenceRef: 'clerk:test:prepared-action', approvedAt: 2_010,
+      },
+      now: 2_010,
+    })
+    if ((authorized.kind !== 'stored' && authorized.kind !== 'replayed')
+      || authorized.preparation.kind !== 'ready_for_routing') throw new Error('authorization missing')
+    const allocated = await backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
+      commandKey: 'egress:prepared-action', commandDigest: 'sha256:' + '3'.repeat(64), principalId,
+      preparationRef: review.preparationRef, now: 2_020,
+    })
+    if (allocated.kind !== 'allocated') throw new Error('allocation missing')
+    const operations = await backend.run(async (ctx) => (
+      ctx.db.query('customerRequestV2PreparationEgressOperations')
+        .withIndex('by_preparationRef', (query) => query.eq('preparationRef', review.preparationRef!)).collect()
+    ))
+    const providerNow = Date.now()
+    for (const operation of operations) {
+      const begun = await backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+        operationRef: operation.operationRef, principalId, now: 2_030,
+      })
+      if (begun.kind !== 'dispatch') throw new Error('dispatch missing')
+      const response = {
+        format: 'ae.provider-option:v1', operationRef: operation.operationRef,
+        contractRef: model.contractRef, offeringId: operation.offeringId, bindingId: operation.bindingId,
+        assertionRef: `provider-assertion:${operation.bindingId}`,
+        assertedAt: providerNow, validUntil: providerNow + 60_000,
+        output: { optionSummary: `Validated result from ${operation.bindingId}` },
+      }
+      const responseBodyText = JSON.stringify(response)
+      await backend.mutation(internal.customerRequestV2PreparationEgressState.resolveDispatch, {
+        operationRef: operation.operationRef, dispatchAttemptRef: begun.dispatchAttemptRef,
+        state: 'released', evidenceRef: `provider-response:${operation.bindingId}`,
+        responseStatus: 200, responseContentType: 'application/json',
+        responseBodyDigest: canonicalDigest(responseBodyText), responseBodyText, now: providerNow + 10,
+      })
+    }
+
+    const command = {
+      commandKey: 'prepared-action:one', commandDigest: 'sha256:' + '4'.repeat(64), principalId,
+      preparationRef: review.preparationRef,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: providerNow + 20,
+    }
+    const prepared = await backend.mutation(internal.customerRequestV2PreparedAction.prepare, command)
+    expect(prepared).toMatchObject({
+      kind: 'prepared',
+      preparedAction: {
+        format: 'ae.prepared-action:v2', business: { name: 'Sandbox Option Two' },
+        offering: { offeringId: 'offering:sandbox-option-two:reference-lookup' },
+        binding: { bindingId: 'binding:sandbox-option-two:http-json' },
+        price: { currency: 'AUD', maximumAmountMinor: 900 },
+        comparison: { kind: 'lowest_maximum_price', candidateCount: 2 },
+      },
+    })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, command)).resolves.toEqual(prepared)
+    const stored = await backend.run(async (ctx) => ({
+      current: await ctx.db.query('customerRequestV2PreparedActions').collect(),
+      legacy: await ctx.db.query('customerRequestPreparedActions').collect(),
+    }))
+    expect(stored.current).toHaveLength(1)
+    expect(stored.legacy).toEqual([])
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'options_ready', nextAction: 'inspect_options',
+      preparedAction: {
+        actionRef: prepared.kind === 'prepared' ? prepared.preparedAction.preparedActionRef : '',
+        businessName: 'Sandbox Option Two', offeringLabel: 'Sandbox Option Two',
+        price: { currency: 'AUD', minimumAmountMinor: 900, maximumAmountMinor: 900 },
+        materialTerms: [{ label: 'Environment', value: 'Sandbox only; not real supply.' }],
+        cancellation: { kind: 'unsupported' }, validUntil: providerNow + 60_000,
+        selection: { basis: 'lowest_maximum_price', alternativeCount: 1 },
+        alternatives: [{
+          businessName: 'Sandbox Option One', price: { currency: 'AUD', maximumAmountMinor: 1_200 },
+        }],
+      },
+    })
+
+    const selectedOperation = operations.find(({ offeringId }) => (
+      offeringId === 'offering:sandbox-option-two:reference-lookup'
+    ))
+    if (selectedOperation === undefined) throw new Error('selected operation missing')
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'revoke',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:prepared-action-stale'],
+        conformanceEvidenceRefs: ['test:prepared-action-stale'],
+      }, providerNow + 30)
+      if (result.kind !== 'ineligible') throw new Error('supply revoke failed')
+    })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:stale', commandDigest: 'sha256:' + '7'.repeat(64), principalId,
+      preparationRef: review.preparationRef, preparationMaterialDigest: command.preparationMaterialDigest,
+      now: providerNow + 40,
+    })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'capability_graph_changed' })
+    await backend.run(async (ctx) => {
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: selectedOperation.offeringId, bindingId: selectedOperation.bindingId,
+        contractRef: model.contractRef, decision: 'admit',
+        expectedOfferingRegistrationHash: selectedOperation.offeringRegistrationHash,
+        expectedBindingRegistrationHash: selectedOperation.bindingRegistrationHash,
+        admissionEvidenceRefs: ['test:prepared-action-restored'],
+        conformanceEvidenceRefs: ['test:prepared-action-restored'],
+      }, providerNow + 50)
+      if (result.kind !== 'eligible') throw new Error('supply restore failed')
+    })
+
+    await backend.run(async (ctx) => await ctx.db.patch(selectedOperation.businessId, { publicStatus: 'unpublished' }))
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:business-unpublished', commandDigest: 'sha256:' + '6'.repeat(64), principalId,
+      preparationRef: review.preparationRef, preparationMaterialDigest: command.preparationMaterialDigest,
+      now: providerNow + 55,
+    })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'capability_graph_changed' })
+    await backend.run(async (ctx) => await ctx.db.patch(selectedOperation.businessId, { publicStatus: 'published' }))
+
+    const rewriteSelectedResponse = async (response: Record<string, unknown>) => {
+      const responseBodyText = JSON.stringify(response)
+      await backend.run(async (ctx) => await ctx.db.patch(selectedOperation._id, {
+        responseBodyText, responseBodyDigest: canonicalDigest(responseBodyText),
+      }))
+    }
+    const exactEnvelope: Record<string, unknown> = {
+      format: 'ae.provider-option:v1', operationRef: selectedOperation.operationRef,
+      contractRef: model.contractRef, offeringId: selectedOperation.offeringId,
+      bindingId: selectedOperation.bindingId,
+      assertionRef: `provider-assertion:${selectedOperation.bindingId}`,
+      assertedAt: providerNow, validUntil: providerNow + 60_000,
+      output: { optionSummary: `Validated result from ${selectedOperation.bindingId}` },
+    }
+    await rewriteSelectedResponse({ ...exactEnvelope, bindingId: 'binding:mismatched' })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:echo-mismatch', commandDigest: 'sha256:' + '8'.repeat(64), principalId,
+      preparationRef: review.preparationRef,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: providerNow + 60,
+    })).resolves.toEqual({ kind: 'conflict', reason: 'prepared_action_material_changed' })
+    await rewriteSelectedResponse({ ...exactEnvelope, output: { unsupported: true } })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:invalid-output', commandDigest: 'sha256:' + '9'.repeat(64), principalId,
+      preparationRef: review.preparationRef,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: providerNow + 70,
+    })).resolves.toEqual({ kind: 'conflict', reason: 'prepared_action_material_changed' })
+    await rewriteSelectedResponse({ ...exactEnvelope, output: { optionSummary: 'Changed valid provider material' } })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      commandKey: 'prepared-action:material-changed', commandDigest: 'sha256:' + 'a'.repeat(64), principalId,
+      preparationRef: review.preparationRef,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: providerNow + 80,
+    })).resolves.toEqual({ kind: 'conflict', reason: 'prepared_action_material_changed' })
+    await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
+      ...command,
+      preparationMaterialDigest: await backend.query(
+        internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+        { preparationRef: review.preparationRef, principalId },
+      ),
+      now: providerNow + 60_001,
+    })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'provider_assertion_expired' })
+    expect(await backend.run(async (ctx) => (
+      ctx.db.query('customerRequestV2PreparedActionRecoveries').collect()
+    ))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'capability_graph_changed' }),
+      expect.objectContaining({ reason: 'provider_assertion_expired' }),
     ]))
   })
 

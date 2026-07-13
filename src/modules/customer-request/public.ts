@@ -45,3 +45,10 @@ export {
   type CustomerRequestSemanticInterpreterInput,
   type CustomerRequestSemanticProposal,
 } from './semantic-interpreter'
+export {
+  compilePreparedActionOptions,
+  preparedActionV2Digest,
+  type CompilePreparedActionOptionsResult,
+  type PreparedActionV2,
+  type PreparedActionOptionCandidate,
+} from './prepared-action-v2'

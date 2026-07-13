@@ -513,7 +513,7 @@ async function openPreparation(
   return { kind: 'ready' as const, preparation: row.preparation, aggregate: revision.aggregate, action, supplies: selected }
 }
 
-function operationIntegrityValid(operation: Doc<'customerRequestV2PreparationEgressOperations'>): boolean {
+export function operationIntegrityValid(operation: Doc<'customerRequestV2PreparationEgressOperations'>): boolean {
   const material = {
     preparationRef: operation.preparationRef,
     requestId: operation.requestId,
@@ -551,19 +551,19 @@ async function markAllocatedNotReleased(
   })
 }
 
-function preparationIntegrityValid(
+export function preparationIntegrityValid(
   preparation: Doc<'customerRequestV2ActionPreparations'>['preparation'],
 ): boolean {
   const { preparationDigest, ...material } = preparation
   return canonicalDigest(material as StableHashValue) === preparationDigest
 }
 
-function aggregateIntegrityValid(aggregate: Doc<'customerRequestV2Revisions'>['aggregate']): boolean {
+export function aggregateIntegrityValid(aggregate: Doc<'customerRequestV2Revisions'>['aggregate']): boolean {
   const { aggregateDigest, ...material } = aggregate
   return aggregate.aggregateVersion === 2 && canonicalDigest(material as StableHashValue) === aggregateDigest
 }
 
-function allocationIntegrityValid(allocation: Doc<'customerRequestV2PreparationDisclosureAllocations'>): boolean {
+export function allocationIntegrityValid(allocation: Doc<'customerRequestV2PreparationDisclosureAllocations'>): boolean {
   const material = {
     operationRef: allocation.operationRef,
     preparationRef: allocation.preparationRef,
@@ -589,7 +589,7 @@ function allocationIntegrityValid(allocation: Doc<'customerRequestV2PreparationD
     && allocation.allocationRef === `preparation-disclosure:${allocation.allocationDigest}`
 }
 
-async function verifiedPreparationAuthority(
+export async function verifiedPreparationAuthority(
   db: Parameters<typeof listEligibleCapabilitySupply>[0],
   preparation: Extract<Doc<'customerRequestV2ActionPreparations'>['preparation'], { kind: 'ready_for_routing' }>,
 ): Promise<boolean> {

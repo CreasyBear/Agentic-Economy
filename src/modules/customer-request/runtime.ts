@@ -16,6 +16,8 @@ export {
   capabilityContractRefV2Value,
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
+  preparedActionRecoveryReasonV2Value,
+  preparedActionV2Value,
   requestEvaluationCandidateV2Value,
   requestFactV2Value,
 } from './internal/convex-v2-schema'

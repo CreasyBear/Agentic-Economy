@@ -15,7 +15,12 @@ import {
   writableCustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
-import { customerRequestV2AggregateValue, durableActionPreparationV2Value } from '@/modules/customer-request/runtime'
+import {
+  customerRequestV2AggregateValue,
+  durableActionPreparationV2Value,
+  preparedActionRecoveryReasonV2Value,
+  preparedActionV2Value,
+} from '@/modules/customer-request/runtime'
 import {
   projectNeedsAttention,
   projectRequestEvaluation,
@@ -98,6 +103,35 @@ const customerOptionSet = v.object({
   }),
   options: v.array(customerOption),
 })
+const customerPreparedAction = v.object({
+  actionRef: v.string(), businessName: v.string(), offeringLabel: v.string(), summary: v.string(),
+  price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
+  materialTerms: v.array(v.object({ label: v.string(), value: v.string() })),
+  cancellation: v.object({ kind: v.union(v.literal('available'), v.literal('unsupported')) }),
+  validUntil: v.number(),
+  selection: v.object({
+    basis: v.union(v.literal('single_option'), v.literal('lowest_maximum_price')),
+    alternativeCount: v.number(), unavailableCount: v.number(),
+    commercialInfluence: v.union(v.literal('none'), v.literal('disclosed')),
+  }),
+  dataUse: v.object({
+    categories: v.array(v.object({
+      label: v.string(), classification: v.union(
+        v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential'),
+      ),
+    })),
+    purposes: v.array(v.string()),
+  }),
+  effects: v.array(v.object({
+    class: v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')),
+    reversibility: v.union(v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible')),
+  })),
+  alternatives: v.array(v.object({
+    businessName: v.string(),
+    price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
+    validUntil: v.number(),
+  })),
+})
 const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
   state: v.union(
@@ -130,6 +164,7 @@ const customerView = v.object({
   )),
   options: v.array(customerOption),
   optionSet: v.optional(customerOptionSet),
+  preparedAction: v.optional(customerPreparedAction),
 })
 const conflict = v.object({
   kind: v.literal('conflict'), requestRef: v.string(),
@@ -343,7 +378,10 @@ export const resume = action({
                 requestRef: current.aggregate.snapshot.requestId, revision: current.aggregate.snapshot.revision,
                 summary: 'The registered options or permission changed. Review this request again.',
               }))
-              return projectEgressCustomerState(current.aggregate, preparation.preparation, resumed.states)
+              if (resumed.states.some(({ state }) => state === 'uncertain' || state === 'in_flight')) {
+                return projectEgressCustomerState(current.aggregate, preparation.preparation, resumed.states)
+              }
+              return await resolvePreparedAction(ctx, current.aggregate, preparation.preparation)
             }
           }
           return projectStoredPreparation(current.aggregate, preparation.preparation)
@@ -669,6 +707,11 @@ type PreparationResumeResult = Readonly<
   | { kind: 'current'; preparation: StoredPreparation }
   | { kind: 'not_found' | 'stale' }
 >
+type PreparedActionMutationResult = Readonly<
+  | { kind: 'prepared'; preparedAction: Infer<typeof preparedActionV2Value> }
+  | { kind: 'not_prepared'; reason: Infer<typeof preparedActionRecoveryReasonV2Value>; recoveryRef: string }
+  | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'prepared_action_material_changed' }
+>
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
   return await ctx.runQuery(internal.customerRequestV2.getCurrentAggregate, { requestId })
@@ -756,7 +799,132 @@ async function runPreparationEgress(
     requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
     summary: 'AE could not read the business response state. Review this request again.',
   }))
-  return projectEgressCustomerState(aggregate, preparation, result.states)
+  if (result.states.some(({ state }) => state === 'uncertain' || state === 'in_flight')) {
+    return projectEgressCustomerState(aggregate, preparation, result.states)
+  }
+  return await resolvePreparedAction(ctx, aggregate, preparation)
+}
+
+async function resolvePreparedAction(
+  ctx: ActionCtx,
+  aggregate: StoredAggregate,
+  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
+): Promise<ActionResult> {
+  const preparationMaterialDigest: string = await ctx.runQuery(
+    internal.customerRequestV2PreparedAction.preparationMaterialDigest,
+    { preparationRef: preparation.preparationRef, principalId: aggregate.snapshot.principalId },
+  )
+  const commandMaterial = {
+    requestRef: aggregate.snapshot.requestId,
+    requestRevision: aggregate.snapshot.revision,
+    preparationRef: preparation.preparationRef,
+    preparationDigest: preparation.preparationDigest,
+    preparationMaterialDigest,
+  }
+  const result: PreparedActionMutationResult = await ctx.runMutation(
+    internal.customerRequestV2PreparedAction.prepare,
+    {
+      commandKey: namespacedKey(
+        aggregate.snapshot.principalId, 'prepared-action', aggregate.snapshot.requestId,
+        `${preparation.preparationRef}:${preparationMaterialDigest}`,
+      ),
+      commandDigest: canonicalDigest(commandMaterial),
+      principalId: aggregate.snapshot.principalId,
+      preparationRef: preparation.preparationRef,
+      preparationMaterialDigest,
+      now: Date.now(),
+    },
+  )
+  if (result.kind === 'prepared') return projectPreparedAction(aggregate, preparation, result.preparedAction)
+  const base = {
+    kind: 'request' as const,
+    requestRef: aggregate.snapshot.requestId,
+    revision: aggregate.snapshot.revision,
+    missingFields: [],
+    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    preparationRef: preparation.preparationRef,
+    options: [],
+  }
+  if (result.kind === 'conflict') return writableView({
+    ...base,
+    state: 'needs_attention', nextAction: 'revise_request',
+    summary: 'A business option changed after it was prepared. Review the request before choosing.',
+  })
+  if (result.reason === 'options_pending' || result.reason === 'disclosure_uncertain') return writableView({
+    ...base,
+    state: 'preparing_options', nextAction: 'wait',
+    summary: 'AE is still checking the businesses already contacted. It will not send the request again.',
+  })
+  if (result.reason === 'selection_required' || result.reason === 'comparison_unavailable'
+    || result.reason === 'commercial_influence_blocks_selection') return writableView({
+    ...base,
+    state: 'needs_attention', nextAction: 'revise_request',
+    summary: 'AE received options but cannot choose between them from the customer’s stated priorities.',
+  })
+  return writableView({
+    ...base,
+    state: 'needs_attention', nextAction: 'revise_request',
+    summary: result.reason === 'provider_assertion_expired'
+      ? 'The available business options expired. Refresh the request before choosing.'
+      : 'The business responses could not support a safe customer choice. Review the request before trying again.',
+  })
+}
+
+function projectPreparedAction(
+  aggregate: StoredAggregate,
+  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
+  action: Infer<typeof preparedActionV2Value>,
+): ActionResult {
+  return {
+    kind: 'request',
+    requestRef: aggregate.snapshot.requestId,
+    revision: aggregate.snapshot.revision,
+    state: 'options_ready',
+    summary: `${action.business.name} can provide ${action.offering.label}.`,
+    nextAction: 'inspect_options',
+    missingFields: [],
+    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    preparationRef: preparation.preparationRef,
+    options: [],
+    preparedAction: {
+      actionRef: action.preparedActionRef,
+      businessName: action.business.name,
+      offeringLabel: action.offering.label,
+      summary: action.offering.summary,
+      price: {
+        currency: action.price.currency,
+        minimumAmountMinor: action.price.minimumAmountMinor,
+        maximumAmountMinor: action.price.maximumAmountMinor,
+      },
+      materialTerms: action.materialTerms.map(({ label, value }) => ({ label, value })),
+      cancellation: { kind: action.cancellation.kind === 'adapter_managed' ? 'available' : 'unsupported' },
+      validUntil: action.expiresAt,
+      selection: {
+        basis: action.comparison.kind,
+        alternativeCount: action.alternatives.length,
+        unavailableCount: action.fallbacks.length,
+        commercialInfluence: action.comparison.kind === 'lowest_maximum_price'
+          ? action.comparison.commercialInfluence
+          : action.commercialRelationship.kind === 'none' ? 'none' : 'disclosed',
+      },
+      dataUse: {
+        categories: preparation.disclosureReview.categories.map(({ label, classification }) => ({ label, classification })),
+        purposes: [...preparation.disclosureReview.purposes],
+      },
+      effects: preparation.disclosureReview.effectRequirements.map(({ class: effectClass, reversibility }) => ({
+        class: effectClass, reversibility,
+      })),
+      alternatives: action.alternatives.map((alternative) => ({
+        businessName: alternative.business.name,
+        price: {
+          currency: alternative.price.currency,
+          minimumAmountMinor: alternative.price.minimumAmountMinor,
+          maximumAmountMinor: alternative.price.maximumAmountMinor,
+        },
+        validUntil: alternative.expiresAt,
+      })),
+    },
+  }
 }
 
 async function recoverUnresolvedEgress(

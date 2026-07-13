@@ -88,6 +88,115 @@ export const durableActionPreparationV2Value = v.union(
     authorityReservation: v.optional(actionPreparationAuthorityReservationV2Value),
   }),
 )
+const preparedActionPriceV2Value = v.object({
+  currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number(),
+  components: v.array(v.object({
+    kind: v.literal('registered_offering'), label: v.string(),
+    minimumAmountMinor: v.number(), maximumAmountMinor: v.number(), evidenceRefs: v.array(v.string()),
+  })),
+})
+const preparedActionEvidenceV2Value = v.object({
+  evidenceId: v.string(), outputPointer: v.string(),
+  purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
+  schemaIdentity: v.string(), valueDigest: v.string(),
+})
+export const preparedActionV2Value = v.object({
+  format: v.literal('ae.prepared-action:v2'), preparedActionRef: v.string(), preparedActionDigest: v.string(),
+  lineage: actionPreparationLineageV2Value,
+  business: v.object({ businessId: v.string(), name: v.string() }),
+  offering: v.object({
+    offeringId: v.string(), registrationHash: v.string(), registrationEvidenceRefs: v.array(v.string()),
+    label: v.string(), summary: v.string(),
+  }),
+  binding: v.object({
+    bindingId: v.string(), registrationHash: v.string(), registrationEvidenceRefs: v.array(v.string()),
+  }),
+  providerAssertion: v.object({
+    assertionRef: v.string(), operationRef: v.string(), assertedAt: v.number(), validUntil: v.number(),
+    responseDigest: v.string(), outputDigest: v.string(), output: v.any(), // runtime-validated JsonValue boundary
+    evidence: v.array(preparedActionEvidenceV2Value),
+  }),
+  price: preparedActionPriceV2Value,
+  materialTerms: v.array(v.object({ termId: v.string(), label: v.string(), value: v.string() })),
+  commercialRelationship: v.object({
+    kind: v.union(v.literal('none'), v.literal('direct'), v.literal('affiliate'), v.literal('ownership')),
+    summary: v.string(), influencesEligibility: v.boolean(), influencesInclusion: v.boolean(),
+    influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
+  }),
+  cancellation: v.object({
+    kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')), evidenceRefs: v.array(v.string()),
+  }),
+  disclosure: v.object({
+    authorityReference: v.string(), authorityScopeDigest: v.string(), operationRef: v.string(),
+    releaseEvidenceRef: v.string(), allocationRefs: v.array(v.string()),
+  }),
+  comparison: v.union(
+    v.object({
+      kind: v.literal('single_option'), candidateCount: v.literal(1), selectedAssertionRef: v.string(),
+    }),
+    v.object({
+      kind: v.literal('lowest_maximum_price'), candidateCount: v.number(), selectedAssertionRef: v.string(),
+      evidenceRef: v.string(), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed')),
+      comparedAssertionRefs: v.array(v.string()),
+    }),
+  ),
+  alternatives: v.array(v.object({
+    assertionRef: v.string(), operationRef: v.string(), responseDigest: v.string(), outputDigest: v.string(),
+    evidence: v.array(preparedActionEvidenceV2Value),
+    business: v.object({ businessId: v.string(), name: v.string() }),
+    offeringId: v.string(), offeringRegistrationHash: v.string(),
+    offeringRegistrationEvidenceRefs: v.array(v.string()),
+    bindingId: v.string(), bindingRegistrationHash: v.string(),
+    bindingRegistrationEvidenceRefs: v.array(v.string()),
+    price: preparedActionPriceV2Value,
+    materialTerms: v.array(v.object({ termId: v.string(), label: v.string(), value: v.string() })),
+    commercialRelationship: v.object({
+      kind: v.union(v.literal('none'), v.literal('direct'), v.literal('affiliate'), v.literal('ownership')),
+      summary: v.string(), influencesEligibility: v.boolean(), influencesInclusion: v.boolean(),
+      influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
+    }),
+    cancellation: v.object({
+      kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')), evidenceRefs: v.array(v.string()),
+    }),
+    disclosure: v.object({
+      authorityReference: v.string(), authorityScopeDigest: v.string(), operationRef: v.string(),
+      releaseEvidenceRef: v.string(), allocationRefs: v.array(v.string()),
+    }),
+    expiresAt: v.number(),
+  })),
+  fallbacks: v.array(v.object({
+    operationRef: v.string(),
+    reason: v.union(
+      v.literal('disclosure_not_released'), v.literal('provider_response_invalid'),
+      v.literal('provider_echo_mismatch'), v.literal('provider_assertion_expired'),
+      v.literal('provider_evidence_invalid'), v.literal('commercial_terms_unavailable'),
+    ),
+    business: v.object({ businessId: v.string(), name: v.string() }),
+    offeringId: v.string(), offeringRegistrationHash: v.string(),
+    offeringRegistrationEvidenceRefs: v.array(v.string()),
+    bindingId: v.string(), bindingRegistrationHash: v.string(),
+    bindingRegistrationEvidenceRefs: v.array(v.string()),
+    commercialRelationship: v.object({
+      kind: v.union(v.literal('none'), v.literal('direct'), v.literal('affiliate'), v.literal('ownership')),
+      summary: v.string(), influencesEligibility: v.boolean(), influencesInclusion: v.boolean(),
+      influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
+    }),
+    disclosureOutcome: v.union(v.literal('released'), v.literal('not_released'), v.literal('uncertain')),
+    authorityReference: v.string(), authorityScopeDigest: v.string(),
+    allocationRefs: v.array(v.string()), evidenceRefs: v.array(v.string()),
+    responseDigest: v.optional(v.string()), assertionRef: v.optional(v.string()), validUntil: v.optional(v.number()),
+  })),
+  preparedAt: v.number(), expiresAt: v.number(),
+})
+export const preparedActionRecoveryReasonV2Value = v.union(
+  v.literal('options_pending'), v.literal('disclosure_not_released'), v.literal('disclosure_uncertain'),
+  v.literal('provider_response_invalid'), v.literal('provider_echo_mismatch'),
+  v.literal('provider_assertion_expired'), v.literal('provider_evidence_invalid'),
+  v.literal('commercial_terms_unavailable'), v.literal('selection_required'),
+  v.literal('comparison_unavailable'), v.literal('commercial_influence_blocks_selection'),
+  v.literal('prepared_action_too_large'),
+  v.literal('capability_authority_changed'), v.literal('capability_graph_changed'),
+)
 const preparationEgressStateV2Value = v.union(
   v.literal('allocated'), v.literal('dispatching'), v.literal('released'),
   v.literal('not_released'), v.literal('uncertain'),
@@ -294,4 +403,27 @@ export const customerRequestV2Tables = {
   })
     .index('by_observationRef', ['observationRef'])
     .index('by_operationRef', ['operationRef']),
+
+  customerRequestV2PreparedActions: defineTable({
+    preparedActionRef: v.string(), preparedActionDigest: v.string(), preparationRef: v.string(),
+    requestId: v.string(), requestRevision: v.number(), actionId: v.string(),
+    lineage: actionPreparationLineageV2Value, preparedAction: preparedActionV2Value, recordedAt: v.number(),
+  })
+    .index('by_preparedActionRef', ['preparedActionRef'])
+    .index('by_preparationRef', ['preparationRef'])
+    .index('by_requestId_and_requestRevision_and_actionId', ['requestId', 'requestRevision', 'actionId']),
+
+  customerRequestV2PreparedActionRecoveries: defineTable({
+    recoveryRef: v.string(), recoveryDigest: v.string(), preparationRef: v.string(),
+    lineage: actionPreparationLineageV2Value, reason: preparedActionRecoveryReasonV2Value,
+    operationRefs: v.array(v.string()), evidenceRefs: v.array(v.string()), observedAt: v.number(),
+  })
+    .index('by_recoveryRef', ['recoveryRef'])
+    .index('by_preparationRef', ['preparationRef']),
+
+  customerRequestV2PreparedActionCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), preparationRef: v.string(),
+    resultKind: v.union(v.literal('prepared'), v.literal('not_prepared')),
+    resultRef: v.string(), resultDigest: v.string(), committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
 } as const
