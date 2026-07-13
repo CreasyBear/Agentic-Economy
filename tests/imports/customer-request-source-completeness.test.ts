@@ -8,6 +8,8 @@ const productionAuthority = {
   compilation: 'src/modules/customer-request/compiler.ts',
   preparation: 'src/modules/customer-request/action-preparation.ts',
   preparationPersistence: 'convex/customerRequestV2Preparation.ts',
+  preparationEgressState: 'convex/customerRequestV2PreparationEgressState.ts',
+  preparationEgress: 'convex/customerRequestV2PreparationEgress.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
@@ -32,6 +34,7 @@ describe('CustomerRequest source completeness', () => {
     expect(application).toContain('capabilityContractDocuments.getActiveExactInternal')
     expect(application).toContain('customerRequestV2.commitAggregate')
     expect(application).toContain('customerRequestV2Preparation.prepare')
+    expect(application).toContain('customerRequestV2PreparationEgress.run')
     expect(application).toContain('bindCustomerCapabilityDescriptor')
   })
 
@@ -44,6 +47,8 @@ describe('CustomerRequest source completeness', () => {
       'convex/customerRequestV2.ts',
       'src/modules/customer-request/action-preparation.ts',
       'convex/customerRequestV2Preparation.ts',
+      'convex/customerRequestV2PreparationEgressState.ts',
+      'convex/customerRequestV2PreparationEgress.ts',
       'convex/customerRequestApplication.ts',
     ]
     const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/

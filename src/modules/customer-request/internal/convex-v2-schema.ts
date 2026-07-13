@@ -29,8 +29,12 @@ const preparationDeclarationV2Value = v.object({
     inputKey: v.string(), inputPointer: v.string(), label: v.string(), schemaIdentity: v.string(),
   })),
 })
+const actionPreparationDisclosureLimitsV2Value = v.object({
+  maximumRecipients: v.number(), maximumExposures: v.number(), maximumOperations: v.number(),
+})
 const actionPreparationAuthorityScopeV2Value = v.object({
-  declarations: v.array(preparationDeclarationV2Value), authorityScopeDigest: v.string(),
+  declarations: v.array(preparationDeclarationV2Value), limits: actionPreparationDisclosureLimitsV2Value,
+  authorityScopeDigest: v.string(),
 })
 const actionPreparationDisclosureReviewV2Value = v.object({
   reviewRef: v.string(), reviewDigest: v.string(), lineage: actionPreparationLineageV2Value,
@@ -40,6 +44,7 @@ const actionPreparationDisclosureReviewV2Value = v.object({
   })),
   purposes: v.array(v.string()), recipients: v.array(capabilityRecipientV2Value),
   effectRequirements: v.array(capabilityEffectV2Value),
+  limits: actionPreparationDisclosureLimitsV2Value,
 })
 const actionPreparationAuthorityReservationV2Value = v.object({
   reservationRef: v.string(), reservationDigest: v.string(), authorityReference: v.string(),
@@ -82,6 +87,10 @@ export const durableActionPreparationV2Value = v.union(
     disclosureReview: actionPreparationDisclosureReviewV2Value, preparedAt: v.number(),
     authorityReservation: v.optional(actionPreparationAuthorityReservationV2Value),
   }),
+)
+const preparationEgressStateV2Value = v.union(
+  v.literal('allocated'), v.literal('dispatching'), v.literal('released'),
+  v.literal('not_released'), v.literal('uncertain'),
 )
 const factSourceV2Value = v.union(
   v.object({ kind: v.literal('customer'), assertionRef: v.string() }),
@@ -229,4 +238,60 @@ export const customerRequestV2Tables = {
   })
     .index('by_reservationRef', ['reservationRef'])
     .index('by_authorityReference', ['authorityReference']),
+
+  customerRequestV2PreparationEgressConsumption: defineTable({
+    authorityReference: v.string(), authorityScopeDigest: v.string(), preparationRef: v.string(),
+    maximumRecipients: v.number(), maximumExposures: v.number(), maximumOperations: v.number(),
+    consumedRecipients: v.number(), consumedExposures: v.number(), consumedOperations: v.number(),
+    updatedAt: v.number(),
+  }).index('by_authorityReference', ['authorityReference']),
+
+  customerRequestV2PreparationEgressCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), preparationRef: v.string(),
+    authorityReference: v.string(), operationRefs: v.array(v.string()), committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
+  customerRequestV2PreparationEgressOperations: defineTable({
+    operationRef: v.string(), operationDigest: v.string(), preparationRef: v.string(),
+    requestId: v.string(), principalId: v.string(),
+    authorityReference: v.string(), authorityScopeDigest: v.string(), lineage: actionPreparationLineageV2Value,
+    businessId: v.id('businesses'), offeringId: v.string(), bindingId: v.string(),
+    offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
+    adapterId: v.string(), adapterConfigDigest: v.string(), adapterConfigJson: v.string(),
+    endpointUrl: v.string(), credentialRef: v.string(), projectedInputDigest: v.string(),
+    state: preparationEgressStateV2Value, allocatedAt: v.number(), dispatchStartedAt: v.optional(v.number()),
+    dispatchAttemptRef: v.optional(v.string()), dispatchLeaseExpiresAt: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()), evidenceRef: v.optional(v.string()),
+    responseStatus: v.optional(v.number()), responseContentType: v.optional(v.string()),
+    responseBodyDigest: v.optional(v.string()), responseBodyText: v.optional(v.string()),
+    failureCode: v.optional(v.string()),
+  })
+    .index('by_operationRef', ['operationRef'])
+    .index('by_preparationRef', ['preparationRef'])
+    .index('by_requestId_and_principalId', ['requestId', 'principalId'])
+    .index('by_authorityReference', ['authorityReference']),
+
+  customerRequestV2PreparationDisclosureAllocations: defineTable({
+    allocationRef: v.string(), allocationDigest: v.string(), operationRef: v.string(), preparationRef: v.string(),
+    authorityReference: v.string(), authorityScopeDigest: v.string(), lineage: actionPreparationLineageV2Value,
+    declarationKey: v.string(), inputKey: v.string(), inputPointer: v.string(), schemaIdentity: v.string(),
+    classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+    purpose: v.string(), effect: capabilityEffectV2Value, declaredRecipient: capabilityRecipientV2Value,
+    businessId: v.id('businesses'), offeringId: v.string(), bindingId: v.string(),
+    offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
+    valueDigest: v.string(), allocatedAt: v.number(),
+  })
+    .index('by_allocationRef', ['allocationRef'])
+    .index('by_operationRef', ['operationRef'])
+    .index('by_authorityReference', ['authorityReference']),
+
+  customerRequestV2PreparationReconciliationObservations: defineTable({
+    observationRef: v.string(), observationDigest: v.string(), operationRef: v.string(),
+    disposition: v.union(v.literal('released'), v.literal('not_released'), v.literal('uncertain')),
+    providerEvidenceRef: v.string(), responseDigest: v.string(),
+    businessId: v.id('businesses'), offeringId: v.string(), bindingId: v.string(),
+    offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(), observedAt: v.number(),
+  })
+    .index('by_observationRef', ['observationRef'])
+    .index('by_operationRef', ['operationRef']),
 } as const

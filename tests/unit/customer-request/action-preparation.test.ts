@@ -31,8 +31,10 @@ describe('exact V2 Action Preparation', () => {
       disclosureReview: {
         categories: [{ label: 'Destination', classification: 'personal' }],
         purposes: ['compare_options'],
+        limits: { maximumRecipients: 1, maximumOperations: 1, maximumExposures: 1 },
       },
       authorityScope: {
+        limits: { maximumRecipients: 1, maximumOperations: 1, maximumExposures: 1 },
         declarations: [{
           inputPointer: '/destination',
           classification: 'personal',
@@ -49,6 +51,28 @@ describe('exact V2 Action Preparation', () => {
     })
     expect(JSON.stringify(prepared)).not.toContain('permittedFields')
     expect(JSON.stringify(prepared)).not.toContain('capabilityContractId')
+  })
+
+  it('binds cumulative disclosure capacity to unique viable businesses and exposure units', () => {
+    const { aggregate, model, actionId } = compiledProtectedRequest()
+    const secondCandidate = {
+      ...aggregate.evaluation.candidates[0]!,
+      candidateRef: 'candidate:two', businessId: 'business:two', offeringId: 'offering:two', bindingId: 'binding:two',
+      offeringRegistrationHash: 'offering-hash:two', bindingRegistrationHash: 'binding-hash:two',
+    }
+    const expanded = {
+      ...aggregate,
+      evaluation: { ...aggregate.evaluation, candidates: [...aggregate.evaluation.candidates, secondCandidate] },
+    }
+
+    expect(projectActionPreparation({ aggregate: expanded, actionId, model, now: 2_000 })).toMatchObject({
+      authorityScope: {
+        limits: { maximumRecipients: 2, maximumOperations: 2, maximumExposures: 2 },
+      },
+      disclosureReview: {
+        limits: { maximumRecipients: 2, maximumOperations: 2, maximumExposures: 2 },
+      },
+    })
   })
 
   it('reserves authority only from an explicit verified command against the current durable review', () => {
@@ -134,10 +158,34 @@ describe('exact V2 Action Preparation', () => {
       kind: 'refused', reason: 'action_not_found',
     })
   })
+
+  it('keeps execution and selected-recipient declarations outside preparation authority', () => {
+    const contract = protectedContract()
+    const { aggregate, model, actionId } = compiledProtectedRequest({
+      ...contract,
+      dataUse: [...contract.dataUse, {
+        effectId: 'selected_execution_release', inputPointer: '/destination', classification: 'personal' as const,
+        phase: 'execution' as const, recipient: { kind: 'selected_binding' as const }, purposes: ['complete_action'],
+      }],
+      effects: [...contract.effects, {
+        effectId: 'selected_execution_release', class: 'data_release' as const,
+        authority: 'explicit' as const, reversibility: 'irreversible' as const,
+      }],
+    })
+
+    const prepared = projectActionPreparation({ aggregate, actionId, model, now: 2_000 })
+    expect(prepared).toMatchObject({
+      kind: 'needs_authority',
+      authorityScope: { declarations: [{ phase: 'preparation', recipient: { kind: 'candidate_binding' } }] },
+    })
+    expect(JSON.stringify(prepared)).not.toContain('selected_execution_release')
+    expect(JSON.stringify(prepared)).not.toContain('complete_action')
+  })
+
 })
 
-function compiledProtectedRequest() {
-  const model = openCapabilityDecisionModel(defineCapabilityContract(protectedContract()))
+function compiledProtectedRequest(document: ReturnType<typeof protectedContract> = protectedContract()) {
+  const model = openCapabilityDecisionModel(defineCapabilityContract(document))
   const destination = model.inputs.find((input) => input.annotationId === 'destination')
   if (destination === undefined) throw new Error('destination input missing')
   const binding = {

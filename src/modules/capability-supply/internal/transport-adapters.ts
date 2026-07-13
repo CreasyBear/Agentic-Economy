@@ -10,6 +10,10 @@ const encoder = new TextEncoder()
 const httpJsonConfiguration = z.object({
   method: z.literal('POST'),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
+  reconciliation: z.object({
+    path: z.string().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
+    requestTimeoutMs: z.number().int().min(100).max(120_000),
+  }).strict().optional(),
 }).strict()
 
 export type TransportAdmissionInput = Readonly<{

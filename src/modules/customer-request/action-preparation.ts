@@ -53,6 +53,21 @@ type ActionPreparationAggregate = Readonly<{
       }>[]
     }>[]
   }>
+  evaluation: Readonly<{
+    candidates: readonly Readonly<{
+      businessId: string
+      contractRef: CapabilityContractRef
+      selectionKey: string
+      semanticDigest: string
+      viability: Readonly<{ kind: 'viable' | 'blocked_on_information' | 'incompatible' }>
+    }>[]
+  }>
+}>
+
+export type ActionPreparationDisclosureLimits = Readonly<{
+  maximumRecipients: number
+  maximumExposures: number
+  maximumOperations: number
 }>
 
 export type ActionPreparationLineage = Readonly<{
@@ -70,6 +85,7 @@ export type ActionPreparationLineage = Readonly<{
 
 export type ActionPreparationAuthorityScope = Readonly<{
   declarations: readonly ActionPreparationDataUse[]
+  limits: ActionPreparationDisclosureLimits
   authorityScopeDigest: string
 }>
 
@@ -87,6 +103,7 @@ export type ActionPreparationDisclosureReview = Readonly<{
   purposes: readonly string[]
   recipients: readonly ActionPreparationDataUse['recipient'][]
   effectRequirements: readonly ActionPreparationDataUse['effect'][]
+  limits: ActionPreparationDisclosureLimits
 }>
 
 export type VerifiedActionPreparationApprovalActor = Readonly<{
@@ -169,7 +186,10 @@ export type DurableActionPreparation =
 
 export type ProjectActionPreparationResult = DurableActionPreparation
   | Readonly<{ kind: 'stale'; reason: 'capability_authority_changed' }>
-  | Readonly<{ kind: 'refused'; reason: 'action_not_found' | 'preparation_incompatible' }>
+  | Readonly<{
+      kind: 'refused'
+      reason: 'action_not_found' | 'preparation_incompatible' | 'preparation_recipient_unsupported'
+    }>
 
 export function projectActionPreparation(input: Readonly<{
   aggregate: ActionPreparationAggregate
@@ -199,6 +219,10 @@ export function projectActionPreparation(input: Readonly<{
     facts: facts.flatMap((fact) => fact === undefined ? [] : [fact]),
   })
   if (projection.kind === 'incompatible') return { kind: 'refused', reason: 'preparation_incompatible' }
+  const preparationDeclarations = projection.dataUse.filter(({ phase }) => phase === 'preparation')
+  if (preparationDeclarations.some(({ recipient }) => recipient.kind !== 'candidate_binding')) {
+    return { kind: 'refused', reason: 'preparation_recipient_unsupported' }
+  }
   const lineage: ActionPreparationLineage = freeze({
     requestId: input.aggregate.snapshot.requestId,
     requestRevision: input.aggregate.snapshot.revision,
@@ -211,7 +235,8 @@ export function projectActionPreparation(input: Readonly<{
     selectionKey: action.selectionKey,
     semanticDigest: action.semanticDigest,
   })
-  const authorityScope = actionPreparationAuthorityScope(projection.dataUse)
+  const limits = actionPreparationDisclosureLimits(input.aggregate, action, preparationDeclarations)
+  const authorityScope = actionPreparationAuthorityScope(preparationDeclarations, limits)
   const disclosureReview = actionPreparationDisclosureReview(lineage, authorityScope)
   const preparationRef = `action-preparation:${canonicalDigest({ lineage } as StableHashValue)}`
   const baseMaterial = {
@@ -229,7 +254,9 @@ export function projectActionPreparation(input: Readonly<{
           inputKey: key, inputPointer, schemaIdentity, label,
         })),
       }
-    : authorityScope.declarations.some((declaration) => declaration.effect.authority !== 'none')
+    : authorityScope.declarations.some((declaration) => (
+      declaration.classification !== 'public' || declaration.effect.authority !== 'none'
+    ))
       ? { kind: 'needs_authority' as const }
       : { kind: 'ready_for_routing' as const }
   return freeze({
@@ -307,6 +334,7 @@ export function authorizeActionPreparation(input: Readonly<{
 
 function actionPreparationAuthorityScope(
   declarations: readonly ActionPreparationDataUse[],
+  limits: ActionPreparationDisclosureLimits,
 ): ActionPreparationAuthorityScope {
   const normalized = declarations.map((declaration) => ({
     ...declaration,
@@ -318,7 +346,8 @@ function actionPreparationAuthorityScope(
   })).sort((left, right) => String(left.declarationKey).localeCompare(String(right.declarationKey)))
   return freeze({
     declarations: normalized,
-    authorityScopeDigest: canonicalDigest(normalized as StableHashValue),
+    limits,
+    authorityScopeDigest: canonicalDigest({ declarations: normalized, limits } as StableHashValue),
   })
 }
 
@@ -348,12 +377,42 @@ function actionPreparationDisclosureReview(
     purposes: [...purposes].sort(),
     recipients: [...recipients.values()],
     effectRequirements: [...effects.values()].sort((left, right) => left.effectId.localeCompare(right.effectId)),
+    limits: authorityScope.limits,
   }
   const reviewDigest = canonicalDigest(reviewMaterial as StableHashValue)
   return freeze({
     reviewRef: `action-preparation-review:${reviewDigest}`,
     reviewDigest,
     ...reviewMaterial,
+  })
+}
+
+function actionPreparationDisclosureLimits(
+  aggregate: ActionPreparationAggregate,
+  action: ActionPreparationAggregate['plan']['actions'][number],
+  declarations: readonly ActionPreparationDataUse[],
+): ActionPreparationDisclosureLimits {
+  const businesses = new Set(aggregate.evaluation.candidates.filter((candidate) => (
+    candidate.viability.kind === 'viable'
+    && sameCapabilityContractRef(candidate.contractRef, action.contractRef)
+    && candidate.selectionKey === action.selectionKey
+    && candidate.semanticDigest === action.semanticDigest
+  )).map((candidate) => candidate.businessId))
+  const exposureUnits = new Set(declarations.filter((declaration) => declaration.phase === 'preparation'
+    && declaration.recipient.kind === 'candidate_binding').flatMap((declaration) => declaration.inputs.flatMap((item) => (
+    declaration.purposes.map((purpose) => canonicalDigest({
+      declarationKey: declaration.declarationKey,
+      inputKey: item.inputKey,
+      inputPointer: item.inputPointer,
+      schemaIdentity: item.schemaIdentity,
+      purpose,
+    } as StableHashValue))
+  ))))
+  const maximumRecipients = businesses.size
+  return freeze({
+    maximumRecipients,
+    maximumOperations: maximumRecipients,
+    maximumExposures: maximumRecipients * exposureUnits.size,
   })
 }
 

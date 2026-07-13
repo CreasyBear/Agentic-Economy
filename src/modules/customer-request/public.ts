@@ -5,6 +5,7 @@ export {
   type ActionPreparationApprovalEvidence,
   type ActionPreparationAuthorityScope,
   type ActionPreparationDisclosureReview,
+  type ActionPreparationDisclosureLimits,
   type ActionPreparationLineage,
   type AuthorizedActionPreparation,
   type DurableActionPreparation,

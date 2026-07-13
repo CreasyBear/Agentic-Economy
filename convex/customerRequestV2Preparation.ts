@@ -37,7 +37,10 @@ const prepareResultValue = v.union(
   }),
   v.object({
     kind: v.literal('needs_attention'),
-    reason: v.union(v.literal('capability_graph_changed'), v.literal('historical_request_resubmit_required')),
+    reason: v.union(
+      v.literal('capability_graph_changed'), v.literal('historical_request_resubmit_required'),
+      v.literal('preparation_recipient_unsupported'),
+    ),
   }),
   v.object({
     kind: v.literal('refused'),
@@ -115,6 +118,9 @@ export const prepare = internalMutation({
     })
     if (projected.kind === 'stale' || (projected.kind === 'refused' && projected.reason === 'preparation_incompatible')) {
       return { kind: 'needs_attention' as const, reason: 'capability_graph_changed' as const }
+    }
+    if (projected.kind === 'refused' && projected.reason === 'preparation_recipient_unsupported') {
+      return { kind: 'needs_attention' as const, reason: 'preparation_recipient_unsupported' as const }
     }
     if (projected.kind === 'refused') return { kind: 'refused' as const, reason: 'action_not_found' as const }
     if (existing !== null && !samePreparationProjectionIdentity(existing.preparation, projected)) {
@@ -380,6 +386,7 @@ function asStoredPreparation(value: DurableActionPreparation): StoredPreparation
         effect: { ...declaration.effect },
         inputs: declaration.inputs.map((item) => ({ ...item })),
       })),
+      limits: { ...value.authorityScope.limits },
       authorityScopeDigest: value.authorityScope.authorityScopeDigest,
     },
     disclosureReview: asStoredReview(value.disclosureReview),
@@ -410,6 +417,7 @@ function asStoredReview(value: DurableActionPreparation['disclosureReview']): St
     purposes: [...value.purposes],
     recipients: value.recipients.map((recipient) => ({ ...recipient })),
     effectRequirements: value.effectRequirements.map((effect) => ({ ...effect })),
+    limits: { ...value.limits },
   }
 }
 

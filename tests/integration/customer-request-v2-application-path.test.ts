@@ -2,6 +2,7 @@ import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
@@ -81,8 +82,12 @@ describe('current V2 Customer Request application path', () => {
     })
     expect(authorized).toMatchObject({
       kind: 'request', requestRef: review.requestRef, revision: review.revision,
-      state: 'ready_to_compare', preparationRef: review.preparationRef,
+      state: 'needs_attention', nextAction: 'revise_request', preparationRef: review.preparationRef,
     })
+    await expect(customer.action(api.customerRequestApplication.authorizePreparation, {
+      requestRef: review.requestRef, revision: review.revision,
+      preparationRef: review.preparationRef, idempotencyKey: 'authorize:v2:1',
+    })).resolves.toEqual(authorized)
     await expect(customer.action(api.customerRequestApplication.compare, {
       requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
     })).resolves.toEqual(review)
@@ -99,6 +104,10 @@ describe('current V2 Customer Request application path', () => {
       reviews: await ctx.db.query('customerRequestV2PreparationDisclosureReviews').collect(),
       approvals: await ctx.db.query('customerRequestV2PreparationApprovalEvidence').collect(),
       reservations: await ctx.db.query('customerRequestV2PreparationAuthorityReservations').collect(),
+      egressCommands: await ctx.db.query('customerRequestV2PreparationEgressCommands').collect(),
+      operations: await ctx.db.query('customerRequestV2PreparationEgressOperations').collect(),
+      allocations: await ctx.db.query('customerRequestV2PreparationDisclosureAllocations').collect(),
+      consumption: await ctx.db.query('customerRequestV2PreparationEgressConsumption').collect(),
       legacyHeads: await ctx.db.query('customerRequestHeads').collect(),
       legacyRequests: await ctx.db.query('customerRequests').collect(),
       legacyPreparations: await ctx.db.query('customerRequestPreparationCommands').collect(),
@@ -129,6 +138,17 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.reviews).toHaveLength(1)
     expect(persisted.approvals).toHaveLength(1)
     expect(persisted.reservations).toHaveLength(1)
+    expect(persisted.egressCommands).toHaveLength(1)
+    expect(persisted.operations).toHaveLength(2)
+    expect(persisted.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ state: 'not_released', authorityReference: persisted.reservations[0]?.reservationRef }),
+    ]))
+    expect(persisted.allocations).toHaveLength(2)
+    expect(persisted.consumption).toMatchObject([{
+      maximumRecipients: 2, maximumOperations: 2, maximumExposures: 2,
+      consumedRecipients: 2, consumedOperations: 2, consumedExposures: 2,
+    }])
+    expect(JSON.stringify(persisted.allocations)).not.toContain('Compare labelled sandbox options')
     expect(persisted.approvals[0]).toMatchObject({
       preparationRef: review.preparationRef,
       reviewDigest: persisted.reviews[0]?.reviewDigest,
@@ -229,7 +249,7 @@ describe('current V2 Customer Request application path', () => {
     await expect(owner.action(api.customerRequestApplication.authorizePreparation, {
       requestRef: review.requestRef, revision: review.revision,
       preparationRef: review.preparationRef, idempotencyKey: 'authorize:external:owner:1',
-    })).resolves.toMatchObject({ kind: 'request', state: 'ready_to_compare' })
+    })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention', nextAction: 'revise_request' })
     const approved = await backend.run(async (ctx) => ({
       approvals: await ctx.db.query('customerRequestV2PreparationApprovalEvidence').collect(),
       reservations: await ctx.db.query('customerRequestV2PreparationAuthorityReservations').collect(),
@@ -305,6 +325,148 @@ describe('current V2 Customer Request application path', () => {
     }))
     expect(stored.preparations[0]?.preparation.kind).toBe('needs_authority')
     expect(stored.reservations).toEqual([])
+  })
+
+  it('allocates before release, cannot reset cumulative limits, and never retries an interrupted dispatch', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: input.key, value: 'Protected request' }] }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:egress-state', requestId: 'request:v2:egress-state',
+      delegatedAgentId: 'agent:egress-state', customerJob: 'Protected request', routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error('request missing')
+    const review = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef, revision: submitted.revision, idempotencyKey: 'prepare:v2:egress-state',
+    })
+    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('review missing')
+
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
+      commandKey: 'egress:before-authority', commandDigest: 'sha256:' + '1'.repeat(64), principalId,
+      preparationRef: review.preparationRef, now: 2_000,
+    })).resolves.toEqual({ kind: 'needs_attention', reason: 'preparation_not_ready' })
+    expect(await backend.run(async (ctx) => ctx.db.query('customerRequestV2PreparationEgressOperations').collect())).toEqual([])
+
+    const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, { requestId: review.requestRef })
+    if (aggregate.kind !== 'current' || aggregate.aggregate.plan.actions[0] === undefined) throw new Error('aggregate missing')
+    const authorized = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
+      commandKey: 'authorize:internal:egress-state', commandDigest: 'sha256:' + '2'.repeat(64), principalId,
+      requestId: review.requestRef, expectedRevision: review.revision,
+      actionId: aggregate.aggregate.plan.actions[0].actionId, preparationRef: review.preparationRef,
+      approvalActor: {
+        kind: 'clerk_owner', requestPrincipalId: principalId, ownerId: identity.subject,
+        credentialId: principalId, authenticationEvidenceRef: 'clerk:test:egress-state', approvedAt: 2_010,
+      },
+      now: 2_010,
+    })
+    if ((authorized.kind !== 'stored' && authorized.kind !== 'replayed')
+      || authorized.preparation.kind !== 'ready_for_routing') throw new Error('authorization missing')
+    const allocated = await backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
+      commandKey: 'egress:authorized:one', commandDigest: 'sha256:' + '3'.repeat(64), principalId,
+      preparationRef: review.preparationRef, now: 2_020,
+    })
+    expect(allocated).toMatchObject({ kind: 'allocated', operationRefs: expect.arrayContaining([expect.any(String)]) })
+    if (allocated.kind !== 'allocated' || allocated.operationRefs[0] === undefined
+      || allocated.operationRefs[1] === undefined) throw new Error('allocation missing')
+    const firstOperationRef = allocated.operationRefs[0]
+    const secondOperationRef = allocated.operationRefs[1]
+    const replayed = await backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
+      commandKey: 'egress:authorized:two', commandDigest: 'sha256:' + '4'.repeat(64), principalId,
+      preparationRef: review.preparationRef, now: 2_030,
+    })
+    expect(replayed).toMatchObject({ kind: 'replayed', operationRefs: allocated.operationRefs })
+    const durable = await backend.run(async (ctx) => ({
+      operations: await ctx.db.query('customerRequestV2PreparationEgressOperations').collect(),
+      consumption: await ctx.db.query('customerRequestV2PreparationEgressConsumption').collect(),
+    }))
+    expect(durable.operations).toHaveLength(2)
+    expect(durable.consumption).toMatchObject([{
+      consumedRecipients: 2, consumedOperations: 2, consumedExposures: 2,
+    }])
+
+    const originalPurpose = await backend.run(async (ctx) => {
+      const allocation = (await ctx.db.query('customerRequestV2PreparationDisclosureAllocations')
+        .withIndex('by_operationRef', (query) => query.eq('operationRef', firstOperationRef)).first())
+      if (allocation === null) throw new Error('disclosure allocation missing')
+      await ctx.db.patch(allocation._id, { purpose: 'tampered-purpose' })
+      return { id: allocation._id, purpose: allocation.purpose }
+    })
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+      operationRef: firstOperationRef, principalId, now: 2_035,
+    })).rejects.toThrow('customer_request_v2_egress_allocation_integrity_failure')
+    await backend.run(async (ctx) => await ctx.db.patch(originalPurpose.id, { purpose: originalPurpose.purpose }))
+
+    const originalHead = await backend.run(async (ctx) => {
+      const head = await ctx.db.query('customerRequestV2Heads')
+        .withIndex('by_requestId', (query) => query.eq('requestId', review.requestRef)).unique()
+      if (head === null) throw new Error('request head missing')
+      await ctx.db.patch(head._id, {
+        currentRevision: head.currentRevision + 1, currentAggregateDigest: 'sha256:' + '8'.repeat(64),
+      })
+      return { id: head._id, revision: head.currentRevision, aggregateDigest: head.currentAggregateDigest }
+    })
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+      operationRef: secondOperationRef, principalId, now: 2_037,
+    })).resolves.toEqual({ kind: 'terminal', state: 'not_released' })
+    await backend.run(async (ctx) => await ctx.db.patch(originalHead.id, {
+      currentRevision: originalHead.revision, currentAggregateDigest: originalHead.aggregateDigest,
+    }))
+
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+      operationRef: firstOperationRef, principalId, now: 2_040,
+    })).resolves.toMatchObject({ kind: 'dispatch', adapterId: 'http-json:v1' })
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+      operationRef: firstOperationRef, principalId, now: 2_050,
+    })).resolves.toEqual({ kind: 'in_flight' })
+    await expect(customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:update-bypass', requestId: review.requestRef, expectedRevision: review.revision,
+      delegatedAgentId: 'agent:update-bypass', customerJob: 'Replace the request', routing: { networkId: 'ae:public' },
+    })).resolves.toEqual({ kind: 'conflict', requestRef: review.requestRef, reason: 'revision_changed' })
+    await expect(customer.action(api.customerRequestApplication.refine, {
+      requestRef: review.requestRef, expectedRevision: review.revision,
+      idempotencyKey: 'refine:blocked-by-egress', message: 'Change the request while it is being sent',
+    })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention', nextAction: 'wait' })
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+      operationRef: firstOperationRef, principalId, now: 152_050,
+    })).resolves.toEqual({ kind: 'terminal', state: 'uncertain' })
+    const reconciliationEvidence = {
+      operationRef: firstOperationRef, disposition: 'released',
+      providerEvidenceRef: 'provider-evidence:operation-observed', responseDigest: 'sha256:' + '9'.repeat(64),
+    } as const
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.reconcileUncertain, {
+      ...reconciliationEvidence, evidenceDigest: canonicalDigest(reconciliationEvidence), observedAt: 2_070,
+    })).resolves.toBe('released')
+    await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.beginDispatch, {
+      operationRef: firstOperationRef, principalId, now: 2_080,
+    })).resolves.toEqual({ kind: 'terminal', state: 'released' })
+    expect(await backend.run(async (ctx) => (
+      ctx.db.query('customerRequestV2PreparationReconciliationObservations').collect()
+    ))).toMatchObject([{
+      operationRef: firstOperationRef, disposition: 'released',
+      providerEvidenceRef: reconciliationEvidence.providerEvidenceRef,
+      responseDigest: reconciliationEvidence.responseDigest,
+      bindingId: expect.stringMatching(/^binding:/),
+    }])
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })).resolves.toMatchObject({ kind: 'request', state: 'preparing_options' })
+    expect(await backend.run(async (ctx) => (
+      ctx.db.query('customerRequestV2PreparationEgressOperations').collect()
+    ))).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operationRef: firstOperationRef, state: 'released' }),
+      expect.objectContaining({ operationRef: secondOperationRef, state: 'not_released' }),
+    ]))
   })
 
   it('preserves accepted exact facts across a natural-language refinement', async () => {

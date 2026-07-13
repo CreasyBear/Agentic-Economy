@@ -53,7 +53,7 @@ export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
   ]),
   dataUse: Object.freeze([Object.freeze({
     effectId: 'request_release', inputPointer: '/requestContext', classification: 'public' as const,
-    phase: 'execution' as const, recipient: Object.freeze({ kind: 'selected_binding' as const }),
+    phase: 'preparation' as const, recipient: Object.freeze({ kind: 'candidate_binding' as const }),
     purposes: Object.freeze(['return_sandbox_result']),
   })]),
   effects: Object.freeze([Object.freeze({

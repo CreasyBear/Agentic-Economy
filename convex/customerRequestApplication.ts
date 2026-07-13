@@ -154,6 +154,9 @@ export const submit = action({
   },
   returns: actionResult,
   handler: async (ctx, args): Promise<ActionResult> => {
+    if (args.expectedRevision !== undefined && args.expectedRevision !== 0) return {
+      kind: 'conflict', requestRef: args.requestId, reason: 'revision_changed',
+    }
     const command = {
       compilationKey: args.compilationKey,
       requestId: args.requestId,
@@ -194,6 +197,8 @@ export const refine = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
+    const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
+    if (recoveryBlock !== undefined) return recoveryBlock
     if (current.aggregate.snapshot.revision !== args.expectedRevision) return {
       kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
     }
@@ -232,6 +237,8 @@ export const provideFacts = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
+    const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
+    if (recoveryBlock !== undefined) return recoveryBlock
     if (current.aggregate.snapshot.revision !== args.expectedRevision) return {
       kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
     }
@@ -300,6 +307,8 @@ export const resume = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
+    const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
+    if (recoveryBlock !== undefined) return recoveryBlock
     if (current.aggregate.plan.actions.length === 1) {
       const action = current.aggregate.plan.actions[0]
       if (action !== undefined) {
@@ -312,7 +321,33 @@ export const resume = action({
             principalId: caller.principalId,
           },
         )
-        if (preparation.kind === 'current') return projectStoredPreparation(current.aggregate, preparation.preparation)
+        if (preparation.kind === 'current') {
+          if (preparation.preparation.kind === 'ready_for_routing') {
+            const egress: {
+              operationCount: number
+              states: Array<{ operationRef: string; state: 'allocated' | 'dispatching' | 'released' | 'not_released' | 'uncertain' }>
+            } = await ctx.runQuery(
+              internal.customerRequestV2PreparationEgressState.status,
+              { preparationRef: preparation.preparation.preparationRef, principalId: caller.principalId },
+            )
+            if (egress.operationCount > 0) {
+              const resumed: {
+                kind: 'completed' | 'needs_attention'
+                states?: Array<{
+                  operationRef: string; state: 'released' | 'not_released' | 'uncertain' | 'in_flight'
+                }>
+              } = await ctx.runAction(internal.customerRequestV2PreparationEgress.resume, {
+                preparationRef: preparation.preparation.preparationRef, principalId: caller.principalId,
+              })
+              if (resumed.kind !== 'completed' || resumed.states === undefined) return writableView(projectNeedsAttention({
+                requestRef: current.aggregate.snapshot.requestId, revision: current.aggregate.snapshot.revision,
+                summary: 'The registered options or permission changed. Review this request again.',
+              }))
+              return projectEgressCustomerState(current.aggregate, preparation.preparation, resumed.states)
+            }
+          }
+          return projectStoredPreparation(current.aggregate, preparation.preparation)
+        }
         if (preparation.kind === 'stale') return writableView(projectNeedsAttention({
           requestRef: args.requestRef,
           revision: current.aggregate.snapshot.revision,
@@ -387,6 +422,16 @@ export const authorizePreparation = action({
       },
       now,
     })
+    if ((result.kind === 'stored' || result.kind === 'replayed') && result.preparation.kind === 'ready_for_routing') {
+      return await runPreparationEgress(ctx, current.aggregate, result.preparation, {
+        principalId: requestPrincipalId,
+        commandKey: namespacedKey(requestPrincipalId, 'egress', args.requestRef, args.idempotencyKey),
+        commandDigest: canonicalDigest({
+          requestRef: args.requestRef, revision: args.revision,
+          preparationRef: result.preparation.preparationRef, idempotencyKey: args.idempotencyKey,
+        }),
+      })
+    }
     return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
   },
 })
@@ -617,7 +662,7 @@ type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
 type PreparationMutationResult = Readonly<
   | { kind: 'stored' | 'replayed'; preparation: StoredPreparation }
   | { kind: 'conflict'; reason: 'revision_changed' | 'idempotency_key_reused' }
-  | { kind: 'needs_attention'; reason: 'capability_graph_changed' | 'historical_request_resubmit_required' }
+  | { kind: 'needs_attention'; reason: 'capability_graph_changed' | 'historical_request_resubmit_required' | 'preparation_recipient_unsupported' }
   | { kind: 'refused'; reason: 'request_not_found' | 'action_not_found' | 'request_not_ready' | 'authority_reference_invalid' | 'authority_invalid' }
 >
 type PreparationResumeResult = Readonly<
@@ -672,7 +717,108 @@ async function prepareCurrentAction(
     actionId: action.actionId,
     now: Date.now(),
   })
+  if ((result.kind === 'stored' || result.kind === 'replayed') && result.preparation.kind === 'ready_for_routing') {
+    return await runPreparationEgress(ctx, current.aggregate, result.preparation, {
+      principalId: caller.principalId,
+      commandKey: namespacedKey(caller.principalId, 'egress', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest({
+        requestRef: args.requestRef, revision: args.revision,
+        preparationRef: result.preparation.preparationRef, idempotencyKey: args.idempotencyKey,
+      }),
+    })
+  }
   return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
+}
+
+async function runPreparationEgress(
+  ctx: ActionCtx,
+  aggregate: StoredAggregate,
+  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
+  command: Readonly<{ principalId: string; commandKey: string; commandDigest: string }>,
+): Promise<ActionResult> {
+  const result: {
+    kind: 'completed' | 'conflict' | 'needs_attention'
+    states?: Array<{ operationRef: string; state: 'released' | 'not_released' | 'uncertain' | 'in_flight' }>
+  } = await ctx.runAction(
+    internal.customerRequestV2PreparationEgress.run,
+    {
+      ...command, preparationRef: preparation.preparationRef, now: Date.now(),
+    },
+  )
+  if (result.kind !== 'completed') return writableView(projectNeedsAttention({
+    requestRef: aggregate.snapshot.requestId,
+    revision: aggregate.snapshot.revision,
+    summary: result.kind === 'conflict'
+      ? 'This preparation command was already used for a different request.'
+      : 'The registered options or permission changed. Review this request again.',
+  }))
+  if (result.states === undefined) return writableView(projectNeedsAttention({
+    requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
+    summary: 'AE could not read the business response state. Review this request again.',
+  }))
+  return projectEgressCustomerState(aggregate, preparation, result.states)
+}
+
+async function recoverUnresolvedEgress(
+  ctx: ActionCtx,
+  aggregate: StoredAggregate,
+): Promise<ActionResult | undefined> {
+  const recovered: {
+    kind: 'completed' | 'needs_attention'
+    states?: Array<{
+      operationRef: string
+      requestRevision: number
+      state: 'released' | 'not_released' | 'uncertain' | 'in_flight'
+    }>
+    operations?: Array<{ operationRef: string; requestRevision: number }>
+  } = await ctx.runAction(internal.customerRequestV2PreparationEgress.resumeRequest, {
+    requestId: aggregate.snapshot.requestId, principalId: aggregate.snapshot.principalId,
+  })
+  const base = {
+    kind: 'request' as const, requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
+    state: 'needs_attention' as const, missingFields: [],
+    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    options: [],
+  }
+  if (recovered.kind === 'needs_attention') return writableView({
+    ...base, nextAction: 'wait',
+    summary: 'AE cannot safely continue while checking an earlier business contact.',
+  })
+  const states = recovered.states ?? []
+  if (states.some(({ state }) => state === 'uncertain' || state === 'in_flight')) return writableView({
+    ...base, nextAction: 'wait',
+    summary: 'AE is still checking whether a business received this request. It will not send it again while checking.',
+  })
+  if (states.some(({ requestRevision }) => requestRevision !== aggregate.snapshot.revision)) return writableView({
+    ...base, nextAction: 'revise_request',
+    summary: 'AE recovered an earlier business contact. Review the current request before continuing.',
+  })
+  return undefined
+}
+
+function projectEgressCustomerState(
+  aggregate: StoredAggregate,
+  preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
+  states: readonly Readonly<{ state: 'released' | 'not_released' | 'uncertain' | 'in_flight' }>[],
+): ActionResult {
+  const base = {
+    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
+    missingFields: [], criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    preparationRef: preparation.preparationRef, options: [],
+  } as const
+  if (states.some(({ state }) => state === 'uncertain')) return writableView({
+    ...base, state: 'needs_attention', nextAction: 'wait',
+    summary: 'AE cannot yet confirm whether every business received the request. It will not send it again while checking.',
+  })
+  if (states.some(({ state }) => state === 'in_flight')) return writableView({
+    ...base, state: 'preparing_options', nextAction: 'wait',
+    summary: 'AE is waiting for businesses that are already processing the request.',
+  })
+  if (states.length > 0 && states.every(({ state }) => state === 'not_released')) return writableView({
+    ...base, state: 'needs_attention', nextAction: 'revise_request',
+    summary: 'No business received the request. Review the available businesses before trying another route.',
+  })
+  return writableView({ ...base, state: 'preparing_options', summary: aggregate.snapshot.intent, nextAction: 'wait' })
 }
 
 function preparationResultView(
@@ -690,6 +836,8 @@ function preparationResultView(
     revision,
     summary: result.reason === 'historical_request_resubmit_required'
       ? 'This earlier request used a retired contract format. Start a new request to continue.'
+      : result.reason === 'preparation_recipient_unsupported'
+        ? 'This registered capability cannot share information with businesses before you choose one.'
       : 'The registered options changed. Review this request again.',
   }))
   if (result.kind === 'refused') {
@@ -728,7 +876,7 @@ function projectStoredPreparation(aggregate: StoredAggregate, preparation: Store
   })
   const disclosureReview = {
     purpose: customerPurposeLabel(preparation.disclosureReview.purposes[0] ?? 'prepare_options'),
-    maximumRecipients: maximumPreparationRecipients(aggregate, preparation),
+    maximumRecipients: preparation.disclosureReview.limits.maximumRecipients,
     categories: preparation.disclosureReview.categories.map(({ label, classification }) => ({ label, classification })),
   }
   if (preparation.kind === 'needs_authority') return writableView({
@@ -745,14 +893,6 @@ function projectStoredPreparation(aggregate: StoredAggregate, preparation: Store
     missingFields: [],
     disclosureReview,
   })
-}
-
-function maximumPreparationRecipients(aggregate: StoredAggregate, preparation: StoredPreparation): number {
-  return new Set(aggregate.evaluation.candidates.filter((candidate) => (
-    candidate.viability.kind === 'viable'
-    && candidate.selectionKey === preparation.lineage.selectionKey
-    && sameCapabilityContractRef(candidate.contractRef, preparation.lineage.contractRef)
-  )).map((candidate) => candidate.businessId)).size
 }
 
 function customerPurposeLabel(value: string): string {
