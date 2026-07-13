@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { pathToFileURL } from 'node:url'
 
 const PROJECT_NAME = 'agentic-economy' as const
 const GITHUB_REPOSITORY_ID = 1_283_024_672 as const
@@ -112,4 +113,5 @@ export async function main(env: Record<string, string | undefined> = process.env
   process.stdout.write(`${JSON.stringify(result)}\n`)
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main()
+const entrypoint = process.argv[1]
+if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) await main()

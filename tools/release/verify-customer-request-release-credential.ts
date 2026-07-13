@@ -1,5 +1,6 @@
 import { withTemporaryClerkApiKey } from './customer-request-production-credential'
 import { verifyHostedCustomerRequestRelease } from './verify-customer-request-release'
+import { pathToFileURL } from 'node:url'
 
 export async function main(env: Record<string, string | undefined> = process.env): Promise<void> {
   await withTemporaryClerkApiKey({
@@ -29,4 +30,5 @@ function required(env: Record<string, string | undefined>, name: string): string
   return value
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main()
+const entrypoint = process.argv[1]
+if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) await main()

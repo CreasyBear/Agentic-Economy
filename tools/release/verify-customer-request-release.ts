@@ -2,6 +2,7 @@ import {
   parseCustomerRequestReleaseReadback,
   verifyCustomerRequestHostedRevision,
 } from '../../src/modules/customer-request/release-readback'
+import { pathToFileURL } from 'node:url'
 
 type Environment = Record<string, string | undefined>
 
@@ -68,4 +69,5 @@ function required(env: Environment, name: string): string {
   return value
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main()
+const entrypoint = process.argv[1]
+if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) await main()
