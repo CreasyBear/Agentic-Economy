@@ -42,8 +42,9 @@ export type CustomerRequestView = Readonly<{
   disclosureReview?: Readonly<{
     purpose: string
     maximumRecipients: number
-    categories: readonly Readonly<{ label: string; classification: 'personal' | 'sensitive' | 'credential' }>[]
+    categories: readonly Readonly<{ label: string; classification: 'public' | 'personal' | 'sensitive' | 'credential' }>[]
   }>
+  preparationRef?: string
   clarification?: Readonly<
     | { kind: 'intent_direction'; prompt: string; answerKind: 'natural_language' }
     | { kind: 'contract_fact'; requirementKey: string; prompt: string; answerKind: 'typed_value' }
@@ -140,6 +141,7 @@ export function projectPreparingOptions(input: Readonly<{
   summary: string
   criteria?: readonly CustomerCriterion[]
   disclosureReview?: CustomerRequestView['disclosureReview']
+  preparationRef?: string
 }>): CustomerRequestView {
   return requestView({ ...input, state: 'preparing_options', nextAction: 'wait' })
 }
@@ -196,6 +198,7 @@ function requestView(input: Readonly<{
   clarification?: CustomerRequestView['clarification']
   criteria?: readonly CustomerCriterion[]
   disclosureReview?: CustomerRequestView['disclosureReview']
+  preparationRef?: string
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
 }>): CustomerRequestView {
@@ -212,6 +215,7 @@ function requestView(input: Readonly<{
       ...input.disclosureReview,
       categories: Object.freeze(input.disclosureReview.categories.map((category) => Object.freeze({ ...category }))),
     }) }),
+    ...(input.preparationRef === undefined ? {} : { preparationRef: input.preparationRef }),
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),

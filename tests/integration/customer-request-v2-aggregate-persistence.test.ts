@@ -198,12 +198,21 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       kind: 'needs_attention', requestId: 'request:v1:historical',
       reason: 'historical_request_resubmit_required', resumable: false,
     })
+    await expect(backend.mutation(internal.customerRequestV2Preparation.prepare, {
+      commandKey: 'prepare:v1:historical', commandDigest: 'sha256:' + '8'.repeat(64),
+      principalId: 'principal:v1', requestId: 'request:v1:historical', expectedRevision: 1,
+      actionId: 'action:v1:historical', now: 2,
+    })).resolves.toEqual({
+      kind: 'needs_attention', reason: 'historical_request_resubmit_required',
+    })
     const v2Rows = await backend.run(async (ctx) => ({
       heads: await ctx.db.query('customerRequestV2Heads').collect(),
       revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
       commands: await ctx.db.query('customerRequestV2Commands').collect(),
+      preparations: await ctx.db.query('customerRequestV2ActionPreparations').collect(),
+      preparationCommands: await ctx.db.query('customerRequestV2PreparationCommands').collect(),
     }))
-    expect(v2Rows).toEqual({ heads: [], revisions: [], commands: [] })
+    expect(v2Rows).toEqual({ heads: [], revisions: [], commands: [], preparations: [], preparationCommands: [] })
   })
 })
 

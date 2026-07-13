@@ -6,6 +6,8 @@ import type { CustomerOptionsProjection } from '@/modules/customer-request/custo
 
 const bodySchema = z.object({
   revision: z.number().int().positive(),
+  idempotencyKey: z.string().trim().min(1).max(200),
+  authorityReference: z.string().trim().min(1).max(300).optional(),
 }).strict()
 const compareAction = sourceAction<Record<string, unknown>, CustomerOptionsProjection>('customerRequestApplication:compare')
 type HandlerOptions = Readonly<{ compare?: (args: Record<string, unknown>) => Promise<CustomerOptionsProjection> }>
@@ -19,7 +21,7 @@ export async function handleCustomerOptionsPost(request: Request, requestRef: st
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
-    const args = { requestRef, revision: parsed.data.revision }
+    const args = { requestRef, ...parsed.data }
     const result = await (options.compare ?? (async (input) => await callSourceAction(compareAction, input)))(args)
     if (result.kind === 'refused') return response(result, 401)
     if (result.kind === 'conflict') return response(result, 409)

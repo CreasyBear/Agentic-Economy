@@ -6,7 +6,8 @@ import { findFiles } from '@/lib/ui/contract-scans'
 const productionAuthority = {
   semantics: 'src/modules/customer-request/evaluation.ts',
   compilation: 'src/modules/customer-request/compiler.ts',
-  preparation: 'src/modules/customer-request/preparation.ts',
+  preparation: 'src/modules/customer-request/action-preparation.ts',
+  preparationPersistence: 'convex/customerRequestV2Preparation.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
@@ -30,6 +31,7 @@ describe('CustomerRequest source completeness', () => {
     expect(application).toContain('capabilitySupply.listEligible')
     expect(application).toContain('capabilityContractDocuments.getActiveExactInternal')
     expect(application).toContain('customerRequestV2.commitAggregate')
+    expect(application).toContain('customerRequestV2Preparation.prepare')
     expect(application).toContain('bindCustomerCapabilityDescriptor')
   })
 
@@ -40,6 +42,8 @@ describe('CustomerRequest source completeness', () => {
       'src/modules/customer-request/semantic-interpreter.ts',
       'src/modules/customer-request/internal/convex-v2-schema.ts',
       'convex/customerRequestV2.ts',
+      'src/modules/customer-request/action-preparation.ts',
+      'convex/customerRequestV2Preparation.ts',
       'convex/customerRequestApplication.ts',
     ]
     const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/
@@ -47,6 +51,7 @@ describe('CustomerRequest source completeness', () => {
 
     const application = readFileSync('convex/customerRequestApplication.ts', 'utf8')
     expect(application).not.toMatch(/legacy-compiler-v1|customerRequestCompilationStoreAdapter|commitRequestSnapshot|putRequestEvaluation/)
+    expect(application).not.toMatch(/customerRequestPreparationAuthority|customerRequests\.prepare|prepareCustomerRequestAction/)
     const persistence = readFileSync('convex/customerRequestV2.ts', 'utf8')
     expect(persistence).toContain('historical_request_resubmit_required')
     expect(persistence).not.toMatch(/parseInt|Number\s*\([^)]*version/)

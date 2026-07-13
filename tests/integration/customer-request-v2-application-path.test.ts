@@ -62,6 +62,34 @@ describe('current V2 Customer Request application path', () => {
       state: 'ready_to_compare',
     })
 
+    const review = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
+    })
+    expect(review).toMatchObject({
+      kind: 'request', requestRef: 'request:v2:application', revision: 1,
+      state: 'needs_authorization', nextAction: 'review_disclosure',
+      preparationRef: expect.stringMatching(/^action-preparation:/),
+      disclosureReview: { purpose: 'Return sandbox result', maximumRecipients: 2 },
+    })
+    await expect(customer.action(api.customerRequestApplication.compare, {
+      requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
+    })).resolves.toEqual(review)
+    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation review missing')
+    await expect(customer.action(api.customerRequestApplication.compare, {
+      requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
+      authorityReference: review.preparationRef,
+    })).resolves.toEqual({
+      kind: 'conflict', requestRef: 'request:v2:application', reason: 'idempotency_key_reused',
+    })
+    const authorized = await customer.action(api.customerRequestApplication.authorizePreparation, {
+      requestRef: review.requestRef, revision: review.revision,
+      preparationRef: review.preparationRef, idempotencyKey: 'authorize:v2:1',
+    })
+    expect(authorized).toMatchObject({
+      kind: 'request', requestRef: review.requestRef, revision: review.revision,
+      state: 'ready_to_compare', preparationRef: review.preparationRef,
+    })
+
     const modelRequest = JSON.stringify(generate.mock.calls[0])
     expect(modelRequest).not.toContain(model.contractRef.capabilityId)
     expect(modelRequest).not.toContain(model.contractRef.contractDigest)
@@ -69,8 +97,13 @@ describe('current V2 Customer Request application path', () => {
     const persisted = await backend.run(async (ctx) => ({
       heads: await ctx.db.query('customerRequestV2Heads').collect(),
       revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      preparations: await ctx.db.query('customerRequestV2ActionPreparations').collect(),
+      preparationCommands: await ctx.db.query('customerRequestV2PreparationCommands').collect(),
+      reviews: await ctx.db.query('customerRequestV2PreparationDisclosureReviews').collect(),
+      reservations: await ctx.db.query('customerRequestV2PreparationAuthorityReservations').collect(),
       legacyHeads: await ctx.db.query('customerRequestHeads').collect(),
       legacyRequests: await ctx.db.query('customerRequests').collect(),
+      legacyPreparations: await ctx.db.query('customerRequestPreparationCommands').collect(),
     }))
     expect(persisted.heads).toMatchObject([{ requestId: 'request:v2:application', principalId }])
     expect(persisted.revisions[0]?.aggregate.plan.actions).toMatchObject([
@@ -79,8 +112,34 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.revisions[0]?.aggregate.plan.completionRequirements).toMatchObject([
       { contractRef: model.contractRef, evidenceId: 'option_summary', outputPointer: '/optionSummary', purpose: 'completion' },
     ])
+    expect(persisted.preparations).toHaveLength(1)
+    expect(persisted.preparations[0]?.preparation).toMatchObject({
+      kind: 'ready_for_routing',
+      lineage: {
+        planRevisionId: persisted.revisions[0]?.aggregate.plan.planRevisionId,
+        planDigest: persisted.revisions[0]?.aggregate.plan.planDigest,
+        contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest,
+      },
+      authorityReservation: {
+        authorityReference: review.preparationRef,
+        verification: { kind: 'clerk_identity' },
+      },
+    })
+    expect(persisted.preparationCommands).toHaveLength(2)
+    expect(persisted.reviews).toHaveLength(1)
+    expect(persisted.reservations).toHaveLength(1)
+    for (const row of [
+      persisted.preparations[0], persisted.preparationCommands[0],
+      persisted.reviews[0], persisted.reservations[0],
+    ]) expect(row).toMatchObject({ lineage: {
+      requestId: 'request:v2:application', requestRevision: 1,
+      planRevisionId: persisted.revisions[0]?.aggregate.plan.planRevisionId,
+      planDigest: persisted.revisions[0]?.aggregate.plan.planDigest,
+      contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest,
+    } })
     expect(persisted.legacyHeads).toEqual([])
     expect(persisted.legacyRequests).toEqual([])
+    expect(persisted.legacyPreparations).toEqual([])
   })
 
   it('accepts the exact command signed by an external agent caller', async () => {
@@ -112,10 +171,117 @@ describe('current V2 Customer Request application path', () => {
       issuedAt: Date.now(),
     })
 
-    await expect(backend.action(api.customerRequestApplication.submit, {
+    const submitted = await backend.action(api.customerRequestApplication.submit, {
       ...command, serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
+    })
+    expect(submitted).toMatchObject({ kind: 'request', requestRef: 'request:v2:external', revision: 1 })
+    const prepareCommand = {
+      requestRef: 'request:v2:external', revision: 1, idempotencyKey: 'prepare:external:1',
+    }
+    const prepareAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'compare', command: prepareCommand,
+      principal: {
+        principalId: 'principal:external', ownerId: 'owner:external', credentialId: 'credential:external',
+        scopes: ['customer_requests:create'],
+      },
+      issuedAt: Date.now(),
+    })
+    const review = await backend.action(api.customerRequestApplication.compare, {
+      ...prepareCommand, serviceAuth: { ...prepareAuth, scopes: [...prepareAuth.scopes] },
+    })
+    expect(review).toMatchObject({ kind: 'request', state: 'needs_authorization' })
+    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('external review missing')
+    const authorizeCommand = {
+      requestRef: review.requestRef, revision: review.revision,
+      idempotencyKey: 'prepare:external:2', authorityReference: review.preparationRef,
+    }
+    const authorizeAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'compare', command: authorizeCommand,
+      principal: {
+        principalId: 'principal:external', ownerId: 'owner:external', credentialId: 'credential:external',
+        scopes: ['customer_requests:create'],
+      },
+      issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.compare, {
+      ...authorizeCommand, serviceAuth: { ...authorizeAuth, scopes: [...authorizeAuth.scopes] },
+    })).resolves.toMatchObject({ kind: 'request', state: 'ready_to_compare' })
+    const reservation = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2PreparationAuthorityReservations').collect()
+    ))
+    expect(reservation[0]?.reservation).toMatchObject({
+      ownerId: 'owner:external', credentialId: 'credential:external',
+      verification: { kind: 'service_assertion' },
+    })
+  })
+
+  it('fails closed when registered supply drifts after disclosure review', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (input === undefined) throw new Error('sandbox request input missing')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: input.key, value: 'Find an option' }],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:drift', requestId: 'request:v2:drift',
+      delegatedAgentId: 'agent:drift', customerJob: 'Find an option', routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error('request missing')
+    const review = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef, revision: submitted.revision, idempotencyKey: 'prepare:v2:drift',
+    })
+    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('review missing')
+
+    await backend.run(async (ctx) => {
+      const binding = (await ctx.db.query('capabilityTransportBindings').collect())[0]
+      if (binding === undefined) throw new Error('binding missing')
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', binding.offeringId)).unique()
+      if (offering === null) throw new Error('offering missing')
+      const result = await setCapabilitySupplyEligibility(ctx.db, {
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: {
+          capabilityId: binding.capabilityId,
+          version: binding.version,
+          contractDigest: binding.contractDigest,
+        },
+        decision: 'revoke',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['test:supply-drift'],
+        conformanceEvidenceRefs: ['test:supply-drift'],
+      }, 3_000)
+      if (result.kind !== 'ineligible') throw new Error(`revoke failed: ${result.reason}`)
+    })
+
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention' })
+
+    await expect(customer.action(api.customerRequestApplication.authorizePreparation, {
+      requestRef: review.requestRef,
+      revision: review.revision,
+      preparationRef: review.preparationRef,
+      idempotencyKey: 'authorize:v2:drift',
+    })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention' })
+    const stored = await backend.run(async (ctx) => ({
+      preparations: await ctx.db.query('customerRequestV2ActionPreparations').collect(),
+      reservations: await ctx.db.query('customerRequestV2PreparationAuthorityReservations').collect(),
     }))
-      .resolves.toMatchObject({ kind: 'request', requestRef: 'request:v2:external', revision: 1 })
+    expect(stored.preparations[0]?.preparation.kind).toBe('needs_authority')
+    expect(stored.reservations).toEqual([])
   })
 
   it('preserves accepted exact facts across a natural-language refinement', async () => {

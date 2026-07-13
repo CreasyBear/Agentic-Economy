@@ -103,7 +103,10 @@ export function AeCustomerRequestWorkspace() {
     try {
       const response = await fetch(`/api/requests/${encodeURIComponent(projection.requestRef)}/options`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ revision: projection.revision }),
+        body: JSON.stringify({
+          revision: projection.revision,
+          idempotencyKey: `prepare:${projection.requestRef}:${projection.revision}:${crypto.randomUUID()}`,
+        }),
       })
       const result: CustomerRequestView | Readonly<{ error: string }> = await response.json()
       if ('kind' in result && result.kind === 'request') setState({ kind: 'request', projection: result })
@@ -114,12 +117,17 @@ export function AeCustomerRequestWorkspace() {
   }
 
   async function authorize(projection: CustomerRequestView) {
+    if (projection.preparationRef === undefined) {
+      setState({ kind: 'error', message: 'AE could not find the disclosure review to authorize. Refresh this request.', authenticationRequired: false })
+      return
+    }
     setState({ kind: 'submitting' })
     try {
       const response = await fetch(`/api/requests/${encodeURIComponent(projection.requestRef)}/authorization`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           revision: projection.revision,
+          preparationRef: projection.preparationRef,
           idempotencyKey: `authorize:${projection.requestRef}:${projection.revision}`,
         }),
       })

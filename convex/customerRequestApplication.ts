@@ -15,7 +15,7 @@ import {
   writableCustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
-import { customerRequestV2AggregateValue } from '@/modules/customer-request/runtime'
+import { customerRequestV2AggregateValue, durableActionPreparationV2Value } from '@/modules/customer-request/runtime'
 import {
   projectNeedsAttention,
   projectRequestEvaluation,
@@ -118,9 +118,12 @@ const customerView = v.object({
   disclosureReview: v.optional(v.object({
     purpose: v.string(), maximumRecipients: v.number(),
     categories: v.array(v.object({
-      label: v.string(), classification: v.union(v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+      label: v.string(), classification: v.union(
+        v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential'),
+      ),
     })),
   })),
+  preparationRef: v.optional(v.string()),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
     v.object({ kind: v.literal('contract_fact'), requirementKey: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
@@ -297,20 +300,52 @@ export const resume = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
+    if (current.aggregate.plan.actions.length === 1) {
+      const action = current.aggregate.plan.actions[0]
+      if (action !== undefined) {
+        const preparation: PreparationResumeResult = await ctx.runQuery(
+          internal.customerRequestV2Preparation.resume,
+          {
+            requestId: args.requestRef,
+            requestRevision: current.aggregate.snapshot.revision,
+            actionId: action.actionId,
+            principalId: caller.principalId,
+          },
+        )
+        if (preparation.kind === 'current') return projectStoredPreparation(current.aggregate, preparation.preparation)
+        if (preparation.kind === 'stale') return writableView(projectNeedsAttention({
+          requestRef: args.requestRef,
+          revision: current.aggregate.snapshot.revision,
+          summary: 'The available business capabilities changed. Review this request again.',
+        }))
+      }
+    }
     return projectStoredAggregate(current.aggregate)
   },
 })
 
 export const compare = action({
-  args: { requestRef: v.string(), revision: v.number(), serviceAuth: v.optional(serviceAssertion) },
+  args: {
+    requestRef: v.string(), revision: v.number(), idempotencyKey: v.string(),
+    authorityReference: v.optional(v.string()), serviceAuth: v.optional(serviceAssertion),
+  },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => await unavailableAfterCurrentCheck(ctx, args.requestRef, args.revision, args.serviceAuth, 'compare'),
+  handler: async (ctx, args): Promise<ActionResult> => await prepareCurrentAction(ctx, args, 'compare'),
 })
 
 export const authorizePreparation = action({
-  args: { requestRef: v.string(), revision: v.number(), idempotencyKey: v.string() },
+  args: {
+    requestRef: v.string(), revision: v.number(), preparationRef: v.string(), idempotencyKey: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
+  },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => await unavailableAfterCurrentCheck(ctx, args.requestRef, args.revision, undefined, 'compare'),
+  handler: async (ctx, args): Promise<ActionResult> => await prepareCurrentAction(ctx, {
+    requestRef: args.requestRef,
+    revision: args.revision,
+    idempotencyKey: args.idempotencyKey,
+    authorityReference: args.preparationRef,
+    ...(args.serviceAuth === undefined ? {} : { serviceAuth: args.serviceAuth }),
+  }, 'authorize'),
 })
 
 async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
@@ -535,9 +570,149 @@ type StoredAggregateResult = Readonly<
   | { kind: 'not_found' }
 >
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
+type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
+type PreparationMutationResult = Readonly<
+  | { kind: 'stored' | 'replayed'; preparation: StoredPreparation }
+  | { kind: 'conflict'; reason: 'revision_changed' | 'idempotency_key_reused' }
+  | { kind: 'needs_attention'; reason: 'capability_graph_changed' | 'historical_request_resubmit_required' }
+  | { kind: 'refused'; reason: 'request_not_found' | 'action_not_found' | 'request_not_ready' | 'authority_reference_invalid' | 'authority_invalid' }
+>
+type PreparationResumeResult = Readonly<
+  | { kind: 'current'; preparation: StoredPreparation }
+  | { kind: 'not_found' | 'stale' }
+>
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
   return await ctx.runQuery(internal.customerRequestV2.getCurrentAggregate, { requestId })
+}
+
+async function prepareCurrentAction(
+  ctx: ActionCtx,
+  args: Readonly<{
+    requestRef: string
+    revision: number
+    idempotencyKey: string
+    authorityReference?: string
+    serviceAuth?: Infer<typeof serviceAssertion>
+  }>,
+  operation: 'compare' | 'authorize',
+): Promise<ActionResult> {
+  const command = {
+    requestRef: args.requestRef,
+    revision: args.revision,
+    idempotencyKey: args.idempotencyKey,
+    ...(args.authorityReference === undefined ? {} : { authorityReference: args.authorityReference }),
+  }
+  const caller = await resolveRequestCaller(ctx, operation, command, args.serviceAuth)
+  if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+  const current = await loadCurrent(ctx, args.requestRef)
+  if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
+    requestRef: args.requestRef, revision: 0,
+    summary: 'This earlier request used a retired contract format. Start a new request to continue.',
+  }))
+  if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+    return { kind: 'refused', reason: 'request_not_found' }
+  }
+  if (current.aggregate.snapshot.revision !== args.revision) return {
+    kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
+  }
+  if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
+    return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: args.revision,
+      summary: 'This request needs an action choice before AE can prepare it.',
+    }))
+  }
+  const action = current.aggregate.plan.actions[0]
+  const result: PreparationMutationResult = await ctx.runMutation(internal.customerRequestV2Preparation.prepare, {
+    commandKey: namespacedKey(caller.principalId, operation, args.requestRef, args.idempotencyKey),
+    commandDigest: canonicalDigest(command),
+    principalId: caller.principalId,
+    requestId: args.requestRef,
+    expectedRevision: args.revision,
+    actionId: action.actionId,
+    ...(args.authorityReference === undefined ? {} : {
+      authorityReference: args.authorityReference,
+      authority: caller.authority,
+    }),
+    now: Date.now(),
+  })
+  if (result.kind === 'conflict') return {
+    kind: 'conflict', requestRef: args.requestRef,
+    reason: result.reason === 'revision_changed' ? 'revision_changed' : 'idempotency_key_reused',
+  }
+  if (result.kind === 'needs_attention') return writableView(projectNeedsAttention({
+    requestRef: args.requestRef,
+    revision: args.revision,
+    summary: result.reason === 'historical_request_resubmit_required'
+      ? 'This earlier request used a retired contract format. Start a new request to continue.'
+      : 'The available business capabilities changed. Review this request again.',
+  }))
+  if (result.kind === 'refused') {
+    if (result.reason === 'request_not_found') return { kind: 'refused', reason: 'request_not_found' }
+    return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      summary: result.reason === 'authority_reference_invalid' || result.reason === 'authority_invalid'
+        ? 'That permission no longer matches this request. Review the disclosure again.'
+        : 'This request cannot be prepared from its current action.',
+    }))
+  }
+  return projectStoredPreparation(current.aggregate, result.preparation)
+}
+
+function projectStoredPreparation(aggregate: StoredAggregate, preparation: StoredPreparation): ActionResult {
+  const criteria = aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const base = {
+    kind: 'request' as const,
+    requestRef: aggregate.snapshot.requestId,
+    revision: aggregate.snapshot.revision,
+    summary: aggregate.snapshot.intent,
+    criteria,
+    preparationRef: preparation.preparationRef,
+    options: [],
+  }
+  if (preparation.kind === 'needs_information') return writableView({
+    ...base,
+    state: 'needs_information',
+    nextAction: 'provide_information',
+    missingFields: preparation.missing.map((item) => ({
+      field: item.inputKey,
+      label: item.label,
+      explanation: 'This answer is required before AE can prepare registered business options.',
+    })),
+  })
+  const disclosureReview = {
+    purpose: customerPurposeLabel(preparation.disclosureReview.purposes[0] ?? 'prepare_options'),
+    maximumRecipients: maximumPreparationRecipients(aggregate, preparation),
+    categories: preparation.disclosureReview.categories.map(({ label, classification }) => ({ label, classification })),
+  }
+  if (preparation.kind === 'needs_authority') return writableView({
+    ...base,
+    state: 'needs_authorization',
+    nextAction: 'review_disclosure',
+    missingFields: [],
+    disclosureReview,
+  })
+  return writableView({
+    ...base,
+    state: 'ready_to_compare',
+    nextAction: 'prepare_options',
+    missingFields: [],
+    disclosureReview,
+  })
+}
+
+function maximumPreparationRecipients(aggregate: StoredAggregate, preparation: StoredPreparation): number {
+  return new Set(aggregate.evaluation.candidates.filter((candidate) => (
+    candidate.viability.kind === 'viable'
+    && candidate.selectionKey === preparation.lineage.selectionKey
+    && sameCapabilityContractRef(candidate.contractRef, preparation.lineage.contractRef)
+  )).map((candidate) => candidate.businessId)).size
+}
+
+function customerPurposeLabel(value: string): string {
+  const words = value.replace(/[_-]+/g, ' ').trim()
+  return `${words.at(0)?.toUpperCase() ?? ''}${words.slice(1)}`
 }
 
 function bindRequirementAnswer(
@@ -595,28 +770,6 @@ function rebindStoredFacts(
       source: fact.source,
     }]
   })
-}
-
-async function unavailableAfterCurrentCheck(
-  ctx: ActionCtx,
-  requestRef: string,
-  revision: number,
-  assertion: Infer<typeof serviceAssertion> | undefined,
-  operation: 'compare',
-): Promise<ActionResult> {
-  const caller = await resolveRequestCaller(ctx, operation, { requestRef, revision }, assertion)
-  if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
-  const current = await loadCurrent(ctx, requestRef)
-  if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
-    return { kind: 'refused', reason: 'request_not_found' }
-  }
-  if (current.aggregate.snapshot.revision !== revision) return {
-    kind: 'conflict', requestRef, reason: 'revision_changed',
-  }
-  return writableView(projectNeedsAttention({
-    requestRef, revision,
-    summary: 'The request is compiled. Route preparation requires the exact-reference routing cutover.',
-  }))
 }
 
 function projectStoredAggregate(aggregate: StoredAggregate): ActionResult {
@@ -685,19 +838,45 @@ function writableOption(option: CustomerRequestView['options'][number]) {
 }
 
 type ServiceAssertion = Infer<typeof serviceAssertion>
-type RequestCaller = Readonly<{ principalId: string; delegatedAgentId: string }>
+type RequestCaller = Readonly<{
+  principalId: string
+  delegatedAgentId: string
+  authority: Readonly<{
+    kind: 'clerk_identity' | 'service_assertion'
+    principalId: string
+    ownerId: string
+    credentialId: string
+    evidenceRef: string
+    verifiedAt: number
+  }>
+}>
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,
 ): Promise<RequestCaller | undefined> {
   const identity = await ctx.auth.getUserIdentity()
-  if (identity !== null) return {
-    principalId: identity.tokenIdentifier,
-    delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier,
+  if (identity !== null) {
+    const verifiedAt = Date.now()
+    return {
+      principalId: identity.tokenIdentifier,
+      delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier,
+      authority: {
+        kind: 'clerk_identity',
+        principalId: identity.tokenIdentifier,
+        ownerId: identity.subject,
+        credentialId: identity.tokenIdentifier,
+        evidenceRef: `clerk-identity:${canonicalDigest({
+          issuer: identity.issuer,
+          subject: identity.subject,
+          tokenIdentifier: identity.tokenIdentifier,
+        })}`,
+        verifiedAt,
+      },
+    }
   }
   const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (assertion === undefined || key === undefined || key.length < 32
@@ -709,7 +888,23 @@ async function resolveRequestCaller(
     scopes: [...assertion.scopes], seenAt: Date.now(),
   })
   if (recorded.kind !== 'recorded') return undefined
-  return { principalId: assertion.principalId, delegatedAgentId: assertion.principalId }
+  return {
+    principalId: assertion.principalId,
+    delegatedAgentId: assertion.principalId,
+    authority: {
+      kind: 'service_assertion',
+      principalId: assertion.principalId,
+      ownerId: assertion.ownerId,
+      credentialId: assertion.credentialId,
+      evidenceRef: `service-assertion:${canonicalDigest({
+        principalId: assertion.principalId,
+        credentialId: assertion.credentialId,
+        issuedAt: assertion.issuedAt,
+        signature: assertion.signature,
+      })}`,
+      verifiedAt: Date.now(),
+    },
+  }
 }
 
 function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {

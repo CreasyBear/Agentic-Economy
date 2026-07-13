@@ -6,6 +6,7 @@ import type { CustomerRequestView } from '@/modules/customer-request/customer-pr
 
 const bodySchema = z.object({
   revision: z.number().int().positive(),
+  preparationRef: z.string().trim().min(1).max(300),
   idempotencyKey: z.string().trim().min(1).max(200),
 }).strict()
 type AuthorizationResult = CustomerRequestView

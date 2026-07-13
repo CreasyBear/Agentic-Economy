@@ -176,6 +176,7 @@ describe('customer Request workspace', () => {
       .mockResolvedValueOnce(Response.json({
         kind: 'request', requestRef: 'request:protected', revision: 1, state: 'needs_authorization',
         summary: 'Send my parcel', nextAction: 'review_disclosure', missingFields: [], criteria: [], options: [],
+        preparationRef: 'action-preparation:protected',
         disclosureReview: {
           purpose: 'Compare parcel services', maximumRecipients: 2,
           categories: [{ label: 'Origin postcode', classification: 'personal' }],
@@ -197,6 +198,8 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Allow this comparison' }))
     await screen.findByRole('button', { name: 'Show available options' })
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aprotected/authorization', expect.objectContaining({ method: 'POST' }))
+    const authorizationBody = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))
+    expect(authorizationBody).toMatchObject({ preparationRef: 'action-preparation:protected' })
   })
 
   it('keeps the Request recoverable while finding options and when no connected option returns', async () => {

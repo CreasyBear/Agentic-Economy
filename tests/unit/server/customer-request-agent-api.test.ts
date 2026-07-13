@@ -39,9 +39,9 @@ describe('agent-native customer Request API', () => {
   })
 
   it('uses the same scoped principal for resume and preparation', async () => {
-    const names: string[] = []
-    const callAction = async (name: string) => {
-      names.push(name)
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = []
+    const callAction = async (name: string, args: Record<string, unknown>) => {
+      calls.push({ name, args })
       if (name.endsWith(':compare')) return {
         kind: 'request' as const, requestRef: 'request:agent:1', revision: 1, state: 'options_ready' as const,
         summary: 'Ready', nextAction: 'inspect_options' as const, missingFields: [], options: [],
@@ -54,10 +54,20 @@ describe('agent-native customer Request API', () => {
     expect((await handleAgentCustomerRequestGet('request:agent:1', {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })).status).toBe(200)
-    expect((await handleAgentCustomerOptionsPost(request('/options', { revision: 1 }), 'request:agent:1', {
+    expect((await handleAgentCustomerOptionsPost(request('/options', {
+      revision: 1, idempotencyKey: 'prepare:1', authorityReference: 'action-preparation:1',
+    }), 'request:agent:1', {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })).status).toBe(200)
-    expect(names).toEqual(['customerRequestApplication:resume', 'customerRequestApplication:compare'])
+    expect(calls.map(({ name }) => name)).toEqual(['customerRequestApplication:resume', 'customerRequestApplication:compare'])
+    const { serviceAuth, ...command } = calls[1]?.args ?? {}
+    expect(command).toMatchObject({
+      requestRef: 'request:agent:1', revision: 1,
+      idempotencyKey: 'prepare:1', authorityReference: 'action-preparation:1',
+    })
+    await expect(verifyCustomerRequestServiceAssertion({
+      key, operation: 'compare', command: command as never, assertion: serviceAuth as never, now: 1_001,
+    })).resolves.toBe(true)
   })
 
   it('signs a natural-language clarification as a refinement of the same Request', async () => {

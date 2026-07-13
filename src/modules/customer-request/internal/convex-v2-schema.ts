@@ -4,6 +4,77 @@ import { v } from 'convex/values'
 export const capabilityContractRefV2Value = v.object({
   capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
 })
+export const actionPreparationLineageV2Value = v.object({
+  requestId: v.string(), requestRevision: v.number(), principalId: v.string(), delegatedAgentId: v.string(),
+  planRevisionId: v.string(), planDigest: v.string(), actionId: v.string(),
+  contractRef: capabilityContractRefV2Value, selectionKey: v.string(), semanticDigest: v.string(),
+})
+const capabilityRecipientV2Value = v.union(
+  v.object({ kind: v.literal('candidate_binding') }),
+  v.object({ kind: v.literal('selected_binding') }),
+  v.object({ kind: v.literal('named_recipient'), recipientId: v.string() }),
+)
+const capabilityEffectV2Value = v.object({
+  effectId: v.string(),
+  class: v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')),
+  authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+  reversibility: v.union(v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible')),
+})
+const preparationDeclarationV2Value = v.object({
+  declarationKey: v.string(), effectId: v.string(), inputPointer: v.string(), schemaIdentity: v.string(),
+  classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+  phase: v.union(v.literal('preparation'), v.literal('execution')),
+  recipient: capabilityRecipientV2Value, purposes: v.array(v.string()), effect: capabilityEffectV2Value,
+  inputs: v.array(v.object({
+    inputKey: v.string(), inputPointer: v.string(), label: v.string(), schemaIdentity: v.string(),
+  })),
+})
+const actionPreparationAuthorityScopeV2Value = v.object({
+  declarations: v.array(preparationDeclarationV2Value), authorityScopeDigest: v.string(),
+})
+const actionPreparationDisclosureReviewV2Value = v.object({
+  reviewRef: v.string(), reviewDigest: v.string(), lineage: actionPreparationLineageV2Value,
+  categories: v.array(v.object({
+    inputKey: v.string(), inputPointer: v.string(), schemaIdentity: v.string(), label: v.string(),
+    classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+  })),
+  purposes: v.array(v.string()), recipients: v.array(capabilityRecipientV2Value),
+  effectRequirements: v.array(capabilityEffectV2Value),
+})
+const actionPreparationAuthorityReservationV2Value = v.object({
+  reservationRef: v.string(), reservationDigest: v.string(), authorityReference: v.string(),
+  principalId: v.string(), ownerId: v.string(), credentialId: v.string(), lineage: actionPreparationLineageV2Value,
+  authorityScopeDigest: v.string(),
+  verification: v.object({
+    kind: v.union(v.literal('clerk_identity'), v.literal('service_assertion')),
+    evidenceRef: v.string(), verifiedAt: v.number(),
+  }),
+  reservedAt: v.number(),
+})
+export const durableActionPreparationV2Value = v.union(
+  v.object({
+    kind: v.literal('needs_information'), preparationRef: v.string(), preparationDigest: v.string(),
+    lineage: actionPreparationLineageV2Value, projectedInputDigest: v.optional(v.string()),
+    authorityScope: actionPreparationAuthorityScopeV2Value,
+    disclosureReview: actionPreparationDisclosureReviewV2Value, preparedAt: v.number(),
+    missing: v.array(v.object({
+      inputKey: v.string(), inputPointer: v.string(), schemaIdentity: v.string(), label: v.string(),
+    })),
+  }),
+  v.object({
+    kind: v.literal('needs_authority'), preparationRef: v.string(), preparationDigest: v.string(),
+    lineage: actionPreparationLineageV2Value, projectedInputDigest: v.optional(v.string()),
+    authorityScope: actionPreparationAuthorityScopeV2Value,
+    disclosureReview: actionPreparationDisclosureReviewV2Value, preparedAt: v.number(),
+  }),
+  v.object({
+    kind: v.literal('ready_for_routing'), preparationRef: v.string(), preparationDigest: v.string(),
+    lineage: actionPreparationLineageV2Value, projectedInputDigest: v.optional(v.string()),
+    authorityScope: actionPreparationAuthorityScopeV2Value,
+    disclosureReview: actionPreparationDisclosureReviewV2Value, preparedAt: v.number(),
+    authorityReservation: v.optional(actionPreparationAuthorityReservationV2Value),
+  }),
+)
 const factSourceV2Value = v.union(
   v.object({ kind: v.literal('customer'), assertionRef: v.string() }),
   v.object({ kind: v.literal('agent_inference'), inferenceRef: v.string() }),
@@ -105,4 +176,31 @@ export const customerRequestV2Tables = {
   })
     .index('by_commandKey', ['commandKey'])
     .index('by_requestId_and_resultingRevision', ['requestId', 'resultingRevision']),
+
+  customerRequestV2ActionPreparations: defineTable({
+    preparationRef: v.string(), preparationDigest: v.string(), requestId: v.string(), requestRevision: v.number(),
+    actionId: v.string(), lineage: actionPreparationLineageV2Value,
+    preparation: durableActionPreparationV2Value, recordedAt: v.number(), updatedAt: v.number(),
+  })
+    .index('by_preparationRef', ['preparationRef'])
+    .index('by_requestId_requestRevision_actionId', ['requestId', 'requestRevision', 'actionId']),
+
+  customerRequestV2PreparationCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
+    authorityReference: v.optional(v.string()), lineage: actionPreparationLineageV2Value,
+    preparationRef: v.string(), preparationDigest: v.string(), committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
+  customerRequestV2PreparationDisclosureReviews: defineTable({
+    reviewRef: v.string(), reviewDigest: v.string(), lineage: actionPreparationLineageV2Value,
+    review: actionPreparationDisclosureReviewV2Value, recordedAt: v.number(),
+  }).index('by_reviewRef', ['reviewRef']),
+
+  customerRequestV2PreparationAuthorityReservations: defineTable({
+    reservationRef: v.string(), reservationDigest: v.string(), authorityReference: v.string(),
+    lineage: actionPreparationLineageV2Value,
+    reservation: actionPreparationAuthorityReservationV2Value, recordedAt: v.number(),
+  })
+    .index('by_reservationRef', ['reservationRef'])
+    .index('by_preparationAuthorityReference', ['authorityReference']),
 } as const

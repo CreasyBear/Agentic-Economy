@@ -1,4 +1,16 @@
 export {
+  authorizeActionPreparation,
+  projectActionPreparation,
+  type ActionPreparationAuthorityReservation,
+  type ActionPreparationAuthorityScope,
+  type ActionPreparationDisclosureReview,
+  type ActionPreparationLineage,
+  type AuthorizedActionPreparation,
+  type DurableActionPreparation,
+  type ProjectActionPreparationResult,
+  type VerifiedActionPreparationAuthority,
+} from './action-preparation'
+export {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
   type CompileCustomerRequestCommand,
