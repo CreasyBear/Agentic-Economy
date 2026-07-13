@@ -47,6 +47,7 @@ describe('hosted Customer Request release verifier', () => {
       baseUrl: 'https://agentic-economy-abc123.vercel.app',
       apiKey: 'test_key',
       expectedRevision: revision,
+      expectedDeploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
       fetchImpl,
     })).resolves.toEqual({
       kind: 'verified',
@@ -55,23 +56,45 @@ describe('hosted Customer Request release verifier', () => {
     })
   })
 
+  it('admits the platform-reported production alias for protected deployment URLs', async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      expect(input.toString()).toBe('https://agentic-economy-phi.vercel.app/api/v1/release')
+      return Response.json(readback())
+    }
+    await expect(verifyHostedCustomerRequestRelease({
+      baseUrl: 'https://agentic-economy-phi.vercel.app',
+      apiKey: 'test_key',
+      expectedRevision: revision,
+      expectedDeploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
+      fetchImpl,
+    })).resolves.toMatchObject({ kind: 'verified', revision })
+  })
+
   it('refuses revision, deployment URL, schema and transport mismatches', async () => {
     const serving = (body: unknown): typeof fetch => async () => Response.json(body)
     await expect(verifyHostedCustomerRequestRelease({
       baseUrl: 'https://agentic-economy-abc123.vercel.app', apiKey: 'test_key', expectedRevision: revision,
+      expectedDeploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
       fetchImpl: serving(readback('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')),
     })).rejects.toThrow('hosted_release_revision_mismatch')
     await expect(verifyHostedCustomerRequestRelease({
       baseUrl: 'https://another-deployment.vercel.app', apiKey: 'test_key', expectedRevision: revision,
+      expectedDeploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
       fetchImpl: serving(readback()),
     })).rejects.toThrow('hosted_release_deployment_url_mismatch')
     await expect(verifyHostedCustomerRequestRelease({
       baseUrl: 'https://agentic-economy-abc123.vercel.app', apiKey: 'test_key', expectedRevision: revision,
+      expectedDeploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
       fetchImpl: serving({ ...readback(), schemaVersion: 'unsupported' }),
     })).rejects.toThrow()
     await expect(verifyHostedCustomerRequestRelease({
       baseUrl: 'http://agentic-economy-abc123.vercel.app', apiKey: 'test_key', expectedRevision: revision,
+      expectedDeploymentId: 'dpl_7Gw5ZMBpQA8h9GF832KGp7nwbuh3',
       fetchImpl: serving(readback()),
     })).rejects.toThrow('hosted_release_https_required')
+    await expect(verifyHostedCustomerRequestRelease({
+      baseUrl: 'https://agentic-economy-abc123.vercel.app', apiKey: 'test_key', expectedRevision: revision,
+      expectedDeploymentId: 'dpl_another', fetchImpl: serving(readback()),
+    })).rejects.toThrow('hosted_release_deployment_id_mismatch')
   })
 })

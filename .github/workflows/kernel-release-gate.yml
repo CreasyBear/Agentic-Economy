@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: kernel-release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   source-proof:
@@ -52,21 +52,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Refuse a checkout other than the triggering revision
-        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
-
-      - name: Install pinned Vercel CLI
-        run: npm install --global vercel@55.0.0
-
-      - name: Deploy the exact clean source revision
-        id: deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          deployment_url="$(vercel deploy --prod --yes --archive=tgz --token="${VERCEL_TOKEN}" --meta="githubCommitSha=${AE_RELEASE_SOURCE_REVISION}")"
-          test -n "${deployment_url}"
-          echo "url=${deployment_url}" >> "${GITHUB_OUTPUT}"
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -75,7 +60,19 @@ jobs:
       - name: Frozen dependency install for independent readback
         run: npm ci
 
+      - name: Refuse a checkout other than the triggering revision
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
+
+      - name: Deploy the exact clean source revision
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment="$(tsx tools/release/deploy-customer-request-git-source.ts)"
+          echo "deployment_id=$(printf '%s' "${deployment}" | jq -r '.deploymentId')" >> "${GITHUB_OUTPUT}"
+
       - name: Verify authenticated deployment readback
         env:
-          AE_CUSTOMER_REQUEST_BASE_URL: ${{ steps.deploy.outputs.url }}
+          AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
+          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
         run: npm run test:release:hosted

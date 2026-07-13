@@ -13,6 +13,7 @@ export async function main(env: Record<string, string | undefined> = process.env
         baseUrl: required(env, 'AE_CUSTOMER_REQUEST_BASE_URL'),
         apiKey,
         expectedRevision: required(env, 'AE_RELEASE_SOURCE_REVISION'),
+        expectedDeploymentId: required(env, 'AE_RELEASE_DEPLOYMENT_ID'),
         ...(env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET?.trim() === undefined
           ? {}
           : { deploymentProtectionBypass: env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET.trim() }),

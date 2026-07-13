@@ -9,6 +9,7 @@ export async function verifyHostedCustomerRequestRelease(options: Readonly<{
   baseUrl: string
   apiKey: string
   expectedRevision: string
+  expectedDeploymentId: string
   deploymentProtectionBypass?: string
   fetchImpl?: typeof fetch
 }>): Promise<Readonly<{ kind: 'verified'; revision: string; deploymentId: string }>> {
@@ -31,8 +32,15 @@ export async function verifyHostedCustomerRequestRelease(options: Readonly<{
   if (!response.ok) throw new Error(`hosted_release_readback_failed:${response.status}`)
 
   const readback = parseCustomerRequestReleaseReadback(await response.json())
-  if (new URL(readback.deployment.url).hostname !== baseUrl.hostname) {
+  const admittedHosts = new Set([
+    new URL(readback.deployment.url).hostname,
+    new URL(readback.deployment.productionUrl).hostname,
+  ])
+  if (!admittedHosts.has(baseUrl.hostname)) {
     throw new Error('hosted_release_deployment_url_mismatch')
+  }
+  if (readback.deployment.id !== options.expectedDeploymentId) {
+    throw new Error('hosted_release_deployment_id_mismatch')
   }
   return verifyCustomerRequestHostedRevision({ expectedRevision: options.expectedRevision, readback })
 }
@@ -41,10 +49,12 @@ export async function main(env: Environment = process.env): Promise<void> {
   const baseUrl = required(env, 'AE_CUSTOMER_REQUEST_BASE_URL')
   const apiKey = required(env, 'AE_CUSTOMER_REQUEST_API_KEY')
   const expectedRevision = required(env, 'AE_RELEASE_SOURCE_REVISION')
+  const expectedDeploymentId = required(env, 'AE_RELEASE_DEPLOYMENT_ID')
   const result = await verifyHostedCustomerRequestRelease({
     baseUrl,
     apiKey,
     expectedRevision,
+    expectedDeploymentId,
     ...(env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET?.trim() === undefined
       ? {}
       : { deploymentProtectionBypass: env.AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET.trim() }),
