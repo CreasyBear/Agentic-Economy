@@ -34,4 +34,24 @@ describe('sandbox supply registration', () => {
       expect.objectContaining({ bindingId: 'sandbox.option.two:v1', admission: 'admitted', conformance: 'conformant' }),
     ]))
   })
+
+  it('does not turn a published listing without a capability binding into supply', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await backend.run(async (ctx) => {
+      const template = await ctx.db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', 'sandbox-option-one')).unique()
+      if (template === null) throw new Error('sandbox template missing')
+      const { _id: _templateId, _creationTime: _templateCreationTime, ...listing } = template
+      await ctx.db.insert('businesses', {
+        ...listing, slug: 'sandbox-listing-only', name: 'Sandbox Listing Only',
+      })
+    })
+
+    const eligible = await backend.query(internal.routingKernelBindings.listEligible, { networkId: 'ae:public' })
+    expect(eligible).toHaveLength(2)
+    expect(eligible.map((binding) => binding.businessId)).not.toContain('sandbox-listing-only')
+    expect(eligible.map((binding) => binding.bindingId).sort()).toEqual([
+      'sandbox.option.one:v1', 'sandbox.option.two:v1',
+    ])
+  })
 })

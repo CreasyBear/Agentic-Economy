@@ -46,7 +46,10 @@ describe('customer request projection', () => {
     expect(needsInformation).toMatchObject({ state: 'needs_information', nextAction: 'provide_information' })
     const unsupported = projectCustomerRequest({ kind: 'unsupported', request: { ...request(), compilationState: 'unsupported' }, reason: 'no_registered_capability' })
     expect(unsupported).toMatchObject({ state: 'unsupported', nextAction: 'revise_request' })
-    expect(new Set(['needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options', 'unsupported', 'needs_attention']).size).toBe(7)
+    expect(new Set([
+      'needs_information', 'needs_authorization', 'ready_to_compare', 'preparing_options',
+      'options_ready', 'no_options', 'unsupported', 'needs_attention',
+    ]).size).toBe(8)
   })
 
   it('shows protected preparation as a customer disclosure review without protocol fields', () => {

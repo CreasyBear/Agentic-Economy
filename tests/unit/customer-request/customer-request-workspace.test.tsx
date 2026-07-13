@@ -132,6 +132,33 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aprotected/authorization', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('keeps the Request recoverable while finding options and when no connected option returns', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-no-options' })
+    const base = {
+      kind: 'request', requestRef: 'request:no-options', revision: 1,
+      summary: 'Find a suitable option', missingFields: [], criteria: [], options: [],
+    } as const
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ ...base, state: 'ready_to_compare', nextAction: 'prepare_options' }))
+      .mockResolvedValueOnce(Response.json({ ...base, state: 'preparing_options', nextAction: 'wait' }, { status: 202 }))
+      .mockResolvedValueOnce(Response.json({ ...base, state: 'no_options', nextAction: 'revise_request' }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Find a suitable option' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
+
+    expect(await screen.findByText('Checking connected businesses')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+
+    expect(await screen.findByRole('heading', { name: 'Nothing eligible returned an option.' })).toBeTruthy()
+    expect(screen.getByText(/AE will not invent availability/)).toBeTruthy()
+    expect(screen.getByText('Request revision 1')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Edit this Request' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start a new Request' })).toBeTruthy()
+  })
+
   it('shows authentication as a customer action rather than a protocol error', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'missing_auth' }, { status: 401 })))
