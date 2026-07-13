@@ -152,6 +152,7 @@ describe('registry public API routes', () => {
       serviceName: 'Heat pump diagnostics',
       serviceQuery: 'heat pump fremantle',
       suburb: 'Fremantle',
+      publishedPhone: '1300 123 456',
     })
 
     const registry = listPublicBusinessCatalog(state, { limit: 10 })
@@ -168,6 +169,7 @@ describe('registry public API routes', () => {
       /businessId|serviceId|ownerId|clerk|sourceHash|rawContact|admin|private:evidence|MCP|OpenAPI|apiKey|"callable"\s*:\s*true|"paymentRequired"\s*:\s*true/i,
     )
     expect(serialized).toContain('not_available_yet')
+    expect(serialized).toContain('1300 123 456')
     expect(serialized).not.toMatch(
       /booking available|payment available|callable endpoint/i,
     )
@@ -434,6 +436,7 @@ function createDurablePublishedRegistryState(input: {
   serviceName: string
   serviceQuery: string
   suburb: string
+  publishedPhone?: string
 }): RegistrySourceState {
   const state = emptyRegistrySourceState()
   const claim = claimBusiness(state, {
@@ -448,6 +451,7 @@ function createDurablePublishedRegistryState(input: {
       suburb: input.suburb,
       stateTerritory: 'WA',
       requestedSlug: input.requestedSlug,
+      ...(input.publishedPhone === undefined ? {} : { publishedPhone: input.publishedPhone }),
       ownerMessage: 'Owner supplied durable source facts.',
       sourceRefs: [
         {

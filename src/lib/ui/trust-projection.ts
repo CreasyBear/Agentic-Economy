@@ -38,6 +38,7 @@ export type ListingTrustProjection = {
 
 type TrustProjectionCatalogSource = {
   updatedAt: number
+  publishedPhone?: string
   services: readonly {
     hoursOrUnknown: string
     serviceArea: string
@@ -50,7 +51,7 @@ export function buildListingTrustProjection(catalog: TrustProjectionCatalogSourc
   const primaryService = catalog.services.at(0)
 
   return {
-    phone: { kind: 'not_published', label: 'Phone not published here' },
+    phone: publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.updatedAt),
     hours: publishedHours(primaryService?.hoursOrUnknown, catalog.updatedAt),
     serviceArea: publishedFact(primaryService?.serviceArea, 'Service area not published here', catalog.updatedAt),
     replyPosture: { kind: 'no_history', label: NO_REPLY_HISTORY },

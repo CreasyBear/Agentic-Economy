@@ -238,6 +238,7 @@ export function extractStorefrontDraftFromHtml(input: StorefrontImportInput & { 
     suburb: '',
     stateTerritory: '',
     requestedSlug: slugify(businessName),
+    publishedPhone: '',
     ownerMessage: 'Draft imported from the business website for owner review before publication.',
     sourceLabel,
     serviceName,

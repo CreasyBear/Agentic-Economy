@@ -1,6 +1,7 @@
 import type { AnswerLayoutProfile, AnswerWorkStep } from '@/modules/answer/public'
 import type { AnswerArtifact } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicAnswerCheckSummary, PublicThreadTurn } from '@/modules/answer-thread/public'
+import { orderShortlistArtifacts } from './AeShortlistTerminal'
 
 /** Assistant answer block: "AE" monogram avatar + vertical connector, bridge-only. */
 export const ANSWER_SECTION_CLASS =
@@ -24,7 +25,7 @@ export function toThreadViewModel(turn: PublicThreadTurn): ThreadTurnViewModel {
     intent: turn.intent,
     seq: turn.seq,
     oneLine: turn.oneLine,
-    artifacts: turn.artifacts,
+    artifacts: orderShortlistArtifacts(turn.artifacts, turn.timing),
     workLog: turn.workLog,
     ...(turn.layoutProfile === undefined ? {} : { layoutProfile: turn.layoutProfile }),
     ...(turn.answerCheckSummary === undefined ? {} : { answerCheckSummary: turn.answerCheckSummary }),

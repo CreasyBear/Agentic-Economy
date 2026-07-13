@@ -73,6 +73,7 @@ const publicCatalogResult = v.object({
   category: v.string(),
   suburb: v.string(),
   stateTerritory: v.string(),
+  publishedPhone: v.optional(v.string()),
   postcode: v.optional(v.string()),
   publicUrl: v.string(),
   publicStatus: v.literal('published'),
@@ -183,6 +184,7 @@ const catalogOkResult = v.object({
     category: v.string(),
     suburb: v.string(),
     stateTerritory: v.string(),
+    publishedPhone: v.optional(v.string()),
     publicStatus: v.literal('published'),
     trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
     claimStatus: v.literal('published'),
@@ -466,6 +468,7 @@ type PublicCatalog = {
   category: string
   suburb: string
   stateTerritory: string
+  publishedPhone?: string
   postcode?: string
   publicUrl: string
   publicStatus: 'published'
@@ -742,6 +745,7 @@ async function publicCatalogForBusiness(db: RuntimeDb, businessId: string): Prom
     category: stringField(context, 'category'),
     suburb: stringField(context, 'suburb'),
     stateTerritory: stringField(context, 'stateTerritory'),
+    ...(optionalStringField(business, 'publishedPhone') === undefined ? {} : { publishedPhone: stringField(business, 'publishedPhone') }),
     ...(optionalStringField(context, 'postcode') === undefined ? {} : { postcode: stringField(context, 'postcode') }),
     publicUrl: `/${stringField(business, 'slug')}`,
     publicStatus: 'published',
@@ -1042,6 +1046,9 @@ function publishedBusinessContract(businessId: string, business: RuntimeDocument
     category: stringField(business, 'category'),
     suburb: stringField(business, 'suburb'),
     stateTerritory: stringField(business, 'stateTerritory'),
+    ...(optionalStringField(business, 'publishedPhone') === undefined
+      ? {}
+      : { publishedPhone: stringField(business, 'publishedPhone') }),
     publicStatus: 'published' as const,
     trustTier: trustTier(business),
     claimStatus: 'published' as const,

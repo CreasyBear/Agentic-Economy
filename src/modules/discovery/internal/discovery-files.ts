@@ -77,7 +77,7 @@ export function buildLlmsTxt(
     '2. If clarification.answerKind is natural_language, POST the answer to /api/v1/requests/:requestRef/messages.',
     '3. If clarification.answerKind is typed_value, POST only the requested fact to /api/v1/requests/:requestRef/facts.',
     '4. POST /api/v1/requests/:requestRef/options with the current revision and a new idempotencyKey.',
-    '5. If needs_authorization, show the disclosure review. After explicit customer approval, POST /options with a new idempotencyKey and authorityReference equal to the opaque preparationRef.',
+    '5. If needs_authorization, show the disclosure review and stop. The customer must approve that exact review in AE; an API key cannot approve on the customer\'s behalf.',
     '6. GET /api/v1/requests/:requestRef to resume after interruption or waiting.',
     '7. Read optionSet.ordering: recommended includes its objective, reasons, tradeoffs and influence status; unranked means no defensible ordering. Treat every option as a proposal only. Nothing has been selected, purchased, or booked.',
     '',

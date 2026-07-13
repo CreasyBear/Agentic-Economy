@@ -8,7 +8,7 @@ import { loadPhaseOneSourceState, persistPhaseOneSourceState, runtimeDb, runtime
 import type { RuntimeDocument, RuntimeWriter } from './source_state'
 import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
-import { suppressBusiness as suppressBusinessModule, unsuppressBusiness as unsuppressBusinessModule } from '../src/modules/business/public'
+import { suppressBusiness as suppressBusinessModule, unsuppressBusiness as unsuppressBusinessModule, validateOwnerPublishedPhone } from '../src/modules/business/public'
 import type { BusinessMutationActor, BusinessSuppressionState } from '../src/modules/business/public'
 import { recordAdminActionDenied, requireAdminAuthority, normalizeClaimFingerprint } from '../src/modules/security/public'
 import type { AdminAuthorityState, AdminDecisionAudit, AdminMembership } from '../src/modules/security/public'
@@ -44,6 +44,7 @@ const businessResult = v.object({
   category: v.string(),
   suburb: v.string(),
   stateTerritory: v.string(),
+  publishedPhone: v.optional(v.string()),
   publicStatus: v.union(v.literal('unpublished'), v.literal('published'), v.literal('suppressed')),
   trustTier: v.union(v.literal('claimed'), v.literal('contact_confirmed'), v.literal('listed'), v.literal('registry_verified')),
   claimStatus: v.union(
@@ -171,6 +172,7 @@ export const claimBusiness = mutationGeneric({
     suburb: v.string(),
     stateTerritory: v.string(),
     requestedSlug: v.string(),
+    publishedPhone: v.optional(v.string()),
     ownerMessage: v.optional(v.string()),
     sourceRefs: v.array(sourceRefArg),
     csrfToken: v.optional(v.string()),
@@ -281,6 +283,7 @@ export const claimBusiness = mutationGeneric({
       slug: normalized.slug,
       sourceRefs: normalized.sourceRefs,
       stateTerritory: normalized.stateTerritory,
+      publishedPhone: normalized.publishedPhone ?? null,
       suburb: normalized.suburb,
     })
     const businessId = await ctx.db.insert('businesses', {
@@ -291,6 +294,7 @@ export const claimBusiness = mutationGeneric({
       category: normalized.category,
       suburb: normalized.suburb,
       stateTerritory: normalized.stateTerritory,
+      ...(normalized.publishedPhone === undefined ? {} : { publishedPhone: normalized.publishedPhone }),
       publicStatus: 'unpublished',
       trustTier: 'claimed',
       claimStatus: 'authenticated',
@@ -342,6 +346,7 @@ export const claimBusiness = mutationGeneric({
         category: normalized.category,
         suburb: normalized.suburb,
         stateTerritory: normalized.stateTerritory,
+        ...(normalized.publishedPhone === undefined ? {} : { publishedPhone: normalized.publishedPhone }),
         publicStatus: 'unpublished' as const,
         trustTier: 'claimed' as const,
         claimStatus: 'authenticated' as const,
@@ -589,6 +594,7 @@ type ClaimBusinessArgs = {
   suburb: string
   stateTerritory: string
   requestedSlug: string
+  publishedPhone?: string
   ownerMessage?: string
   photos?: readonly { url: string; alt: string }[]
   responseTimeMinutes?: number
@@ -602,6 +608,7 @@ type NormalizedClaimFacts =
       category: string
       suburb: string
       stateTerritory: string
+      publishedPhone?: string
       slug: string
       ownerMessage?: string
       photos?: readonly { url: string; alt: string }[]
@@ -641,6 +648,7 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
   const suburb = normalizePublicText(args.suburb)
   const stateTerritory = normalizePublicText(args.stateTerritory)
   const slug = normalizeSlug(args.requestedSlug)
+  const publishedPhoneValidation = validateOwnerPublishedPhone(args.publishedPhone)
   const ownerMessage = normalizeOptionalText(args.ownerMessage)
   const sourceRefs = args.sourceRefs.map((sourceRef) => {
     const label = normalizePublicText(sourceRef.label)
@@ -664,6 +672,10 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
     return { kind: 'invalid', reason: 'At least one source reference is required.' }
   }
 
+  if (publishedPhoneValidation.kind === 'invalid') {
+    return { kind: 'invalid', reason: 'Published phone must be a valid Australian phone number.' }
+  }
+
   const base = {
     kind: 'valid' as const,
     name,
@@ -672,6 +684,7 @@ function normalizeClaimFacts(args: ClaimBusinessArgs): NormalizedClaimFacts {
     stateTerritory,
     slug,
     sourceRefs,
+    ...(publishedPhoneValidation.kind === 'valid' ? { publishedPhone: publishedPhoneValidation.value } : {}),
     ...(args.photos === undefined || args.photos.length === 0 ? {} : { photos: args.photos }),
     ...(args.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: args.responseTimeMinutes }),
   }
@@ -768,6 +781,7 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
   const normalized = normalizePublicText(value)
   return normalized.length === 0 ? undefined : normalized
 }
+
 
 function normalizeSlug(value: string): string {
   return value

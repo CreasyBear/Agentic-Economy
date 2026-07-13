@@ -1,5 +1,6 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import { validateOwnerPublishedPhone } from '@/modules/business/public'
 import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim, rateLimitClaim } from '@/modules/security/public'
 import type {
   BusinessContextRecord,
@@ -141,6 +142,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
       sourceHash: sourceRef.sourceHash,
     })),
     stateTerritory: normalizedFacts.stateTerritory,
+    publishedPhone: normalizedFacts.publishedPhone ?? null,
     suburb: normalizedFacts.suburb,
   })
 
@@ -153,6 +155,7 @@ export function claimBusiness(state: BusinessSourceState, command: ClaimBusiness
     category: normalizedFacts.category,
     suburb: normalizedFacts.suburb,
     stateTerritory: normalizedFacts.stateTerritory,
+    ...(normalizedFacts.publishedPhone === undefined ? {} : { publishedPhone: normalizedFacts.publishedPhone }),
     publicStatus: 'unpublished',
     trustTier: 'claimed',
     claimStatus: 'authenticated',
@@ -224,6 +227,7 @@ type NormalizedClaimFacts =
       suburb: string
       stateTerritory: string
       slug: ReturnType<typeof brandNonEmpty<string, 'Slug'>>
+      publishedPhone?: string
       ownerMessage?: string
       photos?: readonly PublicBusinessPhoto[]
       responseTimeMinutes?: number
@@ -236,6 +240,7 @@ function normalizeClaimFacts(facts: ClaimBusinessCommand['facts']): NormalizedCl
   const category = normalizePublicText(facts.category)
   const suburb = normalizePublicText(facts.suburb)
   const stateTerritory = normalizePublicText(facts.stateTerritory)
+  const publishedPhoneValidation = validateOwnerPublishedPhone(facts.publishedPhone)
   const slugText = normalizeSlug(facts.requestedSlug)
 
   if (name.length === 0 || category.length === 0 || suburb.length === 0 || stateTerritory.length === 0) {
@@ -250,6 +255,10 @@ function normalizeClaimFacts(facts: ClaimBusinessCommand['facts']): NormalizedCl
     return { kind: 'invalid', reason: 'At least one source reference is required.' }
   }
 
+  if (publishedPhoneValidation.kind === 'invalid') {
+    return { kind: 'invalid', reason: 'Published phone must be a valid Australian phone number.' }
+  }
+
   const ownerMessage = normalizeOptionalText(facts.ownerMessage)
   const base = {
     kind: 'valid' as const,
@@ -260,6 +269,7 @@ function normalizeClaimFacts(facts: ClaimBusinessCommand['facts']): NormalizedCl
     slug: brandNonEmpty(slugText, 'Slug'),
     sourceRefs: facts.sourceRefs,
     ...(facts.photos === undefined || facts.photos.length === 0 ? {} : { photos: facts.photos }),
+    ...(publishedPhoneValidation.kind === 'valid' ? { publishedPhone: publishedPhoneValidation.value } : {}),
     ...(facts.responseTimeMinutes === undefined ? {} : { responseTimeMinutes: facts.responseTimeMinutes }),
   }
 
@@ -308,6 +318,7 @@ function normalizeOptionalText(value: string | undefined): string | undefined {
   const normalized = normalizePublicText(value)
   return normalized.length === 0 ? undefined : normalized
 }
+
 
 function normalizeSlug(value: string): string {
   return value

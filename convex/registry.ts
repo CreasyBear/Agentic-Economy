@@ -31,6 +31,7 @@ const catalogItemDto = v.object({
   category: v.string(),
   suburb: v.string(),
   stateTerritory: v.string(),
+  publishedPhone: v.optional(v.string()),
   postcode: v.optional(v.string()),
   publicUrl: v.string(),
   trustTier: v.union(
@@ -313,6 +314,7 @@ type CatalogDto = {
   category: string
   suburb: string
   stateTerritory: string
+  publishedPhone?: string
   postcode?: string
   publicUrl: string
   trustTier: CatalogTrustTier
@@ -863,6 +865,9 @@ function catalogForBusinessFromLookup(
     category: stringField(context, 'category'),
     suburb: stringField(context, 'suburb'),
     stateTerritory: stringField(context, 'stateTerritory'),
+    ...(optionalStringField(business, 'publishedPhone') === undefined
+      ? {}
+      : { publishedPhone: stringField(business, 'publishedPhone') }),
     ...(optionalStringField(context, 'postcode') === undefined
       ? {}
       : { postcode: stringField(context, 'postcode') }),

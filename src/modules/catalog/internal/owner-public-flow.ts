@@ -1,4 +1,4 @@
-import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
+import { claimBusiness, createEmptyBusinessSourceState, validateOwnerPublishedPhone } from '@/modules/business/public'
 import type { BusinessMutationActor } from '@/modules/business/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { CorrelationId, OperationKey, Slug, SourceHash } from '@/modules/common/ids'
@@ -18,6 +18,7 @@ const PublicOwnerClaimFieldValues = [
   'suburb',
   'stateTerritory',
   'requestedSlug',
+  'publishedPhone',
   'ownerMessage',
   'sourceLabel',
   'serviceName',
@@ -40,6 +41,7 @@ export type PublicOwnerClaimFlowInput = {
   suburb: string
   stateTerritory: string
   requestedSlug: string
+  publishedPhone: string
   ownerMessage: string
   sourceLabel: string
   serviceName: string
@@ -101,6 +103,7 @@ export const publicOwnerDefaultClaimInput = {
   suburb: 'Parramatta',
   stateTerritory: 'NSW',
   requestedSlug: 'parramatta-emergency-plumbing',
+  publishedPhone: '',
   ownerMessage: 'Owner supplied emergency plumbing facts for the public service page.',
   sourceLabel: 'Owner supplied service facts',
   serviceName: 'Emergency pipe repair',
@@ -136,7 +139,7 @@ const requiredFieldLabels = {
 } satisfies Record<
   Exclude<
     PublicOwnerClaimField,
-    'ownerMessage' | 'firstRequestMode' | 'publicDisclosure' | 'noContactReason' | 'photoUrl' | 'responseTimeMinutes'
+    'ownerMessage' | 'publishedPhone' | 'firstRequestMode' | 'publicDisclosure' | 'noContactReason' | 'photoUrl' | 'responseTimeMinutes'
   >,
   string
 >
@@ -176,6 +179,10 @@ export function validatePublicOwnerClaimFlowInput(
     }
   } else if (normalized.publicDisclosure.length === 0) {
     errors.push({ field: 'publicDisclosure', message: 'Describe the public first-request instruction.' })
+  }
+
+  if (validateOwnerPublishedPhone(normalized.publishedPhone).kind === 'invalid') {
+    errors.push({ field: 'publishedPhone', message: 'Enter a valid Australian phone number.' })
   }
 
   if (errors.length > 0) {
@@ -228,6 +235,7 @@ function submitPublicOwnerClaimFlowWithState(
       suburb: validation.input.suburb,
       stateTerritory: validation.input.stateTerritory,
       requestedSlug: validation.input.requestedSlug,
+      ...(validation.input.publishedPhone.length === 0 ? {} : { publishedPhone: validation.input.publishedPhone }),
       ...(validation.input.ownerMessage.length === 0 ? {} : { ownerMessage: validation.input.ownerMessage }),
       ...(photos.length === 0 ? {} : { photos }),
       ...(responseTimeMinutes === undefined ? {} : { responseTimeMinutes }),
@@ -422,6 +430,7 @@ function normalizeInput(input: PublicOwnerClaimFlowInput): PublicOwnerClaimFlowI
     suburb: cleanText(input.suburb),
     stateTerritory: cleanText(input.stateTerritory),
     requestedSlug: normalizeSlug(input.requestedSlug),
+    publishedPhone: cleanText(input.publishedPhone),
     ownerMessage: cleanText(input.ownerMessage),
     sourceLabel: cleanText(input.sourceLabel),
     serviceName: cleanText(input.serviceName),
@@ -448,6 +457,7 @@ function normalizeSlug(value: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 72)
 }
+
 
 function sourceHash(value: string): SourceHash {
   return brandNonEmpty(`hash:${value}`, 'SourceHash')

@@ -31,6 +31,7 @@ import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
 import { AeThreadTranscript } from './AeThreadTranscript'
+import { settledShortlistFromArtifacts } from './AeShortlistTerminal'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import {
   buildChatCompleteFunnelEvents,
@@ -152,6 +153,10 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const showThreadUnavailable = routeThreadId !== null && projection === null && liveTurn === null && projectionUnavailable
   const completedTurns = sessionProjection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const completedTurnCount = completedTurns.length
+  const latestProjectedTurn = sessionProjection?.turns.at(-1)
+  const terminalShortlist = liveTurn === null && latestProjectedTurn?.status === 'complete'
+    ? settledShortlistFromArtifacts(latestProjectedTurn.artifacts, latestProjectedTurn.timing)
+    : null
 
 
   const wasShowingWelcomeRef = useRef(showWelcome)
@@ -509,7 +514,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               onRetry={handleRetry}
             />
           </AeThreadScroller>
-          {!showWelcome ? (
+          {!showWelcome && terminalShortlist === null ? (
             <div className="mx-auto w-full max-w-[56rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
               <AeQueryPanel
                 onSubmit={handleSubmit}

@@ -6,6 +6,7 @@ import { AeThreadTurnReplaySection } from './AeThreadTurnReplaySection'
 import { AeThreadTurnStreamSection } from './AeThreadTurnStreamSection'
 import { AeFollowUpChips } from './AeSuggestionChips'
 import { toThreadViewModel } from './thread-turn-view'
+import { AeShortlistTerminal, settledShortlistFromArtifacts } from './AeShortlistTerminal'
 
 export type AeThreadTranscriptProps = {
   threadId?: string | null
@@ -40,6 +41,10 @@ export function AeThreadTranscript({
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
   const resolvedThreadId = resolveThreadId(threadId, projection?.threadId).threadId
   const followUpContext = buildFollowUpContext(completedTurns)
+  const latestProjectedTurn = projection?.turns.at(-1)
+  const terminal = latestProjectedTurn?.status === 'complete'
+    ? settledShortlistFromArtifacts(latestProjectedTurn.artifacts, latestProjectedTurn.timing)
+    : null
 
   return (
     <>
@@ -67,7 +72,12 @@ export function AeThreadTranscript({
               ) : (
                 <AeThreadTurnCollapsed {...viewModel} {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })} />
               )}
-              {isLastCompleted && liveTurn === null ? (
+              {isLastCompleted && turn.turnId === latestProjectedTurn?.turnId && liveTurn === null && terminal !== null ? (
+                <AeShortlistTerminal
+                  {...terminal}
+                  {...(onFollowUp === undefined ? {} : { onChangeCriteria: () => onFollowUp('Change my shortlist criteria') })}
+                />
+              ) : isLastCompleted && liveTurn === null ? (
                 <AeFollowUpChips
                   turn={followUpContext?.turn ?? turn}
                   contextPlacement={followUpContext?.contextPlacement ?? 'current'}

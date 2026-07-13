@@ -18,10 +18,12 @@ function trustCatalog({
   hoursOrUnknown,
   serviceArea,
   responseTimeMinutes,
+  publishedPhone,
 }: {
   hoursOrUnknown: string
   serviceArea: string
   responseTimeMinutes?: number
+  publishedPhone?: string
 }): PublicRouteCatalogContract {
   return {
     businessId: BUSINESS_ID,
@@ -30,6 +32,7 @@ function trustCatalog({
     category: 'Plumbing',
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
+    ...(publishedPhone === undefined ? {} : { publishedPhone }),
     publicUrl: '/trust-fixture',
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
@@ -81,6 +84,22 @@ describe('buildListingTrustProjection', () => {
       },
       replyPosture: { kind: 'no_history', label: 'No reply history yet' },
       explainer: 'AE sends your request in writing and keeps a record — or call directly.',
+    })
+  })
+
+  it('publishes only the catalog phone with the catalog update time', () => {
+    const projection = buildListingTrustProjection(
+      trustCatalog({
+        hoursOrUnknown: 'Mon–Fri 8am–5pm',
+        serviceArea: 'Parramatta',
+        publishedPhone: '0412 345 678',
+      }),
+    )
+
+    expect(projection.phone).toEqual({
+      kind: 'published',
+      value: '0412 345 678',
+      updatedAt: UPDATED_AT,
     })
   })
 

@@ -21,7 +21,7 @@ export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: strin
     `3. \`POST ${base}/api/v1/requests\` with an idempotency key, opaque request reference, and natural-language request. Known facts are optional; no budget or full specification is required to start.`,
     '4. Follow `clarification.answerKind`: send natural-language answers to `/messages`; send only requested typed values to `/facts`.',
     '5. To prepare, POST `/api/v1/requests/:requestRef/options` with the current revision and a new idempotency key.',
-    '6. If AE returns `needs_authorization`, show the disclosure review. Only after explicit customer approval, POST `/options` again with a new idempotency key and `authorityReference` set to the returned opaque `preparationRef`.',
+    '6. If AE returns `needs_authorization`, show the disclosure review and stop. The customer must approve that exact review in AE; then resume the same Request. An API key cannot approve on the customer\'s behalf.',
     '7. Resume at any time with `GET /api/v1/requests/:requestRef` using the same API key.',
     '8. Inspect `options_ready.optionSet.ordering`: `recommended` is tied to the stated objective, reasons, tradeoffs, and commercial-influence evidence; `unranked` means AE found no defensible ordering. Never infer selection or commitment.',
     '',

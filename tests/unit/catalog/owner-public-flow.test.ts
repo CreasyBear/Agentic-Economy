@@ -68,6 +68,26 @@ describe('public owner claim flow', () => {
     expect(input.serviceName).toBe(publicOwnerDefaultClaimInput.serviceName)
   })
 
+  it('trims and publishes an owner-entered Australian phone, and rejects invalid shapes', () => {
+    const published = submitPublicOwnerClaimFlow({
+      ...publicOwnerDefaultClaimInput,
+      publishedPhone: '  +61 412 345 678  ',
+    })
+
+    expect(published).toMatchObject({
+      kind: 'ok',
+      catalog: { publishedPhone: '+61 412 345 678' },
+    })
+
+    expect(validatePublicOwnerClaimFlowInput({
+      ...publicOwnerDefaultClaimInput,
+      publishedPhone: 'owner@example.test',
+    })).toEqual({
+      kind: 'invalid',
+      errors: [{ field: 'publishedPhone', message: 'Enter a valid Australian phone number.' }],
+    })
+  })
+
   it('publishes a website import only after the owner confirms the reviewed draft', () => {
     const draftResult = extractStorefrontDraftFromHtml({
       websiteUrl: 'https://northside.example/',

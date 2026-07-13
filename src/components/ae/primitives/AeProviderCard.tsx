@@ -34,9 +34,7 @@ export function AeProviderCard(props: AeProviderCardProps) {
 function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; threadId?: string }) {
   const area = source.serviceArea || source.suburb
   const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(source.availabilityLabel))
-  const inquiryPath = answerCardInquiryPath(source)
   const detailHref = appendThreadOrigin(source.detailUrl, threadId)
-  const inquiryHref = source.inquiryUrl === undefined ? undefined : appendThreadOrigin(source.inquiryUrl, threadId)
   const grounding = answerCardGrounding(source)
 
   return (
@@ -62,13 +60,14 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
           <Text type="supporting" color="secondary" display="block">{source.category}</Text>
           {grounding === undefined ? null : <Text type="supporting" color="secondary" display="block">{grounding}</Text>}
           <Text type="supporting" color="secondary" display="block">Choice {source.citationIndex} in this answer</Text>
-          {source.trustCue.length > 0 ? <Text type="supporting" color="secondary" display="block">{source.trustCue}</Text> : null}
         </div>
         <Badge label={source.availabilityLabel} variant={badgeVariant} />
       </div>
       <ProviderFacts
         facts={[
-          { term: 'Service area', description: area || 'Check area' },
+          { term: 'Location', description: [source.suburb, source.stateTerritory].filter(Boolean).join(', ') || 'Location not published' },
+          { term: 'Service area', description: area || 'Service area not published here' },
+          { term: 'Reply posture', description: NO_REPLY_HISTORY },
           { term: 'Hours', description: source.hoursLabel },
           ...(source.freshnessLabel !== undefined && source.freshnessLabel.length > 0
             ? [{ term: 'Updated', description: source.freshnessLabel }]
@@ -76,20 +75,8 @@ function AeProviderCardAnswer({ source, threadId }: { source: AnswerSource; thre
         ]}
       />
       <TokenList labels={source.services.slice(0, 4).map((service) => service.name)} />
-      <div className="rounded-md border border-border bg-surface p-3" role="note">
-        <Text type="supporting" color="secondary" weight="medium" display="block">Inquiry path</Text>
-        <Text type="supporting" color="primary" display="block">{inquiryPath.description}</Text>
-      </div>
       <div className="flex flex-wrap gap-2">
-        {inquiryHref !== undefined ? (
-          <Button label={inquiryPath.actionLabel} variant="primary" size="sm" href={inquiryHref} />
-        ) : null}
-        <Button
-          label={source.inquiryUrl === undefined ? inquiryPath.actionLabel : 'Review listing'}
-          variant="secondary"
-          size="sm"
-          href={detailHref}
-        />
+        <Button label="Ask this business" variant="secondary" size="sm" className="min-h-11" href={detailHref} />
       </div>
     </Card>
   )
@@ -104,20 +91,6 @@ function appendThreadOrigin(href: string, threadId: string | undefined): string 
   return `${href}${separator}from=thread&id=${encodeURIComponent(threadId)}`
 }
 
-function answerCardInquiryPath(source: AnswerSource): { description: string; actionLabel: string } {
-  if (source.inquiryUrl !== undefined) {
-    return {
-      description:
-        'AE inquiry form published for owner review. The business still confirms timing, quote, and availability.',
-      actionLabel: 'Open inquiry form',
-    }
-  }
-
-  return {
-    description: 'No AE inquiry form is published yet. Review the listing before using its contact guidance.',
-    actionLabel: source.nextStepLabel.length > 0 ? source.nextStepLabel : 'Review listing',
-  }
-}
 function answerCardGrounding(source: AnswerSource): string | undefined {
   const serviceCategory = source.services.find((service) => service.category.trim().length > 0)?.category.trim() ?? source.category.trim()
   const place = [source.suburb.trim(), source.stateTerritory.trim()].filter((part) => part.length > 0).join(', ')

@@ -32,7 +32,7 @@ type FieldConfig = {
   field: TextClaimField
   label: string
   description: string
-  control: 'input' | 'textarea'
+  control: 'input' | 'tel' | 'textarea'
 }
 
 const emptyPublicOwnerClaimInput = {
@@ -41,6 +41,7 @@ const emptyPublicOwnerClaimInput = {
   suburb: '',
   stateTerritory: '',
   requestedSlug: '',
+  publishedPhone: '',
   ownerMessage: '',
   sourceLabel: '',
   serviceName: '',
@@ -61,6 +62,7 @@ const textClaimFields = [
   'suburb',
   'stateTerritory',
   'requestedSlug',
+  'publishedPhone',
   'ownerMessage',
   'sourceLabel',
   'serviceName',
@@ -213,6 +215,7 @@ function readClaimInput(form: HTMLFormElement, fallback: PublicOwnerClaimFlowInp
     suburb: read('suburb'),
     stateTerritory: read('stateTerritory'),
     requestedSlug: read('requestedSlug'),
+    publishedPhone: read('publishedPhone'),
     ownerMessage: read('ownerMessage'),
     sourceLabel: read('sourceLabel'),
     serviceName: read('serviceName'),
@@ -261,6 +264,12 @@ const identityFields = [
     label: 'Public page slug',
     description: 'Lowercase words separated by hyphens.',
     control: 'input',
+  },
+  {
+    field: 'publishedPhone',
+    label: 'Public phone (optional)',
+    description: 'Published only when you enter it here. Use an Australian phone number.',
+    control: 'tel',
   },
   {
     field: 'sourceLabel',
@@ -811,16 +820,16 @@ function ClaimTextField({
     <input
       id={config.field}
       name={config.field}
+      type={config.control === 'tel' ? 'tel' : 'text'}
+      inputMode={config.control === 'tel' ? 'tel' : undefined}
+      autoComplete={config.control === 'tel' ? 'tel' : undefined}
       aria-label={config.label}
       value={value[config.field] ?? ''}
       disabled={disabled}
       aria-describedby={describedBy}
       aria-invalid={invalid}
       className={inputClassName}
-      onChange={(event) => {
-        const nextValue = event.currentTarget.value
-        updateTextField(config.field, nextValue)
-      }}
+      onChange={(event) => updateTextField(config.field, event.currentTarget.value)}
     />
   )
 

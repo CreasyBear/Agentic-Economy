@@ -71,6 +71,7 @@ const publicBusinessCatalogApiDtoOutputSchema = z.strictObject({
   category: z.string(),
   suburb: z.string(),
   stateTerritory: z.string(),
+  publishedPhone: z.string().optional(),
   postcode: z.string().optional(),
   publicUrl: z.string(),
   trustTier: z.string(),

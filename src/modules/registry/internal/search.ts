@@ -55,6 +55,7 @@ export type PublicBusinessCatalogApiDto = {
   category: string
   suburb: string
   stateTerritory: string
+  publishedPhone?: string
   postcode?: string
   publicUrl: string
   trustTier: PublicCatalogContract['trustTier']
@@ -420,6 +421,7 @@ function toPublicApiDto(
     category: catalog.category,
     suburb: catalog.suburb,
     stateTerritory: catalog.stateTerritory,
+    ...(catalog.publishedPhone === undefined ? {} : { publishedPhone: catalog.publishedPhone }),
     ...(catalog.postcode === undefined ? {} : { postcode: catalog.postcode }),
     publicUrl: catalog.publicUrl,
     trustTier: catalog.trustTier,

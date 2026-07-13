@@ -29,7 +29,7 @@ describe('claimBusiness', () => {
 
     const result = claimBusiness(state, {
       actor: { kind: 'authenticated_owner', clerkUserId: 'user_123', displayName: 'Sam Owner' },
-      facts: validFacts(),
+      facts: { ...validFacts(), publishedPhone: '  0412 345 678  ' },
       security: validSecurity('sam'),
       operationKey: brandNonEmpty('op:claim:sam', 'OperationKey'),
       correlationId: brandNonEmpty('corr:sam', 'CorrelationId'),
@@ -45,6 +45,7 @@ describe('claimBusiness', () => {
         publicStatus: 'unpublished',
         trustTier: 'claimed',
         claimStatus: 'authenticated',
+        publishedPhone: '0412 345 678',
       },
       claim: { status: 'authenticated' },
     })
@@ -53,6 +54,38 @@ describe('claimBusiness', () => {
     expect(state.claims).toHaveLength(1)
     expect(state.claimFingerprints).toHaveLength(1)
     expect(state.abuseRateLimitBuckets).toHaveLength(1)
+  })
+
+  it.each(['(02) 1234 5678', '1300 123 456', '1800 123 456', '13 12 34'])(
+    'accepts owner-published Australian business phone %s',
+    (publishedPhone) => {
+      const state = createEmptyBusinessSourceState()
+      const result = claimBusiness(state, {
+        actor: { kind: 'authenticated_owner', clerkUserId: `user_phone_${publishedPhone}` },
+        facts: { ...validFacts(), publishedPhone },
+        security: validSecurity(publishedPhone),
+        operationKey: brandNonEmpty(`op:claim:${publishedPhone}`, 'OperationKey'),
+        correlationId: brandNonEmpty(`corr:${publishedPhone}`, 'CorrelationId'),
+        now: 10,
+      })
+
+      expect(result).toMatchObject({ kind: 'ok', business: { publishedPhone } })
+    },
+  )
+
+  it('rejects a non-Australian published phone at the business boundary', () => {
+    const state = createEmptyBusinessSourceState()
+    const result = claimBusiness(state, {
+      actor: { kind: 'authenticated_owner', clerkUserId: 'user_phone' },
+      facts: { ...validFacts(), publishedPhone: '+1 415 555 0100' },
+      security: validSecurity('phone'),
+      operationKey: brandNonEmpty('op:claim:phone', 'OperationKey'),
+      correlationId: brandNonEmpty('corr:phone', 'CorrelationId'),
+      now: 10,
+    })
+
+    expect(result).toMatchObject({ kind: 'error', code: 'claim_invalid_facts' })
+    expect(state.businesses).toEqual([])
   })
 
   it('rejects missing and foreign CSRF before creating source records', () => {

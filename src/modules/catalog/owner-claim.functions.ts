@@ -38,6 +38,7 @@ const ownerClaimInputSchema = z.object({
   suburb: z.string(),
   stateTerritory: z.string(),
   requestedSlug: z.string(),
+  publishedPhone: z.string().optional().default(''),
   ownerMessage: z.string(),
   sourceLabel: z.string(),
   serviceName: z.string(),
@@ -71,6 +72,7 @@ type ClaimBusinessArgs = {
   suburb: string
   stateTerritory: string
   requestedSlug: string
+  publishedPhone?: string
   ownerMessage?: string
   sourceRefs: readonly { label: string; evidenceRef: string }[]
   origin?: string
@@ -188,6 +190,7 @@ async function submitOwnerClaimThroughSource(
       suburb: input.suburb,
       stateTerritory: input.stateTerritory,
       requestedSlug: input.requestedSlug,
+      ...(input.publishedPhone.trim().length === 0 ? {} : { publishedPhone: input.publishedPhone }),
       ...(input.ownerMessage.trim().length === 0 ? {} : { ownerMessage: input.ownerMessage }),
       sourceRefs: [{ label: input.sourceLabel, evidenceRef: `owner-submitted:${normalizeOperationPart(input.requestedSlug)}` }],
       origin,
@@ -336,6 +339,7 @@ function getLocalE2ePublicBusinessPageReadback(slug: string): PublicBusinessPage
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     requestedSlug: 'plumbing-demo',
+    publishedPhone: '',
     ownerMessage: 'Local e2e inquiry-capable service facts.',
     sourceLabel: 'Local e2e service facts',
     serviceName: 'Emergency plumbing',

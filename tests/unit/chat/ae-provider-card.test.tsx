@@ -13,34 +13,17 @@ describe('AeProviderCard answer variant', () => {
     cleanup()
   })
 
-  it('makes the selected listing and published inquiry path explicit', () => {
+  it('keeps the answer action on the listing when an inquiry URL is published', () => {
     render(<AeProviderCard variant="answer" source={provider({ citationIndex: 2 })} threadId="thread-abc" />)
 
     expect(screen.getByText('Choice 2 in this answer')).toBeTruthy()
-    expect(screen.getByText('Inquiry path')).toBeTruthy()
-    expect(
-      screen.getByText(
-        'AE inquiry form published for owner review. The business still confirms timing, quote, and availability.',
-      ),
-    ).toBeTruthy()
-    expect(screen.getByText('Open inquiry form').closest('a')?.getAttribute('href')).toBe(
-      '/demo-plumbing/inquiry?from=thread&id=thread-abc',
-    )
-    expect(screen.getByText('Review listing').closest('a')?.getAttribute('href')).toBe(
+    expect(screen.getAllByText('No reply history yet')).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Ask this business' }).getAttribute('href')).toBe(
       '/demo-plumbing?from=thread&id=thread-abc',
     )
-  })
-
-  it('does not imply an AE inquiry form when the listing has no inquiry URL', () => {
-    const { inquiryUrl: _inquiryUrl, ...source } = provider({ nextStepLabel: 'Use published contact' })
-
-    render(<AeProviderCard variant="answer" source={source} />)
-
     expect(
-      screen.getByText('No AE inquiry form is published yet. Review the listing before using its contact guidance.'),
-    ).toBeTruthy()
-    expect(screen.queryByText('Open inquiry form')).toBeNull()
-    expect(screen.getByText('Use published contact')).toBeTruthy()
+      screen.getAllByRole('link').some((link) => link.getAttribute('href')?.includes('/inquiry')),
+    ).toBe(false)
   })
 })
 

@@ -27,6 +27,7 @@ export const businessTables = {
     category: v.string(),
     suburb: v.string(),
     stateTerritory: v.string(),
+    publishedPhone: v.optional(v.string()),
     publicStatus: literalUnion(PublicStatusValues),
     trustTier: literalUnion(TrustTierValues),
     claimStatus: literalUnion(ClaimStatusValues),

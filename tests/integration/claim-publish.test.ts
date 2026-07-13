@@ -43,7 +43,7 @@ describe('PR03 claim publish suppress flow', () => {
     expect(claim).toMatchObject({
       kind: 'ok',
       code: 'claim_created',
-      business: { publicStatus: 'unpublished', trustTier: 'claimed' },
+      business: { publicStatus: 'unpublished', trustTier: 'claimed', publishedPhone: '0412 345 678' },
     })
 
     if (claim.kind !== 'ok') {
@@ -89,6 +89,7 @@ describe('PR03 claim publish suppress flow', () => {
       code: 'catalog_published',
       catalog: {
         publicStatus: 'published',
+        publishedPhone: '0412 345 678',
         services: [
           {
             firstRequest: { rawContactExcluded: true },
@@ -252,6 +253,7 @@ function claimFacts(name: string, requestedSlug: string) {
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     requestedSlug,
+    publishedPhone: '0412 345 678',
     sourceRefs: [
       {
         label: 'Owner supplied',

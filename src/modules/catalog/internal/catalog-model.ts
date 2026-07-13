@@ -158,6 +158,7 @@ export type PublicCatalogContract = {
   category: string
   suburb: string
   stateTerritory: string
+  publishedPhone?: string
   postcode?: string
   publicUrl: string
   publicStatus: Extract<PublicStatus, 'published'>
@@ -347,6 +348,7 @@ export function buildPublicCatalogDto(input: BuildPublicCatalogInput): BuildPubl
     category: input.context.category,
     suburb: input.context.suburb,
     stateTerritory: input.context.stateTerritory,
+    ...(input.business.publishedPhone === undefined ? {} : { publishedPhone: input.business.publishedPhone }),
     ...(input.context.postcode === undefined ? {} : { postcode: input.context.postcode }),
     publicUrl: `/${input.business.slug}`,
     publicStatus: 'published',

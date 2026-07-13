@@ -15,6 +15,7 @@ describe('public catalog DTO', () => {
         category: 'Emergency plumbing',
         suburb: 'Parramatta',
         stateTerritory: 'NSW',
+        publishedPhone: '0412 345 678',
         publicStatus: 'published',
         trustTier: 'claimed',
         claimStatus: 'published',
@@ -78,6 +79,7 @@ describe('public catalog DTO', () => {
       catalog: {
         slug: 'parramatta-emergency-plumbing',
         stateTerritory: 'NSW',
+        publishedPhone: '0412 345 678',
         publicStatus: 'published',
         photos: [],
         services: [

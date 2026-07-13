@@ -17,6 +17,7 @@ import {
   suppressBusiness as suppressBusinessImpl,
   unsuppressBusiness as unsuppressBusinessImpl,
 } from './internal/visibility'
+import { validateOwnerPublishedPhone as validateOwnerPublishedPhoneImpl } from './internal/published-phone'
 import type { AuditEventContract, InvalidationIntent } from '@/modules/observability/public'
 import type { BusinessServiceRecord } from '@/modules/catalog/public'
 
@@ -29,6 +30,8 @@ export type PublicStatus = (typeof PublicStatusValues)[number]
 export const TrustTierValues = ['claimed', 'contact_confirmed', 'listed', 'registry_verified'] as const
 export type TrustTier = (typeof TrustTierValues)[number]
 
+export const validateOwnerPublishedPhone = validateOwnerPublishedPhoneImpl
+
 export const VisibilityTargetTypeValues = ['business', 'service', 'capability'] as const
 export type VisibilityTargetType = (typeof VisibilityTargetTypeValues)[number]
 
@@ -39,6 +42,7 @@ export type BusinessIdentity = {
   name: string
   category: string
   suburb: string
+  publishedPhone?: string
   publicStatus: PublicStatus
   trustTier: TrustTier
   sourceHash: SourceHash
@@ -87,6 +91,7 @@ export type BusinessRecord = {
   category: string
   suburb: string
   stateTerritory: string
+  publishedPhone?: string
   publicStatus: PublicStatus
   trustTier: TrustTier
   claimStatus: ClaimStatus
@@ -151,6 +156,7 @@ export type ClaimBusinessFacts = {
   suburb: string
   stateTerritory: string
   requestedSlug: string
+  publishedPhone?: string
   ownerMessage?: string
   photos?: readonly PublicBusinessPhoto[]
   responseTimeMinutes?: number

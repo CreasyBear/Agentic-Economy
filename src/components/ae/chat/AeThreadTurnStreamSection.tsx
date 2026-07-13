@@ -12,6 +12,7 @@ import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
 import { ANSWER_SECTION_CLASS } from './thread-turn-view'
+import { orderShortlistArtifacts } from './AeShortlistTerminal'
 import type { StreamAnswerResult } from './answer-stream'
 import {
   initialAnswerTurnUiState,
@@ -165,6 +166,7 @@ export function AeThreadTurnStreamSection({
         meta: turnMetaRef.current,
         query,
         intent,
+        searchContext,
       })
       if (settledTurn !== null) {
         onSettledTurnRef.current?.(settledTurn, activeGeneration)
@@ -199,7 +201,7 @@ export function AeThreadTurnStreamSection({
             query={query}
           />
           <AeGenerativeAnswer
-            artifacts={state.artifacts}
+            artifacts={orderShortlistArtifacts(state.artifacts, searchContext?.timing)}
             query={query}
             {...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile })}
             busy={busy}
@@ -234,11 +236,13 @@ function buildOptimisticSettledTurn({
   meta,
   query,
   intent,
+  searchContext,
 }: {
   state: AnswerTurnUiState
   meta: { threadId: string; turnId: string; turnSeq: number } | null
   query: string
   intent: FollowUpIntent
+  searchContext: AeSearchContext | undefined
 }): PublicThreadTurn | null {
   if (!state.complete || meta === null) {
     return null
@@ -253,6 +257,8 @@ function buildOptimisticSettledTurn({
     workLog: state.workLog,
     artifacts: state.artifacts,
     oneLine: state.oneLineFallback,
+    ...(searchContext?.timing === undefined ? {} : { timing: searchContext.timing }),
+    ...(searchContext?.timingDate === undefined ? {} : { timingDate: searchContext.timingDate }),
     ...(state.layoutProfile === undefined ? {} : { layoutProfile: state.layoutProfile }),
   }
 }
