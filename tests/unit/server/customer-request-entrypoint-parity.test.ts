@@ -1,0 +1,145 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  handleAgentCustomerOptionsPost,
+  handleAgentCustomerRequestFactsPost,
+  handleAgentCustomerRequestGet,
+  handleAgentCustomerRequestMessagePost,
+  handleAgentCustomerRequestPost,
+} from '@/lib/server/customer-request-agent-api'
+import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
+import { handleCustomerRequestFactsPost } from '@/lib/server/customer-request-facts-api'
+import { handleCustomerRequestGet } from '@/lib/server/customer-request-inspect-api'
+import { handleCustomerRequestMessagePost } from '@/lib/server/customer-request-messages-api'
+import { handleCustomerRequestPost } from '@/lib/server/customer-request-api'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+
+const key = 'entrypoint-parity-key-with-at-least-32-bytes'
+const requestRef = 'request:parity:1'
+const projection = {
+  kind: 'request' as const,
+  requestRef,
+  revision: 2,
+  state: 'ready_to_compare' as const,
+  summary: 'Ready to compare',
+  nextAction: 'prepare_options' as const,
+  missingFields: [],
+  options: [],
+}
+const authenticate = async () => ({
+  isAuthenticated: true as const,
+  tokenType: 'api_key' as const,
+  id: 'ak_parity',
+  subject: 'user_parity',
+  userId: 'user_parity',
+  orgId: null,
+  scopes: ['customer_requests:create'],
+})
+
+type Capture = (args: Record<string, unknown>) => Promise<typeof projection>
+type AgentCall = (name: string, args: Record<string, unknown>) => Promise<typeof projection>
+type ParityCase = Readonly<{
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume'
+  actionName: string
+  human: (capture: Capture) => Promise<Response>
+  agent: (callAction: AgentCall) => Promise<Response>
+}>
+
+const cases: readonly ParityCase[] = [
+  {
+    operation: 'submit',
+    actionName: 'customerRequestApplication:submit',
+    human: async (submit) => await handleCustomerRequestPost(post('/api/requests', {
+      idempotencyKey: 'submit:parity', requestRef, agentRef: 'human-delegated-agent', request: 'Find an option',
+    }), { submit }),
+    agent: async (callAction) => await handleAgentCustomerRequestPost(post('/api/v1/requests', {
+      idempotencyKey: 'submit:parity', requestRef, agentRef: 'caller-cannot-set-principal', request: 'Find an option',
+    }), agentOptions(callAction)),
+  },
+  {
+    operation: 'refine',
+    actionName: 'customerRequestApplication:refine',
+    human: async (refine) => await handleCustomerRequestMessagePost(post('/messages', {
+      idempotencyKey: 'message:parity', expectedRevision: 1, message: 'Make it relaxed.',
+    }), requestRef, { refine }),
+    agent: async (callAction) => await handleAgentCustomerRequestMessagePost(post('/api/v1/messages', {
+      idempotencyKey: 'message:parity', expectedRevision: 1, message: 'Make it relaxed.',
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
+    operation: 'facts',
+    actionName: 'customerRequestApplication:provideFacts',
+    human: async (provideFacts) => await handleCustomerRequestFactsPost(post('/facts', {
+      idempotencyKey: 'facts:parity', expectedRevision: 1,
+      requirementKey: 'requirement:opaque', value: { destination: '6000' },
+    }), requestRef, { provideFacts }),
+    agent: async (callAction) => await handleAgentCustomerRequestFactsPost(post('/api/v1/facts', {
+      idempotencyKey: 'facts:parity', expectedRevision: 1,
+      requirementKey: 'requirement:opaque', value: { destination: '6000' },
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
+    operation: 'compare',
+    actionName: 'customerRequestApplication:compare',
+    human: async (compare) => await handleCustomerOptionsPost(post('/options', {
+      revision: 2, idempotencyKey: 'compare:parity',
+    }), requestRef, { compare }),
+    agent: async (callAction) => await handleAgentCustomerOptionsPost(post('/api/v1/options', {
+      revision: 2, idempotencyKey: 'compare:parity',
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
+    operation: 'resume',
+    actionName: 'customerRequestApplication:resume',
+    human: async (inspect) => await handleCustomerRequestGet(requestRef, { inspect }),
+    agent: async (callAction) => await handleAgentCustomerRequestGet(requestRef, agentOptions(callAction)),
+  },
+]
+
+describe('human and external-agent Request entrypoint parity', () => {
+  it.each(cases)('$operation uses the same application command and customer response', async (entrypoint) => {
+    let humanCommand: Record<string, unknown> | undefined
+    let agentCommand: Record<string, unknown> | undefined
+    let calledAction: string | undefined
+    const humanResponse = await entrypoint.human(async (args) => {
+      humanCommand = args
+      return projection
+    })
+    const agentResponse = await entrypoint.agent(async (name, args) => {
+      calledAction = name
+      agentCommand = args
+      return projection
+    })
+
+    expect(calledAction).toBe(entrypoint.actionName)
+    expect(agentResponse.status).toBe(humanResponse.status)
+    expect(await agentResponse.json()).toEqual(await humanResponse.json())
+    if (humanCommand === undefined || agentCommand === undefined) throw new Error('entrypoint command missing')
+    const { serviceAuth, ...unsignedAgentCommand } = agentCommand
+    expect(withoutDelegatedPrincipal(unsignedAgentCommand)).toEqual(withoutDelegatedPrincipal(humanCommand))
+    await expect(verifyCustomerRequestServiceAssertion({
+      key,
+      operation: entrypoint.operation,
+      command: unsignedAgentCommand as never,
+      assertion: serviceAuth as never,
+      now: 1_001,
+    })).resolves.toBe(true)
+  })
+})
+
+function agentOptions(callAction: AgentCall) {
+  return { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 }
+}
+
+function withoutDelegatedPrincipal(command: Record<string, unknown>): Record<string, unknown> {
+  const { delegatedAgentId: _delegatedAgentId, ...semanticCommand } = command
+  return semanticCommand
+}
+
+function post(path: string, body: unknown): Request {
+  return new Request(`https://ae.test${path}`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ak_test_secret', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}

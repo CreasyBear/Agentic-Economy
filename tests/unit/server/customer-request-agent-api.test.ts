@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleAgentCustomerOptionsPost,
+  handleAgentCustomerRequestFactsPost,
   handleAgentCustomerRequestGet,
   handleAgentCustomerRequestMessagePost,
   handleAgentCustomerRequestPost,
@@ -84,6 +85,31 @@ describe('agent-native customer Request API', () => {
     const { serviceAuth, ...command } = calledArgs ?? {}
     await expect(verifyCustomerRequestServiceAssertion({
       key, operation: 'refine', command: command as never, assertion: serviceAuth as never, now: 1_001,
+    })).resolves.toBe(true)
+  })
+
+  it('uses the human Request fact contract and signs the unchanged application command', async () => {
+    const result = {
+      kind: 'request' as const, requestRef: 'request:1', revision: 2, state: 'ready_to_compare' as const,
+      summary: 'Ready', nextAction: 'prepare_options' as const, missingFields: [], options: [],
+    }
+    const callAction = vi.fn(async (_name: string, _args: Record<string, unknown>) => result)
+    const response = await handleAgentCustomerRequestFactsPost(request('/api/v1/requests/request:1/facts', {
+      idempotencyKey: 'facts:1', expectedRevision: 1,
+      requirementKey: 'requirement:opaque', value: { destination: '6000' },
+    }), 'request:1', { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(result)
+    const [name, calledArgs] = callAction.mock.calls[0] ?? []
+    expect(name).toBe('customerRequestApplication:provideFacts')
+    const { serviceAuth, ...command } = calledArgs ?? {}
+    expect(command).toEqual({
+      requestRef: 'request:1', idempotencyKey: 'facts:1', expectedRevision: 1,
+      requirementKey: 'requirement:opaque', value: { destination: '6000' },
+    })
+    await expect(verifyCustomerRequestServiceAssertion({
+      key, operation: 'facts', command: command as never, assertion: serviceAuth as never, now: 1_001,
     })).resolves.toBe(true)
   })
 

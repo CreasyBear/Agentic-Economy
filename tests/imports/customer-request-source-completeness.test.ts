@@ -134,21 +134,32 @@ describe('CustomerRequest source completeness', () => {
     expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleCustomerOptionsPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleCustomerRequestGet/)
     expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleCustomerRequestFactsPost/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.messages.ts', 'utf8')).toMatch(/handleCustomerRequestMessagePost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.approval.ts', 'utf8')).toMatch(/handleCustomerRequestApprovalPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.attempts.ts', 'utf8')).toMatch(/handleCustomerRequestActionAttemptPost/)
     expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toMatch(/handleAgentCustomerRequestPost/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.ts', 'utf8')).toMatch(/handleAgentCustomerRequestGet/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleAgentCustomerRequestFactsPost/)
+    expect(readFileSync('src/routes/api.v1.requests.$requestRef.messages.ts', 'utf8')).toMatch(/handleAgentCustomerRequestMessagePost/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleAgentCustomerOptionsPost/)
+    expect(existsSync('src/routes/api.v1.requests.$requestRef.authorization.ts')).toBe(false)
+    expect(existsSync('src/routes/api.v1.requests.$requestRef.approval.ts')).toBe(false)
+    const agentHttp = source('agentHttp')
+    expect(agentHttp).not.toMatch(/authorizePreparation|approvePreparedAction|admitApprovedAction|operation:\s*['"]approve/)
+    const approvalApplication = source('application').slice(source('application').indexOf('export const approvePreparedAction'))
+    expect(approvalApplication.slice(0, approvalApplication.indexOf('export const admitApprovedAction')))
+      .toMatch(/ctx\.auth\.getUserIdentity\(\)/)
+    expect(approvalApplication.slice(0, approvalApplication.indexOf('export const admitApprovedAction')))
+      .not.toMatch(/serviceAuth|verifyServiceCaller/)
     const ui = source('humanUi')
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
     expect(ui).toContain("fetch('/api/requests'")
     expect(ui).toContain('/options`')
     for (const route of [
-      'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.options.ts',
+      'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.messages.ts', 'src/routes/api.requests.$requestRef.options.ts',
       'src/routes/api.requests.$requestRef.approval.ts',
       'src/routes/api.requests.$requestRef.attempts.ts',
-      'src/routes/api.v1.requests.ts', 'src/routes/api.v1.requests.$requestRef.ts', 'src/routes/api.v1.requests.$requestRef.facts.ts', 'src/routes/api.v1.requests.$requestRef.options.ts',
+      'src/routes/api.v1.requests.ts', 'src/routes/api.v1.requests.$requestRef.ts', 'src/routes/api.v1.requests.$requestRef.facts.ts', 'src/routes/api.v1.requests.$requestRef.messages.ts', 'src/routes/api.v1.requests.$requestRef.options.ts',
     ]) {
       expect(readFileSync(route, 'utf8')).not.toMatch(/compileCustomerRequest|prepareCustomerRequestAction|createNeutralRoutingKernel/)
     }
