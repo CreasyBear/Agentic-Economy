@@ -8,7 +8,7 @@
 
 ## Status
 
-**designed.** `listing.md` and `registry.md` specify the journey; no end-to-end ship-test or persona-clearance result is recorded in the canonical design set.
+**built — gate conditionally held on GATE-1.** All J1 build tasks landed (commits 7f0159f5, 077a4533, 2d42ae97, a379c1b6): trust-projection contract, registry cards, listing first screen, publishedPhone data path, hours truthfulness. Persona gate run 2 (2026-07-13, SeoLanderRerun 4/5): P1/P2/P4/P5 PASS on both published-phone and phoneless listings; P3 half-FAIL solely on the GATE-1 locked-explainer contradiction (phoneless page says "— or call directly." with nothing to call). `persona-cleared` blocked pending founder ruling on GATE-1; no code work outstanding.
 
 ## Persona proof
 
@@ -44,6 +44,7 @@ A fresh, signed-out mobile visitor arriving directly at `/:slug` must, without s
 
 ## Open items
 
+- **GATE-1 (2026-07-13, persona gate run 1) — FOUNDER RULING REQUIRED:** the locked explainer `AE sends your request in writing and keeps a record — or call directly.` contradicts `Phone not published here` on phoneless listings (SeoLander P3/P5 walkout evidence, agent://SeoLanderGate). Options: (a) conditional second clause when no phone is published, (b) keep string, accept the dangle, (c) new locked string. Changing a locked string needs an audit ruling per README; not freelanced by agents.
 - **G5 — specified, persona re-run open:** response posture is before selection; emergency/direct-call routing still needs the blind journey test.
 - **G6 — specified, persona re-run open:** phone/hours/service area and the 10-second explainer are in `listing.md`; third-party proof remains CS6.
 - **CS2 — specified, ship proof open:** distance/map is required on registry cards and listings.

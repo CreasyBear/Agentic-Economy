@@ -1,4 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
+
+const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
+if (demoBusiness === undefined) {
+  throw new Error('The plumbing-demo local E2E fixture is required.')
+}
 
 const QUERY = 'emergency plumber parramatta'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
@@ -27,9 +33,10 @@ test.describe('chat discovery to inquiry loop', () => {
     await expectQueryInTranscript(page, QUERY)
     await waitForLatestReadyAnswer(page, QUERY)
 
-    await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(/1 listed business ready to compare/i)
+    await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(/2 listed businesses ready to compare/i)
     await expect(page.getByRole('region', { name: /session context/i })).toContainText(/listed businesses/i)
     await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/These are the listed businesses AE found/i)
+    await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(demoBusiness.businessName)
     const terminal = page.getByRole('region', { name: /your shortlist is ready/i })
     await expect(terminal.getByRole('button', { name: /change criteria/i })).toBeVisible()
     await expect(terminal.getByRole('link', { name: /^open$/i })).toBeVisible()

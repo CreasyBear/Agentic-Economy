@@ -1,4 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
+
+const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
+if (demoBusiness === undefined) {
+  throw new Error('The plumbing-demo local E2E fixture is required.')
+}
 
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|agent-native/i
@@ -16,8 +22,9 @@ test.describe('landing query -> thread answer', () => {
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     await expectQueryInTranscript(page, query)
 
+    await expect(page.getByRole('link', { name: demoBusiness.businessName })).toBeVisible()
     await expect(page.getByRole('link', { name: /Parramatta Emergency Plumbing/i })).toBeVisible()
-    await expect(page.getByText(/publishes service coverage/i).first()).toBeVisible()
+    await expect(page.getByText(/publish service coverage/i).first()).toBeVisible()
     await expect(page.getByText(/Open a listed business page and send an inquiry/i).first()).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()
@@ -27,10 +34,19 @@ test.describe('landing query -> thread answer', () => {
 
   test('shows a listing nudge when no providers match', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('radio', { name: 'Today' }).click()
-
     const query = 'dentist parramatta'
-    await submitLandingQuery(page, query)
+    const search = page.getByRole('search', { name: /find local service businesses/i })
+    const searchbox = search.getByRole('searchbox')
+    const sendButton = search.getByRole('button', { name: /^find businesses$/i })
+    await expect(searchbox).toBeEditable()
+    await searchbox.fill(query)
+    await expect(sendButton).toBeEnabled()
+
+    const todayTiming = page.getByRole('radio', { name: 'Today' })
+    await expect(todayTiming).toBeEnabled()
+    await todayTiming.click()
+    await expect(todayTiming).toHaveAttribute('aria-checked', 'true')
+    await sendButton.click()
 
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     await expectQueryInTranscript(page, query)

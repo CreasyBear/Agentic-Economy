@@ -28,7 +28,12 @@ test.describe('public owner routes', () => {
     await expect(page.getByText('AE searches published business pages. You decide before anything is sent to a business.')).toBeVisible()
 
     if (testInfo.project.name.includes('compact')) {
-      await page.getByRole('button', { name: 'Open public menu' }).click()
+      const menuButton = page.getByRole('button', { name: 'Open public menu' })
+      const compactClaimLink = page.getByRole('link', { name: 'Claim your business page' })
+      await expect(async () => {
+        if (!(await compactClaimLink.isVisible())) await menuButton.click()
+        await expect(compactClaimLink).toBeVisible()
+      }).toPass({ timeout: 15_000 })
     }
     const claimLink = page.getByRole('link', { name: 'Claim your business page' })
     await expect(claimLink).toBeVisible()
@@ -70,7 +75,7 @@ test.describe('public owner routes', () => {
   })
 
   test('claim form preserves input and focuses the first validation error', async ({ page }) => {
-    await page.goto('/claim')
+    await page.goto('/claim', { waitUntil: 'networkidle' })
     await assertPublicLanguage(page)
 
     await page.getByLabel('Business name').fill('Northside Solar')
@@ -83,15 +88,16 @@ test.describe('public owner routes', () => {
     await page.getByLabel(/I confirm these public details/i).check()
     const publishButton = page.getByRole('button', { name: /publish service page/i })
     await expect(publishButton).toBeEnabled()
-    await publishButton.click()
-
-    await expect(page.getByLabel('Business name')).toHaveValue('Northside Solar')
-    await expect(page.getByLabel('Service category')).toBeFocused()
-    await expect(page.getByText('Service category is required.')).toBeVisible()
+    await expect(async () => {
+      await publishButton.click()
+      await expect(page.getByLabel('Business name')).toHaveValue('Northside Solar')
+      await expect(page.getByText('Service category is required.')).toBeVisible()
+      await expect(page.getByLabel('Service category')).toBeFocused()
+    }).toPass({ timeout: 15_000 })
   })
 
   test('claim form remains usable when first request state changes', async ({ page }) => {
-    await page.goto('/claim')
+    await page.goto('/claim', { waitUntil: 'networkidle' })
     await assertPublicLanguage(page)
 
     await page.getByRole('radio', { name: /quote request instructions supplied/i }).click()
@@ -108,7 +114,7 @@ test.describe('public owner routes', () => {
     const slug = `fremantle-priority-electrical-${suffix}`
     const businessName = `Fremantle Priority Electrical ${suffix}`
 
-    await page.goto('/claim')
+    await page.goto('/claim', { waitUntil: 'networkidle' })
     await assertPublicLanguage(page)
 
     await page.getByLabel('Business name').fill(businessName)
@@ -124,9 +130,11 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Hours (or say if not sure)').fill('After-hours availability supplied by owner')
     await page.getByLabel('Unavailable reason').fill('Owner has not supplied a public contact path yet.')
     await page.getByLabel('Owner message').fill('Owner supplied switchboard repair facts for the public service page.')
+    await page.getByLabel('Public page slug').fill(slug)
     await page.getByLabel(/I confirm these public details/i).check()
     await expect(page.getByLabel('Business name')).toHaveValue(businessName)
     await expect(page.getByLabel('Business category')).toHaveValue('Emergency electrical')
+    await expect(page.getByLabel('Public page slug')).toHaveValue(slug)
 
     const publishButton = page.getByRole('button', { name: /publish service page/i })
     await expect(publishButton).toBeEnabled()
@@ -194,7 +202,7 @@ test.describe('public owner routes', () => {
     const suffix = `${testInfo.project.name}-${runId}`.replace(/[^a-z0-9]+/giu, '-').toLowerCase()
     const slug = `privacy-removal-target-${suffix}`
 
-    await page.goto('/claim')
+    await page.goto('/claim', { waitUntil: 'networkidle' })
     await assertPublicLanguage(page)
     await page.getByLabel('Business name').fill(`Privacy Removal Target ${suffix}`)
     await page.getByLabel('Business category').fill('Home repairs')

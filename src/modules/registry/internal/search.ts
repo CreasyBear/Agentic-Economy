@@ -37,6 +37,7 @@ import {
 const apiSchemaVersion = 'public-business-catalog-api:v1' as const
 const defaultLimit = 20
 const maxLimit = 50
+const fixturePublishedAt = Date.now()
 
 export type PublicBusinessCatalogQueryInput = {
   cursor?: string
@@ -228,6 +229,7 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     indexStatus: [],
     suppressionRules: [],
   }
+  const publishedAt = fixturePublishedAt
 
   const claim = claimBusiness(state, {
     actor: {
@@ -258,7 +260,7 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
       rateLimit: {
         scope: 'claim_submit',
         key: `registry:${publicOwnerDefaultClaimInput.requestedSlug}`,
-        now: 1_000,
+        now: publishedAt - 1,
         limit: 5,
         windowMs: 60_000,
       },
@@ -269,7 +271,7 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     correlationId: correlationId(
       `claim:${publicOwnerDefaultClaimInput.requestedSlug}`,
     ),
-    now: 1_000,
+    now: publishedAt - 1,
   })
 
   if (claim.kind === 'error') {
@@ -291,7 +293,7 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
     correlationId: correlationId(
       `publish:${publicOwnerDefaultClaimInput.requestedSlug}`,
     ),
-    now: 2_000,
+    now: publishedAt,
   })
 
   if (published.kind === 'error') {
@@ -310,7 +312,7 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
       clerkUserId: `owner:${fixture.requestedSlug}`,
       displayName: `${fixture.businessName} Owner`,
     }
-    const now = 3_000 + index * 2_000
+    const publishedAt = fixturePublishedAt
     const claim = claimBusiness(state, {
       actor,
       facts: {
@@ -332,14 +334,14 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
         rateLimit: {
           scope: 'claim_submit',
           key: `registry:${fixture.requestedSlug}`,
-          now,
+          now: publishedAt - 1,
           limit: 5,
           windowMs: 60_000,
         },
       },
       operationKey: operationKey(`local-e2e-claim:${fixture.requestedSlug}`),
       correlationId: correlationId(`local-e2e-claim:${fixture.requestedSlug}`),
-      now,
+      now: publishedAt - 1,
     })
     if (claim.kind === 'error') {
       throw new Error(`Local e2e registry claim failed for ${fixture.requestedSlug}: ${claim.reason}`)
@@ -361,7 +363,7 @@ export function createLocalE2eRegistrySourceState(): RegistrySourceState {
       security: { csrf: matchingCsrf(`local-e2e-publish:${fixture.requestedSlug}`) },
       operationKey: operationKey(`local-e2e-publish:${fixture.requestedSlug}`),
       correlationId: correlationId(`local-e2e-publish:${fixture.requestedSlug}`),
-      now: now + 1_000,
+      now: publishedAt,
     })
     if (published.kind === 'error') {
       throw new Error(`Local e2e registry publish failed for ${fixture.requestedSlug}: ${published.reason}`)

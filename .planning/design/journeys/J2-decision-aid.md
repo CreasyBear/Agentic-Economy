@@ -8,7 +8,7 @@
 
 ## Status
 
-**designed.** The R0 path and export contract are specified; the canonical docs record no end-to-end ship-test or persona-clearance result.
+**built — persona-cleared on predicates, polish items open.** All J2 build tasks landed (commits 7f0159f5, 077a4533, 3c28b870, 2d42ae97, a379c1b6): composer NeedTiming, shortlist terminal `Your shortlist is ready`, sanitized preview-first export (copy+print; PDF cut per plan), bounds-visible moments, kill-condition telemetry contract, answer-pipeline recall + call-path activation. Final gates 2026-07-13: UrgentTradieFinal 6/6 PASS (3/5 stars), BrowserOnlyRerun 6/6 PASS (3/5 stars). Open polish findings (persona evidence, not predicate failures): (1) result verbosity leads with process copy before the phone for urgent users; (2) 'Updated 57 years ago' epoch-timestamp display bug on fixture cards (fix in flight); (3) 'Change criteria' triggers a literal search for the phrase before the composer settles; (4) Marcus requests pre-search storage/retention disclosure (currently disclosed only post-search).
 
 ## Persona proof
 
