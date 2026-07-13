@@ -10,6 +10,8 @@ const productionAuthority = {
   preparationPersistence: 'convex/customerRequestV2Preparation.ts',
   preparationEgressState: 'convex/customerRequestV2PreparationEgressState.ts',
   preparationEgress: 'convex/customerRequestV2PreparationEgress.ts',
+  approvalDomain: 'src/modules/customer-request/approval-grant-v2.ts',
+  approvalPersistence: 'convex/customerRequestV2ApprovalGrant.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
@@ -20,6 +22,7 @@ const productionAuthority = {
   agentAuth: 'src/lib/server/customer-request-agent-auth.ts',
   agentHttp: 'src/lib/server/customer-request-agent-api.ts',
   optionsHttp: 'src/lib/server/customer-options-api.ts',
+  approvalHttp: 'src/lib/server/customer-request-approval-api.ts',
   humanUi: 'src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx',
 } as const
 
@@ -35,6 +38,7 @@ describe('CustomerRequest source completeness', () => {
     expect(application).toContain('customerRequestV2.commitAggregate')
     expect(application).toContain('customerRequestV2Preparation.prepare')
     expect(application).toContain('customerRequestV2PreparationEgress.run')
+    expect(application).toContain('customerRequestV2ApprovalGrant.issue')
     expect(application).toContain('bindCustomerCapabilityDescriptor')
   })
 
@@ -49,6 +53,8 @@ describe('CustomerRequest source completeness', () => {
       'convex/customerRequestV2Preparation.ts',
       'convex/customerRequestV2PreparationEgressState.ts',
       'convex/customerRequestV2PreparationEgress.ts',
+      'src/modules/customer-request/approval-grant-v2.ts',
+      'convex/customerRequestV2ApprovalGrant.ts',
       'convex/customerRequestApplication.ts',
     ]
     const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/
@@ -57,6 +63,13 @@ describe('CustomerRequest source completeness', () => {
     const application = readFileSync('convex/customerRequestApplication.ts', 'utf8')
     expect(application).not.toMatch(/legacy-compiler-v1|customerRequestCompilationStoreAdapter|commitRequestSnapshot|putRequestEvaluation/)
     expect(application).not.toMatch(/customerRequestPreparationAuthority|customerRequests\.prepare|prepareCustomerRequestAction/)
+    expect(readFileSync('convex/customerRequestV2ApprovalGrant.ts', 'utf8'))
+      .not.toMatch(/routingKernelAuthorizations|customerRequestPreparedActions|\bfetch\s*\(/)
+    const approvalPersistence = source('approvalPersistence')
+    expect(approvalPersistence).not.toContain('listEligibleCapabilitySupply')
+    expect(approvalPersistence).toContain('getEligibleExactCapabilitySupply')
+    expect(readFileSync('src/lib/server/customer-request-agent-api.ts', 'utf8'))
+      .not.toContain('approvePreparedAction')
     const persistence = readFileSync('convex/customerRequestV2.ts', 'utf8')
     expect(persistence).toContain('historical_request_resubmit_required')
     expect(persistence).not.toMatch(/parseInt|Number\s*\([^)]*version/)
@@ -67,6 +80,7 @@ describe('CustomerRequest source completeness', () => {
     expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleCustomerOptionsPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleCustomerRequestGet/)
     expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleCustomerRequestFactsPost/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.approval.ts', 'utf8')).toMatch(/handleCustomerRequestApprovalPost/)
     expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toMatch(/handleAgentCustomerRequestPost/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.ts', 'utf8')).toMatch(/handleAgentCustomerRequestGet/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleAgentCustomerRequestFactsPost/)
@@ -77,6 +91,7 @@ describe('CustomerRequest source completeness', () => {
     expect(ui).toContain('/options`')
     for (const route of [
       'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.options.ts',
+      'src/routes/api.requests.$requestRef.approval.ts',
       'src/routes/api.v1.requests.ts', 'src/routes/api.v1.requests.$requestRef.ts', 'src/routes/api.v1.requests.$requestRef.facts.ts', 'src/routes/api.v1.requests.$requestRef.options.ts',
     ]) {
       expect(readFileSync(route, 'utf8')).not.toMatch(/compileCustomerRequest|prepareCustomerRequestAction|createNeutralRoutingKernel/)

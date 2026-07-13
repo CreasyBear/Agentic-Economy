@@ -188,6 +188,60 @@ export const preparedActionV2Value = v.object({
   })),
   preparedAt: v.number(), expiresAt: v.number(),
 })
+const approvalGrantDataUseV2Value = v.object({
+  effectId: v.string(), inputPointer: v.string(),
+  classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+  phase: v.union(v.literal('preparation'), v.literal('execution')),
+  recipient: capabilityRecipientV2Value,
+  purposes: v.array(v.string()),
+})
+const approvalGrantEvidenceScopeV2Value = v.object({
+  evidenceId: v.string(), outputPointer: v.string(),
+  purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
+  schemaIdentity: v.string(), valueDigest: v.string(),
+})
+export const approvalGrantV2Value = v.object({
+  format: v.literal('ae.approval-grant:v2'),
+  approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+  preparedAction: v.object({ preparedActionRef: v.string(), preparedActionDigest: v.string() }),
+  lineage: actionPreparationLineageV2Value,
+  capability: v.object({
+    contractRef: capabilityContractRefV2Value, selectionKey: v.string(), semanticDigest: v.string(),
+  }),
+  supply: v.object({
+    businessId: v.string(),
+    offering: v.object({
+      offeringId: v.string(), registrationHash: v.string(),
+      registrationEvidenceRefs: v.array(v.string()), evidenceDigest: v.string(),
+    }),
+    binding: v.object({
+      bindingId: v.string(), registrationHash: v.string(),
+      registrationEvidenceRefs: v.array(v.string()), evidenceDigest: v.string(),
+    }),
+  }),
+  providerAssertion: v.object({
+    assertionRef: v.string(), operationRef: v.string(), assertedAt: v.number(), validUntil: v.number(),
+    responseDigest: v.string(), outputDigest: v.string(), evidenceDigest: v.string(),
+  }),
+  spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
+  disclosure: v.object({ reviewRef: v.string(), reviewDigest: v.string(), authorityScopeDigest: v.string() }),
+  dataScope: v.array(approvalGrantDataUseV2Value),
+  effectScope: v.array(capabilityEffectV2Value),
+  evidenceScope: v.array(approvalGrantEvidenceScopeV2Value),
+  scopeDigest: v.string(),
+  recovery: v.object({
+    unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false),
+    registeredLifecycle: v.object({
+      idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
+      recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    }),
+  }),
+  actor: v.object({
+    kind: v.literal('clerk_owner'), principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
+    authenticationEvidenceRef: v.string(),
+  }),
+  issuedAt: v.number(), expiresAt: v.number(),
+})
 export const preparedActionRecoveryReasonV2Value = v.union(
   v.literal('options_pending'), v.literal('disclosure_not_released'), v.literal('disclosure_uncertain'),
   v.literal('provider_response_invalid'), v.literal('provider_echo_mismatch'),
@@ -424,6 +478,22 @@ export const customerRequestV2Tables = {
   customerRequestV2PreparedActionCommands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), preparationRef: v.string(),
     resultKind: v.union(v.literal('prepared'), v.literal('not_prepared')),
+    resultRef: v.string(), resultDigest: v.string(), committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
+  customerRequestV2ApprovalGrants: defineTable({
+    approvalGrantRef: v.string(), approvalGrantDigest: v.string(),
+    preparedActionRef: v.string(), preparedActionDigest: v.string(),
+    requestId: v.string(), requestRevision: v.number(), actionId: v.string(), principalId: v.string(),
+    approvalGrant: approvalGrantV2Value, recordedAt: v.number(),
+  })
+    .index('by_approvalGrantRef', ['approvalGrantRef'])
+    .index('by_preparedActionRef', ['preparedActionRef'])
+    .index('by_requestId_and_requestRevision_and_actionId', ['requestId', 'requestRevision', 'actionId']),
+
+  customerRequestV2ApprovalGrantCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
+    requestId: v.string(), requestRevision: v.number(), preparedActionRef: v.string(),
     resultRef: v.string(), resultDigest: v.string(), committedAt: v.number(),
   }).index('by_commandKey', ['commandKey']),
 } as const

@@ -52,3 +52,10 @@ export {
   type PreparedActionV2,
   type PreparedActionOptionCandidate,
 } from './prepared-action-v2'
+export {
+  approvalGrantV2Digest,
+  issueApprovalGrantV2,
+  type ApprovalGrantV2,
+  type IssueApprovalGrantV2Result,
+  type VerifiedApprovalGrantActor,
+} from './approval-grant-v2'

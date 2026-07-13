@@ -16,6 +16,7 @@ import {
 } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
 import {
+  approvalGrantV2Value,
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
   preparedActionRecoveryReasonV2Value,
@@ -176,6 +177,28 @@ const refusedReason = v.union(
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
+const approvalActionResult = v.union(
+  v.object({
+    kind: v.literal('approved'), requestRef: v.string(), revision: v.number(),
+    approvalRef: v.string(), preparedActionRef: v.string(),
+    spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
+    expiresAt: v.number(),
+    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
+  }),
+  v.object({
+    kind: v.literal('conflict'), requestRef: v.string(),
+    reason: v.union(
+      v.literal('revision_changed'), v.literal('idempotency_key_reused'), v.literal('approval_changed'),
+    ),
+  }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authentication_required'), v.literal('request_not_found'), v.literal('approval_invalid'),
+    ),
+  }),
+)
+type ApprovalActionResult = Infer<typeof approvalActionResult>
 
 export const submit = action({
   args: {
@@ -474,6 +497,91 @@ export const authorizePreparation = action({
   },
 })
 
+export const approvePreparedAction = action({
+  args: {
+    requestRef: v.string(), revision: v.number(), preparedActionRef: v.string(),
+    maximumSpendMinor: v.number(), expiresAt: v.number(), idempotencyKey: v.string(),
+  },
+  returns: approvalActionResult,
+  handler: async (ctx, args): Promise<ApprovalActionResult> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
+    if (args.requestRef.trim().length === 0 || args.requestRef.length > 200
+      || !Number.isSafeInteger(args.revision) || args.revision < 1
+      || args.preparedActionRef.trim().length === 0 || args.preparedActionRef.length > 300
+      || !Number.isSafeInteger(args.maximumSpendMinor) || args.maximumSpendMinor < 0
+      || !Number.isSafeInteger(args.expiresAt) || args.expiresAt < 1
+      || args.idempotencyKey.trim().length === 0 || args.idempotencyKey.length > 200) {
+      return { kind: 'refused', reason: 'approval_invalid' }
+    }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
+    const requestPrincipalId = current.aggregate.snapshot.principalId
+    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
+    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(
+      internal.customerRequestPrincipals.getAgentPrincipal,
+      { principalId: requestPrincipalId },
+    )
+    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.revision !== args.revision) return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
+    }
+    const command = {
+      requestRef: args.requestRef,
+      revision: args.revision,
+      preparedActionRef: args.preparedActionRef,
+      maximumSpendMinor: args.maximumSpendMinor,
+      expiresAt: args.expiresAt,
+      idempotencyKey: args.idempotencyKey,
+    }
+    const now = Date.now()
+    const result: ApprovalGrantMutationResult = await ctx.runMutation(
+      internal.customerRequestV2ApprovalGrant.issue,
+      {
+        commandKey: namespacedKey(requestPrincipalId, 'approve', args.requestRef, args.idempotencyKey),
+        commandDigest: canonicalDigest(command),
+        principalId: requestPrincipalId,
+        expectedRequestId: args.requestRef,
+        expectedRequestRevision: args.revision,
+        preparedActionRef: args.preparedActionRef,
+        maximumSpendMinor: args.maximumSpendMinor,
+        expiresAt: args.expiresAt,
+        actor: {
+          kind: 'clerk_owner', requestPrincipalId, ownerId: identity.subject,
+          credentialId: identity.tokenIdentifier,
+          authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
+            issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
+          })}`,
+        },
+        now,
+      },
+    )
+    if (result.kind === 'conflict') return {
+      kind: 'conflict', requestRef: args.requestRef,
+      reason: result.reason === 'idempotency_key_reused' ? 'idempotency_key_reused' : 'approval_changed',
+    }
+    if (result.kind === 'refused') return {
+      kind: 'refused',
+      reason: result.reason === 'prepared_action_not_found' ? 'request_not_found' : 'approval_invalid',
+    }
+    return {
+      kind: 'approved',
+      requestRef: result.approvalGrant.lineage.requestId,
+      revision: result.approvalGrant.lineage.requestRevision,
+      approvalRef: result.approvalGrant.approvalGrantRef,
+      preparedActionRef: result.approvalGrant.preparedAction.preparedActionRef,
+      spend: result.approvalGrant.spend,
+      expiresAt: result.approvalGrant.expiresAt,
+      recovery: {
+        unknownOutcome: result.approvalGrant.recovery.unknownOutcome,
+        automaticRetry: result.approvalGrant.recovery.automaticRetry,
+      },
+    }
+  },
+})
+
 async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   commandKey: string
   commandDigest: string
@@ -711,6 +819,15 @@ type PreparedActionMutationResult = Readonly<
   | { kind: 'prepared'; preparedAction: Infer<typeof preparedActionV2Value> }
   | { kind: 'not_prepared'; reason: Infer<typeof preparedActionRecoveryReasonV2Value>; recoveryRef: string }
   | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'prepared_action_material_changed' }
+>
+type ApprovalGrantMutationResult = Readonly<
+  | { kind: 'issued' | 'replayed'; approvalGrant: Infer<typeof approvalGrantV2Value> }
+  | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'approval_material_changed' }
+  | {
+      kind: 'refused'
+      reason: 'prepared_action_not_found' | 'prepared_action_expired' | 'spend_scope_invalid'
+        | 'expiry_scope_invalid' | 'approval_material_invalid' | 'capability_authority_changed'
+    }
 >
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {

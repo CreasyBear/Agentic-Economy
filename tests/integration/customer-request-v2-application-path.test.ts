@@ -534,7 +534,7 @@ describe('current V2 Customer Request application path', () => {
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const input = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
     if (input === undefined) throw new Error('sandbox request input missing')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [{
@@ -635,6 +635,89 @@ describe('current V2 Customer Request application path', () => {
     }))
     expect(stored.current).toHaveLength(1)
     expect(stored.legacy).toEqual([])
+    if (prepared.kind !== 'prepared') throw new Error('prepared action missing')
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      requestRef: review.requestRef,
+      revision: review.revision,
+      preparedActionRef: prepared.preparedAction.preparedActionRef,
+      maximumSpendMinor: 900,
+      expiresAt: providerNow + 50_000,
+      idempotencyKey: '',
+    })).resolves.toEqual({ kind: 'refused', reason: 'approval_invalid' })
+    const otherRequest = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:approval-other-request',
+      requestId: 'request:v2:approval-other-request',
+      delegatedAgentId: 'agent:prepared-action',
+      customerJob: 'Find the cheapest sandbox option',
+      routing: { networkId: 'ae:public' },
+    })
+    if (otherRequest.kind !== 'request') throw new Error(`other request missing: ${JSON.stringify(otherRequest)}`)
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      requestRef: otherRequest.requestRef,
+      revision: otherRequest.revision,
+      preparedActionRef: prepared.preparedAction.preparedActionRef,
+      maximumSpendMinor: 900,
+      expiresAt: providerNow + 50_000,
+      idempotencyKey: 'approve:v2:cross-request',
+    })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+    const unrelatedOperation = operations.find(({ offeringId }) => (
+      offeringId !== prepared.preparedAction.offering.offeringId
+    ))
+    if (unrelatedOperation === undefined) throw new Error('unrelated operation missing')
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', unrelatedOperation.bindingId)).unique()
+      if (binding === null) throw new Error('unrelated binding missing')
+      await ctx.db.patch(binding._id, { registrationHash: 'sha256:' + 'f'.repeat(64) })
+    })
+    const approvalCommand = {
+      requestRef: review.requestRef,
+      revision: review.revision,
+      preparedActionRef: prepared.preparedAction.preparedActionRef,
+      maximumSpendMinor: 900,
+      expiresAt: providerNow + 50_000,
+      idempotencyKey: 'approve:v2:prepared-action',
+    }
+    const approved = await customer.action(api.customerRequestApplication.approvePreparedAction, approvalCommand)
+    await backend.run(async (ctx) => {
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', unrelatedOperation.bindingId)).unique()
+      if (binding === null) throw new Error('unrelated binding missing')
+      await ctx.db.patch(binding._id, { registrationHash: unrelatedOperation.bindingRegistrationHash })
+    })
+    expect(approved).toMatchObject({
+      kind: 'approved', requestRef: review.requestRef, revision: review.revision,
+      preparedActionRef: prepared.preparedAction.preparedActionRef,
+      spend: { currency: 'AUD', maximumAmountMinor: 900 },
+      expiresAt: providerNow + 50_000,
+      recovery: { unknownOutcome: 'reconcile_only', automaticRetry: false },
+    })
+    await expect(customer.action(
+      api.customerRequestApplication.approvePreparedAction, approvalCommand,
+    )).resolves.toEqual(approved)
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      ...approvalCommand, maximumSpendMinor: 899,
+    })).resolves.toEqual({
+      kind: 'conflict', requestRef: review.requestRef, reason: 'idempotency_key_reused',
+    })
+    const stranger = backend.withIdentity({ subject: 'stranger', issuer: identity.issuer })
+    await expect(stranger.action(
+      api.customerRequestApplication.approvePreparedAction,
+      { ...approvalCommand, idempotencyKey: 'approve:v2:stranger' },
+    )).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      ...approvalCommand, revision: review.revision + 1, idempotencyKey: 'approve:v2:wrong-revision',
+    })).resolves.toEqual({
+      kind: 'conflict', requestRef: review.requestRef, reason: 'revision_changed',
+    })
+    const approvalRows = await backend.run(async (ctx) => ({
+      current: await ctx.db.query('customerRequestV2ApprovalGrants').collect(),
+      commands: await ctx.db.query('customerRequestV2ApprovalGrantCommands').collect(),
+      legacy: await ctx.db.query('routingKernelAuthorizations').collect(),
+    }))
+    expect(approvalRows.current).toHaveLength(1)
+    expect(approvalRows.commands).toHaveLength(1)
+    expect(approvalRows.legacy).toEqual([])
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
     })).resolves.toMatchObject({
@@ -667,6 +750,9 @@ describe('current V2 Customer Request application path', () => {
       }, providerNow + 30)
       if (result.kind !== 'ineligible') throw new Error('supply revoke failed')
     })
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      ...approvalCommand, idempotencyKey: 'approve:v2:stale-supply',
+    })).resolves.toEqual({ kind: 'refused', reason: 'approval_invalid' })
     await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
       commandKey: 'prepared-action:stale', commandDigest: 'sha256:' + '7'.repeat(64), principalId,
       preparationRef: review.preparationRef, preparationMaterialDigest: command.preparationMaterialDigest,
@@ -685,12 +771,30 @@ describe('current V2 Customer Request application path', () => {
     })
 
     await backend.run(async (ctx) => await ctx.db.patch(selectedOperation.businessId, { publicStatus: 'unpublished' }))
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      ...approvalCommand, idempotencyKey: 'approve:v2:business-unpublished',
+    })).resolves.toEqual({ kind: 'refused', reason: 'approval_invalid' })
     await expect(backend.mutation(internal.customerRequestV2PreparedAction.prepare, {
       commandKey: 'prepared-action:business-unpublished', commandDigest: 'sha256:' + '6'.repeat(64), principalId,
       preparationRef: review.preparationRef, preparationMaterialDigest: command.preparationMaterialDigest,
       now: providerNow + 55,
     })).resolves.toMatchObject({ kind: 'not_prepared', reason: 'capability_graph_changed' })
     await backend.run(async (ctx) => await ctx.db.patch(selectedOperation.businessId, { publicStatus: 'published' }))
+
+    const contractRowId = await backend.run(async (ctx) => {
+      const row = await ctx.db.query('capabilityContractDocuments')
+        .withIndex('by_capabilityId_and_version', (query) => query
+          .eq('capabilityId', model.contractRef.capabilityId).eq('version', model.contractRef.version)).unique()
+      if (row === null) throw new Error('contract row missing')
+      await ctx.db.patch(row._id, { status: 'retired', retiredAt: providerNow + 56 })
+      return row._id
+    })
+    await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
+      ...approvalCommand, idempotencyKey: 'approve:v2:contract-retired',
+    })).resolves.toEqual({ kind: 'refused', reason: 'approval_invalid' })
+    await backend.run(async (ctx) => await ctx.db.patch(contractRowId, {
+      status: 'active', retiredAt: undefined,
+    }))
 
     const rewriteSelectedResponse = async (response: Record<string, unknown>) => {
       const responseBodyText = JSON.stringify(response)

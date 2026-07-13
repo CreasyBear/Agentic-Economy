@@ -25,6 +25,7 @@ import type * as customerRequestPreparationAuthorityStoreAdapter from "../custom
 import type * as customerRequestPrincipals from "../customerRequestPrincipals.js";
 import type * as customerRequestStoreAdapter from "../customerRequestStoreAdapter.js";
 import type * as customerRequestV2 from "../customerRequestV2.js";
+import type * as customerRequestV2ApprovalGrant from "../customerRequestV2ApprovalGrant.js";
 import type * as customerRequestV2Preparation from "../customerRequestV2Preparation.js";
 import type * as customerRequestV2PreparationEgress from "../customerRequestV2PreparationEgress.js";
 import type * as customerRequestV2PreparationEgressState from "../customerRequestV2PreparationEgressState.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestPrincipals: typeof customerRequestPrincipals;
   customerRequestStoreAdapter: typeof customerRequestStoreAdapter;
   customerRequestV2: typeof customerRequestV2;
+  customerRequestV2ApprovalGrant: typeof customerRequestV2ApprovalGrant;
   customerRequestV2Preparation: typeof customerRequestV2Preparation;
   customerRequestV2PreparationEgress: typeof customerRequestV2PreparationEgress;
   customerRequestV2PreparationEgressState: typeof customerRequestV2PreparationEgressState;

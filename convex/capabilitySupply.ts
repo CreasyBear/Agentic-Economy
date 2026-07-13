@@ -788,6 +788,42 @@ export async function listEligibleCapabilitySupply(
   return { kind: 'available' as const, supplies }
 }
 
+export async function getEligibleExactCapabilitySupply(
+  db: QueryCtx['db'],
+  input: Readonly<{
+    networkId: string
+    businessId: string
+    offeringId: string
+    bindingId: string
+    contractRef: ContractRef
+    expectedOfferingRegistrationHash: string
+    expectedBindingRegistrationHash: string
+  }>,
+) {
+  const offering = await db.query('capabilityOfferings')
+    .withIndex('by_offeringId', (query) => query.eq('offeringId', input.offeringId)).unique()
+  const binding = await db.query('capabilityTransportBindings')
+    .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
+  if (offering === null || binding === null
+    || String(offering.businessId) !== input.businessId
+    || offering.networkId !== input.networkId || binding.networkId !== input.networkId
+    || binding.offeringId !== offering.offeringId
+    || offering.registrationHash !== input.expectedOfferingRegistrationHash
+    || binding.registrationHash !== input.expectedBindingRegistrationHash
+    || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
+    || !sameCapabilityContractRef(contractRefFromRow(offering), input.contractRef)
+    || !sameCapabilityContractRef(contractRefFromRow(binding), input.contractRef)
+    || !offeringIntegrityIsValid(offering) || !offeringEligibilityIsValid(offering)
+    || !bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
+    return { kind: 'unavailable' as const }
+  }
+  const business = await publishedBusiness(db, offering.businessId)
+  if (business === null) return { kind: 'unavailable' as const }
+  const contract = await getActiveExactCapabilityContract(db, input.contractRef)
+  if (contract.kind !== 'found') return { kind: 'unavailable' as const }
+  return { kind: 'available' as const, offering, binding, business, contract }
+}
+
 async function recoverBindingReplay(
   db: QueryCtx['db'], registration: CapabilityTransportBindingRegistration,
   replay: Readonly<{ resultHash: string | undefined }>,
