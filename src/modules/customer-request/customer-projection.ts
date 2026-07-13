@@ -7,6 +7,7 @@ export type CustomerRequestState =
   | 'ready_to_compare'
   | 'preparing_options'
   | 'options_ready'
+  | 'no_options'
   | 'unsupported'
   | 'needs_attention'
 
@@ -134,6 +135,13 @@ export function projectOptionsReady(input: Readonly<{
   summary: string
   candidateSet: PreparedRouteCandidateSet
 }>): CustomerRequestView {
+  if (input.candidateSet.candidates.length === 0) return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    state: 'no_options',
+    summary: input.summary,
+    nextAction: 'revise_request',
+  })
   return requestView({
     ...input,
     state: 'options_ready',

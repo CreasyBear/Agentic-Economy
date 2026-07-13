@@ -64,7 +64,7 @@ const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
   state: v.union(
     v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('preparing_options'),
-    v.literal('options_ready'), v.literal('unsupported'), v.literal('needs_attention'),
+    v.literal('options_ready'), v.literal('no_options'), v.literal('unsupported'), v.literal('needs_attention'),
   ),
   summary: v.string(),
   nextAction: v.union(

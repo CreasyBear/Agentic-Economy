@@ -21,7 +21,7 @@ describe('customer request projection', () => {
     expect(JSON.stringify(projection)).not.toContain('action:1')
   })
 
-  it('uses the six canonical customer states and strips provider recovery references from options', () => {
+  it('uses the canonical customer states and strips provider recovery references from options', () => {
     const base = { requestRef: 'request:1', revision: 1, summary: 'Find an option' }
     expect(projectPreparingOptions(base)).toMatchObject({ state: 'preparing_options', nextAction: 'wait' })
     expect(projectNeedsAttention(base)).toMatchObject({ state: 'needs_attention', nextAction: 'retry' })
@@ -35,6 +35,9 @@ describe('customer request projection', () => {
     } })
     expect(options).toMatchObject({ state: 'options_ready', nextAction: 'inspect_options', options: [{ optionRef: 'option:1' }] })
     expect(JSON.stringify(options)).not.toMatch(/internal:set|internal:evidence|attempts/)
+    expect(projectOptionsReady({ ...base, candidateSet: {
+      inspectionRef: 'internal:empty', attempts: [], candidates: [],
+    } })).toMatchObject({ state: 'no_options', nextAction: 'revise_request', options: [] })
 
     const needsInformation = projectCustomerRequest({
       kind: 'needs_information', request: { ...request(), compilationState: 'needs_information' }, understanding: request().understanding,
@@ -43,7 +46,7 @@ describe('customer request projection', () => {
     expect(needsInformation).toMatchObject({ state: 'needs_information', nextAction: 'provide_information' })
     const unsupported = projectCustomerRequest({ kind: 'unsupported', request: { ...request(), compilationState: 'unsupported' }, reason: 'no_registered_capability' })
     expect(unsupported).toMatchObject({ state: 'unsupported', nextAction: 'revise_request' })
-    expect(new Set(['needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'unsupported', 'needs_attention']).size).toBe(6)
+    expect(new Set(['needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options', 'unsupported', 'needs_attention']).size).toBe(7)
   })
 })
 
