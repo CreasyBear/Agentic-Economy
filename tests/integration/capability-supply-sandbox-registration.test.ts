@@ -15,6 +15,24 @@ const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
 
 describe('labelled sandbox V2 capability supply', () => {
+  it('seeds only the two labelled acceptance businesses through the normal production command planes', async () => {
+    const backend = convexTest(schema, modules)
+    const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+
+    expect(result).toMatchObject({
+      seededSlugs: ['sandbox-option-one', 'sandbox-option-two'],
+      sandboxV2Bindings: [
+        'binding:sandbox-option-one:http-json',
+        'binding:sandbox-option-two:http-json',
+      ],
+    })
+    const businesses = await backend.run((ctx) => ctx.db.query('businesses').collect())
+    expect(businesses.map((business) => business.slug).sort()).toEqual([
+      'sandbox-option-one',
+      'sandbox-option-two',
+    ])
+  })
+
   it('keeps normally registered sandbox bindings ineligible until explicit evidence-bound admission', async () => {
     const backend = convexTest(schema, modules)
     const registrations = await backend.run(async (ctx) => {

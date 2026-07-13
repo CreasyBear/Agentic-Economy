@@ -73,6 +73,11 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
 
+      - name: Register labelled sandbox acceptance supply
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod
+
       - name: Deploy the exact clean source revision
         id: deploy
         env:
