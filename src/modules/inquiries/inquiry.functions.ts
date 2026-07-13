@@ -952,12 +952,11 @@ const localE2eTarget = {
   serviceId: localE2eServiceId,
   capabilityKind: 'phone_inquiry' as const,
 }
-const localE2eBusinessFixture = LOCAL_E2E_BUSINESS_FIXTURES.find(
-  (fixture) => fixture.requestedSlug === 'plumbing-demo',
-)
-if (localE2eBusinessFixture === undefined) {
-  throw new Error('The plumbing-demo local E2E fixture is required.')
-}
+const localE2eBusinessFixture = (() => {
+  const fixture = LOCAL_E2E_BUSINESS_FIXTURES.find((candidate) => candidate.requestedSlug === 'plumbing-demo')
+  if (fixture === undefined) throw new Error('The plumbing-demo local E2E fixture is required.')
+  return fixture
+})()
 
 function createLocalE2eInquirySourceState(): InquirySourceState {
   const submitted = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
