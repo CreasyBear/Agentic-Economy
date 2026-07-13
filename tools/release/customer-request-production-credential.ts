@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import { z } from 'zod'
 
 import {
@@ -48,7 +50,7 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   const createdValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
     method: 'POST', headers,
     body: JSON.stringify({
-      name: 'AE production cold-agent acceptance',
+      name: `AE production cold-agent acceptance ${randomUUID()}`,
       subject: input.subject,
       scopes: [REQUIRED_SCOPE],
       seconds_until_expiration: 3_600,

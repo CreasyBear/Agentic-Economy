@@ -20,6 +20,9 @@ describe('production cold-agent credential', () => {
       method: 'POST',
       body: expect.stringContaining('customer_requests:create'),
     })
+    expect(JSON.parse(String(fetch.mock.calls[2]?.[1]?.body))).toMatchObject({
+      name: expect.stringMatching(/^AE production cold-agent acceptance [0-9a-f-]{36}$/),
+    })
     expect(String(fetch.mock.calls[2]?.[1]?.body)).not.toContain('created_by')
     expect(fetch.mock.calls[3]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_temporary/revoke')
   })
