@@ -28,6 +28,7 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   subject: string
   fetch: typeof globalThis.fetch
   run: (apiKey: string) => Promise<void>
+  keyNamePrefix?: string
 }>): Promise<void> {
   assertConfigured(input)
   const headers = { Authorization: `Bearer ${input.clerkSecretKey}`, 'Content-Type': 'application/json' }
@@ -50,7 +51,7 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   const createdValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
     method: 'POST', headers,
     body: JSON.stringify({
-      name: `AE production cold-agent acceptance ${randomUUID()}`,
+      name: `${input.keyNamePrefix ?? 'AE production cold-agent acceptance'} ${randomUUID()}`,
       subject: input.subject,
       scopes: [REQUIRED_SCOPE],
       seconds_until_expiration: 3_600,

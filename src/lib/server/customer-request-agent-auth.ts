@@ -1,6 +1,6 @@
 import { auth } from '@clerk/tanstack-react-start/server'
 
-const REQUIRED_SCOPE = 'customer_requests:create'
+import { CUSTOMER_REQUEST_AGENT_SCOPE } from '@/modules/customer-request/agent-contract'
 
 type ApiKeyAuth = Readonly<{
   isAuthenticated: boolean
@@ -30,7 +30,7 @@ export async function authenticateCustomerRequestAgent(options: Readonly<{
   if (!candidate.isAuthenticated || candidate.tokenType !== 'api_key' || candidate.id === null || candidate.subject === null || candidate.scopes === null) {
     return { kind: 'refused', status: 401, reason: 'authentication_required' }
   }
-  if (!candidate.scopes.includes(REQUIRED_SCOPE)) return { kind: 'refused', status: 403, reason: 'scope_required' }
+  if (!candidate.scopes.includes(CUSTOMER_REQUEST_AGENT_SCOPE)) return { kind: 'refused', status: 403, reason: 'scope_required' }
   const ownerId = candidate.orgId ?? candidate.userId ?? candidate.subject
   return {
     kind: 'authenticated',

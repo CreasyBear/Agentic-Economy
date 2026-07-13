@@ -36,6 +36,7 @@ import { Route as DotwellKnownHttpMessageSignaturesDirectoryRouteImport } from '
 import { Route as SlugUcpRouteImport } from './routes/$slug.ucp'
 import { Route as SlugInquiryRouteImport } from './routes/$slug.inquiry'
 import { Route as ApiV1RequestsRouteImport } from './routes/api.v1.requests'
+import { Route as ApiV1ReleaseRouteImport } from './routes/api.v1.release'
 import { Route as ApiStorefrontImportDraftRouteImport } from './routes/api.storefront.import-draft'
 import { Route as ApiSandboxCapabilityRouteImport } from './routes/api.sandbox.capability'
 import { Route as ApiRequestsRequestRefRouteImport } from './routes/api.requests.$requestRef'
@@ -208,6 +209,11 @@ const SlugInquiryRoute = SlugInquiryRouteImport.update({
 const ApiV1RequestsRoute = ApiV1RequestsRouteImport.update({
   id: '/api/v1/requests',
   path: '/api/v1/requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1ReleaseRoute = ApiV1ReleaseRouteImport.update({
+  id: '/api/v1/release',
+  path: '/api/v1/release',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiStorefrontImportDraftRoute =
@@ -470,6 +476,7 @@ export interface FileRoutesByFullPath {
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -536,6 +543,7 @@ export interface FileRoutesByTo {
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -604,6 +612,7 @@ export interface FileRoutesById {
   '/api/requests/$requestRef': typeof ApiRequestsRequestRefRouteWithChildren
   '/api/sandbox/capability': typeof ApiSandboxCapabilityRoute
   '/api/storefront/import-draft': typeof ApiStorefrontImportDraftRoute
+  '/api/v1/release': typeof ApiV1ReleaseRoute
   '/api/v1/requests': typeof ApiV1RequestsRouteWithChildren
   '/_operator/admin/runs/$turnId': typeof OperatorAdminRunsTurnIdRoute
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
@@ -672,6 +681,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
+    | '/api/v1/release'
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
@@ -738,6 +748,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
+    | '/api/v1/release'
     | '/api/v1/requests'
     | '/admin/runs/$turnId'
     | '/owner/inquiries/$threadId'
@@ -805,6 +816,7 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef'
     | '/api/sandbox/capability'
     | '/api/storefront/import-draft'
+    | '/api/v1/release'
     | '/api/v1/requests'
     | '/_operator/admin/runs/$turnId'
     | '/_operator/owner/inquiries/$threadId'
@@ -857,6 +869,7 @@ export interface RootRouteChildren {
   ApiObservabilityFunnelRoute: typeof ApiObservabilityFunnelRoute
   ApiSandboxCapabilityRoute: typeof ApiSandboxCapabilityRoute
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
+  ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
 }
 
@@ -1049,6 +1062,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/requests'
       fullPath: '/api/v1/requests'
       preLoaderRoute: typeof ApiV1RequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/release': {
+      id: '/api/v1/release'
+      path: '/api/v1/release'
+      fullPath: '/api/v1/release'
+      preLoaderRoute: typeof ApiV1ReleaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/storefront/import-draft': {
@@ -1534,6 +1554,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiObservabilityFunnelRoute: ApiObservabilityFunnelRoute,
   ApiSandboxCapabilityRoute: ApiSandboxCapabilityRoute,
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
+  ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
 }
 export const routeTree = rootRouteImport

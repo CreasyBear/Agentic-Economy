@@ -27,6 +27,8 @@ const productionAuthority = {
   factsHttp: 'src/lib/server/customer-request-facts-api.ts',
   agentAuth: 'src/lib/server/customer-request-agent-auth.ts',
   agentHttp: 'src/lib/server/customer-request-agent-api.ts',
+  releaseReadback: 'src/modules/customer-request/release-readback.ts',
+  releaseHttp: 'src/lib/server/customer-request-release-readback-api.ts',
   optionsHttp: 'src/lib/server/customer-options-api.ts',
   approvalHttp: 'src/lib/server/customer-request-approval-api.ts',
   attemptHttp: 'src/lib/server/customer-request-action-attempt-api.ts',
@@ -180,6 +182,31 @@ describe('CustomerRequest source completeness', () => {
       expect(durableDiscovery, `durable discovery missing ${marker}`).toContain(marker)
     }
     expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
+  })
+
+  it('binds hosted proof to the platform-owned revision after source gates', () => {
+    const releaseReadback = source('releaseReadback')
+    expect(releaseReadback).toContain('VERCEL_GIT_COMMIT_SHA')
+    expect(releaseReadback).toContain('VERCEL_DEPLOYMENT_ID')
+    expect(releaseReadback).not.toMatch(/AE_RELEASE_SOURCE_REVISION|AE_KERNEL_PROOF_MANIFEST/)
+    expect(source('releaseHttp')).toContain('authenticateCustomerRequestAgent')
+    expect(readFileSync('src/routes/api.v1.release.ts', 'utf8')).toContain('handleAgentCustomerRequestReleaseGet')
+    expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path')
+    expect(releaseReadback).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
+
+    const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
+    expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
+    expect(workflow).toContain('needs: source-proof')
+    expect(workflow).toContain('vercel deploy --prod')
+    expect(workflow).toContain('AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}')
+    expect(workflow.indexOf('Run source release contract')).toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
+    expect(workflow.indexOf('Refuse a checkout other than the triggering revision')).toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
+    expect(workflow.indexOf('Deploy the exact clean source revision')).toBeLessThan(workflow.indexOf('Verify authenticated deployment readback'))
+    expect(workflow.indexOf('Deploy the exact clean source revision')).toBeLessThan(workflow.indexOf('Frozen dependency install for independent readback'))
+
+    const packageJson = readFileSync('package.json', 'utf8')
+    expect(packageJson).toContain('tsx tools/release/verify-customer-request-release-credential.ts')
+    expect(packageJson).not.toContain('AE_KERNEL_PROOF_MANIFEST_JSON')
   })
 
   it('fails if support directories acquire canonical Request behavior or production imports them', () => {

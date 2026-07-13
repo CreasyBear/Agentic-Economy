@@ -34,26 +34,48 @@ jobs:
         run: npm run test:release:source
 
   hosted-proof:
-    name: Deployment codegen and revision-bound Root Run proof
-    if: github.event_name != 'pull_request'
+    name: Exact-revision production deploy and authenticated Request readback
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: source-proof
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
     env:
       CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-      AE_KERNEL_PROOF_MANIFEST_JSON: ${{ secrets.AE_KERNEL_PROOF_MANIFEST_JSON }}
       AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID }}
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: ${{ secrets.AE_CUSTOMER_REQUEST_CLERK_SUBJECT }}
+      AE_CUSTOMER_REQUEST_VERCEL_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Refuse a checkout other than the triggering revision
+        run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
+
+      - name: Install pinned Vercel CLI
+        run: npm install --global vercel@55.0.0
+
+      - name: Deploy the exact clean source revision
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment_url="$(vercel deploy --prod --yes --archive=tgz --token="${VERCEL_TOKEN}" --meta="githubCommitSha=${AE_RELEASE_SOURCE_REVISION}")"
+          test -n "${deployment_url}"
+          echo "url=${deployment_url}" >> "${GITHUB_OUTPUT}"
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
 
-      - name: Frozen dependency install
+      - name: Frozen dependency install for independent readback
         run: npm ci
 
-      - name: Verify deployment-bound release evidence
+      - name: Verify authenticated deployment readback
+        env:
+          AE_CUSTOMER_REQUEST_BASE_URL: ${{ steps.deploy.outputs.url }}
         run: npm run test:release:hosted
