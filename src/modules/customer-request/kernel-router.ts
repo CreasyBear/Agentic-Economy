@@ -73,11 +73,11 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
     allowedExecutionDataFields: Object.entries(input.contract.input)
       .filter(([, field]) => field.disclosure?.phase === 'execution')
       .map(([field]) => field).sort(),
-    requiredOfferOutputs: Object.entries(input.contract.output)
-      .filter(([, field]) => field.required && field.decisionRelevance === 'option_selection'
+    registeredOfferOutputs: Object.entries(input.contract.output)
+      .filter(([, field]) => field.decisionRelevance === 'option_selection'
         && field.valueType !== 'provider_offer_ref')
       .map(([field, definition]) => ({
-        field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor',
+        field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor', required: definition.required,
       })).sort((left, right) => left.field.localeCompare(right.field)),
     resolveCandidatePresentation: async ({ bindingId, nodeId }) => {
       const [presentation] = await directory.resolve([bindingId])
@@ -170,11 +170,11 @@ export function createKernelCustomerRequestActionRouter(
             .filter(([, field]) => field.disclosure?.phase === 'execution')
             .map(([field]) => field)
             .sort(),
-          requiredOfferOutputs: Object.entries(input.contract.output)
-            .filter(([, field]) => field.required && field.decisionRelevance === 'option_selection'
+          registeredOfferOutputs: Object.entries(input.contract.output)
+            .filter(([, field]) => field.decisionRelevance === 'option_selection'
               && field.valueType !== 'provider_offer_ref')
             .map(([field, definition]) => ({
-              field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor',
+              field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor', required: definition.required,
             }))
             .sort((left, right) => left.field.localeCompare(right.field)),
           resolveCandidatePresentation: async ({ bindingId, nodeId }) => {

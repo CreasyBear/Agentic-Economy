@@ -1,7 +1,7 @@
 # Honest option comparability for AE
 
-**Issue:** [#124 — Define comparable options recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124)  
-**Question:** Under what evidence may AE call provider offers comparable, rank or recommend one, and disclose price or commercial influence without misleading the customer?  
+**Issue:** [#124 — Define comparable options recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124)
+**Question:** Under what evidence may AE call provider offers comparable, rank or recommend one, and disclose price or commercial influence without misleading the customer?
 **Method:** Current first-party product documentation and regulator-owned sources were reviewed on 13 July 2026. Older regulator material is retained only where it supplies a useful comparison principle and is labelled as such. “Observed rule” reports the source. “AE inference” is a proposed product contract, not legal advice.
 
 ## Executive conclusion

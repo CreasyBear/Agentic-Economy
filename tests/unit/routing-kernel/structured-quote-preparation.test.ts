@@ -48,7 +48,7 @@ describe('structured quote preparation', () => {
       capabilityContractId: 'shipping.quote:v1', capabilityContractVersion: '1',
       currency: 'AUD', maximumSpendMinor: 2_000,
       purpose: 'compare_shipping_options', protectedFieldNames: ['destinationPostcode', 'parcelWeightGrams'],
-      allowedExecutionDataFields: [], requiredOfferOutputs: [{ field: 'serviceLevel', valueType: 'string' as const }],
+      allowedExecutionDataFields: [], registeredOfferOutputs: [{ field: 'serviceLevel', valueType: 'string' as const, required: true }],
       releaseForCandidate: async (release: Parameters<ReturnType<typeof createStructuredQuotePreparationOperation>>[0]['releaseForCandidate'] extends (value: infer V) => unknown ? V : never) => {
         events.push(`release:${release.recipient.bindingId}`)
         const result = await release.release({ allocationId: `allocation:${release.recipient.bindingId}`, protectedValues: { destinationPostcode: '6000', parcelWeightGrams: 750 } })
@@ -62,6 +62,11 @@ describe('structured quote preparation', () => {
     expect(first.kind).toBe('candidates_prepared')
     expect(replay).toEqual(first)
     expect(providerCalls).toBe(2)
+    expect(first).toMatchObject({
+      kind: 'candidates_prepared',
+      candidates: [{ offer: { issuerBindingId: 'binding:a', offerOutputs: [{ field: 'serviceLevel' }] } }],
+    })
+    expect(JSON.stringify(first)).not.toContain('internalScore')
     expect(events).toHaveLength(4)
     for (const bindingId of ['binding:a', 'binding:b']) {
       expect(events.indexOf(`release:${bindingId}`)).toBeLessThan(events.indexOf(`provider:${bindingId}`))
@@ -87,7 +92,10 @@ describe('structured quote preparation', () => {
             environment: request.environment, expectedCost: { currency: 'AUD', amountMinor: bindingId.endsWith('a') ? 1_100 : 1_300 },
             maximumCost: { currency: 'AUD', amountMinor: bindingId.endsWith('a') ? 1_200 : 1_400 }, expectedLatencyMs: 500,
             providerQuoteRef: `offer:${bindingId}`, providerQuoteExpiresAt: 60_000,
-            ...commercialEvidence([{ field: 'serviceLevel', valueType: 'string', value: 'Tracked' }]),
+            ...commercialEvidence([
+              { field: 'serviceLevel', valueType: 'string', value: 'Tracked' },
+              ...(bindingId.endsWith('b') ? [{ field: 'internalScore', valueType: 'integer' as const, value: 99 }] : []),
+            ]),
             dataFields: [], disclosures: ['Tracked service'],
           }
         },
@@ -123,7 +131,7 @@ describe('structured quote preparation', () => {
       capabilityContractId: 'shipping.quote:v1', capabilityContractVersion: '1',
       currency: 'AUD', maximumSpendMinor: 2_000,
       purpose: 'compare_shipping_options', protectedFieldNames: ['destinationPostcode'],
-      allowedExecutionDataFields: [], requiredOfferOutputs: [],
+      allowedExecutionDataFields: [], registeredOfferOutputs: [],
       releaseForCandidate: async (release: Parameters<ReturnType<typeof createStructuredQuotePreparationOperation>>[0]['releaseForCandidate'] extends (value: infer V) => unknown ? V : never) => ({
         ...await release.release({ allocationId: 'allocation:crash:1', protectedValues: { destinationPostcode: '6000' } }),
         allocationId: 'allocation:crash:1', releasedAt: 1_100,
@@ -204,7 +212,7 @@ describe('structured quote preparation', () => {
       caller: { principalId: 'principal:1', agentId: 'agent:1' },
       capabilityContractId: 'meeting-room.quote:v1', capabilityContractVersion: '1', currency: 'AUD', maximumSpendMinor: 10_000,
       purpose: 'compare_meeting_rooms', protectedFieldNames: ['meetingDate', 'attendeeCount'],
-      allowedExecutionDataFields: ['attendeeNames'], requiredOfferOutputs: [],
+      allowedExecutionDataFields: ['attendeeNames'], registeredOfferOutputs: [],
       releaseForCandidate: async (release) => ({
         ...await release.release({ allocationId: 'allocation:room:1', protectedValues: { meetingDate: '2026-08-04', attendeeCount: 8 } }),
         allocationId: 'allocation:room:1', releasedAt: 1_100,
@@ -247,7 +255,7 @@ describe('structured quote preparation', () => {
       caller: { principalId: 'principal:1', agentId: 'agent:1' }, capabilityContractId: 'shipping.quote:v1',
       capabilityContractVersion: '1', currency: 'AUD', maximumSpendMinor: 2_000,
       purpose: 'compare_shipping_options', protectedFieldNames: ['destinationPostcode'],
-      allowedExecutionDataFields: [], requiredOfferOutputs: [],
+      allowedExecutionDataFields: [], registeredOfferOutputs: [],
       releaseForCandidate: async () => {
         releaseCalls += 1
         return { kind: 'refused', reason: 'should_not_run', nextAction: 'none' }
@@ -296,7 +304,7 @@ describe('structured quote preparation', () => {
       actionId: 'action:quote', generation: 1, networkId: 'network:businesses',
       caller: { principalId: 'principal:1', agentId: 'agent:1' }, capabilityContractId: 'shipping.quote:v1',
       capabilityContractVersion: '1', currency: 'AUD', maximumSpendMinor: 2_000,
-      purpose: 'compare_shipping_options', protectedFieldNames: ['destinationPostcode'], allowedExecutionDataFields: [], requiredOfferOutputs: [],
+      purpose: 'compare_shipping_options', protectedFieldNames: ['destinationPostcode'], allowedExecutionDataFields: [], registeredOfferOutputs: [],
       releaseForCandidate: async (release) => {
         releases += 1
         try {
@@ -340,7 +348,7 @@ describe('structured quote preparation', () => {
       planRevisionId: 'plan:vanishing:1', actionId: 'action:quote', generation: 1,
       networkId: 'network:businesses', caller: { principalId: 'principal:1', agentId: 'agent:1' },
       capabilityContractId: 'inventory.quote:v1', capabilityContractVersion: '1', currency: 'AUD', maximumSpendMinor: 2_000,
-      purpose: 'prepare_inventory_quote', protectedFieldNames: ['accountRef'], allowedExecutionDataFields: [], requiredOfferOutputs: [],
+      purpose: 'prepare_inventory_quote', protectedFieldNames: ['accountRef'], allowedExecutionDataFields: [], registeredOfferOutputs: [],
       releaseForCandidate: async (release: Parameters<ReturnType<typeof createStructuredQuotePreparationOperation>>[0]['releaseForCandidate'] extends (value: infer V) => unknown ? V : never) => {
         try {
           await release.release({ allocationId: 'allocation:vanishing:1', protectedValues: { accountRef: 'private' } })

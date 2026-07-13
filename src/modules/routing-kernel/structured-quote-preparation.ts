@@ -41,7 +41,11 @@ export type StructuredPreparationInput = Readonly<{
   purpose: string
   protectedFieldNames: readonly string[]
   allowedExecutionDataFields: readonly string[]
-  requiredOfferOutputs: readonly Readonly<{ field: string; valueType: 'string' | 'integer' | 'boolean' | 'url' | 'money_minor' }>[]
+  registeredOfferOutputs: readonly Readonly<{
+    field: string
+    valueType: 'string' | 'integer' | 'boolean' | 'url' | 'money_minor'
+    required: boolean
+  }>[]
   resolveCandidatePresentation?: (input: Readonly<{ bindingId: string; nodeId: string }>) => Promise<Readonly<{
     recipientName: string
     presentationEvidenceDigest: string
@@ -442,20 +446,23 @@ function structuredQuoteMatchesCandidate(
     && quote.expectedCost.amountMinor <= quote.maximumCost.amountMinor
     && (request.maximumSpendMinor === undefined || quote.maximumCost.amountMinor <= request.maximumSpendMinor)
     && quote.dataFields.every((field) => request.allowedExecutionDataFields.includes(field))
-    && requiredOfferOutputsMatch(quote.offerOutputs, request.requiredOfferOutputs)
+    && registeredOfferOutputsMatch(quote.offerOutputs, request.registeredOfferOutputs)
     && quote.priceComponents.reduce((total, component) => total + component.amountMinor, 0) <= quote.maximumCost.amountMinor
     && quote.materialTerms.length > 0 && quote.cancellation.summary.trim().length > 0
     && (quote.providerQuoteExpiresAt ?? 0) > now
 }
 
-function requiredOfferOutputsMatch(
+function registeredOfferOutputsMatch(
   outputs: StructuredBindingQuote['offerOutputs'],
-  required: StructuredPreparationInput['requiredOfferOutputs'],
+  registered: StructuredPreparationInput['registeredOfferOutputs'],
 ): boolean {
   if (new Set(outputs.map((output) => output.field)).size !== outputs.length) return false
+  const definitions = new Map(registered.map((definition) => [definition.field, definition]))
   const byField = new Map(outputs.map((output) => [output.field, output]))
-  return required.every((definition) => {
+  if (outputs.some((output) => !definitions.has(output.field))) return false
+  return registered.every((definition) => {
     const output = byField.get(definition.field)
+    if (output === undefined) return !definition.required
     if (output?.valueType !== definition.valueType) return false
     if (definition.valueType === 'integer' || definition.valueType === 'money_minor') return typeof output.value === 'number' && Number.isSafeInteger(output.value)
     if (definition.valueType === 'boolean') return typeof output.value === 'boolean'
