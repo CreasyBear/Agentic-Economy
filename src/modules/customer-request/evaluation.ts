@@ -417,20 +417,23 @@ function projectPreparationDisclosure(
   const categories = new Map<string, PreparationDisclosurePreview['categories'][number]>()
   const purposes = new Set<string>()
   for (const candidate of candidates) {
-    for (const semantic of candidate.model.inputs) {
-      const present = facts.some((fact) => fact.inputKey === semantic.key
-        && fact.selectionKey === candidate.model.selectionKey
-        && sameCapabilityContractRef(fact.contractRef, candidate.model.contractRef))
-      if (!present) continue
-      for (const use of semantic.dataUse) {
-        if (use.phase !== 'preparation' || use.classification === 'public') continue
-        categories.set(semantic.key, {
-          inputKey: semantic.key,
-          label: semantic.label,
+    const projection = candidate.model.projectPreparation({
+      contractRef: candidate.model.contractRef,
+      selectionKey: candidate.model.selectionKey,
+      semanticDigest: candidate.model.semanticDigest,
+      facts: factsForModel(facts, candidate.model),
+    })
+    if (projection.kind === 'incompatible') continue
+    for (const use of projection.dataUse) {
+      if (use.phase !== 'preparation' || use.classification === 'public') continue
+      for (const input of use.inputs) {
+        categories.set(input.inputKey, {
+          inputKey: input.inputKey,
+          label: input.label,
           classification: use.classification,
         })
-        for (const purpose of use.purposes) purposes.add(purpose)
       }
+      for (const purpose of use.purposes) purposes.add(purpose)
     }
   }
   if (categories.size === 0) return undefined

@@ -96,6 +96,52 @@ describe('V2 Request semantics', () => {
     expect(evaluation.nextRequirement).toBeUndefined()
   })
 
+  it('uses the capability-owned projection to disclose missing preparation input before collection', () => {
+    const model = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+      inputSchema: structuredInputSchema(),
+      customerAnnotations: structuredAnnotations(),
+      dataUse: [
+        {
+          effectId: 'request_release', inputPointer: '/request', classification: 'personal', phase: 'preparation',
+          recipient: { kind: 'candidate_binding' }, purposes: ['prepare_customer_options'],
+        },
+        {
+          effectId: 'approval_release', inputPointer: '/approval', classification: 'credential', phase: 'preparation',
+          recipient: { kind: 'candidate_binding' }, purposes: ['confirm_customer_authority'],
+        },
+      ],
+      effects: structuredEffects(),
+    })))
+    const requestInput = requiredInput(model, 'request')
+
+    const evaluation = evaluateCustomerRequestSnapshot({
+      requestId: 'request:disclosure', requestRevision: 1, intent: 'Find data',
+      facts: [{
+        contractRef: model.contractRef,
+        selectionKey: model.selectionKey,
+        inputKey: requestInput.key,
+        inputPointer: requestInput.inputPointer,
+        schemaIdentity: requestInput.schemaIdentity,
+        value: { topic: 'routing' },
+        source: { kind: 'customer', assertionRef: 'assertion:request' },
+      }],
+      registrySnapshotDigest: 'sha256:graph',
+      candidates: [{
+        businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
+        offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
+      }],
+    })
+
+    expect(evaluation.preparationDisclosure).toEqual({
+      maximumRecipients: 1,
+      purposes: ['confirm_customer_authority', 'prepare_customer_options'],
+      categories: [
+        expect.objectContaining({ label: 'Approval', classification: 'credential' }),
+        expect.objectContaining({ label: 'What to find', classification: 'personal' }),
+      ],
+    })
+  })
+
   it('matches and hashes eligible supply by the complete exact contract reference', () => {
     const first = decisionModelWithCommitment()
     const second = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({

@@ -29,11 +29,24 @@ describe('capability contract boundaries', () => {
 
     for (const source of contractSources()) expect(source).not.toMatch(forbiddenOwnership)
   })
+
+  it('keeps capability schema traversal and commitment materialization out of downstream decision modules', () => {
+    const forbiddenReimplementation = /(?:from\s+['"]ajv|CapabilityContractDocument|resolvePointedSchema|materializeInputFacts|setJsonPointer|semantic\.dataUse)/
+
+    for (const root of ['src/modules/customer-request', 'src/modules/routing-kernel']) {
+      for (const source of sourcesUnder(root)) expect(source).not.toMatch(forbiddenReimplementation)
+    }
+    expect(readFileSync('src/modules/customer-request/evaluation.ts', 'utf8')).toMatch(/\.projectPreparation\(/)
+  })
 })
 
 function contractSources(): string[] {
-  return readdirSync(contractRoot, { recursive: true })
+  return sourcesUnder(contractRoot)
+}
+
+function sourcesUnder(root: string): string[] {
+  return readdirSync(root, { recursive: true })
     .filter((path): path is string => typeof path === 'string' && /\.(?:ts|tsx)$/.test(path))
     .sort()
-    .map((path) => readFileSync(join(contractRoot, path), 'utf8'))
+    .map((path) => readFileSync(join(root, path), 'utf8'))
 }

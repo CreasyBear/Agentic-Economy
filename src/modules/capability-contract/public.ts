@@ -99,10 +99,12 @@ export type CapabilityContract = CapabilityContractDocument & Readonly<{ ref: Ca
 declare const capabilitySelectionKeyBrand: unique symbol
 declare const capabilityInputKeyBrand: unique symbol
 declare const pointedSchemaIdentityBrand: unique symbol
+declare const capabilityDataUseDeclarationKeyBrand: unique symbol
 
 export type CapabilitySelectionKey = string & Readonly<{ [capabilitySelectionKeyBrand]: true }>
 export type CapabilityInputKey = string & Readonly<{ [capabilityInputKeyBrand]: true }>
 export type PointedSchemaIdentity = string & Readonly<{ [pointedSchemaIdentityBrand]: true }>
+export type CapabilityDataUseDeclarationKey = string & Readonly<{ [capabilityDataUseDeclarationKeyBrand]: true }>
 export type CapabilityInputStage = 'option_selection' | 'commitment'
 export type CapabilityInputSemantic = Readonly<{
   key: CapabilityInputKey
@@ -139,6 +141,49 @@ export type CapabilityInputAssessment =
   | Readonly<{ kind: 'viable'; stage: 'commitment'; input: JsonValue }>
   | Readonly<{ kind: 'needs_information'; missing: readonly CapabilityInputSemantic[] }>
   | Readonly<{ kind: 'incompatible'; issues: readonly Readonly<{ inputPointer?: string; keyword: string }>[] }>
+export type CapabilityPreparationDataUse = Readonly<{
+  declarationKey: CapabilityDataUseDeclarationKey
+  effectId: string
+  inputPointer: string
+  schemaIdentity: PointedSchemaIdentity
+  classification: CapabilityContractDocument['dataUse'][number]['classification']
+  phase: CapabilityContractDocument['dataUse'][number]['phase']
+  recipient: CapabilityContractDocument['dataUse'][number]['recipient']
+  purposes: CapabilityContractDocument['dataUse'][number]['purposes']
+  effect: CapabilityContractDocument['effects'][number]
+  inputs: readonly Readonly<{
+    inputKey: CapabilityInputKey
+    inputPointer: string
+    label: string
+    schemaIdentity: PointedSchemaIdentity
+  }>[]
+}>
+export type CapabilityPreparationDraft = Readonly<{
+  contractRef: CapabilityContractRef
+  selectionKey: CapabilitySelectionKey
+  semanticDigest: string
+  facts: readonly CapabilityInputFact[]
+}>
+type CapabilityPreparationAuthority = Readonly<{
+  contractRef: CapabilityContractRef
+  selectionKey: CapabilitySelectionKey
+  semanticDigest: string
+}>
+export type CapabilityPreparationProjection =
+  | (CapabilityPreparationAuthority & Readonly<{
+    kind: 'ready'
+    input: JsonValue
+    dataUse: readonly CapabilityPreparationDataUse[]
+  }>)
+  | (CapabilityPreparationAuthority & Readonly<{
+    kind: 'needs_information'
+    missing: readonly CapabilityInputSemantic[]
+    dataUse: readonly CapabilityPreparationDataUse[]
+  }>)
+  | (CapabilityPreparationAuthority & Readonly<{
+    kind: 'incompatible'
+    issues: readonly Readonly<{ inputPointer?: string; keyword: string }>[]
+  }>)
 export type CapabilityDecisionModel = Readonly<{
   contractRef: CapabilityContractRef
   selectionKey: CapabilitySelectionKey
@@ -151,6 +196,7 @@ export type CapabilityDecisionModel = Readonly<{
     stage: CapabilityInputStage
     facts: readonly CapabilityInputFact[]
   }>) => CapabilityInputAssessment
+  projectPreparation: (draft: CapabilityPreparationDraft) => CapabilityPreparationProjection
   validateInput: (value: unknown) => CapabilityDocumentValidation
   validateOutput: (value: unknown) => CapabilityDocumentValidation
 }>
@@ -294,10 +340,45 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     if (schema === undefined) throw new Error('capability_semantic_projection_failed')
     return [input.key, compiledPointedValidator(input.schemaIdentity, schema)]
   }))
+  const preparationDataUse = exactContract.dataUse.map((declaration) => {
+    const schema = resolvePointedSchema(exactContract.inputSchema, declaration.inputPointer)
+    const linkedEffect = exactContract.effects.find((declaredEffect) => declaredEffect.effectId === declaration.effectId)
+    if (schema === undefined || linkedEffect === undefined) throw new Error('capability_semantic_projection_failed')
+    const projection: CapabilityPreparationDataUse = {
+      declarationKey: `ae_data_use:${canonicalDigest({
+        contractRef: exactContract.ref,
+        declaration,
+      } as StableHashValue)}` as CapabilityDataUseDeclarationKey,
+      effectId: declaration.effectId,
+      inputPointer: declaration.inputPointer,
+      schemaIdentity: canonicalDigest(schema as StableHashValue) as PointedSchemaIdentity,
+      classification: declaration.classification,
+      phase: declaration.phase,
+      recipient: declaration.recipient,
+      purposes: declaration.purposes,
+      effect: linkedEffect,
+      inputs: inputs
+        .filter((input) => pointersOverlap(declaration.inputPointer, input.inputPointer))
+        .map((input) => ({
+          inputKey: input.key,
+          inputPointer: input.inputPointer,
+          label: input.label,
+          schemaIdentity: input.schemaIdentity,
+        })),
+    }
+    return {
+      projection,
+      coveredInputs: projection.inputs.map((input) => input.inputKey),
+    }
+  }).sort((left, right) => (
+    left.projection.inputPointer.localeCompare(right.projection.inputPointer)
+      || left.projection.effectId.localeCompare(right.projection.effectId)
+  ))
+  const semanticDigest = canonicalDigest({ contractRef: contract.ref, inputs, evidence } as StableHashValue)
   const model: CapabilityDecisionModel = {
     contractRef: exactContract.ref,
     selectionKey,
-    semanticDigest: canonicalDigest({ contractRef: contract.ref, inputs, evidence } as StableHashValue),
+    semanticDigest,
     inputs,
     evidence,
     assessInput: (draft) => assessCapabilityInput({
@@ -307,10 +388,92 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       inputValidators,
       inputValidator,
     }, draft),
+    projectPreparation: (draft) => projectCapabilityPreparation({
+      contractRef: exactContract.ref,
+      selectionKey,
+      semanticDigest,
+      inputs,
+      inputValidators,
+      inputValidator,
+      dataUse: preparationDataUse,
+    }, draft),
     validateInput: (value) => validateDocument(inputValidator, value),
     validateOutput: (value) => validateDocument(outputValidator, value),
   }
   return deepFreeze(model) as CapabilityDecisionModel
+}
+
+function projectCapabilityPreparation(
+  model: Readonly<{
+    contractRef: CapabilityContractRef
+    selectionKey: CapabilitySelectionKey
+    semanticDigest: string
+    inputs: readonly CapabilityInputSemantic[]
+    inputValidators: ReadonlyMap<CapabilityInputKey, SchemaValidator>
+    inputValidator: SchemaValidator
+    dataUse: readonly Readonly<{
+      projection: CapabilityPreparationDataUse
+      coveredInputs: readonly CapabilityInputKey[]
+    }>[]
+  }>,
+  draft: CapabilityPreparationDraft,
+): CapabilityPreparationProjection {
+  const authority: CapabilityPreparationAuthority = {
+    contractRef: model.contractRef,
+    selectionKey: model.selectionKey,
+    semanticDigest: model.semanticDigest,
+  }
+  if (draft.semanticDigest !== model.semanticDigest) {
+    return deepFreeze({
+      kind: 'incompatible',
+      ...authority,
+      issues: [{ keyword: 'semantic_digest_mismatch' }],
+    }) as CapabilityPreparationProjection
+  }
+  const assessment = assessCapabilityInput(model, {
+    contractRef: draft.contractRef,
+    selectionKey: draft.selectionKey,
+    stage: 'commitment',
+    facts: draft.facts,
+  })
+  if (assessment.kind === 'needs_information') {
+    const relevantInputs = new Set([
+      ...draft.facts.map((fact) => fact.input),
+      ...assessment.missing.map((input) => input.key),
+    ])
+    return deepFreeze({
+      kind: 'needs_information',
+      ...authority,
+      missing: assessment.missing,
+      dataUse: applicablePreparationDataUse(model.dataUse, relevantInputs),
+    }) as CapabilityPreparationProjection
+  }
+  if (assessment.kind === 'incompatible') {
+    return deepFreeze({ kind: 'incompatible', ...authority, issues: assessment.issues }) as CapabilityPreparationProjection
+  }
+  if (assessment.stage !== 'commitment') throw new Error('capability_preparation_projection_invalid')
+  const suppliedInputs = new Set(draft.facts.map((fact) => fact.input))
+  return deepFreeze({
+    kind: 'ready',
+    ...authority,
+    input: assessment.input,
+    dataUse: applicablePreparationDataUse(model.dataUse, suppliedInputs),
+  }) as CapabilityPreparationProjection
+}
+
+function applicablePreparationDataUse(
+  declarations: readonly Readonly<{
+    projection: CapabilityPreparationDataUse
+    coveredInputs: readonly CapabilityInputKey[]
+  }>[],
+  inputs: ReadonlySet<CapabilityInputKey>,
+): readonly CapabilityPreparationDataUse[] {
+  return declarations
+    .filter((declaration) => declaration.coveredInputs.some((input) => inputs.has(input)))
+    .map((declaration) => ({
+      ...declaration.projection,
+      inputs: declaration.projection.inputs.filter((input) => inputs.has(input.inputKey)),
+    }))
 }
 
 function assertSchemaIsSafeAndValid(schema: Readonly<Record<string, JsonValue>>): void {
@@ -331,6 +494,10 @@ function assertUniqueSemanticIds(document: CapabilityContractDocument): void {
     document.evidence.map((requirement) => requirement.evidenceId),
   ]) {
     if (new Set(ids).size !== ids.length) throw new Error('capability_semantic_id_duplicate')
+  }
+  const dataUseIdentities = document.dataUse.map((declaration) => canonicalDigest(declaration as StableHashValue))
+  if (new Set(dataUseIdentities).size !== dataUseIdentities.length) {
+    throw new Error('capability_data_use_duplicate')
   }
 }
 
@@ -1024,6 +1191,10 @@ function escapePointerSegment(value: string): string {
 
 function pointerCovers(parent: string, child: string): boolean {
   return parent === child || child.startsWith(`${parent}/`)
+}
+
+function pointersOverlap(left: string, right: string): boolean {
+  return pointerCovers(left, right) || pointerCovers(right, left)
 }
 
 function resolveSchemaReference(root: Readonly<Record<string, JsonValue>>, reference: string): Readonly<Record<string, JsonValue>> | undefined {
