@@ -94,7 +94,8 @@ type OptionActionResult = Infer<typeof optionProjection>
 const submitResultValue = v.union(
   customerProjection,
   v.object({ kind: v.literal('refused'), reason: v.union(
-    v.literal('authentication_required'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
+    v.literal('authentication_required'), v.literal('request_not_found'),
+    v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
   ) }),
 )
 type SubmitActionResult = Infer<typeof submitResultValue>
@@ -187,6 +188,78 @@ export const submit = action({
       kind: 'conflict' as const, requestRef: args.requestId, reason: 'revision_changed' as const,
     }
     return writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: evaluated.evaluation }))
+  },
+})
+
+export const refine = action({
+  args: {
+    requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(), message: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
+  },
+  returns: submitResultValue,
+  handler: async (ctx, args): Promise<SubmitActionResult> => {
+    const command = {
+      requestRef: args.requestRef, expectedRevision: args.expectedRevision,
+      idempotencyKey: args.idempotencyKey, message: args.message,
+    }
+    const caller = await resolveRequestCaller(ctx, 'refine', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const evaluated: StoredEvaluation | null = await ctx.runQuery(
+      internal.customerRequests.getRequestEvaluation,
+      { requestId: args.requestRef, requestRevision: args.expectedRevision },
+    )
+    if (evaluated === null || evaluated.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    if (evaluated.evaluation.nextRequirement?.kind !== 'intent_direction') return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: evaluated.snapshot.revision,
+      summary: 'This request is not waiting for a natural-language answer.',
+    }))
+    const recordedAt = Date.now()
+    const intent = refinedIntent(evaluated.snapshot.intent, args.message)
+    const snapshotMaterial = {
+      requestId: evaluated.snapshot.requestId, revision: args.expectedRevision + 1,
+      principalId: evaluated.snapshot.principalId, delegatedAgentId: evaluated.snapshot.delegatedAgentId,
+      intent, networkId: evaluated.snapshot.networkId, facts: evaluated.snapshot.facts,
+    }
+    const snapshot: SnapshotValue = {
+      ...snapshotMaterial, snapshotDigest: canonicalDigest(snapshotMaterial), recordedAt,
+    }
+    const committed: SnapshotCommitResult = await ctx.runMutation(internal.customerRequests.commitRequestSnapshot, {
+      commandKey: namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest(command), expectedRevision: args.expectedRevision, snapshot,
+    })
+    if (committed.kind === 'revision_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
+    }
+    if (committed.kind === 'identity_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'identity_changed' as const,
+    }
+    if (committed.kind === 'command_conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
+    }
+    const requestRevision = committed.kind === 'replayed' ? committed.revision : snapshot.revision
+    const existing: StoredEvaluation | null = await ctx.runQuery(internal.customerRequests.getRequestEvaluation, {
+      requestId: args.requestRef, requestRevision,
+    })
+    if (existing !== null) return writableView(projectStoredEvaluation(existing))
+    const durableSnapshot: SnapshotValue | null = committed.kind === 'replayed'
+      ? await ctx.runQuery(internal.customerRequests.getRequestSnapshot, { requestId: args.requestRef, revision: requestRevision })
+      : snapshot
+    if (durableSnapshot === null) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: requestRevision,
+      summary: 'This request needs attention before it can continue.',
+    }))
+    const nextEvaluation = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
+    if (nextEvaluation.kind === 'interpreter_unavailable') return {
+      kind: 'refused' as const, reason: 'interpreter_unavailable' as const,
+    }
+    return nextEvaluation.kind === 'stored'
+      ? writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: nextEvaluation.evaluation }))
+      : writableView(projectNeedsAttention({
+          requestRef: args.requestRef, revision: requestRevision,
+          summary: 'This request changed before reevaluation completed.',
+        }))
   },
 })
 
@@ -799,7 +872,7 @@ type RequestCaller = Readonly<{ principalId: string; delegatedAgentId: string }>
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'resume' | 'facts',
+  operation: 'submit' | 'compare' | 'resume' | 'facts' | 'refine',
   command: Record<string, string | number | boolean | Record<string, unknown> | undefined>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,
@@ -816,6 +889,10 @@ async function resolveRequestCaller(
   })
   if (recorded.kind !== 'recorded') return undefined
   return { principalId: assertion.principalId, delegatedAgentId: assertion.principalId }
+}
+
+function refinedIntent(intent: string, message: string): string {
+  return `Initial request:\n${intent.trim()}\n\nCustomer clarification:\n${message.trim()}`
 }
 
 function submitCommand(args: Readonly<{

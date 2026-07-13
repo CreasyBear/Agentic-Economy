@@ -2,7 +2,11 @@ import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
-import { handleAgentCustomerRequestGet, handleAgentCustomerRequestPost } from '@/lib/server/customer-request-agent-api'
+import {
+  handleAgentCustomerRequestGet,
+  handleAgentCustomerRequestMessagePost,
+  handleAgentCustomerRequestPost,
+} from '@/lib/server/customer-request-agent-api'
 
 import { api, internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
@@ -246,6 +250,66 @@ describe('production CustomerRequest read model', () => {
       },
     })
     expect(JSON.stringify(view)).not.toMatch(/capabilityContractId|bindingId|planRevision|candidateCapability/)
+  })
+
+  it('accepts a natural-language answer and advances the same durable Request', async () => {
+    const backend = convexTest(schema, modules)
+    const serviceKey = 'convex-agent-gateway-key-with-at-least-32-bytes'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', serviceKey)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        kind: 'needs_intent_direction', prompt: 'What are you looking for there?',
+      }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates', candidateCapabilityContractIds: ['sandbox.option.quote:v1'], facts: [],
+      }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    const authenticate = async () => ({
+      isAuthenticated: true as const, tokenType: 'api_key' as const, id: 'ak_place_refine', subject: 'user_owner_1',
+      userId: 'user_owner_1', orgId: null, scopes: ['customer_requests:create'],
+    })
+    const callAction = async (name: string, args: Record<string, unknown>) => {
+      if (name === 'customerRequestApplication:submit') return await backend.action(api.customerRequestApplication.submit, args as never)
+      if (name === 'customerRequestApplication:refine') return await backend.action(api.customerRequestApplication.refine, args as never)
+      throw new Error(`unexpected_action_${name}`)
+    }
+    const options = { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey }, now: Date.now }
+    const submitted = await handleAgentCustomerRequestPost(agentRequest({
+      idempotencyKey: 'submit:place:refine:1', requestRef: 'request:place:refine:1', agentRef: 'ignored-by-admission',
+      request: 'Fremantle',
+    }), options)
+    expect(submitted.status).toBe(200)
+
+    const messageBody = JSON.stringify({ idempotencyKey: 'message:place:1', expectedRevision: 1, message: 'Somewhere relaxed for lunch.' })
+    const messageRequest = new Request('https://ae.test/api/v1/requests/request:place:refine:1/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: messageBody,
+    })
+    const refined = await handleAgentCustomerRequestMessagePost(messageRequest, 'request:place:refine:1', options)
+    expect(refined.status).toBe(200)
+    const refinedView = await refined.json()
+    expect(refinedView).toMatchObject({
+      kind: 'request', requestRef: 'request:place:refine:1', revision: 2,
+      state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
+    const replay = await handleAgentCustomerRequestMessagePost(
+      new Request(messageRequest.url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: messageBody }),
+      'request:place:refine:1', options,
+    )
+    expect(replay.status).toBe(200)
+    await expect(replay.json()).resolves.toEqual(refinedView)
+    const durable = await backend.run(async (ctx) => ({
+      head: await ctx.db.query('customerRequestHeads').withIndex('by_requestId', (query) => query
+        .eq('requestId', 'request:place:refine:1')).unique(),
+      snapshots: await ctx.db.query('customerRequestSnapshots').withIndex('by_requestId_and_revision', (query) => query
+        .eq('requestId', 'request:place:refine:1')).collect(),
+    }))
+    expect(durable.head?.currentRevision).toBe(2)
+    expect(durable.snapshots).toHaveLength(2)
+    expect(durable.snapshots[0]?.intent).toBe('Fremantle')
+    expect(durable.snapshots[1]?.intent).toContain('Somewhere relaxed for lunch.')
   })
 })
 

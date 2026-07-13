@@ -63,11 +63,13 @@ import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admi
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
 import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
+import { Route as ApiRequestsRequestRefMessagesRouteImport } from './routes/api.requests.$requestRef.messages'
 import { Route as ApiRequestsRequestRefFactsRouteImport } from './routes/api.requests.$requestRef.facts'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
 import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/admin.runs.$turnId'
 import { Route as ApiV1RequestsRequestRefOptionsRouteImport } from './routes/api.v1.requests.$requestRef.options'
+import { Route as ApiV1RequestsRequestRefMessagesRouteImport } from './routes/api.v1.requests.$requestRef.messages'
 import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v1.requests.$requestRef.facts'
 
 const TermsRoute = TermsRouteImport.update({
@@ -348,6 +350,12 @@ const ApiRequestsRequestRefOptionsRoute =
     path: '/options',
     getParentRoute: () => ApiRequestsRequestRefRoute,
   } as any)
+const ApiRequestsRequestRefMessagesRoute =
+  ApiRequestsRequestRefMessagesRouteImport.update({
+    id: '/messages',
+    path: '/messages',
+    getParentRoute: () => ApiRequestsRequestRefRoute,
+  } as any)
 const ApiRequestsRequestRefFactsRoute =
   ApiRequestsRequestRefFactsRouteImport.update({
     id: '/facts',
@@ -375,6 +383,12 @@ const ApiV1RequestsRequestRefOptionsRoute =
   ApiV1RequestsRequestRefOptionsRouteImport.update({
     id: '/options',
     path: '/options',
+    getParentRoute: () => ApiV1RequestsRequestRefRoute,
+  } as any)
+const ApiV1RequestsRequestRefMessagesRoute =
+  ApiV1RequestsRequestRefMessagesRouteImport.update({
+    id: '/messages',
+    path: '/messages',
     getParentRoute: () => ApiV1RequestsRequestRefRoute,
   } as any)
 const ApiV1RequestsRequestRefFactsRoute =
@@ -440,9 +454,11 @@ export interface FileRoutesByFullPath {
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
+  '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
+  '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
 }
 export interface FileRoutesByTo {
@@ -501,9 +517,11 @@ export interface FileRoutesByTo {
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
+  '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
+  '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
 }
 export interface FileRoutesById {
@@ -564,9 +582,11 @@ export interface FileRoutesById {
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
+  '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
+  '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
 }
 export interface FileRouteTypes {
@@ -627,9 +647,11 @@ export interface FileRouteTypes {
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/facts'
+    | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/$requestRef/facts'
+    | '/api/v1/requests/$requestRef/messages'
     | '/api/v1/requests/$requestRef/options'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -688,9 +710,11 @@ export interface FileRouteTypes {
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/facts'
+    | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/$requestRef/facts'
+    | '/api/v1/requests/$requestRef/messages'
     | '/api/v1/requests/$requestRef/options'
   id:
     | '__root__'
@@ -750,9 +774,11 @@ export interface FileRouteTypes {
     | '/_operator/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/facts'
+    | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/$requestRef/facts'
+    | '/api/v1/requests/$requestRef/messages'
     | '/api/v1/requests/$requestRef/options'
   fileRoutesById: FileRoutesById
 }
@@ -1175,6 +1201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRequestsRequestRefOptionsRouteImport
       parentRoute: typeof ApiRequestsRequestRefRoute
     }
+    '/api/requests/$requestRef/messages': {
+      id: '/api/requests/$requestRef/messages'
+      path: '/messages'
+      fullPath: '/api/requests/$requestRef/messages'
+      preLoaderRoute: typeof ApiRequestsRequestRefMessagesRouteImport
+      parentRoute: typeof ApiRequestsRequestRefRoute
+    }
     '/api/requests/$requestRef/facts': {
       id: '/api/requests/$requestRef/facts'
       path: '/facts'
@@ -1208,6 +1241,13 @@ declare module '@tanstack/react-router' {
       path: '/options'
       fullPath: '/api/v1/requests/$requestRef/options'
       preLoaderRoute: typeof ApiV1RequestsRequestRefOptionsRouteImport
+      parentRoute: typeof ApiV1RequestsRequestRefRoute
+    }
+    '/api/v1/requests/$requestRef/messages': {
+      id: '/api/v1/requests/$requestRef/messages'
+      path: '/messages'
+      fullPath: '/api/v1/requests/$requestRef/messages'
+      preLoaderRoute: typeof ApiV1RequestsRequestRefMessagesRouteImport
       parentRoute: typeof ApiV1RequestsRequestRefRoute
     }
     '/api/v1/requests/$requestRef/facts': {
@@ -1322,11 +1362,13 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
 
 interface ApiRequestsRequestRefRouteChildren {
   ApiRequestsRequestRefFactsRoute: typeof ApiRequestsRequestRefFactsRoute
+  ApiRequestsRequestRefMessagesRoute: typeof ApiRequestsRequestRefMessagesRoute
   ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
 }
 
 const ApiRequestsRequestRefRouteChildren: ApiRequestsRequestRefRouteChildren = {
   ApiRequestsRequestRefFactsRoute: ApiRequestsRequestRefFactsRoute,
+  ApiRequestsRequestRefMessagesRoute: ApiRequestsRequestRefMessagesRoute,
   ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,
 }
 
@@ -1360,12 +1402,14 @@ const ApiAnswerThreadsRouteWithChildren =
 
 interface ApiV1RequestsRequestRefRouteChildren {
   ApiV1RequestsRequestRefFactsRoute: typeof ApiV1RequestsRequestRefFactsRoute
+  ApiV1RequestsRequestRefMessagesRoute: typeof ApiV1RequestsRequestRefMessagesRoute
   ApiV1RequestsRequestRefOptionsRoute: typeof ApiV1RequestsRequestRefOptionsRoute
 }
 
 const ApiV1RequestsRequestRefRouteChildren: ApiV1RequestsRequestRefRouteChildren =
   {
     ApiV1RequestsRequestRefFactsRoute: ApiV1RequestsRequestRefFactsRoute,
+    ApiV1RequestsRequestRefMessagesRoute: ApiV1RequestsRequestRefMessagesRoute,
     ApiV1RequestsRequestRefOptionsRoute: ApiV1RequestsRequestRefOptionsRoute,
   }
 

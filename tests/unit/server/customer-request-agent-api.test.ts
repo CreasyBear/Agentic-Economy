@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   handleAgentCustomerOptionsPost,
   handleAgentCustomerRequestGet,
+  handleAgentCustomerRequestMessagePost,
   handleAgentCustomerRequestPost,
 } from '@/lib/server/customer-request-agent-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
@@ -57,6 +58,23 @@ describe('agent-native customer Request API', () => {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })).status).toBe(200)
     expect(names).toEqual(['customerRequestApplication:resume', 'customerRequestApplication:compare'])
+  })
+
+  it('signs a natural-language clarification as a refinement of the same Request', async () => {
+    const callAction = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
+      kind: 'request' as const, requestRef: args.requestRef as string, revision: 2, state: 'ready_to_compare' as const,
+      summary: 'Fremantle for lunch', nextAction: 'prepare_options' as const, missingFields: [], options: [],
+    }))
+    const response = await handleAgentCustomerRequestMessagePost(request('/api/v1/requests/request:1/messages', {
+      idempotencyKey: 'message:1', expectedRevision: 1, message: 'Somewhere relaxed for lunch.',
+    }), 'request:1', { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+    expect(response.status).toBe(200)
+    const [name, calledArgs] = callAction.mock.calls[0] ?? []
+    expect(name).toBe('customerRequestApplication:refine')
+    const { serviceAuth, ...command } = calledArgs ?? {}
+    await expect(verifyCustomerRequestServiceAssertion({
+      key, operation: 'refine', command: command as never, assertion: serviceAuth as never, now: 1_001,
+    })).resolves.toBe(true)
   })
 
   it('returns 401 for missing keys and 403 for unscoped keys before Convex', async () => {

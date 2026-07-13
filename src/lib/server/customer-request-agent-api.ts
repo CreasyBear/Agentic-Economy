@@ -2,6 +2,7 @@ import { authenticateCustomerRequestAgent, type CustomerRequestAgentPrincipal } 
 import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
 import { handleCustomerRequestFactsPost, type FactsResult } from '@/lib/server/customer-request-facts-api'
 import { handleCustomerRequestGet, type InspectResult } from '@/lib/server/customer-request-inspect-api'
+import { handleCustomerRequestMessagePost, type MessageResult } from '@/lib/server/customer-request-messages-api'
 import { handleCustomerRequestPost, type SubmitResult } from '@/lib/server/customer-request-api'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
@@ -14,7 +15,7 @@ type HandlerOptions = Readonly<{
   now?: () => number
 }>
 
-type AgentActionResult = SubmitResult | FactsResult | CustomerOptionsProjection | InspectResult
+type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
@@ -35,6 +36,18 @@ export async function handleAgentCustomerRequestFactsPost(
   if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
   return await handleCustomerRequestFactsPost(request, requestRef, {
     provideFacts: async (args) => await callAsAgent<FactsResult>('customerRequestApplication:provideFacts', 'facts', args, admitted.principal, options),
+  })
+}
+
+export async function handleAgentCustomerRequestMessagePost(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestMessagePost(request, requestRef, {
+    refine: async (args) => await callAsAgent<MessageResult>('customerRequestApplication:refine', 'refine', args, admitted.principal, options),
   })
 }
 
@@ -60,7 +73,7 @@ export async function handleAgentCustomerRequestGet(requestRef: string, options:
 
 async function callAsAgent<Result = SubmitResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'compare' | 'resume',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume',
   command: Record<string, unknown>,
   principal: CustomerRequestAgentPrincipal,
   options: HandlerOptions,
