@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { findFiles } from '@/lib/ui/contract-scans'
+import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
 
 const productionAuthority = {
   semantics: 'src/modules/customer-request/evaluation.ts',
@@ -191,7 +192,8 @@ describe('CustomerRequest source completeness', () => {
     expect(releaseReadback).not.toMatch(/AE_RELEASE_SOURCE_REVISION|AE_KERNEL_PROOF_MANIFEST/)
     expect(source('releaseHttp')).toContain('authenticateCustomerRequestAgent')
     expect(readFileSync('src/routes/api.v1.release.ts', 'utf8')).toContain('handleAgentCustomerRequestReleaseGet')
-    expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path')
+    expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8'))
+      .toContain(`createFileRoute('${CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path}')`)
     expect(releaseReadback).toContain('CUSTOMER_REQUEST_AGENT_ENTRYPOINT')
 
     const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
