@@ -63,6 +63,8 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
     artifacts: buildArtifactsFromSnapshot(snapshot),
     oneLine: prose.oneLine,
     answerCheckSummary: buildPublicAnswerCheckSummary(answerRun),
+    ...(evidence.searchContext?.timing === undefined ? {} : { timing: evidence.searchContext.timing }),
+    ...(evidence.searchContext?.timingDate === undefined ? {} : { timingDate: evidence.searchContext.timingDate }),
     ...(prose.layoutProfile === undefined ? {} : { layoutProfile: prose.layoutProfile }),
   }
 }

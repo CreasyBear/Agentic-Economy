@@ -2,7 +2,6 @@ import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn, useServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
@@ -21,10 +20,10 @@ import { Token } from '@astryxdesign/core/Token'
 import { SearchIcon } from 'lucide-react'
 
 import { AeRegistryFunnelBoot } from '@/components/ae/layout/AeRegistryFunnelBoot'
+import { AeProviderCard } from '@/components/ae/primitives/AeProviderCard'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeAnimatedNumber } from '@/components/ae/motion/AeAnimatedNumber'
 import { emitRegistryResultClick } from '@/lib/observability/registry-click'
-import { buildProviderPresentation, pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import type { PublicBusinessCatalogApiDto, PublicBusinessCatalogApiPage } from '@/modules/registry/public'
 import { readPublicRegistryCatalogPage, readPublicRegistrySearchPage } from '@/modules/registry/registry.functions'
 import { captureDemandSignalServer, type DemandCaptureServerResult } from '@/modules/demand/demand.functions'
@@ -397,7 +396,14 @@ function RegistryDemandCaptureEmptyState({ query, showClearSearch }: { query: st
 function RegistryLibraryGrid({ items, query }: { items: readonly PublicBusinessCatalogApiDto[]; query: string }) {
   return (
     <Grid columns={{ minWidth: 320 }} gap={4} aria-label="Business results">
-      {items.map((item, index) => <RegistryLibraryCard key={item.slug} item={item} query={query} position={index + 1} />)}
+      {items.map((item, index) => (
+        <AeProviderCard
+          key={item.slug}
+          variant="registry"
+          item={item}
+          onView={() => { void emitRegistryResultClick({ slug: item.slug, query, position: index + 1 }) }}
+        />
+      ))}
     </Grid>
   )
 }
@@ -407,80 +413,8 @@ const thumbnailWrapper: CSSProperties = {
   overflow: 'hidden',
 }
 
-const thumbnailImage: CSSProperties = {
-  width: '100%',
-  height: '100%',
-  objectFit: 'cover',
-}
 
-function RegistryLibraryCard({ item, query, position }: { item: PublicBusinessCatalogApiDto; query: string; position: number }) {
-  const presentation = buildProviderPresentation(item, { serviceChipLimit: 2 })
-  const summary = presentation.primaryServiceSummary ?? item.services[0]?.summary ?? 'Service details for customers.'
-  const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(presentation.availabilityLabel))
 
-  return (
-    <Card padding={0} aria-labelledby={`registry-card-${item.slug}`} className="h-full overflow-hidden">
-      <div style={thumbnailWrapper}>
-        <img src={presentation.image.url} alt={presentation.image.alt} style={thumbnailImage} loading="lazy" />
-      </div>
-      <Section variant="transparent" padding={4}>
-        <VStack gap={3}>
-          <HStack vAlign="start" gap={3}>
-            <StackItem size="fill">
-              <VStack gap={1}>
-                <Text type="supporting" color="secondary" display="block">{item.category} · {presentation.locationLabel}</Text>
-                <Heading id={`registry-card-${item.slug}`} level={3}>{item.name}</Heading>
-              </VStack>
-            </StackItem>
-            <Badge label={presentation.availabilityLabel} variant={badgeVariant} />
-          </HStack>
-          <Text type="body" size="sm" color="secondary" display="block">{summary}</Text>
-          <TokenList labels={presentation.serviceChips.map((service) => service.label)} />
-          <CompactProviderFacts facts={[{ term: 'Service area', description: presentation.serviceArea }, { term: 'Response', description: presentation.responseFallbackLabel }]} />
-          <Text type="supporting" color="primary" display="block"><strong>Best next step:</strong> {presentation.nextStepLabel}</Text>
-          <HStack gap={2}>
-            <Button label="View details" variant="primary" size="sm" href={`/${item.slug}?from=registry`} onClick={() => { void emitRegistryResultClick({ slug: item.slug, query, position }) }} />
-            <Button label="Get as agent JSON" variant="ghost" size="sm" href={`/api/businesses/${encodeURIComponent(item.slug)}`} />
-          </HStack>
-        </VStack>
-      </Section>
-    </Card>
-  )
-}
-
-function CompactProviderFacts({ facts }: { facts: Array<{ term: string; description: string }> }) {
-  return (
-    <dl className="grid gap-2">
-      {facts.map((fact) => (
-        <div key={fact.term} className="grid gap-0.5">
-          <dt><Text type="supporting" color="secondary" weight="medium">{fact.term}</Text></dt>
-          <dd><Text type="supporting" color="primary">{fact.description}</Text></dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-function TokenList({ labels }: { labels: readonly string[] }) {
-  if (labels.length === 0) {
-    return null
-  }
-
-  return (
-    <ul className="flex flex-wrap gap-2" aria-label="Listed services">
-      {labels.map((label) => (
-        <li key={label}><Token size="sm" label={label} /></li>
-      ))}
-    </ul>
-  )
-}
-
-function badgeVariantForTone(tone: string): 'neutral' | 'success' | 'warning' | 'error' {
-  if (tone === 'available' || tone === 'success') return 'success'
-  if (tone === 'limited' || tone === 'warning') return 'warning'
-  if (tone === 'unavailable' || tone === 'error') return 'error'
-  return 'neutral'
-}
 
 function resultSummary(total: number, query: string): string {
   const label = total === 1 ? 'business' : 'businesses'

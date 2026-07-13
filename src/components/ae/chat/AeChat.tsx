@@ -13,6 +13,7 @@ import {
   DEFAULT_AE_SEARCH_CONTEXT,
   aeSearchContextLocationLabel,
   type AeSearchContext,
+  type NeedTiming,
 } from '@/modules/answer/search-context'
 import {
   classifyFollowUpIntent,
@@ -244,15 +245,16 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
     setLiveTurn({ query, generation: nextGeneration, searchContext: context, intent })
   }
 
-  function handleSubmit(query: string) {
+  function handleSubmit(query: string, timing: NeedTiming = 'flexible', timingDate?: string) {
+    const turnSearchContext = { ...searchContext, timing, ...(timingDate === undefined ? {} : { timingDate }) }
     const intent = classifyFollowUpIntent(query, completedTurnCount)
     captureClientProductEventOnClient('query_submitted', {
       query_length: query.length,
-      search_mode: searchContext.mode,
-      search_location: aeSearchContextLocationLabel(searchContext) ?? 'none',
+      search_mode: turnSearchContext.mode,
+      search_location: aeSearchContextLocationLabel(turnSearchContext) ?? 'none',
     })
     emitChatFunnelEvents(buildChatSubmitFunnelEvents({ query, completedTurnCount }))
-    startTurn(query, searchContext, intent)
+    startTurn(query, turnSearchContext, intent)
   }
 
   function handleThreadCreated(id: string, turnMeta?: { turnId: string; turnSeq: number }) {

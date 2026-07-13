@@ -1,15 +1,17 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { SearchIcon } from 'lucide-react'
 
 import { ChatComposer } from '@astryxdesign/core/Chat'
 import { Text } from '@astryxdesign/core/Text'
+import { Button } from '@astryxdesign/core/Button'
 
 import { useClientMounted } from '@/hooks/use-client-mounted'
+import { NeedTimingValues, type NeedTiming } from '@/modules/answer/search-context'
 
 import { AeAnswerSuggestions } from './AeSuggestionChips'
 
 export type AeAnswerPromptInputProps = {
-  onSubmit: (query: string) => void
+  onSubmit: (query: string, timing: NeedTiming, timingDate?: string) => void
   defaultValue?: string
   examples?: readonly string[]
   busy?: boolean
@@ -18,6 +20,7 @@ export type AeAnswerPromptInputProps = {
   /** Stable accessible name for the searchbox; defaults to a fixed prompt so it does not shift with the visible placeholder. */
   inputLabel?: string
   ariaLabel?: string
+  submitLabel?: string
 }
 
 const DEFAULT_EXAMPLES: readonly string[] = [
@@ -62,6 +65,7 @@ function AeAnswerPromptInputInner({
   placeholder = 'What do you need done?',
   inputLabel = SEARCHBOX_LABEL,
   ariaLabel = 'Find local service businesses',
+  submitLabel = 'Search',
 }: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples'> & {
   inputId: string
   initialValue: string
@@ -71,7 +75,9 @@ function AeAnswerPromptInputInner({
   const hintId = `${inputId}-hint`
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [value, setValue] = useState(initialValue)
+  const [timing, setTiming] = useState<NeedTiming>('flexible')
   const hydrated = useClientMounted()
+  const [timingDate, setTimingDate] = useState('')
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const showCharacterLimit = charactersRemaining <= 40
   const compact = compactOverride ?? examples.length === 0
@@ -105,13 +111,10 @@ function AeAnswerPromptInputInner({
 
   function submitQuery(query: string) {
     const trimmed = query.slice(0, QUERY_MAX_LENGTH).trim()
-    if (trimmed.length === 0) {
+    if (trimmed.length === 0 || busy || (timing === 'date' && timingDate.length === 0)) {
       return
     }
-    onSubmit(trimmed)
-    if (!busy) {
-      setValue('')
-    }
+    onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -122,8 +125,44 @@ function AeAnswerPromptInputInner({
     submitQuery(value)
   }
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    submitQuery(value)
+  }
+
   return (
-    <div className={`flex w-full min-w-0 flex-col${compact ? ' gap-2' : ' gap-3'}`}>
+    <form className={`flex w-full min-w-0 flex-col${compact ? ' gap-2' : ' gap-3'}`} onSubmit={handleFormSubmit}>
+      <fieldset className="grid gap-2" disabled={busy || !hydrated}>
+        <legend className="text-sm font-medium text-primary">When do you need this?</legend>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="When do you need this?">
+          {NeedTimingValues.map((option) => (
+            <Button
+              key={option}
+              label={timingLabel(option)}
+              type="button"
+              variant={timing === option ? 'primary' : 'secondary'}
+              size="sm"
+              role="radio"
+              aria-checked={timing === option}
+              isDisabled={busy || !hydrated}
+              onClick={() => setTiming(option)}
+            />
+          ))}
+        </div>
+        {timing === 'date' ? (
+          <label className="grid max-w-xs gap-1 text-sm font-medium text-primary">
+            Date
+            <input
+              type="date"
+              value={timingDate}
+              min={localToday()}
+              required
+              className="min-h-11 rounded-md border border-border bg-card px-3 text-primary"
+              onChange={(event) => setTimingDate(event.currentTarget.value)}
+            />
+          </label>
+        ) : null}
+      </fieldset>
       <ChatComposer
         className="w-full min-w-0"
         role="search"
@@ -149,6 +188,7 @@ function AeAnswerPromptInputInner({
             </Text>
           )
         }
+        sendButton={<Button label={busy ? 'Starting your thread' : submitLabel} type="submit" variant="primary" isDisabled={busy || !hydrated || value.trim().length === 0 || (timing === 'date' && timingDate.length === 0)} />}
         input={
           <textarea
             id={inputId}
@@ -179,7 +219,7 @@ function AeAnswerPromptInputInner({
           aria-label="Example queries"
           onSelect={(example) => {
             setValue(example)
-            submitQuery(example)
+            inputRef.current?.focus()
           }}
         />
       ) : null}
@@ -187,6 +227,22 @@ function AeAnswerPromptInputInner({
       <p id={hintId} className={`text-sm leading-snug text-secondary${compact ? ' hidden' : ''}`}>
         Type a real need. Name another place only when you want to search there.
       </p>
-    </div>
+    </form>
   )
+}
+
+function timingLabel(timing: NeedTiming): string {
+  switch (timing) {
+    case 'today': return 'Today'
+    case 'this_week': return 'This week'
+    case 'flexible': return 'Flexible'
+    case 'date': return 'Choose a date'
+  }
+}
+
+function localToday(now = new Date()): string {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }

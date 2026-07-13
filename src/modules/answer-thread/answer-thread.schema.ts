@@ -178,6 +178,8 @@ export type PublicThreadTurn = {
   oneLine: string
   layoutProfile?: AnswerLayoutProfile
   answerCheckSummary?: PublicAnswerCheckSummary
+  timing?: AeSearchContext['timing']
+  timingDate?: string
 }
 
 export type PublicThreadProjection = {

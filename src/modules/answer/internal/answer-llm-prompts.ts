@@ -56,6 +56,13 @@ export function buildToolUseAgentUserPrompt(input: {
   if (searchScope !== undefined) {
     parts.push(searchScope)
   }
+  if (input.searchContext?.timing === 'today') {
+    parts.push('Timing is today. Prioritize candidates with source-backed direct-call details before deeper comparison. Never invent a phone number or imply availability; state when call details are not published.')
+  } else if (input.searchContext?.timing === 'this_week') {
+    parts.push('Timing is this week. Keep that structured timing constraint in the interpreted need and comparison.')
+  } else if (input.searchContext?.timing === 'date' && input.searchContext.timingDate !== undefined) {
+    parts.push(`Timing date: ${input.searchContext.timingDate}. Keep this structured date in the interpreted need and comparison.`)
+  }
   if (input.priorProviders !== undefined && input.priorProviders.length > 0) {
     parts.push(buildCatalogDataBlock(input.priorProviders))
     parts.push('These providers are frozen from the prior turn. You may filter or compare them without calling registry.search again.')

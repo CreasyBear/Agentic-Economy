@@ -1,5 +1,5 @@
+import { useState } from 'react'
 import { MapPin } from 'lucide-react'
-import { Link } from '@tanstack/react-router'
 
 import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
@@ -11,13 +11,14 @@ import { RouterLink } from '@/components/astryx/RouterLink'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { buildProviderPresentation, pillToneForAvailabilityLabel } from '@/lib/ui/provider-presentation'
 import { capabilityStatusToAeStatus, firstRequestModeLabel } from '@/lib/ui/status-presentation'
+import { buildListingTrustProjection, NO_REPLY_HISTORY, type TrustFact } from '@/lib/ui/trust-projection'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicRouteServiceContract } from '@/modules/catalog/public'
 import type { PublicBusinessCatalogApiDto } from '@/modules/registry/public'
 
 export type AeProviderCardProps =
   | { variant: 'answer'; source: AnswerSource; threadId?: string }
-  | { variant: 'registry'; item: PublicBusinessCatalogApiDto }
+  | { variant: 'registry'; item: PublicBusinessCatalogApiDto; onView?: () => void }
   | { variant: 'capability'; service: PublicRouteServiceContract }
 
 export function AeProviderCard(props: AeProviderCardProps) {
@@ -25,7 +26,7 @@ export function AeProviderCard(props: AeProviderCardProps) {
     return <AeProviderCardAnswer source={props.source} {...(props.threadId === undefined ? {} : { threadId: props.threadId })} />
   }
   if (props.variant === 'registry') {
-    return <AeProviderCardRegistry item={props.item} />
+    return <AeProviderCardRegistry item={props.item} {...(props.onView === undefined ? {} : { onView: props.onView })} />
   }
   return <AeProviderCardCapability service={props.service} />
 }
@@ -132,61 +133,86 @@ function answerCardGrounding(source: AnswerSource): string | undefined {
 }
 
 
-function AeProviderCardRegistry({ item }: { item: PublicBusinessCatalogApiDto }) {
+function AeProviderCardRegistry({ item, onView }: { item: PublicBusinessCatalogApiDto; onView?: () => void }) {
   const presentation = buildProviderPresentation(item, { serviceChipLimit: 3 })
-  const summary =
-    presentation.primaryServiceSummary ??
-    item.services[0]?.summary ??
-    'Published details for customers.'
-  const badgeVariant = badgeVariantForTone(pillToneForAvailabilityLabel(presentation.availabilityLabel))
+  const trust = buildListingTrustProjection(item)
+  const [copied, setCopied] = useState(false)
+  const location = [item.suburb.trim(), item.stateTerritory.trim()].filter(Boolean).join(', ') || 'Location not published here'
+  const serviceArea = trustFactLabel(trust.serviceArea)
+  const hours = trustFactLabel(trust.hours)
+  const phone = trustFactLabel(trust.phone)
+
+  async function copyDetails() {
+    const details = [
+      item.name,
+      item.category,
+      `Location: ${location}`,
+      `Service area: ${serviceArea}`,
+      `Phone: ${phone}`,
+      `Page: ${window.location.origin}/${item.slug}`,
+    ].join('\n')
+
+    try {
+      await navigator.clipboard.writeText(details)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
 
   return (
     <Card
-      padding={0}
-      className="group relative grid h-full overflow-hidden bg-card shadow-low motion-safe:transition motion-safe:duration-base motion-safe:ease-standard hover:shadow-high motion-safe:hover:lift focus-within:shadow-high"
+      padding={4}
+      className="grid h-full content-start gap-4"
       data-variant="registry"
       aria-labelledby={`registry-card-${item.slug}`}
     >
-      <figure className="aspect-video overflow-hidden bg-accent-muted">
-        <img
-          className="h-full w-full object-cover"
-          src={presentation.image.url}
-          alt={presentation.image.alt}
-          onError={(event) => {
-            const image = event.currentTarget
-            if (image.dataset.fallback === '1') {
-              image.style.visibility = 'hidden'
-              return
-            }
-            image.dataset.fallback = '1'
-            image.src = '/images/illustration/cat-default.png'
-          }}
-          loading="lazy"
+      <div className="grid gap-1">
+        <Text type="supporting" color="secondary" display="block">{item.category}</Text>
+        <Text id={`registry-card-${item.slug}`} type="large" weight="semibold" color="primary" display="block">{item.name}</Text>
+        <span className="flex items-center gap-1">
+          <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
+          <Text type="supporting" color="secondary">{location}</Text>
+        </span>
+      </div>
+
+      <TokenList labels={presentation.serviceChips.map((service) => service.label)} />
+      <ProviderFacts facts={[
+        { term: 'Service area', description: serviceArea },
+        { term: 'Hours', description: hours },
+        { term: 'Phone', description: phone },
+        { term: 'Reply posture', description: trust.replyPosture.kind === 'observed' ? NO_REPLY_HISTORY : trust.replyPosture.label },
+      ]} />
+      <div className="mt-auto grid grid-cols-1 gap-2 border-t border-border pt-4 sm:grid-cols-2" aria-label="Research actions">
+        {trust.phone.kind === 'published' ? (
+          <Button
+            label={`Call ${trust.phone.value}`}
+            variant="secondary"
+            href={`tel:${trust.phone.value.replace(/[^+\d]/g, '')}`}
+            className="min-h-11 w-full"
+          />
+        ) : null}
+        <Button
+          label={`View ${item.name}`}
+          variant="secondary"
+          href={`/${item.slug}?from=registry`}
+          className="min-h-11 w-full"
+          {...(onView === undefined ? {} : { onClick: onView })}
         />
-      </figure>
-      <div className="grid content-start gap-4 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <Text id={`registry-card-${item.slug}`} type="large" weight="semibold" color="primary" display="block">{item.name}</Text>
-            <span className="mt-0.5 flex items-center gap-1">
-              <MapPin aria-hidden="true" className="size-3.5 shrink-0 text-secondary" strokeWidth={1.75} />
-              <Text type="supporting" color="secondary">{item.category} · {presentation.locationLabel}</Text>
-            </span>
-          </div>
-          <Badge label={presentation.availabilityLabel} variant={badgeVariant} />
-        </div>
-        <Text color="secondary" display="block" className="line-clamp-2">{summary}</Text>
-        {presentation.trustCue.length > 0 ? <Text type="supporting" color="secondary" display="block">{presentation.trustCue}</Text> : null}
-        <TokenList labels={presentation.serviceChips.map((service) => service.label)} />
-        <ProviderFacts facts={[{ term: 'Service area', description: presentation.serviceArea }, { term: 'Response', description: presentation.responseFallbackLabel }]} />
-        <Text type="supporting" color="primary" display="block"><strong>Best next step:</strong> {presentation.nextStepLabel}</Text>
-        <div className="mt-1 flex flex-wrap items-center gap-3 border-t border-border pt-4">
-          <Link to="/$slug" params={{ slug: item.slug }} search={{ from: 'registry' }} aria-label={`View ${item.name}`} className="text-sm font-semibold text-accent underline-offset-4 after:absolute after:inset-0 hover:underline">View details</Link>
-          <a className="relative z-10 ml-auto text-sm text-secondary underline-offset-4 hover:underline" href={`/api/businesses/${encodeURIComponent(item.slug)}`}>Get as agent JSON</a>
-        </div>
+        <Button
+          label={copied ? 'Details copied' : 'Copy details'}
+          variant="secondary"
+          type="button"
+          className="min-h-11 w-full"
+          onClick={() => { void copyDetails() }}
+        />
       </div>
     </Card>
   )
+}
+
+function trustFactLabel(fact: TrustFact): string {
+  return fact.kind === 'published' ? fact.value : fact.label
 }
 
 function AeProviderCardCapability({ service }: { service: PublicRouteServiceContract }) {

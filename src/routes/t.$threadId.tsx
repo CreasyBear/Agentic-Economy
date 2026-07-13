@@ -3,12 +3,12 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 
 import { AeChat } from '@/components/ae/chat/AeChat'
-import { getPublicThreadProjection } from '@/modules/answer-thread/public'
-import { buildPublicThreadSeo } from '@/modules/seo/public'
+import { getPublicThreadProjection, type PublicThreadProjection } from '@/modules/answer-thread/public'
+import { buildPublicThreadSeo, type PublicThreadSeoContract } from '@/modules/seo/public'
 
 type ThreadRouteReadback = {
-  projection: Awaited<ReturnType<typeof getPublicThreadProjection>>
-  seo: ReturnType<typeof buildPublicThreadSeo> | undefined
+  projection: PublicThreadProjection | null
+  seo: PublicThreadSeoContract | undefined
 }
 
 const threadRouteParamsSchema = z.object({

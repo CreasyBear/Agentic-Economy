@@ -2,6 +2,9 @@ import { z } from 'zod'
 
 const AeSearchModeValues = ['near_me', 'whole_catalogue'] as const
 export type AeSearchMode = (typeof AeSearchModeValues)[number]
+export const NeedTimingValues = ['today', 'this_week', 'flexible', 'date'] as const
+export type NeedTiming = (typeof NeedTimingValues)[number]
+
 
 const AeSearchLocationSourceValues = [
   'default',
@@ -23,6 +26,11 @@ export const AeSearchContextSchema = z.object({
   mode: z.enum(AeSearchModeValues),
   location: AeSearchLocationSchema.optional(),
   allowOutsideArea: z.boolean().optional(),
+  timing: z.enum(NeedTimingValues).optional(),
+  timingDate: z.string().date().optional(),
+}).refine((context) => context.timing === 'date' ? context.timingDate !== undefined : context.timingDate === undefined, {
+  message: 'A timing date is required only for date timing.',
+  path: ['timingDate'],
 })
 
 export type AeSearchContext = z.infer<typeof AeSearchContextSchema>
@@ -74,5 +82,7 @@ export function stableAeSearchContextKey(context: AeSearchContext | undefined): 
           countryCode: context.location.countryCode,
           source: context.location.source,
         },
+    timing: context.timing,
+    timingDate: context.timingDate,
   })
 }

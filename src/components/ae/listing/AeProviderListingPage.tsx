@@ -1,4 +1,5 @@
 import { ArrowLeftIcon } from 'lucide-react'
+import { useState } from 'react'
 import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
@@ -13,7 +14,8 @@ import { AeProtectedByAe } from '@/components/ae/artifacts/AeProtectedByAe'
 import { AeAgentJsonAffordance } from '@/components/ae/landing/AeAgentJsonAffordance'
 import { RouterLink } from '@/components/astryx/RouterLink'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
-import { buildProviderPresentation, pillToneForAvailabilityLabel, type ProviderPresentation } from '@/lib/ui/provider-presentation'
+import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
+import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
 import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
 import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
@@ -27,6 +29,8 @@ export type AeProviderListingPageProps = {
 
 const ownerReplyStamp = 'owner confirms on reply'
 
+const peerActionClassName = 'min-h-11 w-full sm:w-auto'
+
 export function AeProviderListingPage({
   catalog,
   inquiryAffordance,
@@ -35,54 +39,24 @@ export function AeProviderListingPage({
   backThreadId,
 }: AeProviderListingPageProps) {
   const presentation = buildProviderPresentation(catalog)
+  const trust = buildListingTrustProjection(catalog)
   const officeAddress = readOfficeAddress(catalog)
-  const availabilityVariant = badgeVariantForTone(pillToneForAvailabilityLabel(presentation.availabilityLabel))
   const inquiryHref = appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backFrom, backThreadId)
-  const hasResponseCue = presentation.responseLabel.length > 0
-  const hasTrustNote = presentation.trustCue.length > 0 && presentation.trustCue !== presentation.responseLabel
-
   return (
     <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10">
       <nav aria-label="Return to your previous view">
         <ListingBackLink {...(backFrom === undefined ? {} : { from: backFrom })} {...(backThreadId === undefined ? {} : { threadId: backThreadId })} />
       </nav>
 
+      <ListingFirstScreen
+        catalog={catalog}
+        trust={trust}
+        inquiryAffordance={inquiryAffordance}
+        inquiryHref={inquiryHref}
+      />
+
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
         <div className="grid gap-8">
-          <Card padding={6} className="overflow-hidden" aria-labelledby="provider-listing-title">
-            <VStack gap={5}>
-              <HStack vAlign="center" gap={2} wrap="wrap">
-                <img src="/brand/logo/ae-seal.svg" alt="" className="size-6 shrink-0" />
-                <Text type="label" color="secondary" weight="semibold" className="font-mono text-accent">
-                  Listed on Agentic Economy
-                </Text>
-              </HStack>
-
-              <VStack gap={2}>
-                <Heading id="provider-listing-title" level={1} className="text-balance text-5xl leading-none tracking-tight md:text-6xl">
-                  {catalog.name}
-                </Heading>
-                <Text type="large" color="secondary" display="block" className="max-w-2xl text-pretty">
-                  {catalog.category} in {presentation.locationLabel}
-                </Text>
-              </VStack>
-
-              <HStack vAlign="center" gap={3} wrap="wrap">
-                <Badge label={presentation.availabilityLabel} variant={availabilityVariant} />
-                {hasResponseCue ? <Badge label={presentation.responseLabel} variant="neutral" /> : null}
-                {hasTrustNote ? (
-                  <Text type="supporting" color="secondary">
-                    {presentation.trustCue}
-                  </Text>
-                ) : null}
-              </HStack>
-
-              <Text type="supporting" color="secondary" display="block" className="max-w-3xl text-pretty">
-                Services and contact details from {catalog.name}. Timing, quote, and whether they can take the work come from the business reply.
-              </Text>
-            </VStack>
-          </Card>
-
           <ListingPhotosSection catalog={catalog} presentation={presentation} />
 
           <Grid columns={{ minWidth: 300 }} gap={4}>
@@ -100,15 +74,17 @@ export function AeProviderListingPage({
             <VStack gap={4}>
               <div>
                 <Text type="large" weight="semibold" color="primary" display="block">
-                  {inquiryAffordance.kind === 'available' ? `Tell ${catalog.name} about the job.` : 'Contact option'}
+                  Your request
                 </Text>
                 <Text color="secondary" display="block">
-                  {inquiryAffordance.kind === 'available'
-                    ? 'The business can reply with timing, quote, and whether they can take the work.'
-                    : inquiryAffordance.reason}
+                  {replyPostureLabel(trust.replyPosture)}
                 </Text>
               </div>
-              {inquiryAffordance.kind === 'available' ? <Button label={inquiryAffordance.label} variant="primary" href={inquiryHref} /> : null}
+              {inquiryAffordance.kind === 'available' ? (
+                <Button label="Ask this business" variant="secondary" size="lg" href={inquiryHref} className={peerActionClassName} />
+              ) : (
+                <Text color="secondary" display="block">This business hasn’t joined AE yet</Text>
+              )}
               <AeProtectedByAe />
             </VStack>
           </Card>
@@ -134,6 +110,120 @@ export function AeProviderListingPage({
       </div>
     </article>
   )
+}
+
+export function ListingFirstScreen({
+  catalog,
+  trust,
+  inquiryAffordance,
+  inquiryHref,
+}: {
+  catalog: PublicRouteCatalogContract
+  trust: ListingTrustProjection
+  inquiryAffordance: PublicInquiryAffordance
+  inquiryHref: string
+}) {
+  const [detailsCopied, setDetailsCopied] = useState(false)
+  const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
+
+  async function copyDetails() {
+    const details = [
+      catalog.name,
+      catalog.category,
+      `Phone: ${trustFactText(trust.phone)}`,
+      `Hours: ${trustFactText(trust.hours)}`,
+      `Service area: ${trustFactText(trust.serviceArea)}`,
+    ].join('\n')
+
+    try {
+      await navigator.clipboard.writeText(details)
+      setDetailsCopied(true)
+      window.setTimeout(() => setDetailsCopied(false), 1600)
+    } catch {
+      window.prompt('Copy business details:', details)
+    }
+  }
+
+  return (
+    <Card padding={6} className="overflow-hidden" aria-labelledby="provider-listing-title">
+      <VStack gap={5}>
+        <HStack vAlign="center" gap={2} wrap="wrap">
+          <img src="/brand/logo/ae-seal.svg" alt="" className="size-6 shrink-0" />
+          <Text type="label" color="secondary" weight="semibold" className="font-mono text-accent">
+            Listed on Agentic Economy
+          </Text>
+        </HStack>
+
+        <VStack gap={2}>
+          <Heading id="provider-listing-title" level={1} className="text-balance text-4xl leading-none tracking-tight md:text-6xl">
+            {catalog.name}
+          </Heading>
+          <Text type="large" color="secondary" display="block">{catalog.category}</Text>
+        </VStack>
+
+        <dl className="grid gap-3 sm:grid-cols-3" aria-label="Published business details">
+          <TrustFactRow label="Phone" fact={trust.phone} />
+          <TrustFactRow label="Hours" fact={trust.hours} />
+          <TrustFactRow label="Service area" fact={trust.serviceArea} />
+        </dl>
+
+        <Text color="primary" display="block" className="max-w-3xl text-pretty">{trust.explainer}</Text>
+
+        <VStack gap={2}>
+          <Text type="supporting" color="secondary" weight="semibold" display="block">
+            {replyPostureLabel(trust.replyPosture)}
+          </Text>
+          {phone === undefined ? null : (
+            <Text type="supporting" color="secondary" display="block">
+              Need someone now? <a className="underline underline-offset-4" href={`tel:${phone}`}>Call {phone}</a>
+            </Text>
+          )}
+        </VStack>
+
+        <div className="grid gap-3 sm:flex sm:flex-wrap" role="group" aria-label="Actions for this business">
+          {phone === undefined ? null : (
+            <div data-peer-action="call" data-variant="secondary">
+              <Button label={`Call ${phone}`} variant="secondary" size="lg" href={`tel:${phone}`} className={peerActionClassName} />
+            </div>
+          )}
+          <div data-peer-action="copy-details" data-variant="secondary">
+            <Button
+              type="button"
+              label={detailsCopied ? 'Details copied' : 'Copy details'}
+              variant="secondary"
+              size="lg"
+              className={peerActionClassName}
+              onClick={copyDetails}
+            />
+          </div>
+          {inquiryAffordance.kind === 'available' ? (
+            <div data-peer-action="ask" data-variant="secondary">
+              <Button label="Ask this business" variant="secondary" size="lg" href={inquiryHref} className={peerActionClassName} />
+            </div>
+          ) : (
+            <Text color="secondary" display="block">This business hasn’t joined AE yet</Text>
+          )}
+        </div>
+      </VStack>
+    </Card>
+  )
+}
+
+function TrustFactRow({ label, fact }: { label: string; fact: TrustFact }) {
+  return (
+    <div className="grid min-w-0 gap-1">
+      <dt><Text type="supporting" color="secondary" weight="semibold">{label}</Text></dt>
+      <dd className="m-0 break-words"><Text color="primary">{trustFactText(fact)}</Text></dd>
+    </div>
+  )
+}
+
+function trustFactText(fact: TrustFact): string {
+  return fact.kind === 'published' ? fact.value : fact.label
+}
+
+function replyPostureLabel(posture: ReplyPosture): string {
+  return posture.kind === 'observed' ? NO_REPLY_HISTORY : posture.label
 }
 
 function CapabilityCardsSection({
