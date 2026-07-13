@@ -1,5 +1,6 @@
 import {
   defineCapabilityContract,
+  sameCapabilityContractRef,
   type CapabilityContract,
   type CapabilityContractDocument,
   type CapabilityContractRef,
@@ -65,10 +66,4 @@ export function decodeDurableCapabilityContract(record: DurableCapabilityContrac
     return { kind: 'unavailable', reason: 'integrity_failure' }
   }
   return { kind: 'found', contract: encoded.contract, registeredAt: record.registeredAt }
-}
-
-export function sameCapabilityContractRef(left: CapabilityContractRef, right: CapabilityContractRef): boolean {
-  return left.capabilityId === right.capabilityId
-    && left.version === right.version
-    && left.contractDigest === right.contractDigest
 }

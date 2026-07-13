@@ -3,9 +3,9 @@ import { v } from 'convex/values'
 import {
   decodeDurableCapabilityContract,
   encodeCapabilityContractDocumentJson,
-  sameCapabilityContractRef,
   type DurableCapabilityContract,
 } from '@/modules/capability-contract-registry/public'
+import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
 import { stableHash, stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import { internalQuery, mutation, type MutationCtx, type QueryCtx } from './_generated/server'

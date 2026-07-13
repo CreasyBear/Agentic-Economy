@@ -57,6 +57,7 @@ describe('function-agnostic capability contract', () => {
         outputSchema: objectSchema({ reservationId: { type: 'string' }, status: { type: 'string' } }, ['reservationId', 'status']),
         customerAnnotations: [
           { annotationId: 'time', document: 'input', pointer: '/startsAt', label: 'Start time', role: 'constraint' },
+          { annotationId: 'attendee', document: 'input', pointer: '/attendeeEmail', label: 'Attendee email', role: 'commitment' },
           { annotationId: 'reservation', document: 'output', pointer: '/reservationId', label: 'Reservation', role: 'completion_evidence' },
         ],
         dataUse: [
@@ -196,21 +197,42 @@ describe('function-agnostic capability contract', () => {
     expect(contract.customerAnnotations[0]?.pointer).toBe('/id')
   })
 
-  it('resolves customer pointers through bounded array items', () => {
+  it('projects bounded array inputs without requiring item-specific facts', () => {
     const contract = defineCapabilityContract({
       ...minimalContract(),
       inputSchema: objectSchema({
         records: { type: 'array', maxItems: 10, items: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
       }, ['records']),
       customerAnnotations: [
-        { annotationId: 'identifier', document: 'input', pointer: '/records/0/id', label: 'First identifier', role: 'request' },
+        { annotationId: 'records', document: 'input', pointer: '/records', label: 'Records', role: 'request' },
         { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
       ],
       dataUse: [{ effectId: 'records_release', inputPointer: '/records', classification: 'personal', phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['return_requested_results'] }],
       effects: [{ effectId: 'records_release', class: 'data_release', authority: 'mandate_or_explicit', reversibility: 'irreversible' }],
     })
 
-    expect(contract.customerAnnotations[0]?.pointer).toBe('/records/0/id')
+    expect(contract.customerAnnotations[0]?.pointer).toBe('/records')
+  })
+
+  it('rejects non-canonical JSON Pointer escapes and array-index aliases', () => {
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      customerAnnotations: [
+        { annotationId: 'identifier', document: 'input', pointer: '/id~2alias', label: 'Identifier', role: 'request' },
+        { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
+      ],
+    })).toThrowError('capability_contract_invalid')
+
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      inputSchema: objectSchema({ records: { type: 'array', items: { type: 'string' } } }, ['records']),
+      customerAnnotations: [
+        { annotationId: 'record', document: 'input', pointer: '/records/01', label: 'Record', role: 'request' },
+        { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
+      ],
+      dataUse: [{ effectId: 'records_release', inputPointer: '/records', classification: 'personal', phase: 'execution', recipient: { kind: 'selected_binding' }, purposes: ['return_requested_results'] }],
+      effects: [{ effectId: 'records_release', class: 'data_release', authority: 'mandate_or_explicit', reversibility: 'irreversible' }],
+    })).toThrowError('capability_customer_annotation_pointer_invalid')
   })
 
   it('rejects duplicate semantic identifiers', () => {
