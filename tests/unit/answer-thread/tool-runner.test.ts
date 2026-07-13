@@ -49,6 +49,64 @@ describe('runAnswerToolCall', () => {
     }
   })
 
+  it.each([
+    {
+      query: 'hot water system burst in rental, need plumber today Joondalup',
+      expectedSlug: 'joondalup-rapid-plumbing',
+    },
+    {
+      query: 'electrician switchboard upgrade Fremantle',
+      expectedSlug: 'fremantle-coastal-electrical',
+    },
+  ])('recalls $expectedSlug from the shared local-e2e source for a detailed trade query', async ({
+    query,
+    expectedSlug,
+  }) => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const result = await runAnswerToolCall({
+        toolId: 'registry.search',
+        input: { query },
+        turnId: TURN_ID,
+        seq: BASE_SEQ,
+      })
+
+      expect(result.record.status).toBe('complete')
+      expect(result.providers.map((provider) => provider.slug)).toEqual([expectedSlug])
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
+  })
+
+  it('returns no provider for a plumbing query naming an uncovered suburb', async () => {
+    const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+
+    try {
+      const result = await runAnswerToolCall({
+        toolId: 'registry.search',
+        input: { query: 'plumber Kalamunda WA' },
+        turnId: TURN_ID,
+        seq: BASE_SEQ,
+      })
+
+      expect(result.record.status).toBe('complete')
+      expect(result.providers).toEqual([])
+    } finally {
+      if (previousLocalRegistry === undefined) {
+        delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+      } else {
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalRegistry
+      }
+    }
+  })
+
   it('keeps the registry literal: a misspelled suburb yields an empty complete result', async () => {
     const previousLocalRegistry = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'

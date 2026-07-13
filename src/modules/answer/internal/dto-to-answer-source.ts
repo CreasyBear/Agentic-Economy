@@ -64,6 +64,7 @@ export function toAnswerSource(
         : { responseTimeMinutes: dto.responseTimeMinutes }),
     }),
     ...(primaryPhoto === undefined ? {} : { photoUrl: primaryPhoto.url }),
+    ...(dto.publishedPhone === undefined ? {} : { publishedPhone: dto.publishedPhone }),
     freshnessLabel: plainFreshnessLabel(dto.updatedAt),
     nextStepLabel:
       firstRequestMode === 'inquiry_available'

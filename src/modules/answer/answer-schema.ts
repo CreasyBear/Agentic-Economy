@@ -16,6 +16,7 @@ export const AnswerSourceSchema = z.object({
   trustCue: z.string(),
   freshnessLabel: z.string().optional(),
   photoUrl: z.string().optional(),
+  publishedPhone: z.string().optional(),
   nextStepLabel: z.string(),
   detailUrl: z.string(),
   inquiryUrl: z.string().optional(),

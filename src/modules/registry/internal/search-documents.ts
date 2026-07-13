@@ -194,8 +194,16 @@ export function documentMatchesRegistryQuery(
     return false
   }
 
+  const stateKey = normalizePlaceKey(document.stateTerritory)
+  const queryNamesDocumentPlace = document.placeKeys.some((placeKey) =>
+    placeKey !== stateKey && ` ${query} `.includes(` ${placeKey} `),
+  )
   const location = resolveRegistrySearchLocation(input)
-  if (location !== undefined && !document.placeKeys.includes(location.key)) {
+  if (
+    location !== undefined &&
+    (location.source === 'input' || !queryNamesDocumentPlace) &&
+    !document.placeKeys.includes(location.key)
+  ) {
     return false
   }
 
@@ -203,6 +211,10 @@ export function documentMatchesRegistryQuery(
     .split(' ')
     .filter((token) => !SEARCH_STOP_WORDS.has(token))
     .map(normalizeSearchToken)
+  const serviceIntentTokens = tokens.filter((token) => token === 'plumbing' || token === 'electrical')
+  if (serviceIntentTokens.length > 0) {
+    return serviceIntentTokens.some((token) => document.searchText.includes(token))
+  }
   return tokens.every((token) => document.searchText.includes(token))
 }
 
@@ -221,6 +233,9 @@ export function normalizePlaceKey(value: string): string {
 function normalizeSearchToken(token: string): string {
   if (token === 'plumber' || token === 'plumbers') {
     return 'plumbing'
+  }
+  if (token === 'electrician' || token === 'electricians') {
+    return 'electrical'
   }
   return token
 }

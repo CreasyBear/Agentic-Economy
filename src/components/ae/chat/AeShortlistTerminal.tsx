@@ -34,6 +34,11 @@ export function AeShortlistTerminal({
   const [closed, setClosed] = useState(false)
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false)
   const firstBusiness = providers.at(0)
+  const publishedPhone = firstBusiness?.publishedPhone
+  const dialNumber = publishedPhone?.replace(/[^+\d]/g, '')
+  const callHref = dialNumber !== undefined && /\d{6,}/.test(dialNumber)
+    ? `tel:${dialNumber}`
+    : undefined
   const semanticRevision = shortlistSemanticRevision(revision, providers)
   if (closed) {
     return (
@@ -82,10 +87,14 @@ export function AeShortlistTerminal({
         />
         <Button label="Open" variant="secondary" className="min-h-11" href={firstBusiness?.detailUrl ?? '/registry'} />
         <Button label="Copy" type="button" variant="secondary" className="min-h-11" isDisabled={providers.length === 0} onClick={openExportPreview} />
-        <Button label="Call" type="button" variant="secondary" className="min-h-11" isDisabled />
+        {callHref === undefined
+          ? <Button label="Call" type="button" variant="secondary" className="min-h-11" isDisabled />
+          : <Button label={`Call ${publishedPhone}`} variant="secondary" className="min-h-11" href={callHref} />}
         <Button label="Close" type="button" variant="ghost" className="min-h-11" onClick={() => setClosed(true)} />
       </div>
-      <Text type="supporting" color="secondary">Call is unavailable until a business publishes a phone number here.</Text>
+      {callHref === undefined
+        ? <Text type="supporting" color="secondary">Call is unavailable until a business publishes a phone number here.</Text>
+        : <Text type="supporting" color="secondary">Calls go directly to the published business number.</Text>}
       <AeExportPreview
         isOpen={exportPreviewOpen}
         onOpenChange={setExportPreviewOpen}
@@ -142,6 +151,8 @@ function orderProviders(providers: readonly AnswerSource[], timing: NeedTiming |
 }
 
 function hasActionableContact(provider: AnswerSource): boolean {
-  return typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0
+  const dialNumber = provider.publishedPhone?.replace(/[^+\d]/g, '')
+  return (dialNumber !== undefined && /\d{6,}/.test(dialNumber)) ||
+    (typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0)
 }
 

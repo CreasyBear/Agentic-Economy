@@ -105,6 +105,7 @@ export type AnswerSource = {
   trustCue: string
   freshnessLabel?: string
   photoUrl?: string
+  publishedPhone?: string
   nextStepLabel: string
   detailUrl: string
   inquiryUrl?: string

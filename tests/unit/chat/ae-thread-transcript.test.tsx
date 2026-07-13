@@ -70,12 +70,27 @@ describe('AeThreadTranscript', () => {
     expect(within(actions).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(first.detailUrl)
     expect(within(actions).getByRole('button', { name: 'Copy' }).hasAttribute('disabled')).toBe(false)
     expect(within(actions).getByRole('button', { name: 'Call' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('Call is unavailable until a business publishes a phone number here.')).toBeTruthy()
 
     fireEvent.click(changeCriteria)
     expect(selectedQuery).toBe('Change my shortlist criteria')
     expect(screen.queryByText('Send request')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Continue this thread' })).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
+  it('renders a published phone as a sanitized direct-call link', () => {
+    render(
+      <AeThreadTranscript
+        projection={projectionWithShortlist([provider({ publishedPhone: '0412 345 678' })], 'flexible')}
+      />,
+    )
+
+    const actions = screen.getByLabelText('Shortlist actions')
+    expect(
+      within(actions).getByRole('link', { name: 'Call 0412 345 678' }).getAttribute('href'),
+    ).toBe('tel:0412345678')
+    expect(screen.getByText('Calls go directly to the published business number.')).toBeTruthy()
   })
 
   it('previews the exact shortlist payload before copying it', async () => {
