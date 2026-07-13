@@ -7,14 +7,18 @@ import schema from '../../convex/schema'
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
 
-describe('sandbox supply registration', () => {
-  it('seeds two published businesses, one immutable contract, and two eligible bindings through normal Convex writes', async () => {
+describe('V2-only sandbox supply registration', () => {
+  it('does not dual-write V1 contracts or bindings while seeding the V2 registrations', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const replay = await backend.mutation(internal.devSeed.seedDevCatalog, {})
 
-    expect(first.sandboxBindings).toEqual(['sandbox.option.one:v1', 'sandbox.option.two:v1'])
-    expect(replay.sandboxBindings).toEqual(first.sandboxBindings)
+    expect(first).not.toHaveProperty('sandboxBindings')
+    expect(replay).toEqual(first)
+    expect(first.sandboxV2Bindings).toEqual([
+      'binding:sandbox-option-one:http-json',
+      'binding:sandbox-option-two:http-json',
+    ])
     const state = await backend.run(async (ctx) => {
       const businesses = await Promise.all(['sandbox-option-one', 'sandbox-option-two'].map(async (slug) => await ctx.db
         .query('businesses').withIndex('by_slug', (query) => query.eq('slug', slug)).unique()))
@@ -26,16 +30,11 @@ describe('sandbox supply registration', () => {
       { name: 'Sandbox Option One', publicStatus: 'published', claimStatus: 'published' },
       { name: 'Sandbox Option Two', publicStatus: 'published', claimStatus: 'published' },
     ])
-    expect(state.contracts).toHaveLength(1)
-    expect(state.contracts[0]).toMatchObject({ capabilityContractId: 'sandbox.option.quote:v1', status: 'active' })
-    expect(state.bindings).toHaveLength(2)
-    expect(state.bindings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ bindingId: 'sandbox.option.one:v1', admission: 'admitted', conformance: 'conformant' }),
-      expect.objectContaining({ bindingId: 'sandbox.option.two:v1', admission: 'admitted', conformance: 'conformant' }),
-    ]))
+    expect(state.contracts).toEqual([])
+    expect(state.bindings).toEqual([])
   })
 
-  it('does not turn a published listing without a capability binding into supply', async () => {
+  it('does not expose any legacy eligible supply after the V2-only seed', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await backend.run(async (ctx) => {
@@ -48,10 +47,6 @@ describe('sandbox supply registration', () => {
     })
 
     const eligible = await backend.query(internal.routingKernelBindings.listEligible, { networkId: 'ae:public' })
-    expect(eligible).toHaveLength(2)
-    expect(eligible.map((binding) => binding.businessId)).not.toContain('sandbox-listing-only')
-    expect(eligible.map((binding) => binding.bindingId).sort()).toEqual([
-      'sandbox.option.one:v1', 'sandbox.option.two:v1',
-    ])
+    expect(eligible).toEqual([])
   })
 })

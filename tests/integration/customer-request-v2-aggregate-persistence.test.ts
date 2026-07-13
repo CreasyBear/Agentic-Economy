@@ -205,14 +205,21 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     })).resolves.toEqual({
       kind: 'needs_attention', reason: 'historical_request_resubmit_required',
     })
-    const v2Rows = await backend.run(async (ctx) => ({
+    const persisted = await backend.run(async (ctx) => ({
+      historicalHeads: await ctx.db.query('customerRequestHeads').collect(),
       heads: await ctx.db.query('customerRequestV2Heads').collect(),
       revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
       commands: await ctx.db.query('customerRequestV2Commands').collect(),
       preparations: await ctx.db.query('customerRequestV2ActionPreparations').collect(),
       preparationCommands: await ctx.db.query('customerRequestV2PreparationCommands').collect(),
     }))
-    expect(v2Rows).toEqual({ heads: [], revisions: [], commands: [], preparations: [], preparationCommands: [] })
+    expect(persisted).toEqual({
+      historicalHeads: [expect.objectContaining({
+        requestId: 'request:v1:historical', principalId: 'principal:v1',
+        delegatedAgentId: 'agent:v1', currentRevision: 1, createdAt: 1, updatedAt: 1,
+      })],
+      heads: [], revisions: [], commands: [], preparations: [], preparationCommands: [],
+    })
   })
 })
 

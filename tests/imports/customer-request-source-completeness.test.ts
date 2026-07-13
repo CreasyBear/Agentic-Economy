@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { findFiles } from '@/lib/ui/contract-scans'
@@ -97,6 +97,36 @@ describe('CustomerRequest source completeness', () => {
     const persistence = readFileSync('convex/customerRequestV2.ts', 'utf8')
     expect(persistence).toContain('historical_request_resubmit_required')
     expect(persistence).not.toMatch(/parseInt|Number\s*\([^)]*version/)
+  })
+
+  it('keeps historical V1 Request state out of the deployed write API', () => {
+    const retiredConvexModules = [
+      'convex/customerRequestCapabilityContracts.ts',
+      'convex/customerRequestCapabilityContractRegistryAdapter.ts',
+      'convex/customerRequestCompilationStoreAdapter.ts',
+      'convex/customerRequestStoreAdapter.ts',
+      'convex/customerRequests.ts',
+      'convex/customerRequestPreparationAuthority.ts',
+      'convex/customerRequestPreparationAuthorityStoreAdapter.ts',
+    ]
+    for (const file of retiredConvexModules) expect(existsSync(file), `${file} remains deployable`).toBe(false)
+
+    const generatedApi = readFileSync('convex/_generated/api.d.ts', 'utf8')
+    for (const moduleName of [
+      'customerRequestCapabilityContracts',
+      'customerRequestCapabilityContractRegistryAdapter',
+      'customerRequestCompilationStoreAdapter',
+      'customerRequestStoreAdapter',
+      'customerRequests',
+      'customerRequestPreparationAuthority',
+      'customerRequestPreparationAuthorityStoreAdapter',
+    ]) expect(generatedApi, `${moduleName} remains in the deployed Convex API`).not.toContain(moduleName)
+
+    const devSeed = readFileSync('convex/devSeed.ts', 'utf8')
+    expect(devSeed).not.toMatch(
+      /registerSandboxSupply|from ['"]\.\/customerRequestCapabilityContracts['"]|from ['"]\.\/routingKernelBindings['"]|\bsandboxBindings\b/,
+    )
+    expect(devSeed).toMatch(/registerSandboxV2Supply|sandboxV2Bindings/)
   })
 
   it('keeps routes and UI on the shared projection instead of rebuilding product state', () => {
