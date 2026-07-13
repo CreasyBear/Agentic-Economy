@@ -31,6 +31,18 @@ describe('routing authority retirement', () => {
 
     expect(matches).toEqual([])
   })
+
+  it('keeps the public Convex router outside the legacy selector and dispatch graph', () => {
+    const source = readFileSync(join(root, 'convex/http.ts'), 'utf8')
+    const retirement = readFileSync(join(root, 'src/modules/routing-kernel/retirement.ts'), 'utf8')
+
+    expect(source).toContain("from '@/modules/routing-kernel/retirement'")
+    expect(retirement).toContain('routing_v1_retired')
+    expect(retirement).toContain('/api/v1/requests')
+    expect(source).not.toMatch(
+      /createRegisteredRoutingKernel|routingDependencies|routingKernelTransport|routingKernelBindings|routingKernelAgentGrants|handleRoutingKernel(?:Http|Mcp)Request/,
+    )
+  })
 })
 
 function sourceFiles(base: string, directories: readonly string[]): string[] {

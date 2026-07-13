@@ -1,6 +1,5 @@
 export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: string; routingBaseUrl?: string }): string {
   const base = trimTrailingSlash(options.canonicalBaseUrl)
-  const routingBase = trimTrailingSlash(options.routingBaseUrl ?? options.canonicalBaseUrl)
   return [
     '# Agentic Economy — assistant setup',
     '',
@@ -40,10 +39,6 @@ export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: strin
     '',
     'Business listings are supply facts, not routing or execution authority.',
     'Never choose provider tools directly when delegating the decision to AE.',
-    '',
-    '## Advanced routing',
-    '',
-    `Low-level signed routing remains described at \`${routingBase}/.well-known/ae-routing.json\`.`,
     '',
     '## Privacy',
     '',

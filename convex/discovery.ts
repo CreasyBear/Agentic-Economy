@@ -757,7 +757,6 @@ function buildLlmsTxtFromCatalogs(
   options: { canonicalBaseUrl: string; routingBaseUrl: string }
 ): { body: string; urls: string[] } {
   const canonicalBaseUrl = trimTrailingSlash(options.canonicalBaseUrl)
-  const routingBaseUrl = trimTrailingSlash(options.routingBaseUrl)
   const urls = [
     ...publicSurfacePaths.map((path) => `${canonicalBaseUrl}${path}`),
     ...catalogs.flatMap((catalog) => [
@@ -786,11 +785,6 @@ function buildLlmsTxtFromCatalogs(
     `- prepare=${canonicalBaseUrl}/api/v1/requests/:requestRef/options`,
     '- auth=Bearer AE API key with customer_requests:create',
     '- lifecycle=needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready | no_options | unsupported | needs_attention',
-    '',
-    'Advanced routing kernel:',
-    `- descriptor=${routingBaseUrl}/.well-known/ae-routing.json`,
-    `- http=${routingBaseUrl}/v1/route`,
-    `- mcp=${routingBaseUrl}/mcp`,
     '',
     'Request recipe:',
     '1. POST a natural-language request to /api/v1/requests with one opaque requestRef.',

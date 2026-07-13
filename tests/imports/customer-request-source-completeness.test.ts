@@ -161,7 +161,6 @@ describe('CustomerRequest source completeness', () => {
       '/api/v1/requests',
       'customer_requests:create',
       'needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready',
-      'Advanced routing kernel:',
       'optionSet.ordering: recommended includes its objective, reasons, tradeoffs and influence status',
     ]
 
@@ -169,6 +168,7 @@ describe('CustomerRequest source completeness', () => {
       expect(fixtureDiscovery, `fixture discovery missing ${marker}`).toContain(marker)
       expect(durableDiscovery, `durable discovery missing ${marker}`).toContain(marker)
     }
+    expect(`${fixtureDiscovery}\n${durableDiscovery}`).not.toMatch(/Advanced routing kernel:|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
   })
 
   it('fails if support directories acquire canonical Request behavior or production imports them', () => {

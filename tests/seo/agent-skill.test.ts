@@ -12,7 +12,7 @@ describe('public agent skill', () => {
     expect(body).toContain('/facts')
     expect(body).toContain('customer_requests:create')
     expect(body).toContain('options_ready')
-    expect(body).toContain('https://route.ae.example/.well-known/ae-routing.json')
+    expect(body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
     expect(body).toMatch(/listings are supply facts, not routing or execution authority/i)
   })
 

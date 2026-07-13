@@ -30,7 +30,7 @@ describe('discovery files', () => {
     expect(llms.body).toContain('slug=fremantle-heat-pump-repairs')
     expect(sitemap.body).toContain('<loc>http://localhost:3000/fremantle-heat-pump-repairs</loc>')
     expect(serialized).not.toContain('parramatta-emergency-plumbing')
-    expect(serialized).toContain('/.well-known/ae-routing.json')
+    expect(serialized).not.toMatch(/\.well-known\/ae-routing|\/v1\/route|\/mcp/)
     expect(serialized).not.toMatch(
       /ownerId|clerk|rawContact|private:evidence|admin|sourceHash|OpenAPI|callable=true|paymentRequired=true/i
     )
@@ -50,9 +50,7 @@ describe('discovery files', () => {
 
     expect(result.body).toContain('https://ae.example/parramatta-emergency-plumbing/ucp')
     expect(result.body).toContain('publicStatus=published')
-    expect(result.body).toContain('https://route.ae.example/.well-known/ae-routing.json')
-    expect(result.body).toContain('https://route.ae.example/v1/route')
-    expect(result.body).toContain('https://route.ae.example/mcp')
+    expect(result.body).not.toMatch(/route\.ae\.example|\.well-known\/ae-routing|\/v1\/route|\/mcp/)
     expect(result.body).toContain('https://ae.example/api/v1/requests')
     expect(result.body).toContain('needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready')
     expect(result.body).not.toContain('Parramatta Emergency Plumbing')

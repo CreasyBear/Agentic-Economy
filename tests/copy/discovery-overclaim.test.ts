@@ -11,7 +11,7 @@ const forbiddenDiscoveryOutputPattern =
   /OpenAPI|apiKey|payment handler|payment_handlers|provider webhook|protected action|callable=true|paymentRequired=true|\.well-known\/ucp/i
 
 describe('discovery output overclaim guardrail', () => {
-  it('advertises the implemented routing surfaces without unsupported action or payment claims', () => {
+  it('advertises the Request surface without retired routing or unsupported action claims', () => {
     const state = createDefaultDiscoverySourceState()
     const outputs = [
       buildLlmsTxt(state, { canonicalBaseUrl: 'https://ae.example' }).body,
@@ -20,9 +20,7 @@ describe('discovery output overclaim guardrail', () => {
     ].join('\n')
 
     expect(outputs).not.toMatch(forbiddenDiscoveryOutputPattern)
-    expect(outputs).toContain('/.well-known/ae-routing.json')
-    expect(outputs).toContain('/v1/route')
-    expect(outputs).toContain('/mcp')
+    expect(outputs).not.toMatch(/\.well-known\/ae-routing|\/v1\/route|\/mcp/)
     expect(outputs).toContain('/api/v1/requests')
     expect(outputs).toContain('Bearer AE API key with customer_requests:create')
     expect(outputs).toMatch(/listing endpoints publish business facts; they do not select or execute routes/i)

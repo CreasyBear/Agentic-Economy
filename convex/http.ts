@@ -1,176 +1,29 @@
 import { httpRouter } from 'convex/server'
 
-import { verifyAgentIdentity } from '@/modules/routing-kernel/caller-identity'
-import { authorizeRouteForPrincipal } from '@/modules/routing-kernel/authorization'
-import { handleRoutingKernelHttpRequest } from '@/modules/routing-kernel/http'
-import { handleRoutingKernelMcpRequest } from '@/modules/routing-kernel/mcp'
-import { handleRoutingKernelDescriptorRequest } from '@/modules/routing-kernel/descriptor'
-import { canonicalAuthorityDigest } from '@/modules/routing-kernel/runtime'
-import { verifyRoutingEdgeEnvelope } from '@/modules/routing-kernel/routing-edge-envelope'
+import { routingV1RetiredResponse } from '@/modules/routing-kernel/retirement'
 
 import { httpAction } from './_generated/server'
-import { createRegisteredRoutingKernel } from './routingKernel'
-import { createConvexKernelStore } from './routingKernelStoreAdapter'
-import { internal } from './_generated/api'
 
 const http = httpRouter()
+const retiredPostPaths = [
+  '/v1/route',
+  '/v1/authorize',
+  '/v1/execute',
+  '/v1/reconcile',
+  '/v1/inspect',
+  '/v1/cancel',
+] as const
 
+for (const path of retiredPostPaths) {
+  http.route({ path, method: 'POST', handler: httpAction(async () => routingV1RetiredResponse()) })
+}
+
+http.route({ path: '/mcp', method: 'POST', handler: httpAction(async () => routingV1RetiredResponse()) })
+http.route({ path: '/mcp', method: 'GET', handler: httpAction(async () => routingV1RetiredResponse()) })
 http.route({
   path: '/.well-known/ae-routing.json',
   method: 'GET',
-  handler: httpAction(async (_ctx, request) => {
-    const edgeKey = process.env.AE_EDGE_ORIGIN_HMAC_KEY?.trim()
-    if (edgeKey === undefined || edgeKey.length === 0) return handleRoutingKernelDescriptorRequest(request)
-    const requiredAuthority = process.env.AE_ROUTING_PUBLIC_AUTHORITY?.trim()
-    const edge = await verifyRoutingEdgeEnvelope(request, {
-      key: edgeKey,
-      ...(requiredAuthority === undefined || requiredAuthority.length === 0 ? {} : { requiredAuthority }),
-    })
-    if (edge.kind !== 'verified') return Response.json({ error: { code: edge.reason } }, { status: 401 })
-    return handleRoutingKernelDescriptorRequest(new Request(edge.publicUrl, { method: request.method, headers: request.headers }))
-  }),
+  handler: httpAction(async () => routingV1RetiredResponse()),
 })
-
-function routingDependencies(ctx: Parameters<Parameters<typeof httpAction>[0]>[0]) {
-  let admittedRequestId: string | undefined
-  let providerWaitMs = 0
-  let providerWaitSequence = 0
-  const operations = createRegisteredRoutingKernel(ctx, undefined, async (measurement) => {
-    if (admittedRequestId === undefined) return
-    providerWaitMs += measurement.providerWaitMs
-    providerWaitSequence += 1
-    await ctx.runMutation(internal.routingKernelAdmission.recordProviderWait, {
-      telemetryId: `${admittedRequestId}:${providerWaitSequence}`,
-      requestId: admittedRequestId,
-      ...measurement,
-      observedAt: Date.now(),
-    })
-  }).operations
-  return {
-    operations,
-    admission: {
-      admit: async (input: { requestId: string; agentId: string; operation: 'route' | 'authorize' | 'execute' | 'reconcile' | 'inspect' | 'cancel' | 'mcp_control'; admittedAt: number }) => {
-        const result = await ctx.runMutation(internal.routingKernelAdmission.admit, input)
-        if (result.kind === 'admitted') admittedRequestId = result.requestId
-        return result
-      },
-      release: async (input: { requestId: string; releasedAt: number }) => {
-        await ctx.runMutation(internal.routingKernelAdmission.release, { ...input, providerWaitMs })
-      },
-    },
-    authenticate: async (candidate: Request, bodyText: string) => {
-      const edgeKey = process.env.AE_EDGE_ORIGIN_HMAC_KEY?.trim()
-      const requiredAuthority = process.env.AE_ROUTING_PUBLIC_AUTHORITY?.trim()
-      let publicUrl = candidate.url
-      if (edgeKey !== undefined && edgeKey.length > 0) {
-        const edge = await verifyRoutingEdgeEnvelope(candidate, {
-          key: edgeKey,
-          ...(requiredAuthority === undefined || requiredAuthority.length === 0 ? {} : { requiredAuthority }),
-        })
-        if (edge.kind !== 'verified') {
-          console.warn('routing_edge_envelope_refused', { reason: edge.reason })
-          return { kind: 'unauthenticated' as const }
-        }
-        publicUrl = edge.publicUrl
-      }
-      const signedRequest = new Request(publicUrl, { method: candidate.method, headers: candidate.headers, body: bodyText })
-      const configuredAgents = (process.env.AE_ROUTING_SIGNATURE_AGENTS ?? '').split(',').map((value) => value.trim()).filter(Boolean)
-      const allowedSignatureAgents = [...new Set(configuredAgents)]
-      const agent = await verifyAgentIdentity(signedRequest, {
-        expectedAuthority: new URL(publicUrl).host, bodyText,
-        allowedSignatureAgents, pretrustedDirectoryOrigins: allowedSignatureAgents,
-        fetchDirectory: async (signatureAgent) => {
-          try {
-            const result = await ctx.runAction(internal.routingKernelTransport.fetchSignatureDirectory, { signatureAgent })
-            if (result.status < 200 || result.status >= 300) console.warn('routing_agent_directory_refused', {
-              status: result.status,
-              server: result.server,
-              mitigation: result.mitigation,
-              challenge: result.challengePresent ? 'present' : 'absent',
-            })
-            return new Response(result.bodyText, { status: result.status, headers: { 'Content-Type': result.contentType } })
-          } catch (error) {
-            console.warn('routing_agent_directory_unreachable', {
-              errorName: error instanceof Error ? error.name : 'unknown',
-            })
-            throw error
-          }
-        },
-      })
-      if (agent.kind !== 'identity') {
-        console.warn('routing_agent_authentication_refused', {
-          reason: agent.kind === 'error' ? agent.code : 'unsigned',
-        })
-        return { kind: 'unauthenticated' as const }
-      }
-      const agentId = `agent:${agent.signatureAgent}:${agent.keyid}`
-      const grant = await ctx.runQuery(internal.routingKernelAgentGrants.resolve, { agentId, now: Date.now() })
-      if (grant === null) return { kind: 'unauthenticated' as const }
-      if (grant.protectedFieldSetId === undefined || grant.maximumDisclosureAttempts === undefined || grant.maximumDisclosureExposures === undefined
-        || grant.allowedRecipientBindingIds === undefined || grant.allowedDisclosurePurposes === undefined) return { kind: 'unauthenticated' as const }
-      return {
-        kind: 'authenticated' as const,
-        caller: { agentId, principalId: grant.principalId },
-        grant: { grantId: grant.grantId, networkIds: grant.networkIds, maximumSpendMinor: grant.maximumSpendMinor, currency: grant.currency, allowedDataFields: grant.allowedDataFields, protectedFieldSetId: grant.protectedFieldSetId, maximumDisclosureAttempts: grant.maximumDisclosureAttempts, maximumDisclosureExposures: grant.maximumDisclosureExposures, allowedRecipientBindingIds: grant.allowedRecipientBindingIds, allowedDisclosurePurposes: grant.allowedDisclosurePurposes, expiresAt: grant.expiresAt },
-      }
-    },
-    authorize: async (input: {
-      caller: { agentId: string; principalId: string }; quoteId: string; quoteDigest: string
-      maximumSpendMinor: number; currency: string; expiresAt: number; allowedDataFields: readonly string[]
-      idempotencyKey: string
-      sourceGrantId: string
-    }) => {
-      const kernel = createRegisteredRoutingKernel(ctx)
-      const quote = await createConvexKernelStore(ctx).getQuote(input.quoteId)
-      if (quote === undefined) return { kind: 'authorization_refused' as const, reason: 'quote_not_found' }
-      const budget = await ctx.runQuery(internal.routingKernelAgentGrants.resolveBudgetAuthority, { sourceGrantId: input.sourceGrantId, networkId: quote.networkId, now: Date.now() })
-      if (budget === null || budget.agentId !== input.caller.agentId || budget.principalId !== input.caller.principalId) {
-        return { kind: 'authorization_refused' as const, reason: 'budget_authority_unavailable' }
-      }
-      const dataBudget = await ctx.runQuery(internal.routingKernelAgentGrants.resolveDataAuthorizationBudget, { sourceGrantId: input.sourceGrantId, networkId: quote.networkId, now: Date.now() })
-      if (dataBudget === null || dataBudget.agentId !== input.caller.agentId || dataBudget.principalId !== input.caller.principalId) {
-        return { kind: 'authorization_refused' as const, reason: 'data_authorization_unavailable' }
-      }
-      const result = await authorizeRouteForPrincipal({
-        ...input,
-        budgetAuthorityRef: budget.budgetAuthorityRef,
-        budgetMaximumGrossMinor: budget.maximumGrossMinor,
-        dataAuthorizationBudgetRef: dataBudget.dataAuthorizationBudgetRef,
-        protectedFieldSetId: dataBudget.protectedFieldSetId,
-        dataBudgetMaximumAttempts: dataBudget.maximumAttempts,
-        dataBudgetMaximumExposures: dataBudget.maximumExposures,
-        allowedRecipientBindingIds: dataBudget.permittedRecipientBindingIds,
-        allowedDisclosurePurposes: dataBudget.permittedPurposes,
-        maximumDisclosureAttempts: dataBudget.maximumAttempts,
-        maximumDisclosureExposures: dataBudget.maximumExposures,
-        authorizationRef: `route-authorization:${canonicalAuthorityDigest({
-          caller: input.caller, quoteId: input.quoteId, quoteDigest: input.quoteDigest,
-          maximumSpendMinor: input.maximumSpendMinor, currency: input.currency, expiresAt: input.expiresAt,
-          allowedDataFields: [...input.allowedDataFields].sort(), idempotencyKey: input.idempotencyKey,
-          sourceGrantId: input.sourceGrantId, budgetAuthorityRef: budget.budgetAuthorityRef,
-          dataAuthorizationBudgetRef: dataBudget.dataAuthorizationBudgetRef,
-        })}`,
-        principalId: input.caller.principalId, agentId: input.caller.agentId, now: Date.now(),
-      }, {
-        getQuote: async (quoteId) => await createConvexKernelStore(ctx).getQuote(quoteId),
-        issue: async (authorization) => await kernel.authority.authorize(authorization),
-      })
-      return result.kind === 'authorized'
-        ? { kind: 'authorized' as const, authorizationRef: result.authorization.authorizationRef }
-        : result
-    },
-  }
-}
-
-for (const path of ['/v1/route', '/v1/authorize', '/v1/execute', '/v1/reconcile', '/v1/inspect', '/v1/cancel'] as const) {
-  http.route({
-    path,
-    method: 'POST',
-    handler: httpAction(async (ctx, request) => await handleRoutingKernelHttpRequest(request, routingDependencies(ctx))),
-  })
-}
-
-http.route({ path: '/mcp', method: 'POST', handler: httpAction(async (ctx, request) => await handleRoutingKernelMcpRequest(request, routingDependencies(ctx))) })
-http.route({ path: '/mcp', method: 'GET', handler: httpAction(async (ctx, request) => await handleRoutingKernelMcpRequest(request, routingDependencies(ctx))) })
 
 export default http
