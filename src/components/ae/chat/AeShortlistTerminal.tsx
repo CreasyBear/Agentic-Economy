@@ -4,29 +4,58 @@ import { Button } from '@astryxdesign/core/Button'
 import { Heading } from '@astryxdesign/core/Heading'
 import { Text } from '@astryxdesign/core/Text'
 
+import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId } from '@/lib/ui/journey-events'
+import { shortlistSemanticRevision } from '@/lib/ui/shortlist-export'
+
 import type { AnswerArtifact, AnswerSource } from '@/modules/answer/public'
 import type { NeedTiming } from '@/modules/answer/search-context'
 
+import { AeExportPreview } from './AeExportPreview'
 export type ShortlistTerminal = {
   providers: readonly AnswerSource[]
   timing: NeedTiming | undefined
 }
 
 type AeShortlistTerminalProps = ShortlistTerminal & {
+  threadId?: string
+  revision?: string
+  sourceAt?: string
   onChangeCriteria?: () => void
 }
 
-export function AeShortlistTerminal({ providers, timing, onChangeCriteria }: AeShortlistTerminalProps) {
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+export function AeShortlistTerminal({
+  providers,
+  timing,
+  threadId = 'shortlist',
+  revision = 'shortlist:current',
+  sourceAt,
+  onChangeCriteria,
+}: AeShortlistTerminalProps) {
+  const [closed, setClosed] = useState(false)
+  const [exportPreviewOpen, setExportPreviewOpen] = useState(false)
   const firstBusiness = providers.at(0)
+  const semanticRevision = shortlistSemanticRevision(revision, providers)
+  if (closed) {
+    return (
+      <section className="grid gap-3 rounded-lg border border-border bg-surface p-4" aria-labelledby="shortlist-closed-heading">
+        <Heading id="shortlist-closed-heading" level={2} className="text-xl font-semibold">Shortlist closed</Heading>
+        <Text color="secondary" role="status">Nothing was sent.</Text>
+        <Button label="Return home" variant="secondary" className="min-h-11 justify-self-start" href="/" />
+      </section>
+    )
+  }
 
-  async function copyShortlist() {
+  function openExportPreview() {
+    setExportPreviewOpen(true)
     try {
-      if (typeof navigator.clipboard?.writeText !== 'function') throw new Error('Clipboard unavailable')
-      await navigator.clipboard.writeText(shortlistCopy(providers, window.location.origin))
-      setCopyStatus('copied')
+      emitWave1JourneyEvent({
+        event: 'export_preview_opened',
+        eventVersion: 1,
+        journey: 'J2',
+        pseudonymousJourneyId: getOrCreatePseudonymousJourneyId('J2', threadId),
+      })
     } catch {
-      setCopyStatus('error')
+      // Measurement is best effort and must never block the preview.
     }
   }
 
@@ -52,16 +81,19 @@ export function AeShortlistTerminal({ providers, timing, onChangeCriteria }: AeS
           {...(onChangeCriteria === undefined ? {} : { onClick: onChangeCriteria })}
         />
         <Button label="Open" variant="secondary" className="min-h-11" href={firstBusiness?.detailUrl ?? '/registry'} />
-        <Button label="Copy" type="button" variant="secondary" className="min-h-11" isDisabled={providers.length === 0} onClick={() => void copyShortlist()} />
+        <Button label="Copy" type="button" variant="secondary" className="min-h-11" isDisabled={providers.length === 0} onClick={openExportPreview} />
         <Button label="Call" type="button" variant="secondary" className="min-h-11" isDisabled />
-        <Button label="Close" variant="ghost" className="min-h-11" href="/" />
+        <Button label="Close" type="button" variant="ghost" className="min-h-11" onClick={() => setClosed(true)} />
       </div>
-      {copyStatus === 'idle' ? null : (
-        <Text type="supporting" color="secondary" role="status">
-          {copyStatus === 'copied' ? 'Shortlist copied.' : 'The shortlist could not be copied.'}
-        </Text>
-      )}
       <Text type="supporting" color="secondary">Call is unavailable until a business publishes a phone number here.</Text>
+      <AeExportPreview
+        isOpen={exportPreviewOpen}
+        onOpenChange={setExportPreviewOpen}
+        threadId={threadId}
+        revision={semanticRevision}
+        providers={providers}
+        {...(sourceAt === undefined ? {} : { sourceAt })}
+      />
     </section>
   )
 }
@@ -113,12 +145,3 @@ function hasActionableContact(provider: AnswerSource): boolean {
   return typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0
 }
 
-function shortlistCopy(providers: readonly AnswerSource[], origin: string): string {
-  return providers
-    .map((provider) => {
-      const location = [provider.suburb, provider.stateTerritory].filter(Boolean).join(', ')
-      const businessPage = new URL(provider.detailUrl, origin).toString()
-      return `${provider.name}\nLocation: ${location || 'Location not published'}\nBusiness page: ${businessPage}`
-    })
-    .join('\n\n')
-}

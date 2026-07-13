@@ -141,7 +141,6 @@ export function AeThreadTurnStreamSection({
     if (result === 'aborted') {
       if (userStopRef.current) {
         userStopRef.current = false
-        sendTurnUpdate({ type: 'stopped' })
         onStreamEndRef.current?.('stopped')
       }
       return
@@ -180,7 +179,12 @@ export function AeThreadTurnStreamSection({
   }
 
   function stop() {
+    if (userStopRef.current || !mountedRef.current) {
+      return
+    }
     userStopRef.current = true
+    latestStateRef.current = stopRunningWorkSteps(latestStateRef.current)
+    sendTurnUpdate({ type: 'stopped' })
     abortAnswerTurnStream(streamKey)
   }
 

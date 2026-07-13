@@ -56,6 +56,7 @@ function buildPublicTurn(turn: AnswerTurnRecord): PublicThreadTurn {
   return {
     turnId: turn.turnId,
     seq: turn.seq,
+    createdAt: turn.createdAt,
     query: turn.query,
     intent: turn.intent,
     status: turn.status,

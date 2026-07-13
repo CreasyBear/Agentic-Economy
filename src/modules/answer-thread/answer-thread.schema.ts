@@ -180,6 +180,7 @@ export type PublicThreadTurn = {
   answerCheckSummary?: PublicAnswerCheckSummary
   timing?: AeSearchContext['timing']
   timingDate?: string
+  createdAt?: number
 }
 
 export type PublicThreadProjection = {

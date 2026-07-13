@@ -75,6 +75,9 @@ export function AeThreadTranscript({
               {isLastCompleted && turn.turnId === latestProjectedTurn?.turnId && liveTurn === null && terminal !== null ? (
                 <AeShortlistTerminal
                   {...terminal}
+                  threadId={resolvedThreadId ?? projection?.threadId ?? 'shortlist'}
+                  revision={`${latestProjectedTurn.turnId}:${latestProjectedTurn.seq}`}
+                  {...(latestProjectedTurn.createdAt === undefined ? {} : { sourceAt: new Date(latestProjectedTurn.createdAt).toISOString() })}
                   {...(onFollowUp === undefined ? {} : { onChangeCriteria: () => onFollowUp('Change my shortlist criteria') })}
                 />
               ) : isLastCompleted && liveTurn === null ? (

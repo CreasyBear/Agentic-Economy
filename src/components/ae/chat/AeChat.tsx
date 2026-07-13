@@ -7,8 +7,14 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { Button } from '@astryxdesign/core/Button'
 import { Dialog } from '@astryxdesign/core/Dialog'
 import { IconButton } from '@astryxdesign/core/IconButton'
+import { Text } from '@astryxdesign/core/Text'
 import { captureClientProductEventOnClient } from '@/lib/observability/capture-client-events'
 import { emitFunnelEvent } from '@/lib/observability/funnel-client'
+import {
+  emitWave1JourneyEvent,
+  getOrCreatePseudonymousJourneyId,
+  markJourneyViewedAfterReopenWindow,
+} from '@/lib/ui/journey-events'
 import {
   DEFAULT_AE_SEARCH_CONTEXT,
   aeSearchContextLocationLabel,
@@ -157,6 +163,21 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const terminalShortlist = liveTurn === null && latestProjectedTurn?.status === 'complete'
     ? settledShortlistFromArtifacts(latestProjectedTurn.artifacts, latestProjectedTurn.timing)
     : null
+  useEffect(() => {
+    if (routeThreadId === null || terminalShortlist === null) {
+      return
+    }
+
+    const pseudonymousJourneyId = getOrCreatePseudonymousJourneyId('J2', routeThreadId)
+    if (markJourneyViewedAfterReopenWindow('J2', routeThreadId)) {
+      emitWave1JourneyEvent({
+        event: 'shortlist_reopened',
+        eventVersion: 1,
+        journey: 'J2',
+        pseudonymousJourneyId,
+      })
+    }
+  }, [routeThreadId, terminalShortlist])
 
 
   const wasShowingWelcomeRef = useRef(showWelcome)
@@ -277,6 +298,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
       threadId: id,
       title: liveTurn?.query.trim() ?? 'New question',
     }))
+    emitWave1JourneyEvent({
+      event: 'shortlist_started',
+      eventVersion: 1,
+      journey: 'J2',
+      pseudonymousJourneyId: getOrCreatePseudonymousJourneyId('J2', id),
+    })
   }
 
   function handleSettledTurn(turn: PublicThreadTurn, generation: number) {
@@ -295,6 +322,14 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
         nextRecord,
       ]
     })
+    if (settledShortlistFromArtifacts(turn.artifacts, turn.timing) !== null) {
+      emitWave1JourneyEvent({
+        event: 'shortlist_ready',
+        eventVersion: 1,
+        journey: 'J2',
+        pseudonymousJourneyId: getOrCreatePseudonymousJourneyId('J2', threadIdForTurn),
+      })
+    }
   }
 
   function handleStreamEnd(outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') {
@@ -468,6 +503,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           </div>
         ) : null}
         {showThreadChrome ? (
+          <>
           <AeThreadHeader
             title={projection.title}
             threadId={projection.threadId}
@@ -475,6 +511,12 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             onOpenSidebar={openMobileSidebar}
             sidebarOpen={mobileSidebarOpen}
           />
+          <div className="border-b border-border px-4 py-2 md:px-6" role="note" aria-label="Thread access and retention">
+            <Text type="supporting" color="secondary" display="block">
+              This thread has no automatic expiry. Anyone with its link can open it; the creating browser can delete it from Recent questions.
+            </Text>
+          </div>
+          </>
         ) : null}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <AeThreadScroller

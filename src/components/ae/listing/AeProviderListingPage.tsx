@@ -1,5 +1,5 @@
 import { ArrowLeftIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Badge } from '@astryxdesign/core/Badge'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
@@ -16,6 +16,7 @@ import { RouterLink } from '@/components/astryx/RouterLink'
 import { formatTimestamp, timestampIso } from '@/lib/ui/format-time'
 import { buildProviderPresentation, type ProviderPresentation } from '@/lib/ui/provider-presentation'
 import { buildListingTrustProjection, NO_REPLY_HISTORY, type ListingTrustProjection, type ReplyPosture, type TrustFact } from '@/lib/ui/trust-projection'
+import { emitWave1JourneyEvent, getOrCreatePseudonymousJourneyId, type PseudonymousJourneyId } from '@/lib/ui/journey-events'
 import type { PublicRouteCapabilityContract, PublicRouteCatalogContract } from '@/modules/catalog/public'
 import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
@@ -42,6 +43,18 @@ export function AeProviderListingPage({
   const trust = buildListingTrustProjection(catalog)
   const officeAddress = readOfficeAddress(catalog)
   const inquiryHref = appendThreadOrigin(inquiryAffordance.kind === 'available' ? inquiryAffordance.href : '', backFrom, backThreadId)
+  const [journeyIdentity, setJourneyIdentity] = useState<{ slug: string; id: PseudonymousJourneyId } | null>(null)
+
+  useEffect(() => {
+    const journeyId = getOrCreatePseudonymousJourneyId('J1', catalog.slug)
+    setJourneyIdentity({ slug: catalog.slug, id: journeyId })
+    emitWave1JourneyEvent({
+      event: 'listing_viewed',
+      eventVersion: 1,
+      journey: 'J1',
+      pseudonymousJourneyId: journeyId,
+    })
+  }, [catalog.slug])
   return (
     <article className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-8 md:px-6 md:py-10">
       <nav aria-label="Return to your previous view">
@@ -53,6 +66,7 @@ export function AeProviderListingPage({
         trust={trust}
         inquiryAffordance={inquiryAffordance}
         inquiryHref={inquiryHref}
+        pseudonymousJourneyId={journeyIdentity?.slug === catalog.slug ? journeyIdentity.id : null}
       />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
@@ -117,15 +131,27 @@ export function ListingFirstScreen({
   trust,
   inquiryAffordance,
   inquiryHref,
+  pseudonymousJourneyId,
 }: {
   catalog: PublicRouteCatalogContract
   trust: ListingTrustProjection
   inquiryAffordance: PublicInquiryAffordance
   inquiryHref: string
+  pseudonymousJourneyId?: PseudonymousJourneyId | null
 }) {
   const [detailsCopied, setDetailsCopied] = useState(false)
   const phone = trust.phone.kind === 'published' ? trust.phone.value : undefined
-
+  function recordDirectCall() {
+    if (pseudonymousJourneyId === null || pseudonymousJourneyId === undefined) {
+      return
+    }
+    emitWave1JourneyEvent({
+      event: 'direct_call_selected',
+      eventVersion: 1,
+      journey: 'J1',
+      pseudonymousJourneyId,
+    })
+  }
   async function copyDetails() {
     const details = [
       catalog.name,
@@ -175,7 +201,7 @@ export function ListingFirstScreen({
           </Text>
           {phone === undefined ? null : (
             <Text type="supporting" color="secondary" display="block">
-              Need someone now? <a className="underline underline-offset-4" href={`tel:${phone}`}>Call {phone}</a>
+              Need someone now? <a className="underline underline-offset-4" href={`tel:${phone}`} onClick={recordDirectCall}>Call {phone}</a>
             </Text>
           )}
         </VStack>
@@ -183,7 +209,7 @@ export function ListingFirstScreen({
         <div className="grid gap-3 sm:flex sm:flex-wrap" role="group" aria-label="Actions for this business">
           {phone === undefined ? null : (
             <div data-peer-action="call" data-variant="secondary">
-              <Button label={`Call ${phone}`} variant="secondary" size="lg" href={`tel:${phone}`} className={peerActionClassName} />
+              <Button label={`Call ${phone}`} variant="secondary" size="lg" href={`tel:${phone}`} className={peerActionClassName} onClick={recordDirectCall} />
             </div>
           )}
           <div data-peer-action="copy-details" data-variant="secondary">

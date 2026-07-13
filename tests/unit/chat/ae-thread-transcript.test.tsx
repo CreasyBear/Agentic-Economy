@@ -2,11 +2,38 @@
  * @vitest-environment jsdom
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AeThreadTranscript } from '@/components/ae/chat/AeThreadTranscript'
 import type { AnswerSource } from '@/modules/answer/public'
 import type { PublicThreadProjection } from '@/modules/answer-thread/public'
+
+let showModalDescriptor: PropertyDescriptor | undefined
+let closeDescriptor: PropertyDescriptor | undefined
+
+beforeEach(() => {
+  showModalDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
+  closeDescriptor = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true,
+    writable: true,
+    value(this: HTMLDialogElement) {
+      this.setAttribute('open', '')
+    },
+  })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true,
+    writable: true,
+    value(this: HTMLDialogElement) {
+      this.removeAttribute('open')
+    },
+  })
+})
+
+afterEach(() => {
+  restoreDialogMethod('showModal', showModalDescriptor)
+  restoreDialogMethod('close', closeDescriptor)
+})
 
 describe('AeThreadTranscript', () => {
   afterEach(() => {
@@ -43,7 +70,6 @@ describe('AeThreadTranscript', () => {
     expect(within(actions).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(first.detailUrl)
     expect(within(actions).getByRole('button', { name: 'Copy' }).hasAttribute('disabled')).toBe(false)
     expect(within(actions).getByRole('button', { name: 'Call' }).hasAttribute('disabled')).toBe(true)
-    expect(within(actions).getByRole('link', { name: 'Close' }).getAttribute('href')).toBe('/')
 
     fireEvent.click(changeCriteria)
     expect(selectedQuery).toBe('Change my shortlist criteria')
@@ -52,7 +78,7 @@ describe('AeThreadTranscript', () => {
     expect(screen.queryByRole('textbox')).toBeNull()
   })
 
-  it('copies an absolute business URL and announces success', async () => {
+  it('previews the exact shortlist payload before copying it', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
     const source = provider()
@@ -61,11 +87,17 @@ describe('AeThreadTranscript', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
 
+    expect(writeText).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Export preview' })
+    const visiblePayload = within(dialog).getByLabelText('Export preview text').textContent
+    expect(visiblePayload).toContain(source.name)
+    expect(visiblePayload).toContain(`${window.location.origin}${source.detailUrl}`)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy summary' }))
+
     await waitFor(() => expect(writeText).toHaveBeenCalledOnce())
-    expect(writeText).toHaveBeenCalledWith(
-      `${source.name}\nLocation: Parramatta, NSW\nBusiness page: ${window.location.origin}${source.detailUrl}`,
-    )
-    expect(screen.getByText('Shortlist copied.', { selector: '[role="status"]' })).toBeTruthy()
+    expect(writeText).toHaveBeenCalledWith(visiblePayload)
+    expect(screen.getByText('Summary copied.', { selector: '[role="status"]' })).toBeTruthy()
   })
 
   it('puts a provider with a published inquiry path first when the need is today', () => {
@@ -321,4 +353,12 @@ function provider(overrides: Partial<AnswerSource> = {}): AnswerSource {
     inquiryUrl: '/parramatta-emergency-plumbing/inquiry',
     ...overrides,
   }
+}
+
+function restoreDialogMethod(name: 'showModal' | 'close', descriptor: PropertyDescriptor | undefined) {
+  if (descriptor === undefined) {
+    Reflect.deleteProperty(HTMLDialogElement.prototype, name)
+    return
+  }
+  Object.defineProperty(HTMLDialogElement.prototype, name, descriptor)
 }
