@@ -12,16 +12,15 @@ test.describe('engine product accessibility', () => {
     await expect(page.getByRole('link', { name: 'Tell us what you need' })).toBeVisible()
   })
 
-  test('workbench has persistent labels and generates the exact request envelope', async ({ page }) => {
+  test('request entry is open, labelled, and keyboard reachable without an upfront budget', async ({ page }) => {
     await page.goto('/engine')
-    await expect(page.getByRole('heading', { level: 1, name: 'What do you need?' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Start with whatever you know.' })).toBeVisible()
     await page.waitForLoadState('networkidle')
-    await page.getByLabel('Tell your agent what needs doing').fill('Query three freight providers.')
-    await page.getByLabel('Maximum spend (AUD)').fill('42.50')
-    await expect(page.getByLabel('Maximum spend (AUD)')).toHaveValue('42.50')
-    await expect(page.getByText('Maximum spend: AUD 42.50')).toBeVisible()
-    await page.getByRole('button', { name: 'Copy for my agent' }).focus()
-    await expect(page.getByRole('button', { name: 'Copy for my agent' })).toBeFocused()
+    await page.getByLabel('What are you looking for?').fill('Fremantle')
+    await expect(page.getByLabel('What are you looking for?')).toHaveValue('Fremantle')
+    await expect(page.getByLabel('Maximum spend (AUD)')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Explore' }).focus()
+    await expect(page.getByRole('button', { name: 'Explore' })).toBeFocused()
   })
 
   test('workbench contains wide data without widening the mobile viewport', async ({ page }) => {
@@ -29,7 +28,7 @@ test.describe('engine product accessibility', () => {
     const viewportWidth = await page.evaluate(() => window.innerWidth)
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
-    await expect(page.getByLabel('Tell your agent what needs doing')).toBeVisible()
-    await expect(page.getByText('Technical details for agents and builders')).toBeVisible()
+    await expect(page.getByLabel('What are you looking for?')).toBeVisible()
+    await expect(page.getByText('No budget or full specification required to start.')).toBeVisible()
   })
 })
