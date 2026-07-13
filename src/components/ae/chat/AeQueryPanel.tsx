@@ -5,10 +5,12 @@ import {
 import { AeAnswerPromptInput } from './AeAnswerPromptInput'
 
 export type AeQueryPanelProps = {
-  onSubmit: (query: string) => void
+  onSubmit: (query: string, timing: AeSearchContext['timing'], timingDate?: string) => void
   defaultValue?: string
   busy?: boolean
   searchContext?: AeSearchContext
+  initialTiming?: AeSearchContext['timing']
+  initialTimingDate?: string
   showExamples?: boolean
   placeholder?: string
   loopHint?: string
@@ -19,6 +21,8 @@ export function AeQueryPanel({
   defaultValue = '',
   busy = false,
   searchContext,
+  initialTiming = 'flexible',
+  initialTimingDate = '',
   showExamples = true,
   placeholder,
   loopHint,
@@ -30,6 +34,8 @@ export function AeQueryPanel({
       <AeAnswerPromptInput
         onSubmit={onSubmit}
         defaultValue={defaultValue}
+        initialTiming={initialTiming}
+        initialTimingDate={initialTimingDate}
         busy={busy}
         examples={examples}
         {...(placeholder === undefined ? {} : { placeholder, inputLabel: placeholder })}

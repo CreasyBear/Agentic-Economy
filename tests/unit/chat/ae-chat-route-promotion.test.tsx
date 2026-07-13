@@ -141,6 +141,15 @@ describe('AeChat route promotion', () => {
     expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('none')
   })
 
+  it('places the retention disclosure after the rendered transcript results', () => {
+    render(<AeChat threadId="thread-one" initialProjection={buildProjection('thread-one', 'First answer')} />)
+
+    const transcript = screen.getByTestId('thread-transcript')
+    const retention = screen.getByRole('note', { name: 'Thread access and retention' })
+
+    expect(transcript.compareDocumentPosition(retention) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
   it('passes the classified follow-up intent to live turns before replay catches up', async () => {
     const projection = buildProjection('thread-one', 'First answer')
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
@@ -249,6 +258,18 @@ describe('AeChat route promotion', () => {
     expect(screen.getByRole('region', { name: /session context/i }).textContent).not.toContain('Selected business')
   })
 
+  it('restores Today as the selected timing for a completed persisted turn', () => {
+    const baseProjection = buildProjection('thread-one', 'First answer')
+    const projection: PublicThreadProjection = {
+      ...baseProjection,
+      turns: baseProjection.turns.map((turn) => ({ ...turn, timing: 'today' })),
+    }
+
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    expect(screen.getByRole('radio', { name: 'Today' }).getAttribute('aria-checked')).toBe('true')
+  })
+
   it('guides the composer toward refinement when no listed business is available', () => {
     const projection = buildProjection('thread-one', 'First answer')
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
@@ -260,9 +281,9 @@ describe('AeChat route promotion', () => {
   })
 
   it('guides the composer toward inquiry once a listed business publishes that path', () => {
-    const projection = buildProjection('thread-one', 'First answer', [
+    const projection = withProviderlessFollowUp(buildProjection('thread-one', 'First answer', [
       { kind: 'provider-cards', providers: [provider()] },
-    ])
+    ]))
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
     expectComposerCopy(
@@ -272,9 +293,9 @@ describe('AeChat route promotion', () => {
   })
 
   it('guides the composer toward contact limits when listings lack inquiry paths', () => {
-    const projection = buildProjection('thread-one', 'First answer', [
+    const projection = withProviderlessFollowUp(buildProjection('thread-one', 'First answer', [
       { kind: 'provider-cards', providers: [providerWithoutInquiry()] },
-    ])
+    ]))
     render(<AeChat threadId="thread-one" initialProjection={projection} />)
 
     expectComposerCopy(
@@ -330,6 +351,25 @@ function buildProjection(
         workLog: [],
         artifacts,
         oneLine: title,
+      },
+    ],
+  }
+}
+
+function withProviderlessFollowUp(projection: PublicThreadProjection): PublicThreadProjection {
+  return {
+    ...projection,
+    turns: [
+      ...projection.turns,
+      {
+        turnId: `${projection.threadId}-turn-2`,
+        seq: 2,
+        query: 'What should I do next?',
+        intent: 'explain_boundary',
+        status: 'complete',
+        workLog: [],
+        artifacts: [],
+        oneLine: 'Continue from the listed businesses already found.',
       },
     ],
   }

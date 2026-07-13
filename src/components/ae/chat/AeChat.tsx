@@ -163,6 +163,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const terminalShortlist = liveTurn === null && latestProjectedTurn?.status === 'complete'
     ? settledShortlistFromArtifacts(latestProjectedTurn.artifacts, latestProjectedTurn.timing)
     : null
+  const composerTiming = latestProjectedTurn?.timing ?? liveTurn?.searchContext.timing ?? 'flexible'
+  const composerTimingDate = latestProjectedTurn?.timingDate ?? liveTurn?.searchContext.timingDate
   useEffect(() => {
     if (routeThreadId === null || terminalShortlist === null) {
       return
@@ -382,12 +384,13 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleFollowUp(query: string) {
-    handleSubmit(query)
+    handleSubmit(query, composerTiming, composerTimingDate)
   }
 
   function handleRetry(query: string) {
     const retryIntent = liveTurn?.query === query ? liveTurn.intent : classifyFollowUpIntent(query, completedTurnCount)
-    startTurn(query, searchContext, retryIntent)
+    const retryContext = { ...searchContext, timing: composerTiming, ...(composerTimingDate === undefined ? {} : { timingDate: composerTimingDate }) }
+    startTurn(query, retryContext, retryIntent)
   }
 
   function handleDeleteThread(deletedThreadId: string) {
@@ -503,7 +506,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
           </div>
         ) : null}
         {showThreadChrome ? (
-          <>
           <AeThreadHeader
             title={projection.title}
             threadId={projection.threadId}
@@ -511,12 +513,6 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
             onOpenSidebar={openMobileSidebar}
             sidebarOpen={mobileSidebarOpen}
           />
-          <div className="border-b border-border px-4 py-2 md:px-6" role="note" aria-label="Thread access and retention">
-            <Text type="supporting" color="secondary" display="block">
-              This thread has no automatic expiry. Anyone with its link can open it; the creating browser can delete it from Recent questions.
-            </Text>
-          </div>
-          </>
         ) : null}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <AeThreadScroller
@@ -555,6 +551,13 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               {...(routeThreadId === null ? {} : { onFollowUp: handleFollowUp })}
               onRetry={handleRetry}
             />
+            {showThreadChrome ? (
+              <div className="mx-auto w-full max-w-[56rem] px-4 pb-4 md:px-6" role="note" aria-label="Thread access and retention">
+                <Text type="supporting" color="secondary" display="block">
+                  This thread has no automatic expiry. Anyone with its link can open it; the creating browser can delete it from Recent questions.
+                </Text>
+              </div>
+            ) : null}
           </AeThreadScroller>
           {!showWelcome && terminalShortlist === null ? (
             <div className="mx-auto w-full max-w-[56rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
@@ -563,6 +566,8 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
                 busy={streamingBusy}
                 searchContext={searchContext}
                 showExamples={false}
+                initialTiming={composerTiming}
+                {...(composerTimingDate === undefined ? {} : { initialTimingDate: composerTimingDate })}
                 {...(followUpComposerCopy === null ? {} : { placeholder: followUpComposerCopy.placeholder })}
                 {...(followUpComposerCopy === null ? {} : { loopHint: followUpComposerCopy.loopHint })}
               />

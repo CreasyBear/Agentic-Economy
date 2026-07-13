@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 
 import {
   callPublicSourceQuery,
@@ -329,32 +330,25 @@ function redactPublicBusinessPageReadback(readback: PublicBusinessPageReadbackRe
 }
 
 function getLocalE2ePublicBusinessPageReadback(slug: string): PublicBusinessPageReadbackResult {
-  if (slug !== 'plumbing-demo') {
+  const fixture = LOCAL_E2E_BUSINESS_FIXTURES.find((candidate) => candidate.requestedSlug === slug)
+  if (fixture === undefined) {
     return getPublicBusinessPageReadback(slug)
   }
 
   const result = submitPublicOwnerClaimFlow({
-    businessName: 'Demo Plumbing',
-    category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
-    requestedSlug: 'plumbing-demo',
-    publishedPhone: '',
-    ownerMessage: 'Local e2e inquiry-capable service facts.',
+    ...fixture,
+    publishedPhone: fixture.publishedPhone ?? '',
+    ownerMessage: 'Local e2e owner-supplied service facts.',
     sourceLabel: 'Local e2e service facts',
-    serviceName: 'Emergency plumbing',
-    serviceCategory: 'Emergency plumbing',
-    serviceSummary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
     photoUrl: '',
-    responseTimeMinutes: '',
+    responseTimeMinutes: fixture.responseTimeMinutes?.toString() ?? '',
     firstRequestMode: 'inquiry_available',
     publicDisclosure: 'Use the inquiry form for a first contact.',
     noContactReason: '',
   })
-
-  return result.kind === 'ok' ? { kind: 'available', catalog: result.catalog } : { kind: 'not_found', reason: 'not_public' }
+  return result.kind === 'ok'
+    ? { kind: 'available', catalog: result.catalog }
+    : { kind: 'not_found', reason: 'not_public' }
 }
 
 function redactCatalogSourceHashes(catalog: PublicCatalogContract): PublicRouteCatalogContract {

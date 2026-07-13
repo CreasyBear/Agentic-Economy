@@ -13,6 +13,8 @@ import { AeAnswerSuggestions } from './AeSuggestionChips'
 export type AeAnswerPromptInputProps = {
   onSubmit: (query: string, timing: NeedTiming, timingDate?: string) => void
   defaultValue?: string
+  initialTiming?: NeedTiming
+  initialTimingDate?: string
   examples?: readonly string[]
   busy?: boolean
   compact?: boolean
@@ -38,6 +40,8 @@ const SEARCHBOX_LABEL = 'What do you need done?'
 
 export function AeAnswerPromptInput({
   defaultValue = '',
+  initialTiming = 'flexible',
+  initialTimingDate = '',
   examples = DEFAULT_EXAMPLES,
   ...props
 }: AeAnswerPromptInputProps) {
@@ -46,9 +50,11 @@ export function AeAnswerPromptInput({
 
   return (
     <AeAnswerPromptInputInner
-      key={initialValue}
+      key={`${initialValue}:${initialTiming}:${initialTimingDate}`}
       inputId={inputId}
       initialValue={initialValue}
+      initialTiming={initialTiming}
+      initialTimingDate={initialTimingDate}
       examples={examples}
       {...props}
     />
@@ -58,6 +64,8 @@ export function AeAnswerPromptInput({
 function AeAnswerPromptInputInner({
   inputId,
   initialValue,
+  initialTiming,
+  initialTimingDate,
   onSubmit,
   examples,
   busy = false,
@@ -66,18 +74,21 @@ function AeAnswerPromptInputInner({
   inputLabel = SEARCHBOX_LABEL,
   ariaLabel = 'Find local service businesses',
   submitLabel = 'Search',
-}: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples'> & {
+}: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples' | 'initialTiming' | 'initialTimingDate'> & {
   inputId: string
   initialValue: string
+  initialTiming: NeedTiming
+  initialTimingDate: string
   examples: NonNullable<AeAnswerPromptInputProps['examples']>
 }) {
   const counterId = `${inputId}-counter`
   const hintId = `${inputId}-hint`
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [value, setValue] = useState(initialValue)
-  const [timing, setTiming] = useState<NeedTiming>('flexible')
+  const [timing, setTiming] = useState<NeedTiming>(initialTiming)
   const hydrated = useClientMounted()
-  const [timingDate, setTimingDate] = useState('')
+  const [timingDate, setTimingDate] = useState(initialTimingDate)
+  const timingDateValid = timing !== 'date' || (timingDate.length > 0 && timingDate >= localToday())
   const charactersRemaining = QUERY_MAX_LENGTH - value.length
   const showCharacterLimit = charactersRemaining <= 40
   const compact = compactOverride ?? examples.length === 0
@@ -111,7 +122,7 @@ function AeAnswerPromptInputInner({
 
   function submitQuery(query: string) {
     const trimmed = query.slice(0, QUERY_MAX_LENGTH).trim()
-    if (trimmed.length === 0 || busy || (timing === 'date' && timingDate.length === 0)) {
+    if (trimmed.length === 0 || busy || !timingDateValid) {
       return
     }
     onSubmit(trimmed, timing, timing === 'date' ? timingDate : undefined)
@@ -191,7 +202,7 @@ function AeAnswerPromptInputInner({
             </Text>
           )
         }
-        sendButton={<Button label={busy ? 'Starting your thread' : submitLabel} type="submit" variant="primary" isDisabled={busy || !hydrated || value.trim().length === 0 || (timing === 'date' && timingDate.length === 0)} />}
+        sendButton={<Button label={busy ? 'Starting your thread' : submitLabel} type="submit" variant="primary" isDisabled={busy || !hydrated || value.trim().length === 0 || !timingDateValid} />}
         input={
           <textarea
             id={inputId}

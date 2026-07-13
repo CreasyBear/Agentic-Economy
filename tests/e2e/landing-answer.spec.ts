@@ -27,6 +27,7 @@ test.describe('landing query -> thread answer', () => {
 
   test('shows a listing nudge when no providers match', async ({ page }) => {
     await page.goto('/')
+    await page.getByRole('radio', { name: 'Today' }).click()
 
     const query = 'dentist parramatta'
     await submitLandingQuery(page, query)
@@ -36,6 +37,14 @@ test.describe('landing query -> thread answer', () => {
 
     await expect(page.getByText(/No listed businesses match/i)).toBeVisible()
     await expect(page.getByRole('link', { name: /Browse listed businesses/i })).toBeVisible()
+    await expect(page.getByText('Nothing was sent.', { exact: true })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Today' })).toHaveAttribute('aria-checked', 'true')
+    const jsonAction = page.getByRole('button', { name: 'Get as agent JSON' })
+    await jsonAction.click()
+    const preview = page.getByRole('dialog', { name: 'Agent JSON preview' })
+    await expect(preview).toBeVisible()
+    await expect(preview.getByLabel('Agent JSON payload')).toContainText(`"query": "${query}"`)
+    await expect(preview.getByRole('button', { name: 'Confirm and copy JSON' })).toBeEnabled()
     await assertPublicLanguage(page)
   })
 })

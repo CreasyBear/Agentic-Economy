@@ -691,17 +691,22 @@ export function plainAvailabilityLabel(input: PlainAvailabilityInput): string {
   }
 }
 
+const HOURS_META_LABELS: Record<string, true> = {
+  unknown: true,
+  'hours unknown': true,
+  'hours supplied by owner': true,
+  'owner supplied hours': true,
+  'owner confirmed hours are not listed yet': true,
+  'after-hours availability supplied by owner': true,
+}
+
 /**
  * Plain hours line. Echoes the real hours string when present; otherwise a plain
  * "Check hours" — never `null`, `N/A`, or invented certainty.
  */
 export function plainHoursLabel(hoursOrUnknown: string | undefined): string {
   const trimmed = (hoursOrUnknown ?? '').trim()
-  if (trimmed.length === 0) {
-    return 'Check hours'
-  }
-
-  if (trimmed.toLowerCase() === 'unknown') {
+  if (trimmed.length === 0 || HOURS_META_LABELS[trimmed.toLowerCase()] === true) {
     return 'Check hours'
   }
 

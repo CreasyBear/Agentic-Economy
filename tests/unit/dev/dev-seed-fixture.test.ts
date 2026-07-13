@@ -22,6 +22,29 @@ describe('buildDevSeedCatalogState', () => {
     expect(
       bundle.state.serviceCapabilities.every((capability) => capability.firstRequest.mode === 'inquiry_available')
     ).toBe(true)
+    expect(bundle.state.businesses).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slug: 'joondalup-rapid-plumbing',
+        publishedPhone: '0412 345 678',
+      }),
+      expect.objectContaining({
+        slug: 'fremantle-coastal-electrical',
+        publishedPhone: '(08) 9430 1234',
+      }),
+    ]))
+    expect(
+      bundle.state.businesses.find((business) => business.slug === 'plumbing-demo'),
+    ).not.toHaveProperty('publishedPhone')
+    expect(bundle.state.businessServices).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        serviceArea: 'Joondalup and nearby suburbs',
+        hoursOrUnknown: 'Mon–Fri 7am–5pm',
+      }),
+      expect.objectContaining({
+        serviceArea: 'Fremantle and nearby suburbs',
+        hoursOrUnknown: 'Mon–Sat 8am–6pm',
+      }),
+    ]))
     expect(bundle.supportRecord.capability).toBe('human_inquiry_owner_inbox')
     expect(bundle.supportRecord.supportedChannels).toContain('public_inquiry')
   })

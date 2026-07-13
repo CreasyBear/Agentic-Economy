@@ -1,3 +1,4 @@
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 import { claimBusiness, createEmptyBusinessSourceState } from '@/modules/business/public'
 import type { BusinessMutationActor, BusinessSourceState } from '@/modules/business/public'
 import {
@@ -19,6 +20,7 @@ export type DevSeedBusinessFixture = {
   stateTerritory: string
   ownerMessage: string
   sourceLabel: string
+  publishedPhone?: string
   serviceName: string
   serviceCategory: string
   serviceSummary: string
@@ -60,25 +62,15 @@ type DevSeedLocale = {
 }
 
 const DEV_SEED_ANCHOR_BUSINESSES: readonly DevSeedBusinessFixture[] = [
-  {
-    requestedSlug: 'plumbing-demo',
-    businessName: 'Demo Plumbing',
-    category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
-    ownerMessage: 'Owner supplied service facts for local inquiry testing.',
+  ...LOCAL_E2E_BUSINESS_FIXTURES.map((fixture) => ({
+    ...fixture,
+    ownerMessage: 'Owner supplied service facts for local catalog testing.',
     sourceLabel: 'Owner supplied service facts',
-    serviceName: 'Emergency plumbing',
-    serviceCategory: 'Emergency plumbing',
-    serviceSummary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
     photoUrl: '/images/illustration/cat-plumbing.png',
-    responseTimeMinutes: 22,
-    firstRequestMode: 'inquiry_available',
+    firstRequestMode: 'inquiry_available' as const,
     publicDisclosure: 'Use the inquiry form for a first contact.',
     noContactReason: '',
-  },
+  })),
   {
     requestedSlug: 'sandbox-option-one',
     businessName: 'Sandbox Option One',
@@ -336,6 +328,7 @@ function seedBusinessFixture(
       suburb: fixture.suburb,
       stateTerritory: fixture.stateTerritory,
       requestedSlug: fixture.requestedSlug,
+      ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
       ownerMessage: fixture.ownerMessage,
       sourceRefs: [
         {

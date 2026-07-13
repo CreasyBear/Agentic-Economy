@@ -130,10 +130,12 @@ describe('registry public API routes', () => {
 
       expect(registry.result.items.map((item) => item.slug)).toEqual([
         'plumbing-demo',
+        'fremantle-coastal-electrical',
+        'joondalup-rapid-plumbing',
         'parramatta-emergency-plumbing',
       ])
       expect(registry.result.pagination).toMatchObject({
-        total: 2,
+        total: 4,
         hasMore: false,
       })
     } finally {

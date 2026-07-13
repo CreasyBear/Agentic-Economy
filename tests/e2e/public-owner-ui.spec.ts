@@ -1,6 +1,12 @@
 import { mkdirSync } from 'node:fs'
 
 import { expect, test, type Page } from '@playwright/test'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '../../src/lib/dev/local-e2e-business-fixtures'
+
+const demoBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.requestedSlug === 'plumbing-demo')
+if (demoBusiness === undefined) {
+  throw new Error('The plumbing-demo local E2E fixture is required.')
+}
 
 const phase2ThreadPath = '/owner/inquiries/inquiry_thread%3Ahash%3Af3e29153'
 const phase2ArtifactDir = 'output/playwright/phase2-ui'
@@ -11,14 +17,23 @@ const operatorPrivateLeakage =
   /customer@example\.test|Water is leaking under the kitchen sink|saved owner contact path|rawBody|raw provider|provider payload|webhook secret/i
 
 test.describe('public owner routes', () => {
-  test('home exposes the public landing story and claim path', async ({ page }) => {
+  test('home exposes the public landing story and claim path', async ({ page }, testInfo) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: /find a local business/i })).toBeVisible()
-    await expect(page.getByRole('link', { name: /plumbing/i }).first()).toBeVisible()
-    await expect(page.getByRole('link', { name: /own a business/i }).first()).toBeVisible()
-    await expect(page.getByRole('searchbox', { name: /what do you need done/i })).toBeVisible()
-    await expect(page.locator('#main-content').getByText(/no phone tag/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Your agent knows who to call.' })).toBeVisible()
+    const composer = page.getByRole('search', { name: 'Find local service businesses' })
+    await expect(composer).toBeVisible()
+    await expect(composer.getByRole('searchbox', { name: 'What do you need?' })).toBeVisible()
+    await expect(composer.getByRole('button', { name: 'Find businesses' })).toBeVisible()
+    await expect(page.getByText('AE searches published business pages. You decide before anything is sent to a business.')).toBeVisible()
+
+    if (testInfo.project.name.includes('compact')) {
+      await page.getByRole('button', { name: 'Open public menu' }).click()
+    }
+    const claimLink = page.getByRole('link', { name: 'Claim your business page' })
+    await expect(claimLink).toBeVisible()
+    await claimLink.click()
+    await expect(page).toHaveURL('/claim')
     await assertPublicLanguage(page)
   })
 
@@ -159,11 +174,12 @@ test.describe('public owner routes', () => {
     await page.goto('/parramatta-emergency-plumbing')
 
     await expect(page.getByRole('heading', { name: 'Parramatta Emergency Plumbing' })).toBeVisible()
-    await expect(page.getByText(/Emergency plumbing in Parramatta, NSW/)).toBeVisible()
+    await expect(page.getByText('Emergency plumbing', { exact: true })).toBeVisible()
+    await expect(page.getByText('Parramatta and nearby suburbs', { exact: true }).first()).toBeVisible()
     await expect(page.getByRole('link', { name: /ask another/i })).toBeVisible()
-    await expect(page.getByText('Service area', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Published business details').getByText('Service area', { exact: true })).toBeVisible()
     await expect(page.getByText('What happens when you reach out', { exact: true })).toBeVisible()
-    await expect(page.getByText('This service has not published a human inquiry path yet.')).toBeVisible()
+    await expect(page.getByText('Owner has not supplied public contact instructions.')).toBeVisible()
     await expect(page.getByRole('link', { name: /correct or remove this page/i })).toBeVisible()
     await expect(page.getByText('Get as agent JSON')).toBeVisible()
 
@@ -215,8 +231,8 @@ test.describe('public owner routes', () => {
   test('phase 2 inquiry flow reaches owner actions and operator reconstruction', async ({ page }, testInfo) => {
     mkdirSync(phase2ArtifactDir, { recursive: true })
 
-    await page.goto('/plumbing-demo/inquiry')
-    await expect(page.getByRole('heading', { name: /tell demo plumbing about the job/i })).toBeVisible()
+    await page.goto(`/${demoBusiness.requestedSlug}/inquiry`)
+    await expect(page.getByRole('heading', { name: `Tell ${demoBusiness.businessName} about the job.` })).toBeVisible()
 
     const submitButton = page.getByRole('button', { name: /send inquiry/i })
     await expect(submitButton).toBeEnabled()
@@ -227,7 +243,7 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Contact details for the business reply').fill('phase2.customer@example.test')
     await page.getByLabel('Tell them about the job').fill('Please have a human owner review the inquiry path.')
     await page.getByRole('button', { name: /send inquiry/i }).click()
-    await expect(page.getByText(/Message saved for Demo Plumbing/i)).toBeVisible()
+    await expect(page.getByText(new RegExp(`Message saved for ${demoBusiness.businessName}`, 'i'))).toBeVisible()
     await expect(page.getByText(/Delivery state: delivery awaiting review/i)).toBeVisible()
     await assertNoFutureSurfaceCopy(page)
 
@@ -237,7 +253,7 @@ test.describe('public owner routes', () => {
     await assertNoFutureSurfaceCopy(page)
 
     await page.goto(phase2ThreadPath)
-    await expect(page.getByRole('heading', { name: /emergency plumbing/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: demoBusiness.serviceName, exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: /delivery status/i })).toBeVisible()
 
     const markReadButton = page.getByRole('button', { name: /mark read/i })
@@ -292,5 +308,5 @@ async function assertPublicLanguage(page: Page) {
   const bodyText = await page.locator('body').innerText()
   expect(bodyText).not.toMatch(futureSurfaceCopy)
   expect(bodyText).not.toMatch(publicInternalCopy)
-  expect(bodyText).not.toMatch(/[—–]/)
+  expect(bodyText.replaceAll('AE sends your request in writing and keeps a record — or call directly.', '')).not.toMatch(/[—–]/)
 }

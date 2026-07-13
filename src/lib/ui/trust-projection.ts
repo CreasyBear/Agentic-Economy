@@ -59,9 +59,18 @@ export function buildListingTrustProjection(catalog: TrustProjectionCatalogSourc
   }
 }
 
+const NON_PUBLISHED_HOURS_LABELS: Record<string, true> = {
+  'check hours': true,
+  'hours supplied by owner': true,
+  'hours unknown': true,
+  'owner supplied hours': true,
+  'owner confirmed hours are not listed yet': true,
+  'after-hours availability supplied by owner': true,
+}
+
 function publishedHours(value: string | undefined, updatedAt: number): TrustFact {
   const label = plainHoursLabel(value)
-  return label === 'Check hours'
+  return NON_PUBLISHED_HOURS_LABELS[label.toLowerCase()] === true
     ? { kind: 'not_published', label: 'Hours not published here' }
     : { kind: 'published', value: label, updatedAt }
 }

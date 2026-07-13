@@ -134,6 +134,7 @@ async function upsertBusiness(db: RuntimeDb, ownerId: string, business: Business
     category: business.category,
     suburb: business.suburb,
     stateTerritory: business.stateTerritory,
+    publishedPhone: business.publishedPhone,
     publicStatus: business.publicStatus,
     trustTier: business.trustTier,
     claimStatus: business.claimStatus,

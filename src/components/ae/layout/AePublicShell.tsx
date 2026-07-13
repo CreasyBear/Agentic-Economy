@@ -106,6 +106,7 @@ function PublicNavItems() {
       <>
         <TopNavItem label="Ask AE" href="/engine" />
         <TopNavItem label="Businesses" href={defaultRegistryHref} />
+        <TopNavItem label="Claim your business page" href="/claim" />
         <TopNavItem label="For agents" href="/developers/discovery" />
         <TopNavItem label="Activity" href="/admin/runs" />
       </>
@@ -116,6 +117,7 @@ function PublicNavItems() {
     <div className="hidden md:contents">
       <Button label="Ask AE" variant="ghost" size="sm" href="/engine" />
       <Button label="Businesses" variant="ghost" size="sm" href={defaultRegistryHref} />
+      <Button label="Claim your business page" variant="ghost" size="sm" href="/claim" />
       <Button label="For agents" variant="ghost" size="sm" href="/developers/discovery" />
       <Button label="Activity" variant="ghost" size="sm" href="/admin/runs" />
     </div>

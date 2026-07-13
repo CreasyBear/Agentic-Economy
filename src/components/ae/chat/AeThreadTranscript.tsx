@@ -1,4 +1,5 @@
 import { MessageScrollerItem } from './AeThreadMessageScroller'
+import { Text } from '@astryxdesign/core/Text'
 import type { AeSearchContext } from '@/modules/answer/search-context'
 import type { FollowUpIntent, PublicThreadProjection, PublicThreadTurn } from '@/modules/answer-thread/public'
 import { AeThreadTurnCollapsed } from './AeThreadTurnCollapsed'
@@ -81,11 +82,14 @@ export function AeThreadTranscript({
                   {...(onFollowUp === undefined ? {} : { onChangeCriteria: () => onFollowUp('Change my shortlist criteria') })}
                 />
               ) : isLastCompleted && liveTurn === null ? (
-                <AeFollowUpChips
-                  turn={followUpContext?.turn ?? turn}
-                  contextPlacement={followUpContext?.contextPlacement ?? 'current'}
-                  {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })}
-                />
+                <>
+                  {isNoMatchTurn(turn) ? <Text color="secondary" role="status">Nothing was sent.</Text> : null}
+                  <AeFollowUpChips
+                    turn={followUpContext?.turn ?? turn}
+                    contextPlacement={followUpContext?.contextPlacement ?? 'current'}
+                    {...(onFollowUp === undefined ? {} : { onSelect: onFollowUp })}
+                  />
+                </>
               ) : null}
             </div>
           </MessageScrollerItem>
@@ -173,4 +177,12 @@ function isProviderContextArtifact(artifact: PublicThreadTurn['artifacts'][numbe
     default:
       return false
   }
+}
+
+function isNoMatchTurn(turn: PublicThreadTurn): boolean {
+  const providerCount = turn.artifacts.reduce((count, artifact) => {
+    if (artifact.kind !== 'provider-cards' && artifact.kind !== 'provider-compare-table') return count
+    return count + artifact.providers.length
+  }, 0)
+  return providerCount === 0 && turn.artifacts.some((artifact) => artifact.kind === 'recovery-prompts')
 }

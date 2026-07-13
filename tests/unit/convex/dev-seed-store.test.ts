@@ -36,6 +36,11 @@ describe('dev seed Convex store', () => {
       .dump('businesses')
       .filter((row) => bundle.seededSlugs.includes(String(row.slug)))
     expect(seededBusinesses).toHaveLength(3)
+    expect(seededBusinesses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug: 'joondalup-rapid-plumbing', publishedPhone: '0412 345 678' }),
+      expect.objectContaining({ slug: 'fremantle-coastal-electrical', publishedPhone: '(08) 9430 1234' }),
+    ]))
+    expect(seededBusinesses.find((row) => row.slug === 'plumbing-demo')?.publishedPhone).toBeUndefined()
     expect(db.dump('capabilityLaunchSupportRecords').filter((row) => row.supportRecordId === 'support:dev-seed:human-inquiry-owner-inbox')).toHaveLength(1)
 
     expect(db.reads().filter((read) => read.indexName === null)).toEqual([])

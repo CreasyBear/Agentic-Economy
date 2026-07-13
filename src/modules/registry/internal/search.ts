@@ -1,3 +1,4 @@
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 import {
   claimBusiness,
   createEmptyBusinessSourceState,
@@ -303,73 +304,68 @@ export function createDefaultRegistrySourceState(): RegistrySourceState {
 export function createLocalE2eRegistrySourceState(): RegistrySourceState {
   const state = createDefaultRegistrySourceState()
 
-  const claim = claimBusiness(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: 'owner:plumbing-demo',
-      displayName: 'Demo Owner',
-    },
-    facts: {
-      name: 'Demo Plumbing',
-      category: 'Plumbing',
-      suburb: 'Parramatta',
-      stateTerritory: 'NSW',
-      requestedSlug: 'plumbing-demo',
-      ownerMessage: 'Local e2e inquiry-capable service facts.',
-      sourceRefs: [
-        {
+  for (const [index, fixture] of LOCAL_E2E_BUSINESS_FIXTURES.entries()) {
+    const actor = {
+      kind: 'authenticated_owner' as const,
+      clerkUserId: `owner:${fixture.requestedSlug}`,
+      displayName: `${fixture.businessName} Owner`,
+    }
+    const now = 3_000 + index * 2_000
+    const claim = claimBusiness(state, {
+      actor,
+      facts: {
+        name: fixture.businessName,
+        category: fixture.category,
+        suburb: fixture.suburb,
+        stateTerritory: fixture.stateTerritory,
+        requestedSlug: fixture.requestedSlug,
+        ...(fixture.publishedPhone === undefined ? {} : { publishedPhone: fixture.publishedPhone }),
+        ownerMessage: 'Local e2e owner-supplied service facts.',
+        sourceRefs: [{
           label: 'Local e2e service facts',
-          evidenceRef: 'private:evidence:plumbing-demo',
-          sourceHash: brandNonEmpty('hash:source:plumbing-demo', 'SourceHash'),
-        },
-      ],
-    },
-    security: {
-      csrf: matchingCsrf('local-e2e-claim'),
-      rateLimit: {
-        scope: 'claim_submit',
-        key: 'registry:plumbing-demo',
-        now: 3_000,
-        limit: 5,
-        windowMs: 60_000,
+          evidenceRef: `private:evidence:${fixture.requestedSlug}`,
+          sourceHash: brandNonEmpty(`hash:source:${fixture.requestedSlug}`, 'SourceHash'),
+        }],
       },
-    },
-    operationKey: operationKey('local-e2e-claim:plumbing-demo'),
-    correlationId: correlationId('local-e2e-claim:plumbing-demo'),
-    now: 3_000,
-  })
+      security: {
+        csrf: matchingCsrf(`local-e2e-claim:${fixture.requestedSlug}`),
+        rateLimit: {
+          scope: 'claim_submit',
+          key: `registry:${fixture.requestedSlug}`,
+          now,
+          limit: 5,
+          windowMs: 60_000,
+        },
+      },
+      operationKey: operationKey(`local-e2e-claim:${fixture.requestedSlug}`),
+      correlationId: correlationId(`local-e2e-claim:${fixture.requestedSlug}`),
+      now,
+    })
+    if (claim.kind === 'error') {
+      throw new Error(`Local e2e registry claim failed for ${fixture.requestedSlug}: ${claim.reason}`)
+    }
 
-  if (claim.kind === 'error') {
-    throw new Error(`Local e2e registry claim failed: ${claim.reason}`)
-  }
-
-  const published = publishBusinessCatalog(state, {
-    actor: {
-      kind: 'authenticated_owner',
-      clerkUserId: 'owner:plumbing-demo',
-      displayName: 'Demo Owner',
-    },
-    claimId: claim.claim.claimId,
-    services: [
-      toServiceCatalogInput({
-        serviceName: 'Diagnostic plumbing',
-        serviceCategory: 'Plumbing',
-        serviceSummary: 'Diagnostic plumbing triage for first contact.',
-        serviceArea: 'Parramatta',
-        hoursOrUnknown: 'Hours supplied by owner',
+    const published = publishBusinessCatalog(state, {
+      actor,
+      claimId: claim.claim.claimId,
+      services: [toServiceCatalogInput({
+        serviceName: fixture.serviceName,
+        serviceCategory: fixture.serviceCategory,
+        serviceSummary: fixture.serviceSummary,
+        serviceArea: fixture.serviceArea,
+        hoursOrUnknown: fixture.hoursOrUnknown,
         firstRequestMode: 'inquiry_available',
         publicDisclosure: 'Use the inquiry form for a first contact.',
         noContactReason: '',
-      }),
-    ],
-    security: { csrf: matchingCsrf('local-e2e-publish') },
-    operationKey: operationKey('local-e2e-publish:plumbing-demo'),
-    correlationId: correlationId('local-e2e-publish:plumbing-demo'),
-    now: 4_000,
-  })
-
-  if (published.kind === 'error') {
-    throw new Error(`Local e2e registry publish failed: ${published.reason}`)
+      })],
+      security: { csrf: matchingCsrf(`local-e2e-publish:${fixture.requestedSlug}`) },
+      operationKey: operationKey(`local-e2e-publish:${fixture.requestedSlug}`),
+      correlationId: correlationId(`local-e2e-publish:${fixture.requestedSlug}`),
+      now: now + 1_000,
+    })
+    if (published.kind === 'error') {
+      throw new Error(`Local e2e registry publish failed for ${fixture.requestedSlug}: ${published.reason}`)
+    }
   }
 
   return state

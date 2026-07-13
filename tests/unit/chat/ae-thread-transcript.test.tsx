@@ -169,6 +169,33 @@ describe('AeThreadTranscript', () => {
     expect(screen.queryByRole('heading', { level: 2, name: 'Your shortlist is ready' })).toBeNull()
   })
 
+  it('renders the exact no-send disclosure after a no-match recovery turn', () => {
+    stubDeterministicChips()
+    const projection: PublicThreadProjection = {
+      threadId: 'thread-no-match',
+      title: 'Emergency roofer in Parramatta',
+      turns: [{
+        turnId: 'turn-no-match',
+        seq: 1,
+        query: 'Emergency roofer in Parramatta',
+        intent: 'refine_search',
+        status: 'complete',
+        oneLine: 'No listed businesses match this search.',
+        workLog: [],
+        artifacts: [{
+          kind: 'recovery-prompts',
+          title: 'Try a narrower search',
+          prompts: [],
+        }],
+      }],
+    }
+
+    render(<AeThreadTranscript projection={projection} />)
+
+    expect(screen.getByText('Nothing was sent.', { exact: true, selector: '[role="status"]' }).textContent)
+      .toBe('Nothing was sent.')
+  })
+
   it('keeps follow-up chips connected after a providerless boundary turn', () => {
     stubDeterministicChips()
     let selectedQuery: string | null = null

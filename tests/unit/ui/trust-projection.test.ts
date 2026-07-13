@@ -120,6 +120,20 @@ describe('buildListingTrustProjection', () => {
     })
   })
 
+  it('does not publish the owner-supplied-hours meta label as usable hours', () => {
+    const projection = buildListingTrustProjection(
+      trustCatalog({
+        hoursOrUnknown: 'Hours supplied by owner',
+        serviceArea: 'Parramatta',
+      }),
+    )
+
+    expect(projection.hours).toEqual({
+      kind: 'not_published',
+      label: 'Hours not published here',
+    })
+  })
+
   it.each([0, 22])(
     'does not reinterpret responseTimeMinutes=%i as observed or business-published reply history',
     (responseTimeMinutes) => {

@@ -10,6 +10,7 @@ import {
   sourceMutation,
   sourceQuery,
 } from '@/lib/server/convex-source'
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
 import type { BusinessRecord } from '@/modules/business/public'
@@ -610,8 +611,8 @@ function submitLocalE2ePublicInquiry(
   const customerAccessKey = createCustomerAccessKey()
   const result = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
     target: {
-      businessId: brandNonEmpty(target.businessId, 'BusinessId'),
-      serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
+      businessId: localE2eBusinessId,
+      serviceId: localE2eServiceId,
       capabilityKind: target.capabilityKind,
     },
     body: data.body,
@@ -951,6 +952,12 @@ const localE2eTarget = {
   serviceId: localE2eServiceId,
   capabilityKind: 'phone_inquiry' as const,
 }
+const localE2eBusinessFixture = LOCAL_E2E_BUSINESS_FIXTURES.find(
+  (fixture) => fixture.requestedSlug === 'plumbing-demo',
+)
+if (localE2eBusinessFixture === undefined) {
+  throw new Error('The plumbing-demo local E2E fixture is required.')
+}
 
 function createLocalE2eInquirySourceState(): InquirySourceState {
   const submitted = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
@@ -1023,12 +1030,12 @@ function localE2eBusiness(): BusinessRecord {
   return {
     businessId: localE2eBusinessId,
     ownerId: localE2eOwnerId,
-    slug: brandNonEmpty('plumbing-demo', 'Slug'),
-    name: 'Demo Plumbing',
-    normalizedName: 'demo plumbing',
-    category: 'Emergency plumbing',
-    suburb: 'Parramatta',
-    stateTerritory: 'NSW',
+    slug: brandNonEmpty(localE2eBusinessFixture.requestedSlug, 'Slug'),
+    name: localE2eBusinessFixture.businessName,
+    normalizedName: localE2eBusinessFixture.businessName.toLowerCase(),
+    category: localE2eBusinessFixture.category,
+    suburb: localE2eBusinessFixture.suburb,
+    stateTerritory: localE2eBusinessFixture.stateTerritory,
     publicStatus: 'published',
     trustTier: 'contact_confirmed',
     claimStatus: 'published',
@@ -1041,13 +1048,13 @@ function localE2eBusiness(): BusinessRecord {
 function localE2eService(): BusinessServiceRecord {
   return {
     serviceId: localE2eServiceId,
-    serviceSlug: brandNonEmpty('emergency-plumbing', 'Slug'),
+    serviceSlug: brandNonEmpty('diagnostic-plumbing', 'Slug'),
     businessId: localE2eBusinessId,
-    name: 'Emergency plumbing',
-    category: 'Emergency plumbing',
-    summary: 'Human triage for urgent plumbing issues.',
-    serviceArea: 'Parramatta',
-    hoursOrUnknown: 'Hours supplied by owner',
+    name: localE2eBusinessFixture.serviceName,
+    category: localE2eBusinessFixture.serviceCategory,
+    summary: localE2eBusinessFixture.serviceSummary,
+    serviceArea: localE2eBusinessFixture.serviceArea,
+    hoursOrUnknown: localE2eBusinessFixture.hoursOrUnknown,
     status: 'published',
     sortOrder: 1,
     sourceHash: stableHash({ serviceId: localE2eServiceId }),
