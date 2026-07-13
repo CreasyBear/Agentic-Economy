@@ -31,6 +31,7 @@ export function buildPublicAgentSkillMarkdown(options: { canonicalBaseUrl: strin
     '- `401` means the API key is missing, invalid, expired, or revoked.',
     '- `403` means the key lacks `customer_requests:create`.',
     '- `preparing_options` means wait or resume the same Request; do not create a replacement.',
+    '- `needs_authorization` means show the disclosure review to the customer; do not call `/options` or imply consent.',
     '- `needs_attention` means retry or revise according to `nextAction`.',
     '',
     '## Boundaries (hard)',

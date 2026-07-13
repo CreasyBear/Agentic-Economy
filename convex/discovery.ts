@@ -784,7 +784,7 @@ function buildLlmsTxtFromCatalogs(
     `- clarify=${canonicalBaseUrl}/api/v1/requests/:requestRef/messages`,
     `- facts=${canonicalBaseUrl}/api/v1/requests/:requestRef/facts`,
     '- auth=Bearer AE API key with customer_requests:create',
-    '- lifecycle=needs_information | ready_to_compare | preparing_options | options_ready | no_options | unsupported | needs_attention',
+    '- lifecycle=needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready | no_options | unsupported | needs_attention',
     '',
     'Advanced routing kernel:',
     `- descriptor=${routingBaseUrl}/.well-known/ae-routing.json`,

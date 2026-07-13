@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { projectCustomerRequest, projectNeedsAttention, projectOptionsReady, projectPreparingOptions } from '@/modules/customer-request/customer-projection'
+import { projectCustomerRequest, projectNeedsAttention, projectOptionsReady, projectPreparingOptions, projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 
 describe('customer request projection', () => {
   it('hides capability and protocol identifiers from a ready request', () => {
@@ -47,6 +47,29 @@ describe('customer request projection', () => {
     const unsupported = projectCustomerRequest({ kind: 'unsupported', request: { ...request(), compilationState: 'unsupported' }, reason: 'no_registered_capability' })
     expect(unsupported).toMatchObject({ state: 'unsupported', nextAction: 'revise_request' })
     expect(new Set(['needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options', 'unsupported', 'needs_attention']).size).toBe(7)
+  })
+
+  it('shows protected preparation as a customer disclosure review without protocol fields', () => {
+    const projection = projectRequestEvaluation({
+      snapshot: { requestId: 'request:protected', revision: 1, intent: 'Send my parcel' },
+      evaluation: {
+        requestId: 'request:protected', requestRevision: 1, registrySnapshotDigest: 'registry:1',
+        factsDigest: 'facts:1', facts: {}, criteria: [], candidates: [], posture: 'progress_available',
+        preparationDisclosure: {
+          purposeLabel: 'Compare parcel services', maximumRecipients: 2,
+          categories: [{ field: 'origin_postcode', label: 'Origin postcode', classification: 'personal' }],
+        },
+        evaluationDigest: 'evaluation:1',
+      },
+    })
+    expect(projection).toMatchObject({
+      state: 'needs_authorization', nextAction: 'review_disclosure',
+      disclosureReview: {
+        purpose: 'Compare parcel services', maximumRecipients: 2,
+        categories: [{ label: 'Origin postcode', classification: 'personal' }],
+      },
+    })
+    expect(JSON.stringify(projection)).not.toContain('origin_postcode')
   })
 })
 

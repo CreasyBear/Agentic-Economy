@@ -103,6 +103,26 @@ describe('customer Request workspace', () => {
     await waitFor(() => expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value).toBe(''))
   })
 
+  it('explains protected data sharing before any provider preparation', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-protected' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:protected', revision: 1, state: 'needs_authorization',
+      summary: 'Send my parcel', nextAction: 'review_disclosure', missingFields: [], criteria: [], options: [],
+      disclosureReview: {
+        purpose: 'Compare parcel services', maximumRecipients: 2,
+        categories: [{ label: 'Origin postcode', classification: 'personal' }],
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Send my parcel' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    await screen.findByRole('heading', { name: 'Review what would be shared' })
+    expect(screen.getByText(/up to 2 eligible registered businesses/)).toBeTruthy()
+    expect(screen.getByText(/Nothing has been shared/)).toBeTruthy()
+    expect(screen.queryByText('origin_postcode')).toBeNull()
+  })
+
   it('shows authentication as a customer action rather than a protocol error', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'missing_auth' }, { status: 401 })))

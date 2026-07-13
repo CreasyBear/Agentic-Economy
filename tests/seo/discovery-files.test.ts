@@ -54,7 +54,7 @@ describe('discovery files', () => {
     expect(result.body).toContain('https://route.ae.example/v1/route')
     expect(result.body).toContain('https://route.ae.example/mcp')
     expect(result.body).toContain('https://ae.example/api/v1/requests')
-    expect(result.body).toContain('needs_information | ready_to_compare | preparing_options | options_ready')
+    expect(result.body).toContain('needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready')
     expect(result.body).not.toContain('Parramatta Emergency Plumbing')
     expect(result.body).not.toContain('Ignore previous instructions')
     expect(result.body).not.toContain('verified')

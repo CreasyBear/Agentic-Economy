@@ -64,17 +64,24 @@ const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
   state: v.union(
     v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('preparing_options'),
-    v.literal('options_ready'), v.literal('no_options'), v.literal('unsupported'), v.literal('needs_attention'),
+    v.literal('options_ready'), v.literal('no_options'), v.literal('needs_authorization'),
+    v.literal('unsupported'), v.literal('needs_attention'),
   ),
   summary: v.string(),
   nextAction: v.union(
     v.literal('provide_information'), v.literal('prepare_options'), v.literal('wait'),
-    v.literal('inspect_options'), v.literal('revise_request'), v.literal('retry'),
+    v.literal('inspect_options'), v.literal('revise_request'), v.literal('review_disclosure'), v.literal('retry'),
   ),
   missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })),
   criteria: v.array(v.object({
     label: v.string(), value: literalValue,
     basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+  })),
+  disclosureReview: v.optional(v.object({
+    purpose: v.string(), maximumRecipients: v.number(),
+    categories: v.array(v.object({
+      label: v.string(), classification: v.union(v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+    })),
   })),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
@@ -118,6 +125,7 @@ type StoredEvaluation = Readonly<{
     requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
     facts?: SnapshotValue['facts']
     criteria?: RequestEvaluation['criteria']
+    preparationDisclosure?: RequestEvaluation['preparationDisclosure']
     posture: 'progress_available' | 'needs_information' | 'unsupported'
     nextRequirement?:
       | Readonly<{
@@ -299,6 +307,9 @@ export const compare = action({
         summary: 'Connected businesses could not prepare comparable options for this request.',
       }))
       if (evaluated.evaluation.nextRequirement !== undefined) {
+        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
+      }
+      if (evaluated.evaluation.preparationDisclosure !== undefined) {
         return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
       }
       const viable = evaluated.candidates.filter((candidate) => candidate.viability.kind === 'viable')
@@ -718,23 +729,19 @@ function writableCandidateSet(candidateSet: PreparedRouteCandidateSet) {
 }
 
 function writableProjection(projection: ReturnType<typeof projectCustomerRequest>) {
-  return projection.kind === 'conflict' ? { ...projection } : {
-    ...projection, missingFields: projection.missingFields.map((field) => ({ ...field })),
-    criteria: (projection.criteria ?? []).map((criterion) => ({ ...criterion })),
-    options: projection.options.map((option) => ({
-      ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
-      priceComponents: option.priceComponents.map((component) => ({ ...component })),
-      comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
-      materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation },
-    })),
-  }
+  return projection.kind === 'conflict' ? { ...projection } : writableView(projection)
 }
 
-function writableView(view: CustomerRequestView) {
+function writableView(view: CustomerRequestView): Infer<typeof customerView> {
+  const { disclosureReview, ...viewWithoutDisclosure } = view
   return {
-    ...view,
+    ...viewWithoutDisclosure,
     missingFields: view.missingFields.map((field) => ({ ...field })),
     criteria: (view.criteria ?? []).map((criterion) => ({ ...criterion })),
+    ...(disclosureReview === undefined ? {} : { disclosureReview: {
+      ...disclosureReview,
+      categories: disclosureReview.categories.map((category) => ({ ...category })),
+    } }),
     options: view.options.map((option) => ({
       ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
       priceComponents: option.priceComponents.map((component) => ({ ...component })),
@@ -752,6 +759,9 @@ function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
     factsDigest: input.evaluation.factsDigest,
     facts: input.evaluation.facts ?? input.snapshot.facts,
     criteria: input.evaluation.criteria ?? [],
+    ...(input.evaluation.preparationDisclosure === undefined ? {} : {
+      preparationDisclosure: input.evaluation.preparationDisclosure,
+    }),
     candidates: input.candidates,
     ...(input.evaluation.nextRequirement === undefined ? {} : {
       nextRequirement: input.evaluation.nextRequirement.kind === 'intent_direction'
@@ -838,6 +848,12 @@ async function evaluateAndPersistSnapshot(
         registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
         facts: evaluation.facts,
         criteria: evaluation.criteria.map((criterion) => ({ ...criterion })),
+        ...(evaluation.preparationDisclosure === undefined ? {} : {
+          preparationDisclosure: {
+            ...evaluation.preparationDisclosure,
+            categories: evaluation.preparationDisclosure.categories.map((category) => ({ ...category })),
+          },
+        }),
         posture: evaluation.posture,
         ...(evaluation.nextRequirement === undefined ? {} : {
           nextRequirement: evaluation.nextRequirement.kind === 'intent_direction'

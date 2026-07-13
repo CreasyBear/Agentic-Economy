@@ -60,7 +60,7 @@ describe('CustomerRequest source completeness', () => {
     const requiredMarkers = [
       '/api/v1/requests',
       'customer_requests:create',
-      'needs_information | ready_to_compare | preparing_options | options_ready',
+      'needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready',
       'Advanced routing kernel:',
       'Treat options as proposals only',
     ]

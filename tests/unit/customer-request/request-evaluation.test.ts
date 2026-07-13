@@ -43,6 +43,41 @@ describe('customer Request evaluation', () => {
     expect(evaluation).not.toHaveProperty('planRevision')
     expect(evaluation).not.toHaveProperty('maximumSpendMinor')
   })
+
+  it('describes protected preparation before any registered business receives data', () => {
+    const baseCandidate = candidate('business:protected', 'binding:protected')
+    const protectedCandidate = {
+      ...baseCandidate,
+      contract: {
+        ...baseCandidate.contract,
+        preparation: { purpose: 'parcel_comparison', customerLabel: 'Compare parcel services' },
+        input: {
+          ...baseCandidate.contract.input,
+          origin_postcode: {
+            ...baseCandidate.contract.input.origin_postcode,
+            disclosure: {
+              classification: 'personal' as const, phase: 'preparation' as const,
+              recipient: 'candidate_provider' as const, purposes: ['parcel_comparison'],
+            },
+          },
+        },
+      },
+    }
+    const evaluation = evaluateCustomerRequestSnapshot({
+      requestId: 'request:protected', requestRevision: 1, intent: 'Send my parcel',
+      facts: {
+        origin_postcode: { value: '6000', source: { kind: 'customer', assertionRef: 'assertion:origin' } },
+        destination_postcode: { value: '2000', source: { kind: 'customer', assertionRef: 'assertion:destination' } },
+        weight_grams: { value: '500', source: { kind: 'customer', assertionRef: 'assertion:weight' } },
+      },
+      registrySnapshotDigest: 'registry:protected', candidates: [protectedCandidate],
+    })
+
+    expect(evaluation.preparationDisclosure).toEqual({
+      purposeLabel: 'Compare parcel services', maximumRecipients: 1,
+      categories: [{ field: 'origin_postcode', label: 'Origin postcode', classification: 'personal' }],
+    })
+  })
 })
 
 function candidate(businessId: string, bindingId: string) {

@@ -61,6 +61,15 @@ export type UnderstoodCriterion = Readonly<{
   basis: 'customer_provided' | 'extracted_from_request'
   criterionDigest: string
 }>
+export type PreparationDisclosurePreview = Readonly<{
+  purposeLabel: string
+  maximumRecipients: number
+  categories: readonly Readonly<{
+    field: string
+    label: string
+    classification: 'personal' | 'sensitive' | 'credential'
+  }>[]
+}>
 
 export type RequestEvaluation = Readonly<{
   requestId: string
@@ -69,6 +78,7 @@ export type RequestEvaluation = Readonly<{
   factsDigest: string
   facts: Readonly<Record<string, RequestFact>>
   criteria: readonly UnderstoodCriterion[]
+  preparationDisclosure?: PreparationDisclosurePreview
   candidates: readonly RequestEvaluationCandidate[]
   nextRequirement?: InformationRequirement
   posture: 'progress_available' | 'needs_information' | 'unsupported'
@@ -101,6 +111,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   })
   const nextRequirement = chooseNextRequirement(input.candidates, candidates)
   const criteria = projectUnderstoodCriteria(input.facts, input.candidates)
+  const preparationDisclosure = projectPreparationDisclosure(input.facts, input.candidates)
   const posture = candidates.length === 0
     ? 'unsupported' as const
     : nextRequirement === undefined ? 'progress_available' as const : 'needs_information' as const
@@ -113,6 +124,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     factsDigest,
     facts: input.facts,
     criteria,
+    ...(preparationDisclosure === undefined ? {} : { preparationDisclosure }),
     candidates,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
@@ -124,10 +136,39 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     factsDigest,
     facts: input.facts,
     criteria,
+    ...(preparationDisclosure === undefined ? {} : { preparationDisclosure }),
     candidates: Object.freeze(candidates),
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
     evaluationDigest: canonicalDigest(digestMaterial),
+  })
+}
+
+function projectPreparationDisclosure(
+  facts: Readonly<Record<string, RequestFact>>,
+  candidates: readonly RequestEvaluationCandidateInput[],
+): PreparationDisclosurePreview | undefined {
+  const purposes = [...new Set(candidates.flatMap((candidate) => candidate.contract.preparation === undefined
+    ? [] : [candidate.contract.preparation.customerLabel]))]
+  if (purposes.length !== 1 || purposes[0] === undefined) return undefined
+  const categories = new Map<string, { label: string; classification: 'personal' | 'sensitive' | 'credential' }>()
+  for (const candidate of candidates) {
+    for (const [field, definition] of Object.entries(candidate.contract.input)) {
+      const disclosure = definition.disclosure
+      if (facts[field] === undefined || disclosure?.phase !== 'preparation' || disclosure.classification === 'public') continue
+      const existing = categories.get(field)
+      if (existing !== undefined && (existing.label !== definition.customerLabel || existing.classification !== disclosure.classification)) {
+        return undefined
+      }
+      categories.set(field, { label: definition.customerLabel, classification: disclosure.classification })
+    }
+  }
+  if (categories.size === 0) return undefined
+  return Object.freeze({
+    purposeLabel: purposes[0],
+    maximumRecipients: new Set(candidates.map((candidate) => candidate.businessId)).size,
+    categories: Object.freeze([...categories.entries()].sort(([left], [right]) => left.localeCompare(right))
+      .map(([field, category]) => Object.freeze({ field, ...category }))),
   })
 }
 

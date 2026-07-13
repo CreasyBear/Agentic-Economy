@@ -88,10 +88,18 @@ const understoodCriterionValue = v.object({
   basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
   criterionDigest: v.string(),
 })
+const preparationDisclosurePreviewValue = v.object({
+  purposeLabel: v.string(), maximumRecipients: v.number(),
+  categories: v.array(v.object({
+    field: v.string(), label: v.string(),
+    classification: v.union(v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+  })),
+})
 export const requestEvaluationValue = v.object({
   evaluationId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
   factsDigest: v.string(), facts: v.optional(v.record(v.string(), requestFact)),
-  criteria: v.optional(v.array(understoodCriterionValue)), posture: v.union(
+  criteria: v.optional(v.array(understoodCriterionValue)),
+  preparationDisclosure: v.optional(preparationDisclosurePreviewValue), posture: v.union(
     v.literal('progress_available'), v.literal('needs_information'), v.literal('unsupported'),
   ),
   nextRequirement: v.optional(informationRequirementValue), evaluationDigest: v.string(), evaluatedAt: v.number(),

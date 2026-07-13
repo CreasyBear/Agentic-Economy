@@ -8,6 +8,7 @@ export type CustomerRequestState =
   | 'preparing_options'
   | 'options_ready'
   | 'no_options'
+  | 'needs_authorization'
   | 'unsupported'
   | 'needs_attention'
 
@@ -17,6 +18,7 @@ export type CustomerRequestNextAction =
   | 'wait'
   | 'inspect_options'
   | 'revise_request'
+  | 'review_disclosure'
   | 'retry'
 
 type PreparedCandidate = PreparedRouteCandidateSet['candidates'][number]
@@ -36,6 +38,11 @@ export type CustomerRequestView = Readonly<{
   nextAction: CustomerRequestNextAction
   missingFields: readonly Readonly<{ field: string; label: string; explanation: string }>[]
   criteria?: readonly CustomerCriterion[]
+  disclosureReview?: Readonly<{
+    purpose: string
+    maximumRecipients: number
+    categories: readonly Readonly<{ label: string; classification: 'personal' | 'sensitive' | 'credential' }>[]
+  }>
   clarification?: Readonly<
     | { kind: 'intent_direction'; prompt: string; answerKind: 'natural_language' }
     | { kind: 'contract_fact'; field: string; prompt: string; answerKind: 'typed_value' }
@@ -121,6 +128,19 @@ export function projectRequestEvaluation(input: Readonly<{
         },
     criteria,
   })
+  if (input.evaluation.preparationDisclosure !== undefined) return requestView({
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'needs_authorization',
+    summary: input.snapshot.intent,
+    nextAction: 'review_disclosure',
+    criteria,
+    disclosureReview: {
+      purpose: input.evaluation.preparationDisclosure.purposeLabel,
+      maximumRecipients: input.evaluation.preparationDisclosure.maximumRecipients,
+      categories: input.evaluation.preparationDisclosure.categories.map(({ label, classification }) => ({ label, classification })),
+    },
+  })
   return requestView({
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
@@ -136,6 +156,7 @@ export function projectPreparingOptions(input: Readonly<{
   revision: number
   summary: string
   criteria?: readonly CustomerCriterion[]
+  disclosureReview?: CustomerRequestView['disclosureReview']
 }>): CustomerRequestView {
   return requestView({ ...input, state: 'preparing_options', nextAction: 'wait' })
 }
@@ -180,6 +201,7 @@ function requestView(input: Readonly<{
   missingFields?: readonly Readonly<{ field: string; label: string; explanation: string }>[]
   clarification?: CustomerRequestView['clarification']
   criteria?: readonly CustomerCriterion[]
+  disclosureReview?: CustomerRequestView['disclosureReview']
   options?: readonly CustomerOption[]
 }>): CustomerRequestView {
   return Object.freeze({
@@ -191,6 +213,10 @@ function requestView(input: Readonly<{
     nextAction: input.nextAction,
     missingFields: Object.freeze((input.missingFields ?? []).map((field) => Object.freeze({ ...field }))),
     criteria: Object.freeze((input.criteria ?? []).map((criterion) => Object.freeze({ ...criterion }))),
+    ...(input.disclosureReview === undefined ? {} : { disclosureReview: Object.freeze({
+      ...input.disclosureReview,
+      categories: Object.freeze(input.disclosureReview.categories.map((category) => Object.freeze({ ...category }))),
+    }) }),
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })
