@@ -43,7 +43,7 @@ describe('AeGenerativeAnswer selected provider confirmation', () => {
     const summary = screen.getByText('The business handles timing, price, and availability.')
 
     expect(shortlist.contains(screen.getByText('These are the listed businesses AE found for this request.'))).toBe(true)
-    expect(shortlist.contains(screen.getByText('Open inquiry form'))).toBe(true)
+    expect(shortlist.contains(screen.getByText('Ask this business'))).toBe(true)
     expect(shortlist.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 

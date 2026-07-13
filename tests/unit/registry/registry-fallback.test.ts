@@ -114,14 +114,20 @@ describe('registry convex fallback', () => {
         query: 'diagnostic plumbing parramatta',
         limit: 10,
       })
-      expect(demoPage.items.map((item) => item.slug)).toEqual(['plumbing-demo'])
+      expect(demoPage.items.map((item) => item.slug)).toEqual([
+        'plumbing-demo',
+        'parramatta-emergency-plumbing',
+      ])
       expect(demoPage.items[0]?.services[0]?.firstRequest.mode).toBe('inquiry_available')
 
       const genericPage = await readPublicRegistrySearchPage({
         query: 'emergency plumber parramatta',
         limit: 10,
       })
-      expect(genericPage.items.map((item) => item.slug)).toEqual(['parramatta-emergency-plumbing'])
+      expect(genericPage.items.map((item) => item.slug)).toEqual([
+        'plumbing-demo',
+        'parramatta-emergency-plumbing',
+      ])
     } finally {
       if (previous === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
@@ -182,11 +188,14 @@ describe('registry convex fallback', () => {
         limit: 10,
       })
 
-      expect(page.items.map((item) => item.slug)).toEqual(['parramatta-emergency-plumbing'])
+      expect(page.items.map((item) => item.slug)).toEqual([
+        'plumbing-demo',
+        'parramatta-emergency-plumbing',
+      ])
       expect(page).toMatchObject({
         kind: 'ok',
         schemaVersion: 'public-business-catalog-api:v1',
-        pagination: { total: 1, hasMore: false },
+        pagination: { total: 2, hasMore: false },
       })
     } finally {
       restoreEnv('VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E', previousLocalBypass)

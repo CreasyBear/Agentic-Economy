@@ -139,7 +139,10 @@ describe('developer discovery route handlers', () => {
           expect.objectContaining({ slug: 'parramatta-emergency-plumbing' }),
         ])
       )
-      expect(search.items).toEqual([expect.objectContaining({ slug: 'parramatta-emergency-plumbing' })])
+      expect(search.items).toEqual([
+        expect.objectContaining({ slug: 'plumbing-demo' }),
+        expect.objectContaining({ slug: 'parramatta-emergency-plumbing' }),
+      ])
       expect(detail).toMatchObject({ kind: 'found', business: { slug: 'parramatta-emergency-plumbing' } })
       expect(schema).toMatchObject({
         state: 'degraded',
@@ -199,4 +202,3 @@ function availableDiscoveryState(): DiscoverySourceState {
 
   return state
 }
-

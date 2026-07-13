@@ -128,9 +128,10 @@ describe('POST /api/answer/turn empty-state queries', () => {
       }
 
       expect(complete.answer.providers.map((provider) => provider.slug)).toEqual([
+        'plumbing-demo',
         'parramatta-emergency-plumbing',
       ])
-      expect(complete.answer.summary).toContain('publishes service coverage')
+      expect(complete.answer.summary).toContain('publish service coverage')
 
       const persisted = turns.at(0) as { evidenceJson: string } | undefined
       const evidence = JSON.parse(persisted?.evidenceJson ?? '{}') as {
@@ -164,7 +165,7 @@ describe('POST /api/answer/turn empty-state queries', () => {
       )
       const searchStep = evidence.workLog?.find((step) => step.id === 'step-2')
       expect(searchStep?.status).toBe('complete')
-      expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '1')).toBe(true)
+      expect(searchStep?.detailRows?.some((row) => row.label === 'Results' && row.value === '2')).toBe(true)
       expect(server.requests).toHaveLength(0)
     } finally {
       restoreOpenRouter()

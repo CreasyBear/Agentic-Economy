@@ -351,7 +351,7 @@ describe('server Convex source seam', () => {
       const firstInquiry = inbox.inbox.inquiries[0]
       expect(firstInquiry).toMatchObject({
         businessName: 'Demo Plumbing',
-        serviceName: 'Emergency plumbing',
+        serviceName: 'Diagnostic plumbing',
         status: 'replied',
       })
 

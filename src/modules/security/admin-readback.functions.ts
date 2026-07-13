@@ -63,14 +63,15 @@ export function buildIndexHealthRows(now = defaultIndexHealthReadbackAt): readon
     ]
   }
 
-  syncCatalogProjection(state, { businessId: business.businessId }, { now })
+  const readbackAt = Math.max(now, business.updatedAt + 1)
+  syncCatalogProjection(state, { businessId: business.businessId }, { now: readbackAt })
   const health = readCatalogHealth(state, business.businessId)
   const attempt = health.latestAttempt
 
   return [
-    sourceCatalogRow(health, business.slug, now),
-    projectionAttemptRow(health, attempt, now),
-    publicSurfaceRow(health, attempt, now),
+    sourceCatalogRow(health, business.slug, readbackAt),
+    projectionAttemptRow(health, attempt, readbackAt),
+    publicSurfaceRow(health, attempt, readbackAt),
   ]
 }
 
