@@ -1,19 +1,9 @@
-import { z } from 'zod'
-
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { customerRequestAgentResultSchema, customerRequestFactInputSchema } from '@/modules/customer-request/agent-contract'
 
-const jsonValue: z.ZodType<null | boolean | number | string | readonly unknown[] | Readonly<Record<string, unknown>>> = z.lazy(() => z.union([
-  z.null(), z.boolean(), z.number().finite(), z.string().max(8_000),
-  z.array(jsonValue).max(256), z.record(z.string(), jsonValue),
-]))
-const bodySchema = z.object({
-  idempotencyKey: z.string().trim().min(1).max(200),
-  expectedRevision: z.number().int().positive(),
-  requirementKey: z.string().trim().min(1).max(300),
-  value: jsonValue,
-}).strict()
+const bodySchema = customerRequestFactInputSchema
 export type FactsResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
   kind: 'refused'
   reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable' | 'capabilities_unavailable'
@@ -30,9 +20,11 @@ export async function handleCustomerRequestFactsPost(request: Request, requestRe
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
-    const result = await (options.provideFacts ?? (async (args) => await callSourceAction(factsAction, args)))({
-      requestRef, ...parsed.data,
-    })
+    const result = customerRequestAgentResultSchema.parse(
+      await (options.provideFacts ?? (async (args) => await callSourceAction(factsAction, args)))({
+        requestRef, ...parsed.data,
+      }),
+    )
     if (result.kind === 'refused') {
       const status = result.reason === 'authentication_required' ? 401 : result.reason === 'request_not_found' ? 404 : 503
       return response(result, status)

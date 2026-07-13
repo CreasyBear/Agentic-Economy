@@ -5,6 +5,8 @@ import { findFiles } from '@/lib/ui/contract-scans'
 import { CUSTOMER_REQUEST_AGENT_ENTRYPOINT } from '@/modules/customer-request/agent-contract'
 
 const productionAuthority = {
+  publicContract: 'src/modules/customer-request/agent-contract.ts',
+  hostedJourney: 'src/modules/customer-request/hosted-agent-journey.ts',
   semantics: 'src/modules/customer-request/evaluation.ts',
   compilation: 'src/modules/customer-request/compiler.ts',
   preparation: 'src/modules/customer-request/action-preparation.ts',
@@ -199,7 +201,8 @@ describe('CustomerRequest source completeness', () => {
     const workflow = readFileSync('.github/workflows/kernel-release-gate.yml', 'utf8')
     expect(workflow.match(/npm install --global npm@11\.5\.1/g)).toHaveLength(2)
     expect(workflow).not.toMatch(/kernel-proof|PROOF_MANIFEST|\.mjs|\.mts/)
-    expect(workflow).not.toContain('CONVEX_DEPLOY_KEY')
+    expect(workflow).toContain('CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}')
+    expect(workflow).toContain('npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"')
     expect(workflow).toContain('needs: source-proof')
     expect(workflow).toContain('cancel-in-progress: false')
     expect(workflow).toContain('npm exec -- tsx tools/release/deploy-customer-request-git-source.ts')
@@ -208,12 +211,44 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow).toContain('AE_RELEASE_SOURCE_REVISION: ${{ github.sha }}')
     expect(workflow.indexOf('Run source release contract')).toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
     expect(workflow.indexOf('Refuse a checkout other than the triggering revision')).toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
+    expect(workflow.indexOf('Deploy the exact-revision Convex schema and functions'))
+      .toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
     expect(workflow.indexOf('Deploy the exact clean source revision')).toBeLessThan(workflow.indexOf('Verify authenticated deployment readback'))
+    expect(workflow.indexOf('Verify authenticated deployment readback'))
+      .toBeLessThan(workflow.indexOf('Run cold external-agent Request journey against the exact deployment'))
     expect(workflow.indexOf('Frozen dependency install for independent readback')).toBeLessThan(workflow.indexOf('Deploy the exact clean source revision'))
 
     const packageJson = readFileSync('package.json', 'utf8')
     expect(packageJson).toContain('"test:release:hosted": "tsx tools/release/verify-customer-request-release-credential.ts"')
     expect(packageJson).not.toContain('AE_KERNEL_PROOF_MANIFEST_JSON')
+  })
+
+  it('makes handlers and hosted proof consume one canonical Request wire contract', () => {
+    const contract = source('publicContract')
+    const journey = source('hostedJourney')
+    for (const schema of [
+      'customerRequestSubmitInputSchema', 'customerRequestMessageInputSchema',
+      'customerRequestFactInputSchema', 'customerRequestOptionsInputSchema',
+      'customerRequestAuthorizationInputSchema', 'customerRequestApprovalInputSchema',
+      'customerRequestViewSchema',
+    ]) expect(contract).toContain(`export const ${schema}`)
+
+    const handlerContracts = [
+      ['submitHttp', 'customerRequestSubmitInputSchema'],
+      ['factsHttp', 'customerRequestFactInputSchema'],
+      ['optionsHttp', 'customerRequestOptionsInputSchema'],
+      ['approvalHttp', 'customerRequestApprovalInputSchema'],
+    ] as const
+    for (const [handler, schema] of handlerContracts) expect(source(handler)).toContain(schema)
+    expect(journey).toMatch(/customerRequestFactInputSchema\.parse/)
+    expect(journey).toMatch(/customerRequestViewSchema\.parse/)
+    expect(journey).toContain("'preparation_disclosure'")
+    expect(journey).toContain("'prepared_action_approval'")
+    expect(journey).not.toMatch(/providerId|bindingId|offeringId|Convex|customerRequestApplication:/)
+
+    const smoke = readFileSync('tools/release/customer-request-production-smoke.ts', 'utf8')
+    expect(smoke).toContain('runHostedCustomerRequestJourney')
+    expect(smoke).not.toMatch(/switch\s*\([^)]*state|while\s*\(|requestViewSchema\s*=|z\.object/)
   })
 
   it('fails if support directories acquire canonical Request behavior or production imports them', () => {

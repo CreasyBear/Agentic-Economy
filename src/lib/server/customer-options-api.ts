@@ -1,13 +1,9 @@
-import { z } from 'zod'
-
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
+import { customerRequestAgentResultSchema, customerRequestOptionsInputSchema } from '@/modules/customer-request/agent-contract'
 
-const bodySchema = z.object({
-  revision: z.number().int().positive(),
-  idempotencyKey: z.string().trim().min(1).max(200),
-}).strict()
+const bodySchema = customerRequestOptionsInputSchema
 const compareAction = sourceAction<Record<string, unknown>, CustomerOptionsProjection>('customerRequestApplication:compare')
 type HandlerOptions = Readonly<{ compare?: (args: Record<string, unknown>) => Promise<CustomerOptionsProjection> }>
 
@@ -21,7 +17,9 @@ export async function handleCustomerOptionsPost(request: Request, requestRef: st
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
     const args = { requestRef, ...parsed.data }
-    const result = await (options.compare ?? (async (input) => await callSourceAction(compareAction, input)))(args)
+    const result = customerRequestAgentResultSchema.parse(
+      await (options.compare ?? (async (input) => await callSourceAction(compareAction, input)))(args),
+    )
     if (result.kind === 'refused') return response(result, 401)
     if (result.kind === 'conflict') return response(result, 409)
     return response(result, result.state === 'preparing_options' ? 202 : 200)

@@ -1,14 +1,9 @@
-import { z } from 'zod'
-
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { customerRequestAgentResultSchema, customerRequestMessageInputSchema } from '@/modules/customer-request/agent-contract'
 
-const bodySchema = z.object({
-  idempotencyKey: z.string().trim().min(1).max(200),
-  expectedRevision: z.number().int().positive(),
-  message: z.string().trim().min(1).max(2_000),
-}).strict()
+const bodySchema = customerRequestMessageInputSchema
 
 export type MessageResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
   kind: 'refused'
@@ -31,9 +26,11 @@ export async function handleCustomerRequestMessagePost(
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
-    const result = await (options.refine ?? (async (args) => await callSourceAction(refineAction, args)))({
-      requestRef, ...parsed.data,
-    })
+    const result = customerRequestAgentResultSchema.parse(
+      await (options.refine ?? (async (args) => await callSourceAction(refineAction, args)))({
+        requestRef, ...parsed.data,
+      }),
+    )
     if (result.kind === 'refused') {
       const status = result.reason === 'authentication_required' ? 401 : result.reason === 'request_not_found' ? 404 : 503
       return response(result, status)

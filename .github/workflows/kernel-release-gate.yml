@@ -68,6 +68,11 @@ jobs:
       - name: Refuse a checkout other than the triggering revision
         run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
 
+      - name: Deploy the exact-revision Convex schema and functions
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
+
       - name: Deploy the exact clean source revision
         id: deploy
         env:
@@ -81,3 +86,11 @@ jobs:
           AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
           AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
         run: npm run test:release:hosted
+
+      - name: Run cold external-agent Request journey against the exact deployment
+        env:
+          AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
+          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
+          AE_CUSTOMER_REQUEST_TEXT: Find the cheapest labelled sandbox option.
+          AE_CUSTOMER_REQUEST_FACTS_JSON: '{"*":"Find the cheapest labelled sandbox option"}'
+        run: npm run smoke:customer-request:production:temporary-key

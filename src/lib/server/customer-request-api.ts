@@ -1,18 +1,9 @@
-import { z } from 'zod'
-
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
+import { customerRequestAgentResultSchema, customerRequestSubmitInputSchema } from '@/modules/customer-request/agent-contract'
 
-const bodySchema = z.object({
-  idempotencyKey: z.string().trim().min(1).max(200), requestRef: z.string().trim().min(1).max(200),
-  expectedRevision: z.number().int().nonnegative().optional(), agentRef: z.string().trim().min(1).max(200),
-  request: z.string().trim().min(1).max(2_000),
-  routing: z.object({
-    network: z.string().trim().min(1).max(200).default('ae:public'), currency: z.string().regex(/^[A-Z]{3}$/).optional(),
-    maximumSpendMinor: z.number().int().nonnegative().optional(), optimizeFor: z.enum(['cost', 'latency']).optional(),
-  }).default({ network: 'ae:public' }),
-}).strict()
+const bodySchema = customerRequestSubmitInputSchema
 
 export type SubmitResult = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'interpreter_unavailable' | 'capabilities_unavailable' }>
 const submitAction = sourceAction<Record<string, unknown>, SubmitResult>('customerRequestApplication:submit')
@@ -37,7 +28,9 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
         ...(parsed.data.routing.optimizeFor === undefined ? {} : { optimizeFor: parsed.data.routing.optimizeFor }),
       },
     }
-    const result = await (options.submit ?? (async (input) => await callSourceAction(submitAction, input)))(args)
+    const result = customerRequestAgentResultSchema.parse(
+      await (options.submit ?? (async (input) => await callSourceAction(submitAction, input)))(args),
+    )
     if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 503)
     if (result.kind === 'conflict') return response(result, 409)
     return response(result, 200)

@@ -1,43 +1,7 @@
 import type { PreparedRouteCandidateSet } from './preparation'
+import type { CustomerOption, CustomerOptionSet } from './agent-contract'
 
-type PreparedOption = PreparedRouteCandidateSet['candidates'][number]
 type CoverageStatus = PreparedRouteCandidateSet['attempts'][number]['status']
-
-export type CustomerOption = Readonly<Omit<PreparedOption, 'inspectionRef' | 'issuedAt' | 'commercialInfluence'> & {
-  provenance: Readonly<{
-    kind: 'provider_assertion'
-    observedAt?: number
-    validUntil: number
-  }>
-  commercialInfluence: NonNullable<PreparedOption['commercialInfluence']>
-}>
-
-export type CustomerOptionSet = Readonly<{
-  cardinality: 'none' | 'single' | 'multiple'
-  optionCount: number
-  ordering: Readonly<
-    | { kind: 'not_applicable'; commercialInfluence: 'none' | 'disclosed' | 'unknown' }
-    | { kind: 'unranked'; commercialInfluence: 'none' | 'disclosed' | 'unknown' }
-    | {
-        kind: 'recommended'
-        commercialInfluence: 'none' | 'disclosed'
-        objective: 'lowest_maximum_price'
-        optionRef: string
-        evidenceRef: string
-        reasons: readonly string[]
-        tradeoffs: readonly string[]
-      }
-  >
-  coverage: Readonly<{
-    evaluated: number
-    optionsReceived: number
-    unavailable: number
-    pending: number
-    uncertain: number
-    businesses: readonly Readonly<{ name: string; status: CoverageStatus; explanation: string }>[]
-  }>
-  options: readonly CustomerOption[]
-}>
 
 export function projectCustomerOptionSet(candidateSet: PreparedRouteCandidateSet): CustomerOptionSet {
   const optionCount = candidateSet.candidates.length

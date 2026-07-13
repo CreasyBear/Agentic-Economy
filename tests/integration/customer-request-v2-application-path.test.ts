@@ -653,6 +653,12 @@ describe('current V2 Customer Request application path', () => {
     expect(stored.current).toHaveLength(1)
     expect(stored.legacy).toEqual([])
     if (prepared.kind !== 'prepared') throw new Error('prepared action missing')
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'options_ready',
+      preparedAction: { businessName: 'Sandbox Option Two', approval: { state: 'required' } },
+    })
     await expect(customer.action(api.customerRequestApplication.approvePreparedAction, {
       requestRef: review.requestRef,
       revision: review.revision,
@@ -708,6 +714,18 @@ describe('current V2 Customer Request application path', () => {
       spend: { currency: 'AUD', maximumAmountMinor: 900 },
       expiresAt: providerNow + 50_000,
       recovery: { unknownOutcome: 'reconcile_only', automaticRetry: false },
+    })
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: review.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'options_ready',
+      preparedAction: {
+        businessName: 'Sandbox Option Two',
+        approval: {
+          state: 'recorded', currency: 'AUD', maximumSpendMinor: 900,
+          expiresAt: providerNow + 50_000,
+        },
+      },
     })
     await expect(customer.action(
       api.customerRequestApplication.approvePreparedAction, approvalCommand,

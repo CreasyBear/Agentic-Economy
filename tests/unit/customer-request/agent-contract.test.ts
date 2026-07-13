@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest'
+
+import {
+  customerRequestFactInputSchema,
+  customerRequestViewSchema,
+} from '@/modules/customer-request/agent-contract'
+
+describe('Customer Request agent contract', () => {
+  it('owns the exact typed-fact wire shape used by the handler and external agent', () => {
+    expect(customerRequestFactInputSchema.parse({
+      idempotencyKey: 'fact:one', expectedRevision: 1,
+      requirementKey: 'sandbox.reference.lookup:request_context', value: 'Compare sandbox options',
+    })).toMatchObject({ requirementKey: 'sandbox.reference.lookup:request_context' })
+
+    expect(customerRequestFactInputSchema.safeParse({
+      idempotencyKey: 'fact:one', expectedRevision: 1,
+      facts: { requestContext: 'Compare sandbox options' },
+    }).success).toBe(false)
+  })
+
+  it('validates the customer-semantic prepared decision and every terminal recovery state', () => {
+    const prepared = {
+      kind: 'request', requestRef: 'request:sandbox', revision: 2,
+      state: 'options_ready', summary: 'Sandbox Option Two can provide Sandbox reference lookup.',
+      nextAction: 'inspect_options', missingFields: [], criteria: [], options: [],
+      preparedAction: {
+        actionRef: 'prepared-action:v2:opaque', businessName: 'Sandbox Option Two',
+        offeringLabel: 'Sandbox Option Two', summary: 'Labelled sandbox supply.',
+        price: { currency: 'AUD', minimumAmountMinor: 900, maximumAmountMinor: 900 },
+        materialTerms: [{ label: 'Environment', value: 'Sandbox only; not real supply.' }],
+        cancellation: { kind: 'unsupported' }, validUntil: 10_000,
+        selection: {
+          basis: 'lowest_maximum_price', alternativeCount: 1, unavailableCount: 0,
+          commercialInfluence: 'none',
+        },
+        dataUse: {
+          categories: [{ label: 'Request details', classification: 'public' }],
+          purposes: ['return_sandbox_result'],
+        },
+        effects: [{ class: 'data_release', reversibility: 'irreversible' }],
+        alternatives: [{
+          businessName: 'Sandbox Option One',
+          price: { currency: 'AUD', minimumAmountMinor: 1_200, maximumAmountMinor: 1_200 },
+          validUntil: 10_000,
+        }],
+        approval: { state: 'required' },
+      },
+    }
+
+    expect(customerRequestViewSchema.parse(prepared).preparedAction?.businessName).toBe('Sandbox Option Two')
+    for (const [state, actionState, resolution] of [
+      ['outcome_unknown', 'unknown', 'awaiting_evidence'],
+      ['completed', 'completed', 'provider_result'],
+      ['failed', 'failed', 'reconciled'],
+    ] as const) {
+      expect(customerRequestViewSchema.safeParse({
+        ...prepared, state, nextAction: state === 'outcome_unknown' ? 'wait' : 'none',
+        preparedAction: undefined,
+        action: { state: actionState, resolution, automaticRetry: false, observedAt: 10_000 },
+      }).success).toBe(true)
+    }
+  })
+})

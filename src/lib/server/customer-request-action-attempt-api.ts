@@ -1,13 +1,8 @@
-import { z } from 'zod'
-
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
+import { customerRequestActionAttemptInputSchema } from '@/modules/customer-request/agent-contract'
 
-const bodySchema = z.object({
-  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-  approvalGrantRef: z.string().trim().min(1).max(500).startsWith('approval-grant:v2:'),
-  idempotencyKey: z.string().trim().min(1).max(200),
-}).strict()
+const bodySchema = customerRequestActionAttemptInputSchema
 
 export type CustomerRequestActionAttemptResult = Readonly<
   | {

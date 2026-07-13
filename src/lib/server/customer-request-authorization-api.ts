@@ -1,14 +1,9 @@
-import { z } from 'zod'
-
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestView } from '@/modules/customer-request/customer-projection'
+import { customerRequestAgentResultSchema, customerRequestAuthorizationInputSchema } from '@/modules/customer-request/agent-contract'
 
-const bodySchema = z.object({
-  revision: z.number().int().positive(),
-  preparationRef: z.string().trim().min(1).max(300),
-  idempotencyKey: z.string().trim().min(1).max(200),
-}).strict()
+const bodySchema = customerRequestAuthorizationInputSchema
 type AuthorizationResult = CustomerRequestView
   | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' }>
   | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
@@ -28,9 +23,11 @@ export async function handleCustomerRequestAuthorizationPost(
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
-    const result = await (options.authorize ?? (async (args) => await callSourceAction(authorizeAction, args)))({
-      requestRef, ...parsed.data,
-    })
+    const result = customerRequestAgentResultSchema.parse(
+      await (options.authorize ?? (async (args) => await callSourceAction(authorizeAction, args)))({
+        requestRef, ...parsed.data,
+      }),
+    )
     if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 404)
     if (result.kind === 'conflict') return response(result, 409)
     return response(result, 200)

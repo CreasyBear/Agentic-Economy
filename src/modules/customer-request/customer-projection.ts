@@ -2,7 +2,8 @@ import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { RequestEvaluation } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
-import { projectCustomerOptionSet, type CustomerOption, type CustomerOptionSet } from './customer-option-set'
+import { projectCustomerOptionSet } from './customer-option-set'
+import type { CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView } from './agent-contract'
 
 export type CustomerRequestState =
   | 'needs_information'
@@ -27,41 +28,11 @@ export type CustomerRequestNextAction =
   | 'retry'
   | 'none'
 
-export type { CustomerOption, CustomerOptionSet } from './customer-option-set'
+export type { CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView } from './agent-contract'
 export type CustomerCriterion = Readonly<{
   label: string
   value: JsonValue
   basis: 'customer_provided' | 'extracted_from_request'
-}>
-
-export type CustomerRequestView = Readonly<{
-  kind: 'request'
-  requestRef: string
-  revision: number
-  state: CustomerRequestState
-  summary: string
-  nextAction: CustomerRequestNextAction
-  missingFields: readonly Readonly<{ field: string; label: string; explanation: string }>[]
-  criteria?: readonly CustomerCriterion[]
-  disclosureReview?: Readonly<{
-    purpose: string
-    maximumRecipients: number
-    categories: readonly Readonly<{ label: string; classification: 'public' | 'personal' | 'sensitive' | 'credential' }>[]
-  }>
-  preparationRef?: string
-  clarification?: Readonly<
-    | { kind: 'intent_direction'; prompt: string; answerKind: 'natural_language' }
-    | { kind: 'contract_fact'; requirementKey: string; prompt: string; answerKind: 'typed_value' }
-  >
-  options: readonly CustomerOption[]
-  optionSet?: CustomerOptionSet
-  action?: Readonly<{
-    state: 'unknown' | 'completed' | 'failed'
-    resolution: 'awaiting_evidence' | 'provider_result' | 'reconciled'
-    automaticRetry: false
-    result?: JsonValue
-    observedAt: number
-  }>
 }>
 
 export type CustomerRequestProjection =
@@ -261,6 +232,7 @@ function requestView(input: Readonly<{
   preparationRef?: string
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
+  preparedAction?: CustomerPreparedAction
   action?: CustomerRequestView['action']
 }>): CustomerRequestView {
   return Object.freeze({
@@ -279,6 +251,7 @@ function requestView(input: Readonly<{
     ...(input.preparationRef === undefined ? {} : { preparationRef: input.preparationRef }),
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
+    ...(input.preparedAction === undefined ? {} : { preparedAction: Object.freeze({ ...input.preparedAction }) }),
     ...(input.action === undefined ? {} : { action: Object.freeze({
       ...input.action,
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),

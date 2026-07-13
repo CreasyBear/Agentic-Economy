@@ -12,7 +12,7 @@ import {
 import { approvalGrantV2Value } from '@/modules/customer-request/runtime'
 
 import type { Doc } from './_generated/dataModel'
-import { internalMutation, type MutationCtx } from './_generated/server'
+import { internalMutation, internalQuery, type MutationCtx } from './_generated/server'
 import { getEligibleExactCapabilitySupply } from './capabilitySupply'
 import {
   aggregateIntegrityValid,
@@ -40,6 +40,31 @@ const resultValue = v.union(
   }),
 )
 type Result = Infer<typeof resultValue>
+
+const customerApprovalStatusValue = v.union(
+  v.object({ kind: v.literal('not_approved') }),
+  v.object({
+    kind: v.literal('approved'), currency: v.string(), maximumSpendMinor: v.number(),
+    expiresAt: v.number(), recordedAt: v.number(),
+  }),
+)
+
+export const getCustomerApprovalStatus = internalQuery({
+  args: { preparedActionRef: v.string(), principalId: v.string() },
+  returns: customerApprovalStatusValue,
+  handler: async (ctx, args): Promise<Infer<typeof customerApprovalStatusValue>> => {
+    const row = await ctx.db.query('customerRequestV2ApprovalGrants')
+      .withIndex('by_preparedActionRef', (query) => query.eq('preparedActionRef', args.preparedActionRef)).unique()
+    if (row === null || row.principalId !== args.principalId || !approvalGrantRowIntegrityValid(row)) {
+      return { kind: 'not_approved' }
+    }
+    return {
+      kind: 'approved', currency: row.approvalGrant.spend.currency,
+      maximumSpendMinor: row.approvalGrant.spend.maximumAmountMinor,
+      expiresAt: row.approvalGrant.expiresAt, recordedAt: row.recordedAt,
+    }
+  },
+})
 
 export const issue = internalMutation({
   args: {

@@ -1,8 +1,53 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { withTemporaryClerkApiKey } from '../../../tools/release/customer-request-production-credential'
+import {
+  withTemporaryClerkAcceptanceCredentials,
+  withTemporaryClerkApiKey,
+} from '../../../tools/release/customer-request-production-credential'
 
 describe('production cold-agent credential', () => {
+  it('creates independent agent and customer credentials and revokes both after the journey', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', secret: 'ak_temporary_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_temporary', status: 'active' }))
+      .mockResolvedValueOnce(Response.json({ jwt: 'customer_session_jwt' }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_temporary', status: 'revoked' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', revoked: true }))
+    const run = vi.fn(async (_credentials: Readonly<{ agentApiKey: string; customerSessionToken: string }>) => undefined)
+
+    await expect(withTemporaryClerkAcceptanceCredentials({
+      clerkSecretKey: 'sk_test_server', expectedInstanceId: 'ins_expected', subject: 'user_acceptance', fetch, run,
+    })).resolves.toBeUndefined()
+
+    expect(run).toHaveBeenCalledExactlyOnceWith({
+      agentApiKey: 'ak_temporary_secret', customerSessionToken: 'customer_session_jwt',
+    })
+    expect(fetch.mock.calls[3]?.[0]).toBe('https://api.clerk.com/v1/sessions')
+    expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_temporary/tokens')
+    expect(fetch.mock.calls[5]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_temporary/revoke')
+    expect(fetch.mock.calls[6]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_temporary/revoke')
+  })
+
+  it('revokes both credentials when Clerk returns a created session with malformed metadata', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))
+      .mockResolvedValueOnce(Response.json(acceptanceUser()))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', secret: 'ak_temporary_secret' }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_temporary' }))
+      .mockResolvedValueOnce(Response.json({ id: 'sess_temporary', status: 'revoked' }))
+      .mockResolvedValueOnce(Response.json({ id: 'apikey_temporary', revoked: true }))
+
+    await expect(withTemporaryClerkAcceptanceCredentials({
+      clerkSecretKey: 'sk_test_server', expectedInstanceId: 'ins_expected', subject: 'user_acceptance', fetch,
+      run: async () => undefined,
+    })).rejects.toThrow()
+
+    expect(fetch.mock.calls[4]?.[0]).toBe('https://api.clerk.com/v1/sessions/sess_temporary/revoke')
+    expect(fetch.mock.calls[5]?.[0]).toBe('https://api.clerk.com/v1/api_keys/apikey_temporary/revoke')
+  })
+
   it('validates the Clerk instance, creates one scoped temporary key, runs the journey, and revokes it', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(Response.json({ id: 'ins_expected', environment_type: 'development' }))

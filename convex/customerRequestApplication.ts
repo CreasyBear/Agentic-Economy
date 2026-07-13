@@ -135,6 +135,13 @@ const customerPreparedAction = v.object({
     price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
     validUntil: v.number(),
   })),
+  approval: v.union(
+    v.object({ state: v.literal('required') }),
+    v.object({
+      state: v.literal('recorded'), currency: v.string(), maximumSpendMinor: v.number(),
+      expiresAt: v.number(), recordedAt: v.number(),
+    }),
+  ),
 })
 const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
@@ -954,6 +961,13 @@ type ActionAttemptMutationResult = Readonly<
         | 'cumulative_authority_exhausted' | 'admission_material_invalid'
     }
 >
+type CustomerApprovalStatus = Readonly<
+  | { kind: 'not_approved' }
+  | {
+      kind: 'approved'; currency: string; maximumSpendMinor: number
+      expiresAt: number; recordedAt: number
+    }
+>
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
   return await ctx.runQuery(internal.customerRequestV2.getCurrentAggregate, { requestId })
@@ -1077,7 +1091,16 @@ async function resolvePreparedAction(
       now: Date.now(),
     },
   )
-  if (result.kind === 'prepared') return projectPreparedAction(aggregate, preparation, result.preparedAction)
+  if (result.kind === 'prepared') {
+    const approval: CustomerApprovalStatus = await ctx.runQuery(
+      internal.customerRequestV2ApprovalGrant.getCustomerApprovalStatus,
+      {
+        preparedActionRef: result.preparedAction.preparedActionRef,
+        principalId: aggregate.snapshot.principalId,
+      },
+    )
+    return projectPreparedAction(aggregate, preparation, result.preparedAction, approval)
+  }
   const base = {
     kind: 'request' as const,
     requestRef: aggregate.snapshot.requestId,
@@ -1116,6 +1139,7 @@ function projectPreparedAction(
   aggregate: StoredAggregate,
   preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
   action: Infer<typeof preparedActionV2Value>,
+  approval: CustomerApprovalStatus,
 ): ActionResult {
   return {
     kind: 'request',
@@ -1165,6 +1189,13 @@ function projectPreparedAction(
         },
         validUntil: alternative.expiresAt,
       })),
+      approval: approval.kind === 'approved'
+        ? {
+            state: 'recorded', currency: approval.currency,
+            maximumSpendMinor: approval.maximumSpendMinor,
+            expiresAt: approval.expiresAt, recordedAt: approval.recordedAt,
+          }
+        : { state: 'required' },
     },
   }
 }
@@ -1396,11 +1427,13 @@ function projectStoredAggregate(aggregate: StoredAggregate): ActionResult {
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, clarification, ...required } = view
+  const { disclosureReview, optionSet, clarification, preparedAction, action } = view
   return {
-    ...required,
+    kind: view.kind, requestRef: view.requestRef, revision: view.revision,
+    state: view.state, summary: view.summary, nextAction: view.nextAction,
     missingFields: view.missingFields.map((field) => ({ ...field })),
     criteria: (view.criteria ?? []).map((criterion) => ({ ...criterion })),
+    ...(view.preparationRef === undefined ? {} : { preparationRef: view.preparationRef }),
     ...(disclosureReview === undefined ? {} : {
       disclosureReview: {
         ...disclosureReview,
@@ -1408,6 +1441,27 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       },
     }),
     ...(clarification === undefined ? {} : { clarification: { ...clarification } }),
+    ...(preparedAction === undefined ? {} : { preparedAction: {
+      ...preparedAction,
+      price: { ...preparedAction.price },
+      materialTerms: preparedAction.materialTerms.map((term) => ({ ...term })),
+      cancellation: { ...preparedAction.cancellation },
+      selection: { ...preparedAction.selection },
+      dataUse: {
+        categories: preparedAction.dataUse.categories.map((category) => ({ ...category })),
+        purposes: [...preparedAction.dataUse.purposes],
+      },
+      effects: preparedAction.effects.map((effect) => ({ ...effect })),
+      approval: { ...preparedAction.approval },
+      alternatives: preparedAction.alternatives.map((alternative) => ({
+        ...alternative, price: { ...alternative.price },
+      })),
+    } }),
+    ...(action === undefined ? {} : { action: {
+      state: action.state, resolution: action.resolution, automaticRetry: action.automaticRetry,
+      observedAt: action.observedAt,
+      ...(action.result === undefined ? {} : { result: structuredClone(action.result) }),
+    } }),
     options: view.options.map(writableOption),
     ...(optionSet === undefined ? {} : { optionSet: {
       ...optionSet,
@@ -1428,7 +1482,12 @@ function writableOption(option: CustomerRequestView['options'][number]) {
     ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
     priceComponents: option.priceComponents.map((component) => ({ ...component })),
     comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })), materialTerms: [...option.materialTerms],
-    cancellation: { ...option.cancellation }, provenance: { ...option.provenance }, commercialInfluence: { ...option.commercialInfluence },
+    cancellation: { ...option.cancellation },
+    provenance: {
+      kind: option.provenance.kind, validUntil: option.provenance.validUntil,
+      ...(option.provenance.observedAt === undefined ? {} : { observedAt: option.provenance.observedAt }),
+    },
+    commercialInfluence: { ...option.commercialInfluence },
   }
 }
 
