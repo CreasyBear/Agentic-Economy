@@ -50,6 +50,7 @@ import type * as routingKernelStructuredPreparation from "../routingKernelStruct
 import type * as routingKernelStructuredPreparationStoreAdapter from "../routingKernelStructuredPreparationStoreAdapter.js";
 import type * as routingKernelTracer from "../routingKernelTracer.js";
 import type * as routingKernelTransport from "../routingKernelTransport.js";
+import type * as routingKernelV1History from "../routingKernelV1History.js";
 import type * as security from "../security.js";
 import type * as settings from "../settings.js";
 import type * as sourceWriteAdmission from "../sourceWriteAdmission.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   routingKernelStructuredPreparationStoreAdapter: typeof routingKernelStructuredPreparationStoreAdapter;
   routingKernelTracer: typeof routingKernelTracer;
   routingKernelTransport: typeof routingKernelTransport;
+  routingKernelV1History: typeof routingKernelV1History;
   security: typeof security;
   settings: typeof settings;
   sourceWriteAdmission: typeof sourceWriteAdmission;

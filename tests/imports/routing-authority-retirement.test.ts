@@ -43,6 +43,20 @@ describe('routing authority retirement', () => {
       /createRegisteredRoutingKernel|routingDependencies|routingKernelTransport|routingKernelBindings|routingKernelAgentGrants|handleRoutingKernel(?:Http|Mcp)Request/,
     )
   })
+
+  it('keeps V1 history readback bounded, query-only, and outside routing authority', () => {
+    const source = readFileSync(join(root, 'convex/routingKernelV1History.ts'), 'utf8')
+
+    expect(source).toContain('resolveAdminAuthority(')
+    expect(source).toContain("'read_admin_readbacks'")
+    expect(source).toContain('export const read = query({')
+    expect(source).toContain('.take(MAXIMUM_CHILDREN + 1)')
+    expect(source).not.toMatch(/\b(?:mutation|action|internalMutation|internalAction)\s*\(/)
+    expect(source).not.toMatch(/\.collect\s*\(/)
+    expect(source).not.toMatch(/ctx\.db\.(?:insert|patch|replace|delete)\s*\(/)
+    expect(source).not.toMatch(/ctx\.scheduler|\bfetch\s*\(/)
+    expect(source).not.toMatch(/createRegisteredRoutingKernel|listEligible|routingKernelTransport|providerTransport|dispatchProvider/)
+  })
 })
 
 function sourceFiles(base: string, directories: readonly string[]): string[] {
