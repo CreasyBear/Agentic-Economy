@@ -10,14 +10,30 @@ const requestViewSchema = z.object({
   revision: z.number().int().positive(),
   state: z.enum([
     'needs_information', 'ready_to_compare', 'preparing_options',
-    'options_ready', 'unsupported', 'needs_attention',
+    'options_ready', 'no_options', 'needs_authorization', 'unsupported', 'needs_attention',
   ]),
   summary: z.string(),
   nextAction: z.enum([
     'provide_information', 'prepare_options', 'wait',
-    'inspect_options', 'revise_request', 'retry',
+    'inspect_options', 'revise_request', 'review_disclosure', 'retry',
   ]),
   missingFields: z.array(z.object({ field: z.string(), label: z.string(), explanation: z.string() })),
+  criteria: z.array(z.object({
+    label: z.string(), value: z.union([z.string(), z.number(), z.boolean()]),
+    basis: z.enum(['customer_provided', 'extracted_from_request']),
+  })).optional(),
+  disclosureReview: z.object({
+    purpose: z.string(), maximumRecipients: z.number().int().positive(),
+    categories: z.array(z.object({
+      label: z.string(), classification: z.enum(['personal', 'sensitive', 'credential']),
+    })),
+  }).optional(),
+  clarification: z.union([
+    z.object({ kind: z.literal('intent_direction'), prompt: z.string(), answerKind: z.literal('natural_language') }),
+    z.object({
+      kind: z.literal('contract_fact'), field: z.string(), prompt: z.string(), answerKind: z.literal('typed_value'),
+    }),
+  ]).optional(),
   options: z.array(z.record(z.string(), z.unknown())),
 }).strict()
 
@@ -28,6 +44,7 @@ type SmokeConfig = Readonly<{
   apiKey: string | undefined
   facts: Readonly<Record<string, string | number | boolean>>
   fetch: typeof globalThis.fetch
+  messages: readonly string[]
   preflightOnly: boolean
   requestText: string
 }>
@@ -41,6 +58,7 @@ export function customerRequestProductionSmokeConfigFromEnvironment(
     apiKey,
     facts: parseFacts(env.AE_CUSTOMER_REQUEST_FACTS_JSON),
     fetch: globalThis.fetch,
+    messages: parseMessages(env.AE_CUSTOMER_REQUEST_MESSAGES_JSON),
     preflightOnly: false,
     requestText: env.AE_CUSTOMER_REQUEST_TEXT ?? 'Compare the registered sandbox options for a reference request.',
   }
@@ -70,17 +88,46 @@ export async function runCustomerRequestProductionSmoke(config: SmokeConfig): Pr
   const replay = await authenticatedRequest(config, '/api/v1/requests', { method: 'POST', body: submitBody })
   assertSameProjection(view, replay, 'idempotent submit replay')
 
-  if (view.state === 'needs_information') {
+  let messageIndex = 0
+  for (let clarificationIndex = 0; view.state === 'needs_information' && clarificationIndex < 10; clarificationIndex += 1) {
+    const clarification = view.clarification
+    if (clarification?.answerKind === 'natural_language') {
+      const message = config.messages[messageIndex]
+      if (message === undefined) {
+        throw new Error(`Request needs a conversational answer. Set AE_CUSTOMER_REQUEST_MESSAGES_JSON for: ${clarification.prompt}`)
+      }
+      view = await authenticatedRequest(config, `/api/v1/requests/${encodeURIComponent(requestRef)}/messages`, {
+        method: 'POST', body: {
+          idempotencyKey: `acceptance:message:${nonce}:${clarificationIndex}`,
+          expectedRevision: view.revision,
+          message,
+        },
+      })
+      messageIndex += 1
+      continue
+    }
     const missingNames = view.missingFields.map((field) => field.field)
     const supplied = Object.fromEntries(missingNames.flatMap((name) => name in config.facts ? [[name, config.facts[name]]] : []))
-    if (Object.keys(supplied).length !== missingNames.length) {
+    if (missingNames.length === 0 || Object.keys(supplied).length !== missingNames.length) {
       throw new Error(`Request needs facts. Set AE_CUSTOMER_REQUEST_FACTS_JSON with: ${missingNames.join(', ')}`)
     }
     view = await authenticatedRequest(config, `/api/v1/requests/${encodeURIComponent(requestRef)}/facts`, {
-      method: 'POST', body: { idempotencyKey: `acceptance:facts:${nonce}`, expectedRevision: view.revision, facts: supplied },
+      method: 'POST', body: {
+        idempotencyKey: `acceptance:facts:${nonce}:${clarificationIndex}`,
+        expectedRevision: view.revision,
+        facts: supplied,
+      },
     })
   }
 
+  if (view.state === 'needs_information') throw new Error('Request exceeded the clarification limit')
+  if (view.state === 'needs_authorization') {
+    console.log(JSON.stringify({
+      result: 'CUSTOMER_AUTHORIZATION_REQUIRED', requestRef, state: view.state,
+      revision: view.revision, disclosureReview: view.disclosureReview,
+    }))
+    return
+  }
   if (view.state === 'unsupported') throw new Error(`Registered capability did not support acceptance request: ${view.summary}`)
   if (view.state === 'needs_attention') throw new Error(`Request needs operator attention before comparison: ${view.summary}`)
   if (view.state !== 'ready_to_compare') throw new Error(`Expected ready_to_compare, received ${view.state}`)
@@ -115,7 +162,7 @@ async function proveDiscovery(config: SmokeConfig): Promise<void> {
   ])
   if (!llms.ok || !skill.ok) throw new Error(`Discovery unavailable: llms=${llms.status}, skill=${skill.status}`)
   const discovery = `${await llms.text()}\n${await skill.text()}`
-  for (const marker of ['/api/v1/requests', REQUIRED_SCOPE, 'options_ready']) {
+  for (const marker of ['/api/v1/requests', '/messages', REQUIRED_SCOPE, 'needs_authorization', 'options_ready']) {
     if (!discovery.includes(marker)) throw new Error(`Production discovery missing ${marker}`)
   }
 }
@@ -158,6 +205,13 @@ function parseFacts(value: string | undefined): Readonly<Record<string, string |
   if (value === undefined || value.trim().length === 0) return {}
   const parsed = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).safeParse(JSON.parse(value))
   if (!parsed.success) throw new Error('AE_CUSTOMER_REQUEST_FACTS_JSON must be a JSON object of string, number, or boolean facts')
+  return parsed.data
+}
+
+function parseMessages(value: string | undefined): readonly string[] {
+  if (value === undefined || value.trim().length === 0) return []
+  const parsed = z.array(z.string().trim().min(1)).safeParse(JSON.parse(value))
+  if (!parsed.success) throw new Error('AE_CUSTOMER_REQUEST_MESSAGES_JSON must be a JSON array of non-empty conversational answers')
   return parsed.data
 }
 

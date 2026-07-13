@@ -7,8 +7,8 @@ afterEach(() => vi.restoreAllMocks())
 describe('customer Request production smoke', () => {
   it('runs credential-free discovery and refusal preflight', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response('/api/v1/requests customer_requests:create options_ready'))
-      .mockResolvedValueOnce(new Response('/api/v1/requests customer_requests:create options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
       .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
 
@@ -20,8 +20,8 @@ describe('customer Request production smoke', () => {
     const ready = view('ready_to_compare', 1, [])
     const options = view('options_ready', 2, [{ provider: 'one' }, { provider: 'two' }])
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response('/api/v1/requests customer_requests:create options_ready'))
-      .mockResolvedValueOnce(new Response('/api/v1/requests customer_requests:create options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
       .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
       .mockResolvedValueOnce(Response.json(ready))
       .mockResolvedValueOnce(Response.json(ready))
@@ -37,16 +37,68 @@ describe('customer Request production smoke', () => {
     expect(submitted).not.toHaveProperty('routing')
     expect(fetch.mock.calls.at(-1)?.[0].toString()).toContain('/api/v1/requests/acceptance%3A')
   })
+
+  it('answers customer-semantic clarification through messages before preparing options', async () => {
+    const clarification = {
+      ...view('needs_information', 1, []),
+      nextAction: 'provide_information',
+      clarification: {
+        kind: 'intent_direction', answerKind: 'natural_language', prompt: 'What are you looking for there?',
+      },
+    }
+    const ready = view('ready_to_compare', 2, [])
+    const options = view('options_ready', 3, [{ provider: 'one' }, { provider: 'two' }])
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json(clarification))
+      .mockResolvedValueOnce(Response.json(clarification))
+      .mockResolvedValueOnce(Response.json(ready))
+      .mockResolvedValueOnce(Response.json(options))
+      .mockResolvedValueOnce(Response.json(options))
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    await expect(runCustomerRequestProductionSmoke({
+      ...config(fetch, false), requestText: 'Fremantle', messages: ['Somewhere relaxed for lunch.'],
+    })).resolves.toBeUndefined()
+    expect(fetch.mock.calls[5]?.[0].toString()).toContain('/messages')
+    expect(JSON.parse(String(fetch.mock.calls[5]?.[1]?.body))).toMatchObject({
+      expectedRevision: 1, message: 'Somewhere relaxed for lunch.',
+    })
+  })
+
+  it('stops at protected-data review because an external agent cannot grant customer authority', async () => {
+    const protectedReview = {
+      ...view('needs_authorization', 1, []),
+      nextAction: 'review_disclosure',
+      disclosureReview: {
+        purpose: 'Prepare a comparison', maximumRecipients: 2,
+        categories: [{ label: 'Delivery address', classification: 'personal' }],
+      },
+    }
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json(protectedReview))
+      .mockResolvedValueOnce(Response.json(protectedReview))
+    vi.spyOn(console, 'log').mockImplementation(() => undefined)
+
+    await expect(runCustomerRequestProductionSmoke(config(fetch, false))).resolves.toBeUndefined()
+    expect(fetch).toHaveBeenCalledTimes(5)
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('CUSTOMER_AUTHORIZATION_REQUIRED'))
+  })
 })
 
 function config(fetch: typeof globalThis.fetch, preflightOnly: boolean) {
   return {
     baseUrl: 'https://ae.example', apiKey: preflightOnly ? undefined : 'ak_production', facts: {}, fetch,
-    preflightOnly, requestText: 'Compare registered sandbox options.',
+    messages: [], preflightOnly, requestText: 'Compare registered sandbox options.',
   }
 }
 
-function view(state: 'ready_to_compare' | 'options_ready', revision: number, options: readonly Record<string, unknown>[]) {
+function view(state: 'needs_information' | 'ready_to_compare' | 'options_ready' | 'needs_authorization', revision: number, options: readonly Record<string, unknown>[]) {
   return {
     kind: 'request', requestRef: 'acceptance:test', revision, state,
     summary: 'Compare registered sandbox options.',
