@@ -57,6 +57,15 @@ export type PreparedRouteCandidateSet = Readonly<{
     comparableOutputs: readonly Readonly<{ label: string; value: string | number | boolean }>[]
     materialTerms: readonly string[]
     cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
+    commercialInfluence?: Readonly<
+      | { status: 'unknown' }
+      | { status: 'none'; summary: string }
+      | {
+          status: 'disclosed'; relationship: 'commission' | 'sponsorship' | 'rebate' | 'ownership' | 'other'
+          summary: string; payerName: string; beneficiaryName: string; compensationBasis: string
+          influencesEligibility: boolean; influencesInclusion: boolean; influencesOrder: boolean
+        }
+    >
     issuedAt?: number
     expiresAt: number
     inspectionRef: string

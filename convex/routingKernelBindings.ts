@@ -16,6 +16,16 @@ const bindingRegistration = v.object({
     quotePreparation: v.optional(v.union(v.literal('public_query'), v.literal('structured_authorized'))),
   }),
   adapterFeatureEvidenceRefs: v.array(v.string()),
+  commercialRelationship: v.optional(v.object({
+    kind: v.union(
+      v.literal('none'), v.literal('commission'), v.literal('sponsorship'),
+      v.literal('rebate'), v.literal('ownership'), v.literal('other'),
+    ),
+    summary: v.string(), payerName: v.optional(v.string()), beneficiaryName: v.optional(v.string()),
+    compensationBasis: v.optional(v.string()),
+    influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
+    evidenceRefs: v.array(v.string()),
+  })),
   endpointUrl: v.string(), credentialRef: v.string(),
 })
 
@@ -30,6 +40,7 @@ const registrationResult = v.union(
       v.literal('credential_ref_invalid'),
       v.literal('evidence_refs_invalid'),
       v.literal('query_terms_invalid'),
+      v.literal('commercial_relationship_invalid'),
       v.literal('binding_identity_conflict'),
     ),
   }),
@@ -97,6 +108,7 @@ export const setEligibility = mutation({
       credentialRef: existing.credentialRef, ...nextState,
       adapterFeatures: existing.adapterFeatures ?? { requestCancellation: 'unsupported' as const, quotePreparation: 'public_query' as const },
       adapterFeatureEvidenceRefs: existing.adapterFeatureEvidenceRefs ?? ['legacy:feature-profile-unsupported'],
+      ...(existing.commercialRelationship === undefined ? {} : { commercialRelationship: existing.commercialRelationship }),
     })
     await ctx.db.patch(existing._id, { ...next, registrationHash })
     return { kind: 'updated' as const, bindingId: existing.bindingId, registrationHash }
@@ -122,7 +134,16 @@ export async function registerCapabilityBinding(
     if (registration.queryTerms.length === 0 || registration.queryTerms.length > 32 || registration.queryTerms.some((term) => term.trim().length === 0 || term.length > 100)) {
       return { kind: 'refused' as const, reason: 'query_terms_invalid' as const }
     }
-    const normalized = { ...registration, endpointUrl: endpoint.href, queryTerms: [...new Set(registration.queryTerms.map((term) => term.trim().toLowerCase()))].sort() }
+    const commercialRelationship = normalizeCommercialRelationship(registration.commercialRelationship)
+    if (registration.commercialRelationship !== undefined && commercialRelationship === undefined) {
+      return { kind: 'refused' as const, reason: 'commercial_relationship_invalid' as const }
+    }
+    const normalized = {
+      ...registration,
+      ...(commercialRelationship === undefined ? {} : { commercialRelationship }),
+      endpointUrl: endpoint.href,
+      queryTerms: [...new Set(registration.queryTerms.map((term) => term.trim().toLowerCase()))].sort(),
+    }
     const registrationHash = canonicalAuthorityDigest(normalized)
     const existing = await db.query('routingKernelBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', normalized.bindingId)).unique()
     if (existing !== null) return existing.registrationHash === registrationHash
@@ -160,6 +181,16 @@ export const resolvePresentations = internalQuery({
   args: { bindingIds: v.array(v.string()) },
   returns: v.array(v.object({
     bindingId: v.string(), nodeId: v.string(), businessName: v.string(),
+    commercialRelationship: v.optional(v.object({
+      kind: v.union(
+        v.literal('none'), v.literal('commission'), v.literal('sponsorship'),
+        v.literal('rebate'), v.literal('ownership'), v.literal('other'),
+      ),
+      summary: v.string(), payerName: v.optional(v.string()), beneficiaryName: v.optional(v.string()),
+      compensationBasis: v.optional(v.string()),
+      influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
+      evidenceRefs: v.array(v.string()),
+    })),
     cancellation: v.object({
       kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')),
       summary: v.string(),
@@ -174,8 +205,10 @@ export const resolvePresentations = internalQuery({
       if (row === null) continue
       const business = await ctx.db.get(row.businessId)
       if (business === null || business.publicStatus !== 'published' || business.claimStatus !== 'published' || business.suppressedAt !== undefined) continue
+      const commercialRelationship = normalizeStoredCommercialRelationship(row.commercialRelationship)
       presentations.push({
         bindingId: row.bindingId, nodeId: row.nodeId, businessName: business.name,
+        ...(commercialRelationship === undefined ? {} : { commercialRelationship }),
         cancellation: row.adapterFeatures?.requestCancellation === 'supported'
           ? { kind: 'conditional' as const, summary: 'Cancellation depends on the selected business terms.' }
           : { kind: 'unsupported' as const, summary: 'This registered capability does not expose cancellation.' },
@@ -231,6 +264,7 @@ export const setAdapterFeaturesInternal = internalMutation({
       conformanceEvidenceRefs: existing.conformanceEvidenceRefs, queryTerms: existing.queryTerms,
       endpointUrl: existing.endpointUrl, credentialRef: existing.credentialRef,
       adapterFeatures: args.adapterFeatures, adapterFeatureEvidenceRefs,
+      ...(existing.commercialRelationship === undefined ? {} : { commercialRelationship: existing.commercialRelationship }),
     }
     const registrationHash = canonicalAuthorityDigest(material)
     await ctx.db.patch(existing._id, { adapterFeatures: args.adapterFeatures, adapterFeatureEvidenceRefs, registrationHash, updatedAt: args.updatedAt })
@@ -253,6 +287,7 @@ export const migrateAuthorityDigests = internalMutation({
         endpointUrl: row.endpointUrl, credentialRef: row.credentialRef,
         adapterFeatures: row.adapterFeatures ?? { requestCancellation: 'unsupported' as const, quotePreparation: 'public_query' as const },
         adapterFeatureEvidenceRefs: row.adapterFeatureEvidenceRefs ?? ['legacy:feature-profile-unsupported'],
+        ...(row.commercialRelationship === undefined ? {} : { commercialRelationship: row.commercialRelationship }),
       })
       await ctx.db.patch(row._id, { registrationHash })
       migrated += 1
@@ -270,4 +305,48 @@ function safeHttpsUrl(value: string): URL | undefined {
 
 function validEvidenceRefs(refs: readonly string[]): boolean {
   return refs.length > 0 && refs.length <= 32 && refs.every((ref) => ref.trim().length > 0 && ref.length <= 500)
+}
+
+function normalizeCommercialRelationship(
+  relationship: Infer<typeof bindingRegistration>['commercialRelationship'],
+): Infer<typeof bindingRegistration>['commercialRelationship'] | undefined {
+  if (relationship === undefined || !validEvidenceRefs(relationship.evidenceRefs)) return undefined
+  const summary = relationship.summary.trim()
+  if (summary.length === 0 || summary.length > 500) return undefined
+  const optional = [relationship.payerName, relationship.beneficiaryName, relationship.compensationBasis]
+  if (optional.some((value) => value !== undefined && (value.trim().length === 0 || value.length > 200))) return undefined
+  if (relationship.kind === 'none') {
+    if (optional.some((value) => value !== undefined)
+      || relationship.influencesEligibility || relationship.influencesInclusion || relationship.influencesOrder) return undefined
+  } else if (optional.some((value) => value === undefined)) return undefined
+  return {
+    ...relationship,
+    summary,
+    ...(relationship.payerName === undefined ? {} : { payerName: relationship.payerName.trim() }),
+    ...(relationship.beneficiaryName === undefined ? {} : { beneficiaryName: relationship.beneficiaryName.trim() }),
+    ...(relationship.compensationBasis === undefined ? {} : { compensationBasis: relationship.compensationBasis.trim() }),
+    evidenceRefs: [...new Set(relationship.evidenceRefs.map((ref) => ref.trim()))].sort(),
+  }
+}
+
+function normalizeStoredCommercialRelationship(
+  relationship: Readonly<{
+    kind?: unknown
+    summary: string
+    payerName?: string
+    beneficiaryName?: string
+    compensationBasis?: string
+    influencesEligibility: boolean
+    influencesInclusion: boolean
+    influencesOrder: boolean
+    evidenceRefs: string[]
+  }> | undefined,
+): Infer<typeof bindingRegistration>['commercialRelationship'] | undefined {
+  if (relationship === undefined || !isCommercialRelationshipKind(relationship.kind)) return undefined
+  return normalizeCommercialRelationship({ ...relationship, kind: relationship.kind })
+}
+
+function isCommercialRelationshipKind(value: unknown): value is 'none' | 'commission' | 'sponsorship' | 'rebate' | 'ownership' | 'other' {
+  return value === 'none' || value === 'commission' || value === 'sponsorship'
+    || value === 'rebate' || value === 'ownership' || value === 'other'
 }

@@ -44,6 +44,25 @@ describe('customer option set', () => {
     expect(JSON.stringify(result)).not.toMatch(/best|recommended|cheapest|winner/i)
   })
 
+  it('preserves registered commercial relationships without allowing them to create rank', () => {
+    const result = projectCustomerOptionSet(candidateSet({
+      candidates: [
+        candidate('one', 1_200, { status: 'none', summary: 'No commercial relationship.' }),
+        candidate('two', 900, {
+          status: 'disclosed', relationship: 'commission', summary: 'AE may receive a referral fee.',
+          payerName: 'Two', beneficiaryName: 'Agentic Economy', compensationBasis: 'Fixed referral fee',
+          influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+        }),
+      ],
+      attempts: [attempt('One', 'option_received'), attempt('Two', 'option_received')],
+    }))
+
+    expect(result.ordering).toEqual({ kind: 'unranked', commercialInfluence: 'disclosed' })
+    expect(result.options[1]?.commercialInfluence).toMatchObject({
+      status: 'disclosed', relationship: 'commission', influencesOrder: false,
+    })
+  })
+
   it('preserves pending and uncertain coverage when no option returned', () => {
     const result = projectCustomerOptionSet(candidateSet({
       candidates: [],
@@ -59,13 +78,18 @@ describe('customer option set', () => {
   })
 })
 
-function candidate(key: string, amountMinor: number): PreparedRouteCandidateSet['candidates'][number] {
+function candidate(
+  key: string,
+  amountMinor: number,
+  commercialInfluence?: PreparedRouteCandidateSet['candidates'][number]['commercialInfluence'],
+): PreparedRouteCandidateSet['candidates'][number] {
   return {
     optionRef: `option:${key}`, business: { name: title(key) },
     expectedCost: { currency: 'AUD', amountMinor }, maximumCost: { currency: 'AUD', amountMinor },
     expectedLatencyMs: 100, priceComponents: [{ label: 'Provider amount', amountMinor }],
     comparableOutputs: [{ label: 'Service', value: 'Registered service' }],
     materialTerms: ['Provider term'], cancellation: { kind: 'unsupported', summary: 'No cancellation.' },
+    ...(commercialInfluence === undefined ? {} : { commercialInfluence }),
     issuedAt: 1_000, expiresAt: 2_000, inspectionRef: `evidence:${key}`,
   }
 }

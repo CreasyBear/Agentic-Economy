@@ -46,6 +46,11 @@ async function registerSandboxSupply(db: Parameters<typeof registerCapabilityCon
       admissionEvidenceRefs: ['seed:sandbox-labelled-business'], conformanceEvidenceRefs: ['seed:production-protocol-contract-test'],
       queryTerms: [...profile.queryTerms], adapterFeatures: { requestCancellation: 'unsupported', quotePreparation: 'structured_authorized' },
       adapterFeatureEvidenceRefs: ['seed:structured-quote-handler'],
+      commercialRelationship: {
+        kind: 'none' as const, summary: 'Sandbox verification has no payment, sponsorship, rebate, or ownership relationship.',
+        influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+        evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+      },
       endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}`, siteUrl).href,
       credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
     }, registeredAt)

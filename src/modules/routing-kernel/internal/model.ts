@@ -25,6 +25,17 @@ export type CapabilityBinding = Readonly<{
     requestCancellation: 'supported' | 'unsupported'
     quotePreparation?: 'public_query' | 'structured_authorized'
   }>
+  commercialRelationship?: Readonly<{
+    kind: 'none' | 'commission' | 'sponsorship' | 'rebate' | 'ownership' | 'other'
+    summary: string
+    payerName?: string
+    beneficiaryName?: string
+    compensationBasis?: string
+    influencesEligibility: boolean
+    influencesInclusion: boolean
+    influencesOrder: boolean
+    evidenceRefs: readonly string[]
+  }>
 }>
 
 export type BindingCancellationResult =

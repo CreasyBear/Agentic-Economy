@@ -38,8 +38,8 @@ const requestViewSchema = z.object({
   optionSet: z.object({
     cardinality: z.enum(['none', 'single', 'multiple']), optionCount: z.number().int().nonnegative(),
     ordering: z.union([
-      z.object({ kind: z.literal('not_applicable'), commercialInfluence: z.literal('unknown') }),
-      z.object({ kind: z.literal('unranked'), commercialInfluence: z.literal('unknown') }),
+      z.object({ kind: z.literal('not_applicable'), commercialInfluence: z.enum(['none', 'disclosed', 'unknown']) }),
+      z.object({ kind: z.literal('unranked'), commercialInfluence: z.enum(['none', 'disclosed', 'unknown']) }),
     ]),
     coverage: z.object({
       evaluated: z.number().int().nonnegative(), optionsReceived: z.number().int().nonnegative(),

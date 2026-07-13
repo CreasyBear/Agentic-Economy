@@ -28,6 +28,11 @@ describe('customer Request workspace', () => {
           expectedCost: { currency: 'AUD', amountMinor: 900 }, maximumCost: { currency: 'AUD', amountMinor: 900 }, expectedLatencyMs: 180,
           priceComponents: [{ label: 'Sandbox amount', amountMinor: 900 }], comparableOutputs: [{ label: 'Option', value: 'Sandbox verification only' }],
           materialTerms: ['Verification only; no real service or fulfilment.'], cancellation: { kind: 'unsupported', summary: 'No effect.' },
+          commercialInfluence: {
+            status: 'disclosed', relationship: 'commission', summary: 'AE may receive a fixed referral fee.',
+            payerName: 'Sandbox Option Two', beneficiaryName: 'Agentic Economy', compensationBasis: 'Fixed referral fee',
+            influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+          },
           expiresAt: 10_000, inspectionRef: 'evidence_1',
         }], optionSet: {
           cardinality: 'single', optionCount: 1,
@@ -55,6 +60,9 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('This is not a comparison or recommendation. Nothing has been selected, booked, or purchased.')).toBeTruthy()
     expect(screen.getByText(/AE evaluated 2 connected businesses/)).toBeTruthy()
     expect(screen.getByText('Provider-reported option')).toBeTruthy()
+    expect(screen.getByText('Commercial relationship disclosed')).toBeTruthy()
+    expect(screen.getByText('Sandbox Option Two pays Agentic Economy: Fixed referral fee.')).toBeTruthy()
+    expect(screen.getByText('Registered as not influencing eligibility, inclusion, or ordering.')).toBeTruthy()
     expect(screen.getByText('$9.00')).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/requests', expect.objectContaining({ method: 'POST' }))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/options', expect.objectContaining({ method: 'POST' }))

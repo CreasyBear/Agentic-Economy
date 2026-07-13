@@ -1,4 +1,4 @@
-import type { NeutralRoutingKernel, RouteQuote } from '@/modules/routing-kernel/application'
+import type { CapabilityBinding, NeutralRoutingKernel, RouteQuote } from '@/modules/routing-kernel/application'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import type { CustomerRequestActionRouter, PreparedRouteCandidate, PreparedRouteCandidateSet } from './preparation'
@@ -8,6 +8,7 @@ export type CustomerRequestBindingPresentation = Readonly<{
   nodeId: string
   businessName: string
   cancellation: Readonly<{ kind: 'supported' | 'conditional' | 'unsupported'; summary: string }>
+  commercialRelationship?: NonNullable<CapabilityBinding['commercialRelationship']>
 }>
 
 export type CustomerRequestBindingPresentationDirectory = Readonly<{
@@ -126,7 +127,7 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
   if (prepared.kind === 'preparation_pending') return {
     kind: 'preparation_pending', inspectionRef: customerReference('options', prepared.candidateSetDigest),
   }
-  return { kind: 'candidate_set', candidateSet: await projectStructuredCandidates(prepared, input.contract) }
+  return { kind: 'candidate_set', candidateSet: await projectStructuredCandidates(prepared, input.contract, directory) }
 }
 
 export function createKernelCustomerRequestActionRouter(
@@ -232,7 +233,7 @@ export function createKernelCustomerRequestActionRouter(
         }
         return {
           kind: 'candidate_set' as const,
-          candidateSet: await projectStructuredCandidates(prepared, input.contract),
+          candidateSet: await projectStructuredCandidates(prepared, input.contract, directory),
         }
       }
       const routed = await kernel.operations.route({
@@ -261,22 +262,25 @@ export function createKernelCustomerRequestActionRouter(
 function customerPresentationDigest(presentation: CustomerRequestBindingPresentation): string {
   return canonicalDigest({
     bindingId: presentation.bindingId, nodeId: presentation.nodeId, businessName: presentation.businessName,
+    commercialRelationship: presentation.commercialRelationship ?? null,
   })
 }
 
 async function projectStructuredCandidates(
   prepared: Extract<Awaited<ReturnType<NeutralRoutingKernel['operations']['prepareStructuredQuotes']>>, { kind: 'candidates_prepared' }>,
   contract: Parameters<CustomerRequestActionRouter['route']>[0]['contract'],
+  directory: CustomerRequestBindingPresentationDirectory,
 ): Promise<PreparedRouteCandidateSet> {
-  const presentations = new Map(prepared.frozenCandidates.map((candidate) => [candidate.bindingId, candidate.recipientName]))
+  const presentations = new Map((await directory.resolve(prepared.frozenCandidates.map((candidate) => candidate.bindingId)))
+    .map((presentation) => [presentation.bindingId, presentation]))
   return {
     inspectionRef: customerReference('options', prepared.candidateSetDigest),
     candidates: prepared.candidates.map((candidate) => {
-      const businessName = presentations.get(candidate.offer.issuerBindingId)
-      if (businessName === undefined) throw new Error('prepared_route_business_identity_missing')
+      const presentation = presentations.get(candidate.offer.issuerBindingId)
+      if (presentation === undefined) throw new Error('prepared_route_business_identity_missing')
       return {
         optionRef: customerReference('option', candidate.offer.offerDigest),
-        business: { name: businessName },
+        business: { name: presentation.businessName },
         expectedCost: candidate.expectedCost,
         maximumCost: candidate.maximumCost,
         expectedLatencyMs: candidate.expectedLatencyMs,
@@ -286,16 +290,34 @@ async function projectStructuredCandidates(
         })),
         materialTerms: candidate.disclosures,
         cancellation: candidate.offer.cancellation,
+        commercialInfluence: projectCommercialInfluence(presentation.commercialRelationship),
         issuedAt: candidate.offer.issuedAt,
         expiresAt: candidate.offer.expiresAt,
         inspectionRef: customerReference('evidence', candidate.offer.offerDigest),
       }
     }),
     attempts: prepared.coverage.map((item) => ({
-      business: { name: presentations.get(item.bindingId) ?? 'Previously connected business' },
+      business: { name: presentations.get(item.bindingId)?.businessName ?? 'Previously connected business' },
       status: customerAttemptStatus(item.disposition),
       explanation: customerCoverageExplanation(item.disposition),
     })),
+  }
+}
+
+function projectCommercialInfluence(
+  relationship: CustomerRequestBindingPresentation['commercialRelationship'],
+): NonNullable<PreparedRouteCandidateSet['candidates'][number]['commercialInfluence']> {
+  if (relationship === undefined) return { status: 'unknown' }
+  if (relationship.kind === 'none') return { status: 'none', summary: relationship.summary }
+  if (relationship.payerName === undefined || relationship.beneficiaryName === undefined
+    || relationship.compensationBasis === undefined) return { status: 'unknown' }
+  return {
+    status: 'disclosed', relationship: relationship.kind, summary: relationship.summary,
+    payerName: relationship.payerName, beneficiaryName: relationship.beneficiaryName,
+    compensationBasis: relationship.compensationBasis,
+    influencesEligibility: relationship.influencesEligibility,
+    influencesInclusion: relationship.influencesInclusion,
+    influencesOrder: relationship.influencesOrder,
   }
 }
 

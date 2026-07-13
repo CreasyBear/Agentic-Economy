@@ -186,6 +186,17 @@ export const preparedRouteCandidateSetValue = v.object({
     comparableOutputs: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number(), v.boolean()) })),
     materialTerms: v.array(v.string()),
     cancellation: v.object({ kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')), summary: v.string() }),
+    commercialInfluence: v.optional(v.union(
+      v.object({ status: v.literal('unknown') }),
+      v.object({ status: v.literal('none'), summary: v.string() }),
+      v.object({
+        status: v.literal('disclosed'), relationship: v.union(
+          v.literal('commission'), v.literal('sponsorship'), v.literal('rebate'), v.literal('ownership'), v.literal('other'),
+        ),
+        summary: v.string(), payerName: v.string(), beneficiaryName: v.string(), compensationBasis: v.string(),
+        influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
+      }),
+    )),
     issuedAt: v.optional(v.number()), expiresAt: v.number(), inspectionRef: v.string(),
   })),
   attempts: v.array(v.object({

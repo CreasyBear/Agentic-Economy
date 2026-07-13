@@ -558,6 +558,13 @@ export const routingKernelTables = {
       quotePreparation: v.optional(literalUnion(['public_query', 'structured_authorized'] as const)),
     })),
     adapterFeatureEvidenceRefs: v.optional(v.array(v.string())),
+    commercialRelationship: v.optional(v.object({
+      kind: literalUnion(['none', 'commission', 'sponsorship', 'rebate', 'ownership', 'other'] as const),
+      summary: v.string(), payerName: v.optional(v.string()), beneficiaryName: v.optional(v.string()),
+      compensationBasis: v.optional(v.string()),
+      influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
+      evidenceRefs: v.array(v.string()),
+    })),
     endpointUrl: v.string(),
     credentialRef: v.string(),
     registrationHash: v.string(),

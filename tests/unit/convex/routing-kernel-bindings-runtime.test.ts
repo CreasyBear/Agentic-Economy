@@ -18,6 +18,14 @@ type RegisterArgs = {
     queryTerms: string[]
     adapterFeatures: { requestCancellation: 'supported' | 'unsupported' }
     adapterFeatureEvidenceRefs: string[]
+    commercialRelationship?: {
+      kind: 'none' | 'commission' | 'sponsorship' | 'rebate' | 'ownership' | 'other'
+      summary: string
+      influencesEligibility: boolean
+      influencesInclusion: boolean
+      influencesOrder: boolean
+      evidenceRefs: string[]
+    }
     endpointUrl: string
     credentialRef: string
   }
@@ -59,6 +67,11 @@ describe('routing-kernel binding registration authority', () => {
         queryTerms: ['book label', 'shipping label'],
         adapterFeatures: { requestCancellation: 'supported' },
         adapterFeatureEvidenceRefs: ['evidence:cancel-contract:v1'],
+        commercialRelationship: {
+          kind: 'none', summary: 'No payment or ownership relationship.',
+          influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+          evidenceRefs: ['evidence:commercial-review:labels:v1'],
+        },
         endpointUrl: 'https://provider.example/capability',
         credentialRef: 'env:LABEL_PROVIDER_TOKEN',
         registrationHash: expect.any(String),
@@ -66,6 +79,21 @@ describe('routing-kernel binding registration authority', () => {
       }),
     ])
     expect(db.rows('routingKernelBindings')[0]?.registrationHash).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+
+  it('refuses a contradictory no-influence commercial registration', async () => {
+    const db = database('owner_admin')
+    const input = args()
+    input.registration.commercialRelationship = {
+      kind: 'none', summary: 'No relationship.',
+      influencesEligibility: false, influencesInclusion: false, influencesOrder: true,
+      evidenceRefs: ['evidence:commercial-review:labels:v1'],
+    }
+
+    await expect(registerHandler({ db, auth: new FakeAuth(identity()) }, input)).resolves.toEqual({
+      kind: 'refused', reason: 'commercial_relationship_invalid',
+    })
+    expect(db.rows('routingKernelBindings')).toEqual([])
   })
 
   it('revokes eligibility with evidence and rejects stale concurrent reviews', async () => {
@@ -112,6 +140,11 @@ function args(): RegisterArgs {
       queryTerms: [' Shipping Label ', 'book label', 'shipping label'],
       adapterFeatures: { requestCancellation: 'supported' },
       adapterFeatureEvidenceRefs: ['evidence:cancel-contract:v1'],
+      commercialRelationship: {
+        kind: 'none', summary: 'No payment or ownership relationship.',
+        influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+        evidenceRefs: ['evidence:commercial-review:labels:v1'],
+      },
       endpointUrl: 'https://provider.example/capability',
       credentialRef: 'env:LABEL_PROVIDER_TOKEN',
     },

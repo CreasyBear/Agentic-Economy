@@ -71,6 +71,16 @@ const customerOption = v.object({
   provenance: v.object({
     kind: v.literal('provider_assertion'), observedAt: v.optional(v.number()), validUntil: v.number(),
   }),
+  commercialInfluence: v.union(
+    v.object({ status: v.literal('unknown') }),
+    v.object({ status: v.literal('none'), summary: v.string() }),
+    v.object({
+      status: v.literal('disclosed'),
+      relationship: v.union(v.literal('commission'), v.literal('sponsorship'), v.literal('rebate'), v.literal('ownership'), v.literal('other')),
+      summary: v.string(), payerName: v.string(), beneficiaryName: v.string(), compensationBasis: v.string(),
+      influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
+    }),
+  ),
 })
 const coverageStatus = v.union(
   v.literal('not_contacted'), v.literal('contact_pending'), v.literal('contacted'),
@@ -80,8 +90,8 @@ const customerOptionSet = v.object({
   cardinality: v.union(v.literal('none'), v.literal('single'), v.literal('multiple')),
   optionCount: v.number(),
   ordering: v.union(
-    v.object({ kind: v.literal('not_applicable'), commercialInfluence: v.literal('unknown') }),
-    v.object({ kind: v.literal('unranked'), commercialInfluence: v.literal('unknown') }),
+    v.object({ kind: v.literal('not_applicable'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')) }),
+    v.object({ kind: v.literal('unranked'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')) }),
   ),
   coverage: v.object({
     evaluated: v.number(), optionsReceived: v.number(), unavailable: v.number(), pending: v.number(), uncertain: v.number(),
