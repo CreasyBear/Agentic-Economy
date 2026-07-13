@@ -56,35 +56,43 @@ describe('exact V2 Action Preparation', () => {
     const prepared = projectActionPreparation({ aggregate, actionId, model, now: 2_000 })
     if (prepared.kind !== 'needs_authority') throw new Error(`unexpected ${prepared.kind}`)
 
-    const authorized = authorizeActionPreparation({
+    const { preparation: authorized, approval } = authorizeActionPreparation({
       preparation: prepared,
-      authorityReference: prepared.preparationRef,
-      authority: {
-        kind: 'service_assertion', principalId: aggregate.snapshot.principalId,
+      preparationRef: prepared.preparationRef,
+      commandDigest: 'sha256:' + 'a'.repeat(64),
+      actor: {
+        kind: 'clerk_owner', requestPrincipalId: aggregate.snapshot.principalId,
         ownerId: 'owner:customer', credentialId: 'api-key:1',
-        evidenceRef: 'service-assertion:verified:1', verifiedAt: 2_010,
+        authenticationEvidenceRef: 'clerk-identity:verified:1', approvedAt: 2_010,
       },
     })
 
     expect(authorized).toMatchObject({
       kind: 'ready_for_routing', preparationRef: prepared.preparationRef,
       authorityReservation: {
-        authorityReference: prepared.preparationRef,
+        authorityReference: approval.approvalRef,
         principalId: aggregate.snapshot.principalId,
-        verification: { kind: 'service_assertion', evidenceRef: 'service-assertion:verified:1' },
+        verification: { kind: 'clerk_owner', authenticationEvidenceRef: 'clerk-identity:verified:1' },
       },
+    })
+    expect(approval).toMatchObject({
+      preparationRef: prepared.preparationRef,
+      reviewDigest: prepared.disclosureReview.reviewDigest,
+      authorityScopeDigest: prepared.authorityScope.authorityScopeDigest,
+      commandDigest: 'sha256:' + 'a'.repeat(64),
     })
     expect(authorized.authorityReservation.authorityScopeDigest).toBe(prepared.authorityScope.authorityScopeDigest)
     expect(authorized.authorityReservation.lineage).toEqual(prepared.lineage)
     expect(() => authorizeActionPreparation({
       preparation: prepared,
-      authorityReference: 'preparation:other',
-      authority: {
-        kind: 'service_assertion', principalId: aggregate.snapshot.principalId,
+      preparationRef: 'preparation:other',
+      commandDigest: 'sha256:' + 'a'.repeat(64),
+      actor: {
+        kind: 'clerk_owner', requestPrincipalId: aggregate.snapshot.principalId,
         ownerId: 'owner:customer', credentialId: 'api-key:1',
-        evidenceRef: 'service-assertion:verified:1', verifiedAt: 2_010,
+        authenticationEvidenceRef: 'clerk-identity:verified:1', approvedAt: 2_010,
       },
-    })).toThrow('action_preparation_authority_reference_mismatch')
+    })).toThrow('action_preparation_reference_mismatch')
   })
 
   it('keeps commitment information gaps typed and exact', () => {

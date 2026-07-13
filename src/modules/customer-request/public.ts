@@ -2,13 +2,14 @@ export {
   authorizeActionPreparation,
   projectActionPreparation,
   type ActionPreparationAuthorityReservation,
+  type ActionPreparationApprovalEvidence,
   type ActionPreparationAuthorityScope,
   type ActionPreparationDisclosureReview,
   type ActionPreparationLineage,
   type AuthorizedActionPreparation,
   type DurableActionPreparation,
   type ProjectActionPreparationResult,
-  type VerifiedActionPreparationAuthority,
+  type VerifiedActionPreparationApprovalActor,
 } from './action-preparation'
 export {
   compileCustomerRequest,

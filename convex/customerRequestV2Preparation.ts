@@ -12,7 +12,7 @@ import {
   authorizeActionPreparation,
   projectActionPreparation,
   type DurableActionPreparation,
-  type VerifiedActionPreparationAuthority,
+  type VerifiedActionPreparationApprovalActor,
 } from '@/modules/customer-request/action-preparation'
 import type { CustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest } from '@/modules/customer-request/evaluation'
@@ -25,10 +25,9 @@ import { internalMutation, internalQuery } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { listEligibleCapabilitySupply } from './capabilitySupply'
 
-const verifiedAuthorityValue = v.object({
-  kind: v.union(v.literal('clerk_identity'), v.literal('service_assertion')),
-  principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
-  evidenceRef: v.string(), verifiedAt: v.number(),
+const approvalActorValue = v.object({
+  kind: v.literal('clerk_owner'), requestPrincipalId: v.string(), ownerId: v.string(), credentialId: v.string(),
+  authenticationEvidenceRef: v.string(), approvedAt: v.number(),
 })
 const prepareResultValue = v.union(
   v.object({ kind: v.literal('stored'), preparation: durableActionPreparationV2Value }),
@@ -65,7 +64,7 @@ export const prepare = internalMutation({
   args: {
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
     requestId: v.string(), expectedRevision: v.number(), actionId: v.string(),
-    authorityReference: v.optional(v.string()), authority: v.optional(verifiedAuthorityValue), now: v.number(),
+    preparationRef: v.optional(v.string()), approvalActor: v.optional(approvalActorValue), now: v.number(),
   },
   returns: prepareResultValue,
   handler: async (ctx, args) => {
@@ -76,13 +75,14 @@ export const prepare = internalMutation({
         || priorCommand.lineage.requestId !== args.requestId || priorCommand.lineage.actionId !== args.actionId) {
         return { kind: 'conflict' as const, reason: 'idempotency_key_reused' as const }
       }
-      const stored = await ctx.db.query('customerRequestV2ActionPreparations')
-        .withIndex('by_preparationRef', (query) => query.eq('preparationRef', priorCommand.preparationRef)).unique()
-      if (stored === null || stored.preparationDigest !== priorCommand.preparationDigest
-        || stored.preparation.preparationDigest !== priorCommand.preparationDigest) {
+      if (priorCommand.result.preparationDigest !== priorCommand.preparationDigest
+        || priorCommand.result.preparationRef !== priorCommand.preparationRef
+        || canonicalDigest(priorCommand.lineage as StableHashValue)
+          !== canonicalDigest(priorCommand.result.lineage as StableHashValue)
+        || !preparationIntegrityValid(priorCommand.result)) {
         throw new Error('customer_request_v2_preparation_replay_integrity_failure')
       }
-      return { kind: 'replayed' as const, preparation: asStoredPreparation(asDomainPreparation(stored.preparation)) }
+      return { kind: 'replayed' as const, preparation: priorCommand.result }
     }
 
     const current = await loadCurrentAggregate(ctx.db, args.requestId)
@@ -105,7 +105,7 @@ export const prepare = internalMutation({
       return { kind: 'needs_attention' as const, reason: 'capability_graph_changed' as const }
     }
     const existing = await ctx.db.query('customerRequestV2ActionPreparations')
-      .withIndex('by_requestId_requestRevision_actionId', (query) => query
+      .withIndex('by_requestId_and_requestRevision_and_actionId', (query) => query
         .eq('requestId', args.requestId).eq('requestRevision', args.expectedRevision).eq('actionId', args.actionId))
       .unique()
     const projected = projectActionPreparation({
@@ -118,29 +118,33 @@ export const prepare = internalMutation({
       return { kind: 'needs_attention' as const, reason: 'capability_graph_changed' as const }
     }
     if (projected.kind === 'refused') return { kind: 'refused' as const, reason: 'action_not_found' as const }
-    if (existing !== null && !samePreparationAuthority(existing.preparation, projected)) {
+    if (existing !== null && !samePreparationProjectionIdentity(existing.preparation, projected)) {
       return { kind: 'needs_attention' as const, reason: 'capability_graph_changed' as const }
     }
 
     let preparation: DurableActionPreparation = existing === null
       ? projected
       : asDomainPreparation(existing.preparation)
-    if (args.authorityReference !== undefined) {
+    let approval: ReturnType<typeof authorizeActionPreparation>['approval'] | undefined
+    if (args.preparationRef !== undefined) {
       if (existing === null || existing.preparation.kind !== 'needs_authority'
-        || args.authorityReference !== existing.preparation.preparationRef) {
+        || args.preparationRef !== existing.preparation.preparationRef) {
         return { kind: 'refused' as const, reason: 'authority_reference_invalid' as const }
       }
-      if (args.authority === undefined) return { kind: 'refused' as const, reason: 'authority_invalid' as const }
+      if (args.approvalActor === undefined) return { kind: 'refused' as const, reason: 'authority_invalid' as const }
       try {
-        preparation = authorizeActionPreparation({
+        const authorized = authorizeActionPreparation({
           preparation: asDomainPreparation(existing.preparation) as Extract<DurableActionPreparation, { kind: 'needs_authority' }>,
-          authorityReference: args.authorityReference,
-          authority: args.authority as VerifiedActionPreparationAuthority,
+          preparationRef: args.preparationRef,
+          commandDigest: args.commandDigest,
+          actor: args.approvalActor as VerifiedActionPreparationApprovalActor,
         })
+        preparation = authorized.preparation
+        approval = authorized.approval
       } catch {
         return { kind: 'refused' as const, reason: 'authority_invalid' as const }
       }
-    } else if (args.authority !== undefined) {
+    } else if (args.approvalActor !== undefined) {
       return { kind: 'refused' as const, reason: 'authority_reference_invalid' as const }
     }
 
@@ -157,6 +161,32 @@ export const prepare = internalMutation({
       review: asStoredReview(preparation.disclosureReview),
       recordedAt: args.now,
     })
+
+    if (approval !== undefined) {
+      const priorApproval = await ctx.db.query('customerRequestV2PreparationApprovalEvidence')
+        .withIndex('by_approvalRef', (query) => query.eq('approvalRef', approval.approvalRef)).unique()
+      if (priorApproval !== null && (priorApproval.approvalDigest !== approval.approvalDigest
+        || priorApproval.reviewDigest !== approval.reviewDigest
+        || priorApproval.authorityScopeDigest !== approval.authorityScopeDigest
+        || priorApproval.commandDigest !== approval.commandDigest)) {
+        throw new Error('customer_request_v2_preparation_approval_integrity_failure')
+      }
+      if (priorApproval === null) await ctx.db.insert('customerRequestV2PreparationApprovalEvidence', {
+        approvalRef: approval.approvalRef,
+        approvalDigest: approval.approvalDigest,
+        preparationRef: approval.preparationRef,
+        reviewRef: approval.reviewRef,
+        reviewDigest: approval.reviewDigest,
+        authorityScopeDigest: approval.authorityScopeDigest,
+        principalId: approval.principalId,
+        ownerId: approval.ownerId,
+        credentialId: approval.credentialId,
+        lineage: asStoredLineage(approval.lineage),
+        commandDigest: approval.commandDigest,
+        approval: structuredClone(approval),
+        recordedAt: args.now,
+      })
+    }
 
     const reservation = preparation.kind === 'ready_for_routing' ? preparation.authorityReservation : undefined
     if (reservation !== undefined) {
@@ -196,10 +226,11 @@ export const prepare = internalMutation({
       commandKey: args.commandKey,
       commandDigest: args.commandDigest,
       principalId: args.principalId,
-      ...(args.authorityReference === undefined ? {} : { authorityReference: args.authorityReference }),
+      ...(approval === undefined ? {} : { authorityReference: approval.approvalRef }),
       lineage: asStoredLineage(preparation.lineage),
       preparationRef: preparation.preparationRef,
       preparationDigest: preparation.preparationDigest,
+      result: asStoredPreparation(preparation),
       committedAt: args.now,
     })
     return { kind: 'stored' as const, preparation: asStoredPreparation(preparation) }
@@ -211,7 +242,7 @@ export const resume = internalQuery({
   returns: resumeResultValue,
   handler: async (ctx, args) => {
     const row = await ctx.db.query('customerRequestV2ActionPreparations')
-      .withIndex('by_requestId_requestRevision_actionId', (query) => query
+      .withIndex('by_requestId_and_requestRevision_and_actionId', (query) => query
         .eq('requestId', args.requestId).eq('requestRevision', args.requestRevision).eq('actionId', args.actionId))
       .unique()
     if (row === null || row.lineage.principalId !== args.principalId) return { kind: 'not_found' as const }
@@ -236,9 +267,10 @@ export const resume = internalQuery({
       now: row.recordedAt,
     })
     if (projected.kind === 'stale' || projected.kind === 'refused'
-      || !samePreparationAuthority(row.preparation, projected)) return { kind: 'stale' as const }
+      || !samePreparationProjectionIdentity(row.preparation, projected)) return { kind: 'stale' as const }
     if (row.preparationDigest !== row.preparation.preparationDigest
-      || canonicalDigest(row.lineage as StableHashValue) !== canonicalDigest(row.preparation.lineage as StableHashValue)) {
+      || canonicalDigest(row.lineage as StableHashValue) !== canonicalDigest(row.preparation.lineage as StableHashValue)
+      || !preparationIntegrityValid(row.preparation)) {
       throw new Error('customer_request_v2_preparation_integrity_failure')
     }
     return { kind: 'current' as const, preparation: asStoredPreparation(asDomainPreparation(row.preparation)) }
@@ -306,12 +338,29 @@ function aggregateIntegrityValid(aggregate: Aggregate): boolean {
     && canonicalDigest(material as StableHashValue) === aggregate.aggregateDigest
 }
 
-function samePreparationAuthority(left: StoredPreparation, right: DurableActionPreparation): boolean {
-  return left.preparationRef === right.preparationRef
-    && canonicalDigest(left.lineage as StableHashValue) === canonicalDigest(right.lineage as StableHashValue)
-    && left.authorityScope.authorityScopeDigest === right.authorityScope.authorityScopeDigest
-    && left.disclosureReview.reviewDigest === right.disclosureReview.reviewDigest
-    && left.projectedInputDigest === right.projectedInputDigest
+function preparationIntegrityValid(preparation: StoredPreparation): boolean {
+  const { preparationDigest, ...material } = preparation
+  return canonicalDigest(material as StableHashValue) === preparationDigest
+}
+
+function samePreparationProjectionIdentity(left: StoredPreparation, right: DurableActionPreparation): boolean {
+  return canonicalDigest(projectionIdentity(left) as StableHashValue)
+    === canonicalDigest(projectionIdentity(right) as StableHashValue)
+}
+
+function projectionIdentity(preparation: StoredPreparation | DurableActionPreparation) {
+  const projectedKind = preparation.kind === 'ready_for_routing' && preparation.authorityReservation !== undefined
+    ? 'needs_authority'
+    : preparation.kind
+  return {
+    preparationRef: preparation.preparationRef,
+    lineage: preparation.lineage,
+    projectedInputDigest: preparation.projectedInputDigest,
+    authorityScopeDigest: preparation.authorityScope.authorityScopeDigest,
+    reviewDigest: preparation.disclosureReview.reviewDigest,
+    kind: projectedKind,
+    ...(preparation.kind === 'needs_information' ? { missing: preparation.missing } : {}),
+  }
 }
 
 function asDomainPreparation(value: StoredPreparation): DurableActionPreparation {

@@ -67,7 +67,7 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
   if (result.kind === 'refused') return requestView({
     requestRef: 'request:uncommitted', revision: 0, state: 'needs_attention',
     summary: result.reason === 'capability_graph_invalid'
-      ? 'The available business capabilities changed and need to be checked again.'
+      ? 'The registered options changed and need to be checked again.'
       : 'This request could not be interpreted safely.',
     nextAction: 'retry',
   })

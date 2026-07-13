@@ -55,7 +55,7 @@ describe('agent-native customer Request API', () => {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })).status).toBe(200)
     expect((await handleAgentCustomerOptionsPost(request('/options', {
-      revision: 1, idempotencyKey: 'prepare:1', authorityReference: 'action-preparation:1',
+      revision: 1, idempotencyKey: 'prepare:1',
     }), 'request:agent:1', {
       authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
     })).status).toBe(200)
@@ -63,7 +63,7 @@ describe('agent-native customer Request API', () => {
     const { serviceAuth, ...command } = calls[1]?.args ?? {}
     expect(command).toMatchObject({
       requestRef: 'request:agent:1', revision: 1,
-      idempotencyKey: 'prepare:1', authorityReference: 'action-preparation:1',
+      idempotencyKey: 'prepare:1',
     })
     await expect(verifyCustomerRequestServiceAssertion({
       key, operation: 'compare', command: command as never, assertion: serviceAuth as never, now: 1_001,

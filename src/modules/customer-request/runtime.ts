@@ -11,6 +11,7 @@ export {
   requestSnapshotValue,
 } from './internal/convex-schema'
 export {
+  actionPreparationApprovalEvidenceV2Value,
   actionPreparationLineageV2Value,
   capabilityContractRefV2Value,
   customerRequestV2AggregateValue,

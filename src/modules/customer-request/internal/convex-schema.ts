@@ -237,12 +237,6 @@ export const preparationRefusalReason = v.union(
 
 export const customerRequestTables = {
   ...customerRequestV2Tables,
-  customerRequestAgentPrincipals: defineTable({
-    principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
-    recordedAt: v.number(), lastSeenAt: v.number(),
-  })
-    .index('by_principalId', ['principalId'])
-    .index('by_credentialId', ['credentialId']),
   customerRequestCapabilityContracts: defineTable({
     ...capabilityContractValue.fields,
     contractDigest: v.string(), status: v.union(v.literal('active'), v.literal('retired')),

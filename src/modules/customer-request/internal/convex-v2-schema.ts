@@ -43,13 +43,21 @@ const actionPreparationDisclosureReviewV2Value = v.object({
 })
 const actionPreparationAuthorityReservationV2Value = v.object({
   reservationRef: v.string(), reservationDigest: v.string(), authorityReference: v.string(),
+  approvalDigest: v.string(), reviewDigest: v.string(),
   principalId: v.string(), ownerId: v.string(), credentialId: v.string(), lineage: actionPreparationLineageV2Value,
   authorityScopeDigest: v.string(),
   verification: v.object({
-    kind: v.union(v.literal('clerk_identity'), v.literal('service_assertion')),
-    evidenceRef: v.string(), verifiedAt: v.number(),
+    kind: v.literal('clerk_owner'), authenticationEvidenceRef: v.string(), approvedAt: v.number(),
   }),
   reservedAt: v.number(),
+})
+export const actionPreparationApprovalEvidenceV2Value = v.object({
+  approvalRef: v.string(), approvalDigest: v.string(), preparationRef: v.string(),
+  reviewRef: v.string(), reviewDigest: v.string(), authorityScopeDigest: v.string(),
+  principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
+  lineage: actionPreparationLineageV2Value, commandDigest: v.string(),
+  verification: v.object({ kind: v.literal('clerk_owner'), authenticationEvidenceRef: v.string() }),
+  approvedAt: v.number(),
 })
 export const durableActionPreparationV2Value = v.union(
   v.object({
@@ -161,6 +169,13 @@ export const customerRequestV2AggregateValue = v.object({
 })
 
 export const customerRequestV2Tables = {
+  customerRequestAgentPrincipals: defineTable({
+    principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
+    recordedAt: v.number(), lastSeenAt: v.number(),
+  })
+    .index('by_principalId', ['principalId'])
+    .index('by_credentialId', ['credentialId']),
+
   customerRequestV2Heads: defineTable({
     requestId: v.string(), principalId: v.string(), delegatedAgentId: v.string(), currentRevision: v.number(),
     currentAggregateDigest: v.string(), createdAt: v.number(), updatedAt: v.number(),
@@ -183,12 +198,13 @@ export const customerRequestV2Tables = {
     preparation: durableActionPreparationV2Value, recordedAt: v.number(), updatedAt: v.number(),
   })
     .index('by_preparationRef', ['preparationRef'])
-    .index('by_requestId_requestRevision_actionId', ['requestId', 'requestRevision', 'actionId']),
+    .index('by_requestId_and_requestRevision_and_actionId', ['requestId', 'requestRevision', 'actionId']),
 
   customerRequestV2PreparationCommands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(),
     authorityReference: v.optional(v.string()), lineage: actionPreparationLineageV2Value,
-    preparationRef: v.string(), preparationDigest: v.string(), committedAt: v.number(),
+    preparationRef: v.string(), preparationDigest: v.string(), result: durableActionPreparationV2Value,
+    committedAt: v.number(),
   }).index('by_commandKey', ['commandKey']),
 
   customerRequestV2PreparationDisclosureReviews: defineTable({
@@ -196,11 +212,21 @@ export const customerRequestV2Tables = {
     review: actionPreparationDisclosureReviewV2Value, recordedAt: v.number(),
   }).index('by_reviewRef', ['reviewRef']),
 
+  customerRequestV2PreparationApprovalEvidence: defineTable({
+    approvalRef: v.string(), approvalDigest: v.string(), preparationRef: v.string(),
+    reviewRef: v.string(), reviewDigest: v.string(), authorityScopeDigest: v.string(),
+    principalId: v.string(), ownerId: v.string(), credentialId: v.string(),
+    lineage: actionPreparationLineageV2Value, commandDigest: v.string(),
+    approval: actionPreparationApprovalEvidenceV2Value, recordedAt: v.number(),
+  })
+    .index('by_approvalRef', ['approvalRef'])
+    .index('by_preparationRef', ['preparationRef']),
+
   customerRequestV2PreparationAuthorityReservations: defineTable({
     reservationRef: v.string(), reservationDigest: v.string(), authorityReference: v.string(),
     lineage: actionPreparationLineageV2Value,
     reservation: actionPreparationAuthorityReservationV2Value, recordedAt: v.number(),
   })
     .index('by_reservationRef', ['reservationRef'])
-    .index('by_preparationAuthorityReference', ['authorityReference']),
+    .index('by_authorityReference', ['authorityReference']),
 } as const

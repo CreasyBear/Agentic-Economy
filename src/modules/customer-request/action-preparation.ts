@@ -43,28 +43,49 @@ export type ActionPreparationDisclosureReview = Readonly<{
   effectRequirements: readonly CapabilityPreparationDataUse['effect'][]
 }>
 
-export type VerifiedActionPreparationAuthority = Readonly<{
-  kind: 'clerk_identity' | 'service_assertion'
+export type VerifiedActionPreparationApprovalActor = Readonly<{
+  kind: 'clerk_owner'
+  requestPrincipalId: string
+  ownerId: string
+  credentialId: string
+  authenticationEvidenceRef: string
+  approvedAt: number
+}>
+
+export type ActionPreparationApprovalEvidence = Readonly<{
+  approvalRef: string
+  approvalDigest: string
+  preparationRef: string
+  reviewRef: string
+  reviewDigest: string
+  authorityScopeDigest: string
   principalId: string
   ownerId: string
   credentialId: string
-  evidenceRef: string
-  verifiedAt: number
+  lineage: ActionPreparationLineage
+  commandDigest: string
+  verification: Readonly<{
+    kind: VerifiedActionPreparationApprovalActor['kind']
+    authenticationEvidenceRef: string
+  }>
+  approvedAt: number
 }>
 
 export type ActionPreparationAuthorityReservation = Readonly<{
   reservationRef: string
   reservationDigest: string
   authorityReference: string
+  approvalDigest: string
+  reviewDigest: string
   principalId: string
   ownerId: string
   credentialId: string
   lineage: ActionPreparationLineage
   authorityScopeDigest: string
   verification: Readonly<{
-    kind: VerifiedActionPreparationAuthority['kind']
-    evidenceRef: string
-    verifiedAt: number
+    kind: VerifiedActionPreparationApprovalActor['kind']
+    authenticationEvidenceRef: string
+    approvedAt: number
   }>
   reservedAt: number
 }>
@@ -170,32 +191,54 @@ export function projectActionPreparation(input: Readonly<{
 
 export function authorizeActionPreparation(input: Readonly<{
   preparation: Extract<DurableActionPreparation, { kind: 'needs_authority' }>
-  authorityReference: string
-  authority: VerifiedActionPreparationAuthority
-}>): AuthorizedActionPreparation {
-  if (input.authorityReference !== input.preparation.preparationRef) {
-    throw new Error('action_preparation_authority_reference_mismatch')
+  preparationRef: string
+  commandDigest: string
+  actor: VerifiedActionPreparationApprovalActor
+}>): Readonly<{ preparation: AuthorizedActionPreparation; approval: ActionPreparationApprovalEvidence }> {
+  if (input.preparationRef !== input.preparation.preparationRef) {
+    throw new Error('action_preparation_reference_mismatch')
   }
-  if (input.authority.principalId !== input.preparation.lineage.principalId) {
-    throw new Error('action_preparation_authority_principal_mismatch')
+  if (input.actor.requestPrincipalId !== input.preparation.lineage.principalId) {
+    throw new Error('action_preparation_approval_principal_mismatch')
   }
-  if (!valid(input.authority.ownerId) || !valid(input.authority.credentialId)
-    || !valid(input.authority.evidenceRef) || !Number.isSafeInteger(input.authority.verifiedAt)) {
-    throw new Error('action_preparation_authority_invalid')
+  if (!valid(input.actor.ownerId) || !valid(input.actor.credentialId)
+    || !valid(input.actor.authenticationEvidenceRef) || !valid(input.commandDigest)
+    || !Number.isSafeInteger(input.actor.approvedAt)) {
+    throw new Error('action_preparation_approval_invalid')
   }
+  const approvalMaterial = {
+    preparationRef: input.preparation.preparationRef,
+    reviewRef: input.preparation.disclosureReview.reviewRef,
+    reviewDigest: input.preparation.disclosureReview.reviewDigest,
+    authorityScopeDigest: input.preparation.authorityScope.authorityScopeDigest,
+    principalId: input.preparation.lineage.principalId,
+    ownerId: input.actor.ownerId,
+    credentialId: input.actor.credentialId,
+    lineage: input.preparation.lineage,
+    commandDigest: input.commandDigest,
+    verification: {
+      kind: input.actor.kind,
+      authenticationEvidenceRef: input.actor.authenticationEvidenceRef,
+    },
+    approvedAt: input.actor.approvedAt,
+  }
+  const approvalDigest = canonicalDigest(approvalMaterial as StableHashValue)
+  const approval = freeze({
+    approvalRef: `action-preparation-approval:${approvalDigest}`,
+    approvalDigest,
+    ...approvalMaterial,
+  })
   const reservationMaterial = {
-    authorityReference: input.authorityReference,
-    principalId: input.authority.principalId,
-    ownerId: input.authority.ownerId,
-    credentialId: input.authority.credentialId,
+    authorityReference: approval.approvalRef,
+    approvalDigest: approval.approvalDigest,
+    reviewDigest: approval.reviewDigest,
+    principalId: approval.principalId,
+    ownerId: approval.ownerId,
+    credentialId: approval.credentialId,
     lineage: input.preparation.lineage,
     authorityScopeDigest: input.preparation.authorityScope.authorityScopeDigest,
-    verification: {
-      kind: input.authority.kind,
-      evidenceRef: input.authority.evidenceRef,
-      verifiedAt: input.authority.verifiedAt,
-    },
-    reservedAt: input.authority.verifiedAt,
+    verification: { ...approval.verification, approvedAt: approval.approvedAt },
+    reservedAt: approval.approvedAt,
   }
   const reservationDigest = canonicalDigest(reservationMaterial as StableHashValue)
   const authorityReservation = freeze({
@@ -205,10 +248,11 @@ export function authorizeActionPreparation(input: Readonly<{
   })
   const { kind: _kind, preparationDigest: _preparationDigest, ...base } = input.preparation
   const readyMaterial = { ...base, kind: 'ready_for_routing' as const, authorityReservation }
-  return freeze({
+  const preparation = freeze({
     ...readyMaterial,
     preparationDigest: canonicalDigest(readyMaterial as StableHashValue),
   })
+  return freeze({ preparation, approval })
 }
 
 function actionPreparationAuthorityScope(

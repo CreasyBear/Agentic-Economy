@@ -22,6 +22,7 @@ import type * as customerRequestCapabilityContracts from "../customerRequestCapa
 import type * as customerRequestCompilationStoreAdapter from "../customerRequestCompilationStoreAdapter.js";
 import type * as customerRequestPreparationAuthority from "../customerRequestPreparationAuthority.js";
 import type * as customerRequestPreparationAuthorityStoreAdapter from "../customerRequestPreparationAuthorityStoreAdapter.js";
+import type * as customerRequestPrincipals from "../customerRequestPrincipals.js";
 import type * as customerRequestStoreAdapter from "../customerRequestStoreAdapter.js";
 import type * as customerRequestV2 from "../customerRequestV2.js";
 import type * as customerRequestV2Preparation from "../customerRequestV2Preparation.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestCompilationStoreAdapter: typeof customerRequestCompilationStoreAdapter;
   customerRequestPreparationAuthority: typeof customerRequestPreparationAuthority;
   customerRequestPreparationAuthorityStoreAdapter: typeof customerRequestPreparationAuthorityStoreAdapter;
+  customerRequestPrincipals: typeof customerRequestPrincipals;
   customerRequestStoreAdapter: typeof customerRequestStoreAdapter;
   customerRequestV2: typeof customerRequestV2;
   customerRequestV2Preparation: typeof customerRequestV2Preparation;

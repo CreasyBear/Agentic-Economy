@@ -316,7 +316,7 @@ export const resume = action({
         if (preparation.kind === 'stale') return writableView(projectNeedsAttention({
           requestRef: args.requestRef,
           revision: current.aggregate.snapshot.revision,
-          summary: 'The available business capabilities changed. Review this request again.',
+          summary: 'The registered options changed. Review this request again.',
         }))
       }
     }
@@ -327,25 +327,68 @@ export const resume = action({
 export const compare = action({
   args: {
     requestRef: v.string(), revision: v.number(), idempotencyKey: v.string(),
-    authorityReference: v.optional(v.string()), serviceAuth: v.optional(serviceAssertion),
+    serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => await prepareCurrentAction(ctx, args, 'compare'),
+  handler: async (ctx, args): Promise<ActionResult> => await prepareCurrentAction(ctx, args),
 })
 
 export const authorizePreparation = action({
   args: {
     requestRef: v.string(), revision: v.number(), preparationRef: v.string(), idempotencyKey: v.string(),
-    serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
-  handler: async (ctx, args): Promise<ActionResult> => await prepareCurrentAction(ctx, {
-    requestRef: args.requestRef,
-    revision: args.revision,
-    idempotencyKey: args.idempotencyKey,
-    authorityReference: args.preparationRef,
-    ...(args.serviceAuth === undefined ? {} : { serviceAuth: args.serviceAuth }),
-  }, 'authorize'),
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: 0,
+      summary: 'This earlier request used a retired contract format. Start a new request to continue.',
+    }))
+    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
+    const requestPrincipalId = current.aggregate.snapshot.principalId
+    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
+    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
+      principalId: requestPrincipalId,
+    })
+    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.revision !== args.revision) return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
+    }
+    if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
+      return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.revision,
+        summary: 'This request needs an action choice before AE can prepare it.',
+      }))
+    }
+    const command = {
+      requestRef: args.requestRef, revision: args.revision,
+      preparationRef: args.preparationRef, idempotencyKey: args.idempotencyKey,
+    }
+    const now = Date.now()
+    const result: PreparationMutationResult = await ctx.runMutation(internal.customerRequestV2Preparation.prepare, {
+      commandKey: namespacedKey(requestPrincipalId, 'authorize', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest(command),
+      principalId: requestPrincipalId,
+      requestId: args.requestRef,
+      expectedRevision: args.revision,
+      actionId: current.aggregate.plan.actions[0].actionId,
+      preparationRef: args.preparationRef,
+      approvalActor: {
+        kind: 'clerk_owner', requestPrincipalId, ownerId: identity.subject,
+        credentialId: identity.tokenIdentifier,
+        authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
+          issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
+        })}`,
+        approvedAt: now,
+      },
+      now,
+    })
+    return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
+  },
 })
 
 async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
@@ -424,7 +467,7 @@ async function compileCommit(ctx: ActionCtx, input: Readonly<{
     requestRef: input.requestId,
     revision: input.expectedRevision,
     summary: compiled.reason === 'capability_graph_invalid'
-      ? 'The available business capabilities changed. Try this request again.'
+      ? 'The registered options changed. Try this request again.'
       : 'The request could not be interpreted safely.',
   }))
   const result: CommitResult = await ctx.runMutation(internal.customerRequestV2.commitAggregate, {
@@ -448,7 +491,7 @@ async function compileCommit(ctx: ActionCtx, input: Readonly<{
   }))
   if (result.kind === 'context_stale') return writableView(projectNeedsAttention({
     requestRef: input.requestId, revision: input.expectedRevision,
-    summary: 'The available business capabilities changed. Try this request again.',
+    summary: 'The registered options changed. Try this request again.',
   }))
   return writableView(projectRequestEvaluation({
     snapshot: compiled.aggregate.snapshot,
@@ -592,18 +635,15 @@ async function prepareCurrentAction(
     requestRef: string
     revision: number
     idempotencyKey: string
-    authorityReference?: string
     serviceAuth?: Infer<typeof serviceAssertion>
   }>,
-  operation: 'compare' | 'authorize',
 ): Promise<ActionResult> {
   const command = {
     requestRef: args.requestRef,
     revision: args.revision,
     idempotencyKey: args.idempotencyKey,
-    ...(args.authorityReference === undefined ? {} : { authorityReference: args.authorityReference }),
   }
-  const caller = await resolveRequestCaller(ctx, operation, command, args.serviceAuth)
+  const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
   if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
   const current = await loadCurrent(ctx, args.requestRef)
   if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
@@ -624,40 +664,45 @@ async function prepareCurrentAction(
   }
   const action = current.aggregate.plan.actions[0]
   const result: PreparationMutationResult = await ctx.runMutation(internal.customerRequestV2Preparation.prepare, {
-    commandKey: namespacedKey(caller.principalId, operation, args.requestRef, args.idempotencyKey),
+    commandKey: namespacedKey(caller.principalId, 'compare', args.requestRef, args.idempotencyKey),
     commandDigest: canonicalDigest(command),
     principalId: caller.principalId,
     requestId: args.requestRef,
     expectedRevision: args.revision,
     actionId: action.actionId,
-    ...(args.authorityReference === undefined ? {} : {
-      authorityReference: args.authorityReference,
-      authority: caller.authority,
-    }),
     now: Date.now(),
   })
+  return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
+}
+
+function preparationResultView(
+  aggregate: StoredAggregate,
+  result: PreparationMutationResult,
+  requestRef: string,
+  revision: number,
+): ActionResult {
   if (result.kind === 'conflict') return {
-    kind: 'conflict', requestRef: args.requestRef,
+    kind: 'conflict', requestRef,
     reason: result.reason === 'revision_changed' ? 'revision_changed' : 'idempotency_key_reused',
   }
   if (result.kind === 'needs_attention') return writableView(projectNeedsAttention({
-    requestRef: args.requestRef,
-    revision: args.revision,
+    requestRef,
+    revision,
     summary: result.reason === 'historical_request_resubmit_required'
       ? 'This earlier request used a retired contract format. Start a new request to continue.'
-      : 'The available business capabilities changed. Review this request again.',
+      : 'The registered options changed. Review this request again.',
   }))
   if (result.kind === 'refused') {
     if (result.reason === 'request_not_found') return { kind: 'refused', reason: 'request_not_found' }
     return writableView(projectNeedsAttention({
-      requestRef: args.requestRef,
-      revision: args.revision,
+      requestRef,
+      revision,
       summary: result.reason === 'authority_reference_invalid' || result.reason === 'authority_invalid'
         ? 'That permission no longer matches this request. Review the disclosure again.'
         : 'This request cannot be prepared from its current action.',
     }))
   }
-  return projectStoredPreparation(current.aggregate, result.preparation)
+  return projectStoredPreparation(aggregate, result.preparation)
 }
 
 function projectStoredPreparation(aggregate: StoredAggregate, preparation: StoredPreparation): ActionResult {
@@ -841,14 +886,6 @@ type ServiceAssertion = Infer<typeof serviceAssertion>
 type RequestCaller = Readonly<{
   principalId: string
   delegatedAgentId: string
-  authority: Readonly<{
-    kind: 'clerk_identity' | 'service_assertion'
-    principalId: string
-    ownerId: string
-    credentialId: string
-    evidenceRef: string
-    verifiedAt: number
-  }>
 }>
 
 async function resolveRequestCaller(
@@ -860,22 +897,9 @@ async function resolveRequestCaller(
 ): Promise<RequestCaller | undefined> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity !== null) {
-    const verifiedAt = Date.now()
     return {
       principalId: identity.tokenIdentifier,
       delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier,
-      authority: {
-        kind: 'clerk_identity',
-        principalId: identity.tokenIdentifier,
-        ownerId: identity.subject,
-        credentialId: identity.tokenIdentifier,
-        evidenceRef: `clerk-identity:${canonicalDigest({
-          issuer: identity.issuer,
-          subject: identity.subject,
-          tokenIdentifier: identity.tokenIdentifier,
-        })}`,
-        verifiedAt,
-      },
     }
   }
   const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
@@ -883,7 +907,7 @@ async function resolveRequestCaller(
     || !assertion.scopes.includes('customer_requests:create')) return undefined
   const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })
   if (!verified) return undefined
-  const recorded = await ctx.runMutation(internal.customerRequests.recordAgentPrincipal, {
+  const recorded = await ctx.runMutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
     principalId: assertion.principalId, ownerId: assertion.ownerId, credentialId: assertion.credentialId,
     scopes: [...assertion.scopes], seenAt: Date.now(),
   })
@@ -891,19 +915,6 @@ async function resolveRequestCaller(
   return {
     principalId: assertion.principalId,
     delegatedAgentId: assertion.principalId,
-    authority: {
-      kind: 'service_assertion',
-      principalId: assertion.principalId,
-      ownerId: assertion.ownerId,
-      credentialId: assertion.credentialId,
-      evidenceRef: `service-assertion:${canonicalDigest({
-        principalId: assertion.principalId,
-        credentialId: assertion.credentialId,
-        issuedAt: assertion.issuedAt,
-        signature: assertion.signature,
-      })}`,
-      verifiedAt: Date.now(),
-    },
   }
 }
 
