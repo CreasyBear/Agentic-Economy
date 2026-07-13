@@ -20,6 +20,7 @@
     "test:release:source": "npm run lint && npm run typecheck && npm run check:routing-edge && npm run check:kernel-retirement && npm run test:unit && npm run test:integration && npm run test:types && npm run test:imports && npm run test:ts-standards && npm run test:copy && npm run test:seo && npm run test:ui-contract && npm run build",
     "test:release:hosted": "npm run check:convex-codegen && npm run check:kernel-proof",
     "smoke:customer-request:production": "tsx tools/release/customer-request-production-smoke.ts",
+    "smoke:customer-request:production:temporary-key": "tsx tools/release/customer-request-production-credential.ts",
     "smoke:customer-request:production:preflight": "tsx tools/release/customer-request-production-smoke.ts --preflight",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",

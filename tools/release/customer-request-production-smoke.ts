@@ -32,6 +32,20 @@ type SmokeConfig = Readonly<{
   requestText: string
 }>
 
+export function customerRequestProductionSmokeConfigFromEnvironment(
+  env: NodeJS.ProcessEnv,
+  apiKey = env.AE_CUSTOMER_REQUEST_API_KEY,
+): SmokeConfig {
+  return {
+    baseUrl: (env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/u, ''),
+    apiKey,
+    facts: parseFacts(env.AE_CUSTOMER_REQUEST_FACTS_JSON),
+    fetch: globalThis.fetch,
+    preflightOnly: false,
+    requestText: env.AE_CUSTOMER_REQUEST_TEXT ?? 'Compare the registered sandbox options for a reference request.',
+  }
+}
+
 export async function runCustomerRequestProductionSmoke(config: SmokeConfig): Promise<void> {
   await proveDiscovery(config)
   await proveAnonymousRefusal(config)
@@ -149,12 +163,8 @@ function parseFacts(value: string | undefined): Readonly<Record<string, string |
 
 async function main(): Promise<void> {
   await runCustomerRequestProductionSmoke({
-    baseUrl: (process.env.AE_CUSTOMER_REQUEST_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/u, ''),
-    apiKey: process.env.AE_CUSTOMER_REQUEST_API_KEY,
-    facts: parseFacts(process.env.AE_CUSTOMER_REQUEST_FACTS_JSON),
-    fetch: globalThis.fetch,
+    ...customerRequestProductionSmokeConfigFromEnvironment(process.env),
     preflightOnly: process.argv.includes('--preflight'),
-    requestText: process.env.AE_CUSTOMER_REQUEST_TEXT ?? 'Compare the registered sandbox options for a reference request.',
   })
 }
 
