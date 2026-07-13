@@ -8,7 +8,7 @@ import type {
   PlanRevision,
   PreparedAction,
   ProposedAction,
-} from './public'
+} from './legacy-v1'
 import {
   releasePreparationDisclosure,
   type PreparationAuthorityRefusalReason,

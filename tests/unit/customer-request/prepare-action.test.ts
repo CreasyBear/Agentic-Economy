@@ -13,7 +13,7 @@ import {
   createCustomerRequest,
   createPlanRevision,
   defineCapabilityContract,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/legacy-v1'
 import {
   createInMemoryPreparationDisclosureStore,
   preparationAuthorityDigest,

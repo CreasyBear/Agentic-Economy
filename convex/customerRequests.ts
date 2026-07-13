@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { customerRequestDigest, planRevisionDigest, preparedActionDigest as computePreparedActionDigest } from '@/modules/customer-request/preparation'
-import type { PreparedAction } from '@/modules/customer-request/public'
+import type { PreparedAction } from '@/modules/customer-request/legacy-v1'
 import {
   customerRequestValue,
   planRevisionValue,

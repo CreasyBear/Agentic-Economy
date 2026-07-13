@@ -80,7 +80,7 @@ const bindingRegistrationValue = v.object({
   credentialRef: v.string(),
   continuation: continuationValue,
   cancellation: cancellationValue,
-  adapter: v.object({ adapterId: v.string(), config: v.any() }),
+  adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const contextFields = {
@@ -743,7 +743,7 @@ export async function setCapabilitySupplyEligibility(
   }
 }
 
-async function listEligibleCapabilitySupply(
+export async function listEligibleCapabilitySupply(
   db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number }>,
 ) {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_ELIGIBLE_SUPPLY) {
@@ -1093,7 +1093,32 @@ function bindingRegistrationAudit(
 }
 
 function bindingObservedRowDigest(binding: Doc<'capabilityTransportBindings'>): string {
-  return canonicalDigest(binding as unknown as StableHashValue)
+  return canonicalDigest({
+    _id: binding._id,
+    _creationTime: binding._creationTime,
+    bindingId: binding.bindingId,
+    offeringId: binding.offeringId,
+    networkId: binding.networkId,
+    capabilityId: binding.capabilityId,
+    version: binding.version,
+    contractDigest: binding.contractDigest,
+    endpointUrl: binding.endpointUrl,
+    credentialRef: binding.credentialRef,
+    continuation: binding.continuation,
+    cancellation: binding.cancellation,
+    adapterId: binding.adapterId,
+    configJson: binding.configJson,
+    configDigest: binding.configDigest,
+    registrationEvidenceRefs: binding.registrationEvidenceRefs,
+    registrationHash: binding.registrationHash,
+    admission: binding.admission,
+    conformance: binding.conformance,
+    admissionEvidenceRefs: binding.admissionEvidenceRefs,
+    conformanceEvidenceRefs: binding.conformanceEvidenceRefs,
+    eligibilityHash: binding.eligibilityHash,
+    registeredAt: binding.registeredAt,
+    updatedAt: binding.updatedAt,
+  })
 }
 
 type QuarantineParentDisposition =
@@ -1196,7 +1221,12 @@ async function replayQuarantineBinding(
       eventType: 'capability_binding.quarantined', targetType: 'capability_binding',
       action: 'quarantine_binding',
       targetRef: command.bindingId, actor: command.actor, context: command.context,
-      payload: payload as unknown as StableHashValue, beforeState: '',
+      payload: {
+        bindingId: payload.bindingId,
+        observedRowDigest: payload.observedRowDigest,
+        eligibilityHash: payload.eligibilityHash,
+        parent: payload.parent,
+      }, beforeState: '',
       afterState: 'not_admitted:not_conformant', createdAt: now,
     },
     allowedBeforeStates: [

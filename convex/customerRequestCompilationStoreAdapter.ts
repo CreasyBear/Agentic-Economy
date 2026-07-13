@@ -1,7 +1,7 @@
-import type { CustomerRequestCompilationStore } from '@/modules/customer-request/compiler'
+import type { CustomerRequestCompilationStore } from '@/modules/customer-request/legacy-compiler-v1'
 import { customerRequestValue } from '@/modules/customer-request/runtime'
-import type { CompileCustomerRequestResult } from '@/modules/customer-request/compiler'
-import type { CustomerRequest, PlanRevision } from '@/modules/customer-request/public'
+import type { CompileCustomerRequestResult } from '@/modules/customer-request/legacy-compiler-v1'
+import type { CustomerRequest, PlanRevision } from '@/modules/customer-request/legacy-v1'
 import type { Infer } from 'convex/values'
 
 import { internal } from './_generated/api'

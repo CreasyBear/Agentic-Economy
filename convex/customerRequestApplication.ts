@@ -1,97 +1,84 @@
 import { v, type Infer } from 'convex/values'
 
-import { compileCustomerRequest } from '@/modules/customer-request/compiler'
-import { createJsonCustomerRequestInterpreter } from '@/modules/customer-request/interpreter'
 import {
-  createOpenRouterCustomerRequestSemanticTransport,
-  createOpenRouterCustomerRequestTransport,
-} from '@/modules/customer-request/openrouter-transport'
-import { createJsonCustomerRequestSemanticInterpreter } from '@/modules/customer-request/semantic-interpreter'
+  openCapabilityDecisionModel,
+  sameCapabilityContractRef,
+  isBoundedJsonValue,
+  type CapabilityContractRef,
+  type CapabilityDecisionModel,
+  type JsonValue,
+} from '@/modules/capability-contract/public'
+import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
-  projectCustomerRequest,
+  compileCustomerRequest,
+  writableCustomerRequestV2Aggregate,
+} from '@/modules/customer-request/compiler'
+import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
+import { customerRequestV2AggregateValue } from '@/modules/customer-request/runtime'
+import {
   projectNeedsAttention,
-  projectOptionsReady,
-  projectPreparingOptions,
   projectRequestEvaluation,
   type CustomerRequestView,
-  type CustomerRequestProjection,
 } from '@/modules/customer-request/customer-projection'
 import {
-  discoverRequestEvaluationCandidates,
-  evaluateCustomerRequestSnapshot,
-  evaluateIntentDirectionRequestSnapshot,
-  requestRegistrySnapshotDigest,
-  type RequestEvaluation,
-} from '@/modules/customer-request/evaluation'
-import { prepareCustomerRequestAction, type PreparedRouteCandidateSet } from '@/modules/customer-request/preparation'
-import {
-  createKernelCustomerRequestActionRouter,
-  prepareKernelCustomerRequestEvaluationOptions,
-} from '@/modules/customer-request/kernel-router'
-import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { preparedRouteCandidateSetValue, requestSnapshotValue } from '@/modules/customer-request/runtime'
-import type { PlanRevision } from '@/modules/customer-request/public'
+  bindCustomerCapabilityDescriptor,
+  createJsonCustomerRequestSemanticInterpreter,
+  type CustomerRequestSemanticProposal,
+} from '@/modules/customer-request/semantic-interpreter'
+import { createOpenRouterCustomerRequestSemanticTransport } from '@/modules/customer-request/openrouter-transport'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
-import {
-  createProtectedProjectionCommitter,
-  preparationAuthorityDigest,
-  releasePreparationDisclosure,
-  type VerifiedPreparationAuthority,
-} from '@/modules/customer-request/preparation-authority'
 
-import { action, type ActionCtx } from './_generated/server'
 import { internal } from './_generated/api'
-import { loadConvexCapabilityContractRegistry } from './customerRequestCapabilityContractRegistryAdapter'
-import { createConvexCustomerRequestCompilationStore } from './customerRequestCompilationStoreAdapter'
-import { createConvexCustomerRequestPreparationStore } from './customerRequestStoreAdapter'
-import {
-  createConvexPreparationDisclosureStore,
-  recordConvexVerifiedPreparationAuthority,
-} from './customerRequestPreparationAuthorityStoreAdapter'
-import { createRegisteredRoutingKernel } from './routingKernel'
+import { action, type ActionCtx } from './_generated/server'
 
-const literalValue = v.union(v.string(), v.number(), v.boolean())
 const serviceAssertion = v.object({
   principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
   issuedAt: v.number(), signature: v.string(),
 })
+const commercialInfluence = v.union(
+  v.object({ status: v.literal('unknown') }),
+  v.object({ status: v.literal('none'), summary: v.string() }),
+  v.object({
+    status: v.literal('disclosed'),
+    relationship: v.union(
+      v.literal('commission'), v.literal('sponsorship'), v.literal('rebate'),
+      v.literal('ownership'), v.literal('other'),
+    ),
+    summary: v.string(), payerName: v.string(), beneficiaryName: v.string(), compensationBasis: v.string(),
+    influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
+  }),
+)
 const customerOption = v.object({
   optionRef: v.string(), business: v.object({ name: v.string() }),
   expectedCost: v.object({ currency: v.string(), amountMinor: v.number() }),
   maximumCost: v.object({ currency: v.string(), amountMinor: v.number() }),
   expectedLatencyMs: v.number(),
   priceComponents: v.array(v.object({ label: v.string(), amountMinor: v.number() })),
-  comparableOutputs: v.array(v.object({ label: v.string(), value: literalValue })),
+  comparableOutputs: v.array(v.object({
+    label: v.string(), value: v.union(v.string(), v.number(), v.boolean()),
+  })),
   materialTerms: v.array(v.string()),
   cancellation: v.object({
     kind: v.union(v.literal('supported'), v.literal('conditional'), v.literal('unsupported')),
     summary: v.string(),
   }),
   expiresAt: v.number(),
-  provenance: v.object({
-    kind: v.literal('provider_assertion'), observedAt: v.optional(v.number()), validUntil: v.number(),
-  }),
-  commercialInfluence: v.union(
-    v.object({ status: v.literal('unknown') }),
-    v.object({ status: v.literal('none'), summary: v.string() }),
-    v.object({
-      status: v.literal('disclosed'),
-      relationship: v.union(v.literal('commission'), v.literal('sponsorship'), v.literal('rebate'), v.literal('ownership'), v.literal('other')),
-      summary: v.string(), payerName: v.string(), beneficiaryName: v.string(), compensationBasis: v.string(),
-      influencesEligibility: v.boolean(), influencesInclusion: v.boolean(), influencesOrder: v.boolean(),
-    }),
-  ),
+  provenance: v.object({ kind: v.literal('provider_assertion'), observedAt: v.optional(v.number()), validUntil: v.number() }),
+  commercialInfluence,
 })
-const coverageStatus = v.union(
-  v.literal('not_contacted'), v.literal('contact_pending'), v.literal('contacted'),
-  v.literal('option_received'), v.literal('unavailable'), v.literal('uncertain'),
-)
 const customerOptionSet = v.object({
   cardinality: v.union(v.literal('none'), v.literal('single'), v.literal('multiple')),
   optionCount: v.number(),
   ordering: v.union(
-    v.object({ kind: v.literal('not_applicable'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')) }),
-    v.object({ kind: v.literal('unranked'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')) }),
+    v.object({
+      kind: v.literal('not_applicable'),
+      commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')),
+    }),
+    v.object({
+      kind: v.literal('unranked'),
+      commercialInfluence: v.union(v.literal('none'), v.literal('disclosed'), v.literal('unknown')),
+    }),
     v.object({
       kind: v.literal('recommended'), commercialInfluence: v.union(v.literal('none'), v.literal('disclosed')),
       objective: v.literal('lowest_maximum_price'), optionRef: v.string(), evidenceRef: v.string(),
@@ -100,7 +87,14 @@ const customerOptionSet = v.object({
   ),
   coverage: v.object({
     evaluated: v.number(), optionsReceived: v.number(), unavailable: v.number(), pending: v.number(), uncertain: v.number(),
-    businesses: v.array(v.object({ name: v.string(), status: coverageStatus, explanation: v.string() })),
+    businesses: v.array(v.object({
+      name: v.string(),
+      status: v.union(
+        v.literal('not_contacted'), v.literal('contact_pending'), v.literal('contacted'),
+        v.literal('option_received'), v.literal('unavailable'), v.literal('uncertain'),
+      ),
+      explanation: v.string(),
+    })),
   }),
   options: v.array(customerOption),
 })
@@ -118,7 +112,7 @@ const customerView = v.object({
   ),
   missingFields: v.array(v.object({ field: v.string(), label: v.string(), explanation: v.string() })),
   criteria: v.array(v.object({
-    label: v.string(), value: literalValue,
+    label: v.string(), value: v.any(), // runtime-validated JsonValue boundary
     basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
   })),
   disclosureReview: v.optional(v.object({
@@ -129,127 +123,55 @@ const customerView = v.object({
   })),
   clarification: v.optional(v.union(
     v.object({ kind: v.literal('intent_direction'), prompt: v.string(), answerKind: v.literal('natural_language') }),
-    v.object({ kind: v.literal('contract_fact'), field: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
+    v.object({ kind: v.literal('contract_fact'), requirementKey: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
   )),
   options: v.array(customerOption),
   optionSet: v.optional(customerOptionSet),
 })
-const customerProjection = v.union(
-  customerView,
-  v.object({
-    kind: v.literal('conflict'), requestRef: v.string(),
-    reason: v.union(v.literal('revision_changed'), v.literal('identity_changed'), v.literal('idempotency_key_reused')),
-  }),
+const conflict = v.object({
+  kind: v.literal('conflict'), requestRef: v.string(),
+  reason: v.union(v.literal('revision_changed'), v.literal('identity_changed'), v.literal('idempotency_key_reused')),
+})
+const refusedReason = v.union(
+  v.literal('authentication_required'), v.literal('request_not_found'),
+  v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
 )
-const optionProjection = v.union(
-  customerView,
-  v.object({ kind: v.literal('conflict'), requestRef: v.string(), reason: v.union(v.literal('revision_changed'), v.literal('request_not_ready')) }),
-  v.object({ kind: v.literal('refused'), reason: v.literal('authentication_required') }),
-)
-type OptionActionResult = Infer<typeof optionProjection>
-const submitResultValue = v.union(
-  customerProjection,
-  v.object({ kind: v.literal('refused'), reason: v.union(
-    v.literal('authentication_required'), v.literal('request_not_found'),
-    v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable'),
-  ) }),
-)
-type SubmitActionResult = Infer<typeof submitResultValue>
-type AuthorizePreparationResult = Infer<typeof customerView>
-  | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' }>
-  | Readonly<{ kind: 'refused'; reason: 'authentication_required' | 'request_not_found' }>
-type SnapshotValue = Infer<typeof requestSnapshotValue>
-type SnapshotCommitResult =
-  | Readonly<{ kind: 'stored' }>
-  | Readonly<{ kind: 'replayed'; requestId: string; revision: number }>
-  | Readonly<{ kind: 'revision_conflict' | 'identity_conflict' | 'command_conflict' }>
-type EligibleBinding = Readonly<{
-  businessId: string; bindingId: string; capabilityContractId: string; queryTerms: string[]; registrationHash: string
-}>
-type StoredEvaluation = Readonly<{
-  snapshot: SnapshotValue
-  evaluation: Readonly<{
-    evaluationId: string
-    requestId: string; requestRevision: number; registrySnapshotDigest: string; factsDigest: string
-    facts?: SnapshotValue['facts']
-    criteria?: RequestEvaluation['criteria']
-    decisionPreference?: RequestEvaluation['decisionPreference']
-    preparationDisclosure?: RequestEvaluation['preparationDisclosure']
-    posture: 'progress_available' | 'needs_information' | 'unsupported'
-    nextRequirement?:
-      | Readonly<{
-          kind?: 'contract_fact'; field: string; customerLabel: string; affectedCandidates: readonly string[]
-          probesEnabled: readonly string[]; requirementDigest: string
-        }>
-      | Readonly<{ kind: 'intent_direction'; prompt: string; requirementDigest: string }>
-    evaluationDigest: string
-  }>
-  candidates: RequestEvaluation['candidates']
-}>
-type StoredEvaluationPreparation = Readonly<{
-  preparationKey: string; requestId: string; requestRevision: number; evaluationId: string; evaluationDigest: string
-  status: 'preparing' | 'options_prepared' | 'needs_attention'
-  candidateSet?: PreparedRouteCandidateSet; inspectionRef?: string; updatedAt: number
-}>
+const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
+type ActionResult = Infer<typeof actionResult>
 
 export const submit = action({
   args: {
-    compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()), delegatedAgentId: v.string(),
-    customerJob: v.string(), knownFacts: v.record(v.string(), literalValue),
+    compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()),
+    delegatedAgentId: v.string(), customerJob: v.string(),
     routing: v.object({
       networkId: v.string(), currency: v.optional(v.string()), maximumSpendMinor: v.optional(v.number()),
       optimizeFor: v.optional(v.union(v.literal('cost'), v.literal('latency'))),
-    }), serviceAuth: v.optional(serviceAssertion),
+    }),
+    serviceAuth: v.optional(serviceAssertion),
   },
-  returns: submitResultValue,
-  handler: async (ctx, args): Promise<SubmitActionResult> => {
-    const command = submitCommand(args)
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const command = {
+      compilationKey: args.compilationKey,
+      requestId: args.requestId,
+      ...(args.expectedRevision === undefined ? {} : { expectedRevision: args.expectedRevision }),
+      delegatedAgentId: args.delegatedAgentId,
+      customerJob: args.customerJob,
+      routing: args.routing,
+    }
     const caller = await resolveRequestCaller(ctx, 'submit', command, args.serviceAuth, args.delegatedAgentId)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const expectedRevision = args.expectedRevision ?? 0
-    const recordedAt = Date.now()
-    const facts = Object.fromEntries(Object.entries(args.knownFacts).map(([field, value]) => [field, {
-      value,
-      source: { kind: 'customer' as const, assertionRef: `assertion:${canonicalDigest({ field, value })}` },
-    }]))
-    const snapshotMaterial = {
-      requestId: args.requestId, revision: expectedRevision + 1,
-      principalId: caller.principalId, delegatedAgentId: caller.delegatedAgentId,
-      intent: args.customerJob, networkId: args.routing.networkId, facts,
-    }
-    const snapshot = { ...snapshotMaterial, snapshotDigest: canonicalDigest(snapshotMaterial), recordedAt }
-    const committed: SnapshotCommitResult = await ctx.runMutation(internal.customerRequests.commitRequestSnapshot, {
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    return await interpretCompileCommit(ctx, {
       commandKey: namespacedKey(caller.principalId, 'submit', args.requestId, args.compilationKey),
-      commandDigest: canonicalDigest(command), expectedRevision, snapshot,
+      commandDigest: canonicalDigest(command),
+      requestId: args.requestId,
+      expectedRevision: args.expectedRevision ?? 0,
+      principalId: caller.principalId,
+      delegatedAgentId: caller.delegatedAgentId,
+      intent: args.customerJob,
+      networkId: args.routing.networkId,
+      priorFacts: [],
     })
-    if (committed.kind === 'revision_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestId, reason: 'revision_changed' as const,
-    }
-    if (committed.kind === 'identity_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestId, reason: 'identity_changed' as const,
-    }
-    if (committed.kind === 'command_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestId, reason: 'idempotency_key_reused' as const,
-    }
-    const requestRevision: number = committed.kind === 'replayed' ? committed.revision : snapshot.revision
-    const existing: StoredEvaluation | null = await ctx.runQuery(internal.customerRequests.getRequestEvaluation, {
-      requestId: args.requestId, requestRevision,
-    })
-    if (existing !== null) return writableView(projectStoredEvaluation(existing))
-    const durableSnapshot: SnapshotValue | null = committed.kind === 'replayed'
-      ? await ctx.runQuery(internal.customerRequests.getRequestSnapshot, { requestId: args.requestId, revision: requestRevision })
-      : snapshot
-    if (durableSnapshot === null || durableSnapshot.principalId !== caller.principalId) return {
-      kind: 'conflict' as const, requestRef: args.requestId, reason: 'identity_changed' as const,
-    }
-    const evaluated = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
-    if (evaluated.kind === 'interpreter_unavailable') return {
-      kind: 'refused' as const, reason: 'interpreter_unavailable' as const,
-    }
-    if (evaluated.kind !== 'stored') return {
-      kind: 'conflict' as const, requestRef: args.requestId, reason: 'revision_changed' as const,
-    }
-    return writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: evaluated.evaluation }))
   },
 })
 
@@ -258,690 +180,487 @@ export const refine = action({
     requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(), message: v.string(),
     serviceAuth: v.optional(serviceAssertion),
   },
-  returns: submitResultValue,
-  handler: async (ctx, args): Promise<SubmitActionResult> => {
-    const command = {
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const caller = await resolveRequestCaller(ctx, 'refine', {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
       idempotencyKey: args.idempotencyKey, message: args.message,
+    }, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
     }
-    const caller = await resolveRequestCaller(ctx, 'refine', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const evaluated: StoredEvaluation | null = await ctx.runQuery(
-      internal.customerRequests.getRequestEvaluation,
-      { requestId: args.requestRef, requestRevision: args.expectedRevision },
-    )
-    if (evaluated === null || evaluated.snapshot.principalId !== caller.principalId) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    if (current.aggregate.snapshot.revision !== args.expectedRevision) return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
     }
-    if (evaluated.evaluation.nextRequirement?.kind !== 'intent_direction') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: evaluated.snapshot.revision,
-      summary: 'This request is not waiting for a natural-language answer.',
-    }))
-    const recordedAt = Date.now()
-    const intent = refinedIntent(evaluated.snapshot.intent, args.message)
-    const snapshotMaterial = {
-      requestId: evaluated.snapshot.requestId, revision: args.expectedRevision + 1,
-      principalId: evaluated.snapshot.principalId, delegatedAgentId: evaluated.snapshot.delegatedAgentId,
-      intent, networkId: evaluated.snapshot.networkId, facts: evaluated.snapshot.facts,
-    }
-    const snapshot: SnapshotValue = {
-      ...snapshotMaterial, snapshotDigest: canonicalDigest(snapshotMaterial), recordedAt,
-    }
-    const committed: SnapshotCommitResult = await ctx.runMutation(internal.customerRequests.commitRequestSnapshot, {
+    const intent = `${current.aggregate.snapshot.intent.trim()}\n${args.message.trim()}`
+    return await interpretCompileCommit(ctx, {
       commandKey: namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest(command), expectedRevision: args.expectedRevision, snapshot,
-    })
-    if (committed.kind === 'revision_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
-    }
-    if (committed.kind === 'identity_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'identity_changed' as const,
-    }
-    if (committed.kind === 'command_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
-    }
-    const requestRevision = committed.kind === 'replayed' ? committed.revision : snapshot.revision
-    const existing: StoredEvaluation | null = await ctx.runQuery(internal.customerRequests.getRequestEvaluation, {
-      requestId: args.requestRef, requestRevision,
-    })
-    if (existing !== null) return writableView(projectStoredEvaluation(existing))
-    const durableSnapshot: SnapshotValue | null = committed.kind === 'replayed'
-      ? await ctx.runQuery(internal.customerRequests.getRequestSnapshot, { requestId: args.requestRef, revision: requestRevision })
-      : snapshot
-    if (durableSnapshot === null) return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: requestRevision,
-      summary: 'This request needs attention before it can continue.',
-    }))
-    const nextEvaluation = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
-    if (nextEvaluation.kind === 'interpreter_unavailable') return {
-      kind: 'refused' as const, reason: 'interpreter_unavailable' as const,
-    }
-    return nextEvaluation.kind === 'stored'
-      ? writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: nextEvaluation.evaluation }))
-      : writableView(projectNeedsAttention({
-          requestRef: args.requestRef, revision: requestRevision,
-          summary: 'This request changed before reevaluation completed.',
-        }))
-  },
-})
-
-export const authorizePreparation = action({
-  args: { requestRef: v.string(), revision: v.number(), idempotencyKey: v.string() },
-  returns: v.union(
-    customerView,
-    v.object({ kind: v.literal('conflict'), requestRef: v.string(), reason: v.literal('revision_changed') }),
-    v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found')) }),
-  ),
-  handler: async (ctx, args): Promise<AuthorizePreparationResult> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const evaluated: StoredEvaluation | null = await ctx.runQuery(
-      internal.customerRequests.getRequestEvaluation,
-      { requestId: args.requestRef, requestRevision: args.revision },
-    )
-    if (evaluated === null || evaluated.snapshot.principalId !== identity.tokenIdentifier) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    if (evaluated.snapshot.revision !== args.revision) return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
-    }
-    const disclosure = evaluated.evaluation.preparationDisclosure
-    const viable = evaluated.candidates.filter((candidate) => candidate.viability.kind === 'viable')
-    const contractIds = [...new Set(viable.map((candidate) => candidate.capabilityContractId))]
-    const registry = await loadConvexCapabilityContractRegistry(ctx)
-    const contract = contractIds.length === 1 && contractIds[0] !== undefined ? registry.get(contractIds[0]) : undefined
-    if (disclosure === undefined || contract?.preparation === undefined || viable.length === 0) return {
-      kind: 'refused' as const, reason: 'request_not_found' as const,
-    }
-    const protectedDefinitions = Object.entries(contract.input).flatMap(([field, definition]) => {
-      const fieldDisclosure = definition.disclosure
-      return evaluated.evaluation.facts?.[field] === undefined || fieldDisclosure?.phase !== 'preparation'
-        || fieldDisclosure.classification === 'public' ? [] : [{
-          field, label: definition.customerLabel, classification: fieldDisclosure.classification,
-        }]
-    }).sort((left, right) => left.field.localeCompare(right.field))
-    if (contract.preparation.customerLabel !== disclosure.purposeLabel
-      || canonicalDigest(protectedDefinitions) !== canonicalDigest(disclosure.categories)) return {
-      kind: 'refused' as const, reason: 'request_not_found' as const,
-    }
-    const active: VerifiedPreparationAuthority | null = await ctx.runQuery(
-      internal.customerRequestPreparationAuthority.getActiveForRequestRevision,
-      { requestId: args.requestRef, requestRevision: args.revision, now: Date.now() },
-    )
-    if (active !== null) return writableView(projectAuthorizedEvaluation(evaluated))
-    const grantedAt = Date.now()
-    const authorityMaterial = {
-      authorityId: `preparation-authority:${canonicalDigest({
-        principalId: identity.tokenIdentifier, requestId: args.requestRef,
-        requestRevision: args.revision, idempotencyKey: args.idempotencyKey,
-      })}`,
-      authorityVersion: 1,
-      principalId: identity.tokenIdentifier,
-      delegatedAgentId: evaluated.snapshot.delegatedAgentId,
-      requestId: args.requestRef,
-      requestRevision: args.revision,
-      mode: 'single_use' as const,
-      permittedFields: disclosure.categories.map((category) => category.field),
-      permittedRecipientKinds: ['candidate_provider' as const],
-      permittedRecipientBindingIds: viable.map((candidate) => candidate.bindingId),
-      permittedPurposes: [contract.preparation.purpose],
-      maximumRecipients: new Set(viable.map((candidate) => candidate.businessId)).size,
-      maximumExposures: viable.length * disclosure.categories.length,
-      maximumOperations: 1,
-      grantedAt,
-      expiresAt: grantedAt + 10 * 60_000,
-    }
-    const authority: VerifiedPreparationAuthority = {
-      ...authorityMaterial,
-      authorityDigest: preparationAuthorityDigest(authorityMaterial),
-      status: 'active',
-      verification: {
-        evidenceRef: `authenticated-customer:${canonicalDigest({
-          authorityId: authorityMaterial.authorityId, principalId: identity.tokenIdentifier, grantedAt,
-        })}`,
-        issuerId: 'ae:customer-request', signerId: identity.tokenIdentifier, keyId: 'clerk-session',
-      },
-    }
-    await recordConvexVerifiedPreparationAuthority(ctx, authority, grantedAt)
-    return writableView(projectAuthorizedEvaluation(evaluated))
-  },
-})
-
-export const compare = action({
-  args: { requestRef: v.string(), revision: v.number(), serviceAuth: v.optional(serviceAssertion) },
-  returns: optionProjection,
-  handler: async (ctx, args): Promise<OptionActionResult> => {
-    const command = { requestRef: args.requestRef, revision: args.revision }
-    const caller = await resolveRequestCaller(ctx, 'compare', command, args.serviceAuth)
-    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-    const evaluated: StoredEvaluation | null = await ctx.runQuery(
-      internal.customerRequests.getCurrentRequestEvaluation, { requestId: args.requestRef },
-    )
-    if (evaluated !== null) {
-      if (evaluated.snapshot.principalId !== caller.principalId) {
-        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
-      }
-      if (evaluated.snapshot.revision !== args.revision || evaluated.evaluation.requestRevision !== args.revision) {
-        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const }
-      }
-      const prior: StoredEvaluationPreparation | null = await ctx.runQuery(
-        internal.customerRequests.getRequestEvaluationPreparation,
-        { requestId: args.requestRef, requestRevision: args.revision },
-      )
-      if (prior?.status === 'options_prepared' && prior.candidateSet !== undefined) return writableView(projectOptionsReady({
-        requestRef: args.requestRef, revision: args.revision, summary: evaluated.snapshot.intent,
-        criteria: customerCriteria(evaluated.evaluation.criteria),
-        candidateSet: prior.candidateSet,
-      }))
-      if (prior?.status === 'needs_attention') return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.revision,
-        summary: 'Connected businesses could not prepare comparable options for this request.',
-      }))
-      if (evaluated.evaluation.nextRequirement !== undefined) {
-        return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
-      }
-      let preparationAuthority: VerifiedPreparationAuthority | null = null
-      if (evaluated.evaluation.preparationDisclosure !== undefined) {
-        preparationAuthority = await ctx.runQuery(
-          internal.customerRequestPreparationAuthority.getActiveForRequestRevision,
-          { requestId: args.requestRef, requestRevision: args.revision, now: Date.now() },
-        )
-        if (preparationAuthority === null) {
-          return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
-        }
-      }
-      const viable = evaluated.candidates.filter((candidate) => candidate.viability.kind === 'viable')
-      const capabilityContractIds = [...new Set(viable.map((candidate) => candidate.capabilityContractId))]
-      if (viable.length === 0 || capabilityContractIds.length !== 1) return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.revision,
-        summary: 'The registered options are not yet comparable as one customer decision.',
-      }))
-      const registry = await loadConvexCapabilityContractRegistry(ctx)
-      const [capabilityContractId] = capabilityContractIds
-      if (capabilityContractId === undefined) return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.revision,
-        summary: 'No registered capability remains available for this request.',
-      }))
-      const contract = registry.get(capabilityContractId)
-      if (contract === undefined) return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.revision,
-        summary: 'The registered capability changed before options could be prepared.',
-      }))
-      const commitmentSecret = process.env.AE_PREPARATION_PROJECTION_SECRET?.trim()
-      if (preparationAuthority !== null && (commitmentSecret === undefined || commitmentSecret.length < 32)) {
-        return writableView(projectNeedsAttention({
-          requestRef: args.requestRef, revision: args.revision,
-          summary: 'Protected-data preparation is temporarily unavailable. Nothing was shared.',
-          criteria: customerCriteria(evaluated.evaluation.criteria),
-        }))
-      }
-      const preparationKey = namespacedKey(
-        caller.principalId, 'evaluation-options', args.requestRef,
-        `${args.revision}:${evaluated.evaluation.evaluationId}`,
-      )
-      const started = await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
-        preparation: {
-          preparationKey, requestId: args.requestRef, requestRevision: args.revision,
-          evaluationId: evaluated.evaluation.evaluationId,
-          evaluationDigest: evaluated.evaluation.evaluationDigest,
-          status: 'preparing', updatedAt: Date.now(),
-        },
-      })
-      if (started.kind === 'stale' || started.kind === 'conflict') return {
-        kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
-      }
-      const evaluationInput = Object.fromEntries(Object.entries(evaluated.evaluation.facts ?? evaluated.snapshot.facts)
-        .map(([field, fact]) => [field, fact.value]))
-      const result = await prepareKernelCustomerRequestEvaluationOptions(
-        createRegisteredRoutingKernel(ctx),
-        {
-          resolve: async (bindingIds) => await ctx.runQuery(
-            internal.routingKernelBindings.resolvePresentations, { bindingIds: [...bindingIds] },
-          ),
-        },
-        {
-          preparationRequestId: preparationKey,
-          request: {
-            requestId: args.requestRef, revision: args.revision,
-            principalId: evaluated.snapshot.principalId, delegatedAgentId: evaluated.snapshot.delegatedAgentId,
-            networkId: evaluated.snapshot.networkId,
-          },
-          evaluation: {
-            evaluationId: evaluated.evaluation.evaluationId,
-            evaluationDigest: evaluated.evaluation.evaluationDigest,
-          },
-          allowedBindingIds: viable.map((candidate) => candidate.bindingId),
-          preparationGeneration: args.revision,
-          contract,
-          publicInput: evaluationInput,
-          ...(preparationAuthority === null || commitmentSecret === undefined ? {} : {
-            releasePreparationData: async (releaseInput) => {
-              const protectedValues = Object.fromEntries(releaseInput.fields.flatMap((field) => {
-                const value = evaluationInput[field]
-                return value === undefined ? [] : [[field, value]]
-              }))
-              const result = await releasePreparationDisclosure({
-                operationKey: `${preparationKey}:${releaseInput.releaseKey}`,
-                authorityUseKey: preparationKey,
-                authorityEvidenceRef: preparationAuthority.verification.evidenceRef,
-                principalId: evaluated.snapshot.principalId,
-                delegatedAgentId: evaluated.snapshot.delegatedAgentId,
-                requestId: args.requestRef,
-                requestRevision: args.revision,
-                planRevisionId: evaluated.evaluation.evaluationId,
-                actionId: `evaluation-options:${capabilityContractId}`,
-                capabilityContractId,
-                resolvedInputDigest: canonicalDigest(evaluationInput),
-                protectedProjectionCommitment: createProtectedProjectionCommitter(commitmentSecret)(protectedValues),
-                recipient: releaseInput.recipient,
-                purpose: releaseInput.purpose,
-                purposeLabel: releaseInput.purposeLabel,
-                fields: releaseInput.fields,
-                fieldCategories: releaseInput.fields.map((field) => ({
-                  field, label: contract.input[field]?.customerLabel ?? field,
-                })),
-                protectedValues,
-              }, {
-                verifier: { verify: async ({ authorityEvidenceRef }) => authorityEvidenceRef === preparationAuthority.verification.evidenceRef
-                  ? { kind: 'verified' as const, authority: preparationAuthority }
-                  : { kind: 'refused' as const, reason: 'authority_evidence_invalid' as const } },
-                store: createConvexPreparationDisclosureStore(ctx),
-                now: Date.now,
-                release: async ({ allocationId, protectedValues: values }) => await releaseInput.release({ allocationId, protectedValues: values }),
-              })
-              return result
-            },
-          }),
-        },
-      )
-      if (result.kind === 'candidate_set') {
-        const candidateSet: PreparedRouteCandidateSet = {
-          ...result.candidateSet,
-          ...(evaluated.evaluation.decisionPreference === undefined ? {} : {
-            decisionPreference: evaluated.evaluation.decisionPreference,
-          }),
-        }
-        await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
-          preparation: {
-            preparationKey, requestId: args.requestRef, requestRevision: args.revision,
-            evaluationId: evaluated.evaluation.evaluationId,
-            evaluationDigest: evaluated.evaluation.evaluationDigest,
-            status: 'options_prepared', candidateSet: writableCandidateSet(candidateSet), updatedAt: Date.now(),
-          },
-        })
-        return writableView(projectOptionsReady({
-          requestRef: args.requestRef, revision: args.revision,
-          summary: evaluated.snapshot.intent, criteria: customerCriteria(evaluated.evaluation.criteria),
-          candidateSet,
-        }))
-      }
-      if (result.kind === 'preparation_pending') {
-        await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
-          preparation: {
-            preparationKey, requestId: args.requestRef, requestRevision: args.revision,
-            evaluationId: evaluated.evaluation.evaluationId,
-            evaluationDigest: evaluated.evaluation.evaluationDigest,
-            status: 'preparing', inspectionRef: result.inspectionRef, updatedAt: Date.now(),
-          },
-        })
-        return writableView(projectPreparingOptions({
-          requestRef: args.requestRef, revision: args.revision, summary: evaluated.snapshot.intent,
-          criteria: customerCriteria(evaluated.evaluation.criteria),
-        }))
-      }
-      await ctx.runMutation(internal.customerRequests.putRequestEvaluationPreparation, {
-        preparation: {
-          preparationKey, requestId: args.requestRef, requestRevision: args.revision,
-          evaluationId: evaluated.evaluation.evaluationId,
-          evaluationDigest: evaluated.evaluation.evaluationDigest,
-          status: 'needs_attention', updatedAt: Date.now(),
-        },
-      })
-      return writableView(projectNeedsAttention({
-        requestRef: args.requestRef, revision: args.revision,
-        summary: 'Connected businesses could not prepare comparable options for this request.',
-      }))
-    }
-    const store = createConvexCustomerRequestPreparationStore(ctx)
-    const request = await store.getRequest(args.requestRef)
-    if (request === undefined || request.principalId !== caller.principalId) {
-      return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
-    }
-    if (request.revision !== args.revision) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const }
-    const plan = await ctx.runQuery(internal.customerRequests.getPlanForRequestRevision, {
-      requestId: args.requestRef, requestRevision: args.revision,
-    })
-    const rootActions = plan?.actions.filter((candidate: PlanRevision['actions'][number]) => candidate.dependsOn.length === 0) ?? []
-    const actionStep = rootActions.length === 1 ? rootActions[0] : undefined
-    if (plan === null || actionStep === undefined) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
-    const resolvedInput = resolvePlanInput(actionStep.input, request.knownFacts)
-    if (resolvedInput === undefined) return { kind: 'conflict' as const, requestRef: args.requestRef, reason: 'request_not_ready' as const }
-    const registry = await loadConvexCapabilityContractRegistry(ctx)
-    const result = await prepareCustomerRequestAction({
-      preparationKey: namespacedKey(caller.principalId, 'prepare', request.requestId, String(request.revision)),
-      requestId: request.requestId, requestRevision: request.revision,
-      planRevisionId: plan.planRevisionId, actionId: actionStep.actionId, resolvedInput,
-    }, {
-      store,
-      router: createKernelCustomerRequestActionRouter(createRegisteredRoutingKernel(ctx), {
-        resolve: async (bindingIds) => await ctx.runQuery(internal.routingKernelBindings.resolvePresentations, { bindingIds: [...bindingIds] }),
+      commandDigest: canonicalDigest({
+        requestRef: args.requestRef, expectedRevision: args.expectedRevision,
+        idempotencyKey: args.idempotencyKey, message: args.message,
       }),
-      registry,
-      preparationAuthorityVerifier: { verify: async () => ({ kind: 'refused', reason: 'authority_evidence_invalid' }) },
-      preparationDisclosureStore: createConvexPreparationDisclosureStore(ctx),
-      commitProtectedProjection: (projection) => canonicalDigest(projection),
-      now: Date.now,
-      leaseMs: 30_000,
+      requestId: args.requestRef,
+      expectedRevision: args.expectedRevision,
+      principalId: caller.principalId,
+      delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
+      intent,
+      networkId: current.aggregate.snapshot.networkId,
+      priorFacts: current.aggregate.snapshot.facts,
     })
-    const summary = request.understanding.outcome
-    if (result.kind === 'options_prepared') return writableView(projectOptionsReady({
-      requestRef: request.requestId, revision: request.revision, summary, candidateSet: result.candidateSet,
+  },
+})
+
+export const provideFacts = action({
+  args: {
+    requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(),
+    requirementKey: v.string(), value: v.any(), // runtime-validated JsonValue boundary
+    serviceAuth: v.optional(serviceAssertion),
+  },
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const caller = await resolveRequestCaller(ctx, 'facts', {
+      requestRef: args.requestRef, expectedRevision: args.expectedRevision,
+      idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value: args.value,
+    }, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    if (current.aggregate.snapshot.revision !== args.expectedRevision) return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
+    }
+    const requirement = current.aggregate.evaluation.nextRequirement
+    if (requirement?.kind !== 'contract_fact' || requirement.requirementKey !== args.requirementKey) {
+      return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.expectedRevision,
+        summary: 'Answer the current question before continuing.',
+      }))
+    }
+    const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
+    if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
+    if (graph.registrySnapshotDigest !== current.aggregate.evaluation.registrySnapshotDigest) {
+      return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: args.expectedRevision,
+        summary: 'The available options changed. Review the request again before answering.',
+      }))
+    }
+    const answerFacts = bindRequirementAnswer(requirement, args.value, graph.models, args.expectedRevision + 1)
+    if (answerFacts === undefined) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: args.expectedRevision,
+      summary: 'That answer does not match the requested information.',
     }))
-    if (result.kind === 'preparation_in_progress') return writableView(projectPreparingOptions({
-      requestRef: request.requestId, revision: request.revision, summary,
-    }))
-    return writableView(projectNeedsAttention({
-      requestRef: request.requestId, revision: request.revision, summary: result.kind === 'prepared'
-        ? 'One business option was prepared, but a comparable option set is not available.'
-        : 'Connected businesses could not prepare comparable options for this request.',
-    }))
+    const selections = current.aggregate.plan.actions.flatMap((action) => {
+      const model = graph.models.find((candidate) => sameCapabilityContractRef(candidate.contractRef, action.contractRef))
+      if (model === undefined || model.selectionKey !== action.selectionKey || model.semanticDigest !== action.semanticDigest) return []
+      return [{
+        selectionKey: model.selectionKey,
+        contractRef: model.contractRef,
+        facts: answerFacts.filter((fact) => fact.selectionKey === model.selectionKey
+          && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
+      }]
+    })
+    const proposal: CustomerRequestSemanticProposal = { kind: 'capability_candidates', selections }
+    return await compileCommit(ctx, {
+      commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
+      commandDigest: canonicalDigest({
+        requestRef: args.requestRef, expectedRevision: args.expectedRevision,
+        idempotencyKey: args.idempotencyKey, requirementKey: args.requirementKey, value: args.value,
+      }),
+      requestId: args.requestRef,
+      expectedRevision: args.expectedRevision,
+      principalId: caller.principalId,
+      delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
+      intent: current.aggregate.snapshot.intent,
+      networkId: current.aggregate.snapshot.networkId,
+      priorFacts: rebindStoredFacts(current.aggregate.snapshot.facts, graph.models),
+      proposal,
+      interpreterId: 'customer:requirement-answer',
+      graph,
+    })
   },
 })
 
 export const resume = action({
   args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
-  returns: v.union(customerView, v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found')) })),
-  handler: resumeHandler,
-})
-
-type ResumeResult = ReturnType<typeof writableView> | Readonly<{
-  kind: 'refused'
-  reason: 'authentication_required' | 'request_not_found'
-}>
-
-async function resumeHandler(ctx: ActionCtx, args: Readonly<{ requestRef: string; serviceAuth?: Infer<typeof serviceAssertion> }>): Promise<ResumeResult> {
-  const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
-  if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-  const evaluated: StoredEvaluation | null = await ctx.runQuery(
-    internal.customerRequests.getCurrentRequestEvaluation, { requestId: args.requestRef },
-  )
-  if (evaluated !== null) {
-    if (evaluated.snapshot.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    const preparation: StoredEvaluationPreparation | null = await ctx.runQuery(
-      internal.customerRequests.getRequestEvaluationPreparation,
-      { requestId: evaluated.snapshot.requestId, requestRevision: evaluated.snapshot.revision },
-    )
-    if (preparation?.status === 'options_prepared' && preparation.candidateSet !== undefined) {
-      const liveCandidates = preparation.candidateSet.candidates.filter((candidate) => candidate.expiresAt > Date.now())
-      return liveCandidates.length === 0
-          ? writableView(projectNeedsAttention({
-            requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
-            summary: 'The prepared options expired. Prepare this request again to get current options.',
-            criteria: customerCriteria(evaluated.evaluation.criteria),
-          }))
-        : writableView(projectOptionsReady({
-            requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
-            summary: evaluated.snapshot.intent,
-            criteria: customerCriteria(evaluated.evaluation.criteria),
-            candidateSet: { ...preparation.candidateSet, candidates: liveCandidates },
-          }))
-    }
-    if (preparation?.status === 'preparing') return writableView(projectPreparingOptions({
-      requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision, summary: evaluated.snapshot.intent,
-      criteria: customerCriteria(evaluated.evaluation.criteria),
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const caller = await resolveRequestCaller(ctx, 'resume', { requestRef: args.requestRef }, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind === 'needs_attention') return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: 0,
+      summary: 'This earlier request used a retired contract format. Start a new request to continue.',
     }))
-    if (preparation?.status === 'needs_attention') return writableView(projectNeedsAttention({
-      requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
-      summary: 'Connected businesses could not prepare comparable options for this request.',
-      criteria: customerCriteria(evaluated.evaluation.criteria),
-    }))
-    if (evaluated.evaluation.preparationDisclosure !== undefined) {
-      const authority: VerifiedPreparationAuthority | null = await ctx.runQuery(
-        internal.customerRequestPreparationAuthority.getActiveForRequestRevision,
-        { requestId: evaluated.snapshot.requestId, requestRevision: evaluated.snapshot.revision, now: Date.now() },
-      )
-      if (authority !== null) return writableView(projectAuthorizedEvaluation(evaluated))
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
     }
-    return writableView(projectStoredEvaluation(evaluated))
-  }
-  const unevaluatedSnapshot: SnapshotValue | null = await ctx.runQuery(
-    internal.customerRequests.getCurrentRequestSnapshot, { requestId: args.requestRef },
-  )
-  if (unevaluatedSnapshot !== null) {
-    if (unevaluatedSnapshot.principalId !== caller.principalId) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    const recovered = await evaluateAndPersistSnapshot(ctx, unevaluatedSnapshot)
-    return recovered.kind === 'stored'
-      ? writableView(projectRequestEvaluation({ snapshot: unevaluatedSnapshot, evaluation: recovered.evaluation }))
-      : writableView(projectNeedsAttention({
-          requestRef: unevaluatedSnapshot.requestId,
-          revision: unevaluatedSnapshot.revision,
-          summary: 'Request understanding is temporarily unavailable. Retry to continue.',
-        }))
-  }
-  const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
-    if (request === null || request.principalId !== caller.principalId) {
-      return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    }
-    const preparation = await ctx.runQuery(internal.customerRequests.getPreparationForRequestRevision, {
-      requestId: request.requestId, requestRevision: request.revision,
-    })
-    if (preparation?.status === 'options_prepared' && preparation.candidateSet !== undefined) {
-      const liveCandidates = preparation.candidateSet.candidates.filter((candidate) => candidate.expiresAt > Date.now())
-      if (liveCandidates.length === 0) return writableView(projectNeedsAttention({
-        requestRef: request.requestId, revision: request.revision,
-        summary: 'The prepared options have expired. Prepare this request again to get current options.',
-      }))
-      return writableView(projectOptionsReady({
-        requestRef: request.requestId, revision: request.revision,
-        summary: request.understanding.outcome,
-        candidateSet: { ...preparation.candidateSet, candidates: liveCandidates },
-      }))
-    }
-    if (preparation?.status === 'claimed') return writableView(projectPreparingOptions({
-      requestRef: request.requestId, revision: request.revision, summary: request.understanding.outcome,
-    }))
-    if (preparation?.status === 'refused' || preparation?.status === 'prepared') return writableView(projectNeedsAttention({
-      requestRef: request.requestId, revision: request.revision,
-      summary: 'This request needs attention before options can be prepared.',
-    }))
-    const compilation = await ctx.runQuery(internal.customerRequests.getCompilationForRequestRevision, {
-      requestId: request.requestId, requestRevision: request.revision,
-    })
-    if (compilation === null) return writableView(projectNeedsAttention({
-      requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
-    }))
-    if (compilation.outcome.kind === 'plan_ready') {
-      const planRevision = await ctx.runQuery(internal.customerRequests.getPlanForRequestRevision, {
-        requestId: request.requestId, requestRevision: request.revision,
-      })
-      if (planRevision === null) return writableView(projectNeedsAttention({
-        requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
-      }))
-      const projection = projectCustomerRequest({ kind: 'plan_ready', request, understanding: request.understanding, planRevision })
-      return projection.kind === 'request' ? writableView(projection) : writableView(projectNeedsAttention({
-        requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
-      }))
-    }
-    const projection = projectCustomerRequest(compilation.outcome.kind === 'needs_information'
-        ? { kind: 'needs_information', request, understanding: request.understanding, missingInformation: compilation.outcome.missingInformation }
-        : { kind: 'unsupported', request, reason: compilation.outcome.reason })
-    return projection.kind === 'request' ? writableView(projection) : writableView(projectNeedsAttention({
-      requestRef: request.requestId, revision: request.revision, summary: 'This request needs attention before it can continue.',
-    }))
-}
-
-export const provideFacts = action({
-  args: {
-    requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(),
-    facts: v.record(v.string(), literalValue), serviceAuth: v.optional(serviceAssertion),
+    return projectStoredAggregate(current.aggregate)
   },
-  returns: v.union(
-    customerProjection,
-    v.object({ kind: v.literal('refused'), reason: v.union(v.literal('authentication_required'), v.literal('request_not_found'), v.literal('interpreter_unavailable'), v.literal('capabilities_unavailable')) }),
-  ),
-  handler: provideFactsHandler,
 })
 
-type ProvideFactsResult = ReturnType<typeof writableProjection> | Readonly<{
-  kind: 'refused'
-  reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable' | 'capabilities_unavailable'
+export const compare = action({
+  args: { requestRef: v.string(), revision: v.number(), serviceAuth: v.optional(serviceAssertion) },
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => await unavailableAfterCurrentCheck(ctx, args.requestRef, args.revision, args.serviceAuth, 'compare'),
+})
+
+export const authorizePreparation = action({
+  args: { requestRef: v.string(), revision: v.number(), idempotencyKey: v.string() },
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => await unavailableAfterCurrentCheck(ctx, args.requestRef, args.revision, undefined, 'compare'),
+})
+
+async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
+  commandKey: string
+  commandDigest: string
+  requestId: string
+  expectedRevision: number
+  principalId: string
+  delegatedAgentId: string
+  intent: string
+  networkId: string
+  priorFacts: StoredAggregate['snapshot']['facts']
+}>): Promise<ActionResult> {
+  const replay = await replayCommittedCommand(ctx, input)
+  if (replay !== undefined) return replay
+  const graph = await loadRequestGraph(ctx, input.networkId)
+  if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
+  if (apiKey === undefined || apiKey.length === 0) return { kind: 'refused', reason: 'interpreter_unavailable' }
+  const modelName = process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'
+  const interpreter = createJsonCustomerRequestSemanticInterpreter({
+    interpreterId: `openrouter:${modelName}`,
+    transport: createOpenRouterCustomerRequestSemanticTransport({
+      apiKey, model: modelName,
+      ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
+    }),
+    timeoutMs: 20_000,
+    maximumResponseBytes: 64_000,
+  })
+  let proposal: CustomerRequestSemanticProposal
+  try {
+    proposal = await interpreter.propose({ customerJob: input.intent, capabilities: graph.descriptors })
+  } catch {
+    return { kind: 'refused', reason: 'interpreter_unavailable' }
+  }
+  return await compileCommit(ctx, {
+    ...input,
+    priorFacts: rebindStoredFacts(input.priorFacts, graph.models),
+    proposal,
+    interpreterId: interpreter.interpreterId,
+    graph,
+  })
+}
+
+async function compileCommit(ctx: ActionCtx, input: Readonly<{
+  commandKey: string
+  commandDigest: string
+  requestId: string
+  expectedRevision: number
+  principalId: string
+  delegatedAgentId: string
+  intent: string
+  networkId: string
+  priorFacts: readonly RequestFact[]
+  proposal: CustomerRequestSemanticProposal
+  interpreterId: string
+  graph: RequestGraph
+}>): Promise<ActionResult> {
+  const replay = await replayCommittedCommand(ctx, input)
+  if (replay !== undefined) return replay
+  const compiled = compileCustomerRequest({
+    requestId: input.requestId,
+    expectedRevision: input.expectedRevision,
+    principalId: input.principalId,
+    delegatedAgentId: input.delegatedAgentId,
+    intent: input.intent,
+    networkId: input.networkId,
+    priorFacts: input.priorFacts,
+    proposal: input.proposal,
+    interpreterId: input.interpreterId,
+    bindings: input.graph.bindings,
+    models: input.graph.models,
+    now: Date.now(),
+  })
+  if (compiled.kind === 'refused') return writableView(projectNeedsAttention({
+    requestRef: input.requestId,
+    revision: input.expectedRevision,
+    summary: compiled.reason === 'capability_graph_invalid'
+      ? 'The available business capabilities changed. Try this request again.'
+      : 'The request could not be interpreted safely.',
+  }))
+  const result: CommitResult = await ctx.runMutation(internal.customerRequestV2.commitAggregate, {
+    commandKey: input.commandKey,
+    commandDigest: input.commandDigest,
+    expectedRevision: input.expectedRevision,
+    aggregate: writableCustomerRequestV2Aggregate(compiled.aggregate),
+  })
+  if (result.kind === 'revision_conflict') return {
+    kind: 'conflict', requestRef: input.requestId, reason: 'revision_changed',
+  }
+  if (result.kind === 'identity_conflict') return {
+    kind: 'conflict', requestRef: input.requestId, reason: 'identity_changed',
+  }
+  if (result.kind === 'command_conflict') return {
+    kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused',
+  }
+  if (result.kind === 'aggregate_invalid') return writableView(projectNeedsAttention({
+    requestRef: input.requestId, revision: input.expectedRevision,
+    summary: 'The request changed before it could be recorded. Try again.',
+  }))
+  if (result.kind === 'context_stale') return writableView(projectNeedsAttention({
+    requestRef: input.requestId, revision: input.expectedRevision,
+    summary: 'The available business capabilities changed. Try this request again.',
+  }))
+  return writableView(projectRequestEvaluation({
+    snapshot: compiled.aggregate.snapshot,
+    evaluation: compiled.aggregate.evaluation,
+  }))
+}
+
+async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
+  commandKey: string
+  commandDigest: string
+  requestId: string
+  principalId: string
+}>): Promise<ActionResult | undefined> {
+  const replay: CommandReplayResult = await ctx.runQuery(internal.customerRequestV2.getCommandReplay, {
+    commandKey: input.commandKey,
+    commandDigest: input.commandDigest,
+    principalId: input.principalId,
+    requestId: input.requestId,
+  })
+  if (replay.kind === 'not_found') return undefined
+  if (replay.kind === 'conflict') return {
+    kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused',
+  }
+  return projectStoredAggregate(replay.aggregate)
+}
+
+type EligibleSupply = Readonly<{
+  offering: Readonly<{
+    offeringId: string; businessId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
+    presentation: Readonly<{ label: string; summary: string }>; registrationHash: string
+  }>
+  binding: Readonly<{
+    bindingId: string; offeringId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
+    registrationHash: string
+  }>
+}>
+type EligibleSupplyResult = Readonly<
+  | { kind: 'available'; supplies: readonly EligibleSupply[] }
+  | { kind: 'unavailable'; reason: string }
+>
+type RequestGraph = Readonly<{
+  kind: 'available'
+  models: readonly CapabilityDecisionModel[]
+  descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[]
+  bindings: readonly Readonly<{
+    businessId: string; offeringId: string; bindingId: string; contractRef: CapabilityContractRef
+    offeringRegistrationHash: string; bindingRegistrationHash: string
+  }>[]
+  registrySnapshotDigest: string
 }>
 
-async function provideFactsHandler(
-  ctx: ActionCtx,
-  args: Readonly<{
-    requestRef: string
-    expectedRevision: number
-    idempotencyKey: string
-    facts: Readonly<Record<string, string | number | boolean>>
-    serviceAuth?: Infer<typeof serviceAssertion>
-  }>,
-): Promise<ProvideFactsResult> {
-  const command = factsCommand(args)
-  const caller = await resolveRequestCaller(ctx, 'facts', command, args.serviceAuth)
-  if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
-  const evaluated: StoredEvaluation | null = await ctx.runQuery(
-    internal.customerRequests.getCurrentRequestEvaluation, { requestId: args.requestRef },
-  )
-  if (evaluated !== null) {
-    if (evaluated.snapshot.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    const requirement = evaluated.evaluation.nextRequirement
-    const selectedField = requirement?.kind === 'intent_direction' ? undefined : requirement?.field
-    const suppliedFields = Object.keys(args.facts)
-    if (selectedField === undefined || suppliedFields.length !== 1 || suppliedFields[0] !== selectedField) {
-      return writableView(projectNeedsAttention({
-        requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
-        summary: 'Add only the information currently requested so the available options can be reevaluated.',
+async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<RequestGraph | Readonly<{ kind: 'unavailable' }>> {
+  const supply: EligibleSupplyResult = await ctx.runQuery(internal.capabilitySupply.listEligible, { networkId, limit: 64 })
+  if (supply.kind !== 'available' || supply.supplies.length === 0) return { kind: 'unavailable' }
+  const modelsByRef = new Map<string, CapabilityDecisionModel>()
+  const descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[] = []
+  const bindings = []
+  for (const item of supply.supplies) {
+    const contractRef = {
+      capabilityId: item.binding.capabilityId,
+      version: item.binding.version,
+      contractDigest: item.binding.contractDigest,
+    }
+    const key = exactRefKey(contractRef)
+    let model = modelsByRef.get(key)
+    if (model === undefined) {
+      const stored: ExactContractResult = await ctx.runQuery(
+        internal.capabilityContractDocuments.getActiveExactInternal, contractRef,
+      )
+      if (stored.kind !== 'found') return { kind: 'unavailable' }
+      const decoded = encodeCapabilityContractDocumentJson(stored.documentJson)
+      if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable' }
+      model = openCapabilityDecisionModel(decoded.contract)
+      modelsByRef.set(key, model)
+      descriptors.push(bindCustomerCapabilityDescriptor({
+        contractRef: model.contractRef,
+        selectionKey: model.selectionKey,
+        name: decoded.contract.name,
+        description: decoded.contract.description,
+        inputs: model.inputs,
+        evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
       }))
     }
-    const suppliedValue = args.facts[selectedField]
-    if (suppliedValue === undefined) return writableView(projectNeedsAttention({
-      requestRef: evaluated.snapshot.requestId, revision: evaluated.snapshot.revision,
-      summary: 'The requested information was not supplied.',
-    }))
-    const recordedAt = Date.now()
-    const nextFacts = {
-      ...evaluated.snapshot.facts,
-      [selectedField]: {
-        value: suppliedValue,
-        source: { kind: 'customer' as const, assertionRef: `assertion:${canonicalDigest({
-          field: selectedField, value: suppliedValue, requestRevision: args.expectedRevision + 1,
-        })}` },
-      },
-    }
-    const snapshotMaterial = {
-      requestId: evaluated.snapshot.requestId, revision: args.expectedRevision + 1,
-      principalId: evaluated.snapshot.principalId, delegatedAgentId: evaluated.snapshot.delegatedAgentId,
-      intent: evaluated.snapshot.intent, networkId: evaluated.snapshot.networkId, facts: nextFacts,
-    }
-    const snapshot: SnapshotValue = {
-      ...snapshotMaterial, snapshotDigest: canonicalDigest(snapshotMaterial), recordedAt,
-    }
-    const committed: SnapshotCommitResult = await ctx.runMutation(internal.customerRequests.commitRequestSnapshot, {
-      commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
-      commandDigest: canonicalDigest(command), expectedRevision: args.expectedRevision, snapshot,
+    bindings.push({
+      businessId: String(item.offering.businessId),
+      offeringId: item.offering.offeringId,
+      bindingId: item.binding.bindingId,
+      contractRef: model.contractRef,
+      offeringRegistrationHash: item.offering.registrationHash,
+      bindingRegistrationHash: item.binding.registrationHash,
     })
-    if (committed.kind === 'revision_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'revision_changed' as const,
-    }
-    if (committed.kind === 'identity_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'identity_changed' as const,
-    }
-    if (committed.kind === 'command_conflict') return {
-      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
-    }
-    const requestRevision = committed.kind === 'replayed' ? committed.revision : snapshot.revision
-    const existing: StoredEvaluation | null = await ctx.runQuery(internal.customerRequests.getRequestEvaluation, {
-      requestId: args.requestRef, requestRevision,
-    })
-    if (existing !== null) return writableView(projectStoredEvaluation(existing))
-    const durableSnapshot: SnapshotValue | null = committed.kind === 'replayed'
-      ? await ctx.runQuery(internal.customerRequests.getRequestSnapshot, { requestId: args.requestRef, revision: requestRevision })
-      : snapshot
-    if (durableSnapshot === null) return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: requestRevision, summary: 'This request needs attention before it can continue.',
-    }))
-    const nextEvaluation = await evaluateAndPersistSnapshot(ctx, durableSnapshot)
-    return nextEvaluation.kind === 'stored'
-      ? writableView(projectRequestEvaluation({ snapshot: durableSnapshot, evaluation: nextEvaluation.evaluation }))
-      : writableView(projectNeedsAttention({
-          requestRef: args.requestRef, revision: requestRevision, summary: 'This request changed before reevaluation completed.',
-        }))
   }
-  const request = await ctx.runQuery(internal.customerRequests.getRequest, { requestId: args.requestRef })
-    if (request === null || request.principalId !== caller.principalId) return { kind: 'refused' as const, reason: 'request_not_found' as const }
-    const compilation = await ctx.runQuery(internal.customerRequests.getCompilationForRequestRevision, {
-      requestId: request.requestId, requestRevision: request.revision,
-    })
-    const allowedFields = new Set(compilation?.outcome.kind === 'needs_information'
-      ? compilation.outcome.missingInformation.map((item: { field: string }) => item.field)
-      : [])
-    if (Object.keys(args.facts).length === 0 || Object.keys(args.facts).some((field) => !allowedFields.has(field))) {
-      return writableView(projectNeedsAttention({
-        requestRef: request.requestId, revision: request.revision,
-        summary: 'Only the requested information can be added at this point.',
-      }))
-    }
-    const apiKey = process.env.OPENROUTER_API_KEY?.trim()
-    if (apiKey === undefined || apiKey.length === 0) return { kind: 'refused' as const, reason: 'interpreter_unavailable' as const }
-    const registry = await loadConvexCapabilityContractRegistry(ctx)
-    if (registry.list().length === 0) return { kind: 'refused' as const, reason: 'capabilities_unavailable' as const }
-    const result = await compileCustomerRequest({
-      compilationKey: namespacedKey(caller.principalId, 'facts', request.requestId, args.idempotencyKey),
-      requestId: request.requestId, expectedRevision: args.expectedRevision,
-      principalId: caller.principalId, delegatedAgentId: request.delegatedAgentId,
-      customerJob: request.intent, knownFacts: { ...request.knownFacts, ...args.facts }, routing: request.routing,
-    }, {
-      interpreter: customerRequestInterpreter(apiKey), registry,
-      store: createConvexCustomerRequestCompilationStore(ctx), now: Date.now,
-    })
-    return writableProjection(projectCustomerRequest(result))
-}
-
-function resolvePlanInput(
-  input: Readonly<Record<string, Readonly<{ kind: 'literal'; value: string | number | boolean } | { kind: 'customer_fact'; fact: string } | { kind: 'action_output'; actionId: string; field: string }>>>,
-  knownFacts: Readonly<Record<string, string | number | boolean>>,
-): Record<string, string | number | boolean> | undefined {
-  const resolved: Record<string, string | number | boolean> = {}
-  for (const [field, source] of Object.entries(input)) {
-    if (source.kind === 'action_output') return undefined
-    const value = source.kind === 'literal' ? source.value : knownFacts[source.fact]
-    if (value === undefined) return undefined
-    resolved[field] = value
-  }
-  return resolved
-}
-
-function writableCandidateSet(candidateSet: PreparedRouteCandidateSet) {
+  const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)
   return {
-    ...candidateSet,
-    ...(candidateSet.decisionPreference === undefined ? {} : { decisionPreference: { ...candidateSet.decisionPreference } }),
-    candidates: candidateSet.candidates.map((candidate) => ({
-      ...candidate, business: { ...candidate.business }, expectedCost: { ...candidate.expectedCost }, maximumCost: { ...candidate.maximumCost },
-      priceComponents: candidate.priceComponents.map((component) => ({ ...component })),
-      comparableOutputs: candidate.comparableOutputs.map((output) => ({ ...output })), materialTerms: [...candidate.materialTerms], cancellation: { ...candidate.cancellation },
-    })),
-    attempts: candidateSet.attempts.map((attempt) => ({ ...attempt, business: { ...attempt.business } })),
+    kind: 'available',
+    models: [...modelsByRef.values()],
+    descriptors,
+    bindings,
+    registrySnapshotDigest,
   }
 }
 
-function writableProjection(projection: ReturnType<typeof projectCustomerRequest>) {
-  return projection.kind === 'conflict' ? { ...projection } : writableView(projection)
+type ExactContractResult = Readonly<
+  | { kind: 'found'; ref: CapabilityContractRef; documentJson: string; registeredAt: number }
+  | { kind: 'unavailable'; reason: string }
+>
+type CommitResult = Readonly<
+  | { kind: 'stored' | 'replayed'; requestId: string; revision: number }
+  | { kind: 'revision_conflict' | 'identity_conflict' | 'command_conflict' | 'aggregate_invalid' | 'context_stale' }
+>
+type CommandReplayResult = Readonly<
+  | { kind: 'not_found' }
+  | { kind: 'conflict' }
+  | { kind: 'replayed'; aggregate: StoredAggregate }
+>
+type StoredAggregateResult = Readonly<
+  | { kind: 'current'; aggregate: StoredAggregate }
+  | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
+  | { kind: 'not_found' }
+>
+type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
+
+async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
+  return await ctx.runQuery(internal.customerRequestV2.getCurrentAggregate, { requestId })
+}
+
+function bindRequirementAnswer(
+  requirement: Extract<StoredAggregate['evaluation']['nextRequirement'], { kind: 'contract_fact' }>,
+  value: unknown,
+  models: readonly CapabilityDecisionModel[],
+  requestRevision: number,
+): readonly RequestFact[] | undefined {
+  if (!isBoundedJsonValue(value)) return undefined
+  const facts: RequestFact[] = []
+  for (const target of requirement.targets) {
+    const model = models.find((candidate) => sameCapabilityContractRef(candidate.contractRef, target.contractRef))
+    const semantic = model?.inputs.find((candidate) => candidate.key === target.inputKey
+      && candidate.inputPointer === target.inputPointer && candidate.schemaIdentity === target.schemaIdentity)
+    if (model === undefined || semantic === undefined || model.selectionKey !== target.selectionKey) return undefined
+    const assessment = model.assessInput({
+      contractRef: model.contractRef, selectionKey: model.selectionKey, stage: 'option_selection',
+      facts: [{ input: semantic.key, inputPointer: semantic.inputPointer, value }],
+    })
+    if (assessment.kind === 'incompatible') return undefined
+    facts.push({
+      contractRef: model.contractRef,
+      selectionKey: model.selectionKey,
+      inputKey: semantic.key,
+      inputPointer: semantic.inputPointer,
+      schemaIdentity: semantic.schemaIdentity,
+      value,
+      source: {
+        kind: 'customer',
+        assertionRef: `assertion:${canonicalDigest({
+          requirementKey: requirement.requirementKey, requestRevision, contractRef: model.contractRef,
+          inputKey: semantic.key, value,
+        })}`,
+      },
+    })
+  }
+  return facts
+}
+
+function rebindStoredFacts(
+  stored: StoredAggregate['snapshot']['facts'], models: readonly CapabilityDecisionModel[],
+): readonly RequestFact[] {
+  return stored.flatMap((fact) => {
+    const model = models.find((candidate) => sameCapabilityContractRef(candidate.contractRef, fact.contractRef))
+    const semantic = model?.inputs.find((input) => input.key === fact.inputKey
+      && input.inputPointer === fact.inputPointer && input.schemaIdentity === fact.schemaIdentity)
+    if (model === undefined || semantic === undefined || model.selectionKey !== fact.selectionKey || !isBoundedJsonValue(fact.value)) return []
+    return [{
+      contractRef: model.contractRef,
+      selectionKey: model.selectionKey,
+      inputKey: semantic.key,
+      inputPointer: semantic.inputPointer,
+      schemaIdentity: semantic.schemaIdentity,
+      value: fact.value,
+      source: fact.source,
+    }]
+  })
+}
+
+async function unavailableAfterCurrentCheck(
+  ctx: ActionCtx,
+  requestRef: string,
+  revision: number,
+  assertion: Infer<typeof serviceAssertion> | undefined,
+  operation: 'compare',
+): Promise<ActionResult> {
+  const caller = await resolveRequestCaller(ctx, operation, { requestRef, revision }, assertion)
+  if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+  const current = await loadCurrent(ctx, requestRef)
+  if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+    return { kind: 'refused', reason: 'request_not_found' }
+  }
+  if (current.aggregate.snapshot.revision !== revision) return {
+    kind: 'conflict', requestRef, reason: 'revision_changed',
+  }
+  return writableView(projectNeedsAttention({
+    requestRef, revision,
+    summary: 'The request is compiled. Route preparation requires the exact-reference routing cutover.',
+  }))
+}
+
+function projectStoredAggregate(aggregate: StoredAggregate): ActionResult {
+  const criteria = aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const requirement = aggregate.evaluation.nextRequirement
+  if (aggregate.evaluation.posture === 'unsupported') return writableView({
+    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
+    state: 'unsupported', summary: 'No registered business capability currently matches this request.',
+    nextAction: 'revise_request', missingFields: [], criteria, options: [],
+  })
+  if (requirement !== undefined) return writableView({
+    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
+    state: 'needs_information', summary: aggregate.snapshot.intent, nextAction: 'provide_information',
+    missingFields: requirement.kind === 'contract_fact' ? [{
+      field: requirement.requirementKey, label: requirement.customerLabel,
+      explanation: 'This answer changes which registered options can be prepared now.',
+    }] : [],
+    criteria,
+    clarification: requirement.kind === 'intent_direction'
+      ? { kind: 'intent_direction', prompt: requirement.prompt, answerKind: 'natural_language' }
+      : { kind: 'contract_fact', requirementKey: requirement.requirementKey, prompt: requirement.customerLabel, answerKind: 'typed_value' },
+    options: [],
+  })
+  return writableView({
+    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
+    state: 'ready_to_compare', summary: aggregate.snapshot.intent, nextAction: 'prepare_options',
+    missingFields: [], criteria, options: [],
+  })
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, ...viewWithoutDisclosure } = view
+  const { disclosureReview, optionSet, clarification, ...required } = view
   return {
-    ...viewWithoutDisclosure,
+    ...required,
     missingFields: view.missingFields.map((field) => ({ ...field })),
     criteria: (view.criteria ?? []).map((criterion) => ({ ...criterion })),
-    ...(disclosureReview === undefined ? {} : { disclosureReview: {
-      ...disclosureReview,
-      categories: disclosureReview.categories.map((category) => ({ ...category })),
-    } }),
-    options: view.options.map(writableCustomerOption),
+    ...(disclosureReview === undefined ? {} : {
+      disclosureReview: {
+        ...disclosureReview,
+        categories: disclosureReview.categories.map((category) => ({ ...category })),
+      },
+    }),
+    ...(clarification === undefined ? {} : { clarification: { ...clarification } }),
+    options: view.options.map(writableOption),
     ...(optionSet === undefined ? {} : { optionSet: {
       ...optionSet,
       ordering: optionSet.ordering.kind === 'recommended'
@@ -951,182 +670,18 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         ...optionSet.coverage,
         businesses: optionSet.coverage.businesses.map((business) => ({ ...business })),
       },
-      options: optionSet.options.map(writableCustomerOption),
+      options: optionSet.options.map(writableOption),
     } }),
   }
 }
 
-function writableCustomerOption(option: CustomerRequestView['options'][number]) {
+function writableOption(option: CustomerRequestView['options'][number]) {
   return {
     ...option, business: { ...option.business }, expectedCost: { ...option.expectedCost }, maximumCost: { ...option.maximumCost },
     priceComponents: option.priceComponents.map((component) => ({ ...component })),
-    comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })),
-    materialTerms: [...option.materialTerms], cancellation: { ...option.cancellation }, provenance: { ...option.provenance },
-    commercialInfluence: { ...option.commercialInfluence },
+    comparableOutputs: option.comparableOutputs.map((output) => ({ ...output })), materialTerms: [...option.materialTerms],
+    cancellation: { ...option.cancellation }, provenance: { ...option.provenance }, commercialInfluence: { ...option.commercialInfluence },
   }
-}
-
-function projectStoredEvaluation(input: StoredEvaluation): CustomerRequestView {
-  const evaluation: RequestEvaluation = {
-    requestId: input.evaluation.requestId,
-    requestRevision: input.evaluation.requestRevision,
-    registrySnapshotDigest: input.evaluation.registrySnapshotDigest,
-    factsDigest: input.evaluation.factsDigest,
-    facts: input.evaluation.facts ?? input.snapshot.facts,
-    criteria: input.evaluation.criteria ?? [],
-    ...(input.evaluation.decisionPreference === undefined ? {} : {
-      decisionPreference: input.evaluation.decisionPreference,
-    }),
-    ...(input.evaluation.preparationDisclosure === undefined ? {} : {
-      preparationDisclosure: input.evaluation.preparationDisclosure,
-    }),
-    candidates: input.candidates,
-    ...(input.evaluation.nextRequirement === undefined ? {} : {
-      nextRequirement: input.evaluation.nextRequirement.kind === 'intent_direction'
-        ? {
-            kind: 'intent_direction' as const, prompt: input.evaluation.nextRequirement.prompt,
-            requirementDigest: input.evaluation.nextRequirement.requirementDigest,
-          }
-        : {
-            kind: 'contract_fact' as const,
-            field: input.evaluation.nextRequirement.field,
-            customerLabel: input.evaluation.nextRequirement.customerLabel,
-            impact: {
-              affectedCandidates: input.evaluation.nextRequirement.affectedCandidates,
-              probesEnabled: input.evaluation.nextRequirement.probesEnabled,
-            },
-            requirementDigest: input.evaluation.nextRequirement.requirementDigest,
-          },
-    }),
-    posture: input.evaluation.posture,
-    evaluationDigest: input.evaluation.evaluationDigest,
-  }
-  return projectRequestEvaluation({ snapshot: input.snapshot, evaluation })
-}
-
-function projectAuthorizedEvaluation(input: StoredEvaluation): CustomerRequestView {
-  const { preparationDisclosure: _preparationDisclosure, ...evaluation } = input.evaluation
-  return projectStoredEvaluation({
-    ...input,
-    evaluation,
-  })
-}
-
-async function evaluateAndPersistSnapshot(
-  ctx: ActionCtx,
-  snapshot: SnapshotValue,
-): Promise<Readonly<{ kind: 'stored'; evaluation: RequestEvaluation }> | Readonly<{
-  kind: 'stale' | 'conflict' | 'interpreter_unavailable'
-}>> {
-  const registry = await loadConvexCapabilityContractRegistry(ctx)
-  const bindings: EligibleBinding[] = await ctx.runQuery(
-    internal.routingKernelBindings.listEligible, { networkId: snapshot.networkId },
-  )
-  const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
-  if (apiKey === undefined || apiKey.length === 0) return { kind: 'interpreter_unavailable' as const }
-  const model = process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'
-  const semanticInterpreter = createJsonCustomerRequestSemanticInterpreter({
-    interpreterId: `openrouter:${model}`,
-    transport: createOpenRouterCustomerRequestSemanticTransport({
-      apiKey, model, ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
-    }),
-    timeoutMs: 20_000,
-    maximumResponseBytes: 64_000,
-  })
-  let proposal
-  try { proposal = await semanticInterpreter.propose({
-    customerJob: snapshot.intent,
-    explicitFacts: Object.fromEntries(Object.entries(snapshot.facts).map(([field, fact]) => [field, fact.value])),
-    capabilities: registry.list().map((contract) => ({
-      capabilityContractId: contract.capabilityContractId,
-      name: contract.name,
-      operation: contract.operation,
-      description: contract.preparation?.customerLabel ?? contract.name,
-      input: Object.entries(contract.input).map(([field, definition]) => ({
-        field, customerLabel: definition.customerLabel, valueType: definition.valueType, required: definition.required,
-      })),
-      output: Object.entries(contract.output).map(([field, definition]) => ({
-        field, customerLabel: definition.customerLabel, valueType: definition.valueType, required: definition.required,
-      })),
-    })),
-  }) } catch { return { kind: 'interpreter_unavailable' as const } }
-  const evaluation = proposal.kind === 'needs_intent_direction'
-    ? evaluateIntentDirectionRequestSnapshot({
-        requestId: snapshot.requestId, requestRevision: snapshot.revision,
-        intent: snapshot.intent, facts: snapshot.facts, registrySnapshotDigest, prompt: proposal.prompt,
-      })
-    : evaluateCustomerRequestSnapshot({
-        requestId: snapshot.requestId, requestRevision: snapshot.revision,
-        intent: snapshot.intent, facts: Object.freeze({ ...proposal.facts, ...snapshot.facts }),
-        registrySnapshotDigest,
-        ...(proposal.decisionPreference === undefined ? {} : { decisionPreference: proposal.decisionPreference }),
-        candidates: discoverRequestEvaluationCandidates({
-          candidateCapabilityContractIds: proposal.candidateCapabilityContractIds, bindings,
-          resolveContract: (capabilityContractId) => registry.get(capabilityContractId),
-        }),
-      })
-  const persisted: Readonly<{ kind: 'stored' | 'stale' | 'conflict' }> = await ctx.runMutation(
-    internal.customerRequests.putRequestEvaluation,
-    {
-      evaluation: {
-        evaluationId: `evaluation:${evaluation.evaluationDigest}`,
-        requestId: evaluation.requestId, requestRevision: evaluation.requestRevision,
-        registrySnapshotDigest: evaluation.registrySnapshotDigest, factsDigest: evaluation.factsDigest,
-        facts: evaluation.facts,
-        criteria: evaluation.criteria.map((criterion) => ({ ...criterion })),
-        ...(evaluation.decisionPreference === undefined ? {} : {
-          decisionPreference: { ...evaluation.decisionPreference },
-        }),
-        ...(evaluation.preparationDisclosure === undefined ? {} : {
-          preparationDisclosure: {
-            ...evaluation.preparationDisclosure,
-            categories: evaluation.preparationDisclosure.categories.map((category) => ({ ...category })),
-          },
-        }),
-        posture: evaluation.posture,
-        ...(evaluation.nextRequirement === undefined ? {} : {
-          nextRequirement: evaluation.nextRequirement.kind === 'intent_direction'
-            ? {
-                kind: 'intent_direction' as const, prompt: evaluation.nextRequirement.prompt,
-                requirementDigest: evaluation.nextRequirement.requirementDigest,
-              }
-            : {
-                kind: 'contract_fact' as const,
-                field: evaluation.nextRequirement.field, customerLabel: evaluation.nextRequirement.customerLabel,
-                affectedCandidates: [...evaluation.nextRequirement.impact.affectedCandidates],
-                probesEnabled: [...evaluation.nextRequirement.impact.probesEnabled],
-                requirementDigest: evaluation.nextRequirement.requirementDigest,
-              },
-        }),
-        evaluationDigest: evaluation.evaluationDigest, evaluatedAt: Date.now(),
-      },
-      candidates: evaluation.candidates.map((candidate) => ({
-        ...candidate,
-        viability: candidate.viability.kind === 'viable' ? { kind: 'viable' as const } : {
-          kind: 'blocked_on_information' as const, fields: [...candidate.viability.fields],
-        },
-      })),
-    },
-  )
-  return persisted.kind === 'stored' ? { kind: 'stored', evaluation } : { kind: persisted.kind }
-}
-
-function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {
-  return `${operation}:${canonicalDigest({ principalId, requestRef, callerKey })}`
-}
-
-function customerRequestInterpreter(apiKey: string) {
-  return createJsonCustomerRequestInterpreter({
-    interpreterId: `openrouter:${process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'}`,
-    transport: createOpenRouterCustomerRequestTransport({
-      apiKey,
-      model: process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini',
-      ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
-    }),
-    timeoutMs: 20_000,
-    maximumResponseBytes: 64_000,
-  })
 }
 
 type ServiceAssertion = Infer<typeof serviceAssertion>
@@ -1135,14 +690,18 @@ type RequestCaller = Readonly<{ principalId: string; delegatedAgentId: string }>
 async function resolveRequestCaller(
   ctx: ActionCtx,
   operation: 'submit' | 'compare' | 'resume' | 'facts' | 'refine',
-  command: Record<string, string | number | boolean | Record<string, unknown> | undefined>,
+  command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,
 ): Promise<RequestCaller | undefined> {
   const identity = await ctx.auth.getUserIdentity()
-  if (identity !== null) return { principalId: identity.tokenIdentifier, delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier }
+  if (identity !== null) return {
+    principalId: identity.tokenIdentifier,
+    delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier,
+  }
   const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
-  if (assertion === undefined || key === undefined || key.length < 32 || !assertion.scopes.includes('customer_requests:create')) return undefined
+  if (assertion === undefined || key === undefined || key.length < 32
+    || !assertion.scopes.includes('customer_requests:create')) return undefined
   const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })
   if (!verified) return undefined
   const recorded = await ctx.runMutation(internal.customerRequests.recordAgentPrincipal, {
@@ -1153,41 +712,10 @@ async function resolveRequestCaller(
   return { principalId: assertion.principalId, delegatedAgentId: assertion.principalId }
 }
 
-function refinedIntent(intent: string, message: string): string {
-  return `${intent.trim()}\n${message.trim()}`
+function namespacedKey(principalId: string, operation: string, requestRef: string, callerKey: string): string {
+  return `${operation}:${canonicalDigest({ principalId, requestRef, callerKey })}`
 }
 
-function customerCriteria(criteria: RequestEvaluation['criteria'] | undefined) {
-  return (criteria ?? []).map(({ label, value, basis }) => ({ label, value, basis }))
-}
-
-function submitCommand(args: Readonly<{
-  compilationKey: string
-  requestId: string
-  expectedRevision?: number
-  delegatedAgentId: string
-  customerJob: string
-  knownFacts: Record<string, string | number | boolean>
-  routing: {
-    networkId: string; currency?: string; maximumSpendMinor?: number; optimizeFor?: 'cost' | 'latency'
-  }
-}>) {
-  return {
-    compilationKey: args.compilationKey, requestId: args.requestId,
-    ...(args.expectedRevision === undefined ? {} : { expectedRevision: args.expectedRevision }),
-    delegatedAgentId: args.delegatedAgentId, customerJob: args.customerJob,
-    knownFacts: args.knownFacts, routing: args.routing,
-  }
-}
-
-function factsCommand(args: Readonly<{
-  requestRef: string
-  expectedRevision: number
-  idempotencyKey: string
-  facts: Readonly<Record<string, string | number | boolean>>
-}>) {
-  return {
-    requestRef: args.requestRef, expectedRevision: args.expectedRevision,
-    idempotencyKey: args.idempotencyKey, facts: args.facts,
-  }
+function exactRefKey(ref: CapabilityContractRef): string {
+  return `${ref.capabilityId}\u0000${ref.version}\u0000${ref.contractDigest}`
 }

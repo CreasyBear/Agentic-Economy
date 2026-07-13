@@ -1,7 +1,7 @@
 import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { createCapabilityContractRegistry, defineCapabilityContract } from '@/modules/customer-request/public'
+import { createCapabilityContractRegistry, defineCapabilityContract } from '@/modules/customer-request/legacy-v1'
 import { capabilityContractValue } from '@/modules/customer-request/runtime'
 
 import { internalMutation, internalQuery, mutation, type MutationCtx } from './_generated/server'

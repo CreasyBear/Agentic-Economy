@@ -33,7 +33,7 @@ export function AeCustomerRequestWorkspace() {
         body: JSON.stringify({
           idempotencyKey: `submit:${identity.requestRef}:${editingRevision ?? 0}`, requestRef: identity.requestRef, agentRef: identity.agentRef,
           ...(editingRevision === undefined ? {} : { expectedRevision: editingRevision }),
-          request: need.trim(), knownFacts: {}, routing: { network: 'ae:public' },
+          request: need.trim(), routing: { network: 'ae:public' },
         }),
       })
       const result: SubmitResponse = await response.json()
@@ -82,7 +82,7 @@ export function AeCustomerRequestWorkspace() {
           body: JSON.stringify({
             idempotencyKey: `clarify:${projection.requestRef}:${projection.revision}:${crypto.randomUUID()}`,
             expectedRevision: projection.revision,
-            ...(isNaturalLanguage ? { message } : { facts: { [clarification.field]: message } }),
+            ...(isNaturalLanguage ? { message } : { requirementKey: clarification.requirementKey, value: message }),
           }),
         },
       )

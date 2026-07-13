@@ -1,6 +1,8 @@
 import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
+import { customerRequestV2Tables } from './convex-v2-schema'
+
 const money = v.object({ currency: v.string(), amountMinor: v.number() })
 const business = v.object({ nodeId: v.string(), bindingId: v.string(), name: v.string() })
 const planInput = v.union(
@@ -234,6 +236,7 @@ export const preparationRefusalReason = v.union(
 )
 
 export const customerRequestTables = {
+  ...customerRequestV2Tables,
   customerRequestAgentPrincipals: defineTable({
     principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
     recordedAt: v.number(), lastSeenAt: v.number(),

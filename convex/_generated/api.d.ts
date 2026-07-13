@@ -23,6 +23,7 @@ import type * as customerRequestCompilationStoreAdapter from "../customerRequest
 import type * as customerRequestPreparationAuthority from "../customerRequestPreparationAuthority.js";
 import type * as customerRequestPreparationAuthorityStoreAdapter from "../customerRequestPreparationAuthorityStoreAdapter.js";
 import type * as customerRequestStoreAdapter from "../customerRequestStoreAdapter.js";
+import type * as customerRequestV2 from "../customerRequestV2.js";
 import type * as customerRequests from "../customerRequests.js";
 import type * as demand from "../demand.js";
 import type * as devSeed from "../devSeed.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestPreparationAuthority: typeof customerRequestPreparationAuthority;
   customerRequestPreparationAuthorityStoreAdapter: typeof customerRequestPreparationAuthorityStoreAdapter;
   customerRequestStoreAdapter: typeof customerRequestStoreAdapter;
+  customerRequestV2: typeof customerRequestV2;
   customerRequests: typeof customerRequests;
   demand: typeof demand;
   devSeed: typeof devSeed;

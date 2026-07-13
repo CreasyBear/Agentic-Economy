@@ -17,7 +17,7 @@ import {
   createCustomerRequest,
   createPlanRevision,
   defineCapabilityContract,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/legacy-v1'
 import { createNeutralRoutingKernel, type CapabilityBindingAdapter } from '@/modules/routing-kernel/application'
 import { createInMemoryStructuredQuotePreparationStore } from '@/modules/routing-kernel/structured-quote-preparation-store'
 

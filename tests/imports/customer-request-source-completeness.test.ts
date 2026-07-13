@@ -4,13 +4,13 @@ import { describe, expect, it } from 'vitest'
 import { findFiles } from '@/lib/ui/contract-scans'
 
 const productionAuthority = {
-  semantics: 'src/modules/customer-request/public.ts',
+  semantics: 'src/modules/customer-request/evaluation.ts',
   compilation: 'src/modules/customer-request/compiler.ts',
   preparation: 'src/modules/customer-request/preparation.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
-  persistence: 'convex/customerRequests.ts',
+  persistence: 'convex/customerRequestV2.ts',
   submitHttp: 'src/lib/server/customer-request-api.ts',
   inspectHttp: 'src/lib/server/customer-request-inspect-api.ts',
   factsHttp: 'src/lib/server/customer-request-facts-api.ts',
@@ -27,10 +27,29 @@ describe('CustomerRequest source completeness', () => {
     }
     const application = source('application')
     expect(application).toContain('compileCustomerRequest')
-    expect(application).toContain('prepareCustomerRequestAction')
-    expect(application).toContain('createKernelCustomerRequestActionRouter')
-    expect(application).toContain('createRegisteredRoutingKernel')
-    expect(application).toContain('createConvexCustomerRequestPreparationStore')
+    expect(application).toContain('capabilitySupply.listEligible')
+    expect(application).toContain('capabilityContractDocuments.getActiveExactInternal')
+    expect(application).toContain('customerRequestV2.commitAggregate')
+    expect(application).toContain('bindCustomerCapabilityDescriptor')
+  })
+
+  it('keeps the current Request path exact-V2-only and quarantines V1 authority', () => {
+    const currentFiles = [
+      'src/modules/customer-request/compiler.ts',
+      'src/modules/customer-request/evaluation.ts',
+      'src/modules/customer-request/semantic-interpreter.ts',
+      'src/modules/customer-request/internal/convex-v2-schema.ts',
+      'convex/customerRequestV2.ts',
+      'convex/customerRequestApplication.ts',
+    ]
+    const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/
+    for (const file of currentFiles) expect(readFileSync(file, 'utf8'), file).not.toMatch(forbidden)
+
+    const application = readFileSync('convex/customerRequestApplication.ts', 'utf8')
+    expect(application).not.toMatch(/legacy-compiler-v1|customerRequestCompilationStoreAdapter|commitRequestSnapshot|putRequestEvaluation/)
+    const persistence = readFileSync('convex/customerRequestV2.ts', 'utf8')
+    expect(persistence).toContain('historical_request_resubmit_required')
+    expect(persistence).not.toMatch(/parseInt|Number\s*\([^)]*version/)
   })
 
   it('keeps routes and UI on the shared projection instead of rebuilding product state', () => {

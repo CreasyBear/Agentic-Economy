@@ -1,4 +1,4 @@
-import { createCapabilityContractRegistry, type CapabilityContractRegistry } from '@/modules/customer-request/public'
+import { createCapabilityContractRegistry, type CapabilityContractRegistry } from '@/modules/customer-request/legacy-v1'
 
 import { internal } from './_generated/api'
 import type { ActionCtx } from './_generated/server'

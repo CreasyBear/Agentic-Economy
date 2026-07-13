@@ -162,6 +162,23 @@ export function scanTypeScriptStandards(targets: readonly ScanTarget[]): readonl
       },
     ],
     ['src/routeTree.gen.ts', 'convex/_generated']
+  ).filter((violation) => !isDocumentedJsonBoundary(violation))
+}
+
+function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
+  if (violation.rule !== 'convex-any-validator') return false
+  return (
+    violation.file === 'convex/capabilitySupply.ts'
+      && violation.excerpt.includes('v.any()')
+      && violation.excerpt.includes('runtime-validated adapter config boundary')
+  ) || (
+    violation.file === 'convex/customerRequestApplication.ts'
+      && violation.excerpt.includes('v.any()')
+      && violation.excerpt.includes('runtime-validated JsonValue boundary')
+  ) || (
+    violation.file === 'src/modules/customer-request/internal/convex-v2-schema.ts'
+      && violation.excerpt.includes('v.any()')
+      && violation.excerpt.includes('runtime-validated JsonValue boundary')
   )
 }
 

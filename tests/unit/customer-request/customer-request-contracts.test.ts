@@ -5,7 +5,7 @@ import {
   createCustomerRequest,
   createPlanRevision,
   defineCapabilityContract,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/legacy-v1'
 
 describe('customer request contracts', () => {
   it('creates a canonical durable Request independently from replaceable Plan revisions', () => {

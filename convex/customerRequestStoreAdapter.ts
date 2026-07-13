@@ -1,7 +1,7 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { preparedActionValue } from '@/modules/customer-request/runtime'
 import type { CustomerRequestPreparationStore, PreparationRefusalReason } from '@/modules/customer-request/preparation'
-import type { CustomerRequest, PlanRevision, PreparedAction } from '@/modules/customer-request/public'
+import type { CustomerRequest, PlanRevision, PreparedAction } from '@/modules/customer-request/legacy-v1'
 import type { Infer } from 'convex/values'
 
 import { internal } from './_generated/api'

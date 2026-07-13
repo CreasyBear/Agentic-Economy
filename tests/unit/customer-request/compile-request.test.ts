@@ -4,11 +4,11 @@ import {
   compileCustomerRequest,
   createInMemoryCustomerRequestCompilationStore,
   type CustomerRequestInterpreter,
-} from '@/modules/customer-request/compiler'
+} from '@/modules/customer-request/legacy-compiler-v1'
 import {
   createCapabilityContractRegistry,
   defineCapabilityContract,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/legacy-v1'
 
 describe('compile a CustomerRequest into a registered PlanRevision', () => {
   it('starts from a customer job and known facts without exposing protocol to the caller', async () => {

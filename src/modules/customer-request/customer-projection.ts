@@ -1,4 +1,5 @@
 import type { CompileCustomerRequestResult } from './compiler'
+import type { JsonValue } from '@/modules/capability-contract/public'
 import type { RequestEvaluation } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet, type CustomerOption, type CustomerOptionSet } from './customer-option-set'
@@ -25,7 +26,7 @@ export type CustomerRequestNextAction =
 export type { CustomerOption, CustomerOptionSet } from './customer-option-set'
 export type CustomerCriterion = Readonly<{
   label: string
-  value: string | number | boolean
+  value: JsonValue
   basis: 'customer_provided' | 'extracted_from_request'
 }>
 
@@ -45,7 +46,7 @@ export type CustomerRequestView = Readonly<{
   }>
   clarification?: Readonly<
     | { kind: 'intent_direction'; prompt: string; answerKind: 'natural_language' }
-    | { kind: 'contract_fact'; field: string; prompt: string; answerKind: 'typed_value' }
+    | { kind: 'contract_fact'; requirementKey: string; prompt: string; answerKind: 'typed_value' }
   >
   options: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
@@ -62,39 +63,14 @@ export type CustomerOptionsProjection =
   | Readonly<{ kind: 'refused'; reason: 'authentication_required' }>
 
 export function projectCustomerRequest(result: CompileCustomerRequestResult): CustomerRequestProjection {
-  if (result.kind === 'plan_ready') return requestView({
-    requestRef: result.request.requestId,
-    revision: result.request.revision,
-    state: 'ready_to_compare',
-    summary: result.understanding.outcome,
-    nextAction: 'prepare_options',
+  if (result.kind === 'refused') return requestView({
+    requestRef: 'request:uncommitted', revision: 0, state: 'needs_attention',
+    summary: result.reason === 'capability_graph_invalid'
+      ? 'The available business capabilities changed and need to be checked again.'
+      : 'This request could not be interpreted safely.',
+    nextAction: 'retry',
   })
-  if (result.kind === 'needs_information') return requestView({
-    requestRef: result.request.requestId,
-    revision: result.request.revision,
-    state: 'needs_information',
-    summary: result.understanding.outcome,
-    nextAction: 'provide_information',
-    missingFields: result.missingInformation.map((item) => ({
-      field: item.field,
-      label: item.customerLabel,
-      explanation: item.reason === 'required_for_registered_capability'
-        ? 'This is needed before businesses can prepare an option.'
-        : 'This will determine which registered capability fits the request.',
-    })),
-  })
-  if (result.kind === 'unsupported') return requestView({
-    requestRef: result.request.requestId,
-    revision: result.request.revision,
-    state: 'unsupported',
-    summary: result.reason === 'no_registered_capability'
-      ? 'No registered business capability can support this request yet.'
-      : 'The request could not be translated into a safe business plan.',
-    nextAction: 'revise_request',
-  })
-  if (result.kind === 'revision_conflict') return Object.freeze({ kind: 'conflict', requestRef: result.requestId, reason: 'revision_changed' })
-  if (result.kind === 'identity_conflict') return Object.freeze({ kind: 'conflict', requestRef: result.requestId, reason: 'identity_changed' })
-  return Object.freeze({ kind: 'conflict', requestRef: result.requestId, reason: 'idempotency_key_reused' })
+  return projectRequestEvaluation({ snapshot: result.aggregate.snapshot, evaluation: result.aggregate.evaluation })
 }
 
 export function projectRequestEvaluation(input: Readonly<{
@@ -117,14 +93,14 @@ export function projectRequestEvaluation(input: Readonly<{
     summary: input.snapshot.intent,
     nextAction: 'provide_information',
     missingFields: input.evaluation.nextRequirement.kind === 'contract_fact' ? [{
-      field: input.evaluation.nextRequirement.field,
+      field: input.evaluation.nextRequirement.requirementKey,
       label: input.evaluation.nextRequirement.customerLabel,
       explanation: 'This answer changes which registered options can be prepared now.',
     }] : [],
     clarification: input.evaluation.nextRequirement.kind === 'intent_direction'
       ? { kind: 'intent_direction', prompt: input.evaluation.nextRequirement.prompt, answerKind: 'natural_language' }
       : {
-          kind: 'contract_fact', field: input.evaluation.nextRequirement.field,
+          kind: 'contract_fact', requirementKey: input.evaluation.nextRequirement.requirementKey,
           prompt: input.evaluation.nextRequirement.customerLabel, answerKind: 'typed_value',
         },
     criteria,
@@ -137,7 +113,7 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'review_disclosure',
     criteria,
     disclosureReview: {
-      purpose: input.evaluation.preparationDisclosure.purposeLabel,
+      purpose: customerPurposeLabel(input.evaluation.preparationDisclosure.purposes[0] ?? 'compare_options'),
       maximumRecipients: input.evaluation.preparationDisclosure.maximumRecipients,
       categories: input.evaluation.preparationDisclosure.categories.map(({ label, classification }) => ({ label, classification })),
     },
@@ -150,6 +126,12 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'prepare_options',
     criteria,
   })
+}
+
+function customerPurposeLabel(value: string): string {
+  const words = value.replace(/[_-]+/g, ' ').trim()
+  if (words.length === 0) return 'Compare available options'
+  return `${words.at(0)?.toUpperCase() ?? ''}${words.slice(1)}`
 }
 
 export function projectPreparingOptions(input: Readonly<{

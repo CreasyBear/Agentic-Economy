@@ -1,8 +1,14 @@
+import {
+  sameCapabilityContractRef,
+  type CapabilityContractRef,
+  type CapabilityDecisionModel,
+  type CapabilityInputFact,
+  type CapabilityInputKey,
+  type CapabilitySelectionKey,
+  type JsonValue,
+  type PointedSchemaIdentity,
+} from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-
-import type { CapabilityContract } from './public'
-
-type LiteralValue = string | number | boolean
 
 export type RequestFactSource = Readonly<
   | { kind: 'customer'; assertionRef: string }
@@ -10,65 +16,114 @@ export type RequestFactSource = Readonly<
 >
 
 export type RequestFact = Readonly<{
-  value: LiteralValue
+  contractRef: CapabilityContractRef
+  selectionKey: CapabilitySelectionKey
+  inputKey: CapabilityInputKey
+  inputPointer: string
+  schemaIdentity: PointedSchemaIdentity
+  value: JsonValue
   source: RequestFactSource
 }>
 
 export type RequestEvaluationCandidateInput = Readonly<{
   businessId: string
+  offeringId: string
   bindingId: string
-  contract: CapabilityContract
+  model: CapabilityDecisionModel
+  offeringRegistrationHash: string
+  bindingRegistrationHash: string
 }>
 
 export type RegisteredEvaluationBinding = Readonly<{
   businessId: string
+  offeringId: string
   bindingId: string
-  capabilityContractId: string
-  queryTerms: readonly string[]
-  registrationHash: string
+  contractRef: CapabilityContractRef
+  offeringRegistrationHash: string
+  bindingRegistrationHash: string
 }>
 
 export type RequestEvaluationCandidate = Readonly<{
   candidateRef: string
   businessId: string
+  offeringId: string
   bindingId: string
-  capabilityContractId: string
+  contractRef: CapabilityContractRef
+  selectionKey: CapabilitySelectionKey
+  semanticDigest: string
+  offeringRegistrationHash: string
+  bindingRegistrationHash: string
   viability:
     | Readonly<{ kind: 'viable' }>
-    | Readonly<{ kind: 'blocked_on_information'; fields: readonly string[] }>
+    | Readonly<{ kind: 'blocked_on_information'; inputs: readonly MissingInputDescriptor[] }>
+    | Readonly<{ kind: 'incompatible'; issueKeywords: readonly string[] }>
 }>
+
+export type MissingInputTarget = Readonly<{
+  contractRef: CapabilityContractRef
+  selectionKey: CapabilitySelectionKey
+  inputKey: CapabilityInputKey
+  inputPointer: string
+  schemaIdentity: PointedSchemaIdentity
+}>
+
+export type MissingInputDescriptor = MissingInputTarget & Readonly<{ customerLabel: string }>
 
 export type ContractFactInformationRequirement = Readonly<{
   kind: 'contract_fact'
-  field: string
+  requirementKey: string
   customerLabel: string
+  targets: readonly MissingInputTarget[]
   impact: Readonly<{
     affectedCandidates: readonly string[]
     probesEnabled: readonly string[]
   }>
   requirementDigest: string
 }>
+
 export type IntentDirectionInformationRequirement = Readonly<{
   kind: 'intent_direction'
   prompt: string
   requirementDigest: string
 }>
+
 export type InformationRequirement = ContractFactInformationRequirement | IntentDirectionInformationRequirement
+
 export type UnderstoodCriterion = Readonly<{
-  field: string
+  inputKey: CapabilityInputKey
+  inputPointer: string
   label: string
-  value: LiteralValue
+  value: JsonValue
   basis: 'customer_provided' | 'extracted_from_request'
   criterionDigest: string
 }>
+
 export type PreparationDisclosurePreview = Readonly<{
-  purposeLabel: string
   maximumRecipients: number
+  purposes: readonly string[]
   categories: readonly Readonly<{
-    field: string
+    inputKey: CapabilityInputKey
     label: string
     classification: 'personal' | 'sensitive' | 'credential'
   }>[]
+}>
+
+export type ProposedRequestAction = Readonly<{
+  actionId: string
+  contractRef: CapabilityContractRef
+  selectionKey: CapabilitySelectionKey
+  semanticDigest: string
+  dependsOn: readonly string[]
+  inputs: readonly RequestFact[]
+}>
+
+export type RequestCompletionRequirement = Readonly<{
+  actionId: string
+  contractRef: CapabilityContractRef
+  evidenceId: string
+  outputPointer: string
+  purpose: 'completion'
+  schemaIdentity: PointedSchemaIdentity
 }>
 
 export type RequestEvaluation = Readonly<{
@@ -76,7 +131,7 @@ export type RequestEvaluation = Readonly<{
   requestRevision: number
   registrySnapshotDigest: string
   factsDigest: string
-  facts: Readonly<Record<string, RequestFact>>
+  facts: readonly RequestFact[]
   criteria: readonly UnderstoodCriterion[]
   decisionPreference?: Readonly<{
     objective: 'lowest_maximum_price'
@@ -85,6 +140,7 @@ export type RequestEvaluation = Readonly<{
   }>
   preparationDisclosure?: PreparationDisclosurePreview
   candidates: readonly RequestEvaluationCandidate[]
+  completionRequirements: readonly RequestCompletionRequirement[]
   nextRequirement?: InformationRequirement
   posture: 'progress_available' | 'needs_information' | 'unsupported'
   evaluationDigest: string
@@ -94,45 +150,80 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   requestId: string
   requestRevision: number
   intent: string
-  facts: Readonly<Record<string, RequestFact>>
+  facts: readonly RequestFact[]
   registrySnapshotDigest: string
   candidates: readonly RequestEvaluationCandidateInput[]
+  proposedActions?: readonly ProposedRequestAction[]
+  resolveModel?: (ref: CapabilityContractRef) => CapabilityDecisionModel | undefined
   decisionPreference?: RequestEvaluation['decisionPreference']
 }>): RequestEvaluation {
   const candidates = input.candidates.map((candidate): RequestEvaluationCandidate => {
-    const missingFields = Object.entries(candidate.contract.input)
-      .filter(([field, definition]) => definition.required && input.facts[field] === undefined)
-      .map(([field]) => field)
-      .sort()
-    const candidateRef = `candidate:${candidate.bindingId}`
+    const facts = factsForModel(input.facts, candidate.model)
+    const assessment = candidate.model.assessInput({
+      contractRef: candidate.model.contractRef,
+      selectionKey: candidate.model.selectionKey,
+      stage: 'option_selection',
+      facts,
+    })
+    const candidateRef = `candidate:${canonicalDigest({
+      businessId: candidate.businessId,
+      offeringId: candidate.offeringId,
+      bindingId: candidate.bindingId,
+      contractRef: candidate.model.contractRef,
+    })}`
     return Object.freeze({
       candidateRef,
       businessId: candidate.businessId,
+      offeringId: candidate.offeringId,
       bindingId: candidate.bindingId,
-      capabilityContractId: candidate.contract.capabilityContractId,
-      viability: missingFields.length === 0
+      contractRef: candidate.model.contractRef,
+      selectionKey: candidate.model.selectionKey,
+      semanticDigest: candidate.model.semanticDigest,
+      offeringRegistrationHash: candidate.offeringRegistrationHash,
+      bindingRegistrationHash: candidate.bindingRegistrationHash,
+      viability: assessment.kind === 'viable'
         ? Object.freeze({ kind: 'viable' as const })
-        : Object.freeze({ kind: 'blocked_on_information' as const, fields: Object.freeze(missingFields) }),
+        : assessment.kind === 'needs_information'
+          ? Object.freeze({
+              kind: 'blocked_on_information' as const,
+              inputs: Object.freeze(assessment.missing.map((semantic) => Object.freeze({
+                contractRef: candidate.model.contractRef,
+                selectionKey: candidate.model.selectionKey,
+                inputKey: semantic.key,
+                inputPointer: semantic.inputPointer,
+                schemaIdentity: semantic.schemaIdentity,
+                customerLabel: semantic.label,
+              }))),
+            })
+          : Object.freeze({
+              kind: 'incompatible' as const,
+              issueKeywords: Object.freeze(assessment.issues.map(({ keyword }) => keyword)),
+            }),
     })
   })
-  const nextRequirement = chooseNextRequirement(input.candidates, candidates)
+  const nextRequirement = chooseNextRequirement(candidates)
   const criteria = projectUnderstoodCriteria(input.facts, input.candidates)
   const preparationDisclosure = projectPreparationDisclosure(input.facts, input.candidates)
+  const completionRequirements = deriveCompletionRequirements(
+    input.proposedActions ?? [], input.resolveModel,
+  )
   const posture = candidates.length === 0
     ? 'unsupported' as const
     : nextRequirement === undefined ? 'progress_available' as const : 'needs_information' as const
-  const factsDigest = canonicalDigest(input.facts)
+  const facts = Object.freeze([...input.facts].sort(compareRequestFacts))
+  const factsDigest = canonicalDigest(facts)
   const digestMaterial = {
     requestId: input.requestId,
     requestRevision: input.requestRevision,
     intent: input.intent,
     registrySnapshotDigest: input.registrySnapshotDigest,
     factsDigest,
-    facts: input.facts,
+    facts,
     criteria,
     ...(input.decisionPreference === undefined ? {} : { decisionPreference: input.decisionPreference }),
     ...(preparationDisclosure === undefined ? {} : { preparationDisclosure }),
     candidates,
+    completionRequirements,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
   }
@@ -141,42 +232,15 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     requestRevision: input.requestRevision,
     registrySnapshotDigest: input.registrySnapshotDigest,
     factsDigest,
-    facts: input.facts,
+    facts,
     criteria,
     ...(input.decisionPreference === undefined ? {} : { decisionPreference: input.decisionPreference }),
     ...(preparationDisclosure === undefined ? {} : { preparationDisclosure }),
     candidates: Object.freeze(candidates),
+    completionRequirements,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
     evaluationDigest: canonicalDigest(digestMaterial),
-  })
-}
-
-function projectPreparationDisclosure(
-  facts: Readonly<Record<string, RequestFact>>,
-  candidates: readonly RequestEvaluationCandidateInput[],
-): PreparationDisclosurePreview | undefined {
-  const purposes = [...new Set(candidates.flatMap((candidate) => candidate.contract.preparation === undefined
-    ? [] : [candidate.contract.preparation.customerLabel]))]
-  if (purposes.length !== 1 || purposes[0] === undefined) return undefined
-  const categories = new Map<string, { label: string; classification: 'personal' | 'sensitive' | 'credential' }>()
-  for (const candidate of candidates) {
-    for (const [field, definition] of Object.entries(candidate.contract.input)) {
-      const disclosure = definition.disclosure
-      if (facts[field] === undefined || disclosure?.phase !== 'preparation' || disclosure.classification === 'public') continue
-      const existing = categories.get(field)
-      if (existing !== undefined && (existing.label !== definition.customerLabel || existing.classification !== disclosure.classification)) {
-        return undefined
-      }
-      categories.set(field, { label: definition.customerLabel, classification: disclosure.classification })
-    }
-  }
-  if (categories.size === 0) return undefined
-  return Object.freeze({
-    purposeLabel: purposes[0],
-    maximumRecipients: new Set(candidates.map((candidate) => candidate.businessId)).size,
-    categories: Object.freeze([...categories.entries()].sort(([left], [right]) => left.localeCompare(right))
-      .map(([field, category]) => Object.freeze({ field, ...category }))),
   })
 }
 
@@ -184,118 +248,246 @@ export function evaluateIntentDirectionRequestSnapshot(input: Readonly<{
   requestId: string
   requestRevision: number
   intent: string
-  facts: Readonly<Record<string, RequestFact>>
+  facts: readonly RequestFact[]
   registrySnapshotDigest: string
   prompt: string
 }>): RequestEvaluation {
-  const factsDigest = canonicalDigest(input.facts)
+  const facts = Object.freeze([...input.facts].sort(compareRequestFacts))
+  const factsDigest = canonicalDigest(facts)
   const nextRequirement: IntentDirectionInformationRequirement = Object.freeze({
     kind: 'intent_direction',
     prompt: input.prompt,
     requirementDigest: canonicalDigest({
-      requestId: input.requestId, requestRevision: input.requestRevision,
-      intent: input.intent, registrySnapshotDigest: input.registrySnapshotDigest,
-      kind: 'intent_direction', prompt: input.prompt,
+      requestId: input.requestId,
+      requestRevision: input.requestRevision,
+      intent: input.intent,
+      registrySnapshotDigest: input.registrySnapshotDigest,
+      kind: 'intent_direction',
+      prompt: input.prompt,
     }),
   })
   const digestMaterial = {
-    requestId: input.requestId, requestRevision: input.requestRevision, intent: input.intent,
-    registrySnapshotDigest: input.registrySnapshotDigest, factsDigest, facts: input.facts,
-    candidates: [], criteria: [], nextRequirement, posture: 'needs_information' as const,
+    requestId: input.requestId,
+    requestRevision: input.requestRevision,
+    intent: input.intent,
+    registrySnapshotDigest: input.registrySnapshotDigest,
+    factsDigest,
+    facts,
+    candidates: [],
+    criteria: [],
+    completionRequirements: [],
+    nextRequirement,
+    posture: 'needs_information' as const,
   }
   return Object.freeze({
-    requestId: input.requestId, requestRevision: input.requestRevision,
-    registrySnapshotDigest: input.registrySnapshotDigest, factsDigest, facts: input.facts,
-    candidates: Object.freeze([]), criteria: Object.freeze([]), nextRequirement, posture: 'needs_information' as const,
+    requestId: input.requestId,
+    requestRevision: input.requestRevision,
+    registrySnapshotDigest: input.registrySnapshotDigest,
+    factsDigest,
+    facts,
+    candidates: Object.freeze([]),
+    criteria: Object.freeze([]),
+    completionRequirements: Object.freeze([]),
+    nextRequirement,
+    posture: 'needs_information' as const,
     evaluationDigest: canonicalDigest(digestMaterial),
   })
 }
 
-function projectUnderstoodCriteria(
-  facts: Readonly<Record<string, RequestFact>>,
-  candidates: readonly RequestEvaluationCandidateInput[],
-): readonly UnderstoodCriterion[] {
-  return Object.freeze(Object.entries(facts).sort(([left], [right]) => left.localeCompare(right)).flatMap(([field, fact]) => {
-    const labels = [...new Set(candidates.flatMap((candidate) => {
-      const definition = candidate.contract.input[field]
-      return definition === undefined ? [] : [definition.customerLabel]
-    }))]
-    const label = labels.length === 1 ? labels[0] : undefined
-    if (label === undefined) return []
-    const basis = fact.source.kind === 'customer' ? 'customer_provided' as const : 'extracted_from_request' as const
-    return [Object.freeze({
-      field, label, value: fact.value, basis,
-      criterionDigest: canonicalDigest({ field, label, value: fact.value, basis }),
-    })]
-  }))
-}
-
 export function discoverRequestEvaluationCandidates(input: Readonly<{
-  candidateCapabilityContractIds: readonly string[]
+  selectedCapabilities: readonly Readonly<{
+    selectionKey: CapabilitySelectionKey
+    contractRef: CapabilityContractRef
+  }>[]
   bindings: readonly RegisteredEvaluationBinding[]
-  resolveContract: (capabilityContractId: string) => CapabilityContract | undefined
+  resolveModel: (ref: CapabilityContractRef) => CapabilityDecisionModel | undefined
 }>): readonly RequestEvaluationCandidateInput[] {
-  const admittedCapabilityContractIds = new Set(input.candidateCapabilityContractIds)
-  return Object.freeze(input.bindings
-    .filter((binding) => admittedCapabilityContractIds.has(binding.capabilityContractId))
-    .map((binding) => {
-      const contract = input.resolveContract(binding.capabilityContractId)
-      return contract === undefined ? undefined : Object.freeze({
-        businessId: binding.businessId,
-        bindingId: binding.bindingId,
-        contract,
-      })
-    })
-    .filter((candidate): candidate is RequestEvaluationCandidateInput => candidate !== undefined)
-    .sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
+  return Object.freeze(input.bindings.flatMap((binding) => {
+    const selected = input.selectedCapabilities.find((candidate) => (
+      candidate.selectionKey === input.resolveModel(binding.contractRef)?.selectionKey
+      && sameCapabilityContractRef(candidate.contractRef, binding.contractRef)
+    ))
+    if (selected === undefined) return []
+    const model = input.resolveModel(binding.contractRef)
+    if (model === undefined || model.selectionKey !== selected.selectionKey
+      || !sameCapabilityContractRef(model.contractRef, binding.contractRef)) return []
+    return [Object.freeze({
+      businessId: binding.businessId,
+      offeringId: binding.offeringId,
+      bindingId: binding.bindingId,
+      model,
+      offeringRegistrationHash: binding.offeringRegistrationHash,
+      bindingRegistrationHash: binding.bindingRegistrationHash,
+    })]
+  }).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
 }
 
 export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvaluationBinding[]): string {
   return canonicalDigest([...bindings].map((binding) => ({
     businessId: binding.businessId,
+    offeringId: binding.offeringId,
     bindingId: binding.bindingId,
-    capabilityContractId: binding.capabilityContractId,
-    registrationHash: binding.registrationHash,
+    contractRef: binding.contractRef,
+    offeringRegistrationHash: binding.offeringRegistrationHash,
+    bindingRegistrationHash: binding.bindingRegistrationHash,
   })).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
 }
 
-function chooseNextRequirement(
-  inputs: readonly RequestEvaluationCandidateInput[],
-  candidates: readonly RequestEvaluationCandidate[],
-): InformationRequirement | undefined {
-  const labels = new Map<string, string>()
-  const affected = new Map<string, string[]>()
-  for (let index = 0; index < candidates.length; index += 1) {
-    const candidate = candidates[index]
-    const candidateInput = inputs[index]
-    if (candidate === undefined || candidateInput === undefined) throw new Error('request_evaluation_candidate_alignment_invalid')
+function factsForModel(facts: readonly RequestFact[], model: CapabilityDecisionModel): readonly CapabilityInputFact[] {
+  return facts.filter((fact) => (
+    fact.selectionKey === model.selectionKey
+    && sameCapabilityContractRef(fact.contractRef, model.contractRef)
+  )).map((fact) => ({ input: fact.inputKey, inputPointer: fact.inputPointer, value: fact.value }))
+}
+
+function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]): InformationRequirement | undefined {
+  const groups = new Map<string, {
+    customerLabel: string
+    targets: MissingInputTarget[]
+    affectedCandidates: string[]
+    probesEnabled: string[]
+  }>()
+  for (const candidate of candidates) {
     if (candidate.viability.kind !== 'blocked_on_information') continue
-    for (const field of candidate.viability.fields) {
-      labels.set(field, candidateInput.contract.input[field]?.customerLabel ?? field)
-      affected.set(field, [...(affected.get(field) ?? []), candidate.candidateRef])
+    for (const missing of candidate.viability.inputs) {
+      const groupKey = canonicalDigest({ customerLabel: missing.customerLabel, schemaIdentity: missing.schemaIdentity })
+      const group = groups.get(groupKey) ?? {
+        customerLabel: missing.customerLabel, targets: [], affectedCandidates: [], probesEnabled: [],
+      }
+      group.targets.push(targetFromMissing(missing))
+      group.affectedCandidates.push(candidate.candidateRef)
+      if (candidate.viability.inputs.length === 1) group.probesEnabled.push(candidate.candidateRef)
+      groups.set(groupKey, group)
     }
   }
-  const ranked = [...affected.entries()].map(([field, candidateRefs]) => {
-    const probesEnabled = candidates
-      .filter((candidate) => candidate.viability.kind === 'blocked_on_information'
-        && candidate.viability.fields.length === 1
-        && candidate.viability.fields[0] === field)
-      .map((candidate) => candidate.candidateRef)
-    return { field, candidateRefs: [...candidateRefs].sort(), probesEnabled: probesEnabled.sort() }
-  }).sort((left, right) => right.probesEnabled.length - left.probesEnabled.length
-    || right.candidateRefs.length - left.candidateRefs.length
-    || left.field.localeCompare(right.field))
-  const selected = ranked[0]
+  const selected = [...groups.values()].sort((left, right) => (
+    right.probesEnabled.length - left.probesEnabled.length
+    || right.affectedCandidates.length - left.affectedCandidates.length
+    || left.customerLabel.localeCompare(right.customerLabel)
+  ))[0]
   if (selected === undefined) return undefined
+  const targets = Object.freeze(uniqueTargets(selected.targets).sort(compareTargets))
   const impact = Object.freeze({
-    affectedCandidates: Object.freeze(selected.candidateRefs),
-    probesEnabled: Object.freeze(selected.probesEnabled),
+    affectedCandidates: Object.freeze([...new Set(selected.affectedCandidates)].sort()),
+    probesEnabled: Object.freeze([...new Set(selected.probesEnabled)].sort()),
   })
+  const requirementKey = `requirement:${canonicalDigest({ targets, impact })}`
   return Object.freeze({
-    kind: 'contract_fact' as const,
-    field: selected.field,
-    customerLabel: labels.get(selected.field) ?? selected.field,
+    kind: 'contract_fact',
+    requirementKey,
+    customerLabel: selected.customerLabel,
+    targets,
     impact,
-    requirementDigest: canonicalDigest({ field: selected.field, impact }),
+    requirementDigest: canonicalDigest({ requirementKey, customerLabel: selected.customerLabel, targets, impact }),
   })
+}
+
+function projectUnderstoodCriteria(
+  facts: readonly RequestFact[], candidates: readonly RequestEvaluationCandidateInput[],
+): readonly UnderstoodCriterion[] {
+  return Object.freeze(facts.flatMap((fact) => {
+    const model = candidates.find((candidate) => (
+      candidate.model.selectionKey === fact.selectionKey
+      && sameCapabilityContractRef(candidate.model.contractRef, fact.contractRef)
+    ))?.model
+    const semantic = model?.inputs.find((candidate) => (
+      candidate.key === fact.inputKey
+      && candidate.inputPointer === fact.inputPointer
+      && candidate.schemaIdentity === fact.schemaIdentity
+    ))
+    if (semantic === undefined) return []
+    const basis = fact.source.kind === 'customer' ? 'customer_provided' as const : 'extracted_from_request' as const
+    return [Object.freeze({
+      inputKey: fact.inputKey,
+      inputPointer: fact.inputPointer,
+      label: semantic.label,
+      value: fact.value,
+      basis,
+      criterionDigest: canonicalDigest({
+        contractRef: fact.contractRef, inputKey: fact.inputKey, inputPointer: fact.inputPointer,
+        label: semantic.label, value: fact.value, basis,
+      }),
+    })]
+  }).sort((left, right) => left.label.localeCompare(right.label) || left.inputPointer.localeCompare(right.inputPointer)))
+}
+
+function projectPreparationDisclosure(
+  facts: readonly RequestFact[], candidates: readonly RequestEvaluationCandidateInput[],
+): PreparationDisclosurePreview | undefined {
+  const categories = new Map<string, PreparationDisclosurePreview['categories'][number]>()
+  const purposes = new Set<string>()
+  for (const candidate of candidates) {
+    for (const semantic of candidate.model.inputs) {
+      const present = facts.some((fact) => fact.inputKey === semantic.key
+        && fact.selectionKey === candidate.model.selectionKey
+        && sameCapabilityContractRef(fact.contractRef, candidate.model.contractRef))
+      if (!present) continue
+      for (const use of semantic.dataUse) {
+        if (use.phase !== 'preparation' || use.classification === 'public') continue
+        categories.set(semantic.key, {
+          inputKey: semantic.key,
+          label: semantic.label,
+          classification: use.classification,
+        })
+        for (const purpose of use.purposes) purposes.add(purpose)
+      }
+    }
+  }
+  if (categories.size === 0) return undefined
+  return Object.freeze({
+    maximumRecipients: new Set(candidates.map(({ businessId }) => businessId)).size,
+    purposes: Object.freeze([...purposes].sort()),
+    categories: Object.freeze([...categories.values()].sort((left, right) => left.label.localeCompare(right.label))),
+  })
+}
+
+function deriveCompletionRequirements(
+  actions: readonly ProposedRequestAction[],
+  resolveModel: ((ref: CapabilityContractRef) => CapabilityDecisionModel | undefined) | undefined,
+): readonly RequestCompletionRequirement[] {
+  if (actions.length === 0) return Object.freeze([])
+  if (resolveModel === undefined) throw new Error('request_completion_model_resolver_required')
+  return Object.freeze(actions.flatMap((action) => {
+    const model = resolveModel(action.contractRef)
+    if (model === undefined
+      || model.selectionKey !== action.selectionKey
+      || model.semanticDigest !== action.semanticDigest
+      || !sameCapabilityContractRef(model.contractRef, action.contractRef)) {
+      throw new Error('request_action_contract_mismatch')
+    }
+    return model.evidence.filter((evidence) => evidence.purpose === 'completion').map((evidence) => Object.freeze({
+      actionId: action.actionId,
+      contractRef: action.contractRef,
+      evidenceId: evidence.evidenceId,
+      outputPointer: evidence.outputPointer,
+      purpose: 'completion' as const,
+      schemaIdentity: evidence.schemaIdentity,
+    }))
+  }).sort((left, right) => left.actionId.localeCompare(right.actionId) || left.outputPointer.localeCompare(right.outputPointer)))
+}
+
+function targetFromMissing(missing: MissingInputDescriptor): MissingInputTarget {
+  return {
+    contractRef: missing.contractRef,
+    selectionKey: missing.selectionKey,
+    inputKey: missing.inputKey,
+    inputPointer: missing.inputPointer,
+    schemaIdentity: missing.schemaIdentity,
+  }
+}
+
+function uniqueTargets(targets: readonly MissingInputTarget[]): MissingInputTarget[] {
+  const byDigest = new Map(targets.map((target) => [canonicalDigest(target), target]))
+  return [...byDigest.values()]
+}
+
+function compareTargets(left: MissingInputTarget, right: MissingInputTarget): number {
+  return left.contractRef.capabilityId.localeCompare(right.contractRef.capabilityId)
+    || left.contractRef.version - right.contractRef.version
+    || left.contractRef.contractDigest.localeCompare(right.contractRef.contractDigest)
+    || left.inputPointer.localeCompare(right.inputPointer)
+}
+
+function compareRequestFacts(left: RequestFact, right: RequestFact): number {
+  return compareTargets(left, right)
 }

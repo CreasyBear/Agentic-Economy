@@ -9,7 +9,7 @@ import {
   createCustomerRequest,
   createPlanRevision,
   defineCapabilityContract,
-} from '@/modules/customer-request/public'
+} from '@/modules/customer-request/legacy-v1'
 import { createNeutralRoutingKernel, type CapabilityBindingAdapter } from '@/modules/routing-kernel/application'
 
 describe('customer request kernel router', () => {

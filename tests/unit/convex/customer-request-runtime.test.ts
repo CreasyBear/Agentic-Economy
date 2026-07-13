@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { preparedActionDigest } from '@/modules/customer-request/preparation'
-import type { PreparedAction } from '@/modules/customer-request/public'
+import type { PreparedAction } from '@/modules/customer-request/legacy-v1'
 import { claimPreparation, commitCompilation, completePreparation, getRequest, getRequestRevision, putPlanRevision, putRequest } from '../../../convex/customerRequests'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }

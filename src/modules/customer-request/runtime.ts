@@ -10,3 +10,9 @@ export {
   requestEvaluationValue,
   requestSnapshotValue,
 } from './internal/convex-schema'
+export {
+  capabilityContractRefV2Value,
+  customerRequestV2AggregateValue,
+  requestEvaluationCandidateV2Value,
+  requestFactV2Value,
+} from './internal/convex-v2-schema'

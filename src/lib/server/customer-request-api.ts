@@ -8,7 +8,6 @@ const bodySchema = z.object({
   idempotencyKey: z.string().trim().min(1).max(200), requestRef: z.string().trim().min(1).max(200),
   expectedRevision: z.number().int().nonnegative().optional(), agentRef: z.string().trim().min(1).max(200),
   request: z.string().trim().min(1).max(2_000),
-  knownFacts: z.record(z.string().trim().min(1).max(200), z.union([z.string().max(8_000), z.number().finite(), z.boolean()])).default({}),
   routing: z.object({
     network: z.string().trim().min(1).max(200).default('ae:public'), currency: z.string().regex(/^[A-Z]{3}$/).optional(),
     maximumSpendMinor: z.number().int().nonnegative().optional(), optimizeFor: z.enum(['cost', 'latency']).optional(),
@@ -30,7 +29,7 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
     const args = {
       compilationKey: parsed.data.idempotencyKey, requestId: parsed.data.requestRef,
       ...(parsed.data.expectedRevision === undefined ? {} : { expectedRevision: parsed.data.expectedRevision }),
-      delegatedAgentId: parsed.data.agentRef, customerJob: parsed.data.request, knownFacts: parsed.data.knownFacts,
+      delegatedAgentId: parsed.data.agentRef, customerJob: parsed.data.request,
       routing: {
         networkId: parsed.data.routing.network,
         ...(parsed.data.routing.currency === undefined ? {} : { currency: parsed.data.routing.currency }),

@@ -564,7 +564,7 @@ function assessCapabilityInput(
   const issues: Array<Readonly<{ inputPointer?: string; keyword: string }>> = []
   const accepted: Array<Readonly<{ semantic: CapabilityInputSemantic; value: JsonValue }>> = []
   for (const fact of draft.facts) {
-    if (!valueIsBoundedJson(fact.value)) {
+    if (!isBoundedJsonValue(fact.value)) {
       issues.push({ inputPointer: fact.inputPointer, keyword: 'value_too_complex' })
       if (issues.length >= MAX_VALIDATION_ISSUES) break
       continue
@@ -664,7 +664,7 @@ function setJsonPointer(root: Record<string, JsonValue>, pointer: string, value:
 }
 
 function validateDocument(validator: SchemaValidator, value: unknown): CapabilityDocumentValidation {
-  if (!valueIsBoundedJson(value)) {
+  if (!isBoundedJsonValue(value)) {
     return deepFreeze({
       kind: 'invalid',
       issues: [{ instancePointer: '', keyword: 'value_too_complex' }],
@@ -689,7 +689,7 @@ function cloneJsonValue(value: JsonValue): JsonValue {
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, cloneJsonValue(child)]))
 }
 
-function valueIsBoundedJson(value: unknown): value is JsonValue {
+export function isBoundedJsonValue(value: unknown): value is JsonValue {
   const active = new Set<object>()
   let nodes = 0
   function visit(candidate: unknown, depth: number): boolean {

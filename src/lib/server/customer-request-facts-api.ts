@@ -4,11 +4,15 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
-const literal = z.union([z.string().max(8_000), z.number().finite(), z.boolean()])
+const jsonValue: z.ZodType<null | boolean | number | string | readonly unknown[] | Readonly<Record<string, unknown>>> = z.lazy(() => z.union([
+  z.null(), z.boolean(), z.number().finite(), z.string().max(8_000),
+  z.array(jsonValue).max(256), z.record(z.string(), jsonValue),
+]))
 const bodySchema = z.object({
   idempotencyKey: z.string().trim().min(1).max(200),
   expectedRevision: z.number().int().positive(),
-  facts: z.record(z.string().trim().min(1).max(200), literal).refine((facts) => Object.keys(facts).length > 0 && Object.keys(facts).length <= 64),
+  requirementKey: z.string().trim().min(1).max(300),
+  value: jsonValue,
 }).strict()
 export type FactsResult = CustomerRequestProjection | CustomerRequestView | Readonly<{
   kind: 'refused'

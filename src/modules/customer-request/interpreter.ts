@@ -1,4 +1,4 @@
-import type { CustomerRequestInterpreter } from './compiler'
+import type { CustomerRequestInterpreter } from './legacy-compiler-v1'
 
 export type CustomerRequestInterpretationTransport = Readonly<{
   generateJson: (input: Readonly<{
