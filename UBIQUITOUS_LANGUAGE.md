@@ -28,6 +28,10 @@ _Avoid_: Missing planning data
 The registered evidence role and value type that must be produced for AE to claim the requested outcome reached its defined completion point.
 _Avoid_: Tool success, run completed
 
+**Action Preparation**:
+The durable pre-route state for one exact Plan Revision action. It binds current Request and capability semantics, missing commitment information, disclosure review, and reserved preparation authority before any concrete business release or option exists.
+_Avoid_: Prepared Action, quote, provider option
+
 **Prepared Action**:
 An exact, expiring business option with bound provider, cost, data use, terms, cancellation posture, evidence, and comparison context, ready for a customer decision.
 _Avoid_: Plan, quote preview
