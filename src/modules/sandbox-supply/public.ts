@@ -21,14 +21,61 @@ export const SANDBOX_OPTION_CAPABILITY_CONTRACT = Object.freeze({
   }),
 })
 
+export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
+  contractFormat: 'ae.capability-contract:v2' as const,
+  capabilityId: 'sandbox.reference.lookup',
+  version: 1,
+  name: 'Sandbox reference lookup',
+  description: 'Return one labelled sandbox result for a structured request.',
+  inputSchema: Object.freeze({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    properties: Object.freeze({ requestContext: Object.freeze({ type: 'string', minLength: 1 }) }),
+    required: Object.freeze(['requestContext']),
+    additionalProperties: false,
+  }),
+  outputSchema: Object.freeze({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    properties: Object.freeze({ optionSummary: Object.freeze({ type: 'string' }) }),
+    required: Object.freeze(['optionSummary']),
+    additionalProperties: false,
+  }),
+  customerAnnotations: Object.freeze([
+    Object.freeze({
+      annotationId: 'request_context', document: 'input' as const, pointer: '/requestContext',
+      label: 'Request details', role: 'request' as const,
+    }),
+    Object.freeze({
+      annotationId: 'option_summary', document: 'output' as const, pointer: '/optionSummary',
+      label: 'Option', role: 'completion_evidence' as const,
+    }),
+  ]),
+  dataUse: Object.freeze([Object.freeze({
+    effectId: 'request_release', inputPointer: '/requestContext', classification: 'public' as const,
+    phase: 'execution' as const, recipient: Object.freeze({ kind: 'selected_binding' as const }),
+    purposes: Object.freeze(['return_sandbox_result']),
+  })]),
+  effects: Object.freeze([Object.freeze({
+    effectId: 'request_release', class: 'data_release' as const,
+    authority: 'mandate_or_explicit' as const, reversibility: 'irreversible' as const,
+  })]),
+  evidence: Object.freeze([Object.freeze({
+    evidenceId: 'option_summary', outputPointer: '/optionSummary', purpose: 'completion' as const,
+  })]),
+  lifecycle: Object.freeze({ idempotency: 'required' as const, recovery: 'retry_safe' as const }),
+})
+
 export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
   one: Object.freeze({
     slug: 'sandbox-option-one', bindingId: 'sandbox.option.one:v1', nodeId: 'sandbox:option-one',
+    offeringId: 'offering:sandbox-option-one:reference-lookup', v2BindingId: 'binding:sandbox-option-one:http-json',
     label: 'Sandbox Option One', amountMinor: 1_200, latencyMs: 120,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),
   two: Object.freeze({
     slug: 'sandbox-option-two', bindingId: 'sandbox.option.two:v1', nodeId: 'sandbox:option-two',
+    offeringId: 'offering:sandbox-option-two:reference-lookup', v2BindingId: 'binding:sandbox-option-two:http-json',
     label: 'Sandbox Option Two', amountMinor: 900, latencyMs: 180,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),

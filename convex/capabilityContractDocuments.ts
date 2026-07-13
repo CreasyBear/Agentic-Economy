@@ -152,7 +152,7 @@ export const getActiveExactInternal = internalQuery({
   handler: async (ctx, ref) => await getActiveExactCapabilityContract(ctx.db, ref),
 })
 
-async function registerCapabilityContractDocument(
+export async function registerCapabilityContractDocument(
   db: MutationCtx['db'],
   documentJson: string,
   registeredAt: number,

@@ -21,6 +21,7 @@ const AdminActionMatrix = {
     set_operator_control: true,
     register_capability_binding: true,
     register_capability_contract: true,
+    register_capability_supply: true,
     control_kernel_incidents: true,
   },
   support: {
@@ -33,6 +34,7 @@ const AdminActionMatrix = {
     set_operator_control: false,
     register_capability_binding: false,
     register_capability_contract: false,
+    register_capability_supply: false,
     control_kernel_incidents: false,
   },
   reviewer: {
@@ -45,6 +47,7 @@ const AdminActionMatrix = {
     set_operator_control: false,
     register_capability_binding: false,
     register_capability_contract: false,
+    register_capability_supply: false,
     control_kernel_incidents: false,
   },
 } satisfies Record<AdminRole, Record<AdminAction, boolean>>
