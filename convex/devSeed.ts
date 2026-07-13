@@ -5,7 +5,7 @@ import { buildDevSeedCatalogState } from '../src/modules/dev/public'
 import { persistDevSeedCatalogState } from './devSeedStore'
 import { runtimeDb } from './source_state'
 import { registerCapabilityContract } from './customerRequestCapabilityContracts'
-import { registerCapabilityBinding } from './routingKernelBindings'
+import { addCommercialRelationshipToCapabilityBinding, registerCapabilityBinding } from './routingKernelBindings'
 import { SANDBOX_OPTION_CAPABILITY_CONTRACT, SANDBOX_PROVIDER_PROFILES } from '@/modules/sandbox-supply/public'
 
 export const seedDevCatalog = internalMutation({
@@ -39,12 +39,12 @@ async function registerSandboxSupply(db: Parameters<typeof registerCapabilityCon
   for (const [profileKey, profile] of profiles) {
     const business = await db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
     if (business === null) throw new Error(`sandbox_business_missing_${profile.slug}`)
-    const result = await registerCapabilityBinding(db, {
+    const registration = {
       bindingId: profile.bindingId, businessId: business._id, nodeId: profile.nodeId, networkId: 'ae:public',
       capabilityContractId: SANDBOX_OPTION_CAPABILITY_CONTRACT.capabilityContractId, operation: SANDBOX_OPTION_CAPABILITY_CONTRACT.operation,
-      admission: 'admitted', conformance: 'conformant',
+      admission: 'admitted' as const, conformance: 'conformant' as const,
       admissionEvidenceRefs: ['seed:sandbox-labelled-business'], conformanceEvidenceRefs: ['seed:production-protocol-contract-test'],
-      queryTerms: [...profile.queryTerms], adapterFeatures: { requestCancellation: 'unsupported', quotePreparation: 'structured_authorized' },
+      queryTerms: [...profile.queryTerms], adapterFeatures: { requestCancellation: 'unsupported' as const, quotePreparation: 'structured_authorized' as const },
       adapterFeatureEvidenceRefs: ['seed:structured-quote-handler'],
       commercialRelationship: {
         kind: 'none' as const, summary: 'Sandbox verification has no payment, sponsorship, rebate, or ownership relationship.',
@@ -53,7 +53,18 @@ async function registerSandboxSupply(db: Parameters<typeof registerCapabilityCon
       },
       endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}`, siteUrl).href,
       credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
-    }, registeredAt)
+    }
+    let result = await registerCapabilityBinding(db, registration, registeredAt)
+    if (result.kind === 'refused' && result.reason === 'binding_identity_conflict') {
+      const existing = await db.query('routingKernelBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', profile.bindingId)).unique()
+      if (existing !== null && existing.commercialRelationship === undefined) {
+        const upgraded = await addCommercialRelationshipToCapabilityBinding(db, {
+          bindingId: profile.bindingId, expectedRegistrationHash: existing.registrationHash,
+          commercialRelationship: registration.commercialRelationship, updatedAt: registeredAt,
+        })
+        if (upgraded.kind === 'updated') result = await registerCapabilityBinding(db, registration, registeredAt)
+      }
+    }
     if (result.kind !== 'registered') throw new Error(`sandbox_binding_registration_${result.reason}`)
     registered.push(result.bindingId)
   }

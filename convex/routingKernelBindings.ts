@@ -153,6 +153,36 @@ export async function registerCapabilityBinding(
     return { kind: 'registered' as const, bindingId: normalized.bindingId }
 }
 
+export async function addCommercialRelationshipToCapabilityBinding(
+  db: MutationCtx['db'],
+  input: Readonly<{
+    bindingId: string
+    expectedRegistrationHash: string
+    commercialRelationship: NonNullable<Infer<typeof bindingRegistration>['commercialRelationship']>
+    updatedAt: number
+  }>,
+) {
+  const relationship = normalizeCommercialRelationship(input.commercialRelationship)
+  if (relationship === undefined) return { kind: 'refused' as const, reason: 'commercial_relationship_invalid' as const }
+  const existing = await db.query('routingKernelBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
+  if (existing === null) return { kind: 'refused' as const, reason: 'binding_not_found' as const }
+  if (existing.registrationHash !== input.expectedRegistrationHash) return { kind: 'refused' as const, reason: 'binding_changed' as const }
+  if (existing.commercialRelationship !== undefined) return { kind: 'refused' as const, reason: 'commercial_relationship_already_registered' as const }
+  const registrationHash = canonicalAuthorityDigest({
+    bindingId: existing.bindingId, businessId: existing.businessId, nodeId: existing.nodeId,
+    networkId: existing.networkId, capabilityContractId: existing.capabilityContractId,
+    operation: existing.operation, admission: existing.admission, conformance: existing.conformance,
+    admissionEvidenceRefs: existing.admissionEvidenceRefs, conformanceEvidenceRefs: existing.conformanceEvidenceRefs,
+    queryTerms: existing.queryTerms,
+    adapterFeatures: existing.adapterFeatures ?? { requestCancellation: 'unsupported' as const, quotePreparation: 'public_query' as const },
+    adapterFeatureEvidenceRefs: existing.adapterFeatureEvidenceRefs ?? ['legacy:feature-profile-unsupported'],
+    commercialRelationship: relationship,
+    endpointUrl: existing.endpointUrl, credentialRef: existing.credentialRef,
+  })
+  await db.patch(existing._id, { commercialRelationship: relationship, registrationHash, updatedAt: input.updatedAt })
+  return { kind: 'updated' as const, bindingId: existing.bindingId, registrationHash }
+}
+
 export const listEligible = internalQuery({
   args: { networkId: v.string() },
   handler: async (ctx, args) => {

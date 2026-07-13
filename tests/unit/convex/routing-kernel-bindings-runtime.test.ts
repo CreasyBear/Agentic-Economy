@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { register, setEligibility } from '../../../convex/routingKernelBindings'
+import {
+  addCommercialRelationshipToCapabilityBinding,
+  register,
+  setEligibility,
+} from '../../../convex/routingKernelBindings'
 
 type Row = Record<string, unknown> & { _id: string }
 type RegisterArgs = {
@@ -94,6 +98,28 @@ describe('routing-kernel binding registration authority', () => {
       kind: 'refused', reason: 'commercial_relationship_invalid',
     })
     expect(db.rows('routingKernelBindings')).toEqual([])
+  })
+
+  it('adds evidence to one legacy binding with compare-and-swap and cannot overwrite it', async () => {
+    const db = database('owner_admin')
+    const legacy = args()
+    delete legacy.registration.commercialRelationship
+    await registerHandler({ db, auth: new FakeAuth(identity()) }, legacy)
+    const hash = String(db.rows('routingKernelBindings')[0]?.registrationHash)
+    const commercialRelationship = {
+      kind: 'none' as const, summary: 'No payment or ownership relationship.',
+      influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+      evidenceRefs: ['evidence:commercial-review:labels:v1'],
+    }
+
+    const upgraded = await addCommercialRelationshipToCapabilityBinding(db as never, {
+      bindingId: 'binding:labels', expectedRegistrationHash: hash, commercialRelationship, updatedAt: 2,
+    })
+    expect(upgraded).toMatchObject({ kind: 'updated', bindingId: 'binding:labels' })
+    expect(db.rows('routingKernelBindings')[0]).toMatchObject({ commercialRelationship })
+    await expect(addCommercialRelationshipToCapabilityBinding(db as never, {
+      bindingId: 'binding:labels', expectedRegistrationHash: hash, commercialRelationship, updatedAt: 3,
+    })).resolves.toEqual({ kind: 'refused', reason: 'binding_changed' })
   })
 
   it('revokes eligibility with evidence and rejects stale concurrent reviews', async () => {
