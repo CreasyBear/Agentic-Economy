@@ -334,7 +334,7 @@ function RegistryDemandCaptureEmptyState({ query, showClearSearch }: { query: st
         <VStack gap={4} className="w-full max-w-2xl">
           <VStack gap={2}>
             <Heading level={2}>No businesses here yet.</Heading>
-            <Text color="secondary" display="block">Tell us what you needed — we're expanding here.</Text>
+            <Text color="secondary" display="block">Tell us what you needed. We&apos;re expanding here.</Text>
           </VStack>
 
           {submittedOk ? (

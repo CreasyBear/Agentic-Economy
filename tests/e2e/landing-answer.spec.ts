@@ -41,13 +41,16 @@ test.describe('landing query -> thread answer', () => {
 })
 
 async function submitLandingQuery(page: Page, query: string) {
-  const searchbox = page.getByRole('search', { name: /find local service businesses/i }).getByRole('searchbox')
-  await expect(searchbox).toBeEditable({ timeout: 30_000 })
-  await searchbox.fill(query)
-  await expect(searchbox).toHaveValue(query)
-  const sendButton = page.getByRole('button', { name: /^send$/i })
-  await expect(sendButton).toBeEnabled()
-  await sendButton.click()
+  const search = page.getByRole('search', { name: /find local service businesses/i })
+  const searchbox = search.getByRole('searchbox')
+  const sendButton = search.getByRole('button', { name: /^find businesses$/i })
+  await expect(async () => {
+    await expect(searchbox).toBeEditable()
+    await searchbox.fill(query)
+    await expect(searchbox).toHaveValue(query)
+    await expect(sendButton).toBeEnabled()
+    await sendButton.click()
+  }).toPass({ timeout: 30_000 })
 }
 
 async function expectQueryInTranscript(page: Page, query: string) {

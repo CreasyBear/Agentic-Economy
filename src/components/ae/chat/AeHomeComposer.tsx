@@ -67,7 +67,7 @@ export function AeHomeComposer({ initialQuery = '', onThreadCreated }: AeHomeCom
         busy={busy}
         placeholder="Describe the outcome, place, timing, and limits you already know..."
         inputLabel="What do you need?"
-        ariaLabel="Start a decision thread"
+        ariaLabel="Find local service businesses"
         submitLabel="Find businesses"
       />
       <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">

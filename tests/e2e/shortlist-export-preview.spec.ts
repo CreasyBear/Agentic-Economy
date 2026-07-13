@@ -12,7 +12,7 @@ test.describe('shortlist export preview', () => {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await page.goto('/')
 
-    const search = page.getByRole('search', { name: 'Start a decision thread' })
+    const search = page.getByRole('search', { name: 'Find local service businesses' })
     const searchbox = search.getByRole('searchbox', { name: 'What do you need?' })
     const submit = search.getByRole('button', { name: 'Find businesses' })
     await expect(async () => {
@@ -20,17 +20,16 @@ test.describe('shortlist export preview', () => {
       await searchbox.fill(QUERY)
       await expect(searchbox).toHaveValue(QUERY)
       await expect(submit).toBeEnabled()
+      await submit.click()
     }).toPass({ timeout: 30_000 })
-    await Promise.all([
-      page.waitForURL(/\/t\//, { timeout: 30_000, waitUntil: 'load' }),
-      submit.click(),
-    ])
+    await page.waitForURL(/\/t\//, { timeout: 30_000, waitUntil: 'load' })
     await expect(page.getByRole('heading', { name: 'Your shortlist is ready' })).toBeVisible({ timeout: 30_000 })
 
     const actions = page.getByLabel('Shortlist actions')
-    await actions.getByRole('button', { name: 'Copy' }).click()
-
-    await expect(page.getByRole('dialog', { name: 'Export preview' })).toBeVisible()
+    await expect(async () => {
+      await actions.getByRole('button', { name: 'Copy' }).click()
+      await expect(page.getByRole('dialog', { name: 'Export preview' })).toBeVisible()
+    }).toPass({ timeout: 15_000 })
     expect(await clipboardWrites(page)).toEqual([])
 
     const dialog = page.getByRole('dialog', { name: 'Export preview' })

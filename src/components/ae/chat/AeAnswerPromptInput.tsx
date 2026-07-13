@@ -131,7 +131,12 @@ function AeAnswerPromptInputInner({
   }
 
   return (
-    <form className={`flex w-full min-w-0 flex-col${compact ? ' gap-2' : ' gap-3'}`} onSubmit={handleFormSubmit}>
+    <form
+      role="search"
+      aria-label={ariaLabel}
+      className={`flex w-full min-w-0 flex-col${compact ? ' gap-2' : ' gap-3'}`}
+      onSubmit={handleFormSubmit}
+    >
       <fieldset className="grid gap-2" disabled={busy || !hydrated}>
         <legend className="text-sm font-medium text-primary">When do you need this?</legend>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="When do you need this?">
@@ -165,8 +170,6 @@ function AeAnswerPromptInputInner({
       </fieldset>
       <ChatComposer
         className="w-full min-w-0"
-        role="search"
-        aria-label={ariaLabel}
         value={value}
         onChange={updateValue}
         onSubmit={submitQuery}

@@ -27,8 +27,10 @@ test.describe('public owner routes', () => {
 
     await expect(page.getByRole('heading', { name: /who does what, near you/i })).toBeVisible()
     await expect(page.getByLabel('Business, service, or place')).toBeVisible()
-    await expect(page.getByText('Parramatta Emergency Plumbing')).toBeVisible()
-    await expect(page.getByLabel('Parramatta Emergency Plumbing').getByText('Needs confirmation', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Parramatta Emergency Plumbing').getByText('Parramatta Emergency Plumbing', { exact: true })).toBeVisible()
+    const plumbingCard = page.getByLabel('Parramatta Emergency Plumbing')
+    await expect(plumbingCard.getByText('No reply history yet', { exact: true })).toBeVisible()
+    await expect(plumbingCard.getByText('Phone not published here', { exact: true })).toBeVisible()
     await expect(page.getByText(/Compare local businesses by service/i)).toBeVisible()
     await expect(page.getByText('Published businesses', { exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: /list your business, free/i })).toBeVisible()
@@ -39,12 +41,12 @@ test.describe('public owner routes', () => {
     await page.getByLabel('Business, service, or place').fill('emergency plumber parramatta')
     await page.getByRole('button', { name: /^search businesses$/i }).click()
     await expect(page).toHaveURL(/q=emergency\+plumber\+parramatta/)
-    await expect(page.getByRole('link', { name: /view details/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing?from=registry')
+    await expect(page.getByRole('link', { name: /view parramatta emergency plumbing/i })).toHaveAttribute('href', '/parramatta-emergency-plumbing?from=registry')
 
     await page.getByLabel('Business, service, or place').fill('fremantle locksmith')
     await page.getByRole('button', { name: /^search businesses$/i }).click()
     await expect(page.getByText('No businesses here yet.')).toBeVisible()
-    await expect(page.getByRole('link', { name: /list your business, free/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /own a business.*list it free/i })).toBeVisible()
     await expect(page.getByRole('link', { name: /clear search/i })).toBeVisible()
 
     const bodyText = await page.locator('body').innerText()

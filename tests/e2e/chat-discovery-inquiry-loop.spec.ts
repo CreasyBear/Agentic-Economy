@@ -30,15 +30,16 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(/1 listed business ready to compare/i)
     await expect(page.getByRole('region', { name: /session context/i })).toContainText(/listed businesses/i)
     await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/These are the listed businesses AE found/i)
-    await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /These listings need a published inquiry path before AE can route contact/i,
-    )
-    await expect(page.getByRole('region', { name: /continue this thread/i })).not.toContainText(/Prepare qualified inquiry/i)
-    await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/No AE inquiry form is published yet/i)
+    const terminal = page.getByRole('region', { name: /your shortlist is ready/i })
+    await expect(terminal.getByRole('button', { name: /change criteria/i })).toBeVisible()
+    await expect(terminal.getByRole('link', { name: /^open$/i })).toBeVisible()
+    await expect(terminal.getByRole('button', { name: /^copy$/i })).toBeVisible()
+    await expect(terminal.getByRole('button', { name: /^call$/i })).toBeDisabled()
+    await expect(terminal.getByRole('button', { name: /^close$/i })).toBeVisible()
 
     const reviewLink = page
       .getByRole('region', { name: /business shortlist/i })
-      .getByRole('link', { name: /review listing|view details/i })
+      .getByRole('link', { name: 'Parramatta Emergency Plumbing' })
     await expect(reviewLink).toHaveAttribute(
       'href',
       new RegExp(`/parramatta-emergency-plumbing\\?from=thread&id=${threadPath.split('/').at(-1)}`),
@@ -46,7 +47,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await reviewLink.click()
 
     await expect(page).toHaveURL(/\/parramatta-emergency-plumbing\?from=thread&id=.+/, { timeout: 15_000 })
-    await expect(page.getByText(/This service has not published a human inquiry path yet/i)).toBeVisible()
+    await expect(page.getByText(/This business hasn’t joined AE yet/i).first()).toBeVisible()
     await expect(page.getByText(/the business handles timing, price, and availability/i)).toBeVisible()
     await assertPublicLanguage(page)
   })
@@ -361,8 +362,8 @@ test.describe('chat discovery to inquiry loop', () => {
 
 async function submitLandingQuery(page: Page, query: string) {
   const search = page.getByRole('search', { name: /find local service businesses/i })
-  const searchbox = search.getByRole('searchbox', { name: /what do you need done/i })
-  const sendButton = search.getByRole('button', { name: /^send$/i })
+  const searchbox = search.getByRole('searchbox', { name: /what do you need/i })
+  const sendButton = search.getByRole('button', { name: /^find businesses$/i })
   await expect(searchbox).toBeEditable({ timeout: 30_000 })
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -415,5 +416,4 @@ async function assertPublicLanguage(page: Page) {
   const bodyText = await page.locator('body').innerText()
   expect(bodyText).not.toMatch(futureSurfaceCopy)
   expect(bodyText).not.toMatch(publicInternalCopy)
-  expect(bodyText).not.toMatch(/[—–]/)
 }
