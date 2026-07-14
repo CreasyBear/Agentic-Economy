@@ -496,6 +496,7 @@ async function openPreparation(
     contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
     offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
   }))
   if (requestRegistrySnapshotDigest(registryBindings) !== revision.aggregate.evaluation.registrySnapshotDigest) {
     return { kind: 'needs_attention' as const, reason: 'capability_graph_changed' as const }

@@ -496,6 +496,7 @@ function route(input: Readonly<{
         annotationId: 'result_reference', label: 'Result reference', role: 'completion_evidence',
         guaranteed: true, schemaIdentity: 'schema:result-reference' as never,
       }],
+      cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       recovery: { idempotency: 'required', recovery: 'retry_safe' },
     }],
     edges: [],

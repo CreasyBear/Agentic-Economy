@@ -8,9 +8,12 @@ import {
   type CapabilityInputKey, type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { evaluateCustomerRequestSnapshot } from '@/modules/customer-request/evaluation'
 import {
+  createCustomerRequestRoutePlanGeneration,
+  type CustomerRequestRoutePlanGeneration,
   writableCustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
@@ -57,6 +60,55 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       commands: await ctx.db.query('customerRequestV2Commands').collect(),
     }))
     expect(persisted).toMatchObject({ heads: [{}], revisions: [{}], commands: [{}] })
+  })
+
+  it('replays a pre-#172 detached generation while refusing the same cancellation omission as a new write', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const command = {
+      commandKey: 'command:v2:historical-cancellation-replay',
+      commandDigest: canonicalDigest({ command: 'historical-cancellation-replay' }),
+      expectedRevision: 0,
+      expectedRouteGeneration: 0,
+      aggregate,
+      routeGeneration,
+    }
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
+      .resolves.toMatchObject({ kind: 'stored' })
+    const historicalGeneration = preCancellationRouteGeneration(routeGeneration)
+    const historicalWritable = writableCustomerRequestRoutePlanGeneration(historicalGeneration)
+    await backend.run(async (ctx) => {
+      const stored = await ctx.db.query('customerRequestV2RoutePlanGenerations').first()
+      const storedCommand = await ctx.db.query('customerRequestV2Commands').first()
+      const head = await ctx.db.query('customerRequestV2RoutePlanHeads').first()
+      if (stored === null || storedCommand === null || head === null) {
+        throw new Error('historical route generation fixture missing')
+      }
+      await ctx.db.replace(stored._id, {
+        requestId: stored.requestId,
+        generation: historicalGeneration.generation,
+        generationRef: historicalGeneration.generationRef,
+        generationDigest: historicalGeneration.generationDigest,
+        requestRevision: stored.requestRevision,
+        routeGeneration: historicalWritable,
+        recordedAt: stored.recordedAt,
+      })
+      await ctx.db.patch(storedCommand._id, {
+        resultingRouteGenerationRef: historicalGeneration.generationRef,
+      })
+      await ctx.db.patch(head._id, {
+        currentGenerationRef: historicalGeneration.generationRef,
+        currentGenerationDigest: historicalGeneration.generationDigest,
+      })
+    })
+    const historicalCommand = { ...command, routeGeneration: historicalWritable }
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, historicalCommand))
+      .resolves.toEqual({ kind: 'replayed', requestId: aggregate.snapshot.requestId, revision: 1 })
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      ...historicalCommand,
+      commandKey: 'command:v2:historical-cancellation-new-write',
+      commandDigest: canonicalDigest({ command: 'historical-cancellation-new-write' }),
+    })).resolves.toEqual({ kind: 'aggregate_invalid' })
   })
 
   it('converges identical route material and durably replays the refresh command without history churn', async () => {
@@ -446,6 +498,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
         businessId: candidate.businessId, offeringId: candidate.offeringId, bindingId: candidate.bindingId,
         model, offeringRegistrationHash: candidate.offeringRegistrationHash,
         bindingRegistrationHash: candidate.bindingRegistrationHash,
+        cancellation: candidate.cancellation,
       })),
       proposedActions: actions,
       resolveModel: () => model,
@@ -628,6 +681,7 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       contractRef: model.contractRef, offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
+      cancellation: binding.cancellation,
       ...(publication === undefined ? {} : {
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
@@ -677,6 +731,7 @@ async function compileRefreshCandidate(
       contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
       offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
+      cancellation: binding.cancellation,
       ...(publication === undefined ? {} : {
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
@@ -691,6 +746,52 @@ async function compileRefreshCandidate(
       routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
     }),
   }
+}
+
+function preCancellationRouteGeneration(
+  generation: CustomerRequestRoutePlanGeneration,
+): CustomerRequestRoutePlanGeneration {
+  const decisionSnapshot = generation.decisionSnapshot
+  if (decisionSnapshot === undefined) throw new Error('decision snapshot fixture missing')
+  const historical = writableCustomerRequestRoutePlanGeneration(generation)
+  for (const route of historical.routes) {
+    for (const step of route.steps) Reflect.deleteProperty(step, 'cancellation')
+  }
+  const routeIdByCurrentId = new Map<string, string>()
+  for (const route of historical.routes) {
+    const { routeDigest: _routeDigest, ...routeMaterial } = route
+    const {
+      routePlanId: currentRoutePlanId,
+      fallbacks: _fallbacks,
+      comparison,
+      ...routeCoreWithoutComparison
+    } = routeMaterial
+    const { ordering: _ordering, ...baseComparison } = comparison
+    routeIdByCurrentId.set(currentRoutePlanId, `route:${canonicalDigest({
+      ...routeCoreWithoutComparison,
+      comparison: baseComparison,
+    } as StableHashValue)}`)
+  }
+  for (const route of historical.routes) {
+    const currentRoutePlanId = route.routePlanId
+    route.routePlanId = routeIdByCurrentId.get(currentRoutePlanId) ?? currentRoutePlanId
+    for (const alternative of route.fallbacks.alternatives) {
+      alternative.alternativeRouteRef = routeIdByCurrentId.get(alternative.alternativeRouteRef)
+        ?? alternative.alternativeRouteRef
+    }
+    const { routeDigest: _routeDigest, ...routeMaterial } = route
+    route.routeDigest = canonicalDigest(routeMaterial as StableHashValue)
+  }
+  return createCustomerRequestRoutePlanGeneration({
+    generation: historical.generation,
+    requestId: historical.requestId,
+    requestRevision: historical.requestRevision,
+    compiler: historical.compiler,
+    registrySnapshotDigest: historical.registrySnapshotDigest,
+    decisionSnapshot,
+    routes: historical.routes,
+    createdAt: historical.createdAt,
+  })
 }
 
 async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {

@@ -148,6 +148,26 @@ export function routePlanGenerationMatchesAggregate(
     }))
 }
 
+/**
+ * Historical generations may predate binding-owned cancellation metadata and
+ * remain readable. Every generation admitted by current source must carry an
+ * explicit posture on every step before it can be committed or authorized.
+ */
+export function routePlanGenerationOwnsCancellationPosture(
+  generation: CustomerRequestRoutePlanGeneration,
+): boolean {
+  return generation.routes.every((route) => route.steps.every((step) => {
+    const cancellation: unknown = (step as Readonly<{ cancellation?: unknown }>).cancellation
+    if (!isRecord(cancellation)
+      || (cancellation.kind !== 'unsupported' && cancellation.kind !== 'adapter_managed')
+      || !Array.isArray(cancellation.evidenceRefs)
+      || cancellation.evidenceRefs.length === 0) return false
+    return cancellation.evidenceRefs.every((reference) => (
+      typeof reference === 'string' && reference.trim().length > 0 && reference.length <= 500
+    ))
+  }))
+}
+
 export function routePlanGenerationDecisionSnapshot(
   aggregate: Pick<CustomerRequestV2Aggregate, 'snapshot' | 'evaluation' | 'plan'>,
 ): CustomerRequestRoutePlanDecisionSnapshot {
@@ -261,4 +281,8 @@ function routePlanGenerationDigestMaterial(
     authority: generation.authority,
     createdAt: generation.createdAt,
   }
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

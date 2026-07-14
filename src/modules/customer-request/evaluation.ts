@@ -8,6 +8,7 @@ import {
   type JsonValue,
   type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
+import type { CapabilityCancellation } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -42,6 +43,7 @@ export type RequestEvaluationCandidateInput = Readonly<{
   publicationRevision?: number
   readinessValidUntil?: number
   price?: RegisteredSupplyPrice
+  cancellation: CapabilityCancellation
 }>
 
 export type RegisteredEvaluationBinding = Readonly<{
@@ -55,6 +57,7 @@ export type RegisteredEvaluationBinding = Readonly<{
   publicationRevision?: number
   readinessValidUntil?: number
   price?: RegisteredSupplyPrice
+  cancellation: CapabilityCancellation
 }>
 
 export type RequestEvaluationCandidate = Readonly<{
@@ -71,6 +74,7 @@ export type RequestEvaluationCandidate = Readonly<{
   publicationRevision?: number
   readinessValidUntil?: number
   price?: RegisteredSupplyPrice
+  cancellation: CapabilityCancellation
   viability:
     | Readonly<{ kind: 'viable' }>
     | Readonly<{ kind: 'blocked_on_information'; inputs: readonly MissingInputDescriptor[] }>
@@ -221,6 +225,10 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
       ...(candidate.publicationRevision === undefined ? {} : { publicationRevision: candidate.publicationRevision }),
       ...(candidate.readinessValidUntil === undefined ? {} : { readinessValidUntil: candidate.readinessValidUntil }),
       ...(candidate.price === undefined ? {} : { price: candidate.price }),
+      cancellation: {
+        ...candidate.cancellation,
+        evidenceRefs: [...candidate.cancellation.evidenceRefs],
+      },
       viability: assessment.kind === 'viable'
         ? Object.freeze({ kind: 'viable' as const })
         : assessment.kind === 'needs_information' && unmappedMissing.length > 0
@@ -362,6 +370,10 @@ export function discoverRequestEvaluationCandidates(input: Readonly<{
       ...(binding.publicationRevision === undefined ? {} : { publicationRevision: binding.publicationRevision }),
       ...(binding.readinessValidUntil === undefined ? {} : { readinessValidUntil: binding.readinessValidUntil }),
       ...(binding.price === undefined ? {} : { price: binding.price }),
+      cancellation: {
+        ...binding.cancellation,
+        evidenceRefs: [...binding.cancellation.evidenceRefs],
+      },
     })]
   }).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
 }
@@ -375,6 +387,7 @@ export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvalu
     offeringRegistrationHash: binding.offeringRegistrationHash,
     bindingRegistrationHash: binding.bindingRegistrationHash,
     ...(binding.price === undefined ? {} : { price: binding.price }),
+    cancellation: binding.cancellation,
   })).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
 }
 

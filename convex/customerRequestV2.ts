@@ -30,6 +30,7 @@ import {
   routePlanGenerationMatchesRequest,
   routePlanGenerationMatchesAggregate,
   routePlanGenerationMaterialDigest,
+  routePlanGenerationOwnsCancellationPosture,
   routePlanGenerationOwnsDecisionSnapshot,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
@@ -159,6 +160,10 @@ export const commitAggregate = internalMutation({
       const verified = await readVerifiedCommandReplay(ctx.db, prior)
       if (verified.kind !== 'current') throw new Error('customer_request_v2_command_integrity_failure')
       return { kind: 'replayed' as const, requestId: prior.requestId, revision: prior.resultingRevision }
+    }
+    if (candidateGeneration !== undefined
+      && !routePlanGenerationOwnsCancellationPosture(candidateGeneration)) {
+      return { kind: 'aggregate_invalid' as const }
     }
     const context = await validateAggregateAgainstCurrentCapabilityGraph(ctx.db, args.aggregate, args.routeGeneration)
     if (context === 'stale') return { kind: 'context_stale' as const }
@@ -292,7 +297,8 @@ export const refreshRoutePlanGeneration = internalMutation({
       || !Number.isSafeInteger(args.expectedGeneration) || args.expectedGeneration < 1
       || !aggregateIsInternallyConsistent(args.candidateAggregate, args.expectedRequestRevision - 1)
       || (args.candidateRouteGeneration !== undefined
-        && !routePlanGenerationOwnsDecisionSnapshot(domainRouteGeneration(args.candidateRouteGeneration)))
+        && (!routePlanGenerationOwnsDecisionSnapshot(domainRouteGeneration(args.candidateRouteGeneration))
+          || !routePlanGenerationOwnsCancellationPosture(domainRouteGeneration(args.candidateRouteGeneration))))
       || !routePlanGenerationMatchesAggregate(
         domainRouteGeneration(args.candidateRouteGeneration),
         domainAggregate(args.candidateAggregate),
@@ -980,6 +986,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     offeringRegistrationHash: offering.registrationHash,
     bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
     ...(publication === undefined ? {} : {
       publicationRef: publication.publicationRef, publicationRevision: publication.revision,
       readinessValidUntil: publication.readinessValidUntil,

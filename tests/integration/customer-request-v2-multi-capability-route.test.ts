@@ -128,6 +128,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+        cancellation: binding.cancellation,
       }]),
       models: [upstreamModel, downstreamModel], now: Date.now(),
     })
@@ -209,6 +210,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+        cancellation: binding.cancellation,
       }]),
       models: [upstreamModel, downstreamModel], now: Date.now() + 1,
     })
@@ -247,6 +249,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+        cancellation: binding.cancellation,
       }]),
       models: [upstreamModel, downstreamModel], now: Date.now() + 2,
     })

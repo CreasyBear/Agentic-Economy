@@ -1043,6 +1043,10 @@ type EligibleSupply = Readonly<{
   binding: Readonly<{
     bindingId: string; offeringId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
     registrationHash: string
+    cancellation: Readonly<{
+      kind: 'unsupported' | 'adapter_managed'
+      evidenceRefs: readonly string[]
+    }>
   }>
 }>
 type EligibleSupplyResult = Readonly<
@@ -1111,6 +1115,10 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
       offeringRegistrationHash: item.offering.registrationHash,
       bindingRegistrationHash: item.binding.registrationHash,
       price: item.offering.presentation.price,
+      cancellation: {
+        ...item.binding.cancellation,
+        evidenceRefs: [...item.binding.cancellation.evidenceRefs],
+      },
       ...(item.publication === undefined ? {} : {
         publicationRef: item.publication.publicationRef,
         publicationRevision: item.publication.revision,
