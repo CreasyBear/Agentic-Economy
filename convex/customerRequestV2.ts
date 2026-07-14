@@ -35,8 +35,12 @@ import {
 } from '@/modules/customer-request/route-plan-generation'
 
 import { internalMutation, internalQuery, type QueryCtx } from './_generated/server'
+import type { Id } from './_generated/dataModel'
 import { listEligibleCapabilitySupply } from './capabilitySupply'
-import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import {
+  getActiveExactCapabilityContract,
+  getExactRegisteredCapabilityContract,
+} from './capabilityContractDocuments'
 
 type Aggregate = Infer<typeof customerRequestV2AggregateValue>
 type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
@@ -68,6 +72,19 @@ const currentAggregateResult = v.union(
 )
 const routePlanGenerationResult = v.union(
   v.object({ kind: v.literal('found'), routeGeneration: routePlanGenerationV2Value }),
+  v.object({ kind: v.literal('not_found') }),
+)
+const routePlanProjectionMaterialResult = v.union(
+  v.object({
+    kind: v.literal('found'),
+    current: routePlanGenerationV2Value,
+    previous: v.optional(routePlanGenerationV2Value),
+    businesses: v.array(v.object({ businessId: v.string(), name: v.string() })),
+    capabilities: v.array(v.object({
+      capabilityId: v.string(), version: v.number(), contractDigest: v.string(),
+      name: v.string(), description: v.string(), resultLabels: v.array(v.string()),
+    })),
+  }),
   v.object({ kind: v.literal('not_found') }),
 )
 const commandReplayResult = v.union(
@@ -608,6 +625,86 @@ export const getRoutePlanGeneration = internalQuery({
   args: { requestId: v.string(), generationRef: v.string() },
   returns: routePlanGenerationResult,
   handler: async (ctx, args) => await readExactRoutePlanGeneration(ctx.db, args.requestId, args.generationRef),
+})
+
+export const getCurrentRoutePlanProjectionMaterial = internalQuery({
+  args: { requestId: v.string() },
+  returns: routePlanProjectionMaterialResult,
+  handler: async (ctx, args) => {
+    const current = await ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (current?.currentGenerationRef === undefined) return { kind: 'not_found' as const }
+    const currentReadback = await readExactRoutePlanGeneration(
+      ctx.db, args.requestId, current.currentGenerationRef,
+    )
+    if (currentReadback.kind !== 'found'
+      || currentReadback.routeGeneration.generation !== current.currentGeneration
+      || currentReadback.routeGeneration.generationDigest !== current.currentGenerationDigest) {
+      throw new Error('customer_request_route_plan_projection_head_integrity_failure')
+    }
+    const previousRow = current.currentGeneration <= 1
+      ? null
+      : await ctx.db.query('customerRequestV2RoutePlanGenerations')
+          .withIndex('by_requestId_and_generation', (query) => (
+            query.eq('requestId', args.requestId).eq('generation', current.currentGeneration - 1)
+          )).unique()
+    if (current.currentGeneration > 1 && previousRow === null) {
+      throw new Error('customer_request_route_plan_projection_history_integrity_failure')
+    }
+    const previous = previousRow?.routeGeneration
+    if (previous !== undefined && !routePlanGenerationIsInternallyConsistent(
+      domainRouteGeneration(previous), previous.generation - 1,
+    )) throw new Error('customer_request_route_plan_projection_history_integrity_failure')
+
+    const businessIds = [...new Set([
+      ...currentReadback.routeGeneration.routes,
+      ...(previous?.routes ?? []),
+    ].flatMap((route) => route.steps.map(({ businessId }) => businessId)))].sort()
+    if (businessIds.length > 512) {
+      throw new Error('customer_request_route_plan_projection_business_limit_exceeded')
+    }
+    const businesses = []
+    for (const businessId of businessIds) {
+      const business = await ctx.db.get(businessId as Id<'businesses'>)
+      if (business === null) throw new Error('customer_request_route_plan_projection_business_integrity_failure')
+      businesses.push({ businessId, name: business.name })
+    }
+    const contractRefs = [...new Map([
+      ...currentReadback.routeGeneration.routes,
+      ...(previous?.routes ?? []),
+    ].flatMap((route) => route.steps.map(({ contractRef }) => [
+      `${contractRef.capabilityId}@${contractRef.version}:${contractRef.contractDigest}`,
+      contractRef,
+    ] as const))).values()]
+    if (contractRefs.length > 512) {
+      throw new Error('customer_request_route_plan_projection_capability_limit_exceeded')
+    }
+    const capabilities = []
+    for (const ref of contractRefs) {
+      const exact = await getExactRegisteredCapabilityContract(ctx.db, ref)
+      if (exact.kind !== 'found') {
+        throw new Error('customer_request_route_plan_projection_capability_integrity_failure')
+      }
+      capabilities.push({
+        capabilityId: exact.contract.ref.capabilityId,
+        version: exact.contract.ref.version,
+        contractDigest: exact.contract.ref.contractDigest,
+        name: exact.contract.name,
+        description: exact.contract.description,
+        resultLabels: exact.contract.customerAnnotations
+          .filter(({ document, role }) => document === 'output'
+            && (role === 'result' || role === 'completion_evidence'))
+          .map(({ label }) => label),
+      })
+    }
+    return {
+      kind: 'found' as const,
+      current: currentReadback.routeGeneration,
+      ...(previous === undefined ? {} : { previous }),
+      businesses,
+      capabilities,
+    }
+  },
 })
 
 export const getCommandReplay = internalQuery({

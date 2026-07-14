@@ -3,7 +3,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
 import type {
-  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView,
+  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRoutePlanDecision,
 } from './agent-contract'
 
 export type CustomerRequestState =
@@ -216,17 +216,18 @@ export function projectNeedsAttention(input: Readonly<{
 export function projectRoutePlansReady(input: Readonly<{
   requestRef: string
   revision: number
-  routeGenerationRef: string
   summary: string
+  decision: CustomerRoutePlanDecision
   criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
   return requestView({
     requestRef: input.requestRef,
     revision: input.revision,
-    routeGenerationRef: input.routeGenerationRef,
-    state: 'routes_ready',
+    routeGenerationRef: input.decision.generationRef,
+    state: input.decision.outcome.kind === 'routes_expired' ? 'needs_attention' : 'routes_ready',
     summary: input.summary,
-    nextAction: 'wait',
+    nextAction: input.decision.outcome.kind === 'routes_expired' ? 'retry' : 'inspect_routes',
+    decision: input.decision,
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
   })
 }
@@ -296,6 +297,7 @@ function requestView(input: Readonly<{
   optionSet?: CustomerOptionSet
   preparedAction?: CustomerPreparedAction
   action?: CustomerRequestView['action']
+  decision?: CustomerRoutePlanDecision
 }>): CustomerRequestView {
   return Object.freeze({
     kind: 'request',
@@ -319,6 +321,7 @@ function requestView(input: Readonly<{
       ...input.action,
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),
     }) }),
+    ...(input.decision === undefined ? {} : { decision: input.decision }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })
 }

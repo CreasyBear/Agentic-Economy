@@ -311,13 +311,22 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       throw new Error('single route generation missing')
     }
     const clock = vi.spyOn(Date, 'now').mockReturnValue(first.routeGeneration.routes[0].expiresAt + 1)
+    await expect(customer.action(api.customerRequestApplication.resume, {
+      requestRef: submitted.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'needs_attention', nextAction: 'retry',
+      decision: {
+        generationRef: submitted.routeGenerationRef,
+        outcome: { kind: 'routes_expired' }, routes: [{ availability: 'expired' }],
+      },
+    })
     await observeReady(backend, published, 'single-resolver-renewed')
     const compared = await customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef, revision: submitted.revision,
       idempotencyKey: 'compare:single-route-renewed',
     })
     expect(compared).toMatchObject({
-      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'wait',
+      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: expect.any(String),
     })
     if (compared.kind !== 'request') throw new Error('single route refresh failed')
@@ -333,7 +342,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRef: submitted.requestRef, revision: submitted.revision,
       idempotencyKey: 'compare:single-route-renewed-again',
     })).resolves.toMatchObject({
-      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'wait',
+      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: compared.routeGenerationRef,
     })
     const afterSecondCompare = await backend.run(async (ctx) => (
@@ -343,7 +352,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: submitted.requestRef,
     })).resolves.toMatchObject({
-      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'wait',
+      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: compared.routeGenerationRef,
     })
     clock.mockRestore()
@@ -426,10 +435,41 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(compared).toMatchObject({
       kind: 'request', requestRef: submitted.requestRef, revision: submitted.revision,
-      state: 'routes_ready', nextAction: 'wait',
+      state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: persisted.routeGenerationRef,
+      decision: {
+        generationRef: persisted.routeGenerationRef,
+        requestRevision: 1,
+        outcome: { kind: 'routes_available', routeCount: 1 },
+        routes: [{
+          result: {
+            summary: downstreamDocument.description,
+            deliverables: ['Quote reference'],
+          },
+          businesses: [{ name: 'Route resolver' }, { name: 'Route quoter' }],
+          stepCount: 2,
+          maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
+          dataUse: { recipients: expect.arrayContaining([
+            expect.objectContaining({ name: 'Route resolver', purposes: ['resolve_service_reference'] }),
+            expect.objectContaining({ name: 'Carrier network', purposes: ['prepare_service_quote'] }),
+          ]) },
+          effects: [{ kind: 'information_shared', reversibility: 'irreversible' }],
+          evidence: [
+            { label: 'Service reference', purpose: 'completion' },
+            { label: 'Quote reference', purpose: 'completion' },
+          ],
+          fallback: { available: false, alternatives: [] },
+          recovery: [
+            { step: 1, businessName: 'Route resolver', posture: 'retry_safe' },
+            { step: 2, businessName: 'Route quoter', posture: 'reconcile_required' },
+          ],
+        }],
+        changes: { kind: 'initial' },
+        nextBoundary: { kind: 'confirmation', authorityCreated: false },
+      },
     })
-    expect(compared).not.toHaveProperty('routes')
+    if (compared.kind !== 'request') throw new Error('route decision missing')
+    expect(JSON.stringify(compared.decision)).not.toMatch(/capabilityId|bindingId|offeringId|publicationRef|transport|graph/u)
 
     const firstGenerationRef = persisted.routeGenerationRef
     const expiredClock = vi.spyOn(Date, 'now').mockReturnValue(route.expiresAt + 1)
@@ -442,7 +482,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(refreshedComparison).toMatchObject({
       kind: 'request', requestRef: submitted.requestRef, revision: submitted.revision,
-      state: 'routes_ready', nextAction: 'wait', routeGenerationRef: expect.any(String),
+      state: 'routes_ready', nextAction: 'inspect_routes', routeGenerationRef: expect.any(String),
     })
     if (refreshedComparison.kind !== 'request' || refreshedComparison.routeGenerationRef === undefined) {
       throw new Error('refreshed generation reference missing')
@@ -481,12 +521,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       idempotencyKey: 'compare:multi-capability:price-only',
     })
     expect(priceRefresh).toMatchObject({
-      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'wait',
+      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: expect.any(String),
     })
     if (priceRefresh.kind !== 'request' || priceRefresh.routeGenerationRef === undefined) {
       throw new Error('price-only generation missing')
     }
+    expect(priceRefresh.decision?.changes).toMatchObject({
+      kind: 'changed', previousGenerationRef: refreshedGenerationRef,
+      items: expect.arrayContaining([expect.objectContaining({ kind: 'maximum_cost' })]),
+    })
+    if (priceRefresh.decision?.changes.kind !== 'changed') throw new Error('price-only delta missing')
+    expect(priceRefresh.decision.changes.items.map(({ kind }) => kind)).not.toContain('businesses')
     const priceGeneration = await backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
       requestId: submitted.requestRef, generationRef: priceRefresh.routeGenerationRef,
     })
@@ -547,7 +593,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       idempotencyKey: 'compare:multi-capability:contract-refresh',
     })
     expect(contractRefresh).toMatchObject({
-      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'wait',
+      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: expect.any(String),
     })
     if (contractRefresh.kind !== 'request' || contractRefresh.routeGenerationRef === undefined) {
@@ -592,7 +638,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       idempotencyKey: 'compare:multi-capability:route-shape-refresh',
     })
     expect(routeShapeRefresh).toMatchObject({
-      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'wait',
+      kind: 'request', revision: 1, state: 'routes_ready', nextAction: 'inspect_routes',
       routeGenerationRef: expect.any(String),
     })
     if (routeShapeRefresh.kind !== 'request' || routeShapeRefresh.routeGenerationRef === undefined) {

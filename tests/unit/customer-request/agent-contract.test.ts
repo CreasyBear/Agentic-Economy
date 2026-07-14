@@ -60,4 +60,14 @@ describe('Customer Request agent contract', () => {
       }).success).toBe(true)
     }
   })
+
+  it('rejects an empty routes-ready shell', () => {
+    const shell = {
+      kind: 'request', requestRef: 'request:route', revision: 2,
+      routeGenerationRef: 'generation:two', state: 'routes_ready',
+      summary: 'Ways forward are available.', nextAction: 'inspect_routes',
+      missingFields: [], criteria: [], options: [],
+    }
+    expect(customerRequestViewSchema.safeParse(shell).success).toBe(false)
+  })
 })

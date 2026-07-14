@@ -20,11 +20,38 @@ const projection = {
   kind: 'request' as const,
   requestRef,
   revision: 2,
-  state: 'ready_to_compare' as const,
-  summary: 'Ready to compare',
-  nextAction: 'prepare_options' as const,
+  routeGenerationRef: 'generation:parity',
+  state: 'routes_ready' as const,
+  summary: 'One way forward is available.',
+  nextAction: 'inspect_routes' as const,
   missingFields: [],
   options: [],
+  decision: {
+    generationRef: 'generation:parity', requestRevision: 2,
+    outcome: { kind: 'routes_available' as const, routeCount: 1, summary: 'One way forward is available.' },
+    routes: [{
+      routeRef: 'route:opaque',
+      result: {
+        resultRef: 'route:opaque', summary: 'Prepare a governed result.', deliverables: ['Result reference'],
+      },
+      availability: 'current' as const, stepCount: 1,
+      businesses: [{ businessRef: 'business:opaque', name: 'North Star Services' }],
+      maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+      dataUse: {
+        recipientCount: 1,
+        recipients: [{
+          recipientRef: 'recipient:opaque', name: 'North Star Services', purposes: ['Prepare result'],
+        }],
+        purposes: ['Prepare result'],
+      },
+      effects: [{ kind: 'information_shared' as const, reversibility: 'irreversible' as const }],
+      evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
+      recovery: [{ step: 1, businessName: 'North Star Services', posture: 'retry_safe' as const }],
+      validUntil: 50_000, fallback: { available: false, alternatives: [] }, uncertainty: [],
+    }],
+    changes: { kind: 'initial' as const },
+    nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
+  },
 }
 const authenticate = async () => ({
   isAuthenticated: true as const,
