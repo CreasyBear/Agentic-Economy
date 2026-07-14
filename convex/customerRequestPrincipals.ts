@@ -39,13 +39,16 @@ export const recordAgentPrincipal = internalMutation({
 export const getAgentPrincipal = internalQuery({
   args: { principalId: v.string() },
   returns: v.union(v.object({
-    principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
+    principalId: v.string(), ownerId: v.string(), ownerTokenIdentifier: v.optional(v.string()),
+    credentialId: v.string(), scopes: v.array(v.string()),
   }), v.null()),
   handler: async (ctx, args) => {
     const row = await ctx.db.query('customerRequestAgentPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
     return row === null ? null : {
-      principalId: row.principalId, ownerId: row.ownerId, credentialId: row.credentialId, scopes: row.scopes,
+      principalId: row.principalId, ownerId: row.ownerId,
+      ...(row.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: row.ownerTokenIdentifier }),
+      credentialId: row.credentialId, scopes: row.scopes,
     }
   },
 })

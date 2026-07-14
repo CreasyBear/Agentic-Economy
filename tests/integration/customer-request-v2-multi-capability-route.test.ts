@@ -478,6 +478,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await expect(backend.action(api.customerRequestApplication.resume, {
       ...resumeCommand, serviceAuth: { ...resumeAuth, scopes: [...resumeAuth.scopes] },
     })).resolves.toEqual(confirmed)
+    const owner = backend.withIdentity({
+      subject: principal.ownerId,
+      issuer: 'https://identity.example',
+      tokenIdentifier: `https://identity.example|${principal.ownerId}`,
+    })
+    await expect(owner.action(api.customerRequestApplication.resume, resumeCommand)).resolves.toEqual(confirmed)
     await backend.run(async (ctx) => {
       expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toEqual([])
     })
@@ -667,6 +673,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         requestRevision: 1,
         outcome: { kind: 'routes_available', routeCount: 1 },
         routes: [{
+          quoteDigest: expect.any(String),
           result: {
             summary: downstreamDocument.description,
             deliverables: ['Quote reference'],
@@ -694,6 +701,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       },
     })
     if (compared.kind !== 'request') throw new Error('route decision missing')
+    const projectedQuoteDigest = compared.decision?.routes[0]?.quoteDigest
+    expect(projectedQuoteDigest).toBeTruthy()
+    expect(projectedQuoteDigest).not.toContain(route.routePlanId)
     expect(JSON.stringify(compared.decision)).not.toMatch(/capabilityId|bindingId|offeringId|publicationRef|transport|graph/u)
 
     const firstGenerationRef = persisted.routeGenerationRef

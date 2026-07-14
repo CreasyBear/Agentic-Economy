@@ -23,6 +23,8 @@ type ProjectionRoute = Readonly<{
     publicationRef: string
     contractRef: Readonly<{ capabilityId: string; version: number; contractDigest: string }>
     dataUse: readonly Readonly<{
+      inputPointer: string
+      classification: 'public' | 'personal' | 'sensitive' | 'credential'
       recipient:
         | Readonly<{ kind: 'candidate_binding' | 'selected_binding' }>
         | Readonly<{ kind: 'named_recipient'; recipientId: string }>
@@ -124,8 +126,23 @@ function projectRoute(
   }))), (requirement) => JSON.stringify(requirement))
   const actionPosition = new Map(route.steps.map((step, index) => [step.actionId, index + 1]))
   const cancellation = routeCancellation(route)
+  const routeRef = customerRouteRef(generationRef, route.routePlanId)
+  const quoteDigest = canonicalDigest({
+    contract: 'ae.customer-route-quote:v1',
+    generationRef,
+    routeRef,
+    maximumTotalCost: route.maximumTotalCost,
+    recipients,
+    effects,
+    evidence,
+    recovery: route.steps.map(({ businessId, recovery }) => ({ businessId, recovery })),
+    cancellation,
+    validUntil: route.expiresAt,
+    fallbacks: route.fallbacks,
+  } as StableHashValue)
   return Object.freeze({
-    routeRef: customerRouteRef(generationRef, route.routePlanId),
+    routeRef,
+    quoteDigest,
     result: routeResult(route, capabilitySemantics),
     availability: route.expiresAt <= now ? 'expired' as const : 'current' as const,
     stepCount: route.steps.length,
@@ -391,7 +408,11 @@ function keyedByResult<Value extends object>(
 }
 
 function routeRecipients(route: Route, businessNames: BusinessNames) {
-  const recipients = new Map<string, { name: string; purposes: Set<string> }>()
+  const recipients = new Map<string, {
+    name: string
+    purposes: Set<string>
+    fields: Map<string, { fieldRef: string; label: string; classification: 'public' | 'personal' | 'sensitive' | 'credential' }>
+  }>()
   for (const step of route.steps) {
     for (const use of step.dataUse) {
       const identity = use.recipient.kind === 'named_recipient'
@@ -402,8 +423,14 @@ function routeRecipients(route: Route, businessNames: BusinessNames) {
           ? readableName(use.recipient.recipientId)
           : businessName(step.businessId, businessNames),
         purposes: new Set<string>(),
+        fields: new Map(),
       }
       for (const purpose of use.purposes) existing.purposes.add(purpose)
+      existing.fields.set(`${use.inputPointer}:${use.classification}`, {
+        fieldRef: `field:${canonicalDigest({ inputPointer: use.inputPointer, classification: use.classification })}`,
+        label: readableName(use.inputPointer.replace(/^\/+|\/+$/gu, '')),
+        classification: use.classification,
+      })
       recipients.set(identity, existing)
     }
   }
@@ -411,6 +438,7 @@ function routeRecipients(route: Route, businessNames: BusinessNames) {
     recipientRef: `recipient:${canonicalDigest({ identity })}`,
     name: recipient.name,
     purposes: [...recipient.purposes].sort(),
+    fields: [...recipient.fields.values()].sort((left, right) => left.fieldRef.localeCompare(right.fieldRef)),
   })).sort((left, right) => left.recipientRef.localeCompare(right.recipientRef))
 }
 

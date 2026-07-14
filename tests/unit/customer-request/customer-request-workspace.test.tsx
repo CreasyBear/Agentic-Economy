@@ -155,6 +155,7 @@ describe('customer Request workspace', () => {
         outcome: { kind: 'routes_available', routeCount: 1, summary: 'One way forward is available.' },
         routes: [{
           routeRef: 'route:opaque',
+          quoteDigest: 'quote:opaque',
           result: {
             resultRef: 'route:opaque', summary: 'Prepare a governed result.', deliverables: ['Result reference'],
           },
@@ -167,8 +168,8 @@ describe('customer Request workspace', () => {
           dataUse: {
             recipientCount: 2,
             recipients: [
-              { recipientRef: 'recipient:one', name: 'North Star Services', purposes: ['Find the service'] },
-              { recipientRef: 'recipient:two', name: 'City Ledger', purposes: ['Prepare the result'] },
+              { recipientRef: 'recipient:one', name: 'North Star Services', purposes: ['Find the service'], fields: [{ fieldRef: 'field:request', label: 'Request', classification: 'public' }] },
+              { recipientRef: 'recipient:two', name: 'City Ledger', purposes: ['Prepare the result'], fields: [{ fieldRef: 'field:result', label: 'Result', classification: 'personal' }] },
             ],
             purposes: ['Find the service', 'Prepare the result'],
           },
@@ -230,6 +231,8 @@ describe('customer Request workspace', () => {
     expect(screen.getByRole('heading', { name: 'Prepare a governed result.' })).toBeTruthy()
     expect(screen.getByText('Through North Star Services and City Ledger')).toBeTruthy()
     expect(screen.getByText('Maximum $14.00')).toBeTruthy()
+    expect(screen.getByText('Option fingerprint quote:opaque')).toBeTruthy()
+    expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
     expect(screen.getByText(/Information would be shared/)).toBeTruthy()
@@ -279,6 +282,10 @@ describe('customer Request workspace', () => {
     expect(await screen.findByText('Choice confirmed')).toBeTruthy()
     expect(screen.getByText(/Nothing has started yet/)).toBeTruthy()
     expect(screen.getByText('Confirmation reference confirmation:opaque')).toBeTruthy()
+    expect(screen.getByText(`Option fingerprint ${route.quoteDigest}`)).toBeTruthy()
+    expect(screen.getByText('No uncertainty is declared for this choice.')).toBeTruthy()
+    expect(screen.getByText('No alternative way is currently declared.')).toBeTruthy()
+    expect(screen.getByText(/Step 1, Business route:confirm: AE can safely retry/)).toBeTruthy()
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aconfirm/confirmation', expect.objectContaining({
       method: 'POST',
     }))
@@ -415,6 +422,7 @@ describe('customer Request workspace', () => {
 
     expect(await screen.findByText('Current way forward 1')).toBeTruthy()
     expect(screen.getByText('Expired way forward')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check current options' })).toBeTruthy()
   })
 
   it('turns a decision conflict into an explicit resume action', async () => {
@@ -449,6 +457,7 @@ describe('customer Request workspace', () => {
 function routeChoice(routeRef: string, availability: 'current' | 'expired') {
   return {
     routeRef,
+    quoteDigest: `quote:${routeRef}`,
     result: { resultRef: routeRef, summary: `Result from ${routeRef}`, deliverables: ['Result reference'] },
     availability,
     stepCount: 1,

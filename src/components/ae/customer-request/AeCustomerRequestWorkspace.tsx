@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
+import { Skeleton } from '@astryxdesign/core/Skeleton'
 
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
@@ -232,7 +233,7 @@ function RequestResult({ state, compare, confirmRoute, authorize, refresh, conti
     return <RouteConfirmationCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request' && state.projection.decision !== undefined) {
-    return <RouteDecisionCard projection={state.projection} turns={turns} confirm={(routeRef) => confirmRoute(state.projection, routeRef)} edit={() => edit(state.projection)} restart={restart} />
+    return <RouteDecisionCard projection={state.projection} turns={turns} confirm={(routeRef) => confirmRoute(state.projection, routeRef)} check={() => compare(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
@@ -242,7 +243,8 @@ function RequestResult({ state, compare, confirmRoute, authorize, refresh, conti
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification projection={state.projection} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a supported decision from the registered businesses for this request yet.</Text>}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
-  if (state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'confirming' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : state.kind === 'confirming' ? 'Confirming your choice…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
+  if (state.kind === 'confirming') return <ConfirmationLoadingCard />
+  if (state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
 }
 
@@ -253,10 +255,11 @@ function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 
   return 'This operation key was already used for different work.'
 }
 
-function RouteDecisionCard({ projection, turns, confirm, edit, restart }: {
+function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }: {
   projection: CustomerRequestView
   turns: readonly ConversationTurn[]
   confirm: (routeRef: string) => Promise<void>
+  check: () => Promise<void>
   edit: () => void
   restart: () => void
 }) {
@@ -289,6 +292,7 @@ function RouteDecisionCard({ projection, turns, confirm, edit, restart }: {
             {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">
               Expected result: {route.result.deliverables.join(', ')}
             </Text>}
+            <Text type="supporting" color="secondary">Option fingerprint {route.quoteDigest}</Text>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -310,7 +314,7 @@ function RouteDecisionCard({ projection, turns, confirm, edit, restart }: {
               ? <Text color="secondary">No information sharing is declared for this way forward.</Text>
               : <ul className="grid gap-2 text-sm text-secondary">
                   {route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>
-                    <strong>{recipient.name}</strong> — {recipient.purposes.map(readableLabel).join(', ')}
+                    <strong>{recipient.name}</strong> — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}
                   </li>)}
                 </ul>}
           </div>
@@ -366,7 +370,7 @@ function RouteDecisionCard({ projection, turns, confirm, edit, restart }: {
           </div>
           {route.availability === 'current' && route.maximumTotalCost.kind === 'known'
             ? <Button label={`Confirm ${route.result.summary.replace(/[.!?]+$/u, '')}`} variant="primary" clickAction={() => void confirm(route.routeRef)} />
-            : null}
+            : <Button label="Check current options" variant="secondary" clickAction={() => void check()} />}
         </article>
       </Card>)}
     </div>
@@ -401,15 +405,32 @@ function RouteConfirmationCard({ projection, turns, edit, restart }: {
           <div><Text type="supporting" weight="semibold">Maximum cost</Text><Text type="large" weight="semibold">{route.maximumTotalCost.kind === 'known' ? formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor) : 'Not confirmed'}</Text></div>
           <div><Text type="supporting" weight="semibold">Confirmed until</Text><Text color="secondary">{formatOptionTime(confirmation.validUntil)}</Text></div>
         </div>
-        <div><Text weight="semibold">Information recipients</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}</li>)}</ul></div>
+        <div><Text weight="semibold">Information recipients</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}</li>)}</ul></div>
         <div><Text weight="semibold">What could change</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
         <div><Text weight="semibold">Evidence expected</Text><Text color="secondary" className="mt-1">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</Text></div>
-        <div><Text weight="semibold">Cancellation and recovery</Text><Text color="secondary" className="mt-1">{route.cancellation.summary} {route.recovery.some(({ posture }) => posture === 'reconcile_required') ? 'AE must check what happened before retrying some steps.' : 'Confirmed failures can be retried safely.'}</Text></div>
+        <div><Text weight="semibold">What still needs confirmation</Text><Text color="secondary" className="mt-1">{route.uncertainty.length === 0 ? 'No uncertainty is declared for this choice.' : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text></div>
+        <div><Text weight="semibold">Fallback</Text><Text color="secondary" className="mt-1">{route.fallback.available ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before work starts.` : 'No alternative way is currently declared.'}</Text></div>
+        <div><Text weight="semibold">Cancellation</Text><Text color="secondary" className="mt-1">{route.cancellation.summary}</Text></div>
+        <div><Text weight="semibold">Recovery by step</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.recovery.map((recovery) => <li key={recovery.step}>Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe' ? 'AE can safely retry after a confirmed failure.' : 'AE must check what happened before any retry.'}</li>)}</ul></div>
+        <Text type="supporting" color="secondary">Option fingerprint {route.quoteDigest}</Text>
         <Text type="supporting" color="secondary">Confirmation reference {confirmation.confirmationRef}</Text>
       </div>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
   </section>
+}
+
+function ConfirmationLoadingCard() {
+  return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite" aria-busy="true">
+    <div className="grid gap-5">
+      <Skeleton height="1rem" width="8rem" index={0} />
+      <Skeleton height="2.25rem" width="72%" index={1} />
+      <Skeleton height="1rem" width="55%" index={2} />
+      <div className="grid gap-4 sm:grid-cols-2"><Skeleton height="4rem" width="100%" index={3} /><Skeleton height="4rem" width="100%" index={4} /></div>
+      <Skeleton height="7rem" width="100%" index={5} />
+      <Text color="secondary">Confirming your choice. Nothing is being purchased, booked, or started.</Text>
+    </div>
+  </Card>
 }
 
 function DecisionChanges({ changes, routes }: {

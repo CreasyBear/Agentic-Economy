@@ -12,6 +12,7 @@
  */
 
 import type { AnyAction } from '@/modules/common/action'
+import { customerRequestConfirmAction } from '@/modules/customer-request/customer-request.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
 import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 import {
@@ -23,6 +24,7 @@ import { updateOwnerNotificationPreferencesAction } from '@/modules/settings/set
 import { storefrontImportDraftAction } from '@/modules/storefront/storefront.actions'
 
 const actions: readonly AnyAction[] = [
+  customerRequestConfirmAction,
   submitInquiryAction,
   readCustomerRecordAction,
   registryListAction,

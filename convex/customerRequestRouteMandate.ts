@@ -19,7 +19,7 @@ import {
   routeMandateValue,
 } from '@/modules/customer-request/runtime'
 
-import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
+import { env, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import {
   aggregateIsInternallyConsistent,
   currentRoutePlanGenerationGraphStatus,
@@ -593,7 +593,7 @@ async function authenticateRequestOwnerForMutation(
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   if (head === null) return { kind: 'not_found' }
   if (identity === null) {
-    const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+    const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
     const proof = serviceAuthorization
     if (proof === undefined || key === undefined || key.length < 32
       || proof.command.requestRef !== requestId
@@ -604,9 +604,10 @@ async function authenticateRequestOwnerForMutation(
     if (head.principalId !== proof.assertion.principalId) return { kind: 'not_found' }
     const recorded = await ctx.db.query('customerRequestAgentPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', proof.assertion.principalId)).unique()
+    const recordedScopes = new Set(recorded?.scopes ?? [])
     if (recorded === null || recorded.ownerId !== proof.assertion.ownerId
       || recorded.credentialId !== proof.assertion.credentialId
-      || !proof.assertion.scopes.every((scope) => recorded.scopes.includes(scope))) {
+      || !proof.assertion.scopes.every((scope) => recordedScopes.has(scope))) {
       return { kind: 'unauthenticated' }
     }
     return authenticatedRequest(head.principalId, {

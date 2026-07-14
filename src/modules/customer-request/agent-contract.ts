@@ -118,6 +118,10 @@ const customerRouteMaximumCostSchema = z.union([
 ])
 const customerRouteRecipientSchema = z.object({
   recipientRef: z.string(), name: z.string(), purposes: z.array(z.string()),
+  fields: z.array(z.object({
+    fieldRef: z.string(), label: z.string(),
+    classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
+  }).strict()),
 }).strict()
 const customerRouteEffectSchema = z.object({
   kind: z.enum(['information_shared', 'financial_commitment', 'external_change']),
@@ -144,6 +148,7 @@ const customerRouteResultChangeSchema = customerRouteResultSchema.extend({
 
 const customerRoutePlanSchema = z.object({
   routeRef: z.string(),
+  quoteDigest: z.string(),
   result: customerRouteResultSchema,
   availability: z.enum(['current', 'expired']),
   stepCount: safePositiveInteger,
@@ -422,5 +427,7 @@ export type CustomerOptionSet = DeepReadonly<z.infer<typeof customerOptionSetSch
 export type CustomerRoutePlan = DeepReadonly<z.infer<typeof customerRoutePlanSchema>>
 export type CustomerRoutePlanDecision = DeepReadonly<z.infer<typeof customerRoutePlanDecisionSchema>>
 export type CustomerRouteConfirmation = DeepReadonly<z.infer<typeof customerRouteConfirmationSchema>>
+export type CustomerRequestRouteConfirmationInput = DeepReadonly<z.infer<typeof customerRequestRouteConfirmationInputSchema>>
+export type CustomerRequestAgentResult = DeepReadonly<z.infer<typeof customerRequestAgentResultSchema>>
 export type CustomerPreparedAction = DeepReadonly<z.infer<typeof customerPreparedActionSchema>>
 export type CustomerRequestView = DeepReadonly<z.infer<typeof customerRequestViewSchema>>

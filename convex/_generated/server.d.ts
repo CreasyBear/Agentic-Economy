@@ -25,6 +25,7 @@ import type { DataModel } from "./dataModel.js";
  * Typesafe environment variables declared in `convex.config.ts`.
  */
 type Env = {
+  readonly AE_CONVEX_SERVER_FUNCTION_TOKEN: string | undefined;
   readonly AE_CUSTOMER_REQUEST_MODEL: string | undefined;
   readonly AE_SITE_URL: string | undefined;
   readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;

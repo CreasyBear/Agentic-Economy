@@ -11,6 +11,7 @@ import {
 } from '@/modules/capability-contract/public'
 import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { CustomerRoutePlan } from '@/modules/customer-request/agent-contract'
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
@@ -159,6 +160,11 @@ const customerRouteMaximumCost = v.union(
 )
 const customerRouteRecipient = v.object({
   recipientRef: v.string(), name: v.string(), purposes: v.array(v.string()),
+  fields: v.array(v.object({
+    fieldRef: v.string(), label: v.string(), classification: v.union(
+      v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential'),
+    ),
+  })),
 })
 const customerRouteEffect = v.object({
   kind: v.union(
@@ -183,7 +189,7 @@ const customerRouteResultChange = v.object({
   position: v.optional(v.number()),
 })
 const customerRoute = v.object({
-  routeRef: v.string(), result: customerRouteResult,
+  routeRef: v.string(), quoteDigest: v.string(), result: customerRouteResult,
   availability: v.union(v.literal('current'), v.literal('expired')),
   stepCount: v.number(), businesses: v.array(customerBusiness),
   maximumTotalCost: customerRouteMaximumCost,
@@ -552,19 +558,7 @@ export const resume = action({
             currentMandate.mandate.route.routePlanId,
           )
         ))
-        if (route !== undefined) return writableView(projectRouteConfirmed({
-          requestRef: args.requestRef,
-          revision: current.aggregate.snapshot.revision,
-          criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
-          confirmation: {
-            confirmationRef: `confirmation:${canonicalDigest({ authorityRef: currentMandate.mandate.mandateRef })}`,
-            generationRef: currentMandate.mandate.route.generationRef,
-            requestRevision: currentMandate.mandate.request.requestRevision,
-            confirmedAt: currentMandate.mandate.issuedAt,
-            validUntil: currentMandate.mandate.expiresAt,
-            route,
-          },
-        }))
+        if (route !== undefined) return projectConfirmedRoute(current.aggregate, route, currentMandate.mandate)
       }
     }
     if (current.aggregate.outcome !== 'plan_ready') {
@@ -678,10 +672,7 @@ export const confirmRoute = action({
     const route = preview.decision.routes.find(({ routeRef }) => routeRef === args.routeRef)
     if (route === undefined) return preview
     if (route.availability !== 'current') return preview
-    if (route.maximumTotalCost.kind !== 'known') return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: args.revision,
-      summary: 'The price must be confirmed before you can choose this option.',
-    }))
+    if (route.maximumTotalCost.kind !== 'known') return preview
     const routeReadback: Readonly<
       | { kind: 'found'; routeGeneration: StoredRouteGeneration }
       | { kind: 'not_found' }
@@ -710,19 +701,7 @@ export const confirmRoute = action({
       }),
     })
     if (result.kind === 'issued' || result.kind === 'replayed') {
-      return writableView(projectRouteConfirmed({
-        requestRef: args.requestRef,
-        revision: args.revision,
-        criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
-        confirmation: {
-          confirmationRef: `confirmation:${canonicalDigest({ authorityRef: result.mandate.mandateRef })}`,
-          generationRef: preview.decision.generationRef,
-          requestRevision: args.revision,
-          confirmedAt: result.mandate.issuedAt,
-          validUntil: result.mandate.expiresAt,
-          route,
-        },
-      }))
+      return projectConfirmedRoute(current.aggregate, route, result.mandate)
     }
     if (result.kind === 'conflict') {
       if (result.reason === 'command_changed') return {
@@ -1930,6 +1909,32 @@ function projectStoredAggregate(
   }))
 }
 
+function projectConfirmedRoute(
+  aggregate: StoredAggregate | CustomerRequestV2Aggregate,
+  route: CustomerRoutePlan,
+  mandate: Readonly<{
+    mandateRef: string
+    route: Readonly<{ generationRef: string }>
+    request: Readonly<{ requestRevision: number }>
+    issuedAt: number
+    expiresAt: number
+  }>,
+): ActionResult {
+  return writableView(projectRouteConfirmed({
+    requestRef: aggregate.snapshot.requestId,
+    revision: aggregate.snapshot.revision,
+    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    confirmation: {
+      confirmationRef: `confirmation:${canonicalDigest({ authorityRef: mandate.mandateRef })}`,
+      generationRef: mandate.route.generationRef,
+      requestRevision: mandate.request.requestRevision,
+      confirmedAt: mandate.issuedAt,
+      validUntil: mandate.expiresAt,
+      route,
+    },
+  }))
+}
+
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
   const { disclosureReview, optionSet, clarification, preparedAction, action, decision, confirmation } = view
   return {
@@ -2028,12 +2033,27 @@ async function resolveRequestCaller(
 ): Promise<RequestCaller | undefined> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity !== null) {
+    const requestRef = typeof command.requestRef === 'string' ? command.requestRef : undefined
+    if (requestRef !== undefined) {
+      const current = await loadCurrent(ctx, requestRef)
+      if (current.kind === 'current' && current.aggregate.snapshot.principalId !== identity.tokenIdentifier) {
+        const agentPrincipal = await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
+          principalId: current.aggregate.snapshot.principalId,
+        })
+        if (agentPrincipal?.ownerTokenIdentifier === identity.tokenIdentifier) {
+          return {
+            principalId: agentPrincipal.principalId,
+            delegatedAgentId: agentPrincipal.principalId,
+          }
+        }
+      }
+    }
     return {
       principalId: identity.tokenIdentifier,
       delegatedAgentId: delegatedAgentId ?? identity.tokenIdentifier,
     }
   }
-  const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+  const key = env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
   if (assertion === undefined || key === undefined || key.length < 32
     || !assertion.scopes.includes('customer_requests:create')) return undefined
   const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })

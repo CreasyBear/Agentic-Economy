@@ -1,5 +1,6 @@
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
-import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
+import { ConvexSourceError } from '@/lib/server/convex-source'
+import { customerRequestConfirmAction } from '@/modules/customer-request/customer-request.actions'
 import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
 import {
   customerRequestAgentResultSchema,
@@ -11,7 +12,6 @@ export type ConfirmationResult = CustomerRequestProjection | Readonly<{
   reason: 'authentication_required' | 'request_not_found' | 'interpreter_unavailable' | 'capabilities_unavailable'
 }>
 
-const confirmAction = sourceAction<Record<string, unknown>, ConfirmationResult>('customerRequestApplication:confirmRoute')
 type HandlerOptions = Readonly<{ confirm?: (args: Record<string, unknown>) => Promise<ConfirmationResult> }>
 
 export async function handleCustomerRequestConfirmationPost(
@@ -28,7 +28,10 @@ export async function handleCustomerRequestConfirmationPost(
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
   try {
     const result = customerRequestAgentResultSchema.parse(
-      await (options.confirm ?? (async (input) => await callSourceAction(confirmAction, input)))({
+      await (options.confirm ?? (async (input) => await customerRequestConfirmAction.run({
+        data: customerRequestConfirmAction.schema.parse(input),
+        context: { request },
+      })))({
         requestRef, ...parsed.data,
       }),
     )

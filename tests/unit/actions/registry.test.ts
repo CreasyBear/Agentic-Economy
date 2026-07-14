@@ -24,6 +24,21 @@ describe('action registry', () => {
     expect(ids).toContain('registry.detail')
   })
 
+  it('registers route confirmation as one bounded cross-surface action', () => {
+    const action = findAction('customerRequest.confirm')
+    expect(action).toBeDefined()
+    expect(action?.readOnly).toBe(false)
+    expect(action?.surfaces).toEqual(['ui', 'http', 'agentJson'])
+    expect(action?.parameters.map(({ name }) => name)).toEqual([
+      'requestRef', 'revision', 'routeRef', 'idempotencyKey',
+    ])
+    expect(action?.boundaries.join(' ')).toMatch(/Does not start, book, charge, dispatch, contact, or fulfil/u)
+    expect(action?.schema.safeParse({
+      requestRef: 'request:one', revision: 2, routeRef: 'route-choice:one', idempotencyKey: 'confirm:one',
+      maximumSpendMinor: 1,
+    }).success).toBe(false)
+  })
+
   it('registers storefront import for owner UI and HTTP but not quiet agent tools', () => {
     const action = findAction('storefront.importDraft')
     expect(action).toBeDefined()

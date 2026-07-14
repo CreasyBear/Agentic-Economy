@@ -23,6 +23,7 @@ describe('RoutePlan customer projection', () => {
       outcome: { kind: 'routes_available', routeCount: 1 },
       routes: [{
         routeRef: customerRouteRef('generation:1', 'route:one'),
+        quoteDigest: expect.any(String),
         result: {
           summary: 'Prepare a governed result for the customer.',
           deliverables: ['Result reference'],
@@ -80,6 +81,13 @@ describe('RoutePlan customer projection', () => {
         }],
       }],
     })
+    const previousDecision = projectCustomerRoutePlanDecision({
+      current: previous,
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+    expect(decision.routes[0]?.quoteDigest).not.toBe(previousDecision.routes[0]?.quoteDigest)
   })
 
   it('makes an expired generation legible without discarding its exact routes', () => {
@@ -230,6 +238,9 @@ describe('RoutePlan customer projection', () => {
         recipientRef: expect.stringMatching(/^recipient:/u),
         name: 'North Star Services',
         purposes: ['confirm_result', 'prepare_result'],
+        fields: [{
+          fieldRef: expect.stringMatching(/^field:/u), label: 'Request', classification: 'public',
+        }],
       }],
       purposes: ['confirm_result', 'prepare_result'],
     })

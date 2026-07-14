@@ -43,6 +43,7 @@ function routeDecisionProjection() {
       outcome: { kind: 'routes_available' as const, routeCount: 1, summary: 'One way forward is available.' },
       routes: [{
         routeRef: 'route:opaque',
+        quoteDigest: 'quote:opaque',
         result: {
           resultRef: 'route:opaque', summary: 'Prepare a governed result.', deliverables: ['Result reference'],
         },
@@ -53,6 +54,7 @@ function routeDecisionProjection() {
           recipientCount: 1,
           recipients: [{
             recipientRef: 'recipient:opaque', name: 'North Star Services', purposes: ['Prepare result'],
+            fields: [{ fieldRef: 'field:request', label: 'Request', classification: 'public' as const }],
           }],
           purposes: ['Prepare result'],
         },
