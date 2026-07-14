@@ -130,13 +130,18 @@ describe('labelled sandbox V2 capability supply', () => {
       )),
       audits: await ctx.db.query('auditEvents').collect(),
     }))
-    expect(state.publications).toMatchObject([{
-      publicationRef: first.sandboxCapabilityPublicationRef,
-      bindingId: 'binding:sandbox-option-one:http-json:v3',
-      credentialState: 'unobserved',
-      healthState: 'unobserved',
-      readinessEvidenceRefs: [],
-    }])
+    expect(state.publications).toMatchObject([
+      {
+        publicationRef: first.sandboxCapabilityPublicationRef,
+        bindingId: 'binding:sandbox-option-one:http-json:v3',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      },
+      {
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v2',
+        bindingId: 'binding:sandbox-option-two:http-json:v3',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      },
+    ])
     expect(state.bindings.find((binding) => binding.bindingId === state.publications[0]?.bindingId))
       .toMatchObject({ credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY' })
     await expect(backend.query(api.capabilitySupply.queryCapabilityGraph, {
