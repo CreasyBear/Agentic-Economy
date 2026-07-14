@@ -198,7 +198,6 @@ export const commitAggregate = internalMutation({
         ? {}
         : { nextGenerationRef: args.routeGeneration.generationRef }),
       reason: 'request_revised',
-      recordedAt: snapshot.recordedAt,
     })
 
     await ctx.db.insert('customerRequestV2Revisions', {
@@ -406,7 +405,6 @@ export const refreshRoutePlanGeneration = internalMutation({
           ? {}
           : { nextGenerationRef: resultingGeneration.generationRef }),
         reason: 'route_generation_superseded',
-        recordedAt: candidate.snapshot.recordedAt,
       })
     }
     await ctx.db.insert('customerRequestV2RoutePlanGenerationCommands', {
@@ -993,25 +991,7 @@ export async function currentRoutePlanGenerationGraphStatus(
     limit: 64,
   })
   if (currentSupply.kind !== 'available') return 'stale'
-  const bindings: RegisteredEvaluationBinding[] = currentSupply.supplies.map(({ offering, binding, publication }) => ({
-    businessId: String(offering.businessId),
-    offeringId: offering.offeringId,
-    bindingId: binding.bindingId,
-    contractRef: {
-      capabilityId: binding.capabilityId,
-      version: binding.version,
-      contractDigest: binding.contractDigest,
-    },
-    offeringRegistrationHash: offering.registrationHash,
-    bindingRegistrationHash: binding.registrationHash,
-    price: offering.presentation.price,
-    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
-    ...(publication === undefined ? {} : {
-      publicationRef: publication.publicationRef,
-      publicationRevision: publication.revision,
-      readinessValidUntil: publication.readinessValidUntil,
-    }),
-  }))
+  const bindings = registeredEvaluationBindingsFromEligibleSupply(currentSupply)
   if (requestRegistrySnapshotDigest(bindings) !== generation.routeGeneration.registrySnapshotDigest) return 'invalid'
   const routesAreCurrent = generation.routeGeneration.routes.every((route) => (
     route.expiresAt > Date.now()
@@ -1033,6 +1013,35 @@ export async function currentRoutePlanGenerationGraphStatus(
     )))
   ))
   return routesAreCurrent ? 'current' : 'stale'
+}
+
+type AvailableEligibleCapabilitySupply = Extract<
+  Awaited<ReturnType<typeof listEligibleCapabilitySupply>>,
+  { kind: 'available' }
+>
+
+function registeredEvaluationBindingsFromEligibleSupply(
+  supply: AvailableEligibleCapabilitySupply,
+): RegisteredEvaluationBinding[] {
+  return supply.supplies.map(({ offering, binding, publication }) => ({
+    businessId: String(offering.businessId),
+    offeringId: offering.offeringId,
+    bindingId: binding.bindingId,
+    contractRef: {
+      capabilityId: binding.capabilityId,
+      version: binding.version,
+      contractDigest: binding.contractDigest,
+    },
+    offeringRegistrationHash: offering.registrationHash,
+    bindingRegistrationHash: binding.registrationHash,
+    price: offering.presentation.price,
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
+    ...(publication === undefined ? {} : {
+      publicationRef: publication.publicationRef,
+      publicationRevision: publication.revision,
+      readinessValidUntil: publication.readinessValidUntil,
+    }),
+  }))
 }
 
 function writableRouteGeneration(generation: RouteGeneration): RouteGeneration {
@@ -1059,24 +1068,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     limit: 64,
   })
   if (currentSupply.kind !== 'available') return 'stale'
-  const bindings: RegisteredEvaluationBinding[] = currentSupply.supplies.map(({ offering, binding, publication }) => ({
-    businessId: String(offering.businessId),
-    offeringId: offering.offeringId,
-    bindingId: binding.bindingId,
-    contractRef: {
-      capabilityId: binding.capabilityId,
-      version: binding.version,
-      contractDigest: binding.contractDigest,
-    },
-    offeringRegistrationHash: offering.registrationHash,
-    bindingRegistrationHash: binding.registrationHash,
-    price: offering.presentation.price,
-    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
-    ...(publication === undefined ? {} : {
-      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
-      readinessValidUntil: publication.readinessValidUntil,
-    }),
-  }))
+  const bindings = registeredEvaluationBindingsFromEligibleSupply(currentSupply)
   if (requestRegistrySnapshotDigest(bindings) !== aggregate.evaluation.registrySnapshotDigest) return 'stale'
   const models = new Map<string, CapabilityDecisionModel>()
   for (const binding of bindings) {

@@ -4,7 +4,8 @@ import { internalMutation, internalQuery } from './_generated/server'
 
 export const recordAgentPrincipal = internalMutation({
   args: {
-    principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()), seenAt: v.number(),
+    principalId: v.string(), ownerId: v.string(), ownerTokenIdentifier: v.optional(v.string()),
+    credentialId: v.string(), scopes: v.array(v.string()), seenAt: v.number(),
   },
   returns: v.union(v.object({ kind: v.literal('recorded') }), v.object({ kind: v.literal('conflict') })),
   handler: async (ctx, args) => {
@@ -12,8 +13,15 @@ export const recordAgentPrincipal = internalMutation({
       .withIndex('by_principalId', (query) => query.eq('principalId', args.principalId)).unique()
     const scopes = [...new Set(args.scopes)].sort()
     if (existing !== null) {
-      if (existing.credentialId !== args.credentialId || existing.ownerId !== args.ownerId) return { kind: 'conflict' as const }
-      await ctx.db.patch(existing._id, { scopes, lastSeenAt: args.seenAt })
+      if (existing.credentialId !== args.credentialId || existing.ownerId !== args.ownerId
+        || (existing.ownerTokenIdentifier !== undefined
+          && args.ownerTokenIdentifier !== undefined
+          && existing.ownerTokenIdentifier !== args.ownerTokenIdentifier)) return { kind: 'conflict' as const }
+      await ctx.db.patch(existing._id, {
+        scopes,
+        lastSeenAt: args.seenAt,
+        ...(args.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: args.ownerTokenIdentifier }),
+      })
       return { kind: 'recorded' as const }
     }
     const credential = await ctx.db.query('customerRequestAgentPrincipals')
@@ -21,6 +29,7 @@ export const recordAgentPrincipal = internalMutation({
     if (credential !== null) return { kind: 'conflict' as const }
     await ctx.db.insert('customerRequestAgentPrincipals', {
       principalId: args.principalId, ownerId: args.ownerId, credentialId: args.credentialId,
+      ...(args.ownerTokenIdentifier === undefined ? {} : { ownerTokenIdentifier: args.ownerTokenIdentifier }),
       scopes, recordedAt: args.seenAt, lastSeenAt: args.seenAt,
     })
     return { kind: 'recorded' as const }

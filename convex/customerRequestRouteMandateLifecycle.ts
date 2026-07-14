@@ -1,6 +1,10 @@
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import type { MutationCtx } from './_generated/server'
+import {
+  routeMandateHeadMatchesIssue,
+  routeMandateRevocationRecordIsValid,
+} from './customerRequestRouteMandateIntegrity'
 
 type RevocationReason = 'request_revised' | 'route_generation_superseded'
 
@@ -11,7 +15,6 @@ export async function supersedeCurrentRouteMandate(
     nextRequestRevision: number
     nextGenerationRef?: string
     reason: RevocationReason
-    recordedAt: number
   }>,
 ): Promise<{ kind: 'not_active' } | { kind: 'already_revoked'; mandateRef: string } | {
   kind: 'revoked'
@@ -23,12 +26,24 @@ export async function supersedeCurrentRouteMandate(
   if (head === null) return { kind: 'not_active' }
   if (head.currentRequestRevision === input.nextRequestRevision
     && head.currentGenerationRef === input.nextGenerationRef) return { kind: 'not_active' }
+  const issue = await db.query('customerRequestRouteMandateIssues')
+    .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
+  if (issue === null || !routeMandateHeadMatchesIssue(head, issue)) {
+    throw new Error('customer_request_route_mandate_head_integrity_failure')
+  }
   const prior = await db.query('customerRequestRouteMandateRevocations')
     .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
-  if (prior !== null) return { kind: 'already_revoked', mandateRef: head.currentMandateRef }
+  if (prior !== null) {
+    if (!routeMandateRevocationRecordIsValid(prior, issue)) {
+      throw new Error('customer_request_route_mandate_revocation_integrity_failure')
+    }
+    return { kind: 'already_revoked', mandateRef: head.currentMandateRef }
+  }
+  const recordedAt = Math.max(Date.now(), issue.recordedAt)
   const evidence = {
     mandateRef: head.currentMandateRef,
     mandateDigest: head.currentMandateDigest,
+    principalId: head.principalId,
     requestId: input.requestId,
     requestRevision: head.currentRequestRevision,
     generationRef: head.currentGenerationRef,
@@ -37,7 +52,7 @@ export async function supersedeCurrentRouteMandate(
     ...(input.nextGenerationRef === undefined
       ? {}
       : { supersededByGenerationRef: input.nextGenerationRef }),
-    recordedAt: input.recordedAt,
+    recordedAt,
   }
   const evidenceDigest = canonicalDigest(evidence)
   const revocationRef = `route-mandate-revocation:v1:${evidenceDigest}`
@@ -55,7 +70,7 @@ export async function supersedeCurrentRouteMandate(
       ? {}
       : { supersededByGenerationRef: input.nextGenerationRef }),
     evidenceDigest,
-    recordedAt: input.recordedAt,
+    recordedAt,
   })
   return { kind: 'revoked', mandateRef: head.currentMandateRef, revocationRef }
 }

@@ -692,7 +692,8 @@ export const customerRequestV2StoredAggregateValue = v.union(
 
 export const customerRequestV2Tables = {
   customerRequestAgentPrincipals: defineTable({
-    principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
+    principalId: v.string(), ownerId: v.string(), ownerTokenIdentifier: v.optional(v.string()),
+    credentialId: v.string(), scopes: v.array(v.string()),
     recordedAt: v.number(), lastSeenAt: v.number(),
   })
     .index('by_principalId', ['principalId'])

@@ -9,6 +9,7 @@ import {
 } from '@/modules/customer-request/route-mandate'
 import {
   routePlanGenerationIsInternallyConsistent,
+  routePlanGenerationMatchesRequest,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import {
@@ -17,7 +18,18 @@ import {
 } from '@/modules/customer-request/runtime'
 
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
-import { currentRoutePlanGenerationGraphStatus } from './customerRequestV2'
+import {
+  aggregateIsInternallyConsistent,
+  currentRoutePlanGenerationGraphStatus,
+} from './customerRequestV2'
+import {
+  routeMandateHeadMatchesIssue,
+  routeMandateIssueRecordIsValid,
+  routeMandateRevocationRecordIsValid,
+  type RouteMandateRevocationRecord,
+} from './customerRequestRouteMandateIntegrity'
+
+const MAX_ROUTE_MANDATE_HISTORY_ROWS = 512
 
 const issueCommand = {
   requestId: v.string(),
@@ -54,12 +66,13 @@ const issueResult = v.union(
 
 const currentResult = v.union(
   v.object({ kind: v.literal('active'), mandate: routeMandateValue }),
+  v.object({ kind: v.literal('none') }),
   v.object({ kind: v.literal('not_found') }),
+  v.object({ kind: v.literal('revoked'), mandateRef: v.string(), revocationRef: v.string() }),
   v.object({
-    kind: v.literal('inactive'),
-    reason: v.union(v.literal('expired'), v.literal('revoked'), v.literal('superseded')),
-    mandateRef: v.string(),
+    kind: v.literal('superseded'), mandateRef: v.string(), revocationRef: v.optional(v.string()),
   }),
+  v.object({ kind: v.literal('expired'), mandateRef: v.string() }),
 )
 
 const revocationProjection = v.object({
@@ -70,7 +83,6 @@ const revocationProjection = v.object({
     v.literal('customer_revoked'),
     v.literal('request_revised'),
     v.literal('route_generation_superseded'),
-    v.literal('replacement_issued'),
   ),
   requestRevision: v.number(),
   generationRef: v.string(),
@@ -114,7 +126,7 @@ export const issue = internalMutation({
   args: issueCommand,
   returns: issueResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
+    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
     if (authenticated.kind === 'unauthenticated') {
       return { kind: 'refused' as const, reason: 'authentication_required' as const }
     }
@@ -138,8 +150,8 @@ export const issue = internalMutation({
         .withIndex('by_mandateRef', (query) => query.eq('mandateRef', priorCommand.mandateRef)).unique()
       if (issueRow === null
         || issueRow.mandateDigest !== priorCommand.mandateDigest
-        || issueRow.mandate.mandateDigest !== priorCommand.result.mandateDigest
-        || !issueEvidenceIsValid(issueRow.mandate, issueRow.evidence)) {
+        || !routeMandateIssueRecordIsValid(issueRow)
+        || canonicalDigest(issueRow.mandate) !== canonicalDigest(priorCommand.result)) {
         throw new Error('customer_request_route_mandate_command_integrity_failure')
       }
       return { kind: 'replayed' as const, mandate: priorCommand.result }
@@ -175,6 +187,13 @@ export const issue = internalMutation({
       if (revocation === null) {
         return { kind: 'conflict' as const, reason: 'active_mandate_exists' as const }
       }
+      const priorIssue = await ctx.db.query('customerRequestRouteMandateIssues')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', activeHead.currentMandateRef)).unique()
+      if (priorIssue === null
+        || !routeMandateHeadMatchesIssue(activeHead, priorIssue)
+        || !routeMandateRevocationRecordIsValid(revocation, priorIssue)) {
+        throw new Error('customer_request_route_mandate_replacement_integrity_failure')
+      }
     }
 
     const issuedAt = Date.now()
@@ -184,6 +203,7 @@ export const issue = internalMutation({
     }
     const authorizationEvidenceMaterial = {
       kind: 'explicit' as const,
+      commandDigest,
       principalId: authenticated.principalId,
       requestId: args.requestId,
       requestRevision: args.expectedRequestRevision,
@@ -199,6 +219,7 @@ export const issue = internalMutation({
       kind: 'explicit' as const,
       evidenceRef: `route-authorization:explicit:${authorizationEvidenceDigest}`,
       evidenceDigest: authorizationEvidenceDigest,
+      commandDigest,
       principalId: authenticated.principalId,
       requestId: args.requestId,
       requestRevision: args.expectedRequestRevision,
@@ -247,20 +268,19 @@ export const issue = internalMutation({
     const mandate = writableMandate(compiled.mandate)
     const existingIssue = await ctx.db.query('customerRequestRouteMandateIssues')
       .withIndex('by_mandateRef', (query) => query.eq('mandateRef', mandate.mandateRef)).unique()
-    if (existingIssue === null) {
-      await ctx.db.insert('customerRequestRouteMandateIssues', {
-        mandateRef: mandate.mandateRef,
-        mandateDigest: mandate.mandateDigest,
-        principalId: authenticated.principalId,
-        requestId: args.requestId,
-        requestRevision: args.expectedRequestRevision,
-        generationRef: args.expectedGenerationRef,
-        routePlanId: args.selectedRoutePlanId,
-        mandate,
-        evidence: { authentication: authenticationEvidence, authorization: authorizationEvidence },
-        recordedAt: issuedAt,
-      })
-    }
+    if (existingIssue !== null) throw new Error('customer_request_route_mandate_ref_collision')
+    await ctx.db.insert('customerRequestRouteMandateIssues', {
+      mandateRef: mandate.mandateRef,
+      mandateDigest: mandate.mandateDigest,
+      principalId: authenticated.principalId,
+      requestId: args.requestId,
+      requestRevision: args.expectedRequestRevision,
+      generationRef: args.expectedGenerationRef,
+      routePlanId: args.selectedRoutePlanId,
+      mandate,
+      evidence: { authentication: authenticationEvidence, authorization: authorizationEvidence },
+      recordedAt: issuedAt,
+    })
     if (activeHead === null) {
       await ctx.db.insert('customerRequestRouteMandateHeads', {
         requestId: args.requestId,
@@ -299,7 +319,7 @@ export const revoke = internalMutation({
   args: { requestId: v.string(), mandateRef: v.string(), idempotencyKey: v.string() },
   returns: revokeResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
+    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
     if (authenticated.kind === 'unauthenticated') {
       return { kind: 'refused' as const, reason: 'authentication_required' as const }
     }
@@ -323,7 +343,11 @@ export const revoke = internalMutation({
       }
       const row = await ctx.db.query('customerRequestRouteMandateRevocations')
         .withIndex('by_revocationRef', (query) => query.eq('revocationRef', priorCommand.revocationRef)).unique()
-      if (row === null || row.mandateRef !== priorCommand.mandateRef) {
+      const issueRow = row === null ? null : await ctx.db.query('customerRequestRouteMandateIssues')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', row.mandateRef)).unique()
+      if (row === null || issueRow === null
+        || row.mandateRef !== priorCommand.mandateRef
+        || !routeMandateRevocationRecordIsValid(row, issueRow)) {
         throw new Error('customer_request_route_mandate_revocation_command_integrity_failure')
       }
       return { kind: 'replayed' as const, revocation: projectRevocation(row) }
@@ -337,8 +361,7 @@ export const revoke = internalMutation({
     const issueRow = await ctx.db.query('customerRequestRouteMandateIssues')
       .withIndex('by_mandateRef', (query) => query.eq('mandateRef', args.mandateRef)).unique()
     if (issueRow === null || issueRow.principalId !== authenticated.principalId
-      || issueRow.mandateDigest !== head.currentMandateDigest
-      || !issueEvidenceIsValid(issueRow.mandate, issueRow.evidence)) {
+      || !routeMandateHeadMatchesIssue(head, issueRow)) {
       throw new Error('customer_request_route_mandate_head_integrity_failure')
     }
     const existing = await ctx.db.query('customerRequestRouteMandateRevocations')
@@ -389,30 +412,40 @@ export const getCurrent = internalQuery({
   args: { requestId: v.string() },
   returns: currentResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
+    const authenticated = await authenticateRequestOwnerForQuery(ctx, args.requestId)
     if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
     const head = await ctx.db.query('customerRequestRouteMandateHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null || head.principalId !== authenticated.principalId) return { kind: 'not_found' as const }
+    if (head === null) return { kind: 'none' as const }
+    if (head.principalId !== authenticated.principalId) return { kind: 'not_found' as const }
     const issueRow = await ctx.db.query('customerRequestRouteMandateIssues')
       .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
-    if (issueRow === null
-      || issueRow.mandateDigest !== head.currentMandateDigest
-      || issueRow.mandate.mandateRef !== head.currentMandateRef
-      || issueRow.mandate.mandateDigest !== head.currentMandateDigest
-      || !issueEvidenceIsValid(issueRow.mandate, issueRow.evidence)) {
+    if (issueRow === null || !routeMandateHeadMatchesIssue(head, issueRow)) {
       throw new Error('customer_request_route_mandate_head_integrity_failure')
     }
     const revocation = await ctx.db.query('customerRequestRouteMandateRevocations')
       .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
     if (revocation !== null) {
-      return { kind: 'inactive' as const, reason: 'revoked' as const, mandateRef: head.currentMandateRef }
+      if (!routeMandateRevocationRecordIsValid(revocation, issueRow)) {
+        throw new Error('customer_request_route_mandate_revocation_integrity_failure')
+      }
+      return revocation.reason === 'customer_revoked'
+        ? {
+            kind: 'revoked' as const,
+            mandateRef: head.currentMandateRef,
+            revocationRef: revocation.revocationRef,
+          }
+        : {
+            kind: 'superseded' as const,
+            mandateRef: head.currentMandateRef,
+            revocationRef: revocation.revocationRef,
+          }
     }
     const current = await openCurrentRouteGeneration(ctx, args.requestId)
     if (current.kind === 'not_found'
       || current.requestRevision !== head.currentRequestRevision
       || current.generation.generationRef !== head.currentGenerationRef) {
-      return { kind: 'inactive' as const, reason: 'superseded' as const, mandateRef: head.currentMandateRef }
+      return { kind: 'superseded' as const, mandateRef: head.currentMandateRef }
     }
     const graphStatus = await currentRoutePlanGenerationGraphStatus(
       ctx.db,
@@ -420,7 +453,7 @@ export const getCurrent = internalQuery({
       head.currentGenerationRef,
     )
     if (graphStatus !== 'current') {
-      return { kind: 'inactive' as const, reason: 'superseded' as const, mandateRef: head.currentMandateRef }
+      return { kind: 'superseded' as const, mandateRef: head.currentMandateRef }
     }
     const verification = verifyRouteMandate({
       mandate: domainMandate(issueRow.mandate),
@@ -431,7 +464,7 @@ export const getCurrent = internalQuery({
     })
     if (verification.kind !== 'verified') {
       if (verification.reason === 'mandate_expired') {
-        return { kind: 'inactive' as const, reason: 'expired' as const, mandateRef: head.currentMandateRef }
+        return { kind: 'expired' as const, mandateRef: head.currentMandateRef }
       }
       throw new Error('customer_request_route_mandate_integrity_failure')
     }
@@ -443,21 +476,30 @@ export const getHistory = internalQuery({
   args: { requestId: v.string() },
   returns: historyResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
+    const authenticated = await authenticateRequestOwnerForQuery(ctx, args.requestId)
     if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
     const issues = await ctx.db.query('customerRequestRouteMandateIssues')
-      .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId)).collect()
+      .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
+      .take(MAX_ROUTE_MANDATE_HISTORY_ROWS + 1)
+    if (issues.length > MAX_ROUTE_MANDATE_HISTORY_ROWS) {
+      throw new Error('customer_request_route_mandate_history_limit_exceeded')
+    }
     if (issues.some((row) => row.principalId !== authenticated.principalId
-      || row.mandateRef !== row.mandate.mandateRef
-      || row.mandateDigest !== row.mandate.mandateDigest
-      || !issueEvidenceIsValid(row.mandate, row.evidence))) {
+      || !routeMandateIssueRecordIsValid(row))) {
       throw new Error('customer_request_route_mandate_history_integrity_failure')
     }
     const revocations = await ctx.db.query('customerRequestRouteMandateRevocations')
-      .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId)).collect()
-    if (revocations.some((row) => row.principalId !== authenticated.principalId
-      || !issues.some((issueRow) => issueRow.mandateRef === row.mandateRef
-        && issueRow.mandateDigest === row.mandateDigest))) {
+      .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
+      .take(MAX_ROUTE_MANDATE_HISTORY_ROWS + 1)
+    if (revocations.length > MAX_ROUTE_MANDATE_HISTORY_ROWS) {
+      throw new Error('customer_request_route_mandate_history_limit_exceeded')
+    }
+    if (revocations.some((row) => {
+      const issueRow = issues.find((candidate) => candidate.mandateRef === row.mandateRef)
+      return row.principalId !== authenticated.principalId
+        || issueRow === undefined
+        || !routeMandateRevocationRecordIsValid(row, issueRow)
+    })) {
       throw new Error('customer_request_route_mandate_history_integrity_failure')
     }
     return {
@@ -479,14 +521,10 @@ function routeMandateCommandKey(principalId: string, args: IssueCommand): string
   })}`
 }
 
-async function authenticateRequestOwner(
-  ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
+async function authenticateRequestOwnerForMutation(
+  ctx: MutationCtx,
   requestId: string,
-): Promise<
-  | { kind: 'authenticated'; principalId: string; identity: AuthenticatedRequest['identity'] }
-  | { kind: 'unauthenticated' }
-  | { kind: 'not_found' }
-> {
+): Promise<AuthenticatedRequestResult> {
   const identity = await ctx.auth.getUserIdentity()
   if (identity === null) return { kind: 'unauthenticated' }
   const head = await ctx.db.query('customerRequestV2Heads')
@@ -495,11 +533,40 @@ async function authenticateRequestOwner(
   if (head.principalId !== identity.tokenIdentifier) {
     const delegated = await ctx.db.query('customerRequestAgentPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', head.principalId)).unique()
-    if (delegated?.ownerId !== identity.subject) return { kind: 'not_found' }
+    if (delegated?.ownerTokenIdentifier !== identity.tokenIdentifier) return { kind: 'not_found' }
   }
+  return authenticatedRequest(head.principalId, identity)
+}
+
+async function authenticateRequestOwnerForQuery(
+  ctx: QueryCtx,
+  requestId: string,
+): Promise<AuthenticatedRequestResult> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) return { kind: 'unauthenticated' }
+  const head = await ctx.db.query('customerRequestV2Heads')
+    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
+  if (head === null) return { kind: 'not_found' }
+  if (head.principalId !== identity.tokenIdentifier) {
+    const delegated = await ctx.db.query('customerRequestAgentPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', head.principalId)).unique()
+    if (delegated?.ownerTokenIdentifier !== identity.tokenIdentifier) return { kind: 'not_found' }
+  }
+  return authenticatedRequest(head.principalId, identity)
+}
+
+type AuthenticatedRequestResult =
+  | { kind: 'authenticated'; principalId: string; identity: AuthenticatedRequest['identity'] }
+  | { kind: 'unauthenticated' }
+  | { kind: 'not_found' }
+
+function authenticatedRequest(
+  principalId: string,
+  identity: AuthenticatedRequest['identity'],
+): Extract<AuthenticatedRequestResult, { kind: 'authenticated' }> {
   return {
     kind: 'authenticated',
-    principalId: head.principalId,
+    principalId,
     identity: {
       issuer: identity.issuer,
       subject: identity.subject,
@@ -518,6 +585,19 @@ async function openCurrentRouteGeneration(
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   if (requestHead === null || routeHead?.currentGenerationRef === undefined
     || routeHead.currentRequestRevision !== requestHead.currentRevision) return { kind: 'not_found' }
+  const revision = await ctx.db.query('customerRequestV2Revisions')
+    .withIndex('by_requestId_and_requestRevision', (query) => (
+      query.eq('requestId', requestId).eq('requestRevision', requestHead.currentRevision)
+    )).unique()
+  if (revision === null
+    || 'routes' in revision.aggregate.plan
+    || revision.aggregate.aggregateDigest !== requestHead.currentAggregateDigest
+    || revision.aggregate.snapshot.requestId !== requestId
+    || revision.aggregate.snapshot.revision !== requestHead.currentRevision
+    || revision.aggregate.snapshot.principalId !== requestHead.principalId
+    || !aggregateIsInternallyConsistent(revision.aggregate, requestHead.currentRevision - 1)) {
+    throw new Error('customer_request_route_mandate_request_integrity_failure')
+  }
   const row = await ctx.db.query('customerRequestV2RoutePlanGenerations')
     .withIndex('by_requestId_and_generationRef', (query) => (
       query.eq('requestId', requestId).eq('generationRef', routeHead.currentGenerationRef as string)
@@ -527,7 +607,10 @@ async function openCurrentRouteGeneration(
     || row.generationRef !== routeHead.currentGenerationRef
     || row.generationDigest !== routeHead.currentGenerationDigest
     || row.requestRevision !== requestHead.currentRevision
-    || !routePlanGenerationIsInternallyConsistent(domainGeneration(row.routeGeneration), row.generation - 1)) {
+    || !routePlanGenerationIsInternallyConsistent(domainGeneration(row.routeGeneration), row.generation - 1)
+    || !routePlanGenerationMatchesRequest(
+      domainGeneration(row.routeGeneration), revision.aggregate.snapshot, row.generation - 1,
+    )) {
     throw new Error('customer_request_route_plan_head_integrity_failure')
   }
   return { kind: 'found', requestRevision: requestHead.currentRevision, generation: domainGeneration(row.routeGeneration) }
@@ -583,57 +666,7 @@ function writableIssueEvidence(value: IssueEvidence): IssueEvidence {
   }
 }
 
-function issueEvidenceIsValid(mandate: Infer<typeof routeMandateValue>, evidence: IssueEvidence): boolean {
-  if (mandate.authorization.kind !== 'explicit') return false
-  const authenticatedActor = {
-    issuer: evidence.authentication.issuer,
-    subject: evidence.authentication.subject,
-    tokenIdentifier: evidence.authentication.tokenIdentifier,
-  }
-  const authenticationEvidenceRef = `clerk-identity:${canonicalDigest(authenticatedActor)}`
-  const authorizationMaterial = {
-    kind: 'explicit' as const,
-    principalId: evidence.authorization.principalId,
-    requestId: evidence.authorization.requestId,
-    requestRevision: evidence.authorization.requestRevision,
-    generationRef: evidence.authorization.generationRef,
-    selectedRoutePlanId: evidence.authorization.selectedRoutePlanId,
-    maximumTotalSpend: evidence.authorization.maximumTotalSpend,
-    issuedAt: evidence.authorization.issuedAt,
-    expiresAt: evidence.authorization.expiresAt,
-    authenticatedBy: evidence.authorization.authenticatedActor,
-  }
-  const authorizationEvidenceDigest = canonicalDigest(authorizationMaterial)
-  return evidence.authentication.evidenceRef === authenticationEvidenceRef
-    && canonicalDigest(evidence.authorization.authenticatedActor) === canonicalDigest(authenticatedActor)
-    && evidence.authorization.evidenceDigest === authorizationEvidenceDigest
-    && evidence.authorization.evidenceRef === `route-authorization:explicit:${authorizationEvidenceDigest}`
-    && mandate.principal.principalId === evidence.authorization.principalId
-    && mandate.principal.authenticationEvidenceRef === evidence.authentication.evidenceRef
-    && mandate.authorization.authorizationEvidenceRef === evidence.authorization.evidenceRef
-    && mandate.authorization.authorizationEvidenceDigest === evidence.authorization.evidenceDigest
-    && mandate.request.requestId === evidence.authorization.requestId
-    && mandate.request.requestRevision === evidence.authorization.requestRevision
-    && mandate.route.generationRef === evidence.authorization.generationRef
-    && mandate.route.routePlanId === evidence.authorization.selectedRoutePlanId
-    && canonicalDigest(mandate.route.maximumTotalSpend)
-      === canonicalDigest(evidence.authorization.maximumTotalSpend)
-    && mandate.issuedAt === evidence.authorization.issuedAt
-    && mandate.expiresAt === evidence.authorization.expiresAt
-}
-
-function projectRevocation(value: Readonly<{
-  revocationRef: string
-  mandateRef: string
-  mandateDigest: string
-  reason: 'customer_revoked' | 'request_revised' | 'route_generation_superseded' | 'replacement_issued'
-  requestRevision: number
-  generationRef: string
-  supersededByRequestRevision?: number
-  supersededByGenerationRef?: string
-  evidenceDigest: string
-  recordedAt: number
-}>): Infer<typeof revocationProjection> {
+function projectRevocation(value: RouteMandateRevocationRecord): Infer<typeof revocationProjection> {
   return {
     revocationRef: value.revocationRef,
     mandateRef: value.mandateRef,

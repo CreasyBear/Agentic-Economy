@@ -5,14 +5,11 @@ import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
-import { internal } from '../../convex/_generated/api'
-import schema from '../../convex/schema'
-import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
+import { internal } from './_generated/api'
+import schema from './schema'
+import { setCapabilitySupplyEligibility } from './capabilitySupply'
 
-const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
-const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
-  path.replace('../../convex/', './'), load,
-]))
+const modules = import.meta.glob('./**/*.ts')
 const identity = {
   subject: 'customer-route-mandate',
   issuer: 'https://identity.test',
@@ -86,6 +83,101 @@ describe('durable RouteMandate lifecycle', () => {
     await expect(stranger.query(internal.customerRequestRouteMandate.getCurrent, {
       requestId: command.requestId,
     })).resolves.toEqual({ kind: 'not_found' })
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('customerRequestRouteMandateCommands').first()
+      if (row === null) throw new Error('mandate command row missing')
+      await ctx.db.patch(row._id, {
+        result: {
+          ...row.result,
+          route: { ...row.result.route, routeDigest: 'sha256:' + 'f'.repeat(64) },
+        },
+      })
+    })
+    await expect(customer.mutation(internal.customerRequestRouteMandate.issue, command))
+      .rejects.toThrow('customer_request_route_mandate_command_integrity_failure')
+  })
+
+  it('fails legacy delegated ownership closed until the canonical Clerk token identifier is bound', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const delegatedPrincipalId = 'agent:delegated-route-mandate'
+    await expect(backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+      principalId: delegatedPrincipalId,
+      ownerId: identity.subject,
+      credentialId: 'credential:delegated-route-mandate',
+      scopes: ['customer_requests:create'],
+      seenAt: 900,
+    })).resolves.toEqual({ kind: 'recorded' })
+    const current = await committedRequest(backend, delegatedPrincipalId)
+    const route = current.routeGeneration.routes[0]
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+      throw new Error('exact route fixture missing')
+    }
+    const customer = backend.withIdentity(identity)
+    const command = {
+      requestId: current.aggregate.snapshot.requestId,
+      expectedRequestRevision: current.aggregate.snapshot.revision,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      selectedRoutePlanId: route.routePlanId,
+      maximumTotalSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      expiresAt: Math.min(route.expiresAt, 30_000),
+      idempotencyKey: 'confirm:route:delegated-owner',
+    }
+    await expect(customer.mutation(internal.customerRequestRouteMandate.issue, command))
+      .resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+    await expect(backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+      principalId: delegatedPrincipalId,
+      ownerId: identity.subject,
+      ownerTokenIdentifier: identity.tokenIdentifier,
+      credentialId: 'credential:delegated-route-mandate',
+      scopes: ['customer_requests:create'],
+      seenAt: 950,
+    })).resolves.toEqual({ kind: 'recorded' })
+    const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, command)
+    if (issued.kind !== 'issued') throw new Error(`delegated mandate issuance failed: ${JSON.stringify(issued)}`)
+    expect(issued.mandate.principal.principalId).toBe(delegatedPrincipalId)
+    await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: current.aggregate.snapshot.requestId,
+    })).resolves.toEqual({ kind: 'active', mandate: issued.mandate })
+    await backend.run(async (ctx) => {
+      const delegated = await ctx.db.query('customerRequestAgentPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', delegatedPrincipalId)).unique()
+      expect(delegated?.ownerTokenIdentifier).toBe(identity.tokenIdentifier)
+    })
+  })
+
+  it('distinguishes no mandate from an expired exact mandate', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const current = await committedRequest(backend)
+    const route = current.routeGeneration.routes[0]
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+      throw new Error('exact route fixture missing')
+    }
+    const customer = backend.withIdentity(identity)
+    await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: current.aggregate.snapshot.requestId,
+    })).resolves.toEqual({ kind: 'none' })
+    const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, {
+      requestId: current.aggregate.snapshot.requestId,
+      expectedRequestRevision: current.aggregate.snapshot.revision,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      selectedRoutePlanId: route.routePlanId,
+      maximumTotalSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      expiresAt: 1_100,
+      idempotencyKey: 'confirm:route:expiry-state',
+    })
+    if (issued.kind !== 'issued') throw new Error(`mandate issuance failed: ${JSON.stringify(issued)}`)
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+    await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: current.aggregate.snapshot.requestId,
+    })).resolves.toEqual({ kind: 'expired', mandateRef: issued.mandate.mandateRef })
   })
 
   it('refuses stale heads, altered scope, and caller-supplied authority material', async () => {
@@ -202,12 +294,12 @@ describe('durable RouteMandate lifecycle', () => {
     })
     if (firstIssue.kind !== 'issued') throw new Error(`first mandate failed: ${JSON.stringify(firstIssue)}`)
 
-    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    vi.spyOn(Date, 'now').mockReturnValue(2_000)
     const revised = await compileFixture(backend, {
       expectedRevision: first.aggregate.snapshot.revision,
       expectedRouteGeneration: first.routeGeneration.generation,
       intent: 'Find a governed result with a materially revised request',
-      now: 1_000,
+      now: 2_000,
     })
     const committed = await backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:route-mandate-revision',
@@ -224,9 +316,8 @@ describe('durable RouteMandate lifecycle', () => {
     })
     await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
       requestId: first.aggregate.snapshot.requestId,
-    })).resolves.toEqual({
-      kind: 'inactive',
-      reason: 'revoked',
+    })).resolves.toMatchObject({
+      kind: 'superseded',
       mandateRef: firstIssue.mandate.mandateRef,
     })
 
@@ -264,6 +355,7 @@ describe('durable RouteMandate lifecycle', () => {
         reason: 'request_revised',
         supersededByRequestRevision: revised.aggregate.snapshot.revision,
         supersededByGenerationRef: revised.routeGeneration.generationRef,
+        recordedAt: 2_000,
       }],
     })
   })
@@ -277,7 +369,7 @@ describe('durable RouteMandate lifecycle', () => {
       throw new Error('exact route fixture missing')
     }
     const customer = backend.withIdentity(identity)
-    const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, {
+    const issueCommand = {
       requestId: current.aggregate.snapshot.requestId,
       expectedRequestRevision: current.aggregate.snapshot.revision,
       expectedGenerationRef: current.routeGeneration.generationRef,
@@ -288,7 +380,8 @@ describe('durable RouteMandate lifecycle', () => {
       },
       expiresAt: Math.min(route.expiresAt, 30_000),
       idempotencyKey: 'confirm:route:revoke-proof',
-    })
+    }
+    const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, issueCommand)
     if (issued.kind !== 'issued') throw new Error(`mandate issuance failed: ${JSON.stringify(issued)}`)
     const command = {
       requestId: current.aggregate.snapshot.requestId,
@@ -314,8 +407,8 @@ describe('durable RouteMandate lifecycle', () => {
     })).resolves.toEqual({ kind: 'conflict', reason: 'command_changed' })
     await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
       requestId: command.requestId,
-    })).resolves.toEqual({
-      kind: 'inactive', reason: 'revoked', mandateRef: issued.mandate.mandateRef,
+    })).resolves.toMatchObject({
+      kind: 'revoked', mandateRef: issued.mandate.mandateRef,
     })
     await expect(customer.query(internal.customerRequestRouteMandate.getHistory, {
       requestId: command.requestId,
@@ -336,6 +429,37 @@ describe('durable RouteMandate lifecycle', () => {
       }],
       revocations: [revoked.kind === 'revoked' ? revoked.revocation : {}],
     })
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('customerRequestRouteMandateRevocations')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', issued.mandate.mandateRef)).unique()
+      if (row === null) throw new Error('mandate revocation row missing')
+      await ctx.db.patch(row._id, { reason: 'request_revised' })
+    })
+    await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: command.requestId,
+    })).rejects.toThrow('customer_request_route_mandate_revocation_integrity_failure')
+    await expect(customer.mutation(internal.customerRequestRouteMandate.issue, {
+      ...issueCommand,
+      idempotencyKey: 'confirm:route:tampered-revocation',
+    })).rejects.toThrow('customer_request_route_mandate_replacement_integrity_failure')
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('customerRequestRouteMandateRevocations')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', issued.mandate.mandateRef)).unique()
+      if (row === null) throw new Error('mandate revocation row missing')
+      await ctx.db.patch(row._id, { reason: 'customer_revoked' })
+    })
+    const replacement = await customer.mutation(internal.customerRequestRouteMandate.issue, {
+      ...issueCommand,
+      idempotencyKey: 'confirm:route:after-revocation',
+    })
+    if (replacement.kind !== 'issued') {
+      throw new Error(`replacement mandate failed: ${JSON.stringify(replacement)}`)
+    }
+    expect(replacement.mandate.mandateRef).not.toBe(issued.mandate.mandateRef)
+    expect(replacement.mandate.issuedAt).toBe(issued.mandate.issuedAt)
+    await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: command.requestId,
+    })).resolves.toEqual({ kind: 'active', mandate: replacement.mandate })
 
     const stranger = backend.withIdentity({
       subject: 'stranger', issuer: identity.issuer,
@@ -345,6 +469,17 @@ describe('durable RouteMandate lifecycle', () => {
       ...command,
       idempotencyKey: 'revoke:route:stranger',
     })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
+    await backend.run(async (ctx) => {
+      const row = await ctx.db.query('customerRequestRouteMandateRevocations')
+        .withIndex('by_mandateRef', (query) => query.eq('mandateRef', issued.mandate.mandateRef)).unique()
+      if (row === null) throw new Error('mandate revocation row missing')
+      await ctx.db.patch(row._id, { reason: 'request_revised' })
+    })
+    await expect(customer.mutation(internal.customerRequestRouteMandate.revoke, command))
+      .rejects.toThrow('customer_request_route_mandate_revocation_command_integrity_failure')
+    await expect(customer.query(internal.customerRequestRouteMandate.getHistory, {
+      requestId: command.requestId,
+    })).rejects.toThrow('customer_request_route_mandate_history_integrity_failure')
   })
 
   it('serializes concurrent confirmation so only one mandate owns the current head', async () => {
@@ -421,7 +556,7 @@ describe('durable RouteMandate lifecycle', () => {
     await expect(customer.query(internal.customerRequestRouteMandate.getCurrent, {
       requestId: current.aggregate.snapshot.requestId,
     })).resolves.toEqual({
-      kind: 'inactive', reason: 'superseded', mandateRef: issued.mandate.mandateRef,
+      kind: 'superseded', mandateRef: issued.mandate.mandateRef,
     })
   })
 
@@ -464,10 +599,28 @@ describe('durable RouteMandate lifecycle', () => {
     })).rejects.toThrow('customer_request_route_mandate_head_integrity_failure')
     await expect(customer.mutation(internal.customerRequestRouteMandate.issue, command))
       .rejects.toThrow('customer_request_route_mandate_command_integrity_failure')
+    vi.spyOn(Date, 'now').mockReturnValue(2_000)
+    const revised = await compileFixture(backend, {
+      expectedRevision: current.aggregate.snapshot.revision,
+      expectedRouteGeneration: current.routeGeneration.generation,
+      intent: 'Find a different governed result',
+      now: 2_000,
+    })
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:route-mandate-tampered-supersession',
+      commandDigest: 'sha256:' + 'e'.repeat(64),
+      expectedRevision: current.aggregate.snapshot.revision,
+      expectedRouteGeneration: current.routeGeneration.generation,
+      aggregate: revised.aggregate,
+      routeGeneration: revised.routeGeneration,
+    })).rejects.toThrow('customer_request_route_mandate_head_integrity_failure')
   })
 })
 
-async function committedRequest(backend: ReturnType<typeof convexTest>) {
+async function committedRequest(
+  backend: ReturnType<typeof convexTest>,
+  principalId = identity.tokenIdentifier,
+) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await backend.run(async (ctx) => {
     const offerings = await ctx.db.query('capabilityOfferings').take(64)
@@ -500,6 +653,7 @@ async function committedRequest(backend: ReturnType<typeof convexTest>) {
     expectedRouteGeneration: 0,
     intent: 'Find a governed result',
     now: 1_000,
+    principalId,
   })
   const committed = await backend.mutation(internal.customerRequestV2.commitAggregate, {
     commandKey: 'command:route-mandate-base',
@@ -542,6 +696,7 @@ async function compileFixture(
     expectedRouteGeneration: number
     intent: string
     now: number
+    principalId?: string
   }>,
 ) {
   const supply = await backend.query(internal.capabilitySupply.listEligible, {
@@ -555,7 +710,7 @@ async function compileFixture(
     requestId: 'request:route-mandate',
     expectedRevision: input.expectedRevision,
     expectedRouteGeneration: input.expectedRouteGeneration,
-    principalId: identity.tokenIdentifier,
+    principalId: input.principalId ?? identity.tokenIdentifier,
     delegatedAgentId: 'agent:external',
     intent: input.intent,
     networkId: 'ae:public',

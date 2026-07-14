@@ -1,5 +1,5 @@
 import { convexTest } from 'convex-test'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   defineCapabilityContract,
@@ -39,6 +39,8 @@ const identity = { subject: 'customer-v2', issuer: 'https://identity.test' }
 const principalId = `${identity.issuer}|${identity.subject}`
 
 describe('current V2 Customer Request application path', () => {
+  beforeEach(() => vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', identity.issuer))
+
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
@@ -366,6 +368,11 @@ describe('current V2 Customer Request application path', () => {
     if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
       throw new Error('expected external contract fact')
     }
+    await backend.run(async (ctx) => {
+      const agent = await ctx.db.query('customerRequestAgentPrincipals')
+        .withIndex('by_principalId', (query) => query.eq('principalId', 'principal:external')).unique()
+      expect(agent?.ownerTokenIdentifier).toBe(`${identity.issuer}|owner:external`)
+    })
     await observeSandboxPublications(backend)
     const factsCommand = {
       requestRef: submitted.requestRef, expectedRevision: submitted.revision,

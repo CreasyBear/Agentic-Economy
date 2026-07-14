@@ -656,6 +656,8 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await admitSandboxSupply(backend)
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await backend.finishInProgressScheduledFunctions()
   await observeSandboxPublication(backend)
   const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 64 })
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
