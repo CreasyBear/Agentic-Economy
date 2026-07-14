@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: routeplan-frontier
 status: active
-stopped_at: "RouteMandate pre-release budget enforcement source-complete at a806c44; next unclaimed frontier is shared human/agent RoutePlan confirmation #175"
+stopped_at: "Shared human/agent RoutePlan confirmation closed at 5888d0df; next unclaimed frontier is durable RoutePlan dispatch and recovery #120"
 last_updated: "2026-07-14"
 progress:
   total_phases: 6
@@ -42,6 +42,8 @@ Authority convergence frontier (2026-07-14): [Retire V2 approval and execution a
 
 RouteMandate admission frontier (2026-07-14): [Enforce RouteMandate budgets before route-step release](https://github.com/CreasyBear/Agentic-Economy/issues/174) is source-complete at exact revision `a806c44b35cac4a665249a9fd2f81d67f145fcc6`. One authenticated Convex mutation now reopens the current mandate, verifies the exact selected registered supply and readiness, atomically reserves step occurrence, maximum spend and recipient-purpose data allocations, and returns only a reservation-bound attenuated step grant. Replays revalidate the mandate, reservation integrity and selected supply; substitution, widening, competing commands, revoked authority, authorization failure and partial-write failure fail closed. The two-step sandbox proof reaches the exact cumulative AUD ceiling through the same registered capability path. Convex codegen, TypeScript, lint, 1,262 unit tests, 216 integration tests, 43 source/import standards tests, copy/SEO/UI contracts and the production build passed. This is source/local enforcement proof only: the mutation remains internal and does not prove customer confirmation, provider transport, hosted deployment, real supply, execution, booking, payment, autonomous fulfillment or customer value. The next unclaimed frontier is [Publish one authenticated RoutePlan confirmation handoff for humans and agents](https://github.com/CreasyBear/Agentic-Economy/issues/175).
 
+RoutePlan confirmation frontier (2026-07-14): [Publish one authenticated RoutePlan confirmation handoff for humans and agents](https://github.com/CreasyBear/Agentic-Economy/issues/175) is source-complete and closed at exact revision `5888d0df`. Human and external-agent Request callers now confirm the same exact current customer option through one registered command; AE derives the current generation, spend ceiling, expiry and disclosure authority server-side, returns one resumable receipt, and releases no route step. The preview and receipt preserve maximum cost, recipients, purposes, fields, effects, evidence, uncertainty, fallback, cancellation and per-step recovery without exposing kernel choreography. Cross-surface ownership, exact replay, tamper, staleness, expiry and unknown-price behavior are executable. TypeScript, oxlint, 53 ticket-focused tests, 160 contract/copy/import tests and the production build passed. This is source/local confirmation proof only: no route step was dispatched and no real supply, booking, payment, fulfilment, hosted readback or customer value is claimed.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Current product slice
@@ -69,7 +71,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The next unclaimed frontier is [Publish one authenticated RoutePlan confirmation handoff for humans and agents](https://github.com/CreasyBear/Agentic-Economy/issues/175). Begin only in a new logical ticket session: claim it, project the exact current route in customer language, and make human and external-agent confirmation submit the same authenticated mandate command. No next ticket is claimed yet.
+The next unclaimed frontier is [Dispatch and recover RoutePlan steps without duplicate effects](https://github.com/CreasyBear/Agentic-Economy/issues/120). Begin only in a new logical ticket session: claim it, consume only the server-owned confirmed route and verified mandate, and make one-call and multi-call routes use the same durable attempt, dependency, evidence and unknown-outcome machinery. Follow with generic transport invocation (#144) and the shared external action/recovery surface (#133). No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
