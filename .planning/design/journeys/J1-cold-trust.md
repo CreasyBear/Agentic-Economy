@@ -8,7 +8,7 @@
 
 ## Status
 
-**built — GATE-1 resolved, persona re-run open.** All J1 build tasks landed (commits 7f0159f5, 077a4533, 2d42ae97, a379c1b6): trust-projection contract, registry cards, listing first screen, publishedPhone data path, hours truthfulness. Persona gate run 2 (2026-07-13, SeoLanderRerun 4/5): P1/P2/P4/P5 PASS on both published-phone and phoneless listings; P3 half-FAIL identified the former GATE-1 locked-explainer contradiction. Founder ruling 2026-07-14 selected option (a): the direct-call clause renders only when a published phone exists. Persona proof must now be re-run against the resolved behavior.
+**persona-cleared** (2026-07-14). Built across Wave 1 commits 7f0159f5..0e6becc1. Gate history: run 1 SeoLander 2/5 (walkouts on missing trust trio + explainer contradiction); run 2 SeoLanderRerun 4/5 (P3 held on GATE-1); clearance run SeoLanderClear **4/4 predicates PASS, 5/5** — "Trust held — both pages expose their limits before asking Ben to act, and neither converts missing evidence into a promise." GATE-1 resolved by founder ruling 2026-07-14 (capability-gated explainer clause). UrgentTradie companion evidence: posture + direct-call visible before request selection (UrgentTradieFinal P2/P4 PASS).
 
 ## Persona proof
 
