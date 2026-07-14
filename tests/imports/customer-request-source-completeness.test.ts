@@ -204,6 +204,8 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow).toContain('CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}')
     expect(workflow).toContain('npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"')
     expect(workflow).toContain("npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod")
+    expect(workflow).toContain('npx convex run capabilitySupply:queryCapabilityGraph')
+    expect(workflow).toContain('Labelled sandbox capability publications did not become route-ready.')
     expect(workflow).toContain('needs: source-proof')
     expect(workflow).toContain('cancel-in-progress: false')
     expect(workflow).toContain('npm exec -- tsx tools/release/deploy-customer-request-git-source.ts')

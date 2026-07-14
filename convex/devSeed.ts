@@ -123,7 +123,7 @@ function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
 }
 
-async function seedSandboxCapabilityPublication(
+export async function seedSandboxCapabilityPublication(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registration: SandboxV2SupplyRegistration | undefined,
   observedAt: number,

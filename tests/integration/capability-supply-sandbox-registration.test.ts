@@ -42,6 +42,10 @@ describe('labelled sandbox V2 capability supply', () => {
         'binding:sandbox-option-one:http-json:v3',
         'binding:sandbox-option-two:http-json:v3',
       ],
+      sandboxCapabilityPublicationRefs: [
+        'offering:sandbox-option-one:reference-lookup:v2',
+        'offering:sandbox-option-two:reference-lookup:v2',
+      ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
     expect(bindings.map((binding) => binding.credentialRef)).toEqual([
@@ -52,6 +56,19 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(businesses.map((business) => business.slug).sort()).toEqual([
       'sandbox-option-one',
       'sandbox-option-two',
+    ])
+    const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
+    expect(publications).toMatchObject([
+      {
+        publicationRef: 'offering:sandbox-option-one:reference-lookup:v2',
+        bindingId: 'binding:sandbox-option-one:http-json:v3',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v2',
+        bindingId: 'binding:sandbox-option-two:http-json:v3',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
     ])
   })
 

@@ -84,7 +84,21 @@ jobs:
       - name: Register labelled sandbox acceptance supply
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-        run: npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod
+        run: |
+          npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod
+          for attempt in $(seq 1 30); do
+            graph="$(npx convex run capabilitySupply:queryCapabilityGraph '{"networkId":"ae:public","includeInactive":false,"limit":10}' --prod)"
+            ready="$(printf '%s' "${graph}" | jq '[.nodes[]? | select(
+              .publicationRef == "offering:sandbox-option-one:reference-lookup:v2"
+              or .publicationRef == "offering:sandbox-option-two:reference-lookup:v2"
+            )] | length')"
+            if [ "${ready}" -eq 2 ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Labelled sandbox capability publications did not become route-ready.' >&2
+          exit 1
 
       - name: Verify authenticated deployment readback
         env:
