@@ -1,343 +1,223 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-14
-**Mapped Commit:** `59dbf7f6`
-**Scope:** Current live source plus the current dirty shared tree. Findings labelled **verified defect** are directly established by source or an executable check. Findings labelled **risk** need runtime evidence before being called a defect.
-
-## Product-Critical Diagnosis
-
-**The customer is using two different products, and the neutral engine is not the primary one:**
-- Status: **Verified disconnect.**
-- Evidence: `/` renders `AeHomeComposer` in `src/routes/index.tsx`. It submits to `/api/answer/turn` through `src/components/ae/chat/AeHomeComposer.tsx` and `src/components/ae/chat/answer-stream.ts`. The Answer Thread agent exposes only `registry.search` and `registry.detail` through `src/modules/answer-thread/answer-thread.schema.ts`, `src/modules/answer-thread/internal/intent-router.ts`, and `src/modules/answer-thread/internal/answer-tool-registry.ts`.
-- Separate path: The neutral Request application is mounted only at `/engine` by `src/routes/engine.tsx`, uses `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, and calls `/api/requests`.
-- Customer impact: Work on capability contracts, candidate composition, RoutePlans, mandates, and execution cannot change the homepage query experience. The homepage remains an LLM-assisted registry search even when the neutral engine becomes substantially more capable.
-- Required correction: Choose one customer Request lifecycle. The homepage composer must submit into the canonical Request application, or the Answer Thread must become a presentation adapter over that application. Do not maintain two intent interpreters, two persistence models, two recovery models, and two customer histories.
-
-**The public `/engine` promise is open, but the first real action is authentication-gated:**
-- Status: **Verified defect.**
-- Evidence: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` presents “Start with whatever you know” and calls `/api/requests` before showing any sign-in requirement. `src/lib/server/customer-request-api.ts` calls authenticated Convex transport, and `src/lib/server/convex-source.ts` rejects a missing Clerk token.
-- Hosted reproduction on 2026-07-14: `GET https://agentic-economy-phi.vercel.app/engine` returned `200`; an anonymous valid `POST /api/requests` returned `401 {"error":"missing_auth"}`.
-- Customer impact: “Explore” is a dead end for a signed-out customer. The user gives AE their request before learning that sign-in is mandatory.
-- Required correction: Implement the anonymous Request boundary tracked by the product roadmap, or move sign-in before submission with explicit value and return-to-request continuity. The entered request and opaque identity must survive authentication.
-
-**RoutePlans are durable internal objects but are absent from the customer wire contract:**
-- Status: **Verified disconnect in committed source.**
-- Evidence: `src/modules/customer-request/compiler.ts` now builds `CustomerRequestRoutePlan[]`, and `src/modules/customer-request/internal/convex-v2-schema.ts` plus `convex/customerRequestV2.ts` persist and validate them. `src/modules/customer-request/customer-projection.ts` projects only snapshot/evaluation fields. `src/modules/customer-request/agent-contract.ts` has no RoutePlan field. `convex/customerRequestApplication.ts` serializes no RoutePlan in `customerView`. `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` cannot render one.
-- Customer impact: A major engine capability can pass compilation and persistence tests while producing exactly the same customer experience as before.
-- Required correction: Add a customer-semantic route decision projection with outcome, steps, total cost, data use, effects, evidence, uncertainty, expiry, alternatives, and recovery. Keep internal identifiers backstage, but do not discard the decision object itself.
-
-**The Request application still rejects multi-capability preparation:**
-- Status: **Verified defect relative to the RoutePlan objective.**
-- Evidence: `convex/customerRequestApplication.ts` gates preparation with `current.aggregate.plan.actions.length !== 1` and returns “This request needs an action choice before AE can prepare it.” Resume, provider-status readback, and preparation readback also run only when `actions.length === 1`.
-- Customer impact: A two-step RoutePlan can be compiled and stored but cannot be prepared through the production Request application. No customer action exists to make the missing “action choice.”
-- Required correction: Preparation must select an exact RoutePlan, not a single action. Composite authority, per-step execution, cumulative controls, and recovery must all bind to that selected route.
-
-**The hosted `options_ready` result is not usable in the human UI:**
-- Status: **Verified defect.**
-- Evidence: `projectPreparedAction` in `convex/customerRequestApplication.ts` returns `state: 'options_ready'`, `options: []`, and a populated `preparedAction`. `RequestResult` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` sends every `options_ready` projection to `OptionsCard`. `OptionsCard` reads only `projection.options` and `optionSet`; it never reads `preparedAction`.
-- Symptom: The production prepared-action shape renders as “0 registered options found” with no business card, terms, data use, effects, alternatives, or approval control.
-- Required correction: Render the prepared decision explicitly and connect its exact approval action. Add a production-shape UI test, not another hand-authored option-set response.
-
-**The human UI has no prepared-action approval or run path:**
-- Status: **Verified missing integration.**
-- Evidence: HTTP handlers exist at `src/routes/api.requests.$requestRef.approval.ts` and `src/routes/api.requests.$requestRef.attempts.ts`. The workspace calls submit, messages, facts, options, preparation authorization, and resume only. It never calls approval or attempts.
-- Customer impact: The agent documentation says the customer must approve in AE, but the customer-facing Request surface supplies no way to do so. The release smoke bypasses this gap by invoking approval directly with a customer session token in `src/modules/customer-request/hosted-agent-journey.ts`.
-- Required correction: Add exact-route review, approval, run, and recovery UI states before claiming a complete customer journey.
-
-**Editing an existing Request cannot work against the real application:**
-- Status: **Verified defect.**
-- Evidence: `edit()` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` resubmits `/api/requests` with `expectedRevision` set to the current nonzero revision. `submit` in `convex/customerRequestApplication.ts` immediately returns `revision_changed` whenever `expectedRevision !== undefined && expectedRevision !== 0`.
-- Test blind spot: `tests/unit/customer-request/customer-request-workspace.test.tsx` mocks revision 2 success and therefore proves only the component’s desired behavior, not application compatibility.
-- Required correction: Add a real revise operation or make submit support revisioned replacement under the same principal and Request identity; prove it through handler-to-Convex integration.
-
-**A registered business listing is not executable supply:**
-- Status: **Verified architectural boundary; current product coverage is unproven.**
-- Evidence: Homepage search reads public catalog actions in `src/modules/registry/registry.actions.ts`. The Request graph reads only eligible, current capability publications from `convex/capabilitySupply.ts` through `loadRequestGraph` in `convex/customerRequestApplication.ts`. No bridge treats a catalog service as a capability binding.
-- Impact: “We have registered businesses” does not mean the engine can answer a query about them. A business needs an active exact contract, offering, transport binding, eligibility decision, current publication, credential readiness, and health readiness.
-- Current source evidence: The only production seed path found for the Request graph is the two labelled sandbox businesses in `convex/sandboxAcceptanceSupply.ts`, `convex/devSeed.ts`, and `src/modules/sandbox-supply/public.ts`. This does not prove the hosted graph contains no other supply, but no source-controlled evidence establishes useful real supply.
-- Required correction: Measure and expose supply coverage by customer job. Do not call catalog rows “connected businesses” unless their published capability bindings are currently eligible and reachable.
-
-## Known Bugs
-
-**The homepage query accepts work, then hides a persistence failure behind a spinner:**
-- Status: **Verified hosted defect on 2026-07-14.**
-- Trigger: Open `/`, submit `I need an electrician in Fremantle tomorrow to fix a circuit that keeps tripping`.
-- Result: `POST /api/answer/turn` returns HTTP 200 and emits a `thread` event, then emits `answer_turn_persist_failed`. The emitted thread returns `404 thread_not_found`. `AeHomeComposer` discards all frames, treats the completed transport as success, and polls the missing thread up to 40 times before showing a generic error.
-- Customer impact: The primary public ask surface appears frozen at “Starting your thread”; the real failure is neither immediate nor explained.
-- Test gap: `tests/unit/chat/home-landing-submit.test.tsx` proves only that one fetch starts and accepts an empty successful stream. It does not assert a thread event, persistence readback, streamed error, navigation, or recovery.
-- Required correction: Make persistence failure observable and fail immediately on streamed error, then prove the actual hosted persistence path. This still does not make Answer Thread the neutral Request engine.
-
-**Anonymous `/engine` query submission fails after accepting the query:**
-- Status: **Verified defect.**
-- Trigger: Open `/engine` signed out, enter any non-empty request, choose “Explore.”
-- Result: Hosted API returns `401 missing_auth`; UI replaces the experience with “Sign in to continue.”
-- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `src/lib/server/customer-request-api.ts`, `src/lib/server/convex-source.ts`.
-- Fix: Preserve the request through an explicit auth transition or allow bounded anonymous exploration before durable/private continuation.
-
-**Request revision from the UI always conflicts:**
-- Status: **Verified defect.**
-- Trigger: Reach any Request projection, choose “Edit this Request,” change the text, and resubmit.
-- Root cause: The UI uses submit with a nonzero `expectedRevision`; the Convex action accepts only revision zero.
-- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `convex/customerRequestApplication.ts`.
-- Fix: Implement and call a dedicated revision command with the same durable identity and idempotency guarantees.
-
-**Prepared decision renders as zero options:**
-- Status: **Verified defect by production-shape code path.**
-- Trigger: Reach the `projectPreparedAction` result after provider preparation.
-- Root cause: `preparedAction` exists in the wire schema but is ignored by `OptionsCard`.
-- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
-- Fix: Add a prepared-decision component and exact approval affordance; assert the actual projection shape.
-
-**Current dirty tree failed the TypeScript gate during the mapping run:**
-- Status: **Verified transient integration blocker as of this mapping run.**
-- Command: `npm run typecheck`.
-- Failures: unsafe union access in `src/modules/inquiries/inquiry.functions.ts`; missing `CustomerRequest` exports and exact-optional violations in `src/modules/provider-integrations/shipping/`; Convex index typing and result narrowing errors in `tests/integration/customer-request-v2-multi-capability-route.test.ts`; governed-send fixture drift in inquiry tests; and one Playwright callback signature error.
-- Impact: The current combined working tree is not source-releasable. These failures may belong to concurrent work and must not be attributed to the last clean deployed revision.
-- Fix: Owners of each dirty slice should close their type contract before integration; do not hide the combined failure by running only focused tests.
-
-**Public agent instructions contain duplicate step numbers:**
-- Status: **Verified defect.**
-- Evidence: `src/modules/discovery/internal/agent-skill.ts` has two step 8 entries; `src/modules/discovery/internal/discovery-files.ts` has two step 6 entries.
-- Impact: External agents receive an ambiguous lifecycle recipe at the canonical discovery surface.
-- Fix: Generate numbering from one structured sequence and add an ordered-sequence assertion.
+**Mapped Commit:** `c5bb115e`
+**Scope:** Full live repository plus the current dirty shared tree. Source and executable checks establish current state; planning documents and sandbox fixtures do not establish customer reachability.
 
 ## Tech Debt
 
-**Two customer-intent stacks own overlapping semantics:**
-- Issue: Answer Thread owns conversational search, follow-ups, frozen evidence, registry tools, and public thread history; Customer Request owns semantic interpretation, clarification, capability selection, preparation, authority, and action recovery.
-- Files: `src/modules/answer-thread/`, `src/modules/answer/`, `convex/answerThreads.ts`, `src/modules/customer-request/`, `convex/customerRequestApplication.ts`, `convex/customerRequestV2.ts`.
-- Impact: A customer can ask the same words at `/` and `/engine` and enter unrelated state machines with different capabilities, privacy, identities, and recovery.
-- Fix approach: Make one Request aggregate canonical. Conversation should be a view and input adapter, not a competing domain.
+**Two customer-intent applications own overlapping semantics:**
+- Issue: `/` starts Answer Thread, while `/engine` and `/api/v1/requests` start Customer Request. Answer Thread owns conversation, registry search, persistence, and recovery independently of the neutral Request aggregate.
+- Files: `src/routes/index.tsx`, `src/components/ae/chat/AeHomeComposer.tsx`, `src/modules/answer-thread/`, `convex/answerThreads.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `src/modules/customer-request/`, `convex/customerRequestApplication.ts`.
+- Impact: The same words can enter unrelated state machines with different identities, capabilities, authority, and recovery. Improvements to RoutePlans do not change the primary homepage journey.
+- Fix approach: Make Customer Request the single durable aggregate. Treat conversation as an input and presentation adapter, as required by `PRODUCT.md`; do not add more domain state to Answer Thread.
 
-**Customer contract, Convex return validators, persistence validators, and UI shapes are manually duplicated:**
-- Issue: Request state and option shapes are repeated in `src/modules/customer-request/agent-contract.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, and component-local response unions.
-- Impact: Internal RoutePlans can be added to persistence without reaching the agent contract or UI. A compile-time green in one layer does not prove end-to-end parity.
-- Fix approach: Derive adapters from one owned domain contract where possible; otherwise add exact round-trip contract tests from compiled aggregate to HTTP JSON to rendered state.
+**Customer Request contracts are repeated across layers:**
+- Issue: Request states and projections are declared separately in Zod, Convex validators, persistence adapters, and UI branches.
+- Files: `src/modules/customer-request/agent-contract.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, `convex/customerRequestApplication.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Impact: A RoutePlan or prepared-action field can reach persistence and HTTP while remaining invisible or unusable in the human UI.
+- Fix approach: Keep one owned domain contract and explicit adapters; add aggregate-to-HTTP-to-render contract tests for every customer-visible state.
 
-**“Source completeness” currently proves presence more strongly than connectivity:**
-- Issue: `tests/imports/customer-request-source-completeness.test.ts` verifies canonical files exist, checks for strings/import boundaries, and inspects workflow text. It does not prove the homepage uses Customer Request, a human can approve, or a multi-step RoutePlan reaches the wire/UI.
-- Impact: The gate can pass while the product remains visibly unchanged or unusable.
-- Fix approach: Retain ownership scans, but rename their claim narrowly and add executable vertical gates for the customer lifecycle.
+**Large authority-bearing modules create collision and review risk:**
+- Issue: Commands, validation, persistence, projection, and orchestration remain concentrated in a few very large modules.
+- Files: `convex/inquiries.ts` (~3,403 lines), `convex/capabilitySupply.ts` (~2,474), `src/modules/inquiries/internal/commands.ts` (~2,141), `src/modules/answer-thread/internal/turn-orchestrator.ts` (~1,819), `src/modules/routing-kernel/internal/kernel.ts` (~1,766), `convex/customerRequestApplication.ts` (~1,674).
+- Impact: Small changes cross authority boundaries and collide with concurrent work; local tests can miss incompatible projections.
+- Fix approach: Split by durable command/query and domain responsibility while preserving public entrypoints and contract tests. Do not split cohesive code merely to reduce line counts.
 
-**Large central modules increase integration risk:**
-- Issue: `convex/inquiries.ts` is about 2,979 lines, `convex/capabilitySupply.ts` 2,402, `src/modules/answer-thread/internal/turn-orchestrator.ts` 1,819, `src/modules/routing-kernel/internal/kernel.ts` 1,766, and `convex/customerRequestApplication.ts` 1,596 in the current tree.
-- Impact: Authority, validation, persistence, projection, and orchestration changes collide in the same files. The current dirty tree already contains concurrent modifications across several of these seams.
-- Fix approach: Split by durable command/query and domain responsibility while preserving public entrypoints and behavioral tests.
+**Legacy Request authority remains beside the current V2 contract:**
+- Issue: Retired V1 models and compiler behavior remain importable next to the active Request application.
+- Files: `src/modules/customer-request/legacy-v1.ts`, `src/modules/customer-request/legacy-compiler-v1.ts`, `src/modules/customer-request/public.ts`.
+- Impact: New code can accidentally depend on historical schemas or modernize retired authority as if it were live.
+- Fix approach: Keep legacy entrypoints explicitly quarantined, migrate remaining consumers, then move obsolete files to Trash only with repository-owner confirmation.
 
-**Product authority documents describe incompatible maturity levels:**
-- Issue: `AGENTS.md` says AE’s first owned conversion is a qualified inquiry and explicitly forbids booking, charging, dispatch, or auto-fulfilment. Current Request source includes prepared-action approval, attempt admission, provider execution, and reconciliation. `.planning/STATE.md` also retains a stale “current product slice” and historical Phase 1 constraints beneath the RoutePlan frontier.
-- Impact: Contributors can correctly follow one authority and contradict another. Public copy can either understate real source or overclaim unproven effects.
-- Fix approach: Separate current public product truth, internal source capability, and target architecture in explicit dated sections. Claims must follow hosted customer evidence, not class names.
+**Source-completeness tests prove ownership more strongly than connectivity:**
+- Issue: Import and source scans establish file presence and dependency direction, not that a customer can complete the lifecycle.
+- Files: `tests/imports/customer-request-source-completeness.test.ts`, `src/lib/ui/contract-scans.ts`.
+- Impact: Gates can pass while `/`, `/engine`, approval, execution, or recovery remain disconnected.
+- Fix approach: Keep architectural scans but name their claims narrowly; pair them with executable vertical tests through the intended HTTP and human surfaces.
 
-**Release/support commands still depend on `.mjs` proof utilities:**
-- Issue: `package.json` invokes `.mjs` files for provider readiness, retirement, edge and historical proof helpers even though current runtime ownership is TypeScript.
-- Impact: Supporting evidence can be mistaken for product completion, and the repository’s stated “no .mjs/.mts ownership” rule is easy to blur.
-- Fix approach: Keep product semantics in TypeScript and classify every remaining `.mjs` command as support-only or migrate it. No support command may be the only proof of runtime behavior.
+## Known Bugs
 
-## Security and Privacy Considerations
+**Anonymous `/engine` submission accepts input before revealing the auth boundary:**
+- Symptoms: The page invites “Start with whatever you know”; the first valid `POST /api/requests` requires a Clerk token and returns `401 missing_auth` for a signed-out user.
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `src/lib/server/customer-request-api.ts`, `src/lib/server/convex-source.ts`.
+- Trigger: Open `/engine` signed out, enter a request, and choose “Explore.”
+- Workaround: Sign in before using the workspace. The product fix is an explicit auth transition that preserves the entered Request, or a bounded anonymous exploration contract.
 
-**Customer requests are sent to OpenRouter before any visible data-use review:**
-- Status: **Verified disclosure gap; legal impact requires review.**
-- Risk: `src/modules/customer-request/openrouter-transport.ts` sends the complete `customerJob` and all public capability descriptors to `https://openrouter.ai/api/v1/chat/completions`. The first customer-visible disclosure review in `AeCustomerRequestWorkspace` is framed only as sharing with businesses.
-- Public mismatch: `src/routes/privacy.tsx` says asking AE uses a browser session marker but does not disclose the external model processor or explain request-content handling.
-- Current mitigation: Payload and response sizes are bounded, temperature is zero, descriptors are treated as untrusted data, and a timeout is enforced.
-- Recommendation: Add truthful processor disclosure and data-minimization policy before collection; define retention/provider-routing controls; redact or classify sensitive intent before third-party interpretation where required.
+**Editing a Request uses a command that rejects nonzero revisions:**
+- Symptoms: The workspace resubmits `/api/requests` with the displayed revision, while the application submit command returns `revision_changed` whenever `expectedRevision` is nonzero.
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `convex/customerRequestApplication.ts`.
+- Trigger: Choose “Edit this Request” after receiving any persisted projection and resubmit.
+- Workaround: Restart as a new Request. Implement a revision command bound to the same principal, Request identity, and idempotency contract.
 
-**Public Answer Threads are bearer-link records with no automatic expiry:**
-- Risk: `AeHomeComposer` tells customers that anyone with the thread link can open it and that it has no automatic expiry. Customer queries can contain sensitive needs or locations.
-- Files: `src/components/ae/chat/AeHomeComposer.tsx`, `src/routes/t.$threadId.tsx`, `src/modules/answer-thread/internal/public-projection.ts`.
-- Current mitigation: The disclosure is visible and recent-thread removal is local.
-- Recommendation: Add data minimization, deletion/expiry controls, non-enumerable identifiers, and tests that private inquiry/contact material never enters public projections.
+**Prepared actions render as an empty option list:**
+- Symptoms: `projectPreparedAction` returns `state: 'options_ready'`, `preparedAction`, and no legacy options; `OptionsCard` reads only `projection.options` and `optionSet`.
+- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Trigger: Reach provider preparation through the production Request application.
+- Workaround: Use the external-agent API. Add a prepared-decision projection and exact approval control to the human workspace.
 
-**Capability publication and readiness control what the engine may contact:**
-- Risk: A compromised owner/admin path can publish endpoints, bind credentials, or influence eligibility/readiness.
-- Files: `convex/capabilitySupply.ts`, `convex/capabilitySupplyReadiness.ts`, `src/modules/capability-supply/`, `src/modules/capability-contract/`.
-- Current mitigation: Exact contract refs, registration hashes, eligibility hashes, owner/admin authority, readiness probes, audit records, HTTPS/public-target checks, and fail-closed integrity validation exist.
-- Recommendation: Preserve server-derived identity, credential indirection, SSRF defenses, revision-bound probes, auditability, and quarantine. Exercise cross-owner and changed-target attacks in durable integration tests.
+**RoutePlans cross the HTTP contract but have no human projection:**
+- Symptoms: `routes` is present in `customerRequestViewSchema` and `writableView`, but `AeCustomerRequestWorkspace` never reads or renders it; `routes_ready` falls into a generic unsupported message.
+- Files: `src/modules/customer-request/agent-contract.ts`, `convex/customerRequestApplication.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Trigger: Compile a multi-capability Request that returns `routes_ready`.
+- Workaround: Inspect the authenticated JSON response. Add an ordinary-language route comparison and selection state without exposing internal graph vocabulary on the public surface.
 
-**External agent authority is strong but operationally brittle:**
-- Risk: `/api/v1/requests` requires Clerk API-key auth, the `customer_requests:create` scope, and an HMAC service assertion using `AE_CONVEX_SERVER_FUNCTION_TOKEN`.
-- Files: `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/service-auth-envelope.ts`, `convex/customerRequestApplication.ts`.
-- Current mitigation: Principal, owner, credential, scope, operation, command, timestamp, and signature are bound; agent principals are recorded before use.
-- Recommendation: Add key rotation, replay-window observability, revocation tests, and explicit error telemetry without leaking secret or assertion material.
+**The human Request workspace cannot approve or run a prepared action:**
+- Symptoms: HTTP handlers exist for approval and attempts, but the workspace calls neither route.
+- Files: `src/routes/api.requests.$requestRef.approval.ts`, `src/routes/api.requests.$requestRef.attempts.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Trigger: Reach a prepared action in the human workspace.
+- Workaround: The hosted agent journey invokes these operations directly. Add exact decision review, approval, run, and recovery states before claiming human parity.
 
-**No Request-specific cost/abuse limiter was found:**
-- Status: **Risk.**
-- Risk: Each authenticated submit/refine can make a paid external model call and load up to 64 capabilities. No Request-path rate or spend limiter appears in `src/lib/server/customer-request-*`, `convex/customerRequestApplication.ts`, or `src/modules/customer-request/`.
-- Recommendation: Add durable per-principal and per-credential quotas, concurrency limits, model-cost telemetry, and retry-after semantics before broad access.
+**Multi-capability Requests cannot enter preparation:**
+- Symptoms: preparation and resume paths require `aggregate.plan.actions.length === 1`; multi-action Requests return a route decision but have no exact route selection command.
+- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/preparation.ts`, `src/modules/customer-request/compiler.ts`.
+- Trigger: Submit a Request whose compiled plan has two or more dependent actions.
+- Workaround: None through the current application. Bind preparation to a selected immutable RoutePlan and carry per-step authority and recovery.
+
+**The current dirty tree fails TypeScript validation:**
+- Symptoms: `npm run typecheck` exits 2 on 2026-07-14.
+- Files: `src/modules/provider-integrations/shipping/public.ts`, `src/modules/provider-integrations/shipping/server.ts`, `tests/unit/customer-request/shipping-quote-input.test.ts`.
+- Trigger: Run `npm run typecheck` with Node 22 in the current shared tree.
+- Workaround: The owner of the untracked shipping slice must export the intended Request type and omit absent exact-optional fields rather than passing `undefined`.
+
+## Security Considerations
+
+**Customer text is sent to a model provider before a human data-use review:**
+- Risk: Request prose may contain personal or sensitive facts; interpretation sends the text and registered capability vocabulary to OpenRouter.
+- Files: `src/modules/customer-request/openrouter-interpreter.ts`, `src/modules/customer-request/interpreter.ts`, `src/lib/server/customer-request-api.ts`.
+- Current mitigation: Bounded request bodies, strict generated-output validation, prompt-injection framing, response-size limits, and deadlines constrain processing.
+- Recommendations: Put a clear pre-submit disclosure on the human surface, minimize transmitted fields, and test disclosure parity with actual provider behavior.
+
+**Public Answer Threads are bearer-link records:**
+- Risk: Anyone with a valid public thread token may read the projected conversation; customer text can persist without an evident automatic expiry policy.
+- Files: `src/modules/answer-thread/internal/public-thread-token.ts`, `src/modules/answer-thread/answer-thread.functions.ts`, `convex/answerThreads.ts`.
+- Current mitigation: High-entropy tokens, session-bound writes, bounded turns, and public projection filters.
+- Recommendations: Define retention and revocation, disclose link semantics, and avoid carrying new Customer Request history into this legacy store.
+
+**Capability freshness is an authorization boundary:**
+- Risk: Stale publications, bindings, eligibility, credentials, or readiness could route data or execution to invalid supply.
+- Files: `convex/capabilitySupply.ts`, `src/modules/capability-supply/`, `src/modules/customer-request/action-preparation.ts`, `src/modules/customer-request/approval-grant-v2.ts`.
+- Current mitigation: Exact contract digests, expiry checks, readiness evidence, idempotency, immutable approval material, and fail-closed refusal states.
+- Recommendations: Preserve checks at preparation and attempt time, expose stale-authority recovery, and never treat registry inventory as routeable supply.
+
+**External-agent writes depend on multiple exact trust controls:**
+- Risk: Misconfiguration of Web Bot Auth, Clerk/Convex identity, clearance signing, or scopes can either block valid writes or weaken admission.
+- Files: `src/modules/clearance/`, `src/routes/api.agent.tools.ts`, `src/modules/harness/tool-contract.ts`.
+- Current mitigation: Signature coverage, pinned tool allowlist, named write scopes, mandate evaluation, replay protection, and typed proof gaps.
+- Recommendations: Keep identity separate from authorization; verify unsigned refusal, invalid scope, replay, expiry, and downstream failure in hosted release gates.
 
 ## Performance Bottlenecks
 
-**Every interpretation rebuilds and retransmits the capability descriptor set:**
-- Problem: `loadRequestGraph` in `convex/customerRequestApplication.ts` reads eligible supply, then performs a serial internal query for every unique exact contract, projects schemas, and sends the descriptor payload to OpenRouter.
-- Bounds: Eligible supply is limited to 64; projected descriptors are capped at 512,000 bytes; OpenRouter timeout is 20 seconds; request body cap is 1,000,000 bytes.
-- Measurement: No hosted p50/p95 stage timing or cache-hit metric was found.
-- Improvement path: Cache immutable exact-contract descriptors by digest, parallelize bounded independent reads where Convex permits, retrieve candidates before LLM interpretation, and instrument graph-load/model/compile stages separately.
+**Interpretation rebuilds and transmits capability descriptors:**
+- Problem: Each Request interpretation serializes the current eligible contract vocabulary for the external model call.
+- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/openrouter-interpreter.ts`, `src/modules/customer-request/interpreter.ts`.
+- Cause: The model is constrained by a source-owned dynamic vocabulary rather than a stable compact index.
+- Improvement path: Cache a digest-addressed descriptor projection with explicit invalidation while preserving exact contract identity and current admission.
 
-**RoutePlan enumeration is Cartesian:**
-- Problem: `compileRoutePlans` in `src/modules/customer-request/compiler.ts` multiplies candidate choices across actions and refuses once combinations exceed 256.
-- Impact: A modest graph such as five actions with four candidates each produces 1,024 combinations and becomes `capability_graph_invalid` rather than yielding bounded best routes.
-- Improvement path: Use incremental constrained search with deterministic top-k pruning based on fit, cost, data exposure, consequence, trust, liveness, and evidence. Preserve completeness/uncertainty truth when pruning.
+**Route enumeration grows combinatorially:**
+- Problem: Candidate combinations are enumerated across actions before projection.
+- Files: `src/modules/customer-request/compiler.ts`.
+- Cause: Cartesian composition of viable supplies; `MAX_ROUTE_PLANS = 256` fails closed after enumeration grows beyond the bound.
+- Improvement path: Use bounded incremental search and deterministic top-k pruning based on declared objectives, retaining refusal when completeness cannot be proven.
 
-**Homepage thread creation can issue 40 readback polls:**
-- Problem: `promoteReadableThread` in `src/components/ae/chat/AeHomeComposer.tsx` polls every 250 ms for up to 40 attempts after the stream yields a thread.
-- Impact: Up to ten seconds and forty HTTP reads per submission when projection lag or failure occurs.
-- Improvement path: Make the stream’s committed-thread event authoritative, use backoff, or subscribe to durable availability.
-
-**Broad Convex collection remains common:**
-- Risk: Static inspection found about 50 `.collect()` calls in `convex/`, including registry, discovery, inquiry, notification, observability, and compatibility paths.
-- Measurement: No production cardinality or scan budget was found.
-- Improvement path: Audit public/request-critical paths for indexed pagination and bounded retention; record scanned-row counts before choosing thresholds.
+**Broad Convex reads remain in authority-bearing paths:**
+- Problem: Several modules call `.collect()` where collection size can grow with businesses, publications, inquiries, or evidence.
+- Files: `convex/capabilitySupply.ts`, `convex/inquiries.ts`, `convex/registry.ts`, `convex/customerRequestApplication.ts`.
+- Cause: Some integrity checks and projections scan a logical set rather than using a unique/indexed lookup.
+- Improvement path: Add bounded indexed reads and explicit pagination. Keep full-set integrity checks in bounded administrative jobs rather than customer latency paths.
 
 ## Fragile Areas
 
-**RoutePlan schema evolution across four layers:**
-- Why fragile: Compiler types, writable conversion, Convex table validators, Convex action return validators, agent Zod schemas, and UI projections must change together.
-- Files: `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, `convex/customerRequestV2.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/modules/customer-request/customer-projection.ts`.
-- Current failure mode: The dirty tree persists routes but drops them from public projections.
-- Safe modification: Add a versioned customer route projection and a round-trip contract test before extending preparation or UI.
+**Request projection evolution:**
+- Files: `src/modules/customer-request/agent-contract.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, `convex/customerRequestApplication.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Why fragile: The same state has persistence, Convex validator, HTTP, external-agent, and human-rendering representations.
+- Safe modification: Start with one customer-semantic contract, update adapters together, and prove a real production-shaped response through the UI.
+- Test coverage: Unit coverage is broad, but workspace tests mock desired responses and do not traverse the production handler/Convex boundary.
 
-**Client-only Request identity and recovery:**
-- Why fragile: `requestRef`, `agentRef`, current revision, turns, and pending answer live only in React state in `AeCustomerRequestWorkspace`.
-- Common failures: Reload, sign-in navigation, new tab, crash, or copied URL loses the Request reference even though a durable GET resume endpoint exists.
-- Safe modification: Put an opaque Request reference in a private route/URL or authenticated request index and restore from durable state. Never place private facts in the URL.
+**Capability supply and preparation authority:**
+- Files: `convex/capabilitySupply.ts`, `src/modules/capability-supply/`, `src/modules/customer-request/preparation.ts`, `src/modules/customer-request/action-preparation.ts`.
+- Why fragile: Currentness, admission, credentials, evidence, cost, data use, and exact contract identity jointly decide whether a step may proceed.
+- Safe modification: Preserve deterministic refusal taxonomies and re-check authority at each irreversible transition.
+- Test coverage: Sandbox tests prove contract mechanics, not useful production supply or real provider fulfilment.
 
-**Capability supply freshness can invalidate requests globally:**
-- Why fragile: Registry snapshot digests include publication revision, readiness expiry, offering hash, binding hash, and price. `convex/customerRequestV2.ts` revalidates the entire aggregate against current supply.
-- Common failures: A readiness refresh or price/publication revision can make a durable Request stale before the customer acts.
-- Safe modification: Define which changes invalidate discovery, preparation, approval, and execution separately. Preserve the prior plan as expired evidence rather than collapsing to a generic retry.
-
-**Provider preparation and one-action assumptions are distributed:**
-- Why fragile: Checks for exactly one action occur in resume, status, authorization, comparison, preparation, prepared-action construction, approval, and attempts across `convex/customerRequestApplication.ts` and `convex/customerRequestV2*`.
-- Common failure: Removing one guard creates partial multi-step behavior without composite authority or recovery.
-- Safe modification: Introduce an exact RoutePlan aggregate boundary first, then migrate each lifecycle stage with executable invariants.
-
-**The current shared tree contains several concurrent product slices:**
-- Why fragile: Dirty changes span capability supply, multi-capability compilation, governed inquiry sends, shipping adapters, routes, tests, and planning authority.
-- Impact: A broad commit or cleanup can merge incomplete contracts or overwrite another agent’s work.
-- Safe modification: Preserve all unrelated state, stage by claimed ticket, and verify the combined tree before integration. Never infer release readiness from a focused green test.
+**Concurrent Inquiry and shipping work:**
+- Files: `convex/inquiries.ts`, `src/modules/inquiries/`, `src/modules/provider-integrations/`, related tests.
+- Why fragile: These files are modified or untracked in the shared tree and contain authority, privacy, delivery, and receipt work.
+- Safe modification: Coordinate ownership, inspect per-file diffs, and keep changes unstaged unless the slice owner explicitly requests integration.
+- Test coverage: Current TypeScript failures show the shipping slice is not yet integrated across its public type boundary.
 
 ## Scaling Limits
 
-**Request graph enumeration:**
-- Current capacity: At most 64 eligible supplies in `loadRequestGraph`; descriptor payload at most 512 KiB.
-- Limit behavior: Excess supply or descriptor size returns `capabilities_unavailable`, surfaced to the human UI as a generic failure.
-- Scaling path: Paginated/retrieval-led candidate selection plus explicit coverage evidence.
+**Request compilation:**
+- Current capacity: 64 selections, 128 facts, 700,000 serialized aggregate bytes, and 256 RoutePlans.
+- Limit: Larger or more connected plans refuse as unsafe/invalid rather than degrading gradually.
+- Scaling path: Bound candidate search earlier, paginate alternatives, and persist compact digest-addressed evidence.
 
-**Route alternatives:**
-- Current capacity: 256 full Cartesian RoutePlans.
-- Limit behavior: Exceeding the cap returns an invalid graph rather than a bounded ranked subset.
-- Scaling path: Deterministic top-k graph search with declared pruning and uncertainty.
-
-**Durable aggregate size:**
-- Current capacity: Customer Request aggregate is capped at 700,000 serialized bytes in `src/modules/customer-request/compiler.ts` and `convex/customerRequestV2.ts`.
-- Limit behavior: Compilation or integrity validation refuses the aggregate.
-- Scaling path: Store immutable graph/contract references separately from request-specific state and keep the Request aggregate compact.
-
-**No global Request throughput budget:**
-- Current capacity: Undefined; external-model calls are gated by authentication but not by a source-owned per-principal quota.
-- Symptoms at limit: OpenRouter cost spikes, 20-second request stalls, provider rate limits, and Convex action pressure.
-- Scaling path: Durable quotas, admission control, stage-level timeouts, and cost/latency SLOs.
+**Customer throughput and model spend:**
+- Current capacity: Per-request byte/deadline limits exist; no source-owned global Request quota or cost budget was found.
+- Limit: Automated valid submissions can drive external-model cost and Convex work until provider/platform limits intervene.
+- Scaling path: Add principal/IP quotas, concurrency budgets, telemetry, and explicit retry-after behavior without weakening authenticated authority.
 
 ## Dependencies at Risk
 
-**OpenRouter is a hard availability dependency for every new or refined Request:**
-- Risk: Missing `OPENROUTER_API_KEY`, provider errors, invalid JSON, or a 20-second timeout returns `interpreter_unavailable`.
-- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/openrouter-transport.ts`, `src/modules/customer-request/semantic-interpreter.ts`.
-- Impact: Deterministic contracts, registered supply, and the compiler remain unusable when one model broker is unavailable.
-- Mitigation path: Add an owned interpreter port with provider failover and a bounded deterministic path for exact structured requests. Do not fall back to keyword logic that can create authority or capabilities.
+**OpenRouter:**
+- Risk: Every new or refined Request depends on an external model response and compatible structured output.
+- Impact: Provider latency, outage, model drift, or malformed output blocks Request progress.
+- Migration plan: Keep the transport interface replaceable, pin/test model behavior, preserve strict validation, and expose typed retryable failure rather than silently falling back to invented semantics.
 
-**Clerk, Convex, Vercel, and deployment revision must all agree:**
-- Risk: Human Request calls require Clerk-to-Convex JWT; external agents require Clerk API keys plus the service HMAC; hosted proof requires exact Vercel and Convex revision readback.
-- Impact: Configuration drift presents as generic request unavailability.
-- Mitigation path: Keep exact-revision readback, add customer-readable dependency status, and distinguish auth, graph, interpreter, and provider failures in operator telemetry.
-
-**Pinned nightly Nitro and fast-moving UI/runtime packages:**
-- Risk: `package.json` aliases `nitro` to a dated nightly and uses fast-moving TanStack Start/Router/AI, React 19, Convex, and Astryx packages.
-- Impact: SSR, streaming, route generation, headers, authentication propagation, or presentation can regress.
-- Mitigation path: Pin exact runtime dependencies, upgrade one subsystem at a time, and run authenticated browser plus hosted Request gates.
+**Nightly and fast-moving runtime packages:**
+- Risk: The application uses rapidly changing framework/build dependencies and a pinned Nitro nightly.
+- Impact: Build, SSR, routing, and deployment behavior can change outside domain code.
+- Migration plan: Upgrade in isolated branches with full build, route, browser, and hosted smoke evidence; avoid opportunistic dependency churn during domain work.
 
 ## Missing Critical Features
 
 **One canonical customer front door:**
-- Missing: The homepage query and `/engine` Request lifecycle are not connected.
-- Blocks: The neutral engine changing the product customers actually use.
-- Required proof: Submit on `/`, resume the same Request, and observe the same state through human and external-agent surfaces.
+- Problem: `/` and `/engine` remain separate products.
+- Blocks: A single resumable Request history and proof that engine improvements reach the primary customer surface.
 
-**Customer-semantic RoutePlan projection and selection:**
-- Missing: RoutePlans do not cross the HTTP/UI boundary.
-- Blocks: Legible comparison, exact mandate, multi-step preparation, and route recovery.
-- Required proof: A two-step plan displayed without protocol choreography, with declared cost, data use, effects, evidence, expiry, alternatives, and uncertainty.
+**Human RoutePlan decision and selection:**
+- Problem: RoutePlans reach JSON but not the human projection, and no exact route-selection command exists.
+- Blocks: Multi-capability preparation, customer comparison, bounded composite authority, and visible alternatives/recovery.
 
-**Composite preparation, mandate, dispatch, and recovery:**
-- Missing: Production application behavior remains single-action despite composite compilation in the dirty tree.
-- Blocks: A real RoutePlan outcome rather than a renamed option or persisted DAG.
-- Required proof: Exact selected route, cumulative spend/data authority, step idempotency, output-to-input validation, unknown-outcome reconciliation, and no duplicate effects.
+**Prepared-action approval, run, and inspection in the human UI:**
+- Problem: The routes exist but the workspace does not call them.
+- Blocks: Human parity with the narrow hosted external-agent journey and any complete customer lifecycle claim.
 
-**Useful registered capability supply:**
-- Missing evidence: Source-controlled hosted proof registers two labelled sandbox businesses for `sandbox.reference.lookup`; it does not prove a customer-relevant business category is reachable.
-- Blocks: Honest “real business options” claims for arbitrary customer queries.
-- Required proof: At least two dissimilar useful capabilities and businesses registered through the normal publication path, with hosted readiness and query coverage. Sandbox remains clearly labelled.
+**Useful production routeable supply evidence:**
+- Problem: Registered listings do not prove current contract, offering, binding, eligibility, credential, publication, or readiness records.
+- Blocks: Claims that the engine can route real customer jobs or produce useful provider outcomes.
 
-**Human approval and recovery journey:**
-- Missing: Prepared-action approval and attempt controls are absent from the workspace, and durable Request identity is not recoverable after navigation.
-- Blocks: The documented stop-and-return contract for external agents and customers.
-- Required proof: Browser-based review, exact approval, resume, run, unknown outcome, and resolution against production-shaped projections.
-
-**Generic transport execution for composite steps:**
-- Missing: Capability publication/readiness recognizes AE envelope, OpenAPI HTTP, MCP, and x402, but the current customer Request preparation/execution path is not proven across composite generic adapters.
-- Blocks: Neutrality beyond registration and compilation.
-- Required proof: Substitute dissimilar businesses and transports with registration/config-only changes and no kernel, caller prompt, Request API, or UI changes.
+**Composite execution and reconciliation:**
+- Problem: Current preparation and attempt logic is single-action shaped.
+- Blocks: The target Request → RoutePlan → Approve → Run → Inspect lifecycle for multi-step work.
 
 ## Test Coverage Gaps
 
-**Browser tests do not submit a real Request:**
-- What's tested: `tests/e2e/a11y/engine-product-a11y.spec.ts` loads `/engine`, fills the textarea, checks the absence of a budget field, and focuses “Explore.”
-- What's missing: Clicking Explore, authentication transition, clarification, disclosure, options, prepared action, approval, run, recovery, and reload/resume.
-- Priority: Critical.
-
-**Workspace tests mock desired responses instead of traversing production handlers:**
-- What's tested: `tests/unit/customer-request/customer-request-workspace.test.tsx` supplies hand-authored `fetch` responses.
-- Blind spots: It mocks revision editing as successful despite the real Convex conflict and mocks `options_ready` with option arrays rather than the real `preparedAction` shape.
-- Priority: Critical.
-
-**Hosted cold-agent proof is intentionally narrow:**
-- What's tested: `.github/workflows/kernel-release-gate.yml` seeds exactly two labelled sandbox businesses and asks “Find the cheapest labelled sandbox option,” with a scripted fallback fact. `src/modules/customer-request/hosted-agent-journey.ts` drives the API directly.
-- What's missing: Arbitrary customer query coverage, real supply, homepage parity, browser interaction, route display, and composite execution.
-- Priority: Critical before customer-value claims; the existing proof remains valid as sandbox contract proof.
-
-**Multi-capability integration does not cross the product boundary:**
-- What's tested: `tests/integration/customer-request-v2-multi-capability-route.test.ts` directly constructs two contracts, compiles, commits, and reads back a RoutePlan.
-- What's missing: Natural-language interpreter, public API, customer projection, UI, exact route approval, generic transport invocation, and recovery.
-- Current state: The focused compiler and application proof passed for commit `59dbf7f6`; that proof still stops below HTTP projection and UI.
-- Priority: Critical for the RoutePlan frontier.
-
-**Release source gate omits browser behavior:**
-- Evidence: `test:release:source` in `package.json` runs lint, typecheck, unit/integration/type/import/copy/SEO/UI-contract tests and build, but not `test:e2e` or `test:a11y`.
-- Risk: A green source release can ship a visually present but nonfunctional customer journey.
-- Priority: High; add a small authenticated and anonymous Request browser contract to release qualification.
-
-**No performance or cost budgets cover Request interpretation:**
-- Missing: Graph load time, descriptor count/bytes, OpenRouter latency/cost, compile time, route count, durable action latency, and concurrent idempotency SLOs.
-- Risk: The engine can become expensive or time out before functional tests fail.
-- Priority: High before broad agent access.
-
-**Privacy disclosure parity is untested:**
-- Missing: A test that all external processors and recipients used by Ask/Request flows appear in current public privacy copy and authority reviews.
-- Risk: Source adds a new external model or provider while human disclosure remains stale.
+**Production Request browser journey:**
+- What's not tested: Anonymous/auth transition, real submit, clarification, route comparison, prepared decision, exact approval, run, and recovery through production handlers.
+- Files: `tests/e2e/`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Risk: Mocked component tests can prove desired UI behavior against responses the application never emits.
 - Priority: High.
 
-## Overclaim Guardrails
+**Homepage persistence failure and migration behavior:**
+- What's not tested: Streamed persistence error handling, thread readback, immediate recovery, and eventual cutover from Answer Thread to canonical Request.
+- Files: `tests/unit/chat/home-landing-submit.test.tsx`, `src/components/ae/chat/AeHomeComposer.tsx`, `src/modules/answer-thread/internal/turn-orchestrator.ts`.
+- Risk: The primary public ask surface can fail or diverge from Request without a vertical gate detecting it.
+- Priority: High.
 
-- A clean compiler or persistence test does not prove a customer can see, choose, approve, or run a RoutePlan.
-- Exact-revision hosted sandbox proof does not prove useful real supply or customer value.
-- A catalog listing is not an eligible capability publication.
-- `options_ready` is not product completion while the real prepared-action projection renders as zero options.
-- “External agent journey” describes direct API traversal; it does not prove human UI parity.
-- “Source complete” must not mean files and validators exist; the vertical customer journey must be executable.
-- Do not claim the engine supports a query merely because OpenRouter can interpret it. The graph must contain useful eligible supply and return a legible customer decision.
+**Multi-capability product boundary:**
+- What's not tested: A compiled two-step RoutePlan crossing Convex projection, HTTP schema, human rendering, selection, preparation, approval, execution, and inspection.
+- Files: `tests/integration/customer-request-v2-multi-capability-route.test.ts`, `src/modules/customer-request/`, `convex/customerRequestApplication.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Risk: Internal graph correctness can pass while the product remains single-action.
+- Priority: High.
+
+**Request performance and cost budgets:**
+- What's not tested: Capability vocabulary size, route-enumeration latency, aggregate size, model token/cost, and broad-read scaling under realistic supply.
+- Files: `src/modules/customer-request/compiler.ts`, `convex/customerRequestApplication.ts`, `convex/capabilitySupply.ts`.
+- Risk: Correctness gates pass until real supply causes latency, cost, or refusal cliffs.
+- Priority: Medium.
 
 ---
 
 *Concerns audit: 2026-07-14*
-*Update as verified defects are fixed, dirty-tree blockers are integrated, or hosted evidence changes.*
