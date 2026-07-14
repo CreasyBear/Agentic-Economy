@@ -10,8 +10,6 @@ vi.mock('undici', async (importOriginal) => ({
 
 import { claimBusinessCommand } from '../../convex/business'
 import {
-  registerCapabilityBindingCommand,
-  registerCapabilityOfferingCommand,
   setCapabilitySupplyEligibilityCommand,
 } from '../../convex/capabilitySupply'
 import { publishBusinessCatalogCommand } from '../../convex/catalog'
@@ -43,9 +41,18 @@ describe('V2 Request registration-only business substitution', () => {
     vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-test-key')
     vi.stubEnv('AE_SANDBOX_PROVIDER_THREE_KEY', 'sandbox-provider-three-test-key')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
+      kind: 'quoted',
+      expectedCost: { currency: 'AUD', amountMinor: 0 },
+      maximumCost: { currency: 'AUD', amountMinor: 0 },
+      expectedLatencyMs: 1,
+      dataFields: [],
+      disclosures: ['Sandbox readiness probe only.'],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const backend = createBackend()
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const third = await registerThirdSandboxBusiness(backend)
+    await observeAllPublishedSupplyReady(backend)
 
     const withThird = await prepareCustomerChoice(backend, 'request:substitution:three')
     expect(withThird).toMatchObject({
@@ -98,7 +105,7 @@ describe('V2 Request registration-only business substitution', () => {
 })
 
 async function registerThirdSandboxBusiness(backend: Backend) {
-  return await backend.run(async (ctx) => {
+  const registration = await backend.run(async (ctx) => {
     const now = Date.now()
     const actor = {
       kind: 'authenticated_owner' as const,
@@ -150,80 +157,89 @@ async function registerThirdSandboxBusiness(backend: Backend) {
       version: contract.version,
       contractDigest: contract.contractDigest,
     }
-    const offeringId = 'offering:sandbox-option-three:reference-lookup'
-    const bindingId = 'binding:sandbox-option-three:http-json'
+    const business = await ctx.db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', 'sandbox-option-three'))
+      .unique()
+    if (business === null) throw new Error('third business missing')
+    return { businessId: business._id, contractRef }
+  })
+  const offeringId = 'offering:sandbox-option-three:reference-lookup'
+  const bindingId = 'binding:sandbox-option-three:http-json'
+  const owner = backend.withIdentity({
+    subject: 'test-registration-owner', issuer: 'https://identity.test', tokenIdentifier: 'test-registration-owner',
+  })
+  const published = await owner.mutation(api.capabilitySupply.publishCapability, {
+    businessId: registration.businessId,
+    source: { kind: 'ae_envelope', documentJson: JSON.stringify(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT) },
+    offering: {
+      offeringId, networkId: 'ae:public',
+      presentation: {
+        label: 'Sandbox Option Three', summary: 'Labelled sandbox supply for registration-only substitution proof.',
+        price: { kind: 'fixed', currency: 'AUD', amountMinor: 500 },
+        materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
+        commercialRelationship: {
+          kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
+          influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+          evidenceRefs: ['test:sandbox-commercial-neutrality'],
+        },
+      },
+      searchTerms: ['sandbox', 'option', 'reference lookup'],
+      registrationEvidenceRefs: ['test:third-business-published'],
+    },
+    binding: {
+      bindingId, endpointUrl: 'https://sandbox-three.example.test/capability',
+      credentialRef: 'env:AE_SANDBOX_PROVIDER_THREE_KEY',
+      continuation: { kind: 'single_response', evidenceRefs: ['test:sandbox-single-response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['test:sandbox-no-cancellation'] },
+      adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+      registrationEvidenceRefs: ['test:third-binding-conformant'],
+    },
+    operationKey: 'test:substitution:publication:three',
+    correlationId: 'test:substitution:supply:three',
+    reasonCode: 'registration_only_substitution_proof',
+    evidenceRefs: ['test:third-business-published'],
+  })
+  if (published.kind !== 'published') throw new Error(`third publication failed: ${published.reason}`)
+  const hashes = await backend.run(async (ctx) => {
     const commandContext = {
       correlationId: 'test:substitution:supply:three',
       reasonCode: 'registration_only_substitution_proof',
       evidenceRefs: ['test:third-business-published'],
     }
-    const offering = await registerCapabilityOfferingCommand(ctx.db, {
-      actor: { kind: 'system', ref: 'system:test-registration-owner' },
-      context: { ...commandContext, operationKey: 'test:substitution:offering:three' },
-      registration: {
-        offeringId,
-        businessId: published.business.businessId,
-        networkId: 'ae:public',
-        contractRef,
-        presentation: {
-          label: 'Sandbox Option Three',
-          summary: 'Labelled sandbox supply for registration-only substitution proof.',
-          price: { kind: 'fixed', currency: 'AUD', amountMinor: 500 },
-          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
-          commercialRelationship: {
-            kind: 'none',
-            summary: 'Sandbox verification has no commercial relationship.',
-            influencesEligibility: false,
-            influencesInclusion: false,
-            influencesOrder: false,
-            evidenceRefs: ['test:sandbox-commercial-neutrality'],
-          },
-        },
-        searchTerms: ['sandbox', 'option', 'reference lookup'],
-        registrationEvidenceRefs: ['test:third-business-published'],
-      },
-    }, now + 2)
-    if (offering.kind !== 'registered') throw new Error(`third offering failed: ${offering.reason}`)
-    const binding = await registerCapabilityBindingCommand(ctx.db, {
-      actor: { kind: 'system', ref: 'system:test-registration-owner' },
-      context: { ...commandContext, operationKey: 'test:substitution:binding:three' },
-      registration: {
-        bindingId,
-        offeringId,
-        networkId: 'ae:public',
-        contractRef,
-        endpointUrl: 'https://sandbox-three.example.test/capability',
-        credentialRef: 'env:AE_SANDBOX_PROVIDER_THREE_KEY',
-        continuation: { kind: 'single_response', evidenceRefs: ['test:sandbox-single-response'] },
-        cancellation: { kind: 'unsupported', evidenceRefs: ['test:sandbox-no-cancellation'] },
-        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
-        registrationEvidenceRefs: ['test:third-binding-conformant'],
-      },
-    }, now + 3)
-    if (binding.kind !== 'registered') throw new Error(`third binding failed: ${binding.reason}`)
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', offeringId)).unique()
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', bindingId)).unique()
+    if (offering === null || binding === null) throw new Error('third published supply missing')
     const eligibility = await setCapabilitySupplyEligibilityCommand(ctx.db, {
       actor: { kind: 'system', ref: 'system:test-registration-owner' },
       context: { ...commandContext, operationKey: 'test:substitution:eligibility:three' },
       eligibility: {
         offeringId,
         bindingId,
-        contractRef,
+        contractRef: registration.contractRef,
         decision: 'admit',
         expectedOfferingRegistrationHash: offering.registrationHash,
         expectedBindingRegistrationHash: binding.registrationHash,
         admissionEvidenceRefs: ['test:third-business-published'],
         conformanceEvidenceRefs: ['test:third-binding-conformant'],
       },
-    }, now + 4)
+    }, Date.now())
     if (eligibility.kind !== 'eligible') throw new Error(`third eligibility failed: ${eligibility.kind}`)
-    return {
-      offeringId,
-      bindingId,
-      contractRef,
-      offeringRegistrationHash: offering.registrationHash,
-      bindingRegistrationHash: binding.registrationHash,
-    }
+    return { offering: offering.registrationHash, binding: binding.registrationHash }
   })
+  const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+    publicationRef: published.publicationRef, expectedRevision: 1,
+    credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,
+    operationKey: 'test:substitution:readiness:three', correlationId: 'test:substitution:supply:three',
+    reasonCode: 'registration_only_substitution_proof', evidenceRefs: ['test:third-business-ready'],
+  })
+  if (observed.kind !== 'observed') throw new Error(`third readiness failed: ${observed.reason}`)
+  return {
+    offeringId, bindingId, contractRef: registration.contractRef,
+    offeringRegistrationHash: hashes.offering,
+    bindingRegistrationHash: hashes.binding,
+  }
 }
 
 async function prepareCustomerChoice(backend: Backend, requestId: string) {
@@ -338,6 +354,27 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
     throw new Error(`request options not ready: ${JSON.stringify(resumed)}`)
   }
   return resumed
+}
+
+async function observeAllPublishedSupplyReady(backend: Backend) {
+  const publications = await backend.run(async (ctx) => (
+    await ctx.db.query('capabilityPublications').collect()
+  ))
+  for (const publication of publications) {
+    const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+      credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,
+      operationKey: `test:substitution:readiness:${publication.publicationRef}`,
+      correlationId: 'test:substitution:published-supply',
+      reasonCode: 'registration_only_substitution_proof', evidenceRefs: ['test:published-supply-ready'],
+    })
+    if (observed.kind !== 'observed') throw new Error(`published supply readiness failed: ${observed.reason}`)
+  }
+  const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 16 })
+  if (supply.kind !== 'available') throw new Error(`published supply unavailable: ${supply.reason}`)
+  if (supply.supplies.some((item) => item.publication === undefined)) {
+    throw new Error(`published supply not active: ${JSON.stringify(supply.supplies.map((item) => item.binding.bindingId))}`)
+  }
 }
 
 function registeredProviderFor(endpoint: URL) {

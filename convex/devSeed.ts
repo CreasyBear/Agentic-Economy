@@ -48,12 +48,20 @@ export const seedDevCatalog = internalMutation({
     const sandboxBusinesses = await registerSandboxBusinesses(db, sandboxFixtures, seedStartedAt)
     const sandboxRegistrations = await registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000)
     const sandboxV2Bindings = await admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500)
-    const sandboxCapabilityPublicationRef = await seedSandboxCapabilityPublication(
-      ctx.db, sandboxRegistrations[0], seedStartedAt + 2_750,
-    )
-    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-      publicationRef: sandboxCapabilityPublicationRef, expectedRevision: 1,
-    })
+    const sandboxCapabilityPublicationRefs = []
+    for (const [index, registration] of sandboxRegistrations.entries()) {
+      const publicationRef = await seedSandboxCapabilityPublication(
+        ctx.db, registration, seedStartedAt + 2_750 + index,
+      )
+      sandboxCapabilityPublicationRefs.push(publicationRef)
+      await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+        publicationRef, expectedRevision: 1,
+      })
+    }
+    const sandboxCapabilityPublicationRef = sandboxCapabilityPublicationRefs[0]
+    if (sandboxCapabilityPublicationRef === undefined) {
+      throw new Error('sandbox_capability_publication_registration_missing')
+    }
     await retireLegacySandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
     return {
       ...result,
