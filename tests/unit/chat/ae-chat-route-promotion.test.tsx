@@ -19,6 +19,7 @@ const testState = vi.hoisted(() => {
           onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
           onSettledTurn?: (turn: PublicThreadProjection['turns'][number], generation: number) => void
           onFollowUp?: (query: string) => void
+          onChangeCriteria?: () => void
         }
       | undefined,
     navigate(input: unknown) {
@@ -74,6 +75,9 @@ vi.mock('@/components/ae/chat/AeThreadTranscript', () => ({
           <div data-testid="no-live-turn" />
         ) : (
           <div data-testid="live-turn">{props.liveTurn.query}</div>
+        )}
+        {props?.onChangeCriteria === undefined ? null : (
+          <button type="button" onClick={props.onChangeCriteria}>Change criteria</button>
         )}
       </div>
     )
@@ -148,6 +152,73 @@ describe('AeChat route promotion', () => {
     const retention = screen.getByRole('note', { name: 'Thread access and retention' })
 
     expect(transcript.compareDocumentPosition(retention) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  it('opens focused prior criteria without creating a live or answer turn', async () => {
+    const baseProjection = buildProjection('thread-one', 'First answer', [
+      { kind: 'provider-cards', providers: [provider({ publishedPhone: '0412 345 678' })] },
+    ])
+    const projection: PublicThreadProjection = {
+      ...baseProjection,
+      turns: baseProjection.turns.map((turn) => ({ ...turn, timing: 'today' })),
+    }
+
+    render(<AeChat threadId="thread-one" initialProjection={projection} />)
+
+    const transcript = screen.getByTestId('thread-transcript')
+    const settledTurnCount = transcript.getAttribute('data-turn-count')
+    expect(screen.queryByRole('searchbox')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change criteria' }))
+
+    const composer = await screen.findByRole('searchbox') as HTMLTextAreaElement
+    expect(composer.value).toBe('emergency plumber in Perth')
+    await waitFor(() => expect(document.activeElement).toBe(composer))
+    expect(screen.getByRole('radio', { name: 'Today' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByTestId('live-turn')).toBeNull()
+    expect(screen.getByTestId('no-live-turn')).toBeTruthy()
+    expect(transcript.getAttribute('data-turn-count')).toBe(settledTurnCount)
+    expect(testState.latestTranscriptProps?.liveTurn ?? null).toBeNull()
+  })
+
+  it('closes an open refinement composer on a new thread until that thread requests it', async () => {
+    const firstProjection = buildProjection('thread-one', 'First answer', [
+      { kind: 'provider-cards', providers: [provider({ publishedPhone: '0412 345 678' })] },
+    ])
+    const secondBaseProjection = buildProjection('thread-two', 'Second answer', [
+      { kind: 'provider-cards', providers: [provider({
+        slug: 'fremantle-roof-repairs',
+        name: 'Fremantle Roof Repairs',
+        detailUrl: '/fremantle-roof-repairs',
+        inquiryUrl: '/fremantle-roof-repairs/inquiry',
+        publishedPhone: '0488 123 456',
+      })] },
+    ])
+    const secondProjection = {
+      ...secondBaseProjection,
+      turns: secondBaseProjection.turns.map((turn) => ({
+        ...turn,
+        query: 'urgent roof repairs in Fremantle',
+      })),
+    } satisfies PublicThreadProjection
+    const { rerender } = render(<AeChat threadId="thread-one" initialProjection={firstProjection} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change criteria' }))
+    expect((await screen.findByRole('searchbox') as HTMLTextAreaElement).value).toBe(
+      'emergency plumber in Perth',
+    )
+
+    rerender(<AeChat threadId="thread-two" initialProjection={secondProjection} />)
+
+    await waitFor(() => expect(screen.queryByRole('searchbox')).toBeNull())
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-route-thread-id')).toBe('thread-two')
+    expect(screen.getByTestId('thread-transcript').getAttribute('data-projection-thread-id')).toBe('thread-two')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change criteria' }))
+
+    expect((await screen.findByRole('searchbox') as HTMLTextAreaElement).value).toBe(
+      'urgent roof repairs in Fremantle',
+    )
   })
 
   it('passes the classified follow-up intent to live turns before replay catches up', async () => {

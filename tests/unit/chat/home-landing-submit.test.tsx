@@ -43,6 +43,18 @@ describe('composer-first home', () => {
     routeState.navigate.mockClear()
   })
 
+  it('shows the thread access disclosure before the home composer submits', () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHomeRoute()
+
+    expect(screen.getByRole('note').textContent).toBe(
+      'Your question becomes a thread with no automatic expiry. Anyone with its link can open it; this browser can delete it from Recent questions.',
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('adopts a valid q as an editable draft without starting an answer turn', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)

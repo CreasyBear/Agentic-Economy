@@ -14,6 +14,7 @@ export type AeQueryPanelProps = {
   showExamples?: boolean
   placeholder?: string
   loopHint?: string
+  focusOnMount?: boolean
 }
 
 export function AeQueryPanel({
@@ -26,6 +27,7 @@ export function AeQueryPanel({
   showExamples = true,
   placeholder,
   loopHint,
+  focusOnMount = false,
 }: AeQueryPanelProps) {
   const examples = showExamples ? buildContextExamples(searchContext) : []
 
@@ -38,6 +40,7 @@ export function AeQueryPanel({
         initialTimingDate={initialTimingDate}
         busy={busy}
         examples={examples}
+        focusOnMount={focusOnMount}
         {...(placeholder === undefined ? {} : { placeholder, inputLabel: placeholder })}
       />
       {loopHint !== undefined && loopHint.length > 0 ? (

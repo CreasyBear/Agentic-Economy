@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import {
-  AE_EXPLAINER,
+  AE_EXPLAINER_FULL,
+  AE_EXPLAINER_NO_PHONE,
   NO_REPLY_HISTORY,
   buildListingTrustProjection,
 } from '@/lib/ui/trust-projection'
@@ -83,7 +84,7 @@ describe('buildListingTrustProjection', () => {
         updatedAt: UPDATED_AT,
       },
       replyPosture: { kind: 'no_history', label: 'No reply history yet' },
-      explainer: 'AE sends your request in writing and keeps a record — or call directly.',
+      explainer: AE_EXPLAINER_NO_PHONE,
     })
   })
 
@@ -101,6 +102,7 @@ describe('buildListingTrustProjection', () => {
       value: '0412 345 678',
       updatedAt: UPDATED_AT,
     })
+    expect(projection.explainer).toBe(AE_EXPLAINER_FULL)
   })
 
   it('labels every unavailable trust fact without inventing phone, hours, service area, or reply history', () => {
@@ -116,7 +118,7 @@ describe('buildListingTrustProjection', () => {
       hours: { kind: 'not_published', label: 'Hours not published here' },
       serviceArea: { kind: 'not_published', label: 'Service area not published here' },
       replyPosture: { kind: 'no_history', label: 'No reply history yet' },
-      explainer: 'AE sends your request in writing and keeps a record — or call directly.',
+      explainer: AE_EXPLAINER_NO_PHONE,
     })
   })
 
@@ -152,10 +154,11 @@ describe('buildListingTrustProjection', () => {
     },
   )
 
-  it('locks the public explainer and no-history strings exactly', () => {
-    expect(AE_EXPLAINER).toBe(
+  it('locks both capability-gated public explainers and the no-history string exactly', () => {
+    expect(AE_EXPLAINER_FULL).toBe(
       'AE sends your request in writing and keeps a record — or call directly.',
     )
+    expect(AE_EXPLAINER_NO_PHONE).toBe('AE sends your request in writing and keeps a record.')
     expect(NO_REPLY_HISTORY).toBe('No reply history yet')
   })
 })

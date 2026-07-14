@@ -316,5 +316,9 @@ async function assertPublicLanguage(page: Page) {
   const bodyText = await page.locator('body').innerText()
   expect(bodyText).not.toMatch(futureSurfaceCopy)
   expect(bodyText).not.toMatch(publicInternalCopy)
-  expect(bodyText.replaceAll('AE sends your request in writing and keeps a record — or call directly.', '')).not.toMatch(/[—–]/)
+  expect(
+    bodyText
+      .replaceAll('AE sends your request in writing and keeps a record — or call directly.', '')
+      .replaceAll('AE sends your request in writing and keeps a record.', ''),
+  ).not.toMatch(/[—–]/)
 }

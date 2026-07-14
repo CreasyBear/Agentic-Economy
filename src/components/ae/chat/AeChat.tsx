@@ -108,8 +108,13 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   const searchContext = DEFAULT_AE_SEARCH_CONTEXT
   const [sidebarManuallyOpen, setSidebarManuallyOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [refinementComposerOpen, setRefinementComposerOpen] = useState(false)
   const pendingThreadIdRef = useRef<string | null>(null)
   const mobileSidebarReturnFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    setRefinementComposerOpen(false)
+  }, [routeThreadId])
   threadsRef.current = threads
 
   const setThreadRecords = useCallback((updater: ThreadRecordsUpdater) => {
@@ -274,6 +279,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   }
 
   function handleSubmit(query: string, timing: NeedTiming = 'flexible', timingDate?: string) {
+    setRefinementComposerOpen(false)
     const turnSearchContext = { ...searchContext, timing, ...(timingDate === undefined ? {} : { timingDate }) }
     const intent = classifyFollowUpIntent(query, completedTurnCount)
     captureClientProductEventOnClient('query_submitted', {
@@ -385,6 +391,10 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
 
   function handleFollowUp(query: string) {
     handleSubmit(query, composerTiming, composerTimingDate)
+  }
+
+  function handleChangeCriteria() {
+    setRefinementComposerOpen(true)
   }
 
   function handleRetry(query: string) {
@@ -549,6 +559,7 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               onStreamEnd={handleStreamEnd}
               onSettledTurn={handleSettledTurn}
               {...(routeThreadId === null ? {} : { onFollowUp: handleFollowUp })}
+              {...(routeThreadId === null ? {} : { onChangeCriteria: handleChangeCriteria })}
               onRetry={handleRetry}
             />
             {showThreadChrome ? (
@@ -559,13 +570,15 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
               </div>
             ) : null}
           </AeThreadScroller>
-          {!showWelcome && terminalShortlist === null ? (
+          {!showWelcome && (terminalShortlist === null || refinementComposerOpen) ? (
             <div className="mx-auto w-full max-w-[56rem] flex-none bg-body px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-6">
               <AeQueryPanel
                 onSubmit={handleSubmit}
                 busy={streamingBusy}
                 searchContext={searchContext}
                 showExamples={false}
+                defaultValue={refinementComposerOpen ? (latestProjectedTurn?.query ?? '') : ''}
+                focusOnMount={refinementComposerOpen}
                 initialTiming={composerTiming}
                 {...(composerTimingDate === undefined ? {} : { initialTimingDate: composerTimingDate })}
                 {...(followUpComposerCopy === null ? {} : { placeholder: followUpComposerCopy.placeholder })}

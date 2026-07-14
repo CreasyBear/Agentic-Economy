@@ -8,7 +8,7 @@
 
 ## Status
 
-**built — gate conditionally held on GATE-1.** All J1 build tasks landed (commits 7f0159f5, 077a4533, 2d42ae97, a379c1b6): trust-projection contract, registry cards, listing first screen, publishedPhone data path, hours truthfulness. Persona gate run 2 (2026-07-13, SeoLanderRerun 4/5): P1/P2/P4/P5 PASS on both published-phone and phoneless listings; P3 half-FAIL solely on the GATE-1 locked-explainer contradiction (phoneless page says "— or call directly." with nothing to call). `persona-cleared` blocked pending founder ruling on GATE-1; no code work outstanding.
+**built — GATE-1 resolved, persona re-run open.** All J1 build tasks landed (commits 7f0159f5, 077a4533, 2d42ae97, a379c1b6): trust-projection contract, registry cards, listing first screen, publishedPhone data path, hours truthfulness. Persona gate run 2 (2026-07-13, SeoLanderRerun 4/5): P1/P2/P4/P5 PASS on both published-phone and phoneless listings; P3 half-FAIL identified the former GATE-1 locked-explainer contradiction. Founder ruling 2026-07-14 selected option (a): the direct-call clause renders only when a published phone exists. Persona proof must now be re-run against the resolved behavior.
 
 ## Persona proof
 
@@ -21,7 +21,7 @@
 A fresh, signed-out mobile visitor arriving directly at `/:slug` must, without scrolling past the first screen:
 
 1. find a published phone number, published hours, and published service area, or an explicit `Not listed` for each;
-2. explain AE in one sentence: `AE sends your request in writing and keeps a record — or call directly.`;
+2. explain AE in one capability-honest sentence: `AE sends your request in writing and keeps a record — or call directly.` when a phone is published, otherwise `AE sends your request in writing and keeps a record.`;
 3. use the phone action as a peer to `Ask this business`, not a demoted escape;
 4. see an attributable reply-posture label before selecting the request path; and
 5. return from listing to the same registry query/window/focus when entry came from `/registry`.
@@ -44,7 +44,7 @@ A fresh, signed-out mobile visitor arriving directly at `/:slug` must, without s
 
 ## Open items
 
-- **GATE-1 (2026-07-13, persona gate run 1) — FOUNDER RULING REQUIRED:** the locked explainer `AE sends your request in writing and keeps a record — or call directly.` contradicts `Phone not published here` on phoneless listings (SeoLander P3/P5 walkout evidence, agent://SeoLanderGate). Options: (a) conditional second clause when no phone is published, (b) keep string, accept the dangle, (c) new locked string. Changing a locked string needs an audit ruling per README; not freelanced by agents.
+- <!-- gate-1 --> **GATE-1 — RESOLVED (founder ruling 2026-07-14):** option (a) selected. The locked explainer’s `— or call directly.` clause is rendered only when the business has a published phone. Phoneless listings render `AE sends your request in writing and keeps a record.` Persona re-run remains open.
 - **G5 — specified, persona re-run open:** response posture is before selection; emergency/direct-call routing still needs the blind journey test.
 - **G6 — specified, persona re-run open:** phone/hours/service area and the 10-second explainer are in `listing.md`; third-party proof remains CS6.
 - **CS2 — specified, ship proof open:** distance/map is required on registry cards and listings.

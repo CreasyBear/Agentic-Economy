@@ -23,6 +23,7 @@ export type AeAnswerPromptInputProps = {
   inputLabel?: string
   ariaLabel?: string
   submitLabel?: string
+  focusOnMount?: boolean
 }
 
 const DEFAULT_EXAMPLES: readonly string[] = [
@@ -74,6 +75,7 @@ function AeAnswerPromptInputInner({
   inputLabel = SEARCHBOX_LABEL,
   ariaLabel = 'Find local service businesses',
   submitLabel = 'Search',
+  focusOnMount = false,
 }: Omit<AeAnswerPromptInputProps, 'defaultValue' | 'examples' | 'initialTiming' | 'initialTimingDate'> & {
   inputId: string
   initialValue: string
@@ -101,6 +103,10 @@ function AeAnswerPromptInputInner({
     input.style.height = 'auto'
     input.style.height = `${input.scrollHeight}px`
   }, [value])
+
+  useEffect(() => {
+    if (focusOnMount) inputRef.current?.focus()
+  }, [focusOnMount])
 
   const headerContext = useMemo(
     () => (

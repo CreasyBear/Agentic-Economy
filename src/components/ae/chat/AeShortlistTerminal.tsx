@@ -35,11 +35,22 @@ export function AeShortlistTerminal({
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false)
   const firstBusiness = providers.at(0)
   const publishedPhone = firstBusiness?.publishedPhone
-  const dialNumber = publishedPhone?.replace(/[^+\d]/g, '')
-  const callHref = dialNumber !== undefined && /\d{6,}/.test(dialNumber)
-    ? `tel:${dialNumber}`
-    : undefined
+  const callHref = directCallHref(firstBusiness)
+  const urgentBusiness = timing === 'today' ? providers.find((provider) => directCallHref(provider) !== undefined) : undefined
+  const urgentPhone = urgentBusiness?.publishedPhone
+  const urgentCallHref = directCallHref(urgentBusiness)
   const semanticRevision = shortlistSemanticRevision(revision, providers)
+  const urgentContact = urgentBusiness !== undefined && urgentPhone !== undefined && urgentCallHref !== undefined
+    ? (
+        <div className="grid gap-3 rounded-md border border-border bg-body p-4" aria-label="Call first option">
+          <div className="grid gap-1">
+            <Text type="large" weight="semibold" color="primary" display="block">{urgentBusiness.name}</Text>
+            <Text type="supporting" color="secondary" display="block">No reply history yet</Text>
+          </div>
+          <Button label={`Call ${urgentPhone}`} variant="primary" className="min-h-11 justify-self-start" href={urgentCallHref} />
+        </div>
+      )
+    : null
   if (closed) {
     return (
       <section className="grid gap-3 rounded-lg border border-border bg-surface p-4" aria-labelledby="shortlist-closed-heading">
@@ -66,6 +77,7 @@ export function AeShortlistTerminal({
 
   return (
     <section className="grid gap-4 rounded-lg border border-border bg-surface p-4" aria-labelledby="shortlist-terminal-heading">
+      {urgentContact}
       <div className="grid gap-1">
         <Heading id="shortlist-terminal-heading" level={2} className="text-xl font-semibold">
           Your shortlist is ready
@@ -146,13 +158,17 @@ function orderProviders(providers: readonly AnswerSource[], timing: NeedTiming |
   if (timing !== 'today') return providers
   return providers
     .map((provider, index) => ({ provider, index }))
-    .sort((left, right) => Number(hasActionableContact(right.provider)) - Number(hasActionableContact(left.provider)) || left.index - right.index)
+    .sort((left, right) => contactPriority(right.provider) - contactPriority(left.provider) || left.index - right.index)
     .map(({ provider }) => provider)
 }
 
-function hasActionableContact(provider: AnswerSource): boolean {
-  const dialNumber = provider.publishedPhone?.replace(/[^+\d]/g, '')
-  return (dialNumber !== undefined && /\d{6,}/.test(dialNumber)) ||
-    (typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0)
+function contactPriority(provider: AnswerSource): number {
+  if (directCallHref(provider) !== undefined) return 2
+  return typeof provider.inquiryUrl === 'string' && provider.inquiryUrl.length > 0 ? 1 : 0
+}
+
+function directCallHref(provider: AnswerSource | undefined): string | undefined {
+  const dialNumber = provider?.publishedPhone?.replace(/[^+\d]/g, '')
+  return dialNumber !== undefined && /\d{6,}/.test(dialNumber) ? `tel:${dialNumber}` : undefined
 }
 

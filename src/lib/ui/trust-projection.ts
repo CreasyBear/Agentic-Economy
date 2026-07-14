@@ -2,7 +2,8 @@ import type { PublicRouteCatalogContract } from '@/modules/catalog/public'
 
 import { plainHoursLabel } from './status-presentation'
 
-export const AE_EXPLAINER = 'AE sends your request in writing and keeps a record — or call directly.' as const
+export const AE_EXPLAINER_FULL = 'AE sends your request in writing and keeps a record — or call directly.' as const
+export const AE_EXPLAINER_NO_PHONE = 'AE sends your request in writing and keeps a record.' as const
 export const NO_REPLY_HISTORY = 'No reply history yet' as const
 
 export type TrustFact =
@@ -33,7 +34,7 @@ export type ListingTrustProjection = {
   hours: TrustFact
   serviceArea: TrustFact
   replyPosture: ReplyPosture
-  explainer: typeof AE_EXPLAINER
+  explainer: typeof AE_EXPLAINER_FULL | typeof AE_EXPLAINER_NO_PHONE
 }
 
 type TrustProjectionCatalogSource = {
@@ -49,13 +50,14 @@ export function buildListingTrustProjection(catalog: PublicRouteCatalogContract)
 export function buildListingTrustProjection(catalog: TrustProjectionCatalogSource): ListingTrustProjection
 export function buildListingTrustProjection(catalog: TrustProjectionCatalogSource): ListingTrustProjection {
   const primaryService = catalog.services.at(0)
+  const phone = publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.updatedAt)
 
   return {
-    phone: publishedFact(catalog.publishedPhone, 'Phone not published here', catalog.updatedAt),
+    phone,
     hours: publishedHours(primaryService?.hoursOrUnknown, catalog.updatedAt),
     serviceArea: publishedFact(primaryService?.serviceArea, 'Service area not published here', catalog.updatedAt),
     replyPosture: { kind: 'no_history', label: NO_REPLY_HISTORY },
-    explainer: AE_EXPLAINER,
+    explainer: phone.kind === 'published' ? AE_EXPLAINER_FULL : AE_EXPLAINER_NO_PHONE,
   }
 }
 

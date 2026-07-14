@@ -61,6 +61,9 @@ export function AeHomeComposer({ initialQuery = '', onThreadCreated }: AeHomeCom
       {error ? (
         <Banner title="We could not start your thread. Your ask is still here." status="error" />
       ) : null}
+      <Text type="supporting" color="secondary" role="note">
+        Your question becomes a thread with no automatic expiry. Anyone with its link can open it; this browser can delete it from Recent questions.
+      </Text>
       <AeAnswerPromptInput
         onSubmit={submit}
         defaultValue={initialQuery}

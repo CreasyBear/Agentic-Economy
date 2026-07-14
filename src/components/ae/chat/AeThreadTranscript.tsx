@@ -25,6 +25,7 @@ export type AeThreadTranscriptProps = {
   onStreamEnd?: (outcome: 'complete' | 'error' | 'stopped' | 'rate_limited') => void
   onSettledTurn?: (turn: PublicThreadTurn, generation: number) => void
   onFollowUp?: (query: string) => void
+  onChangeCriteria?: () => void
   onRetry?: (query: string) => void
 }
 
@@ -37,6 +38,7 @@ export function AeThreadTranscript({
   onStreamEnd,
   onSettledTurn,
   onFollowUp,
+  onChangeCriteria,
   onRetry,
 }: AeThreadTranscriptProps) {
   const completedTurns = projection?.turns.filter((turn) => turn.status === 'complete') ?? []
@@ -56,6 +58,14 @@ export function AeThreadTranscript({
         const turnKey = turnRenderKeys?.[turn.turnId] ?? turn.turnId
 
         const anchorThisTurn = liveTurn === null && isLastCompleted
+        const showsTerminal = isLastCompleted && turn.turnId === latestProjectedTurn?.turnId && liveTurn === null && terminal !== null
+        const terminalProps = showsTerminal ? {
+          ...terminal,
+          threadId: resolvedThreadId ?? projection?.threadId ?? 'shortlist',
+          revision: `${latestProjectedTurn.turnId}:${latestProjectedTurn.seq}`,
+          ...(latestProjectedTurn.createdAt === undefined ? {} : { sourceAt: new Date(latestProjectedTurn.createdAt).toISOString() }),
+          ...(onChangeCriteria === undefined ? {} : { onChangeCriteria }),
+        } : null
 
         return (
           <MessageScrollerItem
@@ -64,6 +74,7 @@ export function AeThreadTranscript({
             scrollAnchor={anchorThisTurn}
           >
             <div className="flex flex-col gap-2">
+              {terminalProps?.timing === 'today' ? <AeShortlistTerminal {...terminalProps} /> : null}
               {expanded ? (
                 <AeThreadTurnReplaySection
                   {...viewModel}
@@ -73,15 +84,7 @@ export function AeThreadTranscript({
               ) : (
                 <AeThreadTurnCollapsed {...viewModel} {...(resolvedThreadId === undefined ? {} : { threadId: resolvedThreadId })} />
               )}
-              {isLastCompleted && turn.turnId === latestProjectedTurn?.turnId && liveTurn === null && terminal !== null ? (
-                <AeShortlistTerminal
-                  {...terminal}
-                  threadId={resolvedThreadId ?? projection?.threadId ?? 'shortlist'}
-                  revision={`${latestProjectedTurn.turnId}:${latestProjectedTurn.seq}`}
-                  {...(latestProjectedTurn.createdAt === undefined ? {} : { sourceAt: new Date(latestProjectedTurn.createdAt).toISOString() })}
-                  {...(onFollowUp === undefined ? {} : { onChangeCriteria: () => onFollowUp('Change my shortlist criteria') })}
-                />
-              ) : isLastCompleted && liveTurn === null ? (
+              {terminalProps !== null && terminalProps.timing !== 'today' ? <AeShortlistTerminal {...terminalProps} /> : showsTerminal ? null : isLastCompleted && liveTurn === null ? (
                 <>
                   {isNoMatchTurn(turn) ? <Text color="secondary" role="status">Nothing was sent.</Text> : null}
                   <AeFollowUpChips

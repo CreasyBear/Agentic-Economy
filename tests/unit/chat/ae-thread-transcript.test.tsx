@@ -42,7 +42,7 @@ describe('AeThreadTranscript', () => {
   })
 
   it('renders the latest completed shortlist as a terminal decision surface', () => {
-    let selectedQuery: string | null = null
+    const onChangeCriteria = vi.fn()
     const first = provider()
     const second = provider({
       citationIndex: 2,
@@ -55,9 +55,7 @@ describe('AeThreadTranscript', () => {
     render(
       <AeThreadTranscript
         projection={projectionWithShortlist([first, second], 'flexible')}
-        onFollowUp={(query) => {
-          selectedQuery = query
-        }}
+        onChangeCriteria={onChangeCriteria}
       />,
     )
 
@@ -73,7 +71,7 @@ describe('AeThreadTranscript', () => {
     expect(screen.getByText('Call is unavailable until a business publishes a phone number here.')).toBeTruthy()
 
     fireEvent.click(changeCriteria)
-    expect(selectedQuery).toBe('Change my shortlist criteria')
+    expect(onChangeCriteria).toHaveBeenCalledOnce()
     expect(screen.queryByText('Send request')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Continue this thread' })).toBeNull()
     expect(screen.queryByRole('textbox')).toBeNull()
@@ -115,33 +113,67 @@ describe('AeThreadTranscript', () => {
     expect(screen.getByText('Summary copied.', { selector: '[role="status"]' })).toBeTruthy()
   })
 
-  it('puts a provider with a published inquiry path first when the need is today', () => {
-    const { inquiryUrl: _inquiryUrl, ...listingOnly } = provider({
+  it('prioritizes a later phone provider over an earlier inquiry-only provider for today', () => {
+    const inquiryOnly = provider({
       citationIndex: 1,
-      slug: 'listing-only-plumbing',
-      name: 'Listing Only Plumbing',
-      detailUrl: '/listing-only-plumbing',
+      slug: 'inquiry-only-plumbing',
+      name: 'Inquiry Only Plumbing',
+      detailUrl: '/inquiry-only-plumbing',
+      inquiryUrl: '/inquiry-only-plumbing/inquiry',
     })
-    const actionable = provider({
+    const phoneCapable = provider({
       citationIndex: 2,
-      slug: 'actionable-plumbing',
-      name: 'Actionable Plumbing',
-      detailUrl: '/actionable-plumbing',
-      inquiryUrl: '/actionable-plumbing/inquiry',
+      slug: 'phone-capable-plumbing',
+      name: 'Phone Capable Plumbing',
+      detailUrl: '/phone-capable-plumbing',
+      inquiryUrl: '/phone-capable-plumbing/inquiry',
+      publishedPhone: '0412 345 678',
     })
+    const baseProjection = projectionWithShortlist([inquiryOnly, phoneCapable], 'today')
+    const settledTurn = baseProjection.turns.at(0)
+    if (settledTurn === undefined) throw new Error('The shortlist fixture must contain its settled turn.')
 
-    render(<AeThreadTranscript projection={projectionWithShortlist([listingOnly, actionable], 'today')} />)
+    render(
+      <AeThreadTranscript
+        projection={{
+          ...baseProjection,
+          turns: [{
+            ...settledTurn,
+            answerCheckSummary: {
+              catalogSearches: 1,
+              listingsRead: 2,
+              listedBusinesses: 2,
+              checksPassed: 3,
+              checksFailed: 0,
+              elapsedMs: 900,
+            },
+          }],
+        }}
+      />,
+    )
 
     expect(
       screen.getByText(
         'For today, listings with a published contact path appear first. Phone details are shown only when published.',
       ),
     ).toBeTruthy()
+    const urgentContact = screen.getByLabelText('Call first option')
+    expect(within(urgentContact).getByText(phoneCapable.name)).toBeTruthy()
+    expect(within(urgentContact).getByText('No reply history yet')).toBeTruthy()
+    expect(
+      within(urgentContact).getByRole('link', { name: 'Call 0412 345 678' }).getAttribute('href'),
+    ).toBe('tel:0412345678')
+
+    const replayQuery = screen.getByText('Find plumbers near Parramatta')
+    const processCopy = screen.getByText('How AE checked this')
+    expect(urgentContact.compareDocumentPosition(replayQuery) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(urgentContact.compareDocumentPosition(processCopy) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+
     const orderedProviderLinks = screen
       .getAllByRole('link')
-      .filter((link) => link.textContent === actionable.name || link.textContent === listingOnly.name)
-    expect(orderedProviderLinks.map((link) => link.textContent)).toEqual([actionable.name, listingOnly.name])
-    expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(actionable.detailUrl)
+      .filter((link) => link.textContent === phoneCapable.name || link.textContent === inquiryOnly.name)
+    expect(orderedProviderLinks.map((link) => link.textContent)).toEqual([phoneCapable.name, inquiryOnly.name])
+    expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(phoneCapable.detailUrl)
   })
 
   it('does not terminalize a selected-provider handoff without a shortlist', () => {

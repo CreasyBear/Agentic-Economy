@@ -28,7 +28,7 @@
 
 **Normative blueprint:** PRINCIPLES.md §10 `/:slug`, plus IA-6 listing/detail, IA-7 width ladder, IA-9 action-rail boundaries, LAW-4 progressive certainty, LAW-7 two disclosure levels, and AX-1/AX-6 proposal-versus-send separation.
 <!-- sim: G6 -->
-**Cold-arrival trust contract:** On every eligible listing, the first screen MUST show the business name plus its published phone (when the business published it), published hours, and published service area before any `Ask this business` affordance. Unknown facts remain visible as `Hours not published here` or `Service area not published here`; the page MUST NOT infer them. Within the same first-screen reading block, render the 10-second explainer exactly: `AE sends your request in writing and keeps a record — or call directly.` A published call action MUST be visually equal to `Ask this business` on this research surface. Ratings, reviews, and review counts MUST NEVER be fabricated or inferred. When no attributable review signal exists, state the evidence AE does have, for example `AE has business-published contact and service details; no attributable review information is available here.`
+<!-- gate-1 --> **Cold-arrival trust contract:** On every eligible listing, the first screen MUST show the business name plus its published phone (when the business published it), published hours, and published service area before any `Ask this business` affordance. Unknown facts remain visible as `Hours not published here` or `Service area not published here`; the page MUST NOT infer them. Within the same first-screen reading block, render the capability-gated 10-second explainer exactly: when the phone trust fact is `published`, `AE sends your request in writing and keeps a record — or call directly.`; when it is `not_published`, `AE sends your request in writing and keeps a record.` The direct-call clause MUST NOT render without a published phone. A published call action MUST be visually equal to `Ask this business` on this research surface. Ratings, reviews, and review counts MUST NEVER be fabricated or inferred. When no attributable review signal exists, state the evidence AE does have, for example `AE has business-published contact and service details; no attributable review information is available here.`
 
 <!-- sim: G5 -->
 **Response-posture-before-selection contract:** A response-posture label, with the attribution required in §3, MUST appear in the first-screen facts and in the action rail before any ask/send affordance. When a published phone exists, the same pre-action block MUST include `Need someone now? Call {phone}` as a peer-level call action. AE MUST route emergency-intent visitors to direct contact proudly; it MUST NOT present the written request path as an emergency channel.
@@ -49,7 +49,7 @@
 │ IDENTITY + FIRST-SCREEN TRUST FACTS                                  │ S │
 │ {Business name}  [evidence posture]               [Save] [Share]        │ T │
 │ Phone · hours · service area (published/unknown stated plainly)         │ I │
-│ AE sends your request in writing and keeps a record — or call directly. │ C │
+│ AE sends your request in writing and keeps a record[ — or call directly]. │ C │
 │ Reply posture [source · observed window · recency]                      │ K │
 │ [Call {phone}] [Website] [Copy details] [Ask this business]             │ Y │
 ├───────────────────────────────────────────────────────┬──────────────────┤   │
@@ -90,8 +90,8 @@ The rail is not present beside the identity header because the first screen owns
 │ Service area                  │
 │ Reply posture · attribution   │
 │ AE sends your request in      │
-│ writing and keeps a record —  │
-│ or call directly.             │
+│ writing and keeps a record.   │
+│ [+ or call directly when phone]│
 │ [Call] [Website] [Copy] [Ask] │
 ├───────────────────────────────┤
 │ Can this business help?       │
@@ -125,7 +125,7 @@ There is no sticky or fixed mobile action rail. First-screen trust facts, respon
 
 ### 1. Identity, first-screen trust facts, save, and share <!-- sim: G6 -->
 
-- **Content:** business name; published category; phone when published by the business; published hours; published service area; centrally mapped evidence/status label; the exact explainer `AE sends your request in writing and keeps a record — or call directly.`; optional public logo/image only when source-backed; `Save` and `Share business page`. Phone, hours, service area, explainer, response posture, and peer actions MUST appear above the fold before `Ask this business`. Unknown hours/service area MUST be stated, not omitted. Do not show a rating, review count, “verified” claim, live/open claim, or response promise unless its attributable evidence contract supports the exact statement. If no attributable review evidence exists, say what AE does have and that review information is unavailable here.
+- <!-- gate-1 --> **Content:** business name; published category; phone when published by the business; published hours; published service area; centrally mapped evidence/status label; the exact capability-gated explainer: `AE sends your request in writing and keeps a record — or call directly.` for a `published` phone TrustFact, otherwise `AE sends your request in writing and keeps a record.`; optional public logo/image only when source-backed; `Save` and `Share business page`. No surface may hand-build or independently infer the explainer variant. Phone, hours, service area, explainer, response posture, and peer actions MUST appear above the fold before `Ask this business`. Unknown hours/service area MUST be stated, not omitted. Do not show a rating, review count, “verified” claim, live/open claim, or response promise unless its attributable evidence contract supports the exact statement. If no attributable review evidence exists, say what AE does have and that review information is unavailable here.
 - **Data source:** route loader for canonical business identity, business-published contact/hours/service-area snapshot, public evidence posture, and canonical URL. Thread-origin context is not identity data.
 - **Astryx:** `Heading`, `Text`, semantic definition list, `Badge` through the centralized AE status composition, peer-level `Button`/link actions, and `Tooltip` only where a visible label is retained on narrow screens. Save feedback may use a toast as acknowledgement, never as evidence.
 

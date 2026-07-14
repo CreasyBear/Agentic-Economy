@@ -5,14 +5,13 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { ListingFirstScreen } from '@/components/ae/listing/AeProviderListingPage'
-import { buildListingTrustProjection } from '@/lib/ui/trust-projection'
+import { AE_EXPLAINER_FULL, AE_EXPLAINER_NO_PHONE, buildListingTrustProjection } from '@/lib/ui/trust-projection'
 import type { PublicRouteCatalogContract, PublicRouteServiceContract } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
 
 const BUSINESS_ID = brandNonEmpty('business:listing-first-screen', 'BusinessId')
 const SERVICE_ID = brandNonEmpty('service:emergency-plumbing', 'ServiceId')
-const EXPLAINER = 'AE sends your request in writing and keeps a record — or call directly.'
 const NO_REPLY_HISTORY = 'No reply history yet'
 
 const availableInquiry: PublicInquiryAffordance = {
@@ -46,7 +45,8 @@ describe('ListingFirstScreen', () => {
     expect(markup).toContain('Phone not published here')
     expect(markup).toContain('Mon–Fri, 8am–5pm')
     expect(markup).toContain('Parramatta and nearby suburbs')
-    expect(markup).toContain(EXPLAINER)
+    expect(markup).toContain(AE_EXPLAINER_NO_PHONE)
+    expect(markup).not.toContain('call directly')
     expect(markup).toContain(NO_REPLY_HISTORY)
     expect(markup).not.toContain('href="tel:')
 
@@ -54,7 +54,7 @@ describe('ListingFirstScreen', () => {
       'Phone not published here',
       'Mon–Fri, 8am–5pm',
       'Parramatta and nearby suburbs',
-      EXPLAINER,
+      AE_EXPLAINER_NO_PHONE,
       NO_REPLY_HISTORY,
       'Ask this business',
     ])
@@ -63,6 +63,14 @@ describe('ListingFirstScreen', () => {
       { action: 'ask', variant: 'secondary' },
     ])
     expectForbiddenCopyAbsent(markup)
+  })
+
+  it('renders the direct-call explainer only with a published phone', () => {
+    const markup = renderFirstScreen(catalogFixture({}, '08 6111 2222'), availableInquiry)
+
+    expect(markup).toContain(AE_EXPLAINER_FULL)
+    expect(markup).toContain('href="tel:08 6111 2222"')
+    expect(markup).not.toContain(AE_EXPLAINER_NO_PHONE)
   })
 
   it('states each unpublished trust fact instead of inventing contact or operating details', () => {
@@ -105,6 +113,7 @@ function renderFirstScreen(
 
 function catalogFixture(
   serviceOverrides: Partial<Pick<PublicRouteServiceContract, 'hoursOrUnknown' | 'serviceArea'>> = {},
+  publishedPhone?: string,
 ): PublicRouteCatalogContract {
   const service: PublicRouteServiceContract = {
     serviceId: SERVICE_ID,
@@ -134,6 +143,7 @@ function catalogFixture(
     suburb: 'Parramatta',
     stateTerritory: 'NSW',
     publicUrl: '/demo-plumbing',
+    ...(publishedPhone === undefined ? {} : { publishedPhone }),
     publicStatus: 'published',
     trustTier: 'listed',
     indexStatus: 'indexed',
