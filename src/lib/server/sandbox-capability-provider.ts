@@ -59,9 +59,10 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
     return providerOption(profile, offeringId, bindingId, preparationEgress.data)
   }
   const parsed = requestBody.safeParse(parsedJson)
-  if (!parsed.success || ![
+  const registeredBindingIds: readonly string[] = [
     profile.bindingId, profile.legacyV2BindingId, profile.priorV2BindingId, profile.v2BindingId,
-  ].includes(parsed.data.bindingId)) {
+  ]
+  if (!parsed.success || !registeredBindingIds.includes(parsed.data.bindingId)) {
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)
   }
   if (scenario === 'refusal' && (parsed.data.operation === 'quote' || parsed.data.operation === 'structured_quote')) {
