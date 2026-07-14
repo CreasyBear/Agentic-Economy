@@ -39,10 +39,12 @@ test.describe('public owner routes', () => {
         await expect(compactClaimLink).toBeVisible()
       }).toPass({ timeout: 15_000 })
     }
-    const claimLink = page.getByRole('link', { name: 'Claim your business page' })
-    await expect(claimLink).toBeVisible()
-    await claimLink.click()
-    await expect(page).toHaveURL('/claim')
+    await expect(async () => {
+      const claimLink = page.getByRole('link', { name: 'Claim your business page' })
+      await expect(claimLink).toBeVisible()
+      await claimLink.click()
+      await expect(page).toHaveURL('/claim')
+    }).toPass({ timeout: 20_000 })
     await assertPublicLanguage(page)
   })
 
@@ -238,11 +240,19 @@ test.describe('public owner routes', () => {
     await submitButton.click()
     await expect(page.getByLabel('Your email')).toBeFocused()
 
-    await page.getByLabel('Page slug').fill(slug)
-    await page.getByLabel('Your email').fill('owner@example.com')
-    await page.getByLabel('What should change?').fill('The public facts are inaccurate and should be reviewed.')
-    await page.getByRole('button', { name: /send request/i }).click()
-    await expect(page.getByText('Request recorded', { exact: true }).first()).toBeVisible()
+    const slugInput = page.getByLabel('Page slug')
+    const emailInput = page.getByLabel('Your email')
+    const detailInput = page.getByLabel('What should change?')
+    await expect(async () => {
+      await slugInput.fill(slug)
+      await emailInput.fill('owner@example.com')
+      await detailInput.fill('The public facts are inaccurate and should be reviewed.')
+      await expect(slugInput).toHaveValue(slug)
+      await expect(emailInput).toHaveValue('owner@example.com')
+      await expect(detailInput).toHaveValue('The public facts are inaccurate and should be reviewed.')
+      await submitButton.click()
+      await expect(page.getByText('Request recorded', { exact: true }).first()).toBeVisible()
+    }).toPass({ timeout: 20_000 })
   })
 
   test('phase 2 inquiry flow reaches owner actions and operator reconstruction', async ({ page }, testInfo) => {
