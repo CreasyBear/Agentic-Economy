@@ -2,16 +2,14 @@
 
 import { Agent, fetch as guardedFetch } from 'undici'
 import { v } from 'convex/values'
-import { makeFunctionReference } from 'convex/server'
+import type { RegisteredAction } from 'convex/server'
 
-import { runCapabilityReadinessProbe, type CapabilityProbeOutcome } from '@/modules/capability-supply/public'
+import { runCapabilityReadinessProbe } from '@/modules/capability-supply/public'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 
+import { internal } from './_generated/api'
 import { internalAction } from './_generated/server'
 
-const probeReference = makeFunctionReference<'action', { publicationRef: string; expectedRevision: number }>(
-  'capabilitySupplyReadiness:probe',
-)
 type PublicationLifecycle = {
   state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
   reasons: Array<
@@ -30,13 +28,9 @@ type PublicationLifecycle = {
 type ProbeRecordResult =
   | { kind: 'observed'; publicationRef: string; revision: number; lifecycle: PublicationLifecycle }
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
+type ProbeResult = ProbeRecordResult | { kind: 'unavailable' }
+type ProbeArgs = { publicationRef: string; expectedRevision: number }
 type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; probeKind: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'; targetDigest: string }
-const readTargetReference = makeFunctionReference<'query', { publicationRef: string; expectedRevision: number },
-  { kind: 'available'; target: Target } | { kind: 'unavailable' }>('capabilitySupply:readCapabilityProbeTarget')
-const recordReference = makeFunctionReference<'mutation',
-  { publicationRef: string; expectedRevision: number; targetDigest: string; outcome: CapabilityProbeOutcome },
-  ProbeRecordResult
->('capabilitySupply:recordCapabilityProbeResult')
 
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
@@ -67,25 +61,31 @@ const probeResultValue = v.union(
   }),
 )
 
-export const probe = internalAction({
+export const probe: RegisteredAction<'internal', ProbeArgs, ProbeResult> = internalAction({
   args: { publicationRef: v.string(), expectedRevision: v.number() },
   returns: probeResultValue,
-  handler: async (ctx, args) => {
-    const result = await ctx.runQuery(readTargetReference, args)
+  handler: async (ctx, args): Promise<ProbeResult> => {
+    const result: { kind: 'available'; target: Target } | { kind: 'unavailable' } = await ctx.runQuery(
+      internal.capabilitySupply.readCapabilityProbeTarget,
+      args,
+    )
     if (result.kind !== 'available') return { kind: 'unavailable' as const }
-    const target = result.target
+    const target: Target = result.target
     const observation = await runCapabilityReadinessProbe(target, {
       resolveCredential: async (reference) => resolveCredential(reference),
       validateTarget: async (url) => isPublicHttpTarget(url, defaultDnsResolver),
       send: sendGuarded,
     })
-    const recorded = await ctx.runMutation(recordReference, {
+    const recorded: ProbeRecordResult = await ctx.runMutation(
+      internal.capabilitySupply.recordCapabilityProbeResult,
+      {
       publicationRef: target.publicationRef, expectedRevision: target.revision,
       targetDigest: target.targetDigest, outcome: observation.outcome,
-    })
+      },
+    )
     if (recorded.kind === 'observed') {
       await ctx.scheduler.runAfter(observation.outcome === 'healthy' ? 4 * 60_000 : 60_000,
-        probeReference,
+        internal.capabilitySupplyReadiness.probe,
         { publicationRef: target.publicationRef, expectedRevision: target.revision })
     }
     return recorded
