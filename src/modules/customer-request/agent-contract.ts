@@ -138,7 +138,7 @@ const customerRoutePlanSchema = z.object({
   effects: z.object({ totalCount: safeNonnegativeInteger, irreversibleCount: safeNonnegativeInteger }).strict(),
   evidence: z.object({ requirementCount: safeNonnegativeInteger }).strict(),
   recovery: z.object({ steps: z.array(z.object({
-    businessRef: z.string(), posture: z.enum(['retry_safe', 'reconcile_required']),
+    stepRef: z.string(), businessRef: z.string(), posture: z.enum(['retry_safe', 'reconcile_required']),
   }).strict()) }).strict(),
   validUntil: safePositiveInteger,
   fallbacks: z.object({

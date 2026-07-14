@@ -279,8 +279,8 @@ function projectRoutePlan(route: RoutePlanProjectionInput): CustomerRoutePlan {
       irreversibleCount: route.comparison.irreversibleEffectCount,
     }),
     evidence: Object.freeze({ requirementCount: route.comparison.evidenceRequirementCount }),
-    recovery: Object.freeze({ steps: Object.freeze(route.steps.map((step) => Object.freeze({
-      businessRef: step.businessId, posture: step.recovery.recovery,
+    recovery: Object.freeze({ steps: Object.freeze(route.steps.map((step, index) => Object.freeze({
+      stepRef: `step:${index + 1}`, businessRef: step.businessId, posture: step.recovery.recovery,
     }))) }),
     validUntil: route.expiresAt,
     fallbacks: Object.freeze({

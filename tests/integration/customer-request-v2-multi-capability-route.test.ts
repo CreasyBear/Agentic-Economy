@@ -205,8 +205,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         authority: 'proposal_only', stepCount: 2,
         dataUse: { recipientCount: 2 },
         recovery: { steps: expect.arrayContaining([
-          { businessRef: expect.any(String), posture: 'retry_safe' },
-          { businessRef: expect.any(String), posture: 'reconcile_required' },
+          { stepRef: 'step:1', businessRef: expect.any(String), posture: 'retry_safe' },
+          { stepRef: 'step:2', businessRef: expect.any(String), posture: 'reconcile_required' },
         ]) },
       }],
     })

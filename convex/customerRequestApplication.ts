@@ -201,7 +201,8 @@ const customerView = v.object({
     effects: v.object({ totalCount: v.number(), irreversibleCount: v.number() }),
     evidence: v.object({ requirementCount: v.number() }), validUntil: v.number(),
     recovery: v.object({ steps: v.array(v.object({
-      businessRef: v.string(), posture: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+      stepRef: v.string(), businessRef: v.string(),
+      posture: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
     })) }),
     fallbacks: v.object({
       ordering: v.literal('unranked'),
