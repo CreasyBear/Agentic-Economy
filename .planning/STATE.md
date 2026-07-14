@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: routeplan-frontier
 status: active
-stopped_at: "Closed cold external-agent hosted Request journey #165 at 6c982d0f; next frontier #143 must be split before coding"
+stopped_at: "Closed RoutePlan material supersession #169 at deployed revision 9553845e; next unclaimed frontier is customer and agent projection #170"
 last_updated: "2026-07-14"
 progress:
   total_phases: 6
@@ -29,6 +29,8 @@ SUPERSEDED (2026-07-13): the 14-day bootstrap gate in `.planning/scopes/scope-14
 Active frontier (2026-07-13): contradictory #152 was recharted before coding. Action Preparation and authority reservation (#154) now precede concrete disclosure allocation/egress recovery (#155), real Prepared Action persistence (#156), exact approval/run/recovery authority (#153), and V1 quarantine (#149). The tracker enforces the native chain.
 
 Hosted proof frontier (2026-07-14): the cold external-agent Request journey (#165) is closed at `6c982d0f976bfd37b53394ef6a2770f4ee0b8a27`. GitHub run `29304508882` passed the clean source contract, deployed that exact Git revision to Vercel and Convex, registered exactly two labelled sandbox businesses through production registration, authenticated-read-back deployment `dpl_8ygRkWVAHMehKyVTGrEZNbAsbtqs`, and completed the cold agent journey through typed clarification and both customer-authority stops to `options_ready`. This is sandbox contract and hosted-journey proof only, not real supply, booking, purchase, autonomous execution, or customer value.
+
+RoutePlan supersession frontier (2026-07-14): [Supersede RoutePlan generations on material Request or graph change](https://github.com/CreasyBear/Agentic-Economy/issues/169) is closed at exact deployed revision `9553845e215aa4aa47a08ae72016ed32a28def1d`. GitHub run `29321940577` passed clean source, exact Vercel and Convex deployment, authenticated deployment readback `dpl_3Pmk9Nv4ZRVR2x479cuWMUfYZjZc`, and the sandbox-labelled cold external-agent journey. Immutable generations now converge on identical material, supersede with exact-head CAS on material Request or graph change, preserve terminal Request decisions across resume, and block stale V2 preparation. This remains sandbox contract and hosted-path proof only, not real supply, execution, customer value, booking, payment, or autonomous fulfillment.
 
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
@@ -57,7 +59,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-Inspect and split [Compile one natural-language Request into a multi-capability RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/143) before coding. The current ticket crosses graph composition, structural and semantic edge compatibility, clarification, route declarations, comparison, invalidation, determinism and two-capability proof; each resulting ticket must preserve the difference between a real composed RoutePlan and a renamed one-call option. No next ticket is claimed yet.
+The next unclaimed frontier is [Project exact RoutePlan generation changes to customers and agents](https://github.com/CreasyBear/Agentic-Economy/issues/170). Begin only in a new logical ticket session: claim it, derive one shared human/HTTP projection from exact generation material, and keep authority, protocol choreography and visual redesign outside its boundary. No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
