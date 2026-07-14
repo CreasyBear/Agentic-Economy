@@ -12,17 +12,64 @@ import { internalAction } from './_generated/server'
 const probeReference = makeFunctionReference<'action', { publicationRef: string; expectedRevision: number }>(
   'capabilitySupplyReadiness:probe',
 )
+type PublicationLifecycle = {
+  state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
+  reasons: Array<
+    | 'admission_unproven'
+    | 'conformance_unproven'
+    | 'credential_readiness_unobserved'
+    | 'health_unobserved'
+    | 'credential_unavailable'
+    | 'health_unhealthy'
+    | 'health_stale'
+    | 'withdrawn'
+    | 'incompatible_revision'
+    | 'eligibility_integrity_failure'
+  >
+}
+type ProbeRecordResult =
+  | { kind: 'observed'; publicationRef: string; revision: number; lifecycle: PublicationLifecycle }
+  | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
 type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; probeKind: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'; targetDigest: string }
 const readTargetReference = makeFunctionReference<'query', { publicationRef: string; expectedRevision: number },
   { kind: 'available'; target: Target } | { kind: 'unavailable' }>('capabilitySupply:readCapabilityProbeTarget')
 const recordReference = makeFunctionReference<'mutation',
   { publicationRef: string; expectedRevision: number; targetDigest: string; outcome: CapabilityProbeOutcome },
-  { kind: 'observed'; publicationRef: string; revision: number; lifecycle: unknown } | { kind: 'refused'; reason: string }
+  ProbeRecordResult
 >('capabilitySupply:recordCapabilityProbeResult')
+
+const publicationLifecycleValue = v.object({
+  state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
+  reasons: v.array(v.union(
+    v.literal('admission_unproven'),
+    v.literal('conformance_unproven'),
+    v.literal('credential_readiness_unobserved'),
+    v.literal('health_unobserved'),
+    v.literal('credential_unavailable'),
+    v.literal('health_unhealthy'),
+    v.literal('health_stale'),
+    v.literal('withdrawn'),
+    v.literal('incompatible_revision'),
+    v.literal('eligibility_integrity_failure'),
+  )),
+})
+const probeResultValue = v.union(
+  v.object({ kind: v.literal('unavailable') }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(v.literal('revision_changed'), v.literal('target_changed')),
+  }),
+  v.object({
+    kind: v.literal('observed'),
+    publicationRef: v.string(),
+    revision: v.number(),
+    lifecycle: publicationLifecycleValue,
+  }),
+)
 
 export const probe = internalAction({
   args: { publicationRef: v.string(), expectedRevision: v.number() },
-  returns: v.any(),
+  returns: probeResultValue,
   handler: async (ctx, args) => {
     const result = await ctx.runQuery(readTargetReference, args)
     if (result.kind !== 'available') return { kind: 'unavailable' as const }
