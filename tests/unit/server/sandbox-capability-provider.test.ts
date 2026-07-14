@@ -14,6 +14,16 @@ describe('sandbox capability provider', () => {
     await expect(two.json()).resolves.toMatchObject({ issuerBindingId: 'sandbox.option.two:v1', expectedCost: { amountMinor: 900 } })
   })
 
+  it('accepts and exactly echoes the registered V2 binding identity', async () => {
+    const response = await call('one', 'binding:sandbox-option-one:http-json')
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      issuerBindingId: 'binding:sandbox-option-one:http-json',
+      expectedCost: { amountMinor: 1_200 },
+    })
+  })
+
   it('refuses missing credentials and never commits a real-world effect', async () => {
     const unauthorized = await handleSandboxCapabilityRequest(new Request('https://ae.test/api/sandbox/capability?profile=one', {
       method: 'POST', body: JSON.stringify({}),

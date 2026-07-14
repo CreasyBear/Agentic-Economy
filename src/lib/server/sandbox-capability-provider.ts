@@ -35,7 +35,9 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   let parsedJson: unknown
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
   const parsed = requestBody.safeParse(parsedJson)
-  if (!parsed.success || parsed.data.bindingId !== profile.bindingId) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  if (!parsed.success || (parsed.data.bindingId !== profile.bindingId && parsed.data.bindingId !== profile.v2BindingId)) {
+    return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  }
   if (scenario === 'refusal' && (parsed.data.operation === 'quote' || parsed.data.operation === 'structured_quote')) {
     return json({ kind: 'refused', reason: 'sandbox_deterministic_refusal' })
   }
@@ -67,7 +69,7 @@ function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>,
     return json({ kind: 'refused', reason: 'structured_quote_contract_incomplete' }, 400)
   }
   return json({
-    kind: 'quoted', issuerBindingId: profile.bindingId, issuerNodeId: profile.nodeId,
+    kind: 'quoted', issuerBindingId: body.bindingId, issuerNodeId: profile.nodeId,
     capabilityContractId: body.capabilityContractId, capabilityContractVersion: version, registrationHash, environment,
     expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor), expectedLatencyMs: profile.latencyMs,
     dataFields: [], disclosures: [], providerQuoteRef: quoteRef(profile, body), providerQuoteExpiresAt: expiresAt(scenario),
