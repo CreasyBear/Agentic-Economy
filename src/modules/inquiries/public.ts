@@ -48,6 +48,7 @@ export type {
   InquiryCustomerRecordTimelineStep,
   InquiryDeliveryReadback,
   InquiryCustomerAccessKey,
+  InquiryCustomerAccessGrant,
   InquiryExportMessageProjection,
   InquiryExportReadback,
   InquiryFunnelRecord,
@@ -122,6 +123,36 @@ export type {
   R1TargetAdmission,
   R1TargetAdmissionState,
 } from './internal/admission'
+export {
+  accessIdFromInquiryCustomerAccessKey,
+  issueInquiryCustomerAccess,
+  mintInquiryCustomerAccessKey,
+  resolveInquiryCustomerAccessKeyring,
+  verifyInquiryCustomerAccess,
+} from './internal/customer-access'
+export type {
+  InquiryCustomerAccessKeyring,
+  IssuedInquiryCustomerAccess,
+} from './internal/customer-access'
+export {
+  decryptGovernedSendReceipt,
+  encryptGovernedSendReceipt,
+  inquiryReceiptKeyRef,
+  resolveInquiryReceiptKeyring,
+} from './internal/receipt-envelope'
+export type {
+  InquiryEncryptedReceiptPayload,
+  InquiryReceiptKeyring,
+  InquiryWrappedReceiptKey,
+} from './internal/receipt-envelope'
+export { resolveGovernedSendIntegrityKeyring } from './internal/governed-send'
+export type {
+  GovernedSendErasureLineageRecord,
+  GovernedSendIntegrityCommitmentRecord,
+  GovernedSendIntegrityKeyring,
+  GovernedSendIntegrityTargetBinding,
+  GovernedSendReceiptRecord,
+} from './internal/governed-send'
 
 export const createEmptyInquirySourceState = createEmptyInquirySourceStateImpl
 export const submitInquiry = submitInquiryImpl

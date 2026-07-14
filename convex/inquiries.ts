@@ -5,41 +5,56 @@ import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
 import { runtimeDb } from './source_state'
-import type { RuntimeDb, RuntimeDocument } from './source_state'
+import type { RuntimeDb, RuntimeDocument, RuntimeQuery } from './source_state'
 import { resolveAdminAuthority, resolveBusinessActor } from './authz'
 import { requireSourceWrite, sourceWriteArgs } from './sourceWriteAdmission'
 import { literalUnion } from '../src/modules/common/convex-literals'
 import { brandNonEmpty } from '../src/modules/common/ids'
-import { stableHash } from '../src/modules/common/stable-hash'
+import { stableHash, stableStringify } from '../src/modules/common/stable-hash'
 import { CapabilityKindValues } from '../src/modules/catalog/public'
 import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '../src/modules/catalog/public'
 import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '../src/modules/business/public'
 import {
+  accessIdFromInquiryCustomerAccessKey,
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesModule,
   createEmptyInquirySourceState,
   closeInquiry as closeInquiryModule,
   deleteInquiryPrivateContent as deleteInquiryPrivateContentModule,
+  decryptGovernedSendReceipt,
+  encryptGovernedSendReceipt,
   evaluateR1TargetAdmission,
   InquiryNotificationDispatchProviderValues,
   InquiryNotificationStatusValues,
   InquiryNotificationDispatchStatusValues,
   InquiryPrivacyTombstoneStatusValues,
   InquiryThreadStatusValues,
+  inquiryReceiptKeyRef,
   listOwnerInbox as listOwnerInboxModule,
   markInquiryRead as markInquiryReadModule,
   readInquiryDeliveryReadback as readInquiryDeliveryReadbackModule,
   readInquiryOperatorReconstruction as readInquiryOperatorReconstructionModule,
   readInquiryPrivacyTombstone as readInquiryPrivacyTombstoneModule,
   readCustomerRecord as readCustomerRecordModule,
+  resolveGovernedSendIntegrityKeyring,
+  resolveInquiryCustomerAccessKeyring,
+  resolveInquiryReceiptKeyring,
   OwnerInboxBucketValues,
   readOwnerInquiry as readOwnerInquiryModule,
   replyToInquiry as replyToInquiryModule,
   requestInquiryExport as requestInquiryExportModule,
   submitInquiry as submitInquiryModule,
+  verifyInquiryCustomerAccess,
 } from '../src/modules/inquiries/public'
 import type {
   CapabilityLaunchSupportRecord,
   InquiryDeliveryReadback,
+  GovernedSendErasureLineageRecord,
+  GovernedSendIntegrityCommitmentRecord,
+  GovernedSendReceiptRecord,
+  InquiryCustomerAccessGrant,
+  InquiryEncryptedReceiptPayload,
+  InquiryReceiptKeyring,
+  InquiryWrappedReceiptKey,
   InquiryCustomerRecordReadback,
   InquiryAuditRecord,
   InquiryExportReadback,
@@ -154,11 +169,13 @@ const submitInquiryErrorCode = v.union(
   v.literal('inquiry_target_not_admitted'),
   v.literal('inquiry_target_admission_conflict'),
   v.literal('inquiry_invalid_input'),
+  v.literal('inquiry_digest_mismatch'),
   v.literal('inquiry_duplicate_conflict'),
   v.literal('inquiry_rate_limited'),
   v.literal('inquiry_unsafe_action_intent'),
   v.literal('inquiry_unsafe_future_surface_field'),
-  v.literal('inquiry_csrf_rejected')
+  v.literal('inquiry_integrity_conflict'),
+  v.literal('inquiry_csrf_rejected'),
 )
 
 const submitInquiryResult = v.union(
@@ -316,6 +333,32 @@ const customerRecordReadback = v.object({
     messageSummary: v.string(),
     submittedAt: v.number(),
   }),
+  governedSend: v.optional(v.union(
+    v.object({
+      posture: v.literal('verified'),
+      digest: v.string(),
+      fields: v.array(v.object({
+        key: v.union(
+          v.literal('businessId'),
+          v.literal('serviceId'),
+          v.literal('capabilityKind'),
+          v.literal('body'),
+          v.literal('contactName'),
+          v.literal('contactEmail'),
+          v.literal('contactPhone'),
+          v.literal('originThreadId'),
+        ),
+        label: v.string(),
+        value: v.union(v.string(), v.null()),
+      })),
+    }),
+    v.object({
+      posture: v.literal('erased'),
+      digest: v.string(),
+      erasedAt: v.number(),
+      erasureEventId: v.string(),
+    }),
+  )),
   delivery: v.object({
     state: literalUnion(InquiryNotificationStatusValues),
     label: v.string(),
@@ -370,6 +413,8 @@ const inquiryPrivacyTombstoneProjection = v.object({
   correlationId: v.string(),
   createdAt: v.number(),
   appliedAt: v.optional(v.number()),
+  receiptErasureCount: v.number(),
+  erasureEventIds: v.array(v.string()),
 })
 
 const inquiryExportMessageProjection = v.object({
@@ -713,11 +758,11 @@ export const submitPublicInquiry = mutationGeneric({
     body: v.string(),
     contact: publicInquiryContact,
     inquiryOrigin: v.optional(inquiryOrigin),
-    customerAccessKey: v.string(),
     pseudonymousSessionId: v.string(),
     abuseBucketKey: v.string(),
     ...csrfArgs,
     operationKey: v.string(),
+    expectedDigest: v.string(),
     correlationId: v.string(),
   },
   returns: submitInquiryResult,
@@ -737,12 +782,14 @@ export const submitPublicInquiry = mutationGeneric({
       },
       body: args.body,
       contact: args.contact,
-      customerAccessKey: args.customerAccessKey,
+      customerAccessKeyring: resolveInquiryCustomerAccessKeyring(process.env),
+      governedSendIntegrityKeyring: resolveGovernedSendIntegrityKeyring(process.env),
       ...(args.inquiryOrigin === undefined ? {} : { origin: args.inquiryOrigin }),
       operationKey: brandNonEmpty(args.operationKey, 'OperationKey'),
       correlationId: brandNonEmpty(args.correlationId, 'CorrelationId'),
       pseudonymousSessionId: args.pseudonymousSessionId,
       abuseBucketKey: args.abuseBucketKey,
+      expectedDigest: args.expectedDigest,
       now: Date.now(),
     })
 
@@ -764,7 +811,7 @@ export const submitPublicInquiry = mutationGeneric({
         serviceId: result.thread.serviceId,
         status: result.thread.status,
         version: result.thread.version,
-        customerAccessKey: result.thread.customerAccessKey ?? args.customerAccessKey,
+        customerAccessKey: result.customerAccessKey,
       },
       notification: {
         notificationId: bridged.notification.notificationId,
@@ -939,10 +986,34 @@ export const readCustomerRecord = queryGeneric({
   },
   returns: customerRecordResult,
   handler: async (ctx, args) => {
-    const state = await loadInquirySourceState(runtimeDb(ctx.db))
-    const result = readCustomerRecordModule(state, {
-      threadId: brandNonEmpty(args.threadId, 'InquiryThreadId'),
+    const db = runtimeDb(ctx.db)
+    const threadId = brandNonEmpty(args.threadId, 'InquiryThreadId')
+    const keyring = resolveInquiryCustomerAccessKeyring(process.env)
+    const accessId = accessIdFromInquiryCustomerAccessKey(args.accessKey)
+    const grantRow = accessId === undefined
+      ? null
+      : await db.query('inquiryCustomerAccessGrants')
+          .withIndex('by_accessId', (query) => query.eq('accessId', accessId))
+          .unique()
+    const grant = grantRow === null ? undefined : toInquiryCustomerAccessGrant(grantRow)
+    const now = Date.now()
+    if (grant === undefined || !verifyInquiryCustomerAccess({
+      grant,
       accessKey: args.accessKey,
+      requestedThreadId: threadId,
+      now,
+      keyring,
+    })) {
+      return { kind: 'error' as const, code: 'inquiry_access_denied' as const, retryable: false, reason: 'Inquiry record was not found for this key.' }
+    }
+
+    const state = await loadInquiryCustomerRecordState(db, threadId, grant)
+    const result = readCustomerRecordModule(state, {
+      threadId,
+      accessKey: args.accessKey,
+      keyring,
+      governedSendIntegrityKeyring: resolveGovernedSendIntegrityKeyring(process.env),
+      now,
     })
     if (result.kind === 'error') {
       return result
@@ -1072,6 +1143,13 @@ export const deleteCurrentOwnerInquiryPrivateContent = mutationGeneric({
     }
 
     const db = runtimeDb(ctx.db)
+    const ownedThread = await db.query('inquiryThreads')
+      .withIndex('by_threadId', (query) => query.eq('threadId', args.threadId))
+      .unique()
+    if (ownedThread === null || stringField(ownedThread, 'ownerId') !== owner.ownerId) {
+      return { kind: 'error' as const, code: 'inquiry_not_found' as const, retryable: false, reason: 'Inquiry thread was not found for this owner.' }
+    }
+    await repairGovernedSendErasureKeys(db, args.threadId)
     const state = await loadInquirySourceState(db)
     const result = deleteInquiryPrivateContentModule(state, {
       authority: { ownerId: brandNonEmpty(owner.ownerId, 'OwnerId') },
@@ -1446,6 +1524,11 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     messages,
     notifications,
     privacyTombstones,
+    customerAccessGrants,
+    governedSendReceipts,
+    governedSendIntegrityCommitments,
+    governedSendReceiptKeys,
+    governedSendErasureLineage,
     auditEvents,
     abuseBuckets,
     operationKeys,
@@ -1461,6 +1544,11 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     collect(db, 'inquiryMessages'),
     collect(db, 'inquiryNotifications'),
     collect(db, 'inquiryPrivacyTombstones'),
+    collect(db, 'inquiryCustomerAccessGrants'),
+    collect(db, 'governedSendReceipts'),
+    collect(db, 'governedSendIntegrityCommitments'),
+    collect(db, 'governedSendReceiptKeys'),
+    collect(db, 'governedSendErasureLineage'),
     collect(db, 'auditEvents'),
     collect(db, 'inquiryAbuseBuckets'),
     collect(db, 'operationKeys'),
@@ -1490,6 +1578,20 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     }
   }
 
+  const receiptKeyring = governedSendReceipts.length === 0
+    ? undefined
+    : resolveInquiryReceiptKeyring(process.env)
+  const recoveredReceipts = receiptKeyring === undefined
+    ? []
+    : (await Promise.all(governedSendReceipts.map((receipt) =>
+        toGovernedSendReceiptRecord(
+          receipt,
+          governedSendReceiptKeys,
+          governedSendErasureLineage,
+          receiptKeyring,
+        )
+      ))).filter(isDefined)
+
   return createEmptyInquirySourceState({
     businesses: businesses.map(toBusinessRecord),
     businessServices: businessServices.map(toBusinessServiceRecord),
@@ -1501,12 +1603,79 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     threads: threads.map(toInquiryThreadRecord),
     messages: messages.map(toInquiryMessageRecord),
     notifications: notifications.map(toInquiryNotificationRecord),
+    customerAccessGrants: customerAccessGrants.map(toInquiryCustomerAccessGrant),
     privacyTombstones: privacyTombstones.map(toInquiryPrivacyTombstoneRecord),
+    governedSendReceipts: recoveredReceipts,
+    governedSendIntegrityCommitments: governedSendIntegrityCommitments.map(toGovernedSendIntegrityCommitmentRecord),
+    governedSendErasureLineage: governedSendErasureLineage.map(toGovernedSendErasureLineageRecord),
     auditEvents: inquiryAuditEvents,
     abuseRateLimitBuckets: abuseBuckets.map(toAbuseRateLimitBucketRecord),
     operations: inquiryOperations,
     capabilityLaunchSupportRecords,
   })
+}
+
+async function loadInquiryCustomerRecordState(
+  db: RuntimeDb,
+  threadId: InquiryThreadRecord['threadId'],
+  grant: InquiryCustomerAccessGrant,
+): Promise<InquirySourceState> {
+  const threadRow = await db.query('inquiryThreads')
+    .withIndex('by_threadId', (query) => query.eq('threadId', threadId))
+    .unique()
+  if (threadRow === null) return createEmptyInquirySourceState({ customerAccessGrants: [grant] })
+
+  const [businessRow, messageRows, notificationRows, tombstoneRows, receiptRows, commitmentRows, lineageRows] = await Promise.all([
+    db.get(stringField(threadRow, 'businessId')),
+    takeRuntimeRows(db.query('inquiryMessages').withIndex('by_thread_createdAt', (query) => query.eq('threadId', threadId)), 200),
+    takeRuntimeRows(db.query('inquiryNotifications').withIndex('by_thread_status', (query) => query.eq('threadId', threadId)), 200),
+    takeRuntimeRows(db.query('inquiryPrivacyTombstones').withIndex('by_thread_status', (query) => query.eq('threadId', threadId)), 20),
+    takeRuntimeRows(db.query('governedSendReceipts').withIndex('by_threadId_and_createdAt', (query) => query.eq('threadId', threadId)), 20),
+    takeRuntimeRows(db.query('governedSendIntegrityCommitments').withIndex('by_threadId', (query) => query.eq('threadId', threadId)), 20),
+    takeRuntimeRows(db.query('governedSendErasureLineage').withIndex('by_thread_destroyedAt', (query) => query.eq('threadId', threadId)), 20),
+  ])
+  const keyRows = (await Promise.all(receiptRows.map((receipt) =>
+    db.query('governedSendReceiptKeys')
+      .withIndex('by_keyRef', (query) => query.eq('keyRef', stringField(receipt, 'keyRef')))
+      .unique()
+  ))).filter((row): row is RuntimeDocument => row !== null)
+  const operationRows = (await Promise.all(receiptRows.map((receipt) =>
+    db.query('operationKeys')
+      .withIndex('by_scope_key', (query) => query.eq('scope', 'inquiry').eq('key', stringField(receipt, 'operationKey')))
+      .unique()
+  ))).filter((row): row is RuntimeDocument => row !== null)
+  const commitments = commitmentRows.map(toGovernedSendIntegrityCommitmentRecord)
+  const [claimRows, serviceRows] = await Promise.all([
+    Promise.all(commitments.map((commitment) => db.get(commitment.targetBinding.claimRef))),
+    Promise.all(commitments.map((commitment) => db.get(String(commitment.targetBinding.serviceId)))),
+  ])
+  const claims = claimRows.filter((row): row is RuntimeDocument => row !== null)
+  const services = serviceRows.filter((row): row is RuntimeDocument => row !== null)
+  const receiptKeyring = receiptRows.length === 0 ? undefined : resolveInquiryReceiptKeyring(process.env)
+  const receipts = receiptKeyring === undefined
+    ? []
+    : (await Promise.all(receiptRows.map((receipt) =>
+        toGovernedSendReceiptRecord(receipt, keyRows, lineageRows, receiptKeyring)
+      ))).filter(isDefined)
+
+  return createEmptyInquirySourceState({
+    businesses: businessRow === null ? [] : [toBusinessRecord(businessRow)],
+    businessServices: services.map(toBusinessServiceRecord),
+    claims: claims.map(toClaimRecord),
+    threads: [toInquiryThreadRecord(threadRow)],
+    messages: messageRows.map(toInquiryMessageRecord),
+    notifications: notificationRows.map(toInquiryNotificationRecord),
+    customerAccessGrants: [grant],
+    privacyTombstones: tombstoneRows.map(toInquiryPrivacyTombstoneRecord),
+    governedSendReceipts: receipts,
+    governedSendIntegrityCommitments: commitments,
+    governedSendErasureLineage: lineageRows.map(toGovernedSendErasureLineageRecord),
+    operations: operationRows.map(toInquiryOperationRecord),
+  })
+}
+
+async function takeRuntimeRows(query: RuntimeQuery, limit: number): Promise<RuntimeDocument[]> {
+  return query.take === undefined ? (await query.collect()).slice(0, limit) : query.take(limit)
 }
 
 async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceState): Promise<void> {
@@ -1534,7 +1703,6 @@ async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceStat
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
       version: thread.version,
-      ...(thread.customerAccessKey === undefined ? {} : { customerAccessKey: thread.customerAccessKey }),
       ...(thread.customerReplyEmail === undefined ? {} : { customerReplyEmail: thread.customerReplyEmail }),
       ...(thread.readAt === undefined ? {} : { readAt: thread.readAt }),
       ...(thread.repliedAt === undefined ? {} : { repliedAt: thread.repliedAt }),
@@ -1543,6 +1711,21 @@ async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceStat
         originKind: thread.origin.kind,
         originThreadId: thread.origin.threadId,
       }),
+    })
+  }
+
+  for (const grant of state.customerAccessGrants) {
+    await upsertByFields(db, 'inquiryCustomerAccessGrants', ['accessId'], {
+      accessId: grant.accessId,
+      threadId: grant.threadId,
+      scope: grant.scope,
+      version: grant.version,
+      verifier: grant.verifier,
+      keyId: grant.keyId,
+      status: grant.status,
+      createdAt: grant.createdAt,
+      expiresAt: grant.expiresAt,
+      ...(grant.revokedAt === undefined ? {} : { revokedAt: grant.revokedAt }),
     })
   }
 
@@ -1588,7 +1771,20 @@ async function persistInquirySourceState(db: RuntimeDb, state: InquirySourceStat
       correlationId: tombstone.correlationId,
       createdAt: tombstone.createdAt,
       ...(tombstone.appliedAt === undefined ? {} : { appliedAt: tombstone.appliedAt }),
+      receiptErasureCount: tombstone.receiptErasureCount,
+      erasureEventIds: [...tombstone.erasureEventIds],
     })
+  }
+
+  for (const receipt of state.governedSendReceipts) {
+    const lineage = state.governedSendErasureLineage.find(
+      (candidate) => candidate.receiptOperationKey === receipt.operationKey,
+    )
+    await persistGovernedSendReceipt(db, receipt, lineage)
+  }
+
+  for (const commitment of state.governedSendIntegrityCommitments) {
+    await persistGovernedSendIntegrityCommitment(db, commitment)
   }
 
   const auditEventsByOperationKey = new Map(
@@ -1629,14 +1825,180 @@ async function upsertInquiryOperation(
     resultHash: stableHash({ resultCode: operation.resultCode }),
     effectRefs: [
       `result:${operation.resultCode}`,
-      operation.threadId === undefined ? undefined : `thread:${operation.threadId}`,
-      operation.messageId === undefined ? undefined : `message:${operation.messageId}`,
-      operation.notificationId === undefined ? undefined : `notification:${operation.notificationId}`,
-    ].filter(isString),
+      ...(operation.threadId === undefined ? [] : [`thread:${operation.threadId}`]),
+      ...(operation.messageId === undefined ? [] : [`message:${operation.messageId}`]),
+      ...(operation.notificationId === undefined ? [] : [`notification:${operation.notificationId}`]),
+    ],
     createdAt: operation.createdAt,
     updatedAt: operation.createdAt,
   })
 }
+async function repairGovernedSendErasureKeys(db: RuntimeDb, threadId: string): Promise<void> {
+  const lineageRows = await takeRuntimeRows(
+    db.query('governedSendErasureLineage').withIndex('by_thread_destroyedAt', (query) => query.eq('threadId', threadId)),
+    20,
+  )
+  for (const lineageRow of lineageRows) {
+    const lineage = toGovernedSendErasureLineageRecord(lineageRow)
+    const receiptLineageRows = lineageRows.filter(
+      (candidate) => stringField(candidate, 'receiptOperationKey') === String(lineage.receiptOperationKey),
+    )
+    if (receiptLineageRows.length !== 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
+    const keyRows = await takeRuntimeRows(
+      db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)), 2,
+    )
+    if (keyRows.length > 1) throw new Error('governed_send_receipt_key_duplicate_rows')
+    const key = keyRows[0]
+    if (key === undefined) continue
+    const receiptRows = await takeRuntimeRows(
+      db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', lineage.receiptOperationKey)), 2,
+    )
+    if (receiptRows.length !== 1) throw new Error('governed_send_receipt_conflict')
+    await assertGovernedSendLineageAuthority(db, receiptRows[0]!, lineage)
+    if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
+    await db.delete(key._id)
+  }
+}
+
+async function assertGovernedSendLineageAuthority(
+  db: RuntimeDb,
+  receipt: RuntimeDocument,
+  lineage: GovernedSendErasureLineageRecord,
+): Promise<void> {
+  const tombstoneRows = await takeRuntimeRows(
+    db.query('inquiryPrivacyTombstones').withIndex('by_thread_operationKey', (query) =>
+      query.eq('threadId', lineage.threadId).eq('operationKey', lineage.privacyOperationKey)), 2,
+  )
+  if (tombstoneRows.length !== 1) throw new Error('governed_send_erasure_lineage_conflict')
+  const tombstone = tombstoneRows[0]!
+  const destroyedAt = optionalNumberFromUnknown(tombstone.appliedAt)
+  const erasureEventIds = stringArrayField(tombstone, 'erasureEventIds')
+  if (
+    stringField(tombstone, 'status') !== 'applied' ||
+    new Set(erasureEventIds).size !== erasureEventIds.length ||
+    destroyedAt === undefined ||
+    numberField(tombstone, 'receiptErasureCount') !== erasureEventIds.length ||
+    !erasureEventIds.includes(lineage.erasureEventId)
+  ) {
+    throw new Error('governed_send_erasure_lineage_conflict')
+  }
+  const expectedMaterial = {
+    erasureEventId: `governed-send-erasure:${stableHash({ receiptOperationKey: stringField(receipt, 'operationKey'), privacyOperationKey: lineage.privacyOperationKey, keyRef: stringField(receipt, 'keyRef') })}`,
+    receiptOperationKey: brandNonEmpty(stringField(receipt, 'operationKey'), 'OperationKey'),
+    privacyOperationKey: brandNonEmpty(stringField(tombstone, 'operationKey'), 'OperationKey'),
+    threadId: brandNonEmpty(stringField(receipt, 'threadId'), 'InquiryThreadId'),
+    digest: stringField(receipt, 'digest') as `sha256:${string}`,
+    keyRef: stringField(receipt, 'keyRef'),
+    reasonCode: stringField(tombstone, 'reasonCode'),
+    destroyedAt,
+    priorReceiptCommitment: stableHash({ operationKey: stringField(receipt, 'operationKey'), threadId: stringField(receipt, 'threadId'), digest: stringField(receipt, 'digest'), schemaVersion: numberField(receipt, 'schemaVersion'), recipientRef: stringField(receipt, 'recipientRef'), keyRef: stringField(receipt, 'keyRef') }),
+  }
+  const expected = { ...expectedMaterial, lineageHash: stableHash(expectedMaterial) }
+  if (stableStringify(expected) !== stableStringify(lineage)) throw new Error('governed_send_erasure_lineage_conflict')
+}
+
+async function persistGovernedSendReceipt(
+  db: RuntimeDb,
+  receipt: GovernedSendReceiptRecord,
+  lineage: GovernedSendErasureLineageRecord | undefined,
+): Promise<void> {
+  const existingRows = await takeRuntimeRows(
+    db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', receipt.operationKey)),
+    2,
+  )
+  if (existingRows.length > 1) throw new Error('governed_send_receipt_duplicate_rows')
+  const existing = existingRows[0]
+
+  if (existing === undefined) {
+    if (receipt.retention !== 'recoverable') {
+      throw new Error('Cannot persist erased governed-send metadata without its immutable receipt.')
+    }
+    const encrypted = await encryptGovernedSendReceipt(receipt, resolveInquiryReceiptKeyring(process.env))
+    await db.insert('governedSendReceipts', {
+      ...encrypted.payload,
+      digest: receipt.digest,
+      algorithm: receipt.algorithm,
+      schemaVersion: receipt.schemaVersion,
+      createdAt: receipt.createdAt,
+      operationKey: receipt.operationKey,
+      threadId: receipt.threadId,
+      admissionProof: receipt.admissionProof,
+      recipientRef: receipt.recipientRef,
+    })
+    await db.insert('governedSendReceiptKeys', encrypted.wrappedKey)
+    return
+  }
+
+  if (receipt.retention === 'recoverable') {
+    const keyRows = await takeRuntimeRows(
+      db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', stringField(existing, 'keyRef'))),
+      2,
+    )
+    if (keyRows.length !== 1) throw new Error('governed_send_receipt_conflict')
+    const recovered = await toGovernedSendReceiptRecord(
+      existing,
+      keyRows,
+      [],
+      resolveInquiryReceiptKeyring(process.env),
+    )
+    if (recovered === undefined || stableStringify(recovered) !== stableStringify(receipt)) {
+      throw new Error('governed_send_receipt_conflict')
+    }
+    return
+  }
+  if (lineage === undefined || lineage.keyRef !== stringField(existing, 'keyRef')) {
+    throw new Error('Governed-send erasure lineage does not match the persisted receipt key.')
+  }
+  const { lineageHash, ...lineageMaterial } = lineage
+  if (lineageHash !== stableHash(lineageMaterial)) {
+    throw new Error('governed_send_erasure_lineage_conflict')
+  }
+  await assertGovernedSendLineageAuthority(db, existing, lineage)
+
+  const existingLineageRows = await takeRuntimeRows(
+    db.query('governedSendErasureLineage')
+      .withIndex('by_erasureEventId', (query) => query.eq('erasureEventId', lineage.erasureEventId)),
+    2,
+  )
+  if (existingLineageRows.length > 1) throw new Error('governed_send_erasure_lineage_duplicate_rows')
+  const existingLineage = existingLineageRows[0]
+  if (
+    existingLineage !== undefined &&
+    stableStringify(toGovernedSendErasureLineageRecord(existingLineage)) !== stableStringify(lineage)
+  ) throw new Error('governed_send_erasure_lineage_conflict')
+
+  const wrappedKeyRows = await takeRuntimeRows(
+    db.query('governedSendReceiptKeys').withIndex('by_keyRef', (query) => query.eq('keyRef', lineage.keyRef)),
+    2,
+  )
+  if (wrappedKeyRows.length > 1) throw new Error('governed_send_receipt_key_duplicate_rows')
+  const wrappedKey = wrappedKeyRows[0]
+  if (wrappedKey !== undefined) {
+    if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
+    await db.delete(wrappedKey._id)
+  }
+  if (existingLineage === undefined) await db.insert('governedSendErasureLineage', { ...lineage })
+}
+
+async function persistGovernedSendIntegrityCommitment(
+  db: RuntimeDb,
+  commitment: GovernedSendIntegrityCommitmentRecord,
+): Promise<void> {
+  const rows = await takeRuntimeRows(
+    db.query('governedSendIntegrityCommitments').withIndex('by_operationKey', (query) => query.eq('operationKey', commitment.operationKey)),
+    2,
+  )
+  if (rows.length > 1) throw new Error('governed_send_commitment_duplicate_rows')
+  const existing = rows[0]
+  if (existing === undefined) {
+    await db.insert('governedSendIntegrityCommitments', { ...commitment })
+    return
+  }
+  if (stableStringify(toGovernedSendIntegrityCommitmentRecord(existing)) !== stableStringify(commitment)) {
+    throw new Error('governed_send_commitment_conflict')
+  }
+}
+
 
 async function upsertAuditEvent(db: RuntimeDb, auditEvent: InquiryAuditRecord): Promise<void> {
   const eventId = `audit:${stableHash({
@@ -1904,12 +2266,27 @@ function toInquiryThreadRecord(row: RuntimeDocument): InquiryThreadRecord {
     createdAt: numberField(row, 'createdAt'),
     updatedAt: numberField(row, 'updatedAt'),
     version: numberField(row, 'version'),
-    ...(optionalStringField(row, 'customerAccessKey') === undefined ? {} : { customerAccessKey: brandNonEmpty(stringField(row, 'customerAccessKey'), 'InquiryCustomerAccessKey') }),
     ...(optionalStringField(row, 'customerReplyEmail') === undefined ? {} : { customerReplyEmail: stringField(row, 'customerReplyEmail') }),
     ...(optionalNumberField(row, 'readAt') === undefined ? {} : { readAt: numberField(row, 'readAt') }),
     ...(optionalNumberField(row, 'repliedAt') === undefined ? {} : { repliedAt: numberField(row, 'repliedAt') }),
     ...(optionalNumberField(row, 'closedAt') === undefined ? {} : { closedAt: numberField(row, 'closedAt') }),
     ...(origin === undefined ? {} : { origin }),
+  }
+}
+
+function toInquiryCustomerAccessGrant(row: RuntimeDocument): InquiryCustomerAccessGrant {
+  const status = stringField(row, 'status') === 'revoked' ? 'revoked' as const : 'active' as const
+  return {
+    accessId: stringField(row, 'accessId'),
+    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
+    scope: 'customer_record',
+    version: 'inquiry-customer-access:v1',
+    verifier: stringField(row, 'verifier') as `hmac-sha256:${string}`,
+    keyId: stringField(row, 'keyId'),
+    status,
+    createdAt: numberField(row, 'createdAt'),
+    expiresAt: numberField(row, 'expiresAt'),
+    ...(optionalNumberField(row, 'revokedAt') === undefined ? {} : { revokedAt: numberField(row, 'revokedAt') }),
   }
 }
 
@@ -2028,6 +2405,8 @@ function toInquiryPrivacyTombstoneRecord(row: RuntimeDocument): InquiryPrivacyTo
     correlationId: brandNonEmpty(stringField(row, 'correlationId'), 'CorrelationId'),
     createdAt: numberField(row, 'createdAt'),
     ...(optionalNumberField(row, 'appliedAt') === undefined ? {} : { appliedAt: numberField(row, 'appliedAt') }),
+    receiptErasureCount: numberField(row, 'receiptErasureCount'),
+    erasureEventIds: stringArrayField(row, 'erasureEventIds'),
   }
 }
 
@@ -2077,6 +2456,117 @@ function toInquiryOperationRecord(row: RuntimeDocument): InquiryOperationRecord 
     createdAt: numberField(row, 'createdAt'),
   }
 }
+async function toGovernedSendReceiptRecord(
+  row: RuntimeDocument,
+  keyRows: readonly RuntimeDocument[],
+  lineageRows: readonly RuntimeDocument[],
+  keyring: InquiryReceiptKeyring,
+): Promise<GovernedSendReceiptRecord | undefined> {
+  const proof = isRecord(row.admissionProof) ? row.admissionProof : {}
+  const proofDetail = isRecord(proof.proof) ? proof.proof : {}
+  const destinationVerifiedAt = optionalNumberFromUnknown(proofDetail.destinationVerifiedAt)
+  const operationKey = brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey')
+  const threadId = brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId')
+  const digest = stringField(row, 'digest') as `sha256:${string}`
+  const keyRef = stringField(row, 'keyRef')
+  const base = {
+    digest,
+    algorithm: 'sha256' as const,
+    schemaVersion: numberField(row, 'schemaVersion'),
+    createdAt: numberField(row, 'createdAt'),
+    operationKey,
+    threadId,
+    admissionProof: {
+      version: 'r1-target-admitted:v1' as const,
+      admitted: true as const,
+      proof: {
+        kind: 'claimed_owner' as const,
+        claimRef: stringFromUnknown(proofDetail.claimRef),
+        recipientRef: stringFromUnknown(proofDetail.recipientRef),
+        ...(destinationVerifiedAt === undefined ? {} : { destinationVerifiedAt }),
+      },
+    },
+    recipientRef: stringField(row, 'recipientRef'),
+  }
+  const wrappedKeyRow = keyRows.find((candidate) => stringField(candidate, 'keyRef') === keyRef)
+  const matchingLineageRows = lineageRows.filter(
+    (candidate) => stringField(candidate, 'receiptOperationKey') === String(operationKey),
+  )
+  if (matchingLineageRows.length > 1) return undefined
+  const lineageRow = matchingLineageRows[0]
+  if (wrappedKeyRow === undefined) {
+    if (lineageRow === undefined) return undefined
+    const lineage = toGovernedSendErasureLineageRecord(lineageRow)
+    return {
+      ...base,
+      retention: 'erased',
+      erasedAt: lineage.destroyedAt,
+      erasureEventId: lineage.erasureEventId,
+    }
+  }
+  if (lineageRow !== undefined) return undefined
+
+  const payload: InquiryEncryptedReceiptPayload = {
+    envelopeVersion: 'inquiry-receipt-envelope:v1',
+    keyRef,
+    ciphertextBase64: stringField(row, 'ciphertextBase64'),
+    contentIvBase64: stringField(row, 'contentIvBase64'),
+  }
+  const wrappedKey: InquiryWrappedReceiptKey = {
+    keyRef,
+    receiptOperationKey: stringField(wrappedKeyRow, 'receiptOperationKey'),
+    wrappedKeyBase64: stringField(wrappedKeyRow, 'wrappedKeyBase64'),
+    wrapIvBase64: stringField(wrappedKeyRow, 'wrapIvBase64'),
+    kekKeyId: stringField(wrappedKeyRow, 'kekKeyId'),
+    createdAt: numberField(wrappedKeyRow, 'createdAt'),
+  }
+  try {
+    const canonicalBytesBase64 = await decryptGovernedSendReceipt({ receipt: base, payload, wrappedKey, keyring })
+    return { ...base, retention: 'recoverable', canonicalBytesBase64 }
+  } catch {
+    return undefined
+  }
+}
+
+function toGovernedSendIntegrityCommitmentRecord(
+  row: RuntimeDocument,
+): GovernedSendIntegrityCommitmentRecord {
+  const targetBinding = isRecord(row.targetBinding) ? row.targetBinding : {}
+  return {
+    version: stringField(row, 'version') as 'governed-send-integrity:v1',
+    receiptRef: stringField(row, 'receiptRef'),
+    operationKey: brandNonEmpty(stringField(row, 'operationKey'), 'OperationKey'),
+    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
+    digest: stringField(row, 'digest') as `sha256:${string}`,
+    keyId: stringField(row, 'keyId'),
+    targetBinding: {
+      businessId: brandNonEmpty(stringFromUnknown(targetBinding.businessId), 'BusinessId'),
+      ownerId: brandNonEmpty(stringFromUnknown(targetBinding.ownerId), 'OwnerId'),
+      serviceId: brandNonEmpty(stringFromUnknown(targetBinding.serviceId), 'ServiceId'),
+      capabilityKind: stringFromUnknown(targetBinding.capabilityKind) as CapabilityKind,
+      claimRef: stringFromUnknown(targetBinding.claimRef),
+      recipientRef: stringFromUnknown(targetBinding.recipientRef),
+    },
+    signature: stringField(row, 'signature') as `hmac-sha256:${string}`,
+    createdAt: numberField(row, 'createdAt'),
+  }
+}
+
+function toGovernedSendErasureLineageRecord(row: RuntimeDocument): GovernedSendErasureLineageRecord {
+  return {
+    erasureEventId: stringField(row, 'erasureEventId'),
+    receiptOperationKey: brandNonEmpty(stringField(row, 'receiptOperationKey'), 'OperationKey'),
+    privacyOperationKey: brandNonEmpty(stringField(row, 'privacyOperationKey'), 'OperationKey'),
+    threadId: brandNonEmpty(stringField(row, 'threadId'), 'InquiryThreadId'),
+    digest: stringField(row, 'digest') as `sha256:${string}`,
+    keyRef: stringField(row, 'keyRef'),
+    reasonCode: stringField(row, 'reasonCode'),
+    destroyedAt: numberField(row, 'destroyedAt'),
+    priorReceiptCommitment: stringField(row, 'priorReceiptCommitment'),
+    lineageHash: stringField(row, 'lineageHash'),
+  }
+}
+
 
 function toCapabilityLaunchSupportRecord(row: RuntimeDocument): CapabilityLaunchSupportRecord | undefined {
   if (stringField(row, 'capability') !== 'human_inquiry_owner_inbox') {
@@ -2431,6 +2921,20 @@ function serializeCustomerRecord(record: InquiryCustomerRecordReadback) {
     threadId: record.threadId,
     business: { ...record.business },
     submitted: { ...record.submitted },
+    ...(record.governedSend === undefined ? {} : {
+      governedSend: record.governedSend.posture === 'verified'
+        ? {
+            posture: 'verified' as const,
+            digest: record.governedSend.digest,
+            fields: record.governedSend.fields.map((field) => ({ ...field })),
+          }
+        : {
+            posture: 'erased' as const,
+            digest: record.governedSend.digest,
+            erasedAt: record.governedSend.erasedAt,
+            erasureEventId: record.governedSend.erasureEventId,
+          },
+    }),
     delivery: { ...record.delivery },
     timeline: record.timeline.map((step) => ({ ...step })),
     ...(record.reply === undefined ? {} : { reply: { ...record.reply } }),
@@ -2482,6 +2986,8 @@ function serializeInquiryPrivacyTombstone(tombstone: InquiryPrivacyTombstoneReco
     correlationId: tombstone.correlationId,
     createdAt: tombstone.createdAt,
     ...(tombstone.appliedAt === undefined ? {} : { appliedAt: tombstone.appliedAt }),
+    receiptErasureCount: tombstone.receiptErasureCount,
+    erasureEventIds: [...tombstone.erasureEventIds],
   }
 }
 
@@ -2878,6 +3384,14 @@ function abuseBucketState(row: RuntimeDocument) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringFromUnknown(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function optionalNumberFromUnknown(value: unknown): number | undefined {
+  return typeof value === 'number' ? value : undefined
 }
 
 function isString(value: unknown): value is string {

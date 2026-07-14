@@ -18,6 +18,7 @@ import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } f
 import type { ActionAgentIdentity, ActionSourceWriteRequest } from '@/modules/common/action'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import { encodeGovernedAction } from '@/modules/governed-action/public'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import { resolvePublicRegistryInquiryTarget } from '@/modules/registry/registry.functions'
 import {
@@ -49,6 +50,7 @@ import {
   type PublicInquiryContactInput,
   type R1TargetAdmission,
 } from '@/modules/inquiries/public'
+import { buildGovernedSendIntent } from './internal/governed-send'
 
 const inquiryCapabilityKindSchema = z.enum([
   'phone_inquiry',
@@ -76,6 +78,8 @@ export const publicInquirySubmitSchema = z.object({
     email: z.string().optional(),
     phone: z.string().optional(),
   }).strict(),
+  expectedDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  operationKey: z.string().trim().min(16).max(240).optional(),
   inquiryOrigin: z.object({
     kind: z.literal('answer_thread'),
     threadId: z.string().trim().min(1).max(200),
@@ -125,6 +129,7 @@ type PublicInquirySubmitArgs = {
   }
   body: string
   contact: PublicInquiryContactInput
+  expectedDigest: string
   pseudonymousSessionId: string
   abuseBucketKey: string
   operationKey: string
@@ -133,7 +138,6 @@ type PublicInquirySubmitArgs = {
     kind: 'answer_thread'
     threadId: string
   }
-  customerAccessKey: string
   origin?: string
   sourceWrite?: SourceWriteAdmission
 }
@@ -384,15 +388,14 @@ export async function submitPublicInquiryThroughSource(
       return submitLocalE2ePublicInquiry(data, target)
     }
 
-    const customerAccessKey = createCustomerAccessKey()
-    const operationSuffix = resolvePublicInquiryOperationSuffix(target, context)
-    const operationKey = `inquiry:${operationSuffix}`
-    const correlationId = `correlation:${operationSuffix}`
+    const operationSuffix = data.operationKey ?? resolvePublicInquiryOperationSuffix(target, context)
+    const operationKey = data.operationKey ?? `inquiry:${operationSuffix}`
+    const correlationId = `correlation:${normalizeOperationPart(operationSuffix)}`
     const result = await callPublicSourceMutation(submitPublicInquiryMutation, {
       target,
       body: data.body,
       contact: compactContact(data.contact),
-      customerAccessKey,
+      expectedDigest: data.expectedDigest,
       ...(data.inquiryOrigin === undefined ? {} : { inquiryOrigin: data.inquiryOrigin }),
       pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
       abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
@@ -426,10 +429,13 @@ export async function readCustomerRecordThroughSource(
   data: z.infer<typeof customerRecordSchema>
 ): Promise<CustomerInquiryRecordServerResult> {
   if (isLocalE2EAuthBypassEnabled()) {
-    const state = createLocalE2eInquirySourceState()
+    const state = localE2eSubmittedStateByThreadId.get(data.threadId) ?? createLocalE2eInquirySourceState()
     const result = readCustomerRecordLocal(state, {
       threadId: brandNonEmpty(data.threadId, 'InquiryThreadId'),
       accessKey: data.accessKey,
+      keyring: localE2eCustomerAccessKeyring,
+      governedSendIntegrityKeyring: localE2eGovernedSendIntegrityKeyring,
+      now: Date.now(),
     })
     return result.kind === 'ok' ? { kind: 'ok', code: result.code, record: result.record } : result
   }
@@ -710,22 +716,24 @@ function submitLocalE2ePublicInquiry(
   target: PublicInquirySubmitArgs['target'],
 ): PublicInquirySubmitServerResult {
   const now = Date.now()
-  const operationSuffix = `${normalizeOperationPart(target.businessId)}:local-e2e:${now}`
-  const customerAccessKey = createCustomerAccessKey()
-  const result = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
-    target: {
-      businessId: localE2eBusinessId,
-      serviceId: localE2eServiceId,
-      capabilityKind: target.capabilityKind,
-    },
+  const operationSuffix = data.operationKey ?? `${normalizeOperationPart(target.businessId)}:local-e2e:${now}`
+  const localTarget: InquiryTargetRef = {
+    businessId: brandNonEmpty(target.businessId, 'BusinessId'),
+    serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
+    capabilityKind: target.capabilityKind,
+  }
+  const result = submitInquiryLocal(createLocalPublicAdmissionState(localTarget), {
+    target: localTarget,
     body: data.body,
     contact: compactContact(data.contact),
-    customerAccessKey,
+    expectedDigest: data.expectedDigest,
+    customerAccessKeyring: localE2eCustomerAccessKeyring,
+    governedSendIntegrityKeyring: localE2eGovernedSendIntegrityKeyring,
     ...(data.inquiryOrigin === undefined ? {} : { origin: data.inquiryOrigin }),
     pseudonymousSessionId: `public-inquiry:${operationSuffix}`,
     abuseBucketKey: `public-inquiry:${normalizeOperationPart(target.businessId)}:${normalizeOperationPart(target.serviceId)}`,
-    operationKey: brandNonEmpty(`inquiry:${operationSuffix}`, 'OperationKey'),
-    correlationId: brandNonEmpty(`correlation:${operationSuffix}`, 'CorrelationId'),
+    operationKey: brandNonEmpty(data.operationKey ?? `inquiry:${operationSuffix}`, 'OperationKey'),
+    correlationId: brandNonEmpty(`correlation:${normalizeOperationPart(operationSuffix)}`, 'CorrelationId'),
     now,
     notificationStatus: 'held',
     notificationFailureCode: 'local_e2e_no_provider',
@@ -742,6 +750,8 @@ function submitLocalE2ePublicInquiry(
     }
   }
 
+  localE2eSubmittedStateByThreadId.set(String(result.thread.threadId), result.state)
+
   return {
     kind: 'ok',
     code: result.code,
@@ -753,7 +763,7 @@ function submitLocalE2ePublicInquiry(
       version: result.thread.version,
       notificationId: result.notification.notificationId,
       notificationStatus: result.notification.status,
-      accessKey: result.thread.customerAccessKey ?? customerAccessKey,
+      accessKey: result.customerAccessKey,
     },
   }
 }
@@ -1003,11 +1013,6 @@ function normalizeOperationPart(value: string): string {
   return normalized.length === 0 ? 'inquiry' : normalized
 }
 
-function createCustomerAccessKey(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
-}
 
 function compactContact(input: z.infer<typeof publicInquirySubmitSchema>['contact']): PublicInquiryContactInput {
   return {
@@ -1045,7 +1050,17 @@ function readEnv(name: string): string | undefined {
   return value === undefined || value.trim().length === 0 ? undefined : value.trim()
 }
 
-const localE2eCustomerAccessKey = 'local-e2e-customer-record-key-0000000000000000'
+const localE2eCustomerAccessKeyring = {
+  keyId: 'local-e2e-inquiry-access-v1',
+  secret: 'local-e2e-inquiry-access-secret-00000000000000000000',
+} as const
+const localE2eGovernedSendIntegrityKeyring = {
+  activeKeyId: 'local-e2e-governed-send-integrity-v1',
+  signingSecret: 'local-e2e-governed-send-integrity-secret-000000000000',
+  verificationSecrets: {
+    'local-e2e-governed-send-integrity-v1': 'local-e2e-governed-send-integrity-secret-000000000000',
+  },
+} as const
 const localE2eNow = 1_777_000_000_000
 const localE2eOwnerId = brandNonEmpty('owner:inquiries-route', 'OwnerId')
 const localPublicAdmittedFixture = (() => {
@@ -1148,6 +1163,8 @@ function createLocalPublicAdmissionState(target: InquiryTargetRef): InquirySourc
   })
 }
 
+const localE2eSubmittedStateByThreadId = new Map<string, InquirySourceState>()
+
 const localE2eBusinessId = brandNonEmpty('business:plumbing-demo', 'BusinessId')
 const localE2eServiceId = brandNonEmpty('service:business:plumbing-demo:diagnostic-plumbing', 'ServiceId')
 const localE2eTarget = {
@@ -1161,16 +1178,30 @@ const localE2eBusinessFixture = (() => {
   return fixture
 })()
 
+const localE2eRecordBody = 'Water is leaking under the kitchen sink and I need a human owner to confirm next steps.'
+const localE2eRecordContact = { email: 'customer@example.test' } as const
+const localE2eRecordEncoding = encodeGovernedAction(buildGovernedSendIntent({
+  target: localE2eTarget,
+  body: localE2eRecordBody,
+  contact: localE2eRecordContact,
+}))
+if (localE2eRecordEncoding.kind !== 'encoded') {
+  throw new Error('The local E2E governed inquiry fixture must be canonically encodable.')
+}
+const localE2eRecordDigest = localE2eRecordEncoding.digest
+
 function createLocalE2eInquirySourceState(): InquirySourceState {
   const submitted = submitInquiryLocal(createLocalE2eInquiryBaseState(), {
     target: localE2eTarget,
-    body: 'Water is leaking under the kitchen sink and I need a human owner to confirm next steps.',
-    contact: { email: 'customer@example.test' },
-    customerAccessKey: localE2eCustomerAccessKey,
+    body: localE2eRecordBody,
+    contact: localE2eRecordContact,
+    customerAccessKeyring: localE2eCustomerAccessKeyring,
+    governedSendIntegrityKeyring: localE2eGovernedSendIntegrityKeyring,
     operationKey: brandNonEmpty('inquiry:local-e2e-submit', 'OperationKey'),
     correlationId: brandNonEmpty('correlation:local-e2e-submit', 'CorrelationId'),
     pseudonymousSessionId: 'public-inquiry:local-e2e',
     abuseBucketKey: 'public-inquiry:local-e2e',
+    expectedDigest: localE2eRecordDigest,
     now: localE2eNow,
     notificationStatus: 'failed',
     notificationFailureCode: 'provider_missing',

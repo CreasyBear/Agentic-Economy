@@ -131,7 +131,7 @@ export type SendInquiryNovuInput = {
     inquiryMessageId?: string
     businessName?: string
     businessSlug?: string
-    customerAccessKey?: string
+    customerAccessToken?: string
   }
   appBaseUrl?: string
   fetch?: typeof globalThis.fetch
@@ -470,8 +470,8 @@ export async function triggerInquiryNovuWorkflow(input: SendInquiryNovuInput): P
   const transactionId = idempotencyKey
   const workflowId = novuWorkflowIdForRecipient(input.config, input.recipientRole)
   const ownerLink = input.recipientRole === 'owner' ? ownerInquiryLink(input.appBaseUrl, input.dispatch.inquiryThreadId) : undefined
-  const customerRecordLink = input.recipientRole === 'customer' && input.dispatch.customerAccessKey !== undefined
-    ? customerInquiryRecordLink(input.appBaseUrl, input.dispatch.inquiryThreadId, input.dispatch.customerAccessKey)
+  const customerRecordLink = input.recipientRole === 'customer' && input.dispatch.customerAccessToken !== undefined
+    ? customerInquiryRecordLink(input.appBaseUrl, input.dispatch.inquiryThreadId, input.dispatch.customerAccessToken)
     : undefined
   const payload: RedactedPayload = {
     dispatchId: input.dispatch.dispatchId,
@@ -833,13 +833,14 @@ function ownerInquiryLink(appBaseUrl: string | undefined, inquiryThreadId: strin
   return url.toString()
 }
 
-function customerInquiryRecordLink(appBaseUrl: string | undefined, inquiryThreadId: string, accessKey: string): string | undefined {
-  if (appBaseUrl === undefined || appBaseUrl.trim().length === 0 || accessKey.trim().length === 0) {
+function customerInquiryRecordLink(appBaseUrl: string | undefined, inquiryThreadId: string, accessToken: string): string | undefined {
+  if (appBaseUrl === undefined || appBaseUrl.trim().length === 0 || accessToken.trim().length === 0) {
     return undefined
   }
 
-  const url = new URL(`/i/${encodeURIComponent(inquiryThreadId)}`, appBaseUrl)
-  url.searchParams.set('k', accessKey)
+  const url = new URL(`/t/${encodeURIComponent(inquiryThreadId)}`, appBaseUrl)
+  const fragment = new URLSearchParams({ access: accessToken })
+  url.hash = `record?${fragment.toString()}`
   return url.toString()
 }
 

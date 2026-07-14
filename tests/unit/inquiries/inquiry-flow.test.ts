@@ -9,6 +9,8 @@ import type {
 } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
+import { encodeGovernedAction, type GovernedActionEncoding } from '@/modules/governed-action/public'
+import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import * as inquiries from '@/modules/inquiries/public'
 import type {
   CapabilityLaunchSupportRecord,
@@ -34,6 +36,15 @@ const businessId = brandNonEmpty('business:inquiry', 'BusinessId')
 const serviceId = brandNonEmpty('service:emergency-plumbing', 'ServiceId')
 const serviceSlug = brandNonEmpty('emergency-plumbing', 'Slug')
 const now = 1_900_000_000_000
+const customerAccessKeyring = {
+  keyId: 'test-inquiry-access-v1',
+  secret: 'test-inquiry-access-secret-0123456789abcdef',
+} as const
+const governedSendIntegrityKeyring = {
+  activeKeyId: 'test-governed-send-integrity-v1',
+  signingSecret: 'test-governed-send-integrity-secret-0123456789abcdef',
+  verificationSecrets: { 'test-governed-send-integrity-v1': 'test-governed-send-integrity-secret-0123456789abcdef' },
+} as const
 
 const target = {
   businessId,
@@ -196,20 +207,13 @@ describe('human inquiry owner inbox slice', () => {
     expect(JSON.stringify([submit.notification, submit.state.auditEvents, submit.state.funnelEvents])).not.toContain('sam.customer@example.test')
     expect(JSON.stringify([submit.notification, submit.state.auditEvents, submit.state.funnelEvents])).not.toContain('Pipe burst')
 
-    const customerAccessKey = submit.thread.customerAccessKey
-    if (customerAccessKey === undefined) throw new Error('missing customer access key')
+    const customerAccessKey = submit.customerAccessKey
 
 
-    const wrongCustomerRecord = inquiries.readCustomerRecord(submit.state, {
-      threadId: submit.thread.threadId,
-      accessKey: 'wrong-customer-record-key',
-    })
+    const wrongCustomerRecord = inquiries.readCustomerRecord(submit.state, { threadId: submit.thread.threadId, accessKey: 'wrong-customer-record-key', keyring: customerAccessKeyring, governedSendIntegrityKeyring, now })
     expect(wrongCustomerRecord).toMatchObject({ kind: 'error', code: 'inquiry_access_denied' })
 
-    const initialCustomerRecord = inquiries.readCustomerRecord(submit.state, {
-      threadId: submit.thread.threadId,
-      accessKey: customerAccessKey,
-    })
+    const initialCustomerRecord = inquiries.readCustomerRecord(submit.state, { threadId: submit.thread.threadId, accessKey: customerAccessKey, keyring: customerAccessKeyring, governedSendIntegrityKeyring, now })
     expect(initialCustomerRecord.kind).toBe('ok')
     if (initialCustomerRecord.kind !== 'ok') throw new Error(initialCustomerRecord.code)
     expect(initialCustomerRecord.record.timeline.find((step) => step.key === 'business_replied')?.status).toBe('pending')
@@ -259,10 +263,7 @@ describe('human inquiry owner inbox slice', () => {
     expect(reply.state.messages).toHaveLength(2)
     expect(reply.notification.status).toBe('sent')
 
-    const repliedCustomerRecord = inquiries.readCustomerRecord(reply.state, {
-      threadId: submit.thread.threadId,
-      accessKey: customerAccessKey,
-    })
+    const repliedCustomerRecord = inquiries.readCustomerRecord(reply.state, { threadId: submit.thread.threadId, accessKey: customerAccessKey, keyring: customerAccessKeyring, governedSendIntegrityKeyring, now })
     expect(repliedCustomerRecord.kind).toBe('ok')
     if (repliedCustomerRecord.kind !== 'ok') throw new Error(repliedCustomerRecord.code)
     expect(repliedCustomerRecord.record.reply?.body).toContain('Thanks, we received your inquiry')
@@ -382,15 +383,20 @@ describe('human inquiry owner inbox slice', () => {
       businessName: 'Demo Plumbing',
       serviceName: 'Emergency plumbing',
     })
+    const routeBody = 'Please ask a human owner to contact me about this leak.'
+    const routeContact = { name: 'Route Customer', email: 'route.customer@example.test' }
     expect(submitPublicInquiryRouteReadback({
       state: unadmittedState,
       slug: 'plumbing-demo',
-      body: 'Please ask a human owner to contact me about this leak.',
-      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
+      body: routeBody,
+      contact: routeContact,
       operationKey: operationKey('public-route-unadmitted'),
       correlationId: correlationId('public-route-unadmitted'),
       pseudonymousSessionId: 'session:public-route-unadmitted',
       abuseBucketKey: 'ip:public-route-unadmitted',
+      expectedDigest: encodeCommand({ target, body: routeBody, contact: routeContact }).digest,
+      customerAccessKeyring,
+      governedSendIntegrityKeyring,
       now,
     })).toEqual({
       kind: 'error',
@@ -406,12 +412,15 @@ describe('human inquiry owner inbox slice', () => {
     const submitted = submitPublicInquiryRouteReadback({
       state: eligibleState,
       slug: 'plumbing-demo',
-      body: 'Please ask a human owner to contact me about this leak.',
-      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
+      body: routeBody,
+      contact: routeContact,
       operationKey: operationKey('public-route-submit'),
       correlationId: correlationId('public-route-submit'),
       pseudonymousSessionId: 'session:public-route',
       abuseBucketKey: 'ip:public-route',
+      expectedDigest: encodeCommand({ target, body: routeBody, contact: routeContact }).digest,
+      customerAccessKeyring,
+      governedSendIntegrityKeyring,
       now,
     })
     expect(submitted.kind).toBe('submitted')
@@ -426,16 +435,26 @@ describe('human inquiry owner inbox slice', () => {
     expect(JSON.stringify(submitted.receipt)).not.toContain('route.customer@example.test')
     expect(JSON.stringify(submitted.receipt)).not.toContain('contact me about this leak')
 
+    const contextualBody = 'Please ask a human owner to contact me about the provider I selected.'
+    const contextualOrigin = { kind: 'answer_thread', threadId: 'thread:selected-provider' } as const
     const contextualSubmit = submitPublicInquiryRouteReadback({
       state: eligibleState,
       slug: 'plumbing-demo',
-      body: 'Please ask a human owner to contact me about the provider I selected.',
-      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
-      inquiryOrigin: { kind: 'answer_thread', threadId: 'thread:selected-provider' },
+      body: contextualBody,
+      contact: routeContact,
+      inquiryOrigin: contextualOrigin,
       operationKey: operationKey('public-route-contextual-submit'),
       correlationId: correlationId('public-route-contextual-submit'),
       pseudonymousSessionId: 'session:public-route-contextual',
       abuseBucketKey: 'ip:public-route-contextual',
+      expectedDigest: encodeCommand({
+        target,
+        body: contextualBody,
+        contact: routeContact,
+        origin: contextualOrigin,
+      }).digest,
+      customerAccessKeyring,
+      governedSendIntegrityKeyring,
       now,
     })
     expect(contextualSubmit.kind).toBe('submitted')
@@ -459,15 +478,19 @@ describe('human inquiry owner inbox slice', () => {
     if (contextualThread.kind !== 'available') throw new Error(contextualThread.reason)
     expect(contextualThread.detail.inquiry.origin?.href).toBe('/t/thread%3Aselected-provider')
 
+    const unsafeBody = 'Please book this appointment and charge my card now.'
     const unsafeActionIntent = submitPublicInquiryRouteReadback({
       state: eligibleState,
       slug: 'plumbing-demo',
-      body: 'Please book this appointment and charge my card now.',
-      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
+      body: unsafeBody,
+      contact: routeContact,
       operationKey: operationKey('public-route-unsafe-action'),
       correlationId: correlationId('public-route-unsafe-action'),
       pseudonymousSessionId: 'session:public-route-unsafe-action',
       abuseBucketKey: 'ip:public-route-unsafe-action',
+      expectedDigest: encodeCommand({ target, body: unsafeBody, contact: routeContact }).digest,
+      customerAccessKeyring,
+      governedSendIntegrityKeyring,
       now,
     })
     expect(unsafeActionIntent).toMatchObject({
@@ -836,7 +859,11 @@ describe('human inquiry owner inbox slice', () => {
       body: 'Please route this to the owner, but with changed content.',
       contact: { email: 'duplicate.customer@example.test' },
     }))
-    expect(conflict).toMatchObject({ kind: 'error', code: 'inquiry_duplicate_conflict' })
+    expect(conflict).toMatchObject({
+      kind: 'error',
+      code: 'inquiry_digest_mismatch',
+      reason: 'The operation key was already used for a different reviewed request.',
+    })
     expect(first.state.threads).toHaveLength(1)
     expect(first.state.messages).toHaveLength(1)
   })
@@ -1087,7 +1114,8 @@ describe('human inquiry owner inbox slice', () => {
 })
 
 function submitCommand(key: string, overrides: Partial<SubmitInquiryCommand> = {}): SubmitInquiryCommand {
-  return {
+  const { expectedDigest, ...commandOverrides } = overrides
+  const command = {
     target,
     body: 'Can a human owner contact me about this service?',
     contact: { email: 'customer@example.test' },
@@ -1096,9 +1124,28 @@ function submitCommand(key: string, overrides: Partial<SubmitInquiryCommand> = {
     pseudonymousSessionId: `session:${key}`,
     abuseBucketKey: `ip:${key}`,
     now,
-    ...overrides,
-    customerAccessKey: overrides.customerAccessKey ?? `customer-key:${key}:0123456789abcdef`,
+    ...commandOverrides,
+    customerAccessKeyring: commandOverrides.customerAccessKeyring ?? customerAccessKeyring,
+    governedSendIntegrityKeyring: commandOverrides.governedSendIntegrityKeyring ?? governedSendIntegrityKeyring,
   }
+
+  return {
+    ...command,
+    expectedDigest: expectedDigest ?? encodeCommand(command).digest,
+  }
+}
+
+function encodeCommand(command: Pick<SubmitInquiryCommand, 'target' | 'body' | 'contact' | 'origin'>): GovernedActionEncoding {
+  const encoded = encodeGovernedAction(buildGovernedSendIntent({
+    target: command.target,
+    body: command.body,
+    contact: command.contact,
+    ...(command.origin === undefined ? {} : { origin: command.origin }),
+  }))
+  if (encoded.kind !== 'encoded') {
+    throw new Error(`expected governed action encoding, received ${encoded.code} at ${encoded.path}`)
+  }
+  return encoded
 }
 
 function sourceState(overrides: Partial<InquirySourceState> = {}): InquirySourceState {

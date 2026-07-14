@@ -118,7 +118,7 @@ type NotificationSystemSendReadResult =
         }
         inquiry?: {
           serviceName?: string
-          customerAccessKey?: string
+          customerAccessToken?: string
           customerMessageFirstLine?: string
           isFirstInquiryForBusiness: boolean
         }
@@ -291,7 +291,7 @@ export async function handleNovuDispatchRequest(
         inquiryMessageId: send.dispatch.inquiryMessageId,
         businessName: send.business.name,
         businessSlug: send.business.slug,
-        ...(send.inquiry?.customerAccessKey === undefined ? {} : { customerAccessKey: send.inquiry.customerAccessKey }),
+        ...(send.inquiry?.customerAccessToken === undefined ? {} : { customerAccessToken: send.inquiry.customerAccessToken }),
       },
       appBaseUrl: new URL(request.url).origin,
     })

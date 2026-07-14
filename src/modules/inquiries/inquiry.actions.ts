@@ -104,6 +104,12 @@ const submitParameters: readonly ActionParameter[] = [
     description: 'Private reply channel. Use when a phone reply is better.',
     required: false,
   },
+  {
+    name: 'expectedDigest',
+    type: 'string',
+    description: 'SHA-256 digest of the exact reviewed governed-send payload, formatted as sha256:<64 lowercase hexadecimal characters>.',
+    required: true,
+  },
 ]
 
 // Route-boundary caps for inquiry.submit, checked ahead of (and stricter than) the domain caps
@@ -136,6 +142,23 @@ const customerRecordOutputSchema = z.discriminatedUnion('kind', [
       threadId: z.string(),
       business: z.strictObject({ name: z.string(), slug: z.string() }),
       submitted: z.strictObject({ messageSummary: z.string(), submittedAt: z.number() }),
+      governedSend: z.strictObject({
+        digest: z.string(),
+        fields: z.array(z.strictObject({
+          key: z.enum([
+            'businessId',
+            'serviceId',
+            'capabilityKind',
+            'body',
+            'contactName',
+            'contactEmail',
+            'contactPhone',
+            'originThreadId',
+          ]),
+          label: z.string(),
+          value: z.string().nullable(),
+        })),
+      }).optional(),
       delivery: z.strictObject({
         state: z.enum(['queued', 'sent', 'failed', 'held']),
         label: z.string(),
@@ -202,8 +225,8 @@ export const readCustomerRecordAction = defineAction({
     'Returns the written handoff status, business identity, and any business reply saved on the record.',
   boundaries: [
     'Read-only. The thread id alone never grants access; the private access key is required.',
-    'Returns business identity, delivery state, submitted-message summary, and business reply text only.',
-    'Does not expose owner private data, customer contact details, booking, payment, dispatch, or job acceptance.',
+    'Returns business identity, delivery state, the exact authorized submitted fields when verified, and business reply text.',
+    'Does not expose owner private data, unshared customer details, booking, payment, dispatch, or job acceptance.',
   ],
   schema: readCustomerRecordInputSchema,
   outputSchema: customerRecordOutputSchema,

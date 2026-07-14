@@ -2,11 +2,24 @@ import type { BusinessRecord } from '@/modules/business/public'
 import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { BusinessId, CorrelationId, OperationKey, SourceHash } from '@/modules/common/ids'
-import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
+import { stableHash, stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 import type { ModuleResult } from '@/modules/common/result'
+import {
+  GOVERNED_ACTION_DIGEST_ALGORITHM,
+  GOVERNED_ACTION_WIRE_FORMAT,
+  encodeGovernedAction,
+  verifyGovernedActionBytes,
+} from '@/modules/governed-action/public'
 import { rateLimitClaim } from '@/modules/security/public'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
 import { evaluateR1TargetAdmission, type AdmissionBlocker, type R1TargetAdmissionState } from './admission'
+import {
+  accessIdFromInquiryCustomerAccessKey,
+  issueInquiryCustomerAccess,
+  mintInquiryCustomerAccessKey,
+  verifyInquiryCustomerAccess,
+  type InquiryCustomerAccessKeyring,
+} from './customer-access'
 import {
   defaultInquiryOperatorControls,
   InquiryUnsafeFutureSurfaceFieldValues,
@@ -48,6 +61,20 @@ import {
   type OwnerInquiryDetailReadback,
   type PublicInquiryContactInput,
 } from './schema'
+import {
+  createGovernedSendIntegrityCommitment,
+  buildGovernedSendIntent,
+  GOVERNED_SEND_CANONICAL_FIELDS,
+  GOVERNED_SEND_SCHEMA_VERSION,
+  GOVERNED_SEND_ACTION_CLASS,
+  verifyGovernedSendIntegrityCommitment,
+  type GovernedSendCanonicalFieldKey,
+  type GovernedSendErasureLineageRecord,
+  type GovernedSendIntegrityCommitmentRecord,
+  type GovernedSendIntegrityKeyring,
+  type GovernedSendReceiptRecord,
+} from './governed-send'
+import { inquiryReceiptKeyRef } from './receipt-envelope'
 import { findUnsafeInquiryActionIntent } from './policy'
 
 export type SubmitInquiryCommand = {
@@ -59,10 +86,12 @@ export type SubmitInquiryCommand = {
   pseudonymousSessionId: string
   abuseBucketKey: string
   now: number
+  expectedDigest: string
   origin?: InquiryThreadRecord['origin']
   notificationStatus?: InquiryNotificationStatus
   notificationFailureCode?: string
-  customerAccessKey: string
+  customerAccessKeyring: InquiryCustomerAccessKeyring
+  governedSendIntegrityKeyring: GovernedSendIntegrityKeyring
   unsafeClientFields?: Record<string, unknown>
 }
 
@@ -70,6 +99,8 @@ export type SubmitInquiryErrorCode =
   | 'inquiry_target_not_admitted'
   | 'inquiry_target_admission_conflict'
   | 'inquiry_invalid_input'
+  | 'inquiry_digest_mismatch'
+  | 'inquiry_integrity_conflict'
   | 'inquiry_duplicate_conflict'
   | 'inquiry_rate_limited'
   | 'inquiry_unsafe_action_intent'
@@ -83,6 +114,7 @@ export type SubmitInquiryResult = ModuleResult<
     thread: InquiryThreadRecord
     message: InquiryMessageRecord
     notification: InquiryNotificationRecord
+    customerAccessKey: string
   },
   { reason: string; blockers?: readonly AdmissionBlocker[]; field?: string; retryAfter?: number; state?: InquirySourceState }
 >
@@ -227,9 +259,13 @@ export function createEmptyInquirySourceState(input: Partial<InquirySourceState>
     threads: [],
     messages: [],
     notifications: [],
+    customerAccessGrants: [],
     abuseRateLimitBuckets: [],
     auditEvents: [],
     funnelEvents: [],
+    governedSendReceipts: [],
+    governedSendIntegrityCommitments: [],
+    governedSendErasureLineage: [],
     operations: [],
     privacyTombstones: [],
     operatorControls: defaultInquiryOperatorControls,
@@ -320,6 +356,22 @@ export function submitInquiry(
   if (contact.kind === 'invalid') {
     return error('inquiry_invalid_input', contact.reason)
   }
+  const governedEncoding = encodeGovernedAction(buildGovernedSendIntent({
+    target: command.target,
+    body,
+    contact: command.contact,
+    ...(command.origin === undefined ? {} : { origin: command.origin }),
+  }))
+  if (governedEncoding.kind === 'refused') {
+    return error(
+      'inquiry_invalid_input',
+      `Canonical governed send refused: ${governedEncoding.code} at ${governedEncoding.path}.`,
+    )
+  }
+  if (command.expectedDigest === undefined || command.expectedDigest !== governedEncoding.digest) {
+    return error('inquiry_digest_mismatch', 'The reviewed request no longer matches the request being sent.')
+  }
+
 
   const requestHash = stableHash({
     target: requestTarget(command.target),
@@ -330,13 +382,44 @@ export function submitInquiry(
   })
   const existingOperation = findOperation(state, command.operationKey)
   if (existingOperation !== undefined) {
-    if (existingOperation.requestHash !== requestHash) {
+    const existingReceipts = state.governedSendReceipts.filter(
+      (receipt) => receipt.operationKey === command.operationKey,
+    )
+    if (existingReceipts.length === 1 && existingReceipts[0]?.digest !== governedEncoding.digest) {
+      return error('inquiry_digest_mismatch', 'The operation key was already used for a different reviewed request.')
+    }
+    if (existingOperation.resultCode === 'inquiry_submitted') {
+      const existingCommitments = state.governedSendIntegrityCommitments.filter(
+        (commitment) => commitment.operationKey === command.operationKey,
+      )
+      const existingReceipt = existingReceipts[0]
+      const existingCommitment = existingCommitments[0]
+      const canonicalBytesMatch = existingReceipt?.retention === 'erased' ||
+        existingReceipt?.canonicalBytesBase64 === governedEncoding.canonicalBytesBase64
+      if (
+        existingReceipts.length !== 1 ||
+        existingCommitments.length !== 1 ||
+        existingReceipt === undefined ||
+        existingCommitment === undefined ||
+        !canonicalBytesMatch ||
+        validatedGovernedSendBusiness(state, existingReceipt, existingCommitment, command.governedSendIntegrityKeyring) === undefined
+      ) {
+        return error('inquiry_integrity_conflict', 'The stored evidence for this inquiry operation failed integrity verification.')
+      }
+    } else if (existingOperation.requestHash !== requestHash) {
       return error('inquiry_duplicate_conflict', 'The operation key was already used for a different inquiry body.')
     }
 
     const replay = replaySubmit(state, existingOperation)
     if (replay !== undefined) {
-      return { kind: 'ok', code: 'inquiry_replayed', ...replay }
+      const existingGrant = state.customerAccessGrants.find((grant) => grant.threadId === replay.thread.threadId)
+      const issued = existingGrant === undefined
+        ? issueInquiryCustomerAccess({ threadId: replay.thread.threadId, now: command.now, keyring: command.customerAccessKeyring })
+        : { grant: existingGrant, accessKey: mintInquiryCustomerAccessKey(existingGrant, command.customerAccessKeyring) }
+      const replayState = existingGrant === undefined
+        ? { ...state, customerAccessGrants: [...state.customerAccessGrants, issued.grant] }
+        : state
+      return { kind: 'ok', code: 'inquiry_replayed', ...replay, state: replayState, customerAccessKey: issued.accessKey }
     }
   }
 
@@ -394,7 +477,7 @@ export function submitInquiry(
     createdAt: command.now,
     updatedAt: command.now,
     version: 1,
-    customerAccessKey: brandNonEmpty(command.customerAccessKey, 'InquiryCustomerAccessKey'),
+
     ...(contact.replyEmail === undefined ? {} : { customerReplyEmail: contact.replyEmail }),
     ...(command.origin === undefined ? {} : { origin: { ...command.origin } }),
   }
@@ -464,18 +547,66 @@ export function submitInquiry(
   if (!commitAdmission.admitted) {
     return admissionError('inquiry_target_admission_conflict', commitAdmission.blockers)
   }
+  const issuedCustomerAccess = issueInquiryCustomerAccess({
+    threadId,
+    now: command.now,
+    keyring: command.customerAccessKeyring,
+  })
+  const governedSendReceipt: GovernedSendReceiptRecord = {
+    retention: 'recoverable',
+    canonicalBytesBase64: governedEncoding.canonicalBytesBase64,
+    digest: governedEncoding.digest,
+    algorithm: GOVERNED_ACTION_DIGEST_ALGORITHM,
+    schemaVersion: GOVERNED_SEND_SCHEMA_VERSION,
+    createdAt: command.now,
+    operationKey: command.operationKey,
+    threadId,
+    admissionProof: commitAdmission,
+    recipientRef: commitAdmission.proof.recipientRef,
+  }
+  const governedSendIntegrityCommitment = createGovernedSendIntegrityCommitment({
+    receipt: governedSendReceipt,
+    targetBinding: {
+      businessId: target.business.businessId,
+      ownerId: target.business.ownerId,
+      serviceId: target.service.serviceId,
+      capabilityKind: target.capability.kind,
+      claimRef: commitAdmission.proof.claimRef,
+      recipientRef: commitAdmission.proof.recipientRef,
+    },
+    keyring: command.governedSendIntegrityKeyring,
+  })
+  const admittedSendEvent = funnelRecord({
+    eventType: 'admitted_r1_send',
+    businessId: target.business.businessId,
+    correlationId: command.correlationId,
+    pseudonymousSessionId: command.pseudonymousSessionId,
+    redactedPayload: { threadId, serviceId: target.service.serviceId },
+    now: command.now,
+  })
   const nextState: InquirySourceState = {
     ...state,
     threads: [...state.threads, thread],
     messages: [...state.messages, message],
     notifications: [...state.notifications, notification],
+    customerAccessGrants: [...state.customerAccessGrants, issuedCustomerAccess.grant],
     abuseRateLimitBuckets,
     auditEvents: [...state.auditEvents, auditEvent],
-    funnelEvents: [...state.funnelEvents, funnelEvent],
+    funnelEvents: [...state.funnelEvents, funnelEvent, admittedSendEvent],
+    governedSendReceipts: [...state.governedSendReceipts, governedSendReceipt],
+    governedSendIntegrityCommitments: [...state.governedSendIntegrityCommitments, governedSendIntegrityCommitment],
     operations: [...state.operations, operation],
   }
 
-  return { kind: 'ok', code: 'inquiry_submitted', state: nextState, thread, message, notification }
+  return {
+    kind: 'ok',
+    code: 'inquiry_submitted',
+    state: nextState,
+    thread,
+    message,
+    notification,
+    customerAccessKey: issuedCustomerAccess.accessKey,
+  }
 }
 
 export function listOwnerInbox(
@@ -535,21 +666,37 @@ export function readOwnerInquiry(
 
 export function readCustomerRecord(
   state: InquirySourceState,
-  input: { threadId: InquiryThreadId; accessKey: string }
+  input: {
+    threadId: InquiryThreadId
+    accessKey: string
+    keyring: InquiryCustomerAccessKeyring
+    governedSendIntegrityKeyring: GovernedSendIntegrityKeyring
+    now: number
+  },
 ): ReadCustomerRecordResult {
   const thread = findThread(state, input.threadId)
   if (thread === undefined) {
     return error('inquiry_not_found', 'Inquiry record was not found for this key.')
   }
 
-  if (thread.customerAccessKey === undefined || thread.customerAccessKey !== input.accessKey.trim()) {
+  const accessId = accessIdFromInquiryCustomerAccessKey(input.accessKey)
+  const grant = accessId === undefined
+    ? undefined
+    : state.customerAccessGrants.find((candidate) => candidate.accessId === accessId)
+  if (!verifyInquiryCustomerAccess({
+    grant,
+    accessKey: input.accessKey,
+    requestedThreadId: input.threadId,
+    now: input.now,
+    keyring: input.keyring,
+  })) {
     return error('inquiry_access_denied', 'Inquiry record was not found for this key.')
   }
 
   return {
     kind: 'ok',
     code: 'inquiry_customer_record_read',
-    record: customerRecordReadback(state, thread),
+    record: customerRecordReadback(state, thread, input.governedSendIntegrityKeyring),
   }
 }
 
@@ -901,6 +1048,37 @@ export function deleteInquiryPrivateContent(
   }
 
   const redactedThread = removeCustomerReplyEmail(thread)
+  const receiptErasureLineage: GovernedSendErasureLineageRecord[] = state.governedSendReceipts
+    .filter((receipt) => receipt.threadId === thread.threadId && receipt.retention === 'recoverable')
+    .map((receipt) => {
+      const keyRef = inquiryReceiptKeyRef(receipt)
+      const erasureEventId = `governed-send-erasure:${stableHash({
+        receiptOperationKey: String(receipt.operationKey),
+        privacyOperationKey: String(command.operationKey),
+        keyRef,
+      })}`
+      const priorReceiptCommitment = stableHash({
+        operationKey: String(receipt.operationKey),
+        threadId: String(receipt.threadId),
+        digest: receipt.digest,
+        schemaVersion: receipt.schemaVersion,
+        recipientRef: receipt.recipientRef,
+        keyRef,
+      })
+      const lineage = {
+        erasureEventId,
+        receiptOperationKey: receipt.operationKey,
+        privacyOperationKey: command.operationKey,
+        threadId: receipt.threadId,
+        digest: receipt.digest,
+        keyRef,
+        reasonCode,
+        destroyedAt: command.now,
+        priorReceiptCommitment,
+      }
+      return { ...lineage, lineageHash: stableHash(lineage) }
+    })
+  const erasureEventIds = receiptErasureLineage.map((lineage) => lineage.erasureEventId)
   const tombstone: InquiryPrivacyTombstoneRecord = {
     threadId: thread.threadId,
     businessId: thread.businessId,
@@ -910,6 +1088,8 @@ export function deleteInquiryPrivateContent(
     correlationId: command.correlationId,
     createdAt: command.now,
     appliedAt: command.now,
+    receiptErasureCount: receiptErasureLineage.length,
+    erasureEventIds,
   }
   const redactedMessages = state.messages.map((message) =>
     message.threadId === thread.threadId ? redactPrivateMessage(message, command.now) : message
@@ -948,6 +1128,18 @@ export function deleteInquiryPrivateContent(
     auditEvents: [...state.auditEvents, auditEvent],
     operations: [...state.operations, operation],
     privacyTombstones: [...state.privacyTombstones, tombstone],
+    governedSendReceipts: state.governedSendReceipts.map((receipt) => {
+      const lineage = receiptErasureLineage.find((candidate) => candidate.receiptOperationKey === receipt.operationKey)
+      if (lineage === undefined || receipt.retention === 'erased') return receipt
+      const { canonicalBytesBase64: _discardedCanonicalBytes, ...receiptMetadata } = receipt
+      return {
+        ...receiptMetadata,
+        retention: 'erased' as const,
+        erasedAt: command.now,
+        erasureEventId: lineage.erasureEventId,
+      }
+    }),
+    governedSendErasureLineage: [...state.governedSendErasureLineage, ...receiptErasureLineage],
   }
 
   return { kind: 'ok', code: 'inquiry_private_content_deleted', state: nextState, tombstone }
@@ -1262,8 +1454,29 @@ function uniqueStrings(values: readonly (string | undefined)[]): string[] {
 }
 
 
-function customerRecordReadback(state: InquirySourceState, thread: InquiryThreadRecord): InquiryCustomerRecordReadback {
-  const business = state.businesses.find((candidate) => candidate.businessId === thread.businessId)
+type GovernedSendRecordProjection =
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'invalid' }>
+  | Readonly<{
+      kind: 'verified'
+      business: BusinessRecord
+      governedSend: NonNullable<InquiryCustomerRecordReadback['governedSend']>
+    }>
+
+const absentGovernedSendProjection = { kind: 'absent' } as const
+const invalidGovernedSendProjection = { kind: 'invalid' } as const
+
+function customerRecordReadback(
+  state: InquirySourceState,
+  thread: InquiryThreadRecord,
+  keyring: GovernedSendIntegrityKeyring,
+): InquiryCustomerRecordReadback {
+  const governedSendProjection = governedSendRecordProjection(state, thread.threadId, keyring)
+  const business = governedSendProjection.kind === 'verified'
+    ? governedSendProjection.business
+    : governedSendProjection.kind === 'absent'
+      ? state.businesses.find((candidate) => candidate.businessId === thread.businessId)
+      : undefined
   const firstMessage = state.messages.find((message) => message.messageId === thread.firstMessageId)
   const reply = state.messages
     .filter((message) => message.threadId === thread.threadId && message.sender === 'owner')
@@ -1285,6 +1498,9 @@ function customerRecordReadback(state: InquirySourceState, thread: InquiryThread
       messageSummary: preview(firstMessage?.body ?? ''),
       submittedAt: thread.createdAt,
     },
+    ...(governedSendProjection.kind === 'verified'
+      ? { governedSend: governedSendProjection.governedSend }
+      : {}),
     delivery: {
       state: deliveryState,
       label: customerDeliveryLabel(deliveryState),
@@ -1295,6 +1511,182 @@ function customerRecordReadback(state: InquirySourceState, thread: InquiryThread
     ...(thread.closedAt === undefined ? {} : { closedAt: thread.closedAt }),
     updatedAt: thread.updatedAt,
   }
+}
+
+function governedSendRecordProjection(
+  state: InquirySourceState,
+  threadId: InquiryThreadId,
+  keyring: GovernedSendIntegrityKeyring,
+): GovernedSendRecordProjection {
+  const receipts = state.governedSendReceipts.filter((candidate) => candidate.threadId === threadId)
+  const commitments = state.governedSendIntegrityCommitments.filter((candidate) => candidate.threadId === threadId)
+  if (receipts.length === 0 && commitments.length === 0) return absentGovernedSendProjection
+  if (receipts.length !== 1 || commitments.length !== 1) return invalidGovernedSendProjection
+
+  const receipt = receipts[0]
+  const commitment = commitments[0]
+  if (receipt === undefined || commitment === undefined) return invalidGovernedSendProjection
+  const business = validatedGovernedSendBusiness(state, receipt, commitment, keyring)
+  if (business === undefined) return invalidGovernedSendProjection
+
+  if (receipt.retention === 'erased') {
+    const lineages = state.governedSendErasureLineage.filter(
+      (candidate) => candidate.receiptOperationKey === receipt.operationKey &&
+        candidate.threadId === threadId,
+    )
+    if (lineages.length !== 1) return invalidGovernedSendProjection
+    const lineage = lineages[0]!
+    const tombstone = state.privacyTombstones.find(
+      (candidate) => candidate.threadId === threadId &&
+        candidate.operationKey === lineage.privacyOperationKey &&
+        candidate.status === 'applied',
+    )
+    const keyRef = inquiryReceiptKeyRef(receipt)
+    const expectedMaterial = tombstone?.appliedAt === undefined
+      ? undefined
+      : {
+          erasureEventId: `governed-send-erasure:${stableHash({ receiptOperationKey: String(receipt.operationKey), privacyOperationKey: String(tombstone.operationKey), keyRef })}`,
+          receiptOperationKey: receipt.operationKey,
+          privacyOperationKey: tombstone.operationKey,
+          threadId: receipt.threadId,
+          digest: receipt.digest,
+          keyRef,
+          reasonCode: tombstone.reasonCode,
+          destroyedAt: tombstone.appliedAt,
+          priorReceiptCommitment: stableHash({ operationKey: String(receipt.operationKey), threadId: String(receipt.threadId), digest: receipt.digest, schemaVersion: receipt.schemaVersion, recipientRef: receipt.recipientRef, keyRef }),
+        }
+    const expectedLineage = expectedMaterial === undefined
+      ? undefined
+      : { ...expectedMaterial, lineageHash: stableHash(expectedMaterial) }
+    const uniqueErasureEventIds = new Set(tombstone?.erasureEventIds ?? [])
+    if (
+      expectedLineage === undefined ||
+      stableStringify(expectedLineage) !== stableStringify(lineage) ||
+      !tombstone!.erasureEventIds.includes(lineage.erasureEventId) ||
+      tombstone!.receiptErasureCount !== tombstone!.erasureEventIds.length ||
+      uniqueErasureEventIds.size !== tombstone!.erasureEventIds.length
+    ) return invalidGovernedSendProjection
+    return {
+      kind: 'verified',
+      business,
+      governedSend: {
+        posture: 'erased',
+        digest: receipt.digest,
+        erasedAt: receipt.erasedAt,
+        erasureEventId: receipt.erasureEventId,
+      },
+    }
+  }
+  const appliedTombstone = state.privacyTombstones.some(
+    (tombstone) => tombstone.threadId === threadId && tombstone.status === 'applied',
+  )
+  if (appliedTombstone) return invalidGovernedSendProjection
+
+  try {
+    const binary = atob(receipt.canonicalBytesBase64)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    if (!verifyGovernedActionBytes(bytes, receipt.digest)) return invalidGovernedSendProjection
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    const envelope: unknown = JSON.parse(decoded)
+    if (envelope === null || typeof envelope !== 'object' || Array.isArray(envelope)) {
+      return invalidGovernedSendProjection
+    }
+
+    const envelopeRecord = envelope as Record<string, unknown>
+    const envelopeKeys = Object.keys(envelopeRecord).sort()
+    const declaredEnvelopeKeys = ['actionClass', 'payload', 'schemaVersion', 'wireFormat']
+    if (
+      envelopeKeys.length !== declaredEnvelopeKeys.length ||
+      envelopeKeys.some((key, index) => key !== declaredEnvelopeKeys[index])
+    ) return invalidGovernedSendProjection
+    if (
+      envelopeRecord.wireFormat !== GOVERNED_ACTION_WIRE_FORMAT ||
+      envelopeRecord.schemaVersion !== GOVERNED_SEND_SCHEMA_VERSION ||
+      envelopeRecord.actionClass !== GOVERNED_SEND_ACTION_CLASS
+    ) return invalidGovernedSendProjection
+
+    const payload = envelopeRecord.payload
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      return invalidGovernedSendProjection
+    }
+    const payloadRecord = payload as Record<string, unknown>
+    const payloadKeys = Object.keys(payloadRecord).sort()
+    const declaredKeys = GOVERNED_SEND_CANONICAL_FIELDS.map((field) => field.key).sort()
+    if (payloadKeys.length !== declaredKeys.length || payloadKeys.some((key, index) => key !== declaredKeys[index])) {
+      return invalidGovernedSendProjection
+    }
+    if (
+      payloadRecord.businessId !== String(commitment.targetBinding.businessId) ||
+      payloadRecord.serviceId !== String(commitment.targetBinding.serviceId) ||
+      payloadRecord.capabilityKind !== commitment.targetBinding.capabilityKind
+    ) return invalidGovernedSendProjection
+
+    const fields: { key: GovernedSendCanonicalFieldKey; label: string; value: string | null }[] = []
+    for (const field of GOVERNED_SEND_CANONICAL_FIELDS) {
+      const value = payloadRecord[field.key]
+      if (value !== null && typeof value !== 'string') return invalidGovernedSendProjection
+      fields.push({ key: field.key, label: field.label, value })
+    }
+    return {
+      kind: 'verified',
+      business,
+      governedSend: { posture: 'verified', digest: receipt.digest, fields },
+    }
+  } catch {
+    return invalidGovernedSendProjection
+  }
+}
+
+function validatedGovernedSendBusiness(
+  state: InquirySourceState,
+  receipt: GovernedSendReceiptRecord,
+  commitment: GovernedSendIntegrityCommitmentRecord,
+  keyring: GovernedSendIntegrityKeyring,
+): BusinessRecord | undefined {
+  if (
+    receipt.algorithm !== GOVERNED_ACTION_DIGEST_ALGORITHM ||
+    receipt.schemaVersion !== GOVERNED_SEND_SCHEMA_VERSION ||
+    receipt.recipientRef !== receipt.admissionProof.proof.recipientRef ||
+    !verifyGovernedSendIntegrityCommitment({ receipt, commitment, keyring })
+  ) return undefined
+
+  const binding = commitment.targetBinding
+  const operations = state.operations.filter(
+    (candidate) => candidate.operationKey === receipt.operationKey &&
+      candidate.threadId === receipt.threadId &&
+      candidate.resultCode === 'inquiry_submitted',
+  )
+  const threads = state.threads.filter((candidate) => candidate.threadId === receipt.threadId)
+  const businesses = state.businesses.filter((candidate) => candidate.businessId === binding.businessId)
+  const claims = state.claims.filter((candidate) => String(candidate.claimId) === binding.claimRef)
+  const services = state.businessServices.filter((candidate) => candidate.serviceId === binding.serviceId)
+  if (
+    operations.length !== 1 ||
+    threads.length !== 1 ||
+    businesses.length !== 1 ||
+    claims.length !== 1 ||
+    services.length !== 1
+  ) return undefined
+
+  const thread = threads[0]
+  const business = businesses[0]
+  const claim = claims[0]
+  const service = services[0]
+  if (thread === undefined || business === undefined || claim === undefined || service === undefined) return undefined
+  if (
+    receipt.admissionProof.proof.claimRef !== binding.claimRef ||
+    receipt.recipientRef !== binding.recipientRef ||
+    thread.businessId !== binding.businessId ||
+    thread.ownerId !== binding.ownerId ||
+    thread.serviceId !== binding.serviceId ||
+    thread.capabilityKind !== binding.capabilityKind ||
+    business.ownerId !== binding.ownerId ||
+    claim.businessId !== binding.businessId ||
+    claim.ownerId !== binding.ownerId ||
+    service.businessId !== binding.businessId
+  ) return undefined
+
+  return business
 }
 
 function customerTimeline(

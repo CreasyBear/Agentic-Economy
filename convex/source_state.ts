@@ -27,6 +27,7 @@ export type RuntimeWriter = RuntimeQueryable & {
   get: (id: string) => Promise<RuntimeDocument | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
+  delete?: (id: string) => Promise<void>
 }
 
 export type RuntimeDb = RuntimeReader & RuntimeWriter

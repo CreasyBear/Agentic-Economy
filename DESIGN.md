@@ -42,10 +42,11 @@ cards, and ornamental diagrams.
 
 ## Customer information architecture
 
-- **Ask** — say what you need and clarify the important constraints.
-- **Businesses** — discover real businesses and what they can help with.
-- **Activity** — follow work, respond to exceptions, and keep records.
-- **For agents** — integrate through the machine-readable contract.
+- **Ask** — public header; say what you need and clarify the important constraints.
+- **Businesses** — public header; discover real businesses and what they can help with.
+- **Claim your business page** — public header; the supply-side entry.
+- **For agents** — footer; integrate through the machine-readable contract.
+- **Activity** — a returning-user rail on `/` until accounts exist, not public navigation. <!-- stupid-shit: S3 -->
 
 Recommendation views progressively disclose **Why this**, **What it costs**,
 **What will be shared**, **Other options**, and **Technical details**. Graphs,

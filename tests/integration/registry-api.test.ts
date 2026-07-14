@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
+
 import {
   claimBusiness,
   createEmptyBusinessSourceState,
@@ -10,6 +12,12 @@ import {
 } from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import {
+  readPublicRegistryBusinessDetail,
+  readPublicRegistryCatalogPage,
+  resolvePublicRegistryInquiryTarget,
+  setCatalogSearchBackendForTests,
+} from '@/modules/registry/registry.functions'
+import {
   createDefaultRegistrySourceState,
   getPublicBusinessCatalogBySlug,
   listPublicBusinessCatalog,
@@ -19,6 +27,7 @@ import type {
   PublicBusinessCatalogApiPage,
   RegistrySourceState,
 } from '@/modules/registry/public'
+import { readPublicTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
 import {
   handleListBusinessesRequest,
 } from '@/routes/api.businesses'
@@ -29,6 +38,14 @@ import {
   handleSearchBusinessesRequest,
 } from '@/routes/api.businesses.search'
 import { loadRegistryRouteReadback } from '@/routes/registry'
+
+const admittedLocalE2eBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find(
+  (fixture) => fixture.inquiryAdmission === 'admitted',
+)
+
+if (admittedLocalE2eBusiness === undefined) {
+  throw new Error('An admitted local E2E business fixture is required.')
+}
 
 describe('registry public API routes', () => {
   it('reads one non-default durable catalog through registry, search, API list, and API detail', async () => {
@@ -121,29 +138,149 @@ describe('registry public API routes', () => {
     })
   })
 
-  it('uses the explicit local source path for an empty registry page query', async () => {
-    const previous = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+  it('keeps the shared admitted local fixture continuous across registry search, listing detail, and inquiry admission without contaminating the default fallback', async () => {
+    const previousLocalE2eFlag = process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
+    const previousRegistrySeed = process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+    const previousConvexUrl = process.env.CONVEX_URL
+    const previousPublicConvexUrl = process.env.VITE_CONVEX_URL
+    const restoreCatalogSearchBackend = setCatalogSearchBackendForTests('convex')
     process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'true'
+    delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
 
     try {
-      const registry = await loadRegistryRouteReadback({ q: '', limit: 10 })
+      const searchQuery = `${admittedLocalE2eBusiness.serviceName} ${admittedLocalE2eBusiness.suburb}`
+      const registry = await loadRegistryRouteReadback({ q: searchQuery, limit: 10 })
+      const listing = await readPublicRegistryBusinessDetail({
+        slug: admittedLocalE2eBusiness.requestedSlug,
+      })
 
-      expect(registry.result.items.map((item) => item.slug)).toEqual([
-        'plumbing-demo',
-        'fremantle-coastal-electrical',
-        'joondalup-rapid-plumbing',
-        'parramatta-emergency-plumbing',
-      ])
-      expect(registry.result.pagination).toMatchObject({
-        total: 4,
-        hasMore: false,
+      if (listing.kind !== 'found') {
+        throw new Error('Expected the admitted local E2E fixture to have a public listing.')
+      }
+
+      const inquiryService = listing.business.services.find(
+        (service) => service.name === admittedLocalE2eBusiness.serviceName,
+      )
+      if (inquiryService === undefined) {
+        throw new Error('Expected the admitted local E2E fixture listing to expose its shared service.')
+      }
+
+      const inquiryCapability = inquiryService.capabilities.find(
+        (capability) => capability.kind === 'phone_inquiry' && capability.status === 'available',
+      )
+      if (inquiryCapability === undefined) {
+        throw new Error('Expected the admitted local E2E fixture service to expose an available inquiry capability.')
+      }
+
+      const inquiryTarget = await resolvePublicRegistryInquiryTarget({
+        businessSlug: listing.business.slug,
+        serviceSlug: inquiryService.slug,
+      })
+      if (inquiryTarget.kind !== 'resolved') {
+        throw new Error('Expected the admitted local E2E fixture listing to resolve an inquiry target.')
+      }
+
+      const admission = await readPublicTargetAdmissionThroughSource({
+        businessId: inquiryTarget.businessId,
+        serviceId: inquiryTarget.serviceId,
+        capabilityKind: inquiryCapability.kind,
+      })
+
+      expect(registry).toMatchObject({
+        query: searchQuery,
+        result: {
+          kind: 'ok',
+          items: [
+            {
+              slug: admittedLocalE2eBusiness.requestedSlug,
+              name: admittedLocalE2eBusiness.businessName,
+              suburb: admittedLocalE2eBusiness.suburb,
+              services: [{ name: admittedLocalE2eBusiness.serviceName }],
+            },
+          ],
+        },
+      })
+      expect(listing.business).toMatchObject({
+        slug: admittedLocalE2eBusiness.requestedSlug,
+        name: admittedLocalE2eBusiness.businessName,
+        category: admittedLocalE2eBusiness.category,
+        suburb: admittedLocalE2eBusiness.suburb,
+        stateTerritory: admittedLocalE2eBusiness.stateTerritory,
+        publishedPhone: admittedLocalE2eBusiness.publishedPhone,
+        services: [
+          {
+            name: admittedLocalE2eBusiness.serviceName,
+            category: admittedLocalE2eBusiness.serviceCategory,
+            summary: admittedLocalE2eBusiness.serviceSummary,
+            serviceArea: admittedLocalE2eBusiness.serviceArea,
+          },
+        ],
+      })
+      expect(admission).toMatchObject({
+        kind: 'ok',
+        admission: {
+          version: 'r1-target-admitted:v1',
+          admitted: true,
+          proof: { kind: 'claimed_owner' },
+        },
+      })
+
+      process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = 'false'
+      delete process.env.CONVEX_URL
+      delete process.env.VITE_CONVEX_URL
+
+      await expect(loadRegistryRouteReadback({ q: searchQuery, limit: 10 })).rejects.toThrow(
+        'registry_source_query_failed',
+      )
+      await expect(readPublicRegistryCatalogPage({ limit: 50 })).rejects.toThrow(
+        'registry_source_query_failed',
+      )
+      await expect(readPublicRegistryBusinessDetail({
+        slug: admittedLocalE2eBusiness.requestedSlug,
+      })).rejects.toThrow('registry_source_query_failed')
+      const defaultState = createDefaultRegistrySourceState()
+      const defaultCatalog = listPublicBusinessCatalog(defaultState, { limit: 50 })
+      const defaultSearch = searchPublicBusinessCatalog(defaultState, {
+        query: searchQuery,
+        limit: 50,
+      })
+      const defaultDetail = getPublicBusinessCatalogBySlug(defaultState, {
+        slug: admittedLocalE2eBusiness.requestedSlug,
+      })
+
+      expect(defaultCatalog.items.map((item) => item.slug)).not.toContain(
+        admittedLocalE2eBusiness.requestedSlug,
+      )
+      expect(defaultSearch.items.map((item) => item.slug)).not.toContain(
+        admittedLocalE2eBusiness.requestedSlug,
+      )
+      expect(defaultDetail).toEqual({
+        kind: 'not_found',
+        code: 'business_not_found',
+        reason: 'No public business catalog exists for this slug.',
       })
     } finally {
-      if (previous === undefined) {
+      if (previousLocalE2eFlag === undefined) {
         delete process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E
       } else {
-        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previous
+        process.env.VITE_AE_DISABLE_CLERK_FOR_LOCAL_E2E = previousLocalE2eFlag
       }
+      if (previousRegistrySeed === undefined) {
+        delete process.env.AE_ANSWER_EVAL_REGISTRY_SEED
+      } else {
+        process.env.AE_ANSWER_EVAL_REGISTRY_SEED = previousRegistrySeed
+      }
+      if (previousConvexUrl === undefined) {
+        delete process.env.CONVEX_URL
+      } else {
+        process.env.CONVEX_URL = previousConvexUrl
+      }
+      if (previousPublicConvexUrl === undefined) {
+        delete process.env.VITE_CONVEX_URL
+      } else {
+        process.env.VITE_CONVEX_URL = previousPublicConvexUrl
+      }
+      restoreCatalogSearchBackend()
     }
   })
 

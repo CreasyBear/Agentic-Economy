@@ -11,6 +11,11 @@ import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import type { RedactedPayload } from '../src/modules/observability/public'
 import {
+  mintInquiryCustomerAccessKey,
+  resolveInquiryCustomerAccessKeyring,
+  type InquiryCustomerAccessGrant,
+} from '../src/modules/inquiries/public'
+import {
   createEmptyNotificationOutboxSourceState,
   dispatchNotificationOutbox as dispatchNotificationOutboxModule,
   enqueueInquiryNotification as enqueueInquiryNotificationModule,
@@ -258,7 +263,7 @@ const notificationSystemSendReadResult = v.union(
       }),
       inquiry: v.optional(v.object({
         serviceName: v.optional(v.string()),
-        customerAccessKey: v.optional(v.string()),
+        customerAccessToken: v.optional(v.string()),
         customerMessageFirstLine: v.optional(v.string()),
         isFirstInquiryForBusiness: v.boolean(),
       })),
@@ -1246,7 +1251,7 @@ function deserializeProviderResult(result: RuntimeNotificationProviderTriggerRes
 type DispatchInquiryEmailContext = {
   serviceName?: string
   customerMessageFirstLine?: string
-  customerAccessKey?: string
+  customerAccessToken?: string
   isFirstInquiryForBusiness: boolean
 }
 
@@ -1265,7 +1270,7 @@ async function readInquiryForDispatch(
     return undefined
   }
 
-  const [service, message, businessThreads] = await Promise.all([
+  const [service, message, businessThreads, accessGrantRow] = await Promise.all([
     db.get(stringField(thread, 'serviceId')),
     db
       .query('inquiryMessages')
@@ -1277,15 +1282,34 @@ async function readInquiryForDispatch(
         .withIndex('by_business_status', (query) => query.eq('businessId', businessId)),
       2
     ),
+    db
+      .query('inquiryCustomerAccessGrants')
+      .withIndex('by_thread_status', (query) => query.eq('threadId', threadId).eq('status', 'active'))
+      .unique(),
   ])
   const serviceName = service === null ? undefined : stringField(service, 'name')
   const customerMessageFirstLine = message === null ? undefined : firstNonEmptyLine(stringField(message, 'body'))
-  const customerAccessKey = stringField(thread, 'customerAccessKey')
+  const customerAccessToken = accessGrantRow === null || numberField(accessGrantRow, 'expiresAt') <= Date.now()
+    ? undefined
+    : mintInquiryCustomerAccessKey(
+        {
+          accessId: stringField(accessGrantRow, 'accessId'),
+          threadId: brandNonEmpty(stringField(accessGrantRow, 'threadId'), 'InquiryThreadId'),
+          scope: 'customer_record',
+          version: 'inquiry-customer-access:v1',
+          verifier: stringField(accessGrantRow, 'verifier') as `hmac-sha256:${string}`,
+          keyId: stringField(accessGrantRow, 'keyId'),
+          status: 'active',
+          createdAt: numberField(accessGrantRow, 'createdAt'),
+          expiresAt: numberField(accessGrantRow, 'expiresAt'),
+        } satisfies InquiryCustomerAccessGrant,
+        resolveInquiryCustomerAccessKeyring(process.env),
+      )
 
   return {
     ...(serviceName === undefined || serviceName.length === 0 ? {} : { serviceName }),
     ...(customerMessageFirstLine === undefined ? {} : { customerMessageFirstLine }),
-    ...(customerAccessKey.length === 0 ? {} : { customerAccessKey }),
+    ...(customerAccessToken === undefined ? {} : { customerAccessToken }),
     isFirstInquiryForBusiness: businessThreads.length === 1,
   }
 }

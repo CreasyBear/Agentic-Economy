@@ -37,7 +37,6 @@ export const inquiryTables = {
     createdAt: v.number(),
     updatedAt: v.number(),
     version: v.number(),
-    customerAccessKey: v.optional(v.string()),
     customerReplyEmail: v.optional(v.string()),
     readAt: v.optional(v.number()),
     repliedAt: v.optional(v.number()),
@@ -49,6 +48,21 @@ export const inquiryTables = {
     .index('by_business_status', ['businessId', 'status'])
     .index('by_owner_updatedAt', ['ownerId', 'updatedAt'])
     .index('by_service_status', ['serviceId', 'status']),
+
+  inquiryCustomerAccessGrants: defineTable({
+    accessId: v.string(),
+    threadId: v.string(),
+    scope: v.literal('customer_record'),
+    version: v.literal('inquiry-customer-access:v1'),
+    verifier: v.string(),
+    keyId: v.string(),
+    status: v.union(v.literal('active'), v.literal('revoked')),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index('by_accessId', ['accessId'])
+    .index('by_thread_status', ['threadId', 'status']),
 
   inquiryMessages: defineTable({
     messageId: v.string(),
@@ -111,8 +125,85 @@ export const inquiryTables = {
     correlationId: v.string(),
     createdAt: v.number(),
     appliedAt: v.optional(v.number()),
+    receiptErasureCount: v.number(),
+    erasureEventIds: v.array(v.string()),
   })
     .index('by_thread_status', ['threadId', 'status'])
     .index('by_thread_operationKey', ['threadId', 'operationKey'])
     .index('by_business_createdAt', ['businessId', 'createdAt']),
+
+  governedSendReceipts: defineTable({
+    envelopeVersion: v.literal('inquiry-receipt-envelope:v1'),
+    keyRef: v.string(),
+    ciphertextBase64: v.string(),
+    contentIvBase64: v.string(),
+    digest: v.string(),
+    algorithm: v.literal('sha256'),
+    schemaVersion: v.number(),
+    createdAt: v.number(),
+    operationKey: v.string(),
+    threadId: v.string(),
+    admissionProof: v.object({
+      version: v.literal('r1-target-admitted:v1'),
+      admitted: v.literal(true),
+      proof: v.object({
+        kind: v.literal('claimed_owner'),
+        claimRef: v.string(),
+        recipientRef: v.string(),
+        destinationVerifiedAt: v.optional(v.number()),
+      }),
+    }),
+    recipientRef: v.string(),
+  })
+    .index('by_operationKey', ['operationKey'])
+    .index('by_threadId_and_createdAt', ['threadId', 'createdAt']),
+
+  governedSendIntegrityCommitments: defineTable({
+    version: v.literal('governed-send-integrity:v1'),
+    receiptRef: v.string(),
+    operationKey: v.string(),
+    threadId: v.string(),
+    digest: v.string(),
+    keyId: v.string(),
+    targetBinding: v.object({
+      businessId: v.id('businesses'),
+      ownerId: v.id('owners'),
+      serviceId: v.id('businessServices'),
+      capabilityKind: v.string(),
+      claimRef: v.string(),
+      recipientRef: v.string(),
+    }),
+    signature: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_operationKey', ['operationKey'])
+    .index('by_threadId', ['threadId'])
+    .index('by_receiptRef', ['receiptRef']),
+
+  governedSendReceiptKeys: defineTable({
+    keyRef: v.string(),
+    receiptOperationKey: v.string(),
+    wrappedKeyBase64: v.string(),
+    wrapIvBase64: v.string(),
+    kekKeyId: v.string(),
+    createdAt: v.number(),
+  })
+    .index('by_keyRef', ['keyRef'])
+    .index('by_receiptOperationKey', ['receiptOperationKey']),
+
+  governedSendErasureLineage: defineTable({
+    erasureEventId: v.string(),
+    receiptOperationKey: v.string(),
+    privacyOperationKey: v.string(),
+    threadId: v.string(),
+    digest: v.string(),
+    keyRef: v.string(),
+    reasonCode: v.string(),
+    destroyedAt: v.number(),
+    priorReceiptCommitment: v.string(),
+    lineageHash: v.string(),
+  })
+    .index('by_erasureEventId', ['erasureEventId'])
+    .index('by_receiptOperationKey', ['receiptOperationKey'])
+    .index('by_thread_destroyedAt', ['threadId', 'destroyedAt']),
 } as const

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { UserIdentity } from 'convex/server'
 
 import {
@@ -7,6 +7,7 @@ import {
   listCurrentOwnerInbox,
   markCurrentOwnerInquiryRead,
   readCurrentOwnerInquiryDeliveryReadback,
+  readCustomerRecord as readPublicCustomerRecord,
   readPublicTargetAdmission,
   readCurrentOwnerTargetAdmission,
   readCurrentOwnerInquiry,
@@ -21,6 +22,9 @@ import {
   withSourceWrite,
   withoutSourceWrite,
 } from '../../helpers/source-write-admission'
+import { brandNonEmpty } from '@/modules/common/ids'
+import { encodeGovernedAction } from '@/modules/governed-action/public'
+import { buildGovernedSendIntent } from '@/modules/inquiries/internal/governed-send'
 import type { SourceWriteAdmission } from '@/modules/security/source-write-admission'
 
 type Row = Record<string, unknown> & { _id: string; _creationTime: number }
@@ -43,6 +47,7 @@ type Db = {
   get: (id: string) => Promise<Row | null>
   insert: (tableName: string, value: Record<string, unknown>) => Promise<string>
   patch: (id: string, value: Record<string, unknown>) => Promise<void>
+  delete: (id: string) => Promise<void>
 }
 
 type AuthCtx = {
@@ -61,9 +66,9 @@ type SubmitArgs = {
   pseudonymousSessionId: string
   abuseBucketKey: string
   operationKey: string
+  expectedDigest: string
   correlationId: string
   inquiryOrigin?: { kind: 'answer_thread'; threadId: string }
-  customerAccessKey: string
   csrfToken?: string
   csrfCookie?: string
   origin?: string
@@ -73,7 +78,7 @@ type SubmitArgs = {
 type SubmitOk = {
   kind: 'ok'
   code: 'inquiry_submitted' | 'inquiry_replayed'
-  thread: { threadId: string }
+  thread: { threadId: string; customerAccessKey: string }
 }
 
 const publicTargetAdmissionQuery = readPublicTargetAdmission as unknown as {
@@ -110,6 +115,29 @@ const deletePrivateHandler = (deleteCurrentOwnerInquiryPrivateContent as unknown
 const tombstoneHandler = (readCurrentOwnerInquiryPrivacyTombstone as unknown as {
   _handler: (ctx: AuthCtx, args: { threadId: string }) => Promise<unknown>
 })._handler
+const customerRecordQuery = readPublicCustomerRecord as unknown as {
+  _handler: (ctx: AuthCtx, args: { threadId: string; accessKey: string }) => Promise<unknown>
+}
+const customerRecordHandler = customerRecordQuery._handler
+
+const originalInquiryAccessSecret = process.env.AE_INQUIRY_ACCESS_SECRET
+const originalInquiryReceiptKek = process.env.AE_INQUIRY_RECEIPT_KEK
+const originalGovernedSendIntegritySecret = process.env.AE_GOVERNED_SEND_INTEGRITY_SECRET
+
+beforeEach(() => {
+  process.env.AE_INQUIRY_ACCESS_SECRET = 'test-inquiry-access-secret-0123456789abcdef'
+  process.env.AE_INQUIRY_RECEIPT_KEK = 'test-inquiry-receipt-kek-0123456789abcdef'
+  process.env.AE_GOVERNED_SEND_INTEGRITY_SECRET = 'test-governed-send-integrity-secret-0123456789abcdef'
+})
+
+afterEach(() => {
+  if (originalInquiryAccessSecret === undefined) delete process.env.AE_INQUIRY_ACCESS_SECRET
+  else process.env.AE_INQUIRY_ACCESS_SECRET = originalInquiryAccessSecret
+  if (originalInquiryReceiptKek === undefined) delete process.env.AE_INQUIRY_RECEIPT_KEK
+  else process.env.AE_INQUIRY_RECEIPT_KEK = originalInquiryReceiptKek
+  if (originalGovernedSendIntegritySecret === undefined) delete process.env.AE_GOVERNED_SEND_INTEGRITY_SECRET
+  else process.env.AE_GOVERNED_SEND_INTEGRITY_SECRET = originalGovernedSendIntegritySecret
+})
 
 describe('Convex inquiry runtime bridge', () => {
   it('persists public inquiry effects and exposes only source-owned owner readbacks', async () => {
@@ -124,6 +152,26 @@ describe('Convex inquiry runtime bridge', () => {
       originKind: 'answer_thread',
       originThreadId: 'thread:selected-provider',
     })
+    expect(submitted.thread.customerAccessKey).toMatch(/^iak1\.[a-f0-9]{64}\.[a-f0-9]{64}$/)
+    expect(JSON.stringify(db.dump('inquiryThreads'))).not.toContain(submitted.thread.customerAccessKey)
+    expect(JSON.stringify(db.dump('inquiryThreads'))).not.toContain('customerAccessKey')
+    expect(db.dump('inquiryCustomerAccessGrants')).toEqual([
+      expect.objectContaining({
+        threadId: submitted.thread.threadId,
+        status: 'active',
+        verifier: expect.stringMatching(/^hmac-sha256:[a-f0-9]{64}$/),
+      }),
+    ])
+    expect(JSON.stringify(db.dump('inquiryCustomerAccessGrants'))).not.toContain(submitted.thread.customerAccessKey)
+    expect(db.dump('governedSendReceipts')).toEqual([
+      expect.objectContaining({
+        envelopeVersion: 'inquiry-receipt-envelope:v1',
+        ciphertextBase64: expect.any(String),
+        contentIvBase64: expect.any(String),
+      }),
+    ])
+    expect(JSON.stringify(db.dump('governedSendReceipts'))).not.toContain('canonicalBytesBase64')
+    expect(db.dump('governedSendReceiptKeys')).toHaveLength(1)
     expect(db.dump('inquiryMessages')).toHaveLength(1)
     expect(db.dump('inquiryNotifications')).toHaveLength(1)
     expect(db.dump('notificationDispatches')).toHaveLength(2)
@@ -150,6 +198,10 @@ describe('Convex inquiry runtime bridge', () => {
     const replay = requireSubmitOk(await submitHandler(authCtx(db, null), submitArgs('first', { inquiryOrigin })))
     expect(replay.code).toBe('inquiry_replayed')
     expect(replay.thread.threadId).toBe(submitted.thread.threadId)
+    expect(replay.thread.customerAccessKey).toBe(submitted.thread.customerAccessKey)
+    expect(db.dump('inquiryCustomerAccessGrants')).toHaveLength(1)
+    expect(db.dump('governedSendReceipts')).toHaveLength(1)
+    expect(db.dump('governedSendReceiptKeys')).toHaveLength(1)
     expect(db.dump('inquiryThreads')).toHaveLength(1)
     expect(db.dump('inquiryMessages')).toHaveLength(1)
     expect(db.dump('inquiryNotifications')).toHaveLength(1)
@@ -558,6 +610,34 @@ describe('Convex inquiry runtime bridge', () => {
     expect(db.dump('inquiryMessages').every((message) => typeof message.privateDeletedAt === 'number')).toBe(true)
     expect(JSON.stringify(db.dump('inquiryMessages'))).not.toContain('Pipe burst under the sink')
     expect(JSON.stringify(db.dump('inquiryMessages'))).not.toContain('Private owner bridge reply')
+    expect(db.dump('governedSendReceiptKeys')).toEqual([])
+    expect(db.dump('governedSendReceipts')).toHaveLength(1)
+    expect(JSON.stringify(db.dump('governedSendReceipts'))).not.toContain('canonicalBytesBase64')
+    expect(db.dump('governedSendErasureLineage')).toEqual([
+      expect.objectContaining({
+        threadId: submitted.thread.threadId,
+        destroyedAt: expect.any(Number),
+        lineageHash: expect.any(String),
+      }),
+    ])
+
+    const customerAfterDelete = await customerRecordHandler(authCtx(db, null), {
+      threadId: submitted.thread.threadId,
+      accessKey: submitted.thread.customerAccessKey,
+    })
+    expect(customerAfterDelete).toMatchObject({
+      kind: 'ok',
+      record: {
+        governedSend: {
+          posture: 'erased',
+          digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+          erasedAt: expect.any(Number),
+          erasureEventId: expect.any(String),
+        },
+      },
+    })
+    expect(customerAfterDelete).not.toHaveProperty('record.governedSend.fields')
+    expect(JSON.stringify(customerAfterDelete)).not.toContain('Pipe burst under the sink')
 
     const detailAfterDelete = await readHandler(authCtx(db, sam()), { threadId: submitted.thread.threadId })
     expect(detailAfterDelete).toMatchObject({
@@ -590,6 +670,9 @@ describe('Convex inquiry runtime bridge', () => {
     const replay = await deletePrivateHandler(authCtx(db, sam()), ownerPrivacyDeleteArgs(submitted.thread.threadId))
     expect(replay).toMatchObject({ kind: 'ok', code: 'inquiry_private_content_delete_replayed' })
     expect(db.dump('inquiryPrivacyTombstones')).toHaveLength(1)
+    expect(db.dump('governedSendErasureLineage')).toHaveLength(1)
+    expect(db.dump('governedSendReceiptKeys')).toHaveLength(0)
+    expect(db.dump('governedSendReceipts')).toHaveLength(1)
     expect(db.reads()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ tableName: 'inquiryPrivacyTombstones', indexName: 'by_thread_operationKey' }),
@@ -601,6 +684,8 @@ describe('Convex inquiry runtime bridge', () => {
       ownerPrivacyDeleteArgs(submitted.thread.threadId, 'changed_reason')
     )
     expect(conflict).toMatchObject({ kind: 'error', code: 'inquiry_duplicate_conflict' })
+    expect(db.dump('governedSendErasureLineage')).toHaveLength(1)
+    expect(db.dump('governedSendReceiptKeys')).toHaveLength(0)
 
     expect(db.dump('operationKeys').map((operation) => operation.operationName)).toContain('deleteInquiryPrivateContent')
   })
@@ -700,6 +785,17 @@ class FakeDb implements Db {
       throw new Error(`Missing row ${id}`)
     }
     Object.assign(row, value)
+  }
+
+  async delete(id: string): Promise<void> {
+    for (const rows of Object.values(this.tables)) {
+      const index = rows.findIndex((row) => row._id === id)
+      if (index >= 0) {
+        rows.splice(index, 1)
+        return
+      }
+    }
+    throw new Error(`Missing row ${id}`)
   }
 
   seed(tableName: string, row: Row): void {
@@ -921,11 +1017,12 @@ function seedOwnerInquiryRow(
 function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArgs {
   const operationKey = `inquiry:${key}`
   const correlationId = `correlation:${key}`
-  return withSourceWrite('public_inquiry', {
+  const { expectedDigest, ...argOverrides } = overrides
+  const args = {
     target: {
       businessId: 'businesses:1',
       serviceId: 'businessServices:1',
-      capabilityKind: 'phone_inquiry',
+      capabilityKind: 'phone_inquiry' as const,
     },
     body: 'Pipe burst under the sink. Please ask the owner to contact me.',
     contact: { name: 'Sam Customer', email: 'sam.customer@example.test' },
@@ -935,8 +1032,25 @@ function submitArgs(key: string, overrides: Partial<SubmitArgs> = {}): SubmitArg
     csrfCookie: 'csrf-inquiry',
     operationKey,
     correlationId,
-    customerAccessKey: `customer-access:${key}`,
-    ...overrides,
+    ...argOverrides,
+  }
+  const encoded = encodeGovernedAction(buildGovernedSendIntent({
+    target: {
+      businessId: brandNonEmpty(args.target.businessId, 'BusinessId'),
+      serviceId: brandNonEmpty(args.target.serviceId, 'ServiceId'),
+      capabilityKind: args.target.capabilityKind,
+    },
+    body: args.body,
+    contact: args.contact,
+    ...(args.inquiryOrigin === undefined ? {} : { origin: args.inquiryOrigin }),
+  }))
+  if (encoded.kind !== 'encoded') {
+    throw new Error(`expected governed action encoding, received ${encoded.code} at ${encoded.path}`)
+  }
+
+  return withSourceWrite('public_inquiry', {
+    ...args,
+    expectedDigest: expectedDigest ?? encoded.digest,
   })
 }
 

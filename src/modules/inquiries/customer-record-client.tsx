@@ -1,38 +1,52 @@
-import type { ReactNode } from 'react'
-import { ConvexProvider, ConvexReactClient, useQuery } from 'convex/react'
-import { makeFunctionReference } from 'convex/server'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useServerFn } from '@tanstack/react-start'
 
-import type { CustomerInquiryRecordServerResult } from '@/modules/inquiries/inquiry.functions'
-
-const readCustomerRecordQuery = makeFunctionReference<
-  'query',
-  { threadId: string; accessKey: string },
-  CustomerInquiryRecordServerResult
->('inquiries:readCustomerRecord')
-
-const convexUrl = import.meta.env.VITE_CONVEX_URL?.trim()
-const customerRecordConvexClient = convexUrl === undefined || convexUrl.length === 0
-  ? undefined
-  : new ConvexReactClient(convexUrl)
+import {
+  readCustomerRecordServer,
+  type CustomerInquiryRecordServerResult,
+} from '@/modules/inquiries/inquiry.functions'
 
 export function isCustomerInquiryRecordClientAvailable(): boolean {
-  return customerRecordConvexClient !== undefined
+  return true
 }
 
 export function CustomerInquiryRecordProvider({ children }: { children: ReactNode }) {
-  if (customerRecordConvexClient === undefined) {
-    return <>{children}</>
-  }
-
-  return <ConvexProvider client={customerRecordConvexClient}>{children}</ConvexProvider>
+  return <>{children}</>
 }
 
 export function useCustomerInquiryRecord(input: {
   threadId: string
   accessKey: string | undefined
 }): CustomerInquiryRecordServerResult | undefined {
-  return useQuery(
-    readCustomerRecordQuery,
-    input.accessKey === undefined ? 'skip' : { threadId: input.threadId, accessKey: input.accessKey }
-  )
+  const readCustomerRecord = useServerFn(readCustomerRecordServer)
+  const [result, setResult] = useState<CustomerInquiryRecordServerResult>()
+
+  useEffect(() => {
+    if (input.accessKey === undefined) {
+      setResult(undefined)
+      return
+    }
+
+    let active = true
+    void readCustomerRecord({
+      data: { threadId: input.threadId, accessKey: input.accessKey },
+    }).then((nextResult) => {
+      if (active) setResult(nextResult)
+    }).catch(() => {
+      if (active) {
+        setResult({
+          kind: 'error',
+          code: 'inquiry_source_unavailable',
+          retryable: true,
+          reason: 'The record could not be loaded right now.',
+        })
+      }
+    })
+
+    return () => {
+      active = false
+    }
+  }, [input.accessKey, input.threadId, readCustomerRecord])
+
+  return result
 }

@@ -12,6 +12,8 @@ import {
   submitInquiry,
   type AdmissionBlocker,
   type InquiryNotificationStatus,
+  type InquiryCustomerAccessKeyring,
+  type GovernedSendIntegrityKeyring,
   type InquiryOriginRef,
   type InquirySourceState,
   type InquiryTargetRef,
@@ -103,10 +105,12 @@ export type PublicInquiryRouteSubmitInput = PublicInquiryFormInput & {
   pseudonymousSessionId: string
   abuseBucketKey: string
   now: number
+  expectedDigest: string
   inquiryOrigin?: InquiryOriginRef
   notificationStatus?: InquiryNotificationStatus
   notificationFailureCode?: string
-  customerAccessKey?: string
+  customerAccessKeyring: InquiryCustomerAccessKeyring
+  governedSendIntegrityKeyring: GovernedSendIntegrityKeyring
 }
 
 export type PublicInquiryRouteSubmitResult =
@@ -283,12 +287,14 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
     target: readback.target,
     body: validation.input.body,
     contact: validation.input.contact,
-    customerAccessKey: input.customerAccessKey ?? 'test-customer-record-access-key-00000000',
+    customerAccessKeyring: input.customerAccessKeyring,
+    governedSendIntegrityKeyring: input.governedSendIntegrityKeyring,
     operationKey: input.operationKey,
     correlationId: input.correlationId,
     pseudonymousSessionId: input.pseudonymousSessionId,
     abuseBucketKey: input.abuseBucketKey,
     now: input.now,
+    expectedDigest: input.expectedDigest,
     ...(input.inquiryOrigin === undefined ? {} : { origin: input.inquiryOrigin }),
     ...(input.notificationStatus === undefined ? {} : { notificationStatus: input.notificationStatus }),
     ...(input.notificationFailureCode === undefined ? {} : { notificationFailureCode: input.notificationFailureCode }),
@@ -314,7 +320,7 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
     status: result.thread.status,
     notificationStatus: result.notification.status,
     deliveryLabel: deliveryLabel(result.notification.status),
-    accessKey: result.thread.customerAccessKey ?? input.customerAccessKey ?? 'test-customer-record-access-key-00000000',
+    accessKey: result.customerAccessKey,
   } satisfies PublicInquirySubmittedReceipt
 
   return {

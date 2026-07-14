@@ -14,11 +14,30 @@ import type { NotificationAttemptStatus, NotificationSignatureStatus, Notificati
 import type { AuditEventType, FunnelEventType, RedactedPayload } from '@/modules/observability/public'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
 import type { AbuseRateLimitBucketRecord } from '@/modules/security/public'
+import type {
+  GovernedSendCanonicalFieldKey,
+  GovernedSendErasureLineageRecord,
+  GovernedSendIntegrityCommitmentRecord,
+  GovernedSendReceiptRecord,
+} from './governed-send'
 
 export type InquiryThreadId = Brand<string, 'InquiryThreadId'>
 export type InquiryMessageId = Brand<string, 'InquiryMessageId'>
 export type InquiryNotificationId = Brand<string, 'InquiryNotificationId'>
 export type InquiryCustomerAccessKey = Brand<string, 'InquiryCustomerAccessKey'>
+
+export type InquiryCustomerAccessGrant = Readonly<{
+  accessId: string
+  threadId: InquiryThreadId
+  scope: 'customer_record'
+  version: 'inquiry-customer-access:v1'
+  verifier: `hmac-sha256:${string}`
+  keyId: string
+  status: 'active' | 'revoked'
+  createdAt: number
+  expiresAt: number
+  revokedAt?: number
+}>
 
 export const InquiryThreadStatusValues = ['unread', 'read', 'replied', 'closed'] as const
 export type InquiryThreadStatus = (typeof InquiryThreadStatusValues)[number]
@@ -178,7 +197,7 @@ export type InquiryThreadRecord = {
   createdAt: number
   updatedAt: number
   version: number
-  customerAccessKey?: InquiryCustomerAccessKey
+
   customerReplyEmail?: string
   readAt?: number
   repliedAt?: number
@@ -267,6 +286,8 @@ export type InquiryPrivacyTombstoneRecord = {
   correlationId: CorrelationId
   createdAt: number
   appliedAt?: number
+  receiptErasureCount: number
+  erasureEventIds: readonly string[]
 }
 
 export type InquirySourceState = {
@@ -280,11 +301,18 @@ export type InquirySourceState = {
   threads: InquiryThreadRecord[]
   messages: InquiryMessageRecord[]
   notifications: InquiryNotificationRecord[]
+  customerAccessGrants: readonly InquiryCustomerAccessGrant[]
   abuseRateLimitBuckets: AbuseRateLimitBucketRecord[]
   auditEvents: InquiryAuditRecord[]
   funnelEvents: InquiryFunnelRecord[]
   operations: InquiryOperationRecord[]
   privacyTombstones: InquiryPrivacyTombstoneRecord[]
+  /** Append-only governed-send evidence; mutable thread rows are projections, not authority. */
+  governedSendReceipts: readonly GovernedSendReceiptRecord[]
+  /** Source-keyed commitment over receipt digest, admission proof, and historical target binding. */
+  governedSendIntegrityCommitments: readonly GovernedSendIntegrityCommitmentRecord[]
+  /** Immutable receipt-key destruction lineage; retained after private bytes become unrecoverable. */
+  governedSendErasureLineage: readonly GovernedSendErasureLineageRecord[]
   operatorControls: InquiryOperatorControls
   capabilityLaunchSupportRecords: CapabilityLaunchSupportRecord[]
 }
@@ -380,6 +408,22 @@ export type InquiryCustomerRecordReadback = {
     messageSummary: string
     submittedAt: number
   }
+  governedSend?:
+    | {
+        posture: 'verified'
+        digest: string
+        fields: readonly {
+          key: GovernedSendCanonicalFieldKey
+          label: string
+          value: string | null
+        }[]
+      }
+    | {
+        posture: 'erased'
+        digest: string
+        erasedAt: number
+        erasureEventId: string
+      }
   delivery: {
     state: InquiryNotificationStatus
     label: string

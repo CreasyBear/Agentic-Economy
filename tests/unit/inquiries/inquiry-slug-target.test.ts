@@ -9,6 +9,8 @@ import {
 import type { RegistrySourceState } from '@/modules/registry/public'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
 
+const expectedDigest = 'sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+
 describe('inquiry.submit slug target resolution', () => {
   it('resolves a published slug pair to source ids through the real local registry functions', () => {
     const state = createLocalE2eRegistrySourceState()
@@ -34,6 +36,7 @@ describe('inquiry.submit slug target resolution', () => {
         },
         body: 'Testing an unknown target.',
         contact: { name: 'Casey' },
+        expectedDigest,
       })
 
       expect(result).toEqual({
@@ -60,6 +63,7 @@ describe('inquiry.submit slug target resolution', () => {
         },
         body: 'Testing a service that is not published on this business.',
         contact: { name: 'Casey' },
+        expectedDigest,
       })
 
       expect(result).toEqual({
