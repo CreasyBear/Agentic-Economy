@@ -1,8 +1,8 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-07-14
-**Mapped Commit:** `59dbf7f6`
-**Scope:** Current live source plus the current dirty shared tree. Findings labelled **verified defect** are directly established by source or an executable check. Findings labelled **risk** need runtime evidence before being called a defect.
+**Mapped Commit:** `f6d7744`
+**Scope:** Current source at the mapped commit. Findings labelled **verified defect** are directly established by source or an executable check. Findings labelled **risk** need runtime evidence before being called a defect.
 
 ## Product-Critical Diagnosis
 
@@ -35,14 +35,15 @@
 **The hosted `options_ready` result is not usable in the human UI:**
 - Status: **Verified defect.**
 - Evidence: `projectPreparedAction` in `convex/customerRequestApplication.ts` returns `state: 'options_ready'`, `options: []`, and a populated `preparedAction`. `RequestResult` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` sends every `options_ready` projection to `OptionsCard`. `OptionsCard` reads only `projection.options` and `optionSet`; it never reads `preparedAction`.
-- Symptom: The production prepared-action shape renders as “0 registered options found” with no business card, terms, data use, effects, alternatives, or approval control.
-- Required correction: Render the prepared decision explicitly and connect its exact approval action. Add a production-shape UI test, not another hand-authored option-set response.
+- Symptom: The production prepared-action shape renders as “0 registered options found” with no business card, terms, data use, effects, alternatives, or route-confirmation control.
+- Required correction: Render the prepared decision explicitly. Shared route confirmation must be designed as the future boundary that issues an exact RouteMandate; there is no current approval endpoint to connect. Add a production-shape UI test, not another hand-authored option-set response.
 
-**The human UI has no prepared-action approval or run path:**
-- Status: **Verified missing integration.**
-- Evidence: HTTP handlers exist at `src/routes/api.requests.$requestRef.approval.ts` and `src/routes/api.requests.$requestRef.attempts.ts`. The workspace calls submit, messages, facts, options, preparation authorization, and resume only. It never calls approval or attempts.
-- Customer impact: The agent documentation says the customer must approve in AE, but the customer-facing Request surface supplies no way to do so. The release smoke bypasses this gap by invoking approval directly with a customer session token in `src/modules/customer-request/hosted-agent-journey.ts`.
-- Required correction: Add exact-route review, approval, run, and recovery UI states before claiming a complete customer journey.
+**RouteMandate exists, but shared confirmation and downstream enforcement are future work:**
+- Status: **Verified integration boundary.**
+- Evidence: `src/modules/customer-request/route-mandate.ts` defines exact route-, principal-, spend-, data-, effect-, evidence-, and expiry-bound authority. `convex/customerRequestRouteMandate.ts` durably issues, verifies, reads, and revokes mandates, and `convex/_generated/api.d.ts` includes the RouteMandate modules but none of the retired approval/execution modules. These Convex operations are internal and `convex/customerRequestApplication.ts` does not call them. `src/routeTree.gen.ts` contains preparation authorization routes but no approval or attempt routes.
+- Retirement evidence: `tests/imports/customer-request-source-completeness.test.ts` requires the former prepared-action approval, ActionAttempt, provider release, provider outcome, and reconciliation routes and modules to be absent from production. Their historical V2 authority tables remain only in `src/modules/customer-request/internal/convex-v2-schema.ts`, and the same guard rejects any production runtime reference to those tables.
+- Customer impact: Neither the human nor external-agent Request surface can express one shared confirmation that creates and returns the exact RouteMandate. A stored mandate is also not an execution admission: no current downstream boundary consumes it to reserve or enforce cumulative spend and data budgets before effects.
+- Required correction: Treat shared route confirmation and downstream admission/budget enforcement as future work. Add one confirmation contract used by both caller surfaces, then make every effectful adapter admit only an active exact mandate with atomic cumulative spend/data/effect controls. Do not revive the retired V2 ApprovalGrant or ActionAttempt stacks.
 
 **Editing an existing Request cannot work against the real application:**
 - Status: **Verified defect.**
@@ -86,14 +87,7 @@
 - Trigger: Reach the `projectPreparedAction` result after provider preparation.
 - Root cause: `preparedAction` exists in the wire schema but is ignored by `OptionsCard`.
 - Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
-- Fix: Add a prepared-decision component and exact approval affordance; assert the actual projection shape.
-
-**Current dirty tree failed the TypeScript gate during the mapping run:**
-- Status: **Verified transient integration blocker as of this mapping run.**
-- Command: `npm run typecheck`.
-- Failures: unsafe union access in `src/modules/inquiries/inquiry.functions.ts`; missing `CustomerRequest` exports and exact-optional violations in `src/modules/provider-integrations/shipping/`; Convex index typing and result narrowing errors in `tests/integration/customer-request-v2-multi-capability-route.test.ts`; governed-send fixture drift in inquiry tests; and one Playwright callback signature error.
-- Impact: The current combined working tree is not source-releasable. These failures may belong to concurrent work and must not be attributed to the last clean deployed revision.
-- Fix: Owners of each dirty slice should close their type contract before integration; do not hide the combined failure by running only focused tests.
+- Fix: Add a prepared-decision component and assert the actual projection shape. Keep future RouteMandate confirmation separate from the retired prepared-action approval contract.
 
 **Public agent instructions contain duplicate step numbers:**
 - Status: **Verified defect.**
@@ -115,19 +109,19 @@
 - Fix approach: Derive adapters from one owned domain contract where possible; otherwise add exact round-trip contract tests from compiled aggregate to HTTP JSON to rendered state.
 
 **“Source completeness” currently proves presence more strongly than connectivity:**
-- Issue: `tests/imports/customer-request-source-completeness.test.ts` verifies canonical files exist, checks for strings/import boundaries, and inspects workflow text. It does not prove the homepage uses Customer Request, a human can approve, or a multi-step RoutePlan reaches the wire/UI.
+- Issue: `tests/imports/customer-request-source-completeness.test.ts` verifies canonical files exist, checks import and retirement boundaries, proves the old approval/execution stack is unreachable, and inspects workflow text. It does not prove the homepage uses Customer Request, a human can confirm a RoutePlan into a RouteMandate, or a multi-step RoutePlan reaches the wire/UI.
 - Impact: The gate can pass while the product remains visibly unchanged or unusable.
 - Fix approach: Retain ownership scans, but rename their claim narrowly and add executable vertical gates for the customer lifecycle.
 
 **Large central modules increase integration risk:**
 - Issue: `convex/inquiries.ts` is about 2,979 lines, `convex/capabilitySupply.ts` 2,402, `src/modules/answer-thread/internal/turn-orchestrator.ts` 1,819, `src/modules/routing-kernel/internal/kernel.ts` 1,766, and `convex/customerRequestApplication.ts` 1,596 in the current tree.
-- Impact: Authority, validation, persistence, projection, and orchestration changes collide in the same files. The current dirty tree already contains concurrent modifications across several of these seams.
+- Impact: Authority, validation, persistence, projection, and orchestration changes collide in the same files, increasing the chance that independently correct slices break one another at integration time.
 - Fix approach: Split by durable command/query and domain responsibility while preserving public entrypoints and behavioral tests.
 
-**Product authority documents describe incompatible maturity levels:**
-- Issue: `AGENTS.md` says AE’s first owned conversion is a qualified inquiry and explicitly forbids booking, charging, dispatch, or auto-fulfilment. Current Request source includes prepared-action approval, attempt admission, provider execution, and reconciliation. `.planning/STATE.md` also retains a stale “current product slice” and historical Phase 1 constraints beneath the RoutePlan frontier.
-- Impact: Contributors can correctly follow one authority and contradict another. Public copy can either understate real source or overclaim unproven effects.
-- Fix approach: Separate current public product truth, internal source capability, and target architecture in explicit dated sections. Claims must follow hosted customer evidence, not class names.
+**RouteMandate maturity can be overstated from internal source alone:**
+- Issue: `src/modules/customer-request/route-mandate.ts` and `convex/customerRequestRouteMandate.ts` establish exact domain and durable lifecycle contracts, but no shared confirmation surface or downstream admission consumer is wired through `convex/customerRequestApplication.ts`. `AGENTS.md` therefore remains correct that AE does not publicly book, charge, dispatch, or auto-fulfil.
+- Impact: Contributors can mistake a durable internal authority object for customer-reachable execution or revive retired approval/attempt terminology around it.
+- Fix approach: Keep current public truth, internal RouteMandate capability, and target execution architecture explicitly separate. Claims must follow customer-surface and downstream enforcement evidence, not schema or module presence.
 
 **Release/support commands still depend on `.mjs` proof utilities:**
 - Issue: `package.json` invokes `.mjs` files for provider readiness, retirement, edge and historical proof helpers even though current runtime ownership is TypeScript.
@@ -194,7 +188,7 @@
 **RoutePlan schema evolution across four layers:**
 - Why fragile: Compiler types, writable conversion, Convex table validators, Convex action return validators, agent Zod schemas, and UI projections must change together.
 - Files: `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, `convex/customerRequestV2.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/modules/customer-request/customer-projection.ts`.
-- Current failure mode: The dirty tree persists routes but drops them from public projections.
+- Current failure mode: Current source persists routes but drops them from public projections.
 - Safe modification: Add a versioned customer route projection and a round-trip contract test before extending preparation or UI.
 
 **Client-only Request identity and recovery:**
@@ -205,17 +199,17 @@
 **Capability supply freshness can invalidate requests globally:**
 - Why fragile: Registry snapshot digests include publication revision, readiness expiry, offering hash, binding hash, and price. `convex/customerRequestV2.ts` revalidates the entire aggregate against current supply.
 - Common failures: A readiness refresh or price/publication revision can make a durable Request stale before the customer acts.
-- Safe modification: Define which changes invalidate discovery, preparation, approval, and execution separately. Preserve the prior plan as expired evidence rather than collapsing to a generic retry.
+- Safe modification: Define which changes invalidate discovery, preparation, RouteMandate confirmation, and future downstream admission separately. Preserve the prior plan as expired evidence rather than collapsing to a generic retry.
 
-**Provider preparation and one-action assumptions are distributed:**
-- Why fragile: Checks for exactly one action occur in resume, status, authorization, comparison, preparation, prepared-action construction, approval, and attempts across `convex/customerRequestApplication.ts` and `convex/customerRequestV2*`.
-- Common failure: Removing one guard creates partial multi-step behavior without composite authority or recovery.
-- Safe modification: Introduce an exact RoutePlan aggregate boundary first, then migrate each lifecycle stage with executable invariants.
+**Provider preparation and RouteMandate authority are disconnected boundaries:**
+- Why fragile: Checks for exactly one action remain distributed through resume, authorization, comparison, preparation, and prepared-action construction in `convex/customerRequestApplication.ts` and `convex/customerRequestV2Preparation*`. The separate exact RouteMandate lifecycle is not called by that application.
+- Common failure: Removing one preparation guard can create partial multi-step behavior, while wiring issuance directly can bypass shared confirmation or leave downstream spend/data budgets unenforced.
+- Safe modification: Project and select the exact RoutePlan first, add one shared confirmation command that issues its mandate, then introduce a separate fail-closed admission boundary before any effect. Migrate each stage with executable invariants.
 
-**The current shared tree contains several concurrent product slices:**
-- Why fragile: Dirty changes span capability supply, multi-capability compilation, governed inquiry sends, shipping adapters, routes, tests, and planning authority.
-- Impact: A broad commit or cleanup can merge incomplete contracts or overwrite another agent’s work.
-- Safe modification: Preserve all unrelated state, stage by claimed ticket, and verify the combined tree before integration. Never infer release readiness from a focused green test.
+**Cross-cutting product slices share integration seams:**
+- Why fragile: Capability supply, multi-capability compilation, governed inquiry sends, provider adapters, routes, tests, and planning authority converge on a small set of Request and Convex modules.
+- Impact: A broad change can combine individually incomplete contracts or obscure which slice established a behavior.
+- Safe modification: Keep changes ticket-scoped, preserve unrelated state, and verify the combined tree before integration. Never infer release readiness from a focused green test.
 
 ## Scaling Limits
 
@@ -269,20 +263,21 @@
 - Blocks: Legible comparison, exact mandate, multi-step preparation, and route recovery.
 - Required proof: A two-step plan displayed without protocol choreography, with declared cost, data use, effects, evidence, expiry, alternatives, and uncertainty.
 
-**Composite preparation, mandate, dispatch, and recovery:**
-- Missing: Production application behavior remains single-action despite composite compilation in the dirty tree.
-- Blocks: A real RoutePlan outcome rather than a renamed option or persisted DAG.
-- Required proof: Exact selected route, cumulative spend/data authority, step idempotency, output-to-input validation, unknown-outcome reconciliation, and no duplicate effects.
+**Shared RouteMandate confirmation and downstream admission:**
+- Present but below the product boundary: Exact RouteMandate compilation, durable issuance/revocation/history, and invalidation on Request or route-generation change exist in `src/modules/customer-request/route-mandate.ts`, `convex/customerRequestRouteMandate.ts`, and `convex/customerRequestRouteMandateLifecycle.ts`.
+- Missing: Human and external-agent surfaces do not share a confirmation command, and no production admission layer consumes an active mandate to enforce cumulative spend, data, and effect scope. The historical V2 ApprovalGrant, ActionAttempt, provider-release, outcome, and reconciliation tables are schema-only and intentionally unreachable from production.
+- Blocks: A route-bound authority decision becoming safe effectful execution rather than a durable internal object.
+- Required proof: The same exact-route confirmation and mandate readback through human and agent surfaces, followed by atomic admission that enforces route expiry, cumulative spend/data/effect scope, idempotency, and fail-closed recovery without reviving retired V2 authority modules.
 
 **Useful registered capability supply:**
 - Missing evidence: Source-controlled hosted proof registers two labelled sandbox businesses for `sandbox.reference.lookup`; it does not prove a customer-relevant business category is reachable.
 - Blocks: Honest “real business options” claims for arbitrary customer queries.
 - Required proof: At least two dissimilar useful capabilities and businesses registered through the normal publication path, with hosted readiness and query coverage. Sandbox remains clearly labelled.
 
-**Human approval and recovery journey:**
-- Missing: Prepared-action approval and attempt controls are absent from the workspace, and durable Request identity is not recoverable after navigation.
-- Blocks: The documented stop-and-return contract for external agents and customers.
-- Required proof: Browser-based review, exact approval, resume, run, unknown outcome, and resolution against production-shaped projections.
+**Human confirmation and durable recovery journey:**
+- Missing: The workspace cannot review and confirm an exact RoutePlan into a RouteMandate, and durable Request identity is not recoverable after navigation. Retired approval and attempt controls should remain absent.
+- Blocks: A shared stop-and-return authority contract for external agents and customers.
+- Required proof: Browser-based route review, exact confirmation, mandate readback/revocation, reload/resume, and later downstream admission states against production-shaped projections.
 
 **Generic transport execution for composite steps:**
 - Missing: Capability publication/readiness recognizes AE envelope, OpenAPI HTTP, MCP, and x402, but the current customer Request preparation/execution path is not proven across composite generic adapters.
@@ -293,7 +288,7 @@
 
 **Browser tests do not submit a real Request:**
 - What's tested: `tests/e2e/a11y/engine-product-a11y.spec.ts` loads `/engine`, fills the textarea, checks the absence of a budget field, and focuses “Explore.”
-- What's missing: Clicking Explore, authentication transition, clarification, disclosure, options, prepared action, approval, run, recovery, and reload/resume.
+- What's missing: Clicking Explore, authentication transition, clarification, disclosure, options, prepared action, exact-route confirmation, RouteMandate readback/revocation, and reload/resume. Downstream run/admission coverage remains future work.
 - Priority: Critical.
 
 **Workspace tests mock desired responses instead of traversing production handlers:**
@@ -308,8 +303,8 @@
 
 **Multi-capability integration does not cross the product boundary:**
 - What's tested: `tests/integration/customer-request-v2-multi-capability-route.test.ts` directly constructs two contracts, compiles, commits, and reads back a RoutePlan.
-- What's missing: Natural-language interpreter, public API, customer projection, UI, exact route approval, generic transport invocation, and recovery.
-- Current state: The focused compiler and application proof passed for commit `59dbf7f6`; that proof still stops below HTTP projection and UI.
+- What's missing: Natural-language interpreter, public API, customer projection, UI, shared exact-route confirmation, RouteMandate readback, downstream admission, generic transport invocation, and recovery.
+- Current state: The focused compiler and application proof still stops below HTTP projection and UI. Separate RouteMandate tests prove internal authority semantics, not shared confirmation or execution admission.
 - Priority: Critical for the RoutePlan frontier.
 
 **Release source gate omits browser behavior:**

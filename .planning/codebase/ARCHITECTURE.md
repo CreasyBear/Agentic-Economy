@@ -1,7 +1,7 @@
 # Architecture
 
 **Analysis date:** 2026-07-14
-**Inspected revision:** `59dbf7f6` plus the current shared dirty working tree
+**Inspected revision:** `f6d7744087e874cbb25e404cc7768f4b46118f3b`
 
 ## Executive Architecture Read
 
@@ -14,7 +14,7 @@ Agentic Economy is a TanStack Start and Convex modular monolith with four substa
 
 The capability-contract and capability-supply work has created a real neutral registration substrate. Contracts, offerings, bindings, publications, readiness, price, data use, effects, evidence, and lifecycle are represented as typed data. The Customer Request backend can interpret natural language against those registered contracts and persist resumable request state.
 
-The customer-facing engine has not yet absorbed the full power of that substrate. `/engine` still exposes a single-action preparation journey. It does not display a `RoutePlan`, let the customer choose among multi-step routes, or carry a multi-step route through approval and execution. Multi-step `RoutePlan` compilation is committed production source at `59dbf7f6`, but its projection, decision, preparation and execution work remains downstream-incomplete. This is why a large amount of infrastructure work can coexist with an engine that feels materially unchanged when a customer enters a query.
+The customer-facing engine has not yet absorbed the full power of that substrate. `/engine` still exposes a single-action preparation journey. It does not display a `RoutePlan`, let the customer choose among multi-step routes, issue or revoke a `RouteMandate`, or admit downstream execution. Multi-step `RoutePlan` compilation and the exact `RouteMandate` lifecycle are production source, but both remain below the customer projection. This is why a large amount of infrastructure work can coexist with an engine that feels materially unchanged when a customer enters a query.
 
 ## Architectural Pattern
 
@@ -48,7 +48,7 @@ The customer-facing engine has not yet absorbed the full power of that substrate
 
 ### Customer Request application
 
-- `convex/customerRequestApplication.ts` is the production application orchestrator for submit, refine, fact provision, resume, option preparation, preparation authorization, approval, and attempt admission.
+- `convex/customerRequestApplication.ts` is the production application orchestrator for submit, refine, fact provision, resume, option preparation, and preparation authorization.
 - `src/modules/customer-request/semantic-interpreter.ts` constrains model output to registered capability descriptors and opaque selection/input keys.
 - `src/modules/customer-request/openrouter-transport.ts` calls OpenRouter with JSON-only output; runtime requires `OPENROUTER_API_KEY` and optionally `AE_CUSTOMER_REQUEST_MODEL`.
 - `src/modules/customer-request/compiler.ts` compiles request snapshots, evaluated candidates, actions, and plan revisions.
@@ -65,20 +65,27 @@ The customer-facing engine has not yet absorbed the full power of that substrate
 - `convex/capabilitySupply.ts` persists publications, offerings, bindings, eligibility, and graph readback.
 - `convex/capabilitySupplyReadiness.ts` performs guarded, bounded readiness probes and schedules renewed observations.
 
-### Provider preparation and effects
+### Provider option preparation
 
 - `convex/customerRequestV2Preparation.ts` projects an exact action into disclosure and authority requirements.
 - `convex/customerRequestV2PreparationEgress.ts` and `convex/customerRequestV2PreparationEgressState.ts` allocate, dispatch, persist, and reconcile option-preparation calls.
 - Production egress dispatch currently implements only `http-json:v1`. `mcp-jsonrpc:v1` can be admitted and probed but is not in the preparation egress dispatcher map.
 - `convex/customerRequestV2PreparedAction.ts` validates provider responses and constructs a selected prepared action plus alternatives.
-- `convex/customerRequestV2ApprovalGrant.ts`, `convex/customerRequestV2ActionAttempt.ts`, `convex/customerRequestV2ProviderExecution.ts`, and `convex/customerRequestV2ProviderReconciliation.ts` implement exact approval, cumulative authority, execution, and unknown-outcome recovery below the current human UI.
+
+### Exact route authority
+
+- `src/modules/customer-request/route-mandate.ts` defines the exact, digest-bound `RouteMandate` over one selected RoutePlan, principal, authorization evidence, spend ceiling, data/effect/evidence scope, expiry, and fallback posture.
+- `convex/customerRequestRouteMandate.ts` owns internal issue, revoke, current-state, and history functions; `convex/customerRequestRouteMandateIntegrity.ts` verifies stored lineage.
+- `convex/customerRequestRouteMandateLifecycle.ts` revokes a current mandate when the Request revision or RoutePlan generation is superseded, and `convex/customerRequestV2.ts` invokes that lifecycle from aggregate mutations.
+- `src/modules/customer-request/internal/route-mandate-convex-schema.ts` owns current mandate tables. The generated Convex API includes the RouteMandate modules, but their authority-changing functions are internal and no TanStack Request route exposes them.
+- The older V2 ApprovalGrant, ActionAttempt, provider-release, outcome, and reconciliation validators and tables remain only in `src/modules/customer-request/internal/convex-v2-schema.ts` as schema-readable historical lineage. Their domain modules, Convex function modules, HTTP handlers/routes, application actions, generated API entries, and public exports are absent.
 
 ### Routing kernel
 
 - `src/modules/routing-kernel/internal/kernel.ts` owns a separate neutral route/authorize/execute/reconcile lifecycle.
 - `convex/http.ts` exposes the routing descriptor, signed routing endpoints, and `/mcp` from Convex HTTP.
 - `convex/routingKernelStoreAdapter.ts` and adjacent `convex/routingKernel*.ts` files persist kernel state, grants, bindings, evidence, incident controls, and reconciliation.
-- This kernel is production-deployable machine infrastructure, but `/engine` does not call these endpoints. The Customer Request application has its own preparation and provider-execution path.
+- This kernel is production-deployable machine infrastructure, but `/engine` does not call these endpoints. The Customer Request application has its own option-preparation path and exact RouteMandate state, without a public downstream execution admission path.
 
 ## Exact `/engine` Human Query Path
 
@@ -125,12 +132,11 @@ Customer submits text
 
 `AeCustomerRequestWorkspace.tsx` calls submit, clarify, facts, options, preparation authorization, and resume. It does **not** call:
 
-- `POST /api/requests/:requestRef/approval`;
-- `POST /api/requests/:requestRef/attempts`;
 - any routing-kernel route;
-- any multi-step `RoutePlan` selection or execution endpoint.
+- any multi-step `RoutePlan` selection endpoint;
+- any `RouteMandate` issue/revoke endpoint or downstream admission endpoint.
 
-Those approval and attempt APIs are source-real, but they are not reachable from the current `/engine` UI.
+The generated `src/routeTree.gen.ts` confirms that the public Request subtree stops at resume, messages, facts, options, and preparation authorization. Approval and attempt routes are not registered.
 
 ## External-Agent Request Path
 
@@ -145,7 +151,7 @@ POST /api/v1/requests
   -> same interpreter, graph loader, compiler, persistence, and projection as /engine
 ```
 
-The v1 agent routes support submit, message clarification, typed facts, option preparation, and resume. `src/modules/customer-request/hosted-agent-journey.ts` is a release/verification client for that surface, not runtime ownership. The agent surface deliberately omits customer approval and effect admission; those remain owner-authenticated human APIs.
+The v1 agent routes support submit, message clarification, typed facts, option preparation, and resume. `src/modules/customer-request/hosted-agent-journey.ts` is a release/verification client for that surface, not runtime ownership. The agent surface omits preparation authorization, RouteMandate issuance, and downstream effect admission. The retired approval and attempt operations are not available through a human API either.
 
 ## Capability Graph and RoutePlan State
 
@@ -159,7 +165,7 @@ The v1 agent routes support submit, message clarification, typed facts, option p
 
 ### Committed RoutePlan compilation
 
-Commit `59dbf7f6` adds `CustomerRequestRoutePlan`, `compileRoutePlans()`, registered semantic input/output composition, cost aggregation, route expiry, data/effect/evidence counts, and persisted `plan.routes` in:
+`CustomerRequestRoutePlan`, `compileRoutePlans()`, registered semantic input/output composition, cost aggregation, route expiry, data/effect/evidence counts, and persisted `plan.routes` live in:
 
 - `src/modules/customer-request/compiler.ts`;
 - `src/modules/customer-request/evaluation.ts`;
@@ -172,13 +178,14 @@ The compiler and persistence proof is source-real. Its current product boundary 
 - `CustomerRequestView` in `src/modules/customer-request/agent-contract.ts` has no route-plan projection;
 - `/engine` has no route-plan UI or route choice;
 - `prepareCurrentAction()` refuses plans containing more than one action;
-- preparation/execution remains keyed to one action rather than a selected route;
+- option preparation remains keyed to one action rather than a selected route;
+- the exact RouteMandate lifecycle is internal Convex authority and has no public Request issuance, revocation, or downstream admission surface;
 - `compileRoutePlans()` ranks only by maximum known cost, with route ID as the tie-breaker; its comparison metrics are descriptive, not a multi-objective ranker;
 - `fallbacks` is always empty;
 - mixed-currency combinations are dropped and `on_request` becomes `requires_preparation`;
 - graph `schema_compatible` edges compare whole input/output schema digests, while Request composition uses registered matching semantic identities plus exact pointed schema identities. These are two different edge models.
 
-The RoutePlan compiler is therefore meaningful committed kernel source, not a customer-reachable engine capability yet.
+The RoutePlan compiler and RouteMandate lifecycle are therefore meaningful production source, not customer-reachable route-choice or execution capabilities.
 
 ## Convex Persistence
 
@@ -196,7 +203,9 @@ The RoutePlan compiler is therefore meaningful committed kernel source, not a cu
 - V2 heads, revisions, and command replays in the customer-request schema;
 - immutable aggregate digests and registry snapshot digests;
 - preparation records, disclosure reviews, approval evidence, authority reservations, and egress operations;
-- prepared actions, approval grants, attempt reservations, provider runs, result evidence, and reconciliation observations.
+- prepared actions and option-preparation reconciliation observations;
+- current RouteMandate issues, heads, commands, revocations, and revocation commands;
+- schema-only V2 ApprovalGrant, ActionAttempt, provider-release, outcome, and reconciliation tables retained for historical read and migration evidence.
 
 **Persistence invariants:**
 
@@ -222,7 +231,7 @@ Legacy V1 request tables and `src/modules/customer-request/legacy-*` remain for 
 | MCP registration/probe | `transport-adapters.ts`, `capabilitySupplyReadiness.ts` | Convex publication/readiness | Indirectly | No MCP preparation egress dispatcher |
 | x402 import | `publication-importers.ts` | `publishCapability` | Indirectly | Normalizes to HTTP JSON; payment execution is not implemented here |
 | Multi-step RoutePlan compilation | `compiler.ts`, V2 schema and `customerRequestV2.ts` | Customer Request submit/commit internals | No | Committed and persisted, but not projected/selected/prepared/executed |
-| Exact effect approval/admission | approval/attempt Convex modules and human APIs | `/api/requests/:ref/approval`, `/attempts` | No | APIs exist; workspace has no controls |
+| Exact RouteMandate authority | `route-mandate.ts`, `customerRequestRouteMandate*.ts` | Internal Convex functions | No | Exact issue/revoke/integrity state exists; no public Request route or downstream admission boundary is exposed |
 | Signed routing kernel | `routing-kernel/`, `convex/http.ts` | Convex HTTP routes | No | Separate protocol plane, not the customer Request engine |
 
 ## Why the Engine Can Feel Unchanged
@@ -238,11 +247,11 @@ The architecture has deepened below the interface, but the `/engine` interaction
 - unsupported or unavailable supply collapses to short generic messages;
 - the registration graph may be healthy while the required model key, API-key scope, credential environment, publication readiness, or provider adapter is missing.
 
-The next architectural inflection is not more schema around the same journey. It is joining the already-built neutral supply graph, RoutePlan compiler, customer projection, route choice, authority, and resumable execution into one production-reachable vertical path.
+The next architectural inflection is not more schema around the same journey. It is joining the already-built neutral supply graph, RoutePlan compiler, customer projection, route choice, public RouteMandate authority, and a new downstream admission boundary into one production-reachable vertical path.
 
 ## Cross-Cutting Boundaries
 
-**Authentication and authority:** Clerk authenticates humans; Clerk user API keys authenticate external agents; service assertions bind agent operations before public Convex calls. Data release, effect approval, cumulative spend, and attempt admission are separate authority stages.
+**Authentication and authority:** Clerk authenticates humans; Clerk user API keys authenticate external agents; service assertions bind agent operations before public Convex calls. Preparation data release has its own authorization stage. Exact route authority is represented by RouteMandate issue/revoke state; the retired V2 ApprovalGrant/ActionAttempt path must not be reused as runtime authority.
 
 **Validation:** Zod bounds web and domain JSON; Convex validators bound persisted/function values; capability contracts validate exact JSON Schema-compatible shapes; stable canonical digests bind identities and replay.
 
