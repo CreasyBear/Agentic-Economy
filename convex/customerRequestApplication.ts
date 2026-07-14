@@ -1095,6 +1095,7 @@ async function prepareCurrentAction(
         && binding.publicationRevision === step.publicationRevision
         && binding.readinessValidUntil !== undefined
         && binding.readinessValidUntil >= route.expiresAt
+        && binding.price !== undefined
         && canonicalDigest(binding.price) === canonicalDigest(step.price)
       ))))
     if (!routesAreCurrent) return writableView(projectNeedsAttention({
