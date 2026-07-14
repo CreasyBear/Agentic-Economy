@@ -11,9 +11,7 @@
 
 ## Status
 
-- **Current:** designed, not proven end to end.
-- **Entry:** authorized business representative begins a claim with permitted prefill only.
-- **Exit:** `R1TargetAdmitted` changes from a named refusal to admitted through legible owner actions, and the first request reaches a usable reply channel.
+**building — admission core landed** (2026-07-14, commit 6fe81bbc). `R1TargetAdmitted` is real, versioned (`r1-target-admitted:v1`), fail-closed code: enforced at target resolution AND re-evaluated atomically at send commit (drift → typed conflict, zero partial writes). Convex loader defect fixed (claims.status mapping — unclaimed businesses could previously receive sends). Owner status page shows canonical blocker readback as actionable todos. Public routes derive the ask affordance from the same predicate. v1 proof class = claimed_owner + resolvable recipient; destination VERIFICATION deliberately deferred (no source mechanism) as the named strengthening step. Remaining for J6 complete: CS1 reply-by-email ingestion, real-owner activation proof (0/5 real owners — code cannot fix this), first admitted-send ship test end-to-end with a real owner.
 
 ## Persona proof
 
