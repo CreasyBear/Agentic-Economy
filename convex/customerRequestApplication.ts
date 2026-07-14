@@ -1144,10 +1144,43 @@ async function resolvePreparedAction(
   return writableView({
     ...base,
     state: 'needs_attention', nextAction: 'revise_request',
-    summary: result.reason === 'provider_assertion_expired'
-      ? 'The available business options expired. Refresh the request before choosing.'
-      : 'The business responses could not support a safe customer choice. Review the request before trying again.',
+    summary: preparedActionFailureSummary(result.reason),
   })
+}
+
+function preparedActionFailureSummary(
+  reason: Extract<PreparedActionMutationResult, { kind: 'not_prepared' }>['reason'],
+): string {
+  switch (reason) {
+    case 'options_pending':
+    case 'disclosure_uncertain':
+      return 'AE is still checking the businesses already contacted. It will not send the request again.'
+    case 'disclosure_not_released':
+      return 'AE did not send the request to the business. Check the business connection before trying again.'
+    case 'provider_response_invalid':
+      return 'A business returned an incomplete response. Refresh the request before choosing.'
+    case 'provider_echo_mismatch':
+      return 'A business response did not match the option requested. Refresh before choosing.'
+    case 'provider_assertion_expired':
+      return 'The available business options expired. Refresh the request before choosing.'
+    case 'provider_evidence_invalid':
+      return 'A business response was missing the evidence needed to compare it safely.'
+    case 'commercial_terms_unavailable':
+      return 'A business option was missing the price or terms needed for a safe choice.'
+    case 'selection_required':
+    case 'comparison_unavailable':
+    case 'commercial_influence_blocks_selection':
+      return 'AE received options but cannot choose between them from the customer’s stated priorities.'
+    case 'prepared_action_too_large':
+      return 'The business responses were too large to compare safely. Narrow the request and try again.'
+    case 'capability_authority_changed':
+    case 'capability_graph_changed':
+      return 'The available business options changed. Refresh the request before choosing.'
+    default: {
+      const exhaustive: never = reason
+      return exhaustive
+    }
+  }
 }
 
 function projectPreparedAction(

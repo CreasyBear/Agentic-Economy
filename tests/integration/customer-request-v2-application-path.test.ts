@@ -590,7 +590,10 @@ describe('current V2 Customer Request application path', () => {
     }])
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: review.requestRef,
-    })).resolves.toMatchObject({ kind: 'request', state: 'needs_attention', nextAction: 'revise_request' })
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'needs_attention', nextAction: 'revise_request',
+      summary: 'AE did not send the request to the business. Check the business connection before trying again.',
+    })
     const staleTerminalDigest = await backend.query(
       internal.customerRequestV2PreparedAction.preparationMaterialDigest,
       { preparationRef: review.preparationRef, principalId },
