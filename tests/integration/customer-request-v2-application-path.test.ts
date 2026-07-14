@@ -247,6 +247,39 @@ describe('current V2 Customer Request application path', () => {
     expect(generate).toHaveBeenCalledTimes(1)
   })
 
+  it('retries one unsafe model proposal without weakening contract validation', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (requestInput === undefined) throw new Error('sandbox request input missing')
+    const modelResponse = (value: unknown) => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: requestInput.key, value }] }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const generate = vi.fn()
+      .mockResolvedValueOnce(modelResponse(42))
+      .mockResolvedValueOnce(modelResponse('Compare labelled sandbox options'))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:retry', requestId: 'request:v2:retry',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
+      routing: { networkId: 'ae:public' },
+    })
+
+    expect(submitted).toMatchObject({
+      kind: 'request', requestRef: 'request:v2:retry', revision: 1,
+      state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
+    expect(generate).toHaveBeenCalledTimes(2)
+  })
+
   it('lets an external agent prepare but never promotes its API signature into customer authority', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})

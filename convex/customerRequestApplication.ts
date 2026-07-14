@@ -732,22 +732,30 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     timeoutMs: 20_000,
     maximumResponseBytes: 64_000,
   })
-  let proposal: CustomerRequestSemanticProposal
-  try {
-    proposal = await interpreter.propose({ customerJob: input.intent, capabilities: graph.descriptors })
-  } catch {
-    return { kind: 'refused', reason: 'interpreter_unavailable' }
+  const priorFacts = rebindStoredFacts(input.priorFacts, graph.models)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let proposal: CustomerRequestSemanticProposal
+    try {
+      proposal = await interpreter.propose({ customerJob: input.intent, capabilities: graph.descriptors })
+    } catch {
+      return { kind: 'refused', reason: 'interpreter_unavailable' }
+    }
+    const compilationInput: CompileCommitInput = {
+      ...input, priorFacts, proposal, interpreterId: interpreter.interpreterId, graph,
+    }
+    const preview = compileProposal(compilationInput)
+    if (preview.kind === 'compiled') {
+      return await compileCommit(ctx, { ...compilationInput, compiledAggregate: preview.aggregate })
+    }
+    if (preview.reason === 'capability_graph_invalid') break
   }
-  return await compileCommit(ctx, {
-    ...input,
-    priorFacts: rebindStoredFacts(input.priorFacts, graph.models),
-    proposal,
-    interpreterId: interpreter.interpreterId,
-    graph,
-  })
+  return writableView(projectNeedsAttention({
+    requestRef: input.requestId, revision: input.expectedRevision,
+    summary: 'The request could not be interpreted safely.',
+  }))
 }
 
-async function compileCommit(ctx: ActionCtx, input: Readonly<{
+type CompileCommitInput = Readonly<{
   commandKey: string
   commandDigest: string
   requestId: string
@@ -760,10 +768,11 @@ async function compileCommit(ctx: ActionCtx, input: Readonly<{
   proposal: CustomerRequestSemanticProposal
   interpreterId: string
   graph: RequestGraph
-}>): Promise<ActionResult> {
-  const replay = await replayCommittedCommand(ctx, input)
-  if (replay !== undefined) return replay
-  const compiled = compileCustomerRequest({
+  compiledAggregate?: CustomerRequestV2Aggregate
+}>
+
+function compileProposal(input: CompileCommitInput) {
+  return compileCustomerRequest({
     requestId: input.requestId,
     expectedRevision: input.expectedRevision,
     principalId: input.principalId,
@@ -777,6 +786,14 @@ async function compileCommit(ctx: ActionCtx, input: Readonly<{
     models: input.graph.models,
     now: Date.now(),
   })
+}
+
+async function compileCommit(ctx: ActionCtx, input: CompileCommitInput): Promise<ActionResult> {
+  const replay = await replayCommittedCommand(ctx, input)
+  if (replay !== undefined) return replay
+  const compiled = input.compiledAggregate === undefined
+    ? compileProposal(input)
+    : { kind: 'compiled' as const, aggregate: input.compiledAggregate }
   if (compiled.kind === 'refused') return writableView(projectNeedsAttention({
     requestRef: input.requestId,
     revision: input.expectedRevision,
