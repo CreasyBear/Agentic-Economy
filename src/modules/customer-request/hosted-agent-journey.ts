@@ -7,7 +7,6 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestAgentResultSchema,
-  customerRequestApprovalResultSchema,
   customerRequestAuthorizationInputSchema,
   customerRequestFactInputSchema,
   customerRequestJsonValueSchema,
@@ -59,13 +58,9 @@ export const hostedCustomerRequestJourneyProofSchema = z.object({
     'needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options',
     'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
   ])),
-  authorityStops: z.array(z.enum(['preparation_disclosure', 'prepared_action_approval'])),
+  authorityStops: z.array(z.literal('preparation_disclosure')),
   final: z.object({
     requestRef: z.string(), state: z.literal('options_ready'), businessName: z.string(),
-    approval: z.object({
-      state: z.literal('recorded'), currency: z.string(), maximumSpendMinor: z.number().int().nonnegative(),
-      expiresAt: z.number().int().positive(), recordedAt: z.number().int().nonnegative(),
-    }).strict(),
   }).strict(),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
@@ -87,7 +82,7 @@ export async function runHostedCustomerRequestJourney(
   const nonce = randomUUID()
   const requestRef = `acceptance:${nonce}`
   const states: CustomerRequestView['state'][] = []
-  const authorityStops: Array<'preparation_disclosure' | 'prepared_action_approval'> = []
+  const authorityStops: Array<'preparation_disclosure'> = []
   const consumedFacts: Array<{ requirementKey: string; valueDigest: string }> = []
   const consumedMessages: Array<{ index: number; valueDigest: string }> = []
   const submit = customerRequestSubmitInputSchema.parse({
@@ -171,23 +166,6 @@ export async function runHostedCustomerRequestJourney(
       if (consumedFacts.length < 1) throw new Error('hosted_journey_typed_fact_not_submitted')
       const prepared = view.preparedAction
       if (prepared === undefined) throw new Error('hosted_journey_prepared_decision_missing')
-      authorityStops.push('prepared_action_approval')
-      const approval = await callCustomerApproval(input, requestRef, {
-        revision: view.revision, preparedActionRef: prepared.actionRef,
-        maximumSpendMinor: prepared.price.maximumAmountMinor,
-        expiresAt: prepared.validUntil,
-        idempotencyKey: `acceptance:approve:${nonce}:${view.revision}`,
-      })
-      const resumed = await callAgent(input, requestPath(requestRef), 'GET')
-      observe(states, resumed)
-      const recordedApproval = resumed.preparedAction?.approval
-      if (resumed.state !== 'options_ready' || resumed.preparedAction?.businessName !== prepared.businessName
-        || recordedApproval?.state !== 'recorded'
-        || recordedApproval.currency !== approval.spend.currency
-        || recordedApproval.maximumSpendMinor !== approval.spend.maximumAmountMinor
-        || recordedApproval.expiresAt !== approval.expiresAt) {
-        throw new Error('hosted_journey_post_approval_resume_changed')
-      }
       return hostedCustomerRequestJourneyProofSchema.parse({
         kind: 'cold_external_agent_journey', agent: input.agent,
         release: {
@@ -202,9 +180,8 @@ export async function runHostedCustomerRequestJourney(
         },
         observedStates: states, authorityStops,
         final: {
-          requestRef: resumed.requestRef, state: resumed.state,
-          businessName: resumed.preparedAction.businessName,
-          approval: recordedApproval,
+          requestRef: view.requestRef, state: view.state,
+          businessName: prepared.businessName,
         },
         sandbox: true,
         claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
@@ -266,22 +243,6 @@ async function callCustomerView(
   const value: unknown = await response.json()
   if (!response.ok) throw responseError('POST', path, response.status, value)
   return customerRequestViewSchema.parse(value)
-}
-
-async function callCustomerApproval(
-  input: HostedCustomerRequestJourneyInput,
-  requestRef: string,
-  body: unknown,
-): Promise<Extract<z.infer<typeof customerRequestApprovalResultSchema>, { kind: 'approved' }>> {
-  const response = await (input.fetch ?? fetch)(
-    `${normalizedBaseUrl(input.baseUrl)}/api/requests/${encodeURIComponent(requestRef)}/approval`,
-    { method: 'POST', headers: headers(input, input.customerSessionToken), body: JSON.stringify(body) },
-  )
-  const value: unknown = await response.json()
-  if (!response.ok) throw responseError('POST', 'approval', response.status, value)
-  const result = customerRequestApprovalResultSchema.parse(value)
-  if (result.kind !== 'approved') throw new Error(`hosted_journey_approval_result:${result.kind}`)
-  return result
 }
 
 async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise<void> {

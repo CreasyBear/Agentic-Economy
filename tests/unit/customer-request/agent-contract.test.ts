@@ -43,7 +43,6 @@ describe('Customer Request agent contract', () => {
           price: { currency: 'AUD', minimumAmountMinor: 1_200, maximumAmountMinor: 1_200 },
           validUntil: 10_000,
         }],
-        approval: { state: 'required' },
       },
     }
 

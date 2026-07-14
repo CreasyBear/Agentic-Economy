@@ -29,8 +29,6 @@ import {
   requestRegistrySnapshotDigest, type RegisteredEvaluationBinding, type RegisteredSupplyPrice, type RequestFact,
 } from '@/modules/customer-request/evaluation'
 import {
-  actionAttemptV2Value,
-  approvalGrantV2Value,
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
   preparedActionRecoveryReasonV2Value,
@@ -38,7 +36,6 @@ import {
   routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
-  projectCustomerActionStatus,
   projectNeedsAttention,
   projectRequestEvaluation,
   projectRoutePlansReady,
@@ -54,7 +51,6 @@ import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-reques
 
 import { internal } from './_generated/api'
 import { action, env, type ActionCtx } from './_generated/server'
-import type { CustomerActionStatusV2 } from './customerRequestV2ProviderReconciliation'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
 const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
@@ -153,13 +149,6 @@ const customerPreparedAction = v.object({
     price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
     validUntil: v.number(),
   })),
-  approval: v.union(
-    v.object({ state: v.literal('required') }),
-    v.object({
-      state: v.literal('recorded'), currency: v.string(), maximumSpendMinor: v.number(),
-      expiresAt: v.number(), recordedAt: v.number(),
-    }),
-  ),
 })
 const customerBusiness = v.object({ businessRef: v.string(), name: v.string() })
 const customerRouteMaximumCost = v.union(
@@ -346,45 +335,6 @@ const refusedReason = v.union(
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
-const approvalActionResult = v.union(
-  v.object({
-    kind: v.literal('approved'), requestRef: v.string(), revision: v.number(),
-    approvalRef: v.string(), preparedActionRef: v.string(),
-    spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
-    expiresAt: v.number(),
-    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
-  }),
-  v.object({
-    kind: v.literal('conflict'), requestRef: v.string(),
-    reason: v.union(
-      v.literal('revision_changed'), v.literal('idempotency_key_reused'), v.literal('approval_changed'),
-    ),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    reason: v.union(
-      v.literal('authentication_required'), v.literal('request_not_found'), v.literal('approval_invalid'),
-    ),
-  }),
-)
-type ApprovalActionResult = Infer<typeof approvalActionResult>
-const actionAttemptAdmissionResult = v.union(
-  v.object({
-    kind: v.literal('accepted'), requestRef: v.string(), revision: v.number(),
-    actionAttemptRef: v.string(), state: v.literal('admitted'), expiresAt: v.number(),
-    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
-  }),
-  v.object({
-    kind: v.literal('conflict'), requestRef: v.string(),
-    reason: v.union(v.literal('revision_changed'), v.literal('idempotency_key_reused'), v.literal('approval_used')),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    reason: v.union(v.literal('authentication_required'), v.literal('request_not_found'), v.literal('admission_invalid')),
-  }),
-)
-type ActionAttemptAdmissionResult = Infer<typeof actionAttemptAdmissionResult>
-
 export const submit = action({
   args: {
     compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()),
@@ -582,31 +532,6 @@ export const resume = action({
       )
       if (!generationRepresentsStoredPlan) return await projectCurrentRoutePlans(ctx, current.aggregate)
     }
-    if (current.aggregate.plan.actions.length === 1) {
-      const action = current.aggregate.plan.actions[0]
-      if (action !== undefined) {
-        const status: CustomerActionStatusV2 = await ctx.runQuery(
-          internal.customerRequestV2ProviderReconciliation.getActionStatus,
-          {
-            requestId: current.aggregate.snapshot.requestId,
-            requestRevision: current.aggregate.snapshot.revision,
-            actionId: action.actionId,
-            principalId: caller.principalId,
-          },
-        )
-        if (status.kind === 'integrity_failure') return writableView(projectNeedsAttention({
-          requestRef: current.aggregate.snapshot.requestId,
-          revision: current.aggregate.snapshot.revision,
-          summary: 'AE could not verify the business result. The action will not be sent again.',
-        }))
-        if (status.kind !== 'none') return writableView(projectCustomerActionStatus({
-          requestRef: current.aggregate.snapshot.requestId,
-          revision: current.aggregate.snapshot.revision,
-          criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
-          status,
-        }))
-      }
-    }
     const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
     if (recoveryBlock !== undefined) return recoveryBlock
     if (current.aggregate.plan.actions.length === 1) {
@@ -738,153 +663,6 @@ export const authorizePreparation = action({
       })
     }
     return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
-  },
-})
-
-export const approvePreparedAction = action({
-  args: {
-    requestRef: v.string(), revision: v.number(), preparedActionRef: v.string(),
-    maximumSpendMinor: v.number(), expiresAt: v.number(), idempotencyKey: v.string(),
-  },
-  returns: approvalActionResult,
-  handler: async (ctx, args): Promise<ApprovalActionResult> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    if (args.requestRef.trim().length === 0 || args.requestRef.length > 200
-      || !Number.isSafeInteger(args.revision) || args.revision < 1
-      || args.preparedActionRef.trim().length === 0 || args.preparedActionRef.length > 300
-      || !Number.isSafeInteger(args.maximumSpendMinor) || args.maximumSpendMinor < 0
-      || !Number.isSafeInteger(args.expiresAt) || args.expiresAt < 1
-      || args.idempotencyKey.trim().length === 0 || args.idempotencyKey.length > 200) {
-      return { kind: 'refused', reason: 'approval_invalid' }
-    }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
-    const requestPrincipalId = current.aggregate.snapshot.principalId
-    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
-    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(
-      internal.customerRequestPrincipals.getAgentPrincipal,
-      { principalId: requestPrincipalId },
-    )
-    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.revision !== args.revision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    const command = {
-      requestRef: args.requestRef,
-      revision: args.revision,
-      preparedActionRef: args.preparedActionRef,
-      maximumSpendMinor: args.maximumSpendMinor,
-      expiresAt: args.expiresAt,
-      idempotencyKey: args.idempotencyKey,
-    }
-    const now = Date.now()
-    const result: ApprovalGrantMutationResult = await ctx.runMutation(
-      internal.customerRequestV2ApprovalGrant.issue,
-      {
-        commandKey: namespacedKey(requestPrincipalId, 'approve', args.requestRef, args.idempotencyKey),
-        commandDigest: canonicalDigest(command),
-        principalId: requestPrincipalId,
-        expectedRequestId: args.requestRef,
-        expectedRequestRevision: args.revision,
-        preparedActionRef: args.preparedActionRef,
-        maximumSpendMinor: args.maximumSpendMinor,
-        expiresAt: args.expiresAt,
-        actor: {
-          kind: 'clerk_owner', requestPrincipalId, ownerId: identity.subject,
-          credentialId: identity.tokenIdentifier,
-          authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
-            issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
-          })}`,
-        },
-        now,
-      },
-    )
-    if (result.kind === 'conflict') return {
-      kind: 'conflict', requestRef: args.requestRef,
-      reason: result.reason === 'idempotency_key_reused' ? 'idempotency_key_reused' : 'approval_changed',
-    }
-    if (result.kind === 'refused') return {
-      kind: 'refused',
-      reason: result.reason === 'prepared_action_not_found' ? 'request_not_found' : 'approval_invalid',
-    }
-    return {
-      kind: 'approved',
-      requestRef: result.approvalGrant.lineage.requestId,
-      revision: result.approvalGrant.lineage.requestRevision,
-      approvalRef: result.approvalGrant.approvalGrantRef,
-      preparedActionRef: result.approvalGrant.preparedAction.preparedActionRef,
-      spend: result.approvalGrant.spend,
-      expiresAt: result.approvalGrant.expiresAt,
-      recovery: {
-        unknownOutcome: result.approvalGrant.recovery.unknownOutcome,
-        automaticRetry: result.approvalGrant.recovery.automaticRetry,
-      },
-    }
-  },
-})
-
-export const admitApprovedAction = action({
-  args: {
-    requestRef: v.string(), revision: v.number(), approvalGrantRef: v.string(), idempotencyKey: v.string(),
-  },
-  returns: actionAttemptAdmissionResult,
-  handler: async (ctx, args): Promise<ActionAttemptAdmissionResult> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    if (args.requestRef.trim().length === 0 || args.requestRef.length > 200
-      || !Number.isSafeInteger(args.revision) || args.revision < 1
-      || !args.approvalGrantRef.startsWith('approval-grant:v2:') || args.approvalGrantRef.length > 500
-      || args.idempotencyKey.trim().length === 0 || args.idempotencyKey.length > 200) {
-      return { kind: 'refused', reason: 'admission_invalid' }
-    }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
-    const requestPrincipalId = current.aggregate.snapshot.principalId
-    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
-    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(
-      internal.customerRequestPrincipals.getAgentPrincipal,
-      { principalId: requestPrincipalId },
-    )
-    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.revision !== args.revision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    const command = {
-      requestRef: args.requestRef, revision: args.revision,
-      approvalGrantRef: args.approvalGrantRef, idempotencyKey: args.idempotencyKey,
-    }
-    const result: ActionAttemptMutationResult = await ctx.runMutation(
-      internal.customerRequestV2ActionAttempt.admit,
-      {
-        commandKey: namespacedKey(requestPrincipalId, 'admit', args.requestRef, args.idempotencyKey),
-        commandDigest: canonicalDigest(command), principalId: requestPrincipalId,
-        expectedRequestId: args.requestRef, expectedRequestRevision: args.revision,
-        approvalGrantRef: args.approvalGrantRef, now: Date.now(),
-      },
-    )
-    if (result.kind === 'conflict') return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
-    }
-    if (result.kind === 'refused') return result.reason === 'approval_grant_consumed'
-      ? { kind: 'conflict', requestRef: args.requestRef, reason: 'approval_used' }
-      : {
-          kind: 'refused',
-          reason: result.reason === 'approval_grant_not_found' ? 'request_not_found' : 'admission_invalid',
-        }
-    return {
-      kind: 'accepted',
-      requestRef: result.actionAttempt.lineage.requestId,
-      revision: result.actionAttempt.lineage.requestRevision,
-      actionAttemptRef: result.actionAttempt.actionAttemptRef,
-      state: result.actionAttempt.state,
-      expiresAt: result.actionAttempt.expiresAt,
-      recovery: result.actionAttempt.recovery,
-    }
   },
 })
 
@@ -1207,33 +985,6 @@ type PreparedActionMutationResult = Readonly<
   | { kind: 'not_prepared'; reason: Infer<typeof preparedActionRecoveryReasonV2Value>; recoveryRef: string }
   | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'prepared_action_material_changed' }
 >
-type ApprovalGrantMutationResult = Readonly<
-  | { kind: 'issued' | 'replayed'; approvalGrant: Infer<typeof approvalGrantV2Value> }
-  | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'approval_material_changed' }
-  | {
-      kind: 'refused'
-      reason: 'prepared_action_not_found' | 'prepared_action_expired' | 'spend_scope_invalid'
-        | 'expiry_scope_invalid' | 'approval_material_invalid' | 'capability_authority_changed'
-    }
->
-type ActionAttemptMutationResult = Readonly<
-  | { kind: 'admitted' | 'replayed'; actionAttempt: Infer<typeof actionAttemptV2Value> }
-  | { kind: 'conflict'; reason: 'idempotency_key_reused' }
-  | {
-      kind: 'refused'
-      reason: 'approval_grant_not_found' | 'approval_grant_expired' | 'approval_authority_changed'
-        | 'approval_grant_consumed' | 'cumulative_authority_changed'
-        | 'cumulative_authority_exhausted' | 'admission_material_invalid'
-    }
->
-type CustomerApprovalStatus = Readonly<
-  | { kind: 'not_approved' }
-  | {
-      kind: 'approved'; currency: string; maximumSpendMinor: number
-      expiresAt: number; recordedAt: number
-    }
->
-
 function storedGenerationRepresentsAggregate(
   generation: StoredRouteGeneration,
   aggregate: StoredAggregate,
@@ -1697,14 +1448,7 @@ async function resolvePreparedAction(
     },
   )
   if (result.kind === 'prepared') {
-    const approval: CustomerApprovalStatus = await ctx.runQuery(
-      internal.customerRequestV2ApprovalGrant.getCustomerApprovalStatus,
-      {
-        preparedActionRef: result.preparedAction.preparedActionRef,
-        principalId: aggregate.snapshot.principalId,
-      },
-    )
-    return projectPreparedAction(aggregate, preparation, result.preparedAction, approval)
+    return projectPreparedAction(aggregate, preparation, result.preparedAction)
   }
   const base = {
     kind: 'request' as const,
@@ -1777,7 +1521,6 @@ function projectPreparedAction(
   aggregate: StoredAggregate,
   preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
   action: Infer<typeof preparedActionV2Value>,
-  approval: CustomerApprovalStatus,
 ): ActionResult {
   return {
     kind: 'request',
@@ -1827,13 +1570,6 @@ function projectPreparedAction(
         },
         validUntil: alternative.expiresAt,
       })),
-      approval: approval.kind === 'approved'
-        ? {
-            state: 'recorded', currency: approval.currency,
-            maximumSpendMinor: approval.maximumSpendMinor,
-            expiresAt: approval.expiresAt, recordedAt: approval.recordedAt,
-          }
-        : { state: 'required' },
     },
   }
 }
@@ -2074,7 +1810,6 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         purposes: [...preparedAction.dataUse.purposes],
       },
       effects: preparedAction.effects.map((effect) => ({ ...effect })),
-      approval: { ...preparedAction.approval },
       alternatives: preparedAction.alternatives.map((alternative) => ({
         ...alternative, price: { ...alternative.price },
       })),

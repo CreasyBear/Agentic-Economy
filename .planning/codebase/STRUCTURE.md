@@ -1,7 +1,7 @@
 # Codebase Structure
 
 **Analysis date:** 2026-07-14
-**Inspected revision:** `63f7fac510915ca9ee88dd44e114b868b64fd5bc` plus the current shared dirty working tree
+**Inspected revision:** `f6d7744087e874cbb25e404cc7768f4b46118f3b`
 
 ## Repository Layout
 
@@ -83,8 +83,6 @@ This is the production path to inspect when a query on `/engine` fails or feels 
 - `src/routes/api.requests.$requestRef.facts.ts` — typed fact answer.
 - `src/routes/api.requests.$requestRef.options.ts` — single-action option preparation.
 - `src/routes/api.requests.$requestRef.authorization.ts` — disclosure/preparation authorization.
-- `src/routes/api.requests.$requestRef.approval.ts` — exact prepared-action spend approval; not called by `/engine`.
-- `src/routes/api.requests.$requestRef.attempts.ts` — approved action admission; not called by `/engine`.
 - `src/routes/api.v1.requests*.ts` — external-agent submit, clarify, facts, options, and resume.
 - `src/routes/api.v1.release.ts` — exact revision/readback release surface.
 - `src/routes/api.sandbox.capability.ts` — labelled sandbox provider endpoint, not real supply.
@@ -135,8 +133,6 @@ New visual work follows `DESIGN.md` and Astryx. Presentation files must not beco
 - `customer-request-facts-api.ts` — current typed requirement answer.
 - `customer-options-api.ts` — compare/prepare mapping.
 - `customer-request-authorization-api.ts` — preparation disclosure authority.
-- `customer-request-approval-api.ts` — exact prepared-action approval.
-- `customer-request-action-attempt-api.ts` — exact attempt admission.
 - `customer-request-inspect-api.ts` — resumable readback.
 - `customer-request-agent-api.ts` — external-agent wrapper over the shared application.
 - `customer-request-agent-auth.ts` — Clerk user API-key and scope enforcement.
@@ -167,17 +163,16 @@ These adapters should remain thin. Customer matching and lifecycle behavior belo
 - `internal/convex-v2-schema.ts` — durable V2 validators/table values.
 - `runtime.ts` — re-export seam for Convex validators.
 
-### Preparation, approval, and execution domain logic
+### Preparation and exact route authority
 
 - `action-preparation.ts` — disclosure/authority projection.
 - `preparation.ts` and `preparation-authority.ts` — route candidate and authority rules.
 - `customer-option-set.ts` and `option-inspection.ts` — comparable provider option projection.
 - `prepared-action-v2.ts` — exact prepared action and selection.
-- `approval-grant-v2.ts` — approval material.
-- `action-attempt-v2.ts` — attempt admission and reservations.
-- `provider-execution-v2.ts` — provider invocation/result validation.
-- `provider-reconciliation-v2.ts` — unknown-outcome recovery.
+- `route-mandate.ts` — exact selected-route authority bound to principal, authorization evidence, spend, data/effect/evidence scope, expiry, and fallback posture.
 - `service-auth-envelope.ts` — signed external-agent service assertions.
+
+`internal/convex-v2-schema.ts` still declares the older V2 ApprovalGrant, ActionAttempt, provider-release, outcome, and reconciliation validators/tables, but only as schema-readable historical lineage. Do not add runtime imports, handlers, exports, or new authority to those shapes.
 
 ### Support and historical files
 
@@ -249,10 +244,11 @@ The current shared dirty tree contains shipping integration work here. It must r
 - `customerRequestV2PreparationEgress.ts` — effectful HTTP option request and reconciliation.
 - `customerRequestV2PreparationEgressState.ts` — durable egress allocations/operations.
 - `customerRequestV2PreparedAction.ts` — provider-option validation and prepared choice.
-- `customerRequestV2ApprovalGrant.ts` — exact human approval.
-- `customerRequestV2ActionAttempt.ts` — cumulative spend/data admission.
-- `customerRequestV2ProviderExecution.ts` — provider execution.
-- `customerRequestV2ProviderReconciliation.ts` — evidence-led recovery.
+- `customerRequestRouteMandate.ts` — internal exact mandate issue, revoke, current-state, and history functions.
+- `customerRequestRouteMandateIntegrity.ts` — stored mandate and revocation integrity checks.
+- `customerRequestRouteMandateLifecycle.ts` — automatic revocation when Request revision or RoutePlan generation is superseded.
+
+The generated `convex/_generated/api.d.ts` includes the RouteMandate modules and excludes the retired ApprovalGrant, ActionAttempt, provider-execution, and provider-reconciliation modules.
 
 ### Adjacent systems
 
@@ -268,7 +264,9 @@ Table definitions live beside domains and are composed in `convex/schema.ts`:
 
 - `src/modules/capability-contract-registry/internal/convex-schema.ts` — exact contracts;
 - `src/modules/capability-supply/internal/convex-schema.ts` — publications, offerings, bindings;
-- `src/modules/customer-request/internal/convex-schema.ts` — legacy and V2 Request, preparation, approval, attempt, execution, and reconciliation tables;
+- `src/modules/customer-request/internal/convex-schema.ts` — legacy V1 Request compatibility tables;
+- `src/modules/customer-request/internal/convex-v2-schema.ts` — current V2 Request/preparation tables plus schema-only historical ApprovalGrant, ActionAttempt, provider-release, outcome, and reconciliation lineage;
+- `src/modules/customer-request/internal/route-mandate-convex-schema.ts` — current exact RouteMandate issue, head, command, and revocation tables;
 - `src/modules/routing-kernel/internal/convex-schema.ts` — separate routing kernel;
 - other module schema fragments own registry, inquiry, answer, security, observability, and settings state.
 
@@ -292,8 +290,7 @@ Do not add tables directly to `convex/schema.ts`; add them to the owning module 
 - external-agent `/api/v1/requests*` routes;
 - `capabilitySupply:queryCapabilityGraph`;
 - capability publication/owner registration mutations;
-- exact approval and attempt HTTP APIs;
-- provider execution/reconciliation beyond the absent UI controls;
+- internal exact RouteMandate issue, revoke, current-state, history, integrity, and supersession functions;
 - the signed routing kernel in `convex/http.ts`;
 - MCP transport admission/probing without an egress dispatcher.
 
@@ -309,9 +306,9 @@ Do not add tables directly to `convex/schema.ts`; add them to the owning module 
 - `src/modules/customer-request/hosted-agent-journey.ts`;
 - dev seed and sandbox supply/provider files.
 
-### Uncommitted current work
+### Retired V2 authority lineage
 
-RoutePlan/compiler work is committed at `59dbf7f6`. The shared tree still contains uncommitted planning, governed-inquiry, provider-integration and related collaboration work. These files are live collaboration state but are not exact-revision production proof. Inspect `git diff` before planning or staging, and preserve ownership of unrelated changes.
+ApprovalGrant, ActionAttempt, provider-release, provider-outcome, and provider-reconciliation names belong only in `src/modules/customer-request/internal/convex-v2-schema.ts`, migration/history tooling, or tests that enforce retirement. Their former domain modules, Convex function modules, server adapters, routes, generated API entries, application actions, and public/runtime exports are not valid code locations.
 
 ## Key Diagnostic Locations
 
@@ -333,6 +330,14 @@ When compare/options fails:
 3. `convex/customerRequestV2PreparationEgressState.ts` — allocations and durable state.
 4. `convex/customerRequestV2PreparationEgress.ts` — adapter dispatch and network outcome.
 5. `convex/customerRequestV2PreparedAction.ts` — response/evidence validation.
+
+When exact route authority fails in an internal integration:
+
+1. `src/modules/customer-request/route-mandate.ts` — compile and verification rules.
+2. `convex/customerRequestRouteMandate.ts` — authenticated issue/revoke/read state.
+3. `convex/customerRequestRouteMandateIntegrity.ts` — stored evidence and digest integrity.
+4. `convex/customerRequestRouteMandateLifecycle.ts` — Request revision and generation supersession.
+5. `src/modules/customer-request/internal/route-mandate-convex-schema.ts` — current durable mandate tables.
 
 When external-agent requests fail:
 

@@ -53,13 +53,6 @@ export {
   type PreparedActionOptionCandidate,
 } from './prepared-action-v2'
 export {
-  approvalGrantV2Digest,
-  issueApprovalGrantV2,
-  type ApprovalGrantV2,
-  type IssueApprovalGrantV2Result,
-  type VerifiedApprovalGrantActor,
-} from './approval-grant-v2'
-export {
   compileRouteMandate,
   routeMandateAuthorityScopeDigest,
   routeMandateDigest,
@@ -71,51 +64,3 @@ export {
   type RouteMandateStep,
   type VerifyRouteMandateResult,
 } from './route-mandate'
-export {
-  actionAttemptV2Digest,
-  actionAuthorityBudgetV2Digest,
-  actionAuthorityBudgetV2Ref,
-  admitActionAttemptV2,
-  type ActionAttemptV2,
-  type ActionAuthorityBudgetV2,
-  type ActionAttemptAdmissionBundleV2,
-  type ActionAttemptDataReservationV2,
-  type ActionAttemptIdempotencyClaimV2,
-  type ActionAttemptSpendReservationV2,
-  type ActionDisclosureGrantV2,
-  type AdmitActionAttemptV2Result,
-  type ApprovalGrantConsumptionV2,
-  type ProviderReleaseGrantV2,
-} from './action-attempt-v2'
-export {
-  actionAttemptReleaseV2Digest,
-  providerInvocationEnvelopeV2Digest,
-  providerInvocationEnvelopeIntegrityValid,
-  providerOutcomeV2Digest,
-  recordProviderOutcomeV2,
-  releaseProviderInvocationV2,
-  type ProviderExecutionLineageV2,
-  type ActionAttemptReleaseV2,
-  type ProviderInvocationEnvelopeV2,
-  type ProviderLeafRunV2,
-  type ProviderOutcomeEvidenceBundleV2,
-  type ProviderOutcomeV2,
-  type ProviderProtocolEvidenceV2,
-  type ProviderResultEchoV2,
-  type ProviderResultV2,
-  type ProviderRootRunV2,
-  type RecordProviderOutcomeV2Result,
-  type ReleaseProviderInvocationV2Result,
-} from './provider-execution-v2'
-export {
-  actionAttemptResolutionV2Digest,
-  reconcileProviderOutcomeV2,
-  reconciliationObservationV2Digest,
-  type ActionAttemptResolutionV2,
-  type ProviderIdentityV2,
-  type ProviderReconciliationEvidenceV2,
-  type ProviderReconciliationObservationV2,
-  type ProviderReconciliationReportV2,
-  type ProviderReconciliationUnknownReasonV2,
-  type ReconcileProviderOutcomeV2Result,
-} from './provider-reconciliation-v2'

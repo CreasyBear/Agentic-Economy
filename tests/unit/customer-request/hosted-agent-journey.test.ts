@@ -28,8 +28,8 @@ describe('hosted Customer Request journey', () => {
 
   it('cannot claim the hosted acceptance journey without submitting a requested typed fact', async () => {
     const responses = [
-      requestView('options_ready', 1, { preparedAction: preparedAction('required') }),
-      requestView('options_ready', 1, { preparedAction: preparedAction('required') }),
+      requestView('options_ready', 1, { preparedAction: preparedAction() }),
+      requestView('options_ready', 1, { preparedAction: preparedAction() }),
     ]
     const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(responses.shift()))
 
@@ -45,7 +45,7 @@ describe('hosted Customer Request journey', () => {
     })).rejects.toThrow('hosted_journey_typed_fact_not_submitted')
   })
 
-  it('stops the agent at both authority boundaries and resumes only after independent customer decisions', async () => {
+  it('stops at preparation disclosure and returns options without creating legacy approval authority', async () => {
     const calls: Array<{ url: string; authorization: string | null; body: unknown }> = []
     const responses = [
       requestView('needs_information', 1, {
@@ -73,13 +73,8 @@ describe('hosted Customer Request journey', () => {
           categories: [{ label: 'Request details', classification: 'public' }],
         },
       }),
-      preparedView('required'),
-      preparedView('required'),
-      { kind: 'approved', requestRef: 'request:cold', revision: 2,
-        approvalRef: 'approval-grant:v2:opaque', preparedActionRef: 'prepared-action:v2:opaque',
-        spend: { currency: 'AUD', maximumAmountMinor: 900 }, expiresAt: 20_000,
-        recovery: { unknownOutcome: 'reconcile_only', automaticRetry: false } },
-      preparedView('recorded'),
+      preparedView(),
+      preparedView(),
     ]
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       calls.push({
@@ -108,10 +103,9 @@ describe('hosted Customer Request journey', () => {
 
     expect(proof).toMatchObject({
       kind: 'cold_external_agent_journey', sandbox: true,
-      authorityStops: ['preparation_disclosure', 'prepared_action_approval'],
+      authorityStops: ['preparation_disclosure'],
       final: {
         state: 'options_ready', businessName: 'Sandbox Option Two',
-        approval: { state: 'recorded', maximumSpendMinor: 900 },
       },
     })
     expect(proof.input.facts).toEqual([expect.objectContaining({
@@ -120,11 +114,11 @@ describe('hosted Customer Request journey', () => {
     expect(calls[2]?.body).toMatchObject({
       requirementKey: 'sandbox.request_context', value: 'Find the cheapest labelled sandbox option',
     })
-    expect(calls.filter((call) => call.authorization === 'Bearer sess_customer')).toHaveLength(2)
-    expect(calls.filter((call) => call.authorization === 'Bearer ak_agent')).toHaveLength(6)
+    expect(calls.filter((call) => call.authorization === 'Bearer sess_customer')).toHaveLength(1)
+    expect(calls.filter((call) => call.authorization === 'Bearer ak_agent')).toHaveLength(5)
     expect(calls[3]?.url).toContain('/options')
     expect(calls[4]?.url).toContain('/authorization')
-    expect(calls[6]?.url).toContain('/approval')
+    expect(calls.some((call) => call.url.includes('/approval'))).toBe(false)
   })
 })
 
@@ -140,13 +134,13 @@ function requestView(state: string, revision: number, extra: Record<string, unkn
   }
 }
 
-function preparedView(approval: 'required' | 'recorded') {
+function preparedView() {
   return requestView('options_ready', 2, {
-    preparedAction: preparedAction(approval),
+    preparedAction: preparedAction(),
   })
 }
 
-function preparedAction(approval: 'required' | 'recorded') {
+function preparedAction() {
   return {
     actionRef: 'prepared-action:v2:opaque', businessName: 'Sandbox Option Two',
     offeringLabel: 'Sandbox reference lookup', summary: 'Labelled sandbox supply.',
@@ -160,8 +154,5 @@ function preparedAction(approval: 'required' | 'recorded') {
       businessName: 'Sandbox Option One',
       price: { currency: 'AUD', minimumAmountMinor: 1_200, maximumAmountMinor: 1_200 }, validUntil: 20_000,
     }],
-    approval: approval === 'required'
-      ? { state: 'required' }
-      : { state: 'recorded', currency: 'AUD', maximumSpendMinor: 900, expiresAt: 20_000, recordedAt: 10_000 },
   }
 }
