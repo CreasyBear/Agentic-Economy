@@ -178,6 +178,7 @@ describe('customer Request workspace', () => {
             { step: 1, businessName: 'North Star Services', posture: 'retry_safe' },
             { step: 2, businessName: 'City Ledger', posture: 'reconcile_required' },
           ],
+          cancellation: { kind: 'unavailable', summary: 'The businesses do not publish a cancellation path for this option.' },
           validUntil: Date.now() + 60_000,
           fallback: { available: false, alternatives: [] }, uncertainty: [],
           steps: [
@@ -233,9 +234,54 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
     expect(screen.getByText(/Information would be shared/)).toBeTruthy()
     expect(screen.getByText('No uncertainty is declared for this way forward.')).toBeTruthy()
+    expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Confirm Prepare a governed result' })).toBeTruthy()
     expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
+  })
+
+  it('confirms the displayed choice without implying that business work started', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-confirm' })
+    const route = routeChoice('route:confirm', 'current')
+    const preview = {
+      kind: 'request' as const, requestRef: 'request:confirm', revision: 2,
+      routeGenerationRef: 'generation:confirm', state: 'routes_ready' as const,
+      summary: 'One way forward is available.', nextAction: 'inspect_routes' as const,
+      missingFields: [], criteria: [], options: [],
+      decision: {
+        generationRef: 'generation:confirm', requestRevision: 2,
+        outcome: { kind: 'routes_available' as const, routeCount: 1, summary: 'One way forward is available.' },
+        routes: [route], changes: { kind: 'initial' as const },
+        nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
+      },
+    }
+    const confirmed = {
+      kind: 'request' as const, requestRef: 'request:confirm', revision: 2,
+      routeGenerationRef: 'generation:confirm', state: 'route_confirmed' as const,
+      summary: 'Your choice is confirmed. Nothing has started yet.', nextAction: 'inspect_confirmation' as const,
+      missingFields: [], criteria: [], options: [],
+      confirmation: {
+        confirmationRef: 'confirmation:opaque', generationRef: 'generation:confirm', requestRevision: 2,
+        confirmedAt: Date.now(), validUntil: route.validUntil, route,
+      },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(preview))
+      .mockResolvedValueOnce(Response.json(confirmed))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Prepare a result' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm Result from route:confirm' }))
+
+    expect(await screen.findByText('Choice confirmed')).toBeTruthy()
+    expect(screen.getByText(/Nothing has started yet/)).toBeTruthy()
+    expect(screen.getByText('Confirmation reference confirmation:opaque')).toBeTruthy()
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aconfirm/confirmation', expect.objectContaining({
+      method: 'POST',
+    }))
   })
 
   it('distinguishes revising the same Request from starting a new one', async () => {
@@ -411,6 +457,7 @@ function routeChoice(routeRef: string, availability: 'current' | 'expired') {
     dataUse: { recipientCount: 0, recipients: [], purposes: [] },
     effects: [], evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
     recovery: [{ step: 1, businessName: `Business ${routeRef}`, posture: 'retry_safe' as const }],
+    cancellation: { kind: 'unavailable' as const, summary: 'No cancellation path is published.' },
     validUntil: availability === 'current' ? Date.now() + 60_000 : Date.now() - 60_000,
     fallback: { available: false, alternatives: [] }, uncertainty: [],
     steps: [{

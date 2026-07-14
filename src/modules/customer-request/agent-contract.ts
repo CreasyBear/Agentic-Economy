@@ -46,6 +46,10 @@ export const customerRequestOptionsInputSchema = z.object({
   revision: safePositiveInteger, idempotencyKey: boundedText(200),
 }).strict()
 
+export const customerRequestRouteConfirmationInputSchema = z.object({
+  revision: safePositiveInteger, routeRef: boundedText(300), idempotencyKey: boundedText(200),
+}).strict()
+
 export const customerRequestAuthorizationInputSchema = z.object({
   revision: safePositiveInteger, preparationRef: boundedText(300), idempotencyKey: boundedText(200),
 }).strict()
@@ -153,12 +157,21 @@ const customerRoutePlanSchema = z.object({
   effects: z.array(customerRouteEffectSchema),
   evidence: z.array(customerRouteEvidenceSchema),
   recovery: z.array(customerRouteRecoverySchema),
+  cancellation: z.object({
+    kind: z.enum(['available', 'partially_available', 'unavailable']), summary: z.string(),
+  }).strict(),
   validUntil: safePositiveInteger,
   fallback: customerRouteFallbackSchema,
   uncertainty: z.array(z.literal('price_needs_confirmation')),
   steps: z.array(z.object({
     step: safePositiveInteger, business: customerBusinessSchema, after: z.array(safePositiveInteger),
   }).strict()).optional(),
+}).strict()
+
+export const customerRouteConfirmationSchema = z.object({
+  confirmationRef: z.string(), generationRef: z.string(), requestRevision: safePositiveInteger,
+  confirmedAt: safeNonnegativeInteger, validUntil: safePositiveInteger,
+  route: customerRoutePlanSchema,
 }).strict()
 
 const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
@@ -241,6 +254,19 @@ const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
       resultRef: z.string(), steps: z.array(customerRouteRecoverySchema),
     }).strict()),
   }).strict(),
+  z.object({
+    kind: z.literal('cancellation'),
+    before: z.array(z.object({
+      resultRef: z.string(), cancellation: z.object({
+        kind: z.enum(['available', 'partially_available', 'unavailable']), summary: z.string(),
+      }).strict(),
+    }).strict()),
+    after: z.array(z.object({
+      resultRef: z.string(), cancellation: z.object({
+        kind: z.enum(['available', 'partially_available', 'unavailable']), summary: z.string(),
+      }).strict(),
+    }).strict()),
+  }).strict(),
 ])
 
 export const customerRoutePlanDecisionSchema = z.object({
@@ -296,12 +322,12 @@ export const customerRequestViewSchema = z.object({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   routeGenerationRef: z.string().optional(),
   state: z.enum([
-    'needs_information', 'ready_to_compare', 'routes_ready', 'preparing_options', 'options_ready', 'no_options',
+    'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'preparing_options', 'options_ready', 'no_options',
     'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
   ]),
   summary: z.string(),
   nextAction: z.enum([
-    'provide_information', 'prepare_options', 'inspect_routes', 'wait', 'inspect_options', 'revise_request',
+    'provide_information', 'prepare_options', 'inspect_routes', 'inspect_confirmation', 'wait', 'inspect_options', 'revise_request',
     'review_disclosure', 'retry', 'none',
   ]),
   missingFields: z.array(z.object({ field: z.string(), label: z.string(), explanation: z.string() }).strict()),
@@ -333,6 +359,7 @@ export const customerRequestViewSchema = z.object({
     automaticRetry: z.literal(false), result: customerRequestJsonValueSchema.optional(), observedAt: safeNonnegativeInteger,
   }).strict().optional(),
   decision: customerRoutePlanDecisionSchema.optional(),
+  confirmation: customerRouteConfirmationSchema.optional(),
 }).strict().superRefine((view, context) => {
   if (view.state === 'routes_ready' && view.decision === undefined) {
     context.addIssue({
@@ -347,6 +374,15 @@ export const customerRequestViewSchema = z.object({
     context.addIssue({
       code: 'custom', path: ['decision'], message: 'route_decision_lineage_invalid',
     })
+  }
+  if (view.state === 'route_confirmed' && view.confirmation === undefined) {
+    context.addIssue({ code: 'custom', path: ['confirmation'], message: 'route_confirmation_required' })
+  }
+  if (view.confirmation !== undefined && (view.state !== 'route_confirmed'
+    || view.routeGenerationRef !== view.confirmation.generationRef
+    || view.revision !== view.confirmation.requestRevision
+    || view.confirmation.route.routeRef.trim().length === 0)) {
+    context.addIssue({ code: 'custom', path: ['confirmation'], message: 'route_confirmation_lineage_invalid' })
   }
 })
 
@@ -385,5 +421,6 @@ export type CustomerOption = DeepReadonly<z.infer<typeof customerOptionSchema>>
 export type CustomerOptionSet = DeepReadonly<z.infer<typeof customerOptionSetSchema>>
 export type CustomerRoutePlan = DeepReadonly<z.infer<typeof customerRoutePlanSchema>>
 export type CustomerRoutePlanDecision = DeepReadonly<z.infer<typeof customerRoutePlanDecisionSchema>>
+export type CustomerRouteConfirmation = DeepReadonly<z.infer<typeof customerRouteConfirmationSchema>>
 export type CustomerPreparedAction = DeepReadonly<z.infer<typeof customerPreparedActionSchema>>
 export type CustomerRequestView = DeepReadonly<z.infer<typeof customerRequestViewSchema>>

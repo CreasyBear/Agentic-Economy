@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   handleAgentCustomerOptionsPost,
+  handleAgentCustomerRequestConfirmationPost,
   handleAgentCustomerRequestFactsPost,
   handleAgentCustomerRequestGet,
   handleAgentCustomerRequestMessagePost,
@@ -12,6 +13,7 @@ import { handleCustomerRequestFactsPost } from '@/lib/server/customer-request-fa
 import { handleCustomerRequestGet } from '@/lib/server/customer-request-inspect-api'
 import { handleCustomerRequestMessagePost } from '@/lib/server/customer-request-messages-api'
 import { handleCustomerRequestPost } from '@/lib/server/customer-request-api'
+import { handleCustomerRequestConfirmationPost } from '@/lib/server/customer-request-confirmation-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 const key = 'entrypoint-parity-key-with-at-least-32-bytes'
@@ -47,6 +49,7 @@ const projection = {
       effects: [{ kind: 'information_shared' as const, reversibility: 'irreversible' as const }],
       evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
       recovery: [{ step: 1, businessName: 'North Star Services', posture: 'retry_safe' as const }],
+      cancellation: { kind: 'unavailable' as const, summary: 'This option does not publish a cancellation path.' },
       validUntil: 50_000, fallback: { available: false, alternatives: [] }, uncertainty: [],
     }],
     changes: { kind: 'initial' as const },
@@ -66,7 +69,7 @@ const authenticate = async () => ({
 type Capture = (args: Record<string, unknown>) => Promise<typeof projection>
 type AgentCall = (name: string, args: Record<string, unknown>) => Promise<typeof projection>
 type ParityCase = Readonly<{
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume'
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'resume'
   actionName: string
   human: (capture: Capture) => Promise<Response>
   agent: (callAction: AgentCall) => Promise<Response>
@@ -113,6 +116,16 @@ const cases: readonly ParityCase[] = [
     }), requestRef, { compare }),
     agent: async (callAction) => await handleAgentCustomerOptionsPost(post('/api/v1/options', {
       revision: 2, idempotencyKey: 'compare:parity',
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
+    operation: 'confirm',
+    actionName: 'customerRequestApplication:confirmRoute',
+    human: async (confirm) => await handleCustomerRequestConfirmationPost(post('/confirmation', {
+      revision: 2, routeRef: 'route:opaque', idempotencyKey: 'confirm:parity',
+    }), requestRef, { confirm }),
+    agent: async (callAction) => await handleAgentCustomerRequestConfirmationPost(post('/api/v1/confirmation', {
+      revision: 2, routeRef: 'route:opaque', idempotencyKey: 'confirm:parity',
     }), requestRef, agentOptions(callAction)),
   },
   {

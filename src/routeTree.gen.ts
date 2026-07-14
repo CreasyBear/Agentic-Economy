@@ -66,6 +66,7 @@ import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.req
 import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
 import { Route as ApiRequestsRequestRefMessagesRouteImport } from './routes/api.requests.$requestRef.messages'
 import { Route as ApiRequestsRequestRefFactsRouteImport } from './routes/api.requests.$requestRef.facts'
+import { Route as ApiRequestsRequestRefConfirmationRouteImport } from './routes/api.requests.$requestRef.confirmation'
 import { Route as ApiRequestsRequestRefAuthorizationRouteImport } from './routes/api.requests.$requestRef.authorization'
 import { Route as ApiAnswerThreadsThreadIdRouteImport } from './routes/api.answer.threads.$threadId'
 import { Route as OperatorOwnerInquiriesThreadIdRouteImport } from './routes/_operator/owner.inquiries.$threadId'
@@ -73,6 +74,7 @@ import { Route as OperatorAdminRunsTurnIdRouteImport } from './routes/_operator/
 import { Route as ApiV1RequestsRequestRefOptionsRouteImport } from './routes/api.v1.requests.$requestRef.options'
 import { Route as ApiV1RequestsRequestRefMessagesRouteImport } from './routes/api.v1.requests.$requestRef.messages'
 import { Route as ApiV1RequestsRequestRefFactsRouteImport } from './routes/api.v1.requests.$requestRef.facts'
+import { Route as ApiV1RequestsRequestRefConfirmationRouteImport } from './routes/api.v1.requests.$requestRef.confirmation'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -369,6 +371,12 @@ const ApiRequestsRequestRefFactsRoute =
     path: '/facts',
     getParentRoute: () => ApiRequestsRequestRefRoute,
   } as any)
+const ApiRequestsRequestRefConfirmationRoute =
+  ApiRequestsRequestRefConfirmationRouteImport.update({
+    id: '/confirmation',
+    path: '/confirmation',
+    getParentRoute: () => ApiRequestsRequestRefRoute,
+  } as any)
 const ApiRequestsRequestRefAuthorizationRoute =
   ApiRequestsRequestRefAuthorizationRouteImport.update({
     id: '/authorization',
@@ -408,6 +416,12 @@ const ApiV1RequestsRequestRefFactsRoute =
   ApiV1RequestsRequestRefFactsRouteImport.update({
     id: '/facts',
     path: '/facts',
+    getParentRoute: () => ApiV1RequestsRequestRefRoute,
+  } as any)
+const ApiV1RequestsRequestRefConfirmationRoute =
+  ApiV1RequestsRequestRefConfirmationRouteImport.update({
+    id: '/confirmation',
+    path: '/confirmation',
     getParentRoute: () => ApiV1RequestsRequestRefRoute,
   } as any)
 
@@ -468,10 +482,12 @@ export interface FileRoutesByFullPath {
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
+  '/api/requests/$requestRef/confirmation': typeof ApiRequestsRequestRefConfirmationRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
   '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
@@ -533,10 +549,12 @@ export interface FileRoutesByTo {
   '/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
+  '/api/requests/$requestRef/confirmation': typeof ApiRequestsRequestRefConfirmationRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
   '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
@@ -600,10 +618,12 @@ export interface FileRoutesById {
   '/_operator/owner/inquiries/$threadId': typeof OperatorOwnerInquiriesThreadIdRoute
   '/api/answer/threads/$threadId': typeof ApiAnswerThreadsThreadIdRoute
   '/api/requests/$requestRef/authorization': typeof ApiRequestsRequestRefAuthorizationRoute
+  '/api/requests/$requestRef/confirmation': typeof ApiRequestsRequestRefConfirmationRoute
   '/api/requests/$requestRef/facts': typeof ApiRequestsRequestRefFactsRoute
   '/api/requests/$requestRef/messages': typeof ApiRequestsRequestRefMessagesRoute
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
+  '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
   '/api/v1/requests/$requestRef/facts': typeof ApiV1RequestsRequestRefFactsRoute
   '/api/v1/requests/$requestRef/messages': typeof ApiV1RequestsRequestRefMessagesRoute
   '/api/v1/requests/$requestRef/options': typeof ApiV1RequestsRequestRefOptionsRoute
@@ -667,10 +687,12 @@ export interface FileRouteTypes {
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
+    | '/api/requests/$requestRef/confirmation'
     | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef'
+    | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/facts'
     | '/api/v1/requests/$requestRef/messages'
     | '/api/v1/requests/$requestRef/options'
@@ -732,10 +754,12 @@ export interface FileRouteTypes {
     | '/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
+    | '/api/requests/$requestRef/confirmation'
     | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef'
+    | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/facts'
     | '/api/v1/requests/$requestRef/messages'
     | '/api/v1/requests/$requestRef/options'
@@ -798,10 +822,12 @@ export interface FileRouteTypes {
     | '/_operator/owner/inquiries/$threadId'
     | '/api/answer/threads/$threadId'
     | '/api/requests/$requestRef/authorization'
+    | '/api/requests/$requestRef/confirmation'
     | '/api/requests/$requestRef/facts'
     | '/api/requests/$requestRef/messages'
     | '/api/requests/$requestRef/options'
     | '/api/v1/requests/$requestRef'
+    | '/api/v1/requests/$requestRef/confirmation'
     | '/api/v1/requests/$requestRef/facts'
     | '/api/v1/requests/$requestRef/messages'
     | '/api/v1/requests/$requestRef/options'
@@ -1248,6 +1274,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRequestsRequestRefFactsRouteImport
       parentRoute: typeof ApiRequestsRequestRefRoute
     }
+    '/api/requests/$requestRef/confirmation': {
+      id: '/api/requests/$requestRef/confirmation'
+      path: '/confirmation'
+      fullPath: '/api/requests/$requestRef/confirmation'
+      preLoaderRoute: typeof ApiRequestsRequestRefConfirmationRouteImport
+      parentRoute: typeof ApiRequestsRequestRefRoute
+    }
     '/api/requests/$requestRef/authorization': {
       id: '/api/requests/$requestRef/authorization'
       path: '/authorization'
@@ -1295,6 +1328,13 @@ declare module '@tanstack/react-router' {
       path: '/facts'
       fullPath: '/api/v1/requests/$requestRef/facts'
       preLoaderRoute: typeof ApiV1RequestsRequestRefFactsRouteImport
+      parentRoute: typeof ApiV1RequestsRequestRefRoute
+    }
+    '/api/v1/requests/$requestRef/confirmation': {
+      id: '/api/v1/requests/$requestRef/confirmation'
+      path: '/confirmation'
+      fullPath: '/api/v1/requests/$requestRef/confirmation'
+      preLoaderRoute: typeof ApiV1RequestsRequestRefConfirmationRouteImport
       parentRoute: typeof ApiV1RequestsRequestRefRoute
     }
   }
@@ -1402,6 +1442,7 @@ const ApiBusinessesRouteWithChildren = ApiBusinessesRoute._addFileChildren(
 
 interface ApiRequestsRequestRefRouteChildren {
   ApiRequestsRequestRefAuthorizationRoute: typeof ApiRequestsRequestRefAuthorizationRoute
+  ApiRequestsRequestRefConfirmationRoute: typeof ApiRequestsRequestRefConfirmationRoute
   ApiRequestsRequestRefFactsRoute: typeof ApiRequestsRequestRefFactsRoute
   ApiRequestsRequestRefMessagesRoute: typeof ApiRequestsRequestRefMessagesRoute
   ApiRequestsRequestRefOptionsRoute: typeof ApiRequestsRequestRefOptionsRoute
@@ -1410,6 +1451,8 @@ interface ApiRequestsRequestRefRouteChildren {
 const ApiRequestsRequestRefRouteChildren: ApiRequestsRequestRefRouteChildren = {
   ApiRequestsRequestRefAuthorizationRoute:
     ApiRequestsRequestRefAuthorizationRoute,
+  ApiRequestsRequestRefConfirmationRoute:
+    ApiRequestsRequestRefConfirmationRoute,
   ApiRequestsRequestRefFactsRoute: ApiRequestsRequestRefFactsRoute,
   ApiRequestsRequestRefMessagesRoute: ApiRequestsRequestRefMessagesRoute,
   ApiRequestsRequestRefOptionsRoute: ApiRequestsRequestRefOptionsRoute,
@@ -1444,6 +1487,7 @@ const ApiAnswerThreadsRouteWithChildren =
   ApiAnswerThreadsRoute._addFileChildren(ApiAnswerThreadsRouteChildren)
 
 interface ApiV1RequestsRequestRefRouteChildren {
+  ApiV1RequestsRequestRefConfirmationRoute: typeof ApiV1RequestsRequestRefConfirmationRoute
   ApiV1RequestsRequestRefFactsRoute: typeof ApiV1RequestsRequestRefFactsRoute
   ApiV1RequestsRequestRefMessagesRoute: typeof ApiV1RequestsRequestRefMessagesRoute
   ApiV1RequestsRequestRefOptionsRoute: typeof ApiV1RequestsRequestRefOptionsRoute
@@ -1451,6 +1495,8 @@ interface ApiV1RequestsRequestRefRouteChildren {
 
 const ApiV1RequestsRequestRefRouteChildren: ApiV1RequestsRequestRefRouteChildren =
   {
+    ApiV1RequestsRequestRefConfirmationRoute:
+      ApiV1RequestsRequestRefConfirmationRoute,
     ApiV1RequestsRequestRefFactsRoute: ApiV1RequestsRequestRefFactsRoute,
     ApiV1RequestsRequestRefMessagesRoute: ApiV1RequestsRequestRefMessagesRoute,
     ApiV1RequestsRequestRefOptionsRoute: ApiV1RequestsRequestRefOptionsRoute,

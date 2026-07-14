@@ -3,13 +3,15 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
 import type {
-  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRoutePlanDecision,
+  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRouteConfirmation,
+  CustomerRoutePlanDecision,
 } from './agent-contract'
 
 export type CustomerRequestState =
   | 'needs_information'
   | 'ready_to_compare'
   | 'routes_ready'
+  | 'route_confirmed'
   | 'preparing_options'
   | 'options_ready'
   | 'no_options'
@@ -24,6 +26,7 @@ export type CustomerRequestNextAction =
   | 'provide_information'
   | 'prepare_options'
   | 'inspect_routes'
+  | 'inspect_confirmation'
   | 'wait'
   | 'inspect_options'
   | 'revise_request'
@@ -232,6 +235,24 @@ export function projectRoutePlansReady(input: Readonly<{
   })
 }
 
+export function projectRouteConfirmed(input: Readonly<{
+  requestRef: string
+  revision: number
+  confirmation: CustomerRouteConfirmation
+  criteria?: readonly CustomerCriterion[]
+}>): CustomerRequestView {
+  return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    routeGenerationRef: input.confirmation.generationRef,
+    state: 'route_confirmed',
+    summary: 'Your choice is confirmed. Nothing has started yet.',
+    nextAction: 'inspect_confirmation',
+    confirmation: input.confirmation,
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+  })
+}
+
 export function projectCustomerActionStatus(input: Readonly<{
   requestRef: string
   revision: number
@@ -298,6 +319,7 @@ function requestView(input: Readonly<{
   preparedAction?: CustomerPreparedAction
   action?: CustomerRequestView['action']
   decision?: CustomerRoutePlanDecision
+  confirmation?: CustomerRouteConfirmation
 }>): CustomerRequestView {
   return Object.freeze({
     kind: 'request',
@@ -322,6 +344,7 @@ function requestView(input: Readonly<{
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),
     }) }),
     ...(input.decision === undefined ? {} : { decision: input.decision }),
+    ...(input.confirmation === undefined ? {} : { confirmation: input.confirmation }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),
   })
 }

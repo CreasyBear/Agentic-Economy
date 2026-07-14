@@ -12,6 +12,8 @@ import {
   routePlanGenerationMatchesRequest,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
+import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import { customerRouteRef } from '@/modules/customer-request/route-plan-customer-projection'
 import {
   routeMandateIssueEvidenceValue,
   routeMandateValue,
@@ -41,6 +43,14 @@ const issueCommand = {
   idempotencyKey: v.string(),
 }
 const issueCommandValue = v.object(issueCommand)
+const serviceAssertion = v.object({
+  principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
+  issuedAt: v.number(), signature: v.string(),
+})
+const confirmationCommand = v.object({
+  requestRef: v.string(), revision: v.number(), routeRef: v.string(), idempotencyKey: v.string(),
+})
+const serviceAuthorization = v.object({ command: confirmationCommand, assertion: serviceAssertion })
 
 const issueRefusalReason = v.union(
   v.literal('authentication_required'),
@@ -115,6 +125,7 @@ const revokeResult = v.union(
 )
 
 type IssueCommand = Infer<typeof issueCommandValue>
+type ServiceAuthorization = Infer<typeof serviceAuthorization>
 type IssueEvidence = Infer<typeof routeMandateIssueEvidenceValue>
 type RouteGeneration = CustomerRequestRoutePlanGeneration
 type AuthenticatedRequest = Readonly<{
@@ -123,19 +134,27 @@ type AuthenticatedRequest = Readonly<{
 }>
 
 export const issue = internalMutation({
-  args: issueCommand,
+  args: { ...issueCommand, serviceAuthorization: v.optional(serviceAuthorization) },
   returns: issueResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId)
+    const authenticated = await authenticateRequestOwnerForMutation(ctx, args.requestId, args.serviceAuthorization)
     if (authenticated.kind === 'unauthenticated') {
       return { kind: 'refused' as const, reason: 'authentication_required' as const }
     }
     if (authenticated.kind === 'not_found') {
       return { kind: 'refused' as const, reason: 'request_not_found' as const }
     }
+    if (args.serviceAuthorization !== undefined
+      && (args.serviceAuthorization.command.revision !== args.expectedRequestRevision
+        || args.serviceAuthorization.command.routeRef !== customerRouteRef(
+          args.expectedGenerationRef, args.selectedRoutePlanId,
+        )
+        || args.serviceAuthorization.command.idempotencyKey !== args.idempotencyKey)) {
+      return { kind: 'refused' as const, reason: 'mandate_scope_invalid' as const }
+    }
 
     const commandKey = routeMandateCommandKey(authenticated.principalId, args)
-    const commandDigest = canonicalDigest(args)
+    const commandDigest = canonicalDigest(issueCommandMaterial(args))
     const priorCommand = await ctx.db.query('customerRequestRouteMandateCommands')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
     if (priorCommand !== null) {
@@ -419,6 +438,17 @@ export const getCurrent = internalQuery({
   },
 })
 
+export const getCurrentForPrincipal = internalQuery({
+  args: { requestId: v.string(), principalId: v.string() },
+  returns: currentResult,
+  handler: async (ctx, args) => {
+    const current = await readCurrentRouteMandateStateForPrincipal(ctx, args.requestId, args.principalId)
+    return current.kind === 'active'
+      ? { kind: 'active' as const, mandate: writableMandate(current.mandate) }
+      : current
+  },
+})
+
 export type CurrentRouteMandateState =
   | { kind: 'active'; mandate: RouteMandate; networkId: string }
   | { kind: 'none' | 'not_found' }
@@ -434,10 +464,20 @@ export async function readCurrentRouteMandateState(
 ): Promise<CurrentRouteMandateState> {
   const authenticated = await authenticateRequestOwner(ctx, requestId)
   if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
+  return await readCurrentRouteMandateStateForPrincipal(ctx, requestId, authenticated.principalId, now, options)
+}
+
+async function readCurrentRouteMandateStateForPrincipal(
+  ctx: MutationCtx | QueryCtx,
+  requestId: string,
+  principalId: string,
+  now = Date.now(),
+  options: Readonly<{ requireCurrentGraph?: boolean }> = {},
+): Promise<CurrentRouteMandateState> {
   const head = await ctx.db.query('customerRequestRouteMandateHeads')
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   if (head === null) return { kind: 'none' as const }
-  if (head.principalId !== authenticated.principalId) return { kind: 'not_found' as const }
+  if (head.principalId !== principalId) return { kind: 'not_found' as const }
   const issueRow = await ctx.db.query('customerRequestRouteMandateIssues')
     .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
   if (issueRow === null || !routeMandateHeadMatchesIssue(head, issueRow)) {
@@ -546,18 +586,52 @@ function routeMandateCommandKey(principalId: string, args: IssueCommand): string
 async function authenticateRequestOwnerForMutation(
   ctx: MutationCtx,
   requestId: string,
+  serviceAuthorization?: ServiceAuthorization,
 ): Promise<AuthenticatedRequestResult> {
   const identity = await ctx.auth.getUserIdentity()
-  if (identity === null) return { kind: 'unauthenticated' }
   const head = await ctx.db.query('customerRequestV2Heads')
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   if (head === null) return { kind: 'not_found' }
+  if (identity === null) {
+    const key = process.env.AE_CONVEX_SERVER_FUNCTION_TOKEN?.trim()
+    const proof = serviceAuthorization
+    if (proof === undefined || key === undefined || key.length < 32
+      || proof.command.requestRef !== requestId
+      || !proof.assertion.scopes.includes('customer_requests:create')
+      || !await verifyCustomerRequestServiceAssertion({
+        key, operation: 'confirm', command: proof.command, assertion: proof.assertion,
+      })) return { kind: 'unauthenticated' }
+    if (head.principalId !== proof.assertion.principalId) return { kind: 'not_found' }
+    const recorded = await ctx.db.query('customerRequestAgentPrincipals')
+      .withIndex('by_principalId', (query) => query.eq('principalId', proof.assertion.principalId)).unique()
+    if (recorded === null || recorded.ownerId !== proof.assertion.ownerId
+      || recorded.credentialId !== proof.assertion.credentialId
+      || !proof.assertion.scopes.every((scope) => recorded.scopes.includes(scope))) {
+      return { kind: 'unauthenticated' }
+    }
+    return authenticatedRequest(head.principalId, {
+      issuer: 'ae:clerk-api-key', subject: proof.assertion.ownerId,
+      tokenIdentifier: proof.assertion.credentialId,
+    })
+  }
   if (head.principalId !== identity.tokenIdentifier) {
     const delegated = await ctx.db.query('customerRequestAgentPrincipals')
       .withIndex('by_principalId', (query) => query.eq('principalId', head.principalId)).unique()
     if (delegated?.ownerTokenIdentifier !== identity.tokenIdentifier) return { kind: 'not_found' }
   }
   return authenticatedRequest(head.principalId, identity)
+}
+
+function issueCommandMaterial(args: IssueCommand): IssueCommand {
+  return {
+    requestId: args.requestId,
+    expectedRequestRevision: args.expectedRequestRevision,
+    expectedGenerationRef: args.expectedGenerationRef,
+    selectedRoutePlanId: args.selectedRoutePlanId,
+    maximumTotalSpend: { ...args.maximumTotalSpend },
+    expiresAt: args.expiresAt,
+    idempotencyKey: args.idempotencyKey,
+  }
 }
 
 async function authenticateRequestOwner(

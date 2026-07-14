@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CustomerRequestRoutePlan } from '@/modules/customer-request/compiler'
 import {
+  customerRouteRef,
   projectCustomerRoutePlanDecision,
 } from '@/modules/customer-request/route-plan-customer-projection'
 import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
@@ -21,7 +22,7 @@ describe('RoutePlan customer projection', () => {
       requestRevision: 3,
       outcome: { kind: 'routes_available', routeCount: 1 },
       routes: [{
-        routeRef: 'route:one',
+        routeRef: customerRouteRef('generation:1', 'route:one'),
         result: {
           summary: 'Prepare a governed result for the customer.',
           deliverables: ['Result reference'],
@@ -120,6 +121,9 @@ describe('RoutePlan customer projection', () => {
         }]
       })],
       ['recovery', changed(original, (value) => { value.steps[0]!.recovery.recovery = 'reconcile_required' })],
+      ['cancellation', changed(original, (value) => {
+        value.steps[0]!.cancellation = { kind: 'adapter_managed', evidenceRefs: ['cancellation:adapter:one'] }
+      })],
     ]
 
     for (const [expectedKind, changedRoute] of cases) {
@@ -322,7 +326,10 @@ describe('RoutePlan customer projection', () => {
       now: 10_000,
     })
 
-    expect(decision.routes.map(({ routeRef }) => routeRef)).toEqual(['route:one', 'route:second-offering'])
+    expect(decision.routes.map(({ routeRef }) => routeRef)).toEqual([
+      customerRouteRef('generation:1', 'route:one'),
+      customerRouteRef('generation:1', 'route:second-offering'),
+    ])
     expect(new Set(decision.routes.map(({ result }) => result.resultRef)).size).toBe(2)
   })
 

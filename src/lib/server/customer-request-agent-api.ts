@@ -4,6 +4,10 @@ import { handleCustomerRequestFactsPost, type FactsResult } from '@/lib/server/c
 import { handleCustomerRequestGet, type InspectResult } from '@/lib/server/customer-request-inspect-api'
 import { handleCustomerRequestMessagePost, type MessageResult } from '@/lib/server/customer-request-messages-api'
 import { handleCustomerRequestPost, type SubmitResult } from '@/lib/server/customer-request-api'
+import {
+  handleCustomerRequestConfirmationPost,
+  type ConfirmationResult,
+} from '@/lib/server/customer-request-confirmation-api'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
@@ -15,7 +19,7 @@ type HandlerOptions = Readonly<{
   now?: () => number
 }>
 
-type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult
+type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult | ConfirmationResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
@@ -63,6 +67,20 @@ export async function handleAgentCustomerOptionsPost(
   })
 }
 
+export async function handleAgentCustomerRequestConfirmationPost(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestConfirmationPost(request, requestRef, {
+    confirm: async (args) => await callAsAgent<ConfirmationResult>(
+      'customerRequestApplication:confirmRoute', 'confirm', args, admitted.principal, options,
+    ),
+  })
+}
+
 export async function handleAgentCustomerRequestGet(requestRef: string, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
   if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
@@ -73,7 +91,7 @@ export async function handleAgentCustomerRequestGet(requestRef: string, options:
 
 async function callAsAgent<Result = SubmitResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'resume',
   command: Record<string, unknown>,
   principal: CustomerRequestAgentPrincipal,
   options: HandlerOptions,

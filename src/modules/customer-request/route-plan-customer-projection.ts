@@ -33,6 +33,7 @@ type ProjectionRoute = Readonly<{
       reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'
     }>[]
     evidence: readonly Readonly<{ label: string; purpose: 'comparison' | 'completion' | 'recovery' }>[]
+    cancellation?: Readonly<{ kind: 'unsupported' | 'adapter_managed'; evidenceRefs: readonly string[] }>
     recovery: Readonly<{ recovery: 'retry_safe' | 'reconcile_required' }>
   }>[]
   edges: readonly Readonly<{ fromStep: string; toStep: string }>[]
@@ -68,7 +69,8 @@ export function projectCustomerRoutePlanDecision(input: Readonly<{
     throw new Error('customer_route_plan_projection_limit_exceeded')
   }
   const routes = input.current.routes.map((route) => projectRoute(
-    route, input.current.routes, input.businessNames, input.capabilitySemantics, input.now,
+    route, input.current.generationRef, input.current.routes,
+    input.businessNames, input.capabilitySemantics, input.now,
   ))
   const expired = routes.every(({ availability }) => availability === 'expired')
   const expiredCount = routes.filter(({ availability }) => availability === 'expired').length
@@ -101,6 +103,7 @@ export function projectCustomerRoutePlanDecision(input: Readonly<{
 
 function projectRoute(
   route: Route,
+  generationRef: string,
   generationRoutes: readonly Route[],
   businessNames: BusinessNames,
   capabilitySemantics: CustomerRouteCapabilitySemantics,
@@ -120,8 +123,9 @@ function projectRoute(
     purpose: requirement.purpose,
   }))), (requirement) => JSON.stringify(requirement))
   const actionPosition = new Map(route.steps.map((step, index) => [step.actionId, index + 1]))
+  const cancellation = routeCancellation(route)
   return Object.freeze({
-    routeRef: route.routePlanId,
+    routeRef: customerRouteRef(generationRef, route.routePlanId),
     result: routeResult(route, capabilitySemantics),
     availability: route.expiresAt <= now ? 'expired' as const : 'current' as const,
     stepCount: route.steps.length,
@@ -139,13 +143,14 @@ function projectRoute(
       businessName: businessName(step.businessId, businessNames),
       posture: step.recovery.recovery,
     }))),
+    cancellation: Object.freeze(cancellation),
     validUntil: route.expiresAt,
     fallback: Object.freeze({
       available: route.fallbacks.alternatives.length > 0,
       alternatives: Object.freeze(route.fallbacks.alternatives.map(({ alternativeRouteRef }) => {
         const alternative = generationRoutes.find(({ routePlanId }) => routePlanId === alternativeRouteRef)
         return Object.freeze({
-          routeRef: alternativeRouteRef,
+          routeRef: customerRouteRef(generationRef, alternativeRouteRef),
           when: 'route_unavailable_before_confirmation' as const,
         })
       })),
@@ -163,6 +168,10 @@ function projectRoute(
         .sort((left, right) => left - right)),
     }))),
   })
+}
+
+export function customerRouteRef(generationRef: string, routePlanId: string): string {
+  return `route-choice:${canonicalDigest({ generationRef, routePlanId })}`
 }
 
 function projectChanges(
@@ -188,6 +197,17 @@ function projectChanges(
         routeCount: current.routes.length,
         results: routeResultSnapshot(current.routes, capabilitySemantics),
       },
+    }),
+  )
+  addChanged(
+    items,
+    'cancellation',
+    cancellationSnapshot(previous.routes),
+    cancellationSnapshot(current.routes),
+    () => ({
+      kind: 'cancellation',
+      before: cancellationSnapshot(previous.routes),
+      after: cancellationSnapshot(current.routes),
     }),
   )
 
@@ -345,6 +365,19 @@ function recoverySnapshot(routes: readonly Route[], businessNames: BusinessNames
       posture: step.recovery.recovery,
     })),
   }))
+}
+
+function cancellationSnapshot(routes: readonly Route[]) {
+  return keyedByResult(routes, (route) => ({ cancellation: routeCancellation(route) }))
+}
+
+function routeCancellation(route: Route): CustomerRoutePlan['cancellation'] {
+  const cancellableSteps = route.steps.filter(({ cancellation }) => cancellation?.kind === 'adapter_managed').length
+  return cancellableSteps === route.steps.length
+    ? { kind: 'available', summary: 'Every business step publishes a cancellation path.' }
+    : cancellableSteps === 0
+      ? { kind: 'unavailable', summary: 'The businesses do not publish a cancellation path for this option.' }
+      : { kind: 'partially_available', summary: 'Only some business steps publish a cancellation path.' }
 }
 
 function keyedByResult<Value extends object>(

@@ -59,6 +59,7 @@ function routeDecisionProjection() {
         effects: [{ kind: 'information_shared' as const, reversibility: 'irreversible' as const }],
         evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
         recovery: [{ step: 1, businessName: 'North Star Services', posture: 'retry_safe' as const }],
+        cancellation: { kind: 'unavailable' as const, summary: 'No cancellation path is published.' },
         validUntil: 50_000, fallback: { available: false, alternatives: [] }, uncertainty: [],
         steps: [{
           step: 1, business: { businessRef: 'business:opaque', name: 'North Star Services' }, after: [],

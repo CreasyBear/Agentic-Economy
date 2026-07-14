@@ -8,6 +8,7 @@ import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
+import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import {
   aggregateIsInternallyConsistent,
   currentRoutePlanGenerationGraphStatus,
@@ -369,6 +370,119 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('confirms the displayed option through one customer command without releasing a step', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const current = await committedTwoStepAdmissionRoute(backend, admin)
+    const compared = await admin.action(api.customerRequestApplication.compare, {
+      requestRef: current.aggregate.snapshot.requestId,
+      revision: current.aggregate.snapshot.revision,
+      idempotencyKey: 'compare:two-step-confirmation',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error(`customer route missing: ${JSON.stringify(compared)}`)
+    }
+    const displayedRoute = compared.decision.routes[0]
+
+    const confirmed = await admin.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      idempotencyKey: 'confirm:two-step-customer',
+    })
+
+    expect(confirmed).toMatchObject({
+      kind: 'request', requestRef: compared.requestRef, revision: compared.revision,
+      state: 'route_confirmed', nextAction: 'inspect_confirmation',
+      routeGenerationRef: compared.routeGenerationRef,
+      confirmation: {
+        confirmationRef: expect.any(String),
+        confirmedAt: expect.any(Number),
+        validUntil: displayedRoute.validUntil,
+        route: displayedRoute,
+      },
+    })
+    expect(JSON.stringify(confirmed)).not.toMatch(/mandate|capabilityId|bindingId|offeringId|publicationRef|transport|graph/u)
+    await expect(admin.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      idempotencyKey: 'confirm:two-step-customer',
+    })).resolves.toEqual(confirmed)
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: compared.requestRef,
+    })).resolves.toEqual(confirmed)
+    await expect(admin.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: displayedRoute.routeRef,
+      idempotencyKey: 'confirm:two-step-customer-changed',
+    })).resolves.toEqual({
+      kind: 'conflict', requestRef: compared.requestRef, reason: 'options_changed',
+    })
+    await expect(admin.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: compared.requestRef,
+    })).resolves.toMatchObject({ kind: 'active' })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toEqual([])
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toEqual([])
+    })
+  })
+
+  it('lets an external agent confirm and resume the same displayed option with command-bound authority', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const current = await committedTwoStepAdmissionRoute(backend, admin)
+    const compared = await admin.action(api.customerRequestApplication.compare, {
+      requestRef: current.aggregate.snapshot.requestId,
+      revision: current.aggregate.snapshot.revision,
+      idempotencyKey: 'compare:two-step-agent-confirmation',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error('external confirmation preview missing')
+    }
+    const principal = {
+      principalId: current.aggregate.snapshot.principalId,
+      ownerId: 'owner:external-confirmation',
+      credentialId: 'credential:external-confirmation',
+      scopes: ['customer_requests:create'],
+    }
+    const key = 'external-confirmation-key-that-is-long-enough'
+    vi.stubEnv('AE_CONVEX_SERVER_FUNCTION_TOKEN', key)
+    vi.stubEnv('CLERK_JWT_ISSUER_DOMAIN', 'https://identity.example')
+    const command = {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: compared.decision.routes[0].routeRef,
+      idempotencyKey: 'confirm:two-step-agent',
+    }
+    const serviceAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'confirm', command, principal, issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.confirmRoute, {
+      ...command,
+      routeRef: `${command.routeRef}:tampered`,
+      serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
+    })).resolves.toEqual({ kind: 'refused', reason: 'authentication_required' })
+    const confirmed = await backend.action(api.customerRequestApplication.confirmRoute, {
+      ...command, serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
+    })
+    expect(confirmed).toMatchObject({
+      kind: 'request', state: 'route_confirmed', nextAction: 'inspect_confirmation',
+      confirmation: { route: { routeRef: command.routeRef } },
+    })
+    const resumeCommand = { requestRef: compared.requestRef }
+    const resumeAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'resume', command: resumeCommand, principal, issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.resume, {
+      ...resumeCommand, serviceAuth: { ...resumeAuth, scopes: [...resumeAuth.scopes] },
+    })).resolves.toEqual(confirmed)
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toEqual([])
+    })
+  })
+
   it('refreshes an expired one-step generation before any preparation record can be created', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
@@ -406,7 +520,22 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     if (first.kind !== 'found' || first.routeGeneration.routes[0] === undefined) {
       throw new Error('single route generation missing')
     }
+    const preview = await customer.action(api.customerRequestApplication.resume, {
+      requestRef: submitted.requestRef,
+    })
+    if (preview.kind !== 'request' || preview.decision?.routes[0] === undefined) {
+      throw new Error('single route customer preview missing')
+    }
     const clock = vi.spyOn(Date, 'now').mockReturnValue(first.routeGeneration.routes[0].expiresAt + 1)
+    await expect(customer.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      routeRef: preview.decision.routes[0].routeRef,
+      idempotencyKey: 'confirm:single-route-expired',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'needs_attention', nextAction: 'retry',
+      decision: { outcome: { kind: 'routes_expired' }, routes: [{ availability: 'expired' }] },
+    })
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: submitted.requestRef,
     })).resolves.toMatchObject({
@@ -585,6 +714,8 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     }
     expect(refreshedComparison.routeGenerationRef).not.toBe(firstGenerationRef)
     const refreshedGenerationRef = refreshedComparison.routeGenerationRef
+    const refreshedChoiceRef = refreshedComparison.decision?.routes[0]?.routeRef
+    if (refreshedChoiceRef === undefined) throw new Error('refreshed customer choice missing')
     await expect(customer.action(api.customerRequestApplication.compare, {
       requestRef: submitted.requestRef,
       revision: submitted.revision,
@@ -626,6 +757,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(priceRefresh.decision?.changes).toMatchObject({
       kind: 'changed', previousGenerationRef: refreshedGenerationRef,
       items: expect.arrayContaining([expect.objectContaining({ kind: 'maximum_cost' })]),
+    })
+    await expect(customer.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      routeRef: refreshedChoiceRef,
+      idempotencyKey: 'confirm:stale-price-choice',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'routes_ready', routeGenerationRef: priceRefresh.routeGenerationRef,
+      decision: {
+        changes: { kind: 'changed', items: expect.arrayContaining([expect.objectContaining({ kind: 'maximum_cost' })]) },
+        nextBoundary: { kind: 'confirmation', authorityCreated: false },
+      },
     })
     if (priceRefresh.decision?.changes.kind !== 'changed') throw new Error('price-only delta missing')
     expect(priceRefresh.decision.changes.items.map(({ kind }) => kind)).not.toContain('businesses')

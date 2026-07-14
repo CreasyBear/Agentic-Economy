@@ -11,6 +11,7 @@ type WorkspaceState =
   | Readonly<{ kind: 'submitting' }>
   | Readonly<{ kind: 'request'; projection: CustomerRequestView }>
   | Readonly<{ kind: 'comparing'; projection: CustomerRequestView }>
+  | Readonly<{ kind: 'confirming'; projection: CustomerRequestView; routeRef: string }>
   | Readonly<{ kind: 'refreshing'; projection: CustomerRequestView }>
   | Readonly<{
       kind: 'conflict'
@@ -32,7 +33,7 @@ export function AeCustomerRequestWorkspace() {
 
   async function submit() {
     if (need.trim().length === 0 || state.kind === 'submitting'
-      || state.kind === 'comparing' || state.kind === 'refreshing') return
+      || state.kind === 'comparing' || state.kind === 'confirming' || state.kind === 'refreshing') return
     const identity = requestIdentityRef.current ?? { requestRef: `request:${crypto.randomUUID()}`, agentRef: `web:${crypto.randomUUID()}` }
     requestIdentityRef.current = identity
     setState({ kind: 'submitting' })
@@ -153,6 +154,29 @@ export function AeCustomerRequestWorkspace() {
     }
   }
 
+  async function confirmRoute(projection: CustomerRequestView, routeRef: string) {
+    setState({ kind: 'confirming', projection, routeRef })
+    try {
+      const response = await fetch(`/api/requests/${encodeURIComponent(projection.requestRef)}/confirmation`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          revision: projection.revision,
+          routeRef,
+          idempotencyKey: `confirm:${projection.requestRef}:${projection.revision}:${routeRef}`,
+        }),
+      })
+      const result: SubmitResponse = await response.json()
+      if ('kind' in result && result.kind === 'request') setState({ kind: 'request', projection: result })
+      else if ('kind' in result && result.kind === 'conflict') {
+        setState({ kind: 'conflict', projection, reason: result.reason })
+      } else setState(errorState(response.status, 'AE could not confirm this choice. Nothing was started.'))
+    } catch {
+      setState({
+        kind: 'error', message: 'AE could not be reached. Nothing was started.', authenticationRequired: false,
+      })
+    }
+  }
+
   async function refresh(projection: CustomerRequestView) {
     setState({ kind: 'refreshing', projection })
     try {
@@ -187,13 +211,13 @@ export function AeCustomerRequestWorkspace() {
         </form>
         <Text type="supporting" color="secondary" className="text-center">No budget or full specification required to start.</Text>
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
-        {state.kind === 'error' ? <RequestResult state={state} compare={compare} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
-      </section> : <RequestResult state={state} compare={compare} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
+        {state.kind === 'error' ? <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
+      </section> : <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
     </main>
   )
 }
 
-function RequestResult({ state, compare, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
+function RequestResult({ state, compare, confirmRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
   if (state.kind === 'conflict') return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
     <div className="grid gap-4">
@@ -204,8 +228,11 @@ function RequestResult({ state, compare, authorize, refresh, continueRequest, ed
       <RecoveryActions edit={() => edit(state.projection)} restart={restart} />
     </div>
   </Card>
+  if (state.kind === 'request' && state.projection.confirmation !== undefined) {
+    return <RouteConfirmationCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
+  }
   if (state.kind === 'request' && state.projection.decision !== undefined) {
-    return <RouteDecisionCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
+    return <RouteDecisionCard projection={state.projection} turns={turns} confirm={(routeRef) => confirmRoute(state.projection, routeRef)} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
@@ -215,7 +242,7 @@ function RequestResult({ state, compare, authorize, refresh, continueRequest, ed
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification projection={state.projection} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a supported decision from the registered businesses for this request yet.</Text>}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
-  if (state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or automatic retry occurs during this step.</Text></Card>
+  if (state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'confirming' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : state.kind === 'confirming' ? 'Confirming your choice…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
 }
 
@@ -226,9 +253,10 @@ function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 
   return 'This operation key was already used for different work.'
 }
 
-function RouteDecisionCard({ projection, turns, edit, restart }: {
+function RouteDecisionCard({ projection, turns, confirm, edit, restart }: {
   projection: CustomerRequestView
   turns: readonly ConversationTurn[]
+  confirm: (routeRef: string) => Promise<void>
   edit: () => void
   restart: () => void
 }) {
@@ -332,12 +360,53 @@ function RouteDecisionCard({ projection, turns, edit, restart }: {
               ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before confirmation.`
               : 'No alternative way is currently declared.'}</Text>
           </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">Cancellation</Text>
+            <Text color="secondary">{route.cancellation.summary}</Text>
+          </div>
+          {route.availability === 'current' && route.maximumTotalCost.kind === 'known'
+            ? <Button label={`Confirm ${route.result.summary.replace(/[.!?]+$/u, '')}`} variant="primary" clickAction={() => void confirm(route.routeRef)} />
+            : null}
         </article>
       </Card>)}
     </div>
     <Card padding={4}>
       <Text weight="semibold">Nothing has been authorized or shared.</Text>
       <Text color="secondary" className="mt-1">A separate confirmation step is required before AE can create authority for any action.</Text>
+    </Card>
+    <RecoveryActions edit={edit} restart={restart} />
+  </section>
+}
+
+function RouteConfirmationCard({ projection, turns, edit, restart }: {
+  projection: CustomerRequestView
+  turns: readonly ConversationTurn[]
+  edit: () => void
+  restart: () => void
+}) {
+  const confirmation = projection.confirmation
+  if (confirmation === undefined) return null
+  const route = confirmation.route
+  return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
+    <Conversation turns={turns} />
+    <WorkingUnderstanding projection={projection} correct={edit} />
+    <Card padding={5}>
+      <div className="grid gap-5">
+        <div className="grid gap-2">
+          <Text className="text-sm font-semibold text-accent">Choice confirmed</Text>
+          <Heading level={2}>{route.result.summary}</Heading>
+          <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}. Nothing has started yet.</Text>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div><Text type="supporting" weight="semibold">Maximum cost</Text><Text type="large" weight="semibold">{route.maximumTotalCost.kind === 'known' ? formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor) : 'Not confirmed'}</Text></div>
+          <div><Text type="supporting" weight="semibold">Confirmed until</Text><Text color="secondary">{formatOptionTime(confirmation.validUntil)}</Text></div>
+        </div>
+        <div><Text weight="semibold">Information recipients</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>{recipient.name} — {recipient.purposes.map(readableLabel).join(', ')}</li>)}</ul></div>
+        <div><Text weight="semibold">What could change</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>{effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}</li>)}</ul></div>
+        <div><Text weight="semibold">Evidence expected</Text><Text color="secondary" className="mt-1">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</Text></div>
+        <div><Text weight="semibold">Cancellation and recovery</Text><Text color="secondary" className="mt-1">{route.cancellation.summary} {route.recovery.some(({ posture }) => posture === 'reconcile_required') ? 'AE must check what happened before retrying some steps.' : 'Confirmed failures can be retried safely.'}</Text></div>
+        <Text type="supporting" color="secondary">Confirmation reference {confirmation.confirmationRef}</Text>
+      </div>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
   </section>
@@ -402,7 +471,10 @@ function decisionChangeLabel(
   if (change.kind === 'fallback') {
     return `Fallbacks changed. Before: ${fallbackList(change.before, resultNames)}. Now: ${fallbackList(change.after, resultNames)}.`
   }
-  return `Recovery changed. Before: ${recoveryList(change.before, resultNames)}. Now: ${recoveryList(change.after, resultNames)}.`
+  if (change.kind === 'recovery') {
+    return `Recovery changed. Before: ${recoveryList(change.before, resultNames)}. Now: ${recoveryList(change.after, resultNames)}.`
+  }
+  return `Cancellation changed. Before: ${cancellationList(change.before, resultNames)}. Now: ${cancellationList(change.after, resultNames)}.`
 }
 
 function costList(
@@ -496,6 +568,14 @@ function recoveryList(
   return values.map(({ resultRef, steps }) => `${resultName(resultRef, names)}: ${steps.map((step) => (
     `step ${step.step}, ${step.businessName}: ${step.posture === 'retry_safe' ? 'safe retry' : 'check before retry'}`
   )).join(', ') || 'none'}`).join('; ') || 'none'
+}
+
+function cancellationList(
+  values: readonly { resultRef: string; cancellation: { summary: string } }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return values.map(({ resultRef, cancellation }) => `${resultName(resultRef, names)}: ${cancellation.summary}`)
+    .join('; ') || 'none'
 }
 
 function resultName(resultRef: string, names: ReadonlyMap<string, string>): string {
