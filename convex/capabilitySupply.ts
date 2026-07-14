@@ -992,7 +992,15 @@ export const queryCapabilityGraph = query({
           description: contract.contract.description,
           inputSchemaDigest: canonicalDigest(contract.contract.inputSchema as StableHashValue),
           outputSchemaDigest: canonicalDigest(contract.contract.outputSchema as StableHashValue),
-          customerAnnotations: contract.contract.customerAnnotations,
+          customerAnnotations: contract.contract.customerAnnotations.map((annotation) => ({
+            annotationId: annotation.annotationId,
+            document: annotation.document,
+            pointer: annotation.pointer,
+            label: annotation.label,
+            role: annotation.role,
+            ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
+            ...(annotation.inference === undefined ? {} : { inference: annotation.inference }),
+          })),
           searchTerms: offering.searchTerms,
         },
         policy: {
