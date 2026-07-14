@@ -36,6 +36,13 @@ describe('capability supply boundaries', () => {
     expect(seed).toContain('DEV_SEED_BUSINESS_FIXTURES.filter')
     expect(seed).not.toMatch(/ctx\.db\.(?:insert|patch|replace)|db\.(?:insert|patch|replace)\(['"](?:businesses|claims|businessServices|capabilityOfferings|capabilityTransportBindings)['"]/)
   })
+
+  it('keeps publication importers production-owned and fixture-independent', () => {
+    const importer = readFileSync('src/modules/capability-supply/internal/publication-importers.ts', 'utf8')
+    expect(importer).not.toMatch(/tests\/|fixtures\/|examples\/|devSeed|sandbox-supply|provider-integrations/)
+    expect(importer).not.toMatch(/from\s+['"][^'"]*(?:customer-request|routing-kernel|catalog)[^'"]*['"]/)
+    expect(importer).not.toMatch(/\bfetch\s*\(/)
+  })
 })
 
 function sources(): string[] {

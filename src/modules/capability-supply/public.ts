@@ -6,6 +6,23 @@ import { stableStringify, type StableHashValue } from '@/modules/common/stable-h
 
 export { admitRegisteredTransport } from './internal/transport-adapters'
 export type { TransportAdmissionInput, TransportAdmissionResult } from './internal/transport-adapters'
+export {
+  importMcpCapability,
+  importOpenApiHttpCapability,
+  importX402Capability,
+  normalizeCapabilityPublication,
+} from './internal/publication-importers'
+export type {
+  CanonicalCapabilityPublicationDraft,
+  CapabilityContractMetadata,
+  CapabilityImporterCommercialInput,
+  CapabilityPublicationBindingDraft,
+  CapabilityPublicationImport,
+  CapabilityPublicationImportRefusal,
+  CapabilityPublicationImportResult,
+  CapabilityPublicationOfferingDraft,
+  CapabilityPublicationSource,
+} from './internal/publication-importers'
 
 const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536

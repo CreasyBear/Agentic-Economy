@@ -26,6 +26,36 @@ const price = v.union(
 )
 
 export const capabilitySupplyTables = {
+  capabilityPublications: defineTable({
+    publicationRef: v.string(),
+    revision: v.number(),
+    businessId: v.id('businesses'),
+    networkId: v.string(),
+    sourceKind: v.union(
+      v.literal('ae_envelope'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402'),
+    ),
+    sourceDigest: v.string(),
+    ...contractRefFields,
+    offeringId: v.string(),
+    bindingId: v.string(),
+    disposition: v.union(
+      v.literal('current'), v.literal('superseded'), v.literal('withdrawn'), v.literal('incompatible'),
+    ),
+    supersedesRevision: v.optional(v.number()),
+    credentialState: v.union(v.literal('unobserved'), v.literal('ready'), v.literal('unavailable')),
+    healthState: v.union(v.literal('unobserved'), v.literal('healthy'), v.literal('unhealthy')),
+    readinessEvidenceRefs: v.array(v.string()),
+    readinessObservedAt: v.optional(v.number()),
+    readinessValidUntil: v.optional(v.number()),
+    registrationEvidenceRefs: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    withdrawnAt: v.optional(v.number()),
+  })
+    .index('by_publicationRef_and_revision', ['publicationRef', 'revision'])
+    .index('by_networkId_and_disposition', ['networkId', 'disposition'])
+    .index('by_businessId_and_disposition', ['businessId', 'disposition']),
+
   capabilityOfferings: defineTable({
     offeringId: v.string(),
     businessId: v.id('businesses'),

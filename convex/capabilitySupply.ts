@@ -10,17 +10,23 @@ import {
   defineCapabilityOfferingRegistration,
   defineCapabilityTransportBindingRegistration,
   admitRegisteredTransport,
+  normalizeCapabilityPublication,
   type CapabilityOfferingRegistration,
   type CapabilityTransportBindingRegistration,
 } from '@/modules/capability-supply/public'
 import { sameCapabilityContractRef } from '@/modules/capability-contract/public'
+import { encodeCapabilityContractDocumentJson } from '@/modules/capability-contract-registry/public'
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { Doc, Id } from './_generated/dataModel'
-import { internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
-import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
+import {
+  getActiveExactCapabilityContract,
+  getExactRegisteredCapabilityContract,
+  registerCapabilityContractDocument,
+} from './capabilityContractDocuments'
 
 const MAX_ELIGIBLE_SUPPLY = 256
 const MAX_CONTEXT_VALUE_LENGTH = 200
@@ -81,6 +87,22 @@ const bindingRegistrationValue = v.object({
   continuation: continuationValue,
   cancellation: cancellationValue,
   adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
+  registrationEvidenceRefs: evidenceRefsValue,
+})
+const capabilityPublicationOfferingValue = v.object({
+  offeringId: v.string(),
+  networkId: v.string(),
+  presentation: presentationValue,
+  searchTerms: v.array(v.string()),
+  registrationEvidenceRefs: evidenceRefsValue,
+})
+const capabilityPublicationBindingValue = v.object({
+  bindingId: v.string(),
+  endpointUrl: v.string(),
+  credentialRef: v.string(),
+  continuation: continuationValue,
+  cancellation: cancellationValue,
+  adapter: v.object({ adapterId: v.string(), config: v.any() }),
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const contextFields = {
@@ -165,6 +187,94 @@ const eligibleSupplyValue = v.object({
     admission: v.literal('admitted'), conformance: v.literal('conformant'), registrationHash: v.string(),
   }),
 })
+const publicationLifecycleValue = v.object({
+  state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
+  reasons: v.array(v.union(
+    v.literal('admission_unproven'),
+    v.literal('conformance_unproven'),
+    v.literal('credential_readiness_unobserved'),
+    v.literal('health_unobserved'),
+    v.literal('credential_unavailable'),
+    v.literal('health_unhealthy'),
+    v.literal('health_stale'),
+    v.literal('withdrawn'),
+    v.literal('incompatible_revision'),
+    v.literal('eligibility_integrity_failure'),
+  )),
+})
+const capabilityPublicationValue = v.object({
+  kind: v.literal('published'),
+  publicationRef: v.string(),
+  contractRef: contractRefValue,
+  offeringId: v.string(),
+  bindingId: v.string(),
+  lifecycle: publicationLifecycleValue,
+})
+const capabilityPublicationResultValue = v.union(
+  capabilityPublicationValue,
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authorization_denied'),
+      v.literal('business_not_registered'),
+      v.literal('contract_invalid'),
+      v.literal('contract_too_large'),
+      v.literal('contract_identity_conflict'),
+      v.literal('contract_integrity_failure'),
+      v.literal('offering_invalid'),
+      v.literal('offering_identity_conflict'),
+      v.literal('offering_integrity_failure'),
+      v.literal('binding_invalid'),
+      v.literal('binding_identity_conflict'),
+      v.literal('binding_integrity_failure'),
+      v.literal('adapter_not_registered'),
+      v.literal('adapter_config_invalid'),
+      v.literal('adapter_config_too_large'),
+      v.literal('registration_context_invalid'),
+      v.literal('operation_key_conflict'),
+      v.literal('source_invalid'),
+    ),
+  }),
+)
+const capabilityGraphNodeValue = v.object({
+  publicationRef: v.string(), revision: v.number(), businessId: v.id('businesses'),
+  contractRef: contractRefValue, offeringId: v.string(), bindingId: v.string(),
+  source: v.object({
+    kind: v.union(v.literal('ae_envelope'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
+    digest: v.string(),
+  }),
+  semantic: v.object({
+    capabilityId: v.string(), name: v.string(), description: v.string(),
+    inputSchemaDigest: v.string(), outputSchemaDigest: v.string(),
+    customerAnnotations: v.any(), searchTerms: v.array(v.string()),
+  }),
+  policy: v.object({ effects: v.any(), dataUse: v.any(), lifecycle: v.any() }),
+  cost: v.object({ price: priceValue, commercialRelationship: commercialRelationshipValue }),
+  trust: v.object({ tier: v.string(), publicStatus: v.string() }),
+  liveness: v.object({
+    credentialState: v.union(v.literal('unobserved'), v.literal('ready'), v.literal('unavailable')),
+    healthState: v.union(v.literal('unobserved'), v.literal('healthy'), v.literal('unhealthy')),
+    observedAt: v.optional(v.number()), validUntil: v.optional(v.number()), stale: v.boolean(),
+  }),
+  routability: v.object({ eligible: v.boolean(), reasons: v.array(v.string()) }),
+  evidenceRefs: v.array(v.string()),
+})
+const capabilityGraphResultValue = v.union(
+  v.object({
+    kind: v.literal('available'), nodes: v.array(capabilityGraphNodeValue),
+    edges: v.array(v.object({
+      kind: v.union(v.literal('published_by'), v.literal('bound_to'), v.literal('schema_compatible')),
+      from: v.string(), to: v.string(),
+    })),
+  }),
+  v.object({
+    kind: v.literal('unavailable'),
+    reason: v.union(
+      v.literal('query_invalid'), v.literal('authorization_denied'),
+      v.literal('graph_limit_exceeded'), v.literal('graph_integrity_failure'),
+    ),
+  }),
+)
 
 type RegistrationContext = Readonly<{
   operationKey: string
@@ -173,12 +283,12 @@ type RegistrationContext = Readonly<{
   evidenceRefs: readonly string[]
 }>
 type ContractRef = Infer<typeof contractRefValue>
-type SupplyCommandActor = Readonly<{ kind: 'admin' | 'system'; ref: string }>
+type SupplyCommandActor = Readonly<{ kind: 'admin' | 'owner' | 'system'; ref: string }>
 type SupplyAuditInput = Readonly<{
   eventType: 'capability_offering.registered' | 'capability_binding.registered' | 'capability_supply.eligibility_changed'
-    | 'capability_binding.quarantined'
-  action: 'register_offering' | 'register_binding' | 'set_eligibility' | 'quarantine_binding'
-  targetType: 'capability_offering' | 'capability_binding'
+    | 'capability_binding.quarantined' | 'capability_publication.published'
+  action: 'register_offering' | 'register_binding' | 'set_eligibility' | 'quarantine_binding' | 'publish_capability'
+  targetType: 'capability_offering' | 'capability_binding' | 'capability_publication'
   targetRef: string
   actor: SupplyCommandActor
   context: RegistrationContext
@@ -197,6 +307,595 @@ type EligibilityInput = Readonly<{
   admissionEvidenceRefs: readonly string[]
   conformanceEvidenceRefs: readonly string[]
 }>
+
+type PublicationLifecycleReason =
+  | 'admission_unproven' | 'conformance_unproven' | 'credential_readiness_unobserved'
+  | 'health_unobserved' | 'credential_unavailable' | 'health_unhealthy' | 'health_stale'
+  | 'withdrawn' | 'incompatible_revision'
+  | 'eligibility_integrity_failure'
+type PublicationLifecycle = {
+  state: 'inactive' | 'active' | 'withdrawn' | 'incompatible'
+  reasons: PublicationLifecycleReason[]
+}
+
+const INITIAL_PUBLICATION_LIFECYCLE: PublicationLifecycle = {
+  state: 'inactive',
+  reasons: [
+    'admission_unproven',
+    'conformance_unproven',
+    'credential_readiness_unobserved',
+    'health_unobserved',
+  ],
+}
+
+export const publishCapability = mutation({
+  args: {
+    businessId: v.id('businesses'),
+    source: v.any(),
+    offering: v.optional(capabilityPublicationOfferingValue),
+    binding: v.optional(capabilityPublicationBindingValue),
+    ...contextFields,
+  },
+  returns: capabilityPublicationResultValue,
+  handler: async (ctx, args) => {
+    if (!validRegistrationContext(args)) {
+      return { kind: 'refused' as const, reason: 'registration_context_invalid' as const }
+    }
+    if (!await ownsPublishedBusiness(ctx, args.businessId)) {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
+    let importInput: Parameters<typeof normalizeCapabilityPublication>[0]
+    if (isDirectPublicationSource(args.source)) {
+      if (args.offering === undefined || args.binding === undefined) {
+        return { kind: 'refused' as const, reason: 'source_invalid' as const }
+      }
+      importInput = {
+        kind: 'ae_envelope', documentJson: args.source.documentJson,
+        offering: args.offering, binding: args.binding, evidenceRefs: args.evidenceRefs,
+      }
+    } else {
+      importInput = decodeConvexPublicationSource(args.source) as Parameters<typeof normalizeCapabilityPublication>[0]
+    }
+    let normalized
+    try {
+      normalized = normalizeCapabilityPublication(importInput)
+    } catch {
+      return { kind: 'refused' as const, reason: 'source_invalid' as const }
+    }
+    if (normalized === undefined || normalized.kind === 'refused') {
+      return { kind: 'refused' as const, reason: 'source_invalid' as const }
+    }
+    const draft = normalized.draft
+    let encoded
+    try {
+      encoded = encodeCapabilityContractDocumentJson(draft.documentJson)
+    } catch (error) {
+      return {
+        kind: 'refused' as const,
+        reason: error instanceof Error && error.message === 'capability_contract_too_large'
+          ? 'contract_too_large' as const
+          : 'contract_invalid' as const,
+      }
+    }
+    const offering = {
+      ...draft.offering,
+      businessId: args.businessId,
+      contractRef: encoded.contract.ref,
+    }
+    const binding = {
+      ...draft.binding,
+      offeringId: draft.offering.offeringId,
+      networkId: draft.offering.networkId,
+      contractRef: encoded.contract.ref,
+    }
+    try {
+      defineCapabilityOfferingRegistration(offering)
+    } catch {
+      return { kind: 'refused' as const, reason: 'offering_invalid' as const }
+    }
+    let admittedTransport: ReturnType<typeof admitRegisteredTransport>
+    try {
+      const definedBinding = defineCapabilityTransportBindingRegistration(binding)
+      admittedTransport = admitRegisteredTransport(transportAdmissionInput(definedBinding))
+      if (admittedTransport.kind === 'refused') return admittedTransport
+    } catch {
+      return { kind: 'refused' as const, reason: 'binding_invalid' as const }
+    }
+
+    const now = Date.now()
+    const existingContract = await ctx.db.query('capabilityContractDocuments')
+      .withIndex('by_capabilityId_and_version', (index) => (
+        index.eq('capabilityId', encoded.contract.ref.capabilityId).eq('version', encoded.contract.ref.version)
+      )).unique()
+    if (existingContract !== null && existingContract.contractDigest !== encoded.contract.ref.contractDigest) {
+      return { kind: 'refused' as const, reason: 'contract_identity_conflict' as const }
+    }
+    const definedOffering = defineCapabilityOfferingRegistration(offering)
+    const offeringHash = capabilityOfferingRegistrationHash(definedOffering)
+    const existingOffering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (index) => index.eq('offeringId', definedOffering.offeringId)).unique()
+    if (existingOffering !== null) {
+      if (!offeringIntegrityIsValid(existingOffering)) {
+        return { kind: 'refused' as const, reason: 'offering_integrity_failure' as const }
+      }
+      if (existingOffering.registrationHash !== offeringHash) {
+        return { kind: 'refused' as const, reason: 'offering_identity_conflict' as const }
+      }
+    }
+    const definedBinding = defineCapabilityTransportBindingRegistration(binding)
+    if (admittedTransport.kind !== 'admitted') throw new Error('capability_publication_admission_invariant')
+    const bindingHash = capabilityBindingRegistrationHash(definedBinding, admittedTransport.transport)
+    const existingBinding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (index) => index.eq('bindingId', definedBinding.bindingId)).unique()
+    if (existingBinding !== null) {
+      if (!bindingIntegrityIsValid(existingBinding)) {
+        return { kind: 'refused' as const, reason: 'binding_integrity_failure' as const }
+      }
+      if (existingBinding.registrationHash !== bindingHash) {
+        return { kind: 'refused' as const, reason: 'binding_identity_conflict' as const }
+      }
+    }
+    const existingPublication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (index) => (
+        index.eq('publicationRef', draft.offering.offeringId).eq('revision', 1)
+      )).unique()
+    if (existingPublication !== null && (
+      existingPublication.sourceDigest !== draft.source.descriptorDigest
+      || existingPublication.offeringId !== draft.offering.offeringId
+      || existingPublication.bindingId !== draft.binding.bindingId
+    )) {
+      return { kind: 'refused' as const, reason: 'offering_identity_conflict' as const }
+    }
+    const expected = publicationProjection(encoded.contract.ref, draft.offering.offeringId, draft.binding.bindingId)
+    const actor = { kind: 'owner' as const, ref: (await ctx.auth.getUserIdentity())!.subject }
+    const operation = await beginOperation(
+      ctx.db,
+      actor,
+      'publishCapability',
+      args,
+      { businessId: args.businessId, source: draft.source, offering: draft.offering, binding: draft.binding },
+      now,
+    )
+    if (operation.kind === 'conflict') {
+      return { kind: 'refused' as const, reason: 'operation_key_conflict' as const }
+    }
+    if (operation.kind === 'replay') return replayOperationResult(operation, expected)
+    const contractResult = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, now)
+    if (contractResult.kind === 'refused') throw new Error(`capability_publication_contract_${contractResult.reason}`)
+    const offeringResult = await registerCapabilityOffering(ctx.db, offering, now)
+    if (offeringResult.kind === 'refused') throw new Error(`capability_publication_offering_${offeringResult.reason}`)
+    const bindingResult = await registerCapabilityTransportBinding(ctx.db, binding, now)
+    if (bindingResult.kind === 'refused') throw new Error(`capability_publication_binding_${bindingResult.reason}`)
+    if (existingPublication === null) {
+      await ctx.db.insert('capabilityPublications', {
+        publicationRef: draft.offering.offeringId,
+        revision: 1,
+        businessId: args.businessId,
+        networkId: draft.offering.networkId,
+        sourceKind: draft.source.kind,
+        sourceDigest: draft.source.descriptorDigest,
+        ...encoded.contract.ref,
+        offeringId: draft.offering.offeringId,
+        bindingId: draft.binding.bindingId,
+        disposition: 'current',
+        credentialState: 'unobserved',
+        healthState: 'unobserved',
+        readinessEvidenceRefs: [],
+        registrationEvidenceRefs: [...args.evidenceRefs],
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+    const auditId = await ensureSupplyAudit(ctx.db, {
+      eventType: 'capability_publication.published',
+      action: 'publish_capability',
+      targetType: 'capability_publication',
+      targetRef: draft.offering.offeringId,
+      actor,
+      context: args,
+      payload: {
+        businessId: args.businessId,
+        sourceKind: draft.source.kind,
+        sourceDigest: draft.source.descriptorDigest,
+        contractRef: encoded.contract.ref,
+        offeringId: draft.offering.offeringId,
+        bindingId: draft.binding.bindingId,
+      },
+      beforeState: 'absent',
+      afterState: 'inactive',
+      createdAt: now,
+    })
+    await succeedOperation(ctx.db, operation.operationId, expected, [auditId], now)
+    return expected
+  },
+})
+
+export const readCapabilityPublication = query({
+  args: { publicationRef: v.string() },
+  returns: v.union(capabilityPublicationValue, v.null()),
+  handler: async (ctx, args) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (index) => (
+        index.eq('publicationRef', args.publicationRef)
+      )).order('desc').first()
+    if (publication === null || !await ownsPublishedBusiness(ctx, publication.businessId)) return null
+    if (publication.disposition === 'incompatible') {
+      return publicationProjection(
+        contractRefFromRow(publication), publication.offeringId, publication.bindingId,
+        { state: 'incompatible', reasons: ['incompatible_revision'] },
+      )
+    }
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    if (offering === null || binding === null) return null
+    return publicationProjection(
+      contractRefFromRow(publication), publication.offeringId, publication.bindingId,
+      publicationLifecycle(publication, offering, binding, Date.now()),
+    )
+  },
+})
+
+export const observeCapabilityReadiness = internalMutation({
+  args: {
+    publicationRef: v.string(),
+    expectedRevision: v.number(),
+    credentialState: v.union(v.literal('ready'), v.literal('unavailable')),
+    healthState: v.union(v.literal('healthy'), v.literal('unhealthy')),
+    validUntil: v.number(),
+    ...contextFields,
+  },
+  returns: v.union(
+    v.object({ kind: v.literal('observed'), publicationRef: v.string(), revision: v.number(), lifecycle: publicationLifecycleValue }),
+    v.object({ kind: v.literal('refused'), reason: v.union(
+      v.literal('authorization_denied'), v.literal('publication_not_found'),
+      v.literal('revision_changed'), v.literal('observation_invalid'),
+    ) }),
+  ),
+  handler: async (ctx, args) => {
+    const now = Date.now()
+    if (!validRegistrationContext(args) || !Number.isSafeInteger(args.expectedRevision)
+      || args.validUntil <= now || args.validUntil > now + 86_400_000) {
+      return { kind: 'refused' as const, reason: 'observation_invalid' as const }
+    }
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (index) => (
+        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
+      )).unique()
+    if (publication === null) return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+    if (publication.disposition !== 'current') {
+      return { kind: 'refused' as const, reason: 'revision_changed' as const }
+    }
+    await ctx.db.patch(publication._id, {
+      credentialState: args.credentialState,
+      healthState: args.healthState,
+      readinessEvidenceRefs: [...args.evidenceRefs],
+      readinessObservedAt: now,
+      readinessValidUntil: args.validUntil,
+      updatedAt: now,
+    })
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    if (offering === null || binding === null) throw new Error('capability_publication_supply_integrity_failure')
+    return {
+      kind: 'observed' as const,
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+      lifecycle: publicationLifecycle({
+        ...publication,
+        credentialState: args.credentialState,
+        healthState: args.healthState,
+        readinessValidUntil: args.validUntil,
+      }, offering, binding, now),
+    }
+  },
+})
+
+export const withdrawCapability = mutation({
+  args: { publicationRef: v.string(), expectedRevision: v.number(), ...contextFields },
+  returns: v.union(
+    v.object({ kind: v.literal('withdrawn'), publicationRef: v.string(), revision: v.number(), lifecycle: publicationLifecycleValue }),
+    v.object({ kind: v.literal('refused'), reason: v.union(
+      v.literal('authorization_denied'), v.literal('publication_not_found'), v.literal('revision_changed'),
+    ) }),
+  ),
+  handler: async (ctx, args) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (index) => (
+        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
+      )).unique()
+    if (publication === null) return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+    if (!await ownsPublishedBusiness(ctx, publication.businessId)) {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
+    if (publication.disposition !== 'current') {
+      return { kind: 'refused' as const, reason: 'revision_changed' as const }
+    }
+    const offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
+    const binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    if (offering === null || binding === null) throw new Error('capability_publication_supply_integrity_failure')
+    const revoked = await setCapabilitySupplyEligibility(ctx.db, {
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: contractRefFromRow(publication),
+      decision: 'revoke',
+      expectedOfferingRegistrationHash: offering.registrationHash,
+      expectedBindingRegistrationHash: binding.registrationHash,
+      admissionEvidenceRefs: args.evidenceRefs,
+      conformanceEvidenceRefs: args.evidenceRefs,
+    }, Date.now())
+    if (revoked.kind === 'refused') throw new Error(`capability_publication_withdraw_${revoked.reason}`)
+    const now = Date.now()
+    await ctx.db.patch(publication._id, { disposition: 'withdrawn', withdrawnAt: now, updatedAt: now })
+    return {
+      kind: 'withdrawn' as const,
+      publicationRef: publication.publicationRef,
+      revision: publication.revision,
+      lifecycle: { state: 'withdrawn' as const, reasons: ['withdrawn' as const] },
+    }
+  },
+})
+
+export const refreshCapability = mutation({
+  args: {
+    publicationRef: v.string(),
+    expectedRevision: v.number(),
+    source: v.any(),
+    offering: v.optional(capabilityPublicationOfferingValue),
+    binding: v.optional(capabilityPublicationBindingValue),
+    ...contextFields,
+  },
+  returns: v.union(
+    v.object({
+      kind: v.literal('refreshed'), publicationRef: v.string(), revision: v.number(),
+      disposition: v.union(v.literal('current'), v.literal('incompatible')),
+      lifecycle: publicationLifecycleValue,
+    }),
+    v.object({ kind: v.literal('refused'), reason: v.union(
+      v.literal('authorization_denied'), v.literal('publication_not_found'),
+      v.literal('revision_changed'), v.literal('refresh_invalid'),
+    ) }),
+  ),
+  handler: async (ctx, args) => {
+    if (!validRegistrationContext(args)) {
+      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+    }
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (index) => (
+        index.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)
+      )).unique()
+    if (publication === null) return { kind: 'refused' as const, reason: 'publication_not_found' as const }
+    if (!await ownsPublishedBusiness(ctx, publication.businessId)) {
+      return { kind: 'refused' as const, reason: 'authorization_denied' as const }
+    }
+    if (publication.disposition !== 'current') {
+      return { kind: 'refused' as const, reason: 'revision_changed' as const }
+    }
+    let importInput: Parameters<typeof normalizeCapabilityPublication>[0]
+    if (isDirectPublicationSource(args.source)) {
+      if (args.offering === undefined || args.binding === undefined) {
+        return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+      }
+      importInput = {
+        kind: 'ae_envelope', documentJson: args.source.documentJson,
+        offering: args.offering, binding: args.binding, evidenceRefs: args.evidenceRefs,
+      }
+    } else {
+      importInput = decodeConvexPublicationSource(args.source) as Parameters<typeof normalizeCapabilityPublication>[0]
+    }
+    let normalized
+    try {
+      normalized = normalizeCapabilityPublication(importInput)
+    } catch {
+      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+    }
+    if (normalized === undefined || normalized.kind === 'refused') {
+      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+    }
+    const draft = normalized.draft
+    let encoded
+    try {
+      encoded = encodeCapabilityContractDocumentJson(draft.documentJson)
+    } catch {
+      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+    }
+    if (encoded.contract.ref.capabilityId !== publication.capabilityId
+      || encoded.contract.ref.version <= publication.version) {
+      return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
+    }
+    const previousContract = await getExactRegisteredCapabilityContract(ctx.db, contractRefFromRow(publication))
+    if (previousContract.kind !== 'found') throw new Error('capability_publication_contract_integrity_failure')
+    const compatible = canonicalDigest({
+      inputSchema: previousContract.contract.inputSchema,
+      outputSchema: previousContract.contract.outputSchema,
+      customerAnnotations: previousContract.contract.customerAnnotations,
+      dataUse: previousContract.contract.dataUse,
+      effects: previousContract.contract.effects,
+      evidence: previousContract.contract.evidence,
+      lifecycle: previousContract.contract.lifecycle,
+    } as StableHashValue) === canonicalDigest({
+      inputSchema: encoded.contract.inputSchema,
+      outputSchema: encoded.contract.outputSchema,
+      customerAnnotations: encoded.contract.customerAnnotations,
+      dataUse: encoded.contract.dataUse,
+      effects: encoded.contract.effects,
+      evidence: encoded.contract.evidence,
+      lifecycle: encoded.contract.lifecycle,
+    } as StableHashValue)
+    const now = Date.now()
+    const revision = publication.revision + 1
+    const currentOffering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
+    const currentBinding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    if (currentOffering === null || currentBinding === null) {
+      throw new Error('capability_publication_supply_integrity_failure')
+    }
+    const revoked = await setCapabilitySupplyEligibility(ctx.db, {
+      offeringId: currentOffering.offeringId,
+      bindingId: currentBinding.bindingId,
+      contractRef: contractRefFromRow(publication),
+      decision: 'revoke',
+      expectedOfferingRegistrationHash: currentOffering.registrationHash,
+      expectedBindingRegistrationHash: currentBinding.registrationHash,
+      admissionEvidenceRefs: args.evidenceRefs,
+      conformanceEvidenceRefs: args.evidenceRefs,
+    }, now)
+    if (revoked.kind === 'refused') throw new Error(`capability_publication_refresh_${revoked.reason}`)
+    await ctx.db.patch(publication._id, { disposition: 'superseded', updatedAt: now })
+    if (!compatible) {
+      await ctx.db.insert('capabilityPublications', {
+        publicationRef: publication.publicationRef, revision, businessId: publication.businessId,
+        networkId: draft.offering.networkId, sourceKind: draft.source.kind,
+        sourceDigest: draft.source.descriptorDigest, ...encoded.contract.ref,
+        offeringId: draft.offering.offeringId, bindingId: draft.binding.bindingId,
+        disposition: 'incompatible', supersedesRevision: publication.revision,
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+        registrationEvidenceRefs: [...args.evidenceRefs], createdAt: now, updatedAt: now,
+      })
+      return {
+        kind: 'refreshed' as const, publicationRef: publication.publicationRef, revision,
+        disposition: 'incompatible' as const,
+        lifecycle: { state: 'incompatible' as const, reasons: ['incompatible_revision' as const] },
+      }
+    }
+    const contractResult = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, now)
+    if (contractResult.kind === 'refused') throw new Error(`capability_publication_refresh_${contractResult.reason}`)
+    const nextOffering = {
+      ...draft.offering, businessId: publication.businessId, contractRef: encoded.contract.ref,
+    }
+    const nextBinding = {
+      ...draft.binding, offeringId: draft.offering.offeringId,
+      networkId: draft.offering.networkId, contractRef: encoded.contract.ref,
+    }
+    const offeringResult = await registerCapabilityOffering(ctx.db, nextOffering, now)
+    if (offeringResult.kind === 'refused') throw new Error(`capability_publication_refresh_${offeringResult.reason}`)
+    const bindingResult = await registerCapabilityTransportBinding(ctx.db, nextBinding, now)
+    if (bindingResult.kind === 'refused') throw new Error(`capability_publication_refresh_${bindingResult.reason}`)
+    await ctx.db.insert('capabilityPublications', {
+      publicationRef: publication.publicationRef, revision, businessId: publication.businessId,
+      networkId: draft.offering.networkId, sourceKind: draft.source.kind,
+      sourceDigest: draft.source.descriptorDigest, ...encoded.contract.ref,
+      offeringId: draft.offering.offeringId, bindingId: draft.binding.bindingId,
+      disposition: 'current', supersedesRevision: publication.revision,
+      credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      registrationEvidenceRefs: [...args.evidenceRefs], createdAt: now, updatedAt: now,
+    })
+    return {
+      kind: 'refreshed' as const, publicationRef: publication.publicationRef, revision,
+      disposition: 'current' as const,
+      lifecycle: INITIAL_PUBLICATION_LIFECYCLE,
+    }
+  },
+})
+
+export const queryCapabilityGraph = query({
+  args: { networkId: v.string(), includeInactive: v.boolean(), limit: v.number() },
+  returns: capabilityGraphResultValue,
+  handler: async (ctx, args) => {
+    if (!boundedTrimmed(args.networkId, MAX_CONTEXT_VALUE_LENGTH)
+      || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > MAX_ELIGIBLE_SUPPLY) {
+      return { kind: 'unavailable' as const, reason: 'query_invalid' as const }
+    }
+    if (args.includeInactive) {
+      const authority = await resolveAdminAuthority(
+        { db: ctx.db as never, auth: ctx.auth }, 'register_capability_supply',
+      )
+      if (authority.kind !== 'allowed') {
+        return { kind: 'unavailable' as const, reason: 'authorization_denied' as const }
+      }
+    }
+    const publications = await ctx.db.query('capabilityPublications')
+      .withIndex('by_networkId_and_disposition', (index) => (
+        index.eq('networkId', args.networkId).eq('disposition', 'current')
+      )).take(args.limit + 1)
+    if (publications.length > args.limit) {
+      return { kind: 'unavailable' as const, reason: 'graph_limit_exceeded' as const }
+    }
+    const nodes = []
+    for (const publication of publications.sort((left, right) => left.publicationRef.localeCompare(right.publicationRef))) {
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+      const business = await publishedBusiness(ctx.db, publication.businessId)
+      const contract = await getExactRegisteredCapabilityContract(ctx.db, contractRefFromRow(publication))
+      if (offering === null || binding === null || business === null || contract.kind !== 'found'
+        || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
+        || !offeringEligibilityIsValid(offering) || !bindingEligibilityIsValid(binding)) {
+        return { kind: 'unavailable' as const, reason: 'graph_integrity_failure' as const }
+      }
+      const lifecycle = publicationLifecycle(publication, offering, binding, Date.now())
+      if (!args.includeInactive && lifecycle.state !== 'active') continue
+      nodes.push({
+        publicationRef: publication.publicationRef,
+        revision: publication.revision,
+        businessId: publication.businessId,
+        contractRef: contractRefFromRow(publication),
+        offeringId: publication.offeringId,
+        bindingId: publication.bindingId,
+        source: { kind: publication.sourceKind, digest: publication.sourceDigest },
+        semantic: {
+          capabilityId: contract.contract.capabilityId,
+          name: contract.contract.name,
+          description: contract.contract.description,
+          inputSchemaDigest: canonicalDigest(contract.contract.inputSchema as StableHashValue),
+          outputSchemaDigest: canonicalDigest(contract.contract.outputSchema as StableHashValue),
+          customerAnnotations: contract.contract.customerAnnotations,
+          searchTerms: offering.searchTerms,
+        },
+        policy: {
+          effects: contract.contract.effects,
+          dataUse: contract.contract.dataUse,
+          lifecycle: contract.contract.lifecycle,
+        },
+        cost: {
+          price: offering.presentation.price,
+          commercialRelationship: offering.presentation.commercialRelationship,
+        },
+        trust: { tier: business.trustTier, publicStatus: business.publicStatus },
+        liveness: {
+          credentialState: publication.credentialState,
+          healthState: publication.healthState,
+          ...(publication.readinessObservedAt === undefined
+            ? {} : { observedAt: publication.readinessObservedAt }),
+          ...(publication.readinessValidUntil === undefined
+            ? {} : { validUntil: publication.readinessValidUntil }),
+          stale: publication.readinessValidUntil !== undefined && publication.readinessValidUntil < Date.now(),
+        },
+        routability: { eligible: lifecycle.state === 'active', reasons: lifecycle.reasons },
+        evidenceRefs: [...new Set([
+          ...publication.registrationEvidenceRefs,
+          ...publication.readinessEvidenceRefs,
+          ...offering.registrationEvidenceRefs,
+          ...binding.registrationEvidenceRefs,
+        ])].sort(),
+      })
+    }
+    const edges: Array<{
+      kind: 'published_by' | 'bound_to' | 'schema_compatible'
+      from: string
+      to: string
+    }> = nodes.flatMap((node) => [
+      { kind: 'published_by' as const, from: node.publicationRef, to: `business:${node.businessId}` },
+      { kind: 'bound_to' as const, from: node.publicationRef, to: node.bindingId },
+    ])
+    for (const upstream of nodes) {
+      for (const downstream of nodes) {
+        if (upstream.publicationRef !== downstream.publicationRef
+          && upstream.semantic.outputSchemaDigest === downstream.semantic.inputSchemaDigest) {
+          edges.push({ kind: 'schema_compatible' as const, from: upstream.publicationRef, to: downstream.publicationRef })
+        }
+      }
+    }
+    return { kind: 'available' as const, nodes, edges }
+  },
+})
 
 export const registerOffering = mutation({
   args: { registration: offeringRegistrationValue, ...contextFields },
@@ -910,6 +1609,87 @@ function bindingRegistrationFromRow(row: Doc<'capabilityTransportBindings'>): Ca
 
 function contractRefFromRow(row: Readonly<{ capabilityId: string; version: number; contractDigest: string }>) {
   return { capabilityId: row.capabilityId, version: row.version, contractDigest: row.contractDigest }
+}
+
+function publicationProjection(
+  contractRef: ContractRef,
+  offeringId: string,
+  bindingId: string,
+  lifecycle: PublicationLifecycle = INITIAL_PUBLICATION_LIFECYCLE,
+) {
+  return {
+    kind: 'published' as const,
+    publicationRef: offeringId,
+    contractRef,
+    offeringId,
+    bindingId,
+    lifecycle,
+  }
+}
+
+function isDirectPublicationSource(value: unknown): value is Readonly<{ kind: 'ae_envelope'; documentJson: string }> {
+  return typeof value === 'object' && value !== null
+    && 'kind' in value && value.kind === 'ae_envelope'
+    && 'documentJson' in value && typeof value.documentJson === 'string'
+}
+
+function decodeConvexPublicationSource(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) return value
+  try {
+    if (value.kind === 'openapi_http' && 'documentJson' in value && typeof value.documentJson === 'string') {
+      const { documentJson, ...source } = value
+      return { ...source, document: JSON.parse(documentJson) }
+    }
+    if (value.kind === 'mcp' && 'toolJson' in value && typeof value.toolJson === 'string') {
+      const { toolJson, ...source } = value
+      return { ...source, tool: JSON.parse(toolJson) }
+    }
+    if (value.kind === 'x402' && 'resourceJson' in value && typeof value.resourceJson === 'string') {
+      const { resourceJson, ...source } = value
+      return { ...source, resource: JSON.parse(resourceJson) }
+    }
+  } catch {
+    return undefined
+  }
+  return value
+}
+
+function publicationLifecycle(
+  publication: Doc<'capabilityPublications'>,
+  offering: Doc<'capabilityOfferings'>,
+  binding: Doc<'capabilityTransportBindings'>,
+  now: number,
+): PublicationLifecycle {
+  if (publication.disposition === 'withdrawn') {
+    return { state: 'withdrawn' as const, reasons: ['withdrawn' as const] }
+  }
+  if (publication.disposition === 'incompatible') {
+    return { state: 'incompatible' as const, reasons: ['incompatible_revision' as const] }
+  }
+  const reasons: PublicationLifecycleReason[] = []
+  if (!offeringEligibilityIsValid(offering) || !bindingEligibilityIsValid(binding)) {
+    return { state: 'inactive', reasons: ['eligibility_integrity_failure'] }
+  }
+  if (binding.admission !== 'admitted' || offering.status !== 'active') reasons.push('admission_unproven')
+  if (binding.conformance !== 'conformant') reasons.push('conformance_unproven')
+  if (publication.credentialState === 'unobserved') reasons.push('credential_readiness_unobserved')
+  if (publication.credentialState === 'unavailable') reasons.push('credential_unavailable')
+  if (publication.healthState === 'unobserved') reasons.push('health_unobserved')
+  if (publication.healthState === 'unhealthy') reasons.push('health_unhealthy')
+  if (publication.readinessValidUntil !== undefined && publication.readinessValidUntil < now) reasons.push('health_stale')
+  return { state: reasons.length === 0 ? 'active' as const : 'inactive' as const, reasons }
+}
+
+async function ownsPublishedBusiness(
+  ctx: Pick<MutationCtx | QueryCtx, 'auth' | 'db'>,
+  businessId: Id<'businesses'>,
+): Promise<boolean> {
+  const identity = await ctx.auth.getUserIdentity()
+  if (identity === null) return false
+  const business = await publishedBusiness(ctx.db, businessId)
+  if (business === null) return false
+  const owner = await ctx.db.get(business.ownerId)
+  return owner !== null && owner.clerkUserId === identity.subject
 }
 
 async function publishedBusiness(db: QueryCtx['db'], businessId: string | Id<'businesses'>) {
