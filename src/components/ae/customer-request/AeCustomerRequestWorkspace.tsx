@@ -12,6 +12,11 @@ type WorkspaceState =
   | Readonly<{ kind: 'request'; projection: CustomerRequestView }>
   | Readonly<{ kind: 'comparing'; projection: CustomerRequestView }>
   | Readonly<{ kind: 'refreshing'; projection: CustomerRequestView }>
+  | Readonly<{
+      kind: 'conflict'
+      projection: CustomerRequestView
+      reason: Extract<CustomerRequestProjection, { kind: 'conflict' }>['reason']
+    }>
   | Readonly<{ kind: 'error'; message: string; authenticationRequired: boolean }>
 type ConversationTurn = Readonly<{ speaker: 'customer' | 'ae'; text: string }>
 
@@ -110,9 +115,11 @@ export function AeCustomerRequestWorkspace() {
           idempotencyKey: `prepare:${projection.requestRef}:${projection.revision}:${crypto.randomUUID()}`,
         }),
       })
-      const result: CustomerRequestView | Readonly<{ error: string }> = await response.json()
+      const result: CustomerRequestProjection | Readonly<{ error: string }> = await response.json()
       if ('kind' in result && result.kind === 'request') setState({ kind: 'request', projection: result })
-      else setState(errorState(response.status, 'AE could not prepare comparable options for this request.'))
+      else if ('kind' in result && result.kind === 'conflict') {
+        setState({ kind: 'conflict', projection, reason: result.reason })
+      } else setState(errorState(response.status, 'AE could not prepare comparable options for this request.'))
     } catch {
       setState({ kind: 'error', message: 'AE could not be reached. No option was selected or purchased.', authenticationRequired: false })
     }
@@ -186,6 +193,18 @@ export function AeCustomerRequestWorkspace() {
 
 function RequestResult({ state, compare, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
+  if (state.kind === 'conflict') return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
+    <div className="grid gap-4">
+      <Text className="text-sm font-semibold text-accent">A newer decision is available</Text>
+      <Heading level={2}>This Request changed.</Heading>
+      <Text color="secondary">{conflictExplanation(state.reason)} No action was authorized, and your Request is preserved.</Text>
+      <Button label="Load the current Request" variant="primary" clickAction={() => void refresh(state.projection)} />
+      <RecoveryActions edit={() => edit(state.projection)} restart={restart} />
+    </div>
+  </Card>
+  if (state.kind === 'request' && state.projection.decision !== undefined) {
+    return <RouteDecisionCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
+  }
   if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'needs_authorization') return <DisclosureReview projection={state.projection} turns={turns} authorize={() => authorize(state.projection)} edit={() => edit(state.projection)} restart={restart} />
@@ -196,6 +215,317 @@ function RequestResult({ state, compare, authorize, refresh, continueRequest, ed
   if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification projection={state.projection} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a supported decision from the registered businesses for this request yet.</Text>}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
   if (state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or automatic retry occurs during this step.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
+}
+
+function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 'conflict' }>['reason']): string {
+  if (reason === 'revision_changed') return 'The Request was revised before this comparison finished.'
+  if (reason === 'options_changed') return 'The available ways forward changed before this comparison finished.'
+  if (reason === 'identity_changed') return 'The person or agent allowed to access this Request changed.'
+  return 'This operation key was already used for different work.'
+}
+
+function RouteDecisionCard({ projection, turns, edit, restart }: {
+  projection: CustomerRequestView
+  turns: readonly ConversationTurn[]
+  edit: () => void
+  restart: () => void
+}) {
+  const decision = projection.decision
+  if (decision === undefined) return null
+  return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
+    <Conversation turns={turns} />
+    <WorkingUnderstanding projection={projection} correct={edit} />
+    <header className="grid gap-2">
+      <Text className="text-sm font-semibold text-accent">Ways forward</Text>
+      <Heading level={2} className="text-3xl">{decision.outcome.summary}</Heading>
+      <Text color="secondary">{decision.outcome.kind === 'routes_expired'
+        ? 'Your Request is preserved. Check again to rebuild the available ways forward from current business information.'
+        : 'Compare who is involved, the maximum cost, what would be shared, and how problems would be handled.'}</Text>
+    </header>
+    {decision.changes.kind === 'changed'
+      ? <DecisionChanges changes={decision.changes.items} routes={decision.routes} />
+      : null}
+    <div className="grid gap-4">
+      {decision.routes.map((route, index) => <Card key={route.routeRef} padding={5}>
+        <article className="grid gap-5">
+          <div className="grid gap-1">
+            <Text type="supporting" color="secondary">
+              {route.availability === 'expired'
+                ? 'Expired way forward'
+                : decision.routes.length === 1 ? 'Current way forward' : `Current way forward ${index + 1}`}
+            </Text>
+            <Heading level={3}>{route.result.summary}</Heading>
+            <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}</Text>
+            {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">
+              Expected result: {route.result.deliverables.join(', ')}
+            </Text>}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Text type="supporting" weight="semibold">What it could cost</Text>
+              <Text type="large" weight="semibold">
+                {route.maximumTotalCost.kind === 'known'
+                  ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
+                  : 'Price needs confirmation'}
+              </Text>
+            </div>
+            <div>
+              <Text type="supporting" weight="semibold">Available until</Text>
+              <Text color="secondary">{formatOptionTime(route.validUntil)}</Text>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">What would be shared</Text>
+            {route.dataUse.recipients.length === 0
+              ? <Text color="secondary">No information sharing is declared for this way forward.</Text>
+              : <ul className="grid gap-2 text-sm text-secondary">
+                  {route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>
+                    <strong>{recipient.name}</strong> — {recipient.purposes.map(readableLabel).join(', ')}
+                  </li>)}
+                </ul>}
+          </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">What could change</Text>
+            {route.effects.length === 0
+              ? <Text color="secondary">No external consequence is declared for this way forward.</Text>
+              : <ul className="grid gap-1 text-sm text-secondary">
+                  {route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>
+                    {effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}
+                  </li>)}
+                </ul>}
+          </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">What still needs confirmation</Text>
+            <Text color="secondary">{route.uncertainty.length === 0
+              ? 'No uncertainty is declared for this way forward.'
+              : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text>
+          </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">What AE would need back</Text>
+            <ul className="grid gap-1 text-sm text-secondary">
+              {route.evidence.map((evidence) => <li key={`${evidence.label}:${evidence.purpose}`}>{evidence.label}</li>)}
+            </ul>
+          </div>
+          <details className="rounded-md border border-border bg-surface p-4">
+            <summary className="min-h-11 cursor-pointer font-semibold">How this would work</summary>
+            <ol className="mt-3 grid gap-3 text-sm text-secondary">
+              {(route.steps ?? []).map((step) => <li key={step.step}>
+                <strong>Step {step.step}: {step.business.name}.</strong>{' '}
+                {step.after.length === 0
+                  ? 'This starts the work.'
+                  : `${step.business.name} will follow ${step.after.length === 1 ? `step ${step.after[0]}` : `steps ${step.after.join(', ')}`}.`}
+              </li>)}
+            </ol>
+          </details>
+          <div className="grid gap-2">
+            <Text weight="semibold">If something goes wrong</Text>
+            <ul className="grid gap-1 text-sm text-secondary">
+              {route.recovery.map((recovery) => <li key={recovery.step}>
+                Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe'
+                  ? 'AE can safely retry after a confirmed failure.'
+                  : 'AE must check what happened before any retry.'}
+              </li>)}
+            </ul>
+            <Text type="supporting" color="secondary">{route.fallback.available
+              ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before confirmation.`
+              : 'No alternative way is currently declared.'}</Text>
+          </div>
+        </article>
+      </Card>)}
+    </div>
+    <Card padding={4}>
+      <Text weight="semibold">Nothing has been authorized or shared.</Text>
+      <Text color="secondary" className="mt-1">A separate confirmation step is required before AE can create authority for any action.</Text>
+    </Card>
+    <RecoveryActions edit={edit} restart={restart} />
+  </section>
+}
+
+function DecisionChanges({ changes, routes }: {
+  changes: Extract<NonNullable<CustomerRequestView['decision']>['changes'], { kind: 'changed' }>['items']
+  routes: NonNullable<CustomerRequestView['decision']>['routes']
+}) {
+  const resultNames = new Map(routes.map(({ result }) => [result.resultRef, result.summary]))
+  for (const change of changes) {
+    if (change.kind !== 'route_result') continue
+    for (const result of [...change.before.results, ...change.after.results]) {
+      resultNames.set(result.resultRef, result.summary)
+    }
+  }
+  return <Card padding={4}>
+    <div className="grid gap-2">
+      <Heading level={3}>What changed</Heading>
+      <ul className="grid gap-1 text-sm text-secondary">
+        {changes.map((change) => <li key={change.kind}>{decisionChangeLabel(change, resultNames)}</li>)}
+      </ul>
+    </div>
+  </Card>
+}
+
+function decisionChangeLabel(
+  change: Extract<NonNullable<CustomerRequestView['decision']>['changes'], { kind: 'changed' }>['items'][number],
+  resultNames: ReadonlyMap<string, string>,
+): string {
+  if (change.kind === 'maximum_cost' && change.before.length === 1 && change.after.length === 1
+    && change.before[0]?.cost.kind === 'known' && change.after[0]?.cost.kind === 'known') {
+    return `The maximum for ${resultName(change.after[0].resultRef, resultNames)} changed from ${formatMoney(change.before[0].cost.currency, change.before[0].cost.amountMinor)} to ${formatMoney(change.after[0].cost.currency, change.after[0].cost.amountMinor)}.`
+  }
+  if (change.kind === 'maximum_cost') {
+    return `Maximum costs changed. Before: ${costList(change.before, resultNames)}. Now: ${costList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'route_result') {
+    return `Ways forward changed. Before: ${resultList(change.before.results)}. Now: ${resultList(change.after.results)}.`
+  }
+  if (change.kind === 'businesses') {
+    return `Businesses changed. Before: ${routeBusinessList(change.before, resultNames)}. Now: ${routeBusinessList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'step_shape') {
+    return `The sequence changed. Before: ${shapeList(change.before, resultNames)}. Now: ${shapeList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'data_use') {
+    return `Information sharing changed. Before: ${recipientList(change.before, resultNames)}. Now: ${recipientList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'effects') {
+    return `Consequences changed. Before: ${effectsList(change.before, resultNames)}. Now: ${effectsList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'evidence') {
+    return `Required evidence changed. Before: ${evidenceList(change.before, resultNames)}. Now: ${evidenceList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'uncertainty') {
+    return `Uncertainty changed. Before: ${uncertaintyList(change.before, resultNames)}. Now: ${uncertaintyList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'expiry') {
+    return `Availability changed. Before: ${dateList(change.before, resultNames)}. Now: ${dateList(change.after, resultNames)}.`
+  }
+  if (change.kind === 'fallback') {
+    return `Fallbacks changed. Before: ${fallbackList(change.before, resultNames)}. Now: ${fallbackList(change.after, resultNames)}.`
+  }
+  return `Recovery changed. Before: ${recoveryList(change.before, resultNames)}. Now: ${recoveryList(change.after, resultNames)}.`
+}
+
+function costList(
+  costs: readonly { resultRef: string; cost: NonNullable<CustomerRequestView['decision']>['routes'][number]['maximumTotalCost'] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return costs.map(({ resultRef, cost }) => `${resultName(resultRef, names)}: ${cost.kind === 'known'
+    ? formatMoney(cost.currency, cost.amountMinor)
+    : 'price needs confirmation'}`).join(', ') || 'none'
+}
+
+function routeBusinessList(
+  routes: readonly { resultRef: string; businesses: readonly { name: string }[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return routes.map(({ resultRef, businesses }) => (
+    `${resultName(resultRef, names)}: ${businessList(businesses.map(({ name }) => name))}`
+  )).join('; ') || 'none'
+}
+
+function resultList(results: readonly { summary: string; position?: number | undefined }[]): string {
+  return results.map((result) => result.position === undefined
+    ? result.summary
+    : `${result.summary} (position ${result.position})`).join('; ') || 'none'
+}
+
+function shapeList(
+  shapes: readonly { resultRef: string; steps: number; dependencies: number }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return shapes.map(({ resultRef, steps, dependencies }) => (
+    `${resultName(resultRef, names)}: ${steps} ${steps === 1 ? 'step' : 'steps'}, ${dependencies} ${dependencies === 1 ? 'dependency' : 'dependencies'}`
+  )).join('; ') || 'none'
+}
+
+function recipientList(
+  routes: readonly { resultRef: string; recipients: readonly { name: string; purposes: readonly string[] }[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return routes.map(({ resultRef, recipients }) => `${resultName(resultRef, names)}: ${recipients
+    .map(({ name, purposes }) => `${name} for ${purposes.map(readableLabel).join(', ')}`).join(', ') || 'none'}`)
+    .join('; ') || 'none'
+}
+
+function effectsList(
+  routes: readonly { resultRef: string; effects: readonly { kind: 'information_shared' | 'financial_commitment' | 'external_change'; reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible' }[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return routes.map(({ resultRef, effects }) => `${resultName(resultRef, names)}: ${effects
+    .map(({ kind, reversibility }) => `${effectLabel(kind)} (${reversibilityLabel(reversibility)})`).join(', ') || 'none'}`)
+    .join('; ') || 'none'
+}
+
+function evidenceList(
+  routes: readonly { resultRef: string; evidence: readonly { label: string; purpose: 'comparison' | 'completion' | 'recovery' }[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return routes.map(({ resultRef, evidence }) => `${resultName(resultRef, names)}: ${evidence
+    .map(({ label, purpose }) => `${label} for ${readableLabel(purpose)}`).join(', ') || 'none'}`)
+    .join('; ') || 'none'
+}
+
+function uncertaintyList(
+  routes: readonly { resultRef: string; uncertainty: readonly 'price_needs_confirmation'[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return routes.map(({ resultRef, uncertainty }) => `${resultName(resultRef, names)}: ${uncertainty
+    .map(uncertaintyLabel).join(', ') || 'none'}`).join('; ') || 'none'
+}
+
+function dateList(
+  values: readonly { resultRef: string; validUntil: number }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return values.map(({ resultRef, validUntil }) => `${resultName(resultRef, names)}: ${formatOptionTime(validUntil)}`)
+    .join(', ') || 'none'
+}
+
+function fallbackList(
+  values: readonly { resultRef: string; alternatives: readonly { summary: string }[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return values.map(({ resultRef, alternatives }) => `${resultName(resultRef, names)}: ${alternatives
+    .map(({ summary }) => summary).join(', ') || 'none'}`).join('; ') || 'none'
+}
+
+function recoveryList(
+  values: readonly { resultRef: string; steps: readonly { step: number; businessName: string; posture: 'retry_safe' | 'reconcile_required' }[] }[],
+  names: ReadonlyMap<string, string>,
+): string {
+  return values.map(({ resultRef, steps }) => `${resultName(resultRef, names)}: ${steps.map((step) => (
+    `step ${step.step}, ${step.businessName}: ${step.posture === 'retry_safe' ? 'safe retry' : 'check before retry'}`
+  )).join(', ') || 'none'}`).join('; ') || 'none'
+}
+
+function resultName(resultRef: string, names: ReadonlyMap<string, string>): string {
+  return names.get(resultRef)?.replace(/[.!?]+$/u, '') ?? 'This way forward'
+}
+
+function effectLabel(kind: 'information_shared' | 'financial_commitment' | 'external_change'): string {
+  if (kind === 'information_shared') return 'Information would be shared'
+  if (kind === 'financial_commitment') return 'A financial commitment could be created'
+  return 'An external change could be made'
+}
+
+function reversibilityLabel(value: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'): string {
+  if (value === 'not_applicable') return 'reversal does not apply'
+  if (value === 'reversible') return 'reversible'
+  if (value === 'conditional') return 'reversal depends on conditions'
+  return 'cannot be reversed automatically'
+}
+
+function uncertaintyLabel(value: 'price_needs_confirmation'): string {
+  return value === 'price_needs_confirmation' ? 'Price needs confirmation' : value
+}
+
+function businessList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? 'Registered business'
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`
+}
+
+function readableLabel(value: string): string {
+  const words = value.replace(/[_-]+/gu, ' ').trim()
+  return words.length === 0 ? value : `${words[0]?.toUpperCase() ?? ''}${words.slice(1)}`
 }
 
 function OptionsCard({ projection, turns, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; edit: () => void; restart: () => void }) {

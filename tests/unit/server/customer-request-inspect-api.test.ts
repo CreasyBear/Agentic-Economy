@@ -20,4 +20,52 @@ describe('customer Request inspect HTTP API', () => {
     })
     expect(response.status).toBe(404)
   })
+
+  it('preserves the shared exact-generation decision on the human and agent HTTP contract', async () => {
+    const projection = routeDecisionProjection()
+    const response = await handleCustomerRequestGet(projection.requestRef, {
+      inspect: async () => projection,
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(projection)
+  })
 })
+
+function routeDecisionProjection() {
+  return {
+    kind: 'request' as const, requestRef: 'request:route', revision: 2,
+    routeGenerationRef: 'generation:two', state: 'routes_ready' as const,
+    summary: 'One way forward is available.', nextAction: 'inspect_routes' as const,
+    missingFields: [], criteria: [], options: [],
+    decision: {
+      generationRef: 'generation:two', requestRevision: 2,
+      outcome: { kind: 'routes_available' as const, routeCount: 1, summary: 'One way forward is available.' },
+      routes: [{
+        routeRef: 'route:opaque',
+        result: {
+          resultRef: 'route:opaque', summary: 'Prepare a governed result.', deliverables: ['Result reference'],
+        },
+        availability: 'current' as const, stepCount: 1,
+        businesses: [{ businessRef: 'business:opaque', name: 'North Star Services' }],
+        maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+        dataUse: {
+          recipientCount: 1,
+          recipients: [{
+            recipientRef: 'recipient:opaque', name: 'North Star Services', purposes: ['Prepare result'],
+          }],
+          purposes: ['Prepare result'],
+        },
+        effects: [{ kind: 'information_shared' as const, reversibility: 'irreversible' as const }],
+        evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
+        recovery: [{ step: 1, businessName: 'North Star Services', posture: 'retry_safe' as const }],
+        validUntil: 50_000, fallback: { available: false, alternatives: [] }, uncertainty: [],
+        steps: [{
+          step: 1, business: { businessRef: 'business:opaque', name: 'North Star Services' }, after: [],
+        }],
+      }],
+      changes: { kind: 'initial' as const },
+      nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
+    },
+  }
+}
