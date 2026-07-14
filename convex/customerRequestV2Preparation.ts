@@ -322,6 +322,7 @@ async function loadCurrentActionModel(
     contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
     offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
   }))
   if (requestRegistrySnapshotDigest(bindings) !== aggregate.evaluation.registrySnapshotDigest
     || !bindings.some((binding) => sameCapabilityContractRef(binding.contractRef, action.contractRef))) return undefined

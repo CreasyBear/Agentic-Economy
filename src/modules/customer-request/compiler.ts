@@ -4,6 +4,7 @@ import {
   type CapabilityDecisionModel,
   type CapabilityInputSemantic,
 } from '@/modules/capability-contract/public'
+import type { CapabilityCancellation } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -93,6 +94,7 @@ export type CustomerRequestRoutePlan = Readonly<{
     dataUse: CapabilityDecisionModel['dataUse']
     effects: CapabilityDecisionModel['effects']
     evidence: CapabilityDecisionModel['evidence']
+    cancellation: CapabilityCancellation
     recovery: CapabilityDecisionModel['lifecycle']
   }>[]
   edges: readonly (RequestActionInputMapping & Readonly<{ fromStep: string; toStep: string }>)[]
@@ -466,6 +468,7 @@ export function compileRoutePlans(input: Readonly<{
         deferredInputs: action.inputMappings,
         price: candidate.price,
         dataUse: model.dataUse, effects: model.effects, evidence: model.evidence,
+        cancellation: candidate.cancellation,
         recovery: model.lifecycle,
       })
     })
@@ -516,12 +519,14 @@ export function compileRoutePlans(input: Readonly<{
 }
 
 type RouteCandidate = RequestEvaluation['candidates'][number] & Required<Pick<
-  RequestEvaluation['candidates'][number], 'publicationRef' | 'publicationRevision' | 'readinessValidUntil' | 'price'
+  RequestEvaluation['candidates'][number],
+  'publicationRef' | 'publicationRevision' | 'readinessValidUntil' | 'price' | 'cancellation'
 >>
 
 function isRouteCandidate(candidate: RequestEvaluation['candidates'][number]): candidate is RouteCandidate {
   return candidate.publicationRef !== undefined && candidate.publicationRevision !== undefined
     && candidate.readinessValidUntil !== undefined && candidate.price !== undefined
+    && candidate.cancellation !== undefined
 }
 
 function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerRequestRoutePlan['maximumTotalCost'] | undefined {

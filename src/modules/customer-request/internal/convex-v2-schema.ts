@@ -501,6 +501,12 @@ export const requestEvaluationCandidateV2Value = v.object({
   offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
   publicationRef: v.optional(v.string()), publicationRevision: v.optional(v.number()), readinessValidUntil: v.optional(v.number()),
   price: v.optional(registeredPriceV2Value),
+  // Optional only for immutable Request revisions written before RoutePlan cancellation was bound.
+  // Current production compilation always supplies it and mandate creation rejects its absence.
+  cancellation: v.optional(v.object({
+    kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
+    evidenceRefs: v.array(v.string()),
+  })),
   viability: v.union(
     v.object({ kind: v.literal('viable') }),
     v.object({ kind: v.literal('blocked_on_information'), inputs: v.array(v.object({
@@ -554,6 +560,11 @@ const routePlanV2Value = v.object({
       evidenceId: v.string(), outputPointer: v.string(), purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
       annotationId: v.string(), label: v.string(), role: v.union(v.literal('comparison'), v.literal('completion_evidence'), v.literal('recovery')),
       semanticIdentity: v.optional(v.string()), guaranteed: v.boolean(), schemaIdentity: v.string(),
+    })),
+    // Optional only for immutable RoutePlan generations written before #172.
+    cancellation: v.optional(v.object({
+      kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
+      evidenceRefs: v.array(v.string()),
     })),
     recovery: v.object({
       idempotency: v.union(v.literal('not_applicable'), v.literal('required')),

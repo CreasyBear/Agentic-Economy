@@ -129,6 +129,7 @@ describe('exact V2 Action Preparation', () => {
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
         contractRef: model.contractRef, offeringRegistrationHash: 'offering-hash:one',
         bindingRegistrationHash: 'binding-hash:one',
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       }],
       models: [model], now: 1_000,
       proposal: {
@@ -192,6 +193,7 @@ function compiledProtectedRequest(document: ReturnType<typeof protectedContract>
     businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one',
     contractRef: model.contractRef, offeringRegistrationHash: 'offering-hash:one',
     bindingRegistrationHash: 'binding-hash:one',
+    cancellation: { kind: 'unsupported' as const, evidenceRefs: ['cancellation:binding:one'] },
   }
   const compiled = compileCustomerRequest({
     requestId: 'request:protected:1', expectedRevision: 0,

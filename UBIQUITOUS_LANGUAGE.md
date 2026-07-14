@@ -16,6 +16,14 @@ _Avoid_: Final intent, approved plan
 An untrusted proposal composed only from registered capability contracts and typed inputs, bound to one Customer Request revision.
 _Avoid_: Execution plan, authorization
 
+**RoutePlan**:
+An exact, immutable proposal for one or more ordered registered capability steps that can satisfy a Customer Request revision. It binds the selected businesses, capability contracts, costs, data use, effects, evidence, cancellation posture, recovery, expiry, and fallback choices. A RoutePlan is never authority.
+_Avoid_: Execution permission, provider-specific workflow, approved route
+
+**RouteMandate**:
+Independently authenticated, expiring authority bound to one exact selected RoutePlan and its material limits. A different route, fallback, generation, recipient, purpose, effect, price ceiling, or expiry requires a new RouteMandate.
+_Avoid_: Signed identity, blanket consent, reusable approval
+
 **Decision-Changing Information**:
 Missing information whose answer changes which registered options are viable or comparable at the current decision point.
 _Avoid_: Required form field, collect everything upfront
@@ -45,7 +53,7 @@ A durable, value-redacted reservation binding one preparation release to a concr
 _Avoid_: Post-call disclosure record, provider log
 
 **Approval Grant**:
-Authenticated, expiring authority bound to one exact Prepared Action and its material consequences.
+Legacy single-action authority bound to one exact Prepared Action and its material consequences. It does not authorize a composite RoutePlan; new route authority uses a RouteMandate.
 _Avoid_: Confirmation flag, model approval
 
 **Action Attempt**:

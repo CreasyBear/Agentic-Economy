@@ -60,6 +60,18 @@ export {
   type VerifiedApprovalGrantActor,
 } from './approval-grant-v2'
 export {
+  compileRouteMandate,
+  routeMandateAuthorityScopeDigest,
+  routeMandateDigest,
+  verifyRouteMandate,
+  type CompileRouteMandateResult,
+  type RouteMandate,
+  type RouteMandateAuthorization,
+  type RouteMandatePrincipal,
+  type RouteMandateStep,
+  type VerifyRouteMandateResult,
+} from './route-mandate'
+export {
   actionAttemptV2Digest,
   actionAuthorityBudgetV2Digest,
   actionAuthorityBudgetV2Ref,

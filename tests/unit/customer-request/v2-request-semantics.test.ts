@@ -16,6 +16,7 @@ import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import {
   routePlanGenerationIsInternallyConsistent,
   routePlanGenerationMaterialDigest,
+  routePlanGenerationOwnsCancellationPosture,
   writableCustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 import {
@@ -145,6 +146,7 @@ describe('V2 Request semantics', () => {
       candidates: [{
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
         offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       }],
     })
 
@@ -214,6 +216,7 @@ describe('V2 Request semantics', () => {
       candidates: [{
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
         offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       }],
     })
 
@@ -346,6 +349,7 @@ describe('V2 Request semantics', () => {
             dataUse: [{ purposes: ['return_requested_result'] }],
             effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
             evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
+            cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:catalog.lookup'] },
             recovery: { idempotency: 'required', recovery: 'retry_safe' },
           },
           {
@@ -376,6 +380,10 @@ describe('V2 Request semantics', () => {
       .toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
     expect(routePlanGenerationMaterialDigest(changedPrice.routeGeneration))
       .not.toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    expect(routePlanGenerationOwnsCancellationPosture(first.routeGeneration)).toBe(true)
+    const cancellationOmitted = writableCustomerRequestRoutePlanGeneration(first.routeGeneration)
+    Reflect.deleteProperty(cancellationOmitted.routes[0]!.steps[0]!, 'cancellation')
+    expect(routePlanGenerationOwnsCancellationPosture(cancellationOmitted)).toBe(false)
     const materialVariants = [
       (generation: typeof first.routeGeneration) => {
         const changed = writableCustomerRequestRoutePlanGeneration(generation)
@@ -908,5 +916,6 @@ function supply(bindingId: string, model: ReturnType<typeof decisionModelWithCom
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
     publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
     price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
+    cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }
