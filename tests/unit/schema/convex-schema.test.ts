@@ -32,6 +32,7 @@ const durableTables = [
   'capabilityLaunchSupportRecords',
   'capabilityContractDocuments',
   'capabilityOfferings',
+  'capabilityPublications',
   'capabilityTransportBindings',
   'customerRequestAgentPrincipals',
   'customerRequestCapabilityContracts',
