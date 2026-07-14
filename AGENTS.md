@@ -4,21 +4,45 @@ Always-on instructions for any assistant operating inside or against Agentic Eco
 Read this before acting. `DESIGN.md` is the source of truth for visual/UI decisions;
 `PRODUCT.md` is the source of truth for the product thesis and trust contract.
 
+## Authority and maturity
+
+`PRODUCT.md` deliberately separates the **current evidenced state** from the
+**target product contract**. Preserve that separation in source, plans, issues,
+copy, tests, and status reports.
+
+- Current claims require production source plus executable evidence through the
+  intended human or machine surface.
+- Target requirements direct architecture but are not public feature claims.
+- Sandbox evidence proves contract behavior only. It does not prove useful real
+  supply, customer value, or production fulfilment.
+- Internal objects, schemas, tests, scripts, planning files, and closed issues do
+  not establish customer reachability by themselves.
+- When documents and runtime differ, report the difference. Do not silently
+  downgrade the target to match legacy behavior or upgrade current claims to
+  match the target.
+
 ## What AE is
 
-AE is the trust and discovery layer for agentic commerce. Today it publishes
-business-supplied service pages that customers can compare and assistants can
-safely read. The first owned conversion is a **qualified inquiry** — a human
-first-contact message to a business for owner review.
+AE is being built as the trust, discovery, decision, and bounded-action layer for
+agentic commerce. Its neutral engine matches a Customer Request only against
+registered capability contracts and is intended to return inspectable routes
+before authority or execution.
 
-## What AE is not
+Today, the customer-reachable product is narrower: AE publishes
+business-supplied pages that customers can compare and assistants can safely
+read, and it can send a **qualified inquiry** for owner review. The authenticated
+Customer Request path can interpret and prepare bounded proposals, while
+multi-capability RoutePlans remain below the customer projection. Treat this as
+current migration state, not AE's permanent category or core identity.
+
+## What AE does not publicly do today
 
 AE does not book, charge, dispatch, or auto-fulfil. Do not imply that it does,
 in copy, tool descriptions, or agent responses. "Verified" is only used when a
 named standard exists and a listing meets it — otherwise use "checked",
 "supplied", "published", "last checked", or "needs confirmation".
 
-## The safe contract for assistants
+## The current safe contract for assistants
 
 An assistant reading AE may: **read**, **compare**, **summarize**, and **route
 to the next step**. It may **send a qualified inquiry** on a person's behalf
@@ -26,6 +50,17 @@ when the listing publishes that capability. It may **not** assume booking,
 payment, dispatch, availability, or any fact the listing marks as needing
 confirmation. If a requested action exceeds the safe contract, return the
 person to AE and state the boundary plainly.
+
+An authenticated external agent may also use the published Customer Request API
+to create or resume a Request, provide missing facts, and inspect the states that
+surface actually returns. That API does not by itself prove customer-visible
+RoutePlan choice, mandate, composite execution, useful real supply, or successful
+external fulfilment. Describe only the exact state returned.
+
+The target Request → RoutePlan → Approve → Run → Inspect lifecycle in
+`PRODUCT.md` guides implementation. Do not expose a target operation as an
+available assistant action until its production surface, authority boundary,
+failure behavior, and readback have been proven.
 
 ## Actions (define once, call from any surface)
 
@@ -44,7 +79,7 @@ Currently exposed to assistants (`surfaces` includes `agentTools`):
   Returns public catalog facts or a not-found result; do not invent missing
   provider details.
 - `inquiry.submit` — send a qualified inquiry. Write, admission-gated. Returns
-  a receipt and delivery state. This is the only assistant-exposed write.
+  a receipt and delivery state. This is the only `agentTools` write.
   Refuse if the person wants booking, payment, dispatch, or autonomous
   fulfillment — AE does not do those.
 
@@ -87,6 +122,15 @@ shown through truthful content, not a labelled ledger.
   bubble radius on everything, gradient CTA buttons, glassmorphism, blobs.
 - Add new operations as actions (`<module>/<module>.actions.ts`) and import
   them in `src/modules/actions/index.ts` so they register.
+- Customer conversation must compile into and resume the canonical Customer
+  Request. Do not add another intent compiler, customer history, recommendation
+  model, or recovery state machine to the legacy Answer Thread path.
+- A registered business page is discovery inventory. Routeable supply requires
+  a current admitted business, exact capability contract, offering, binding,
+  eligibility decision, publication, credentials, and readiness evidence.
+- Keep domain-specific behavior in registered contracts or adapters. The neutral
+  compiler, Request API, customer projection, and UI must not change when a
+  conformant business is added or swapped.
 - Keep public human copy free of internal architecture words: `source-owned`,
   `readback`, `manifest`, `capability`, `gateway`, `operator`, `MCP`,
   `OpenAPI`, `callable`, `autonomous`, `agent-native`, `DTO`, `fixture`.
