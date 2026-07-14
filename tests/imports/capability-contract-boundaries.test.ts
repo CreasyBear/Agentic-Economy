@@ -11,7 +11,15 @@ describe('capability contract boundaries', () => {
     ))
 
     expect(imports).toEqual([
-      'ajv/dist/2020.js',
+      '@cfworker/json-schema',
+      'ajv/dist/refs/json-schema-2020-12/meta/applicator.json',
+      'ajv/dist/refs/json-schema-2020-12/meta/content.json',
+      'ajv/dist/refs/json-schema-2020-12/meta/core.json',
+      'ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json',
+      'ajv/dist/refs/json-schema-2020-12/meta/meta-data.json',
+      'ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json',
+      'ajv/dist/refs/json-schema-2020-12/meta/validation.json',
+      'ajv/dist/refs/json-schema-2020-12/schema.json',
       'zod',
       '@/modules/common/canonical-digest',
       '@/modules/common/stable-hash',
@@ -31,7 +39,7 @@ describe('capability contract boundaries', () => {
   })
 
   it('keeps capability schema traversal and commitment materialization out of downstream decision modules', () => {
-    const forbiddenReimplementation = /(?:from\s+['"]ajv|CapabilityContractDocument|resolvePointedSchema|materializeInputFacts|setJsonPointer|semantic\.dataUse)/
+    const forbiddenReimplementation = /(?:from\s+['"](?:ajv|@cfworker\/json-schema)|CapabilityContractDocument|resolvePointedSchema|materializeInputFacts|setJsonPointer|semantic\.dataUse)/
 
     for (const root of ['src/modules/customer-request', 'src/modules/routing-kernel']) {
       for (const source of sourcesUnder(root)) expect(source).not.toMatch(forbiddenReimplementation)

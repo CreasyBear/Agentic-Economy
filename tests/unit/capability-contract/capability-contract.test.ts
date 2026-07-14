@@ -105,6 +105,11 @@ describe('function-agnostic capability contract', () => {
       ...minimalContract(),
       inputSchema: { $schema: JSON_SCHEMA_2020_12, $dynamicAnchor: 'node', $dynamicRef: '#node' },
     })).toThrowError('capability_contract_invalid')
+
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      inputSchema: { $schema: JSON_SCHEMA_2020_12, $recursiveAnchor: true, $recursiveRef: '#' },
+    })).toThrowError('capability_contract_invalid')
   })
 
   it('does not mistake instance data containing $ref for a schema reference', () => {
@@ -181,6 +186,11 @@ describe('function-agnostic capability contract', () => {
     expect(() => defineCapabilityContract({
       ...minimalContract(),
       inputSchema: { $schema: JSON_SCHEMA_2020_12, type: 'not-a-json-schema-type' },
+    })).toThrowError('capability_json_schema_invalid')
+
+    expect(() => defineCapabilityContract({
+      ...minimalContract(),
+      inputSchema: objectSchema({ id: { type: 'not-a-json-schema-type' } }, ['id']),
     })).toThrowError('capability_json_schema_invalid')
   })
 

@@ -1,4 +1,12 @@
-import Ajv2020 from 'ajv/dist/2020.js'
+import { Validator, type Schema } from '@cfworker/json-schema'
+import applicatorMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/applicator.json'
+import contentMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/content.json'
+import coreMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/core.json'
+import formatAnnotationMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json'
+import metaDataMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/meta-data.json'
+import unevaluatedMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json'
+import validationMetaSchema from 'ajv/dist/refs/json-schema-2020-12/meta/validation.json'
+import rootMetaSchema from 'ajv/dist/refs/json-schema-2020-12/schema.json'
 import { z } from 'zod'
 
 import { canonicalDigest } from '@/modules/common/canonical-digest'
@@ -17,10 +25,21 @@ const MAX_VALIDATED_VALUE_NODES = 10_000
 const MAX_VALIDATED_VALUE_DEPTH = 64
 
 type ValidationError = Readonly<{ instancePath?: string; keyword?: string; params?: Readonly<Record<string, unknown>> }>
-type SchemaValidator = ((value: unknown) => boolean) & Readonly<{ errors?: readonly ValidationError[] | null }>
+type SchemaValidator = ((value: unknown) => boolean) & { errors?: readonly ValidationError[] | null }
 const compiledContracts = new Map<string, Readonly<{ input: SchemaValidator; output: SchemaValidator }>>()
 const compiledPointedSchemas = new Map<string, SchemaValidator>()
 const definedContracts = new WeakSet<object>()
+const supportedSchemaKeywords = new Set([
+  '$anchor', '$comment', '$defs', '$dynamicAnchor', '$dynamicRef', '$id', '$recursiveAnchor',
+  '$recursiveRef', '$ref', '$schema', '$vocabulary', 'additionalItems', 'additionalProperties',
+  'allOf', 'anyOf', 'const', 'contains', 'contentEncoding', 'contentMediaType', 'contentSchema',
+  'default', 'definitions', 'dependencies', 'dependentRequired', 'dependentSchemas', 'deprecated',
+  'description', 'else', 'enum', 'examples', 'exclusiveMaximum', 'exclusiveMinimum', 'format',
+  'if', 'items', 'maxContains', 'maxItems', 'maxLength', 'maxProperties', 'maximum', 'minContains',
+  'minItems', 'minLength', 'minProperties', 'minimum', 'multipleOf', 'not', 'oneOf', 'pattern',
+  'patternProperties', 'prefixItems', 'properties', 'propertyNames', 'readOnly', 'required', 'then',
+  'title', 'type', 'unevaluatedItems', 'unevaluatedProperties', 'uniqueItems', 'writeOnly',
+])
 
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | Readonly<{ [key: string]: JsonValue }>
 
@@ -39,6 +58,7 @@ const jsonSchema = z.record(z.string(), jsonValueSchema).superRefine((schema, co
     context.addIssue({ code: 'custom', message: 'json_schema_reference_profile_unsupported' })
   }
 })
+const schemaMetaValidator = createSchemaMetaValidator()
 const customerAnnotation = z.object({
   annotationId: identifier,
   document: z.enum(['input', 'output']),
@@ -481,10 +501,61 @@ function assertSchemaIsSafeAndValid(schema: Readonly<Record<string, JsonValue>>)
     throw new Error('capability_json_schema_too_complex')
   }
   try {
-    new Ajv2020({ allErrors: true, allowUnionTypes: true, strict: true, validateFormats: false }).compile(schema)
+    if (!schemaAndChildrenMatchMetaSchema(schema)) throw new Error('schema_meta_validation_failed')
+    createInterpreter(schema).validate(null)
   } catch {
     throw new Error('capability_json_schema_invalid')
   }
+}
+
+function createSchemaMetaValidator(): Validator {
+  const validator = new Validator(mutableInterpreterSchema(rootMetaSchema), '2020-12', false)
+  for (const schema of [
+    applicatorMetaSchema,
+    contentMetaSchema,
+    coreMetaSchema,
+    formatAnnotationMetaSchema,
+    metaDataMetaSchema,
+    unevaluatedMetaSchema,
+    validationMetaSchema,
+  ]) validator.addSchema(mutableInterpreterSchema(schema))
+  return validator
+}
+
+function schemaAndChildrenMatchMetaSchema(schema: Readonly<Record<string, JsonValue>>): boolean {
+  if (Object.keys(schema).some((keyword) => !supportedSchemaKeywords.has(keyword))) return false
+  const result = schemaMetaValidator.validate(schema)
+  return result.valid && childSchemas(schema).every(schemaAndChildrenMatchMetaSchema)
+}
+
+function createInterpreter(schema: Readonly<Record<string, JsonValue>>): Validator {
+  return new Validator(mutableInterpreterSchema(schema), '2020-12', false)
+}
+
+function createInterpreterValidator(schema: Readonly<Record<string, JsonValue>>): SchemaValidator {
+  const interpreter = createInterpreter(schema)
+  const validator = ((value: unknown) => {
+    const result = interpreter.validate(value)
+    validator.errors = result.errors.map((error) => ({
+      instancePath: error.instanceLocation === '#' ? '' : error.instanceLocation.replace(/^#/u, ''),
+      keyword: error.keyword,
+      params: { keywordLocation: error.keywordLocation },
+    }))
+    return result.valid
+  }) as SchemaValidator
+  return validator
+}
+
+function mutableInterpreterSchema(input: unknown): Schema {
+  const clone = jsonValueSchema.parse(JSON.parse(JSON.stringify(input)))
+  if (!isJsonRecord(clone)) throw new Error('capability_json_schema_invalid')
+  stripSchemaFormats(clone)
+  return clone as Schema
+}
+
+function stripSchemaFormats(schema: Record<string, JsonValue>): void {
+  delete schema.format
+  for (const child of childSchemas(schema)) stripSchemaFormats(child as Record<string, JsonValue>)
 }
 
 function assertUniqueSemanticIds(document: CapabilityContractDocument): void {
@@ -555,15 +626,8 @@ function assertSemanticPointersProjectable(document: CapabilityContractDocument)
 
 function schemaCompilesIndependently(schema: Readonly<Record<string, JsonValue>>): boolean {
   try {
-    new Ajv2020({
-      allErrors: true,
-      allowUnionTypes: true,
-      strict: true,
-      validateFormats: false,
-      coerceTypes: false,
-      useDefaults: false,
-      removeAdditional: false,
-    }).compile(schema)
+    const validator = createInterpreterValidator(schema)
+    validator(null)
     return true
   } catch {
     return false
@@ -653,18 +717,9 @@ function compiledValidator(contract: CapabilityContract, document: 'input' | 'ou
   const cacheKey = `${contract.ref.capabilityId}:${contract.ref.version}:${contract.ref.contractDigest}`
   let cached = compiledContracts.get(cacheKey)
   if (cached === undefined) {
-    const ajv = new Ajv2020({
-      allErrors: true,
-      allowUnionTypes: true,
-      strict: true,
-      validateFormats: false,
-      coerceTypes: false,
-      useDefaults: false,
-      removeAdditional: false,
-    })
     cached = {
-      input: ajv.compile(contract.inputSchema) as SchemaValidator,
-      output: ajv.compile(contract.outputSchema) as SchemaValidator,
+      input: createInterpreterValidator(contract.inputSchema),
+      output: createInterpreterValidator(contract.outputSchema),
     }
     compiledContracts.set(cacheKey, cached)
     if (compiledContracts.size > MAX_COMPILED_CONTRACTS) {
@@ -684,16 +739,7 @@ function compiledPointedValidator(
 ): SchemaValidator {
   let validator = compiledPointedSchemas.get(identity)
   if (validator === undefined) {
-    const ajv = new Ajv2020({
-      allErrors: true,
-      allowUnionTypes: true,
-      strict: true,
-      validateFormats: false,
-      coerceTypes: false,
-      useDefaults: false,
-      removeAdditional: false,
-    })
-    validator = ajv.compile(schema) as SchemaValidator
+    validator = createInterpreterValidator(schema)
     compiledPointedSchemas.set(identity, validator)
     if (compiledPointedSchemas.size > MAX_COMPILED_POINTED_SCHEMAS) {
       const oldestKey = compiledPointedSchemas.keys().next().value
@@ -891,7 +937,7 @@ function jsonDepth(value: JsonValue, depth = 0): number {
 }
 
 function containsRemoteSchemaReference(schema: Readonly<Record<string, JsonValue>>): boolean {
-  for (const keyword of ['$ref', '$dynamicRef'] as const) {
+  for (const keyword of ['$ref', '$dynamicRef', '$recursiveRef'] as const) {
     const reference = schema[keyword]
     if (reference !== undefined && (typeof reference !== 'string' || !reference.startsWith('#'))) return true
   }
@@ -901,7 +947,7 @@ function containsRemoteSchemaReference(schema: Readonly<Record<string, JsonValue
 function containsUnsupportedReference(schema: Readonly<Record<string, JsonValue>>): boolean {
   const reference = schema.$ref
   if (reference !== undefined && (typeof reference !== 'string' || !reference.startsWith('#/'))) return true
-  if (schema.$dynamicRef !== undefined) return true
+  if (schema.$dynamicRef !== undefined || schema.$recursiveRef !== undefined || schema.$recursiveAnchor !== undefined) return true
   return childSchemas(schema).some((child) => containsUnsupportedReference(child))
 }
 
