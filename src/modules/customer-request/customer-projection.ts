@@ -265,6 +265,8 @@ export function projectRouteProgress(input: Readonly<{
     step: number
     state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention'
   }>
+  updatedAt: number
+  cancellationAvailable: boolean
   criteria?: readonly CustomerCriterion[]
 }>): CustomerRequestView {
   return requestView({
@@ -281,6 +283,12 @@ export function projectRouteProgress(input: Readonly<{
       total: input.total,
       current: { ...input.current },
     },
+    activity: {
+      actor: 'ae_for_customer', certainty: 'pending', updatedAt: input.updatedAt,
+      nextCheckAt: input.updatedAt + 30_000, retry: 'not_needed',
+      cancellation: input.cancellationAvailable ? 'available_before_next_step' : 'too_late_or_unsupported',
+      safeNextAction: 'check_progress',
+    },
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
   })
 }
@@ -289,12 +297,17 @@ export function projectRouteCancelled(input: Readonly<{
   requestRef: string
   revision: number
   criteria?: readonly CustomerCriterion[]
+  updatedAt?: number
 }>): CustomerRequestView {
   return requestView({
     ...input,
     state: 'cancelled',
     summary: 'This request was stopped before the next business step began.',
     nextAction: 'revise_request',
+    activity: {
+      actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: input.updatedAt ?? 0,
+      retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+    },
   })
 }
 
@@ -322,6 +335,11 @@ export function projectCustomerActionStatus(input: Readonly<{
       state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
       observedAt: input.status.observedAt,
     },
+    activity: {
+      actor: 'ae_for_customer', certainty: 'unknown', updatedAt: input.status.observedAt,
+      nextCheckAt: input.status.observedAt + 30_000, retry: 'blocked_until_reconciled',
+      cancellation: 'too_late_or_unsupported', safeNextAction: 'wait_for_evidence',
+    },
   })
   if (input.status.kind === 'completed') return requestView({
     requestRef: input.requestRef, revision: input.revision,
@@ -334,6 +352,10 @@ export function projectCustomerActionStatus(input: Readonly<{
       state: 'completed', resolution: input.status.resolution, automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
     },
+    activity: {
+      actor: 'ae_for_customer', certainty: 'confirmed', updatedAt: input.status.resolvedAt,
+      retry: 'not_needed', cancellation: 'complete', safeNextAction: 'review_result',
+    },
   })
   return requestView({
     requestRef: input.requestRef, revision: input.revision,
@@ -343,6 +365,10 @@ export function projectCustomerActionStatus(input: Readonly<{
     action: {
       state: 'failed', resolution: 'reconciled', automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
+    },
+    activity: {
+      actor: 'ae_for_customer', certainty: 'failed', updatedAt: input.status.resolvedAt,
+      retry: 'manual_after_failure', cancellation: 'complete', safeNextAction: 'revise_request',
     },
   })
 }
@@ -364,6 +390,7 @@ function requestView(input: Readonly<{
   preparedAction?: CustomerPreparedAction
   action?: CustomerRequestView['action']
   progress?: CustomerRequestView['progress']
+  activity?: CustomerRequestView['activity']
   decision?: CustomerRoutePlanDecision
   confirmation?: CustomerRouteConfirmation
 }>): CustomerRequestView {
@@ -393,6 +420,7 @@ function requestView(input: Readonly<{
       ...input.progress,
       current: Object.freeze({ ...input.progress.current }),
     }) }),
+    ...(input.activity === undefined ? {} : { activity: Object.freeze({ ...input.activity }) }),
     ...(input.decision === undefined ? {} : { decision: input.decision }),
     ...(input.confirmation === undefined ? {} : { confirmation: input.confirmation }),
     options: Object.freeze((input.options ?? []).map((option) => Object.freeze({ ...option }))),

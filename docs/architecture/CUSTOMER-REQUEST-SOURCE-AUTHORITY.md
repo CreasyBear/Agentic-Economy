@@ -11,8 +11,8 @@ The production path is owned by these TypeScript sources:
 | Customer-facing states | `src/modules/customer-request/customer-projection.ts` |
 | Authenticated application composition | `convex/customerRequestApplication.ts` |
 | Durable V2 Request aggregate | `convex/customerRequestV2.ts` |
-| Durable preparation and exact RouteMandate state | `convex/customerRequestV2Preparation.ts`, `convex/customerRequestV2PreparedAction.ts`, `convex/customerRequestRouteMandate.ts` |
-| Machine submit, message refinement, facts, resume, comparison, and preparation-authorization boundaries | `src/lib/server/customer-request-api.ts`, `src/lib/server/customer-request-messages-api.ts`, `src/lib/server/customer-request-facts-api.ts`, `src/lib/server/customer-request-inspect-api.ts`, `src/lib/server/customer-options-api.ts`, `src/lib/server/customer-request-authorization-api.ts` |
+| Durable preparation, exact RouteMandate, run, problem, and evidence state | `convex/customerRequestV2Preparation.ts`, `convex/customerRequestV2PreparedAction.ts`, `convex/customerRequestRouteMandate.ts`, `convex/customerRequestRouteExecution.ts` |
+| Machine submit, refinement, facts, resume, comparison, confirmation, run, cancellation, problem, evidence, and preparation-authorization boundaries | `src/lib/server/customer-request-api.ts`, `src/lib/server/customer-request-messages-api.ts`, `src/lib/server/customer-request-facts-api.ts`, `src/lib/server/customer-request-inspect-api.ts`, `src/lib/server/customer-options-api.ts`, `src/lib/server/customer-request-confirmation-api.ts`, `src/lib/server/customer-request-route-action-api.ts`, `src/lib/server/customer-request-recovery-api.ts`, `src/lib/server/customer-request-authorization-api.ts` |
 | External-agent admission and service assertion | `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/service-auth-envelope.ts` |
 | Human Request workspace | `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` |
 | Registered provider protocol | `src/modules/routing-kernel/http-capability-binding.ts` |
@@ -32,11 +32,18 @@ An authenticated caller keeps one opaque `requestRef`. The human surface exposes
 - `POST /api/requests/:requestRef/facts` supplies only fields requested by the current durable Request revision.
 - `POST /api/requests/:requestRef/options` compares registered eligible options.
 - `POST /api/requests/:requestRef/authorization` authorizes disclosed preparation.
+- `POST /api/requests/:requestRef/confirmation` confirms one exact current customer option without starting it.
+- `POST /api/requests/:requestRef/run` starts or resumes only that confirmed option.
+- `POST /api/requests/:requestRef/cancellation` stops before the next business step only while that remains safe.
+- `POST /api/requests/:requestRef/problems` records a bounded problem report without retrying or changing the work.
+- `GET /api/requests/:requestRef/evidence` exports customer-safe observed step and result receipts.
 - `GET /api/requests/:requestRef` resumes and inspects without contacting providers.
 
 Request operations return the same `CustomerRequestView` vocabulary, including information, comparison, authorization, outcome, completion, and recovery states. Customer option sets declare whether their cards are unranked or carry an evidence-bound recommendation. Binding IDs, capability IDs, Plan graphs, digests, provider schemas, attempts, and recovery references never cross this boundary.
 
 Human sessions use `/api/requests`. External agents use the parallel versioned surface at `/api/v1/requests` with a Clerk API key carrying `customer_requests:create`. The server accepts only the `api_key` token type, derives the durable principal from the immutable key ID, and records the owning Clerk user or organization separately. It never forwards the API key to Convex.
+
+The versioned surface mirrors the same suffixes and customer-semantic responses. A caller supplies one opaque `requestRef`, current displayed references where required, and idempotency material. It cannot supply a capability, business binding, RoutePlan, mandate, digest, transport, recipients, effects, spend envelope, or kernel state. Runtime responses declare actor, certainty, next-check timing, retry posture, cancellation posture, and one safe next action. Source and local sandbox proof of this contract does not prove hosted reachability, useful real supply, customer value, or external fulfilment.
 
 The TanStack server signs each verified agent command with a 30-second HMAC assertion bound to the operation, complete command digest, key principal, owner, credential ID, scopes, and issue time. Convex verifies that assertion before reading or writing, records the principal-to-owner relationship, and then calls the same CustomerRequest application used by human sessions. The shared service key never crosses the boundary or appears in the assertion.
 

@@ -7,6 +7,8 @@ import {
   handleAgentCustomerRequestGet,
   handleAgentCustomerRequestMessagePost,
   handleAgentCustomerRequestPost,
+  handleAgentCustomerRequestRunPost,
+  handleAgentCustomerRequestCancelPost,
 } from '@/lib/server/customer-request-agent-api'
 import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
 import { handleCustomerRequestFactsPost } from '@/lib/server/customer-request-facts-api'
@@ -14,6 +16,10 @@ import { handleCustomerRequestGet } from '@/lib/server/customer-request-inspect-
 import { handleCustomerRequestMessagePost } from '@/lib/server/customer-request-messages-api'
 import { handleCustomerRequestPost } from '@/lib/server/customer-request-api'
 import { handleCustomerRequestConfirmationPost } from '@/lib/server/customer-request-confirmation-api'
+import {
+  handleCustomerRequestCancelPost,
+  handleCustomerRequestRunPost,
+} from '@/lib/server/customer-request-route-action-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 const key = 'entrypoint-parity-key-with-at-least-32-bytes'
@@ -71,7 +77,7 @@ const authenticate = async () => ({
 type Capture = (args: Record<string, unknown>) => Promise<typeof projection>
 type AgentCall = (name: string, args: Record<string, unknown>) => Promise<typeof projection>
 type ParityCase = Readonly<{
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'resume'
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'resume'
   actionName: string
   human: (capture: Capture) => Promise<Response>
   agent: (callAction: AgentCall) => Promise<Response>
@@ -128,6 +134,26 @@ const cases: readonly ParityCase[] = [
     }), requestRef, { confirm }),
     agent: async (callAction) => await handleAgentCustomerRequestConfirmationPost(post('/api/v1/confirmation', {
       revision: 2, routeRef: 'route:opaque', idempotencyKey: 'confirm:parity',
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
+    operation: 'run',
+    actionName: 'customerRequestApplication:runRoute',
+    human: async (run) => await handleCustomerRequestRunPost(post('/run', {
+      idempotencyKey: 'run:parity',
+    }), requestRef, { run }),
+    agent: async (callAction) => await handleAgentCustomerRequestRunPost(post('/api/v1/run', {
+      idempotencyKey: 'run:parity',
+    }), requestRef, agentOptions(callAction)),
+  },
+  {
+    operation: 'cancel',
+    actionName: 'customerRequestApplication:cancelRoute',
+    human: async (cancel) => await handleCustomerRequestCancelPost(post('/cancellation', {
+      idempotencyKey: 'cancel:parity',
+    }), requestRef, { cancel }),
+    agent: async (callAction) => await handleAgentCustomerRequestCancelPost(post('/api/v1/cancellation', {
+      idempotencyKey: 'cancel:parity',
     }), requestRef, agentOptions(callAction)),
   },
   {

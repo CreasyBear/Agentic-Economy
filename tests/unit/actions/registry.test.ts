@@ -39,6 +39,15 @@ describe('action registry', () => {
     }).success).toBe(false)
   })
 
+  it('registers the complete customer-safe run and recovery surface', () => {
+    expect(['customerRequest.run', 'customerRequest.cancel', 'customerRequest.reportProblem', 'customerRequest.inspectEvidence']
+      .map((id) => findAction(id)?.id)).toEqual([
+        'customerRequest.run', 'customerRequest.cancel', 'customerRequest.reportProblem', 'customerRequest.inspectEvidence',
+      ])
+    expect(findAction('customerRequest.inspectEvidence')?.readOnly).toBe(true)
+    expect(findAction('customerRequest.run')?.boundaries.join(' ')).toMatch(/does not let the caller choose/i)
+  })
+
   it('registers storefront import for owner UI and HTTP but not quiet agent tools', () => {
     const action = findAction('storefront.importDraft')
     expect(action).toBeDefined()

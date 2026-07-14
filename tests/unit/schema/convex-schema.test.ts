@@ -58,6 +58,7 @@ const durableTables = [
   'customerRequestRouteRunHeads',
   'customerRequestRouteRunCommands',
   'customerRequestRouteCancellationCommands',
+  'customerRequestRouteProblemReports',
   'customerRequestRouteStepAttempts',
   'customerRequestRouteDispatchOutbox',
   'customerRequestV2Heads',
@@ -217,6 +218,7 @@ const requiredIndexes = {
   customerRequestRouteRunHeads: ['by_requestId'],
   customerRequestRouteRunCommands: ['by_commandKey'],
   customerRequestRouteCancellationCommands: ['by_commandKey'],
+  customerRequestRouteProblemReports: ['by_commandKey', 'by_requestId'],
   customerRequestRouteStepAttempts: [
     'by_attemptRef', 'by_runRef_and_position', 'by_mandateRef_and_actionId',
   ],

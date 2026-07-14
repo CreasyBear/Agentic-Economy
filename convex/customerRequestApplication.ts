@@ -365,6 +365,23 @@ const customerView = v.object({
       ),
     }),
   })),
+  activity: v.optional(v.object({
+    actor: v.literal('ae_for_customer'),
+    certainty: v.union(
+      v.literal('pending'), v.literal('unknown'), v.literal('confirmed'),
+      v.literal('failed'), v.literal('cancelled'),
+    ),
+    updatedAt: v.number(),
+    nextCheckAt: v.optional(v.number()),
+    retry: v.union(v.literal('not_needed'), v.literal('blocked_until_reconciled'), v.literal('manual_after_failure')),
+    cancellation: v.union(
+      v.literal('available_before_next_step'), v.literal('too_late_or_unsupported'), v.literal('complete'),
+    ),
+    safeNextAction: v.union(
+      v.literal('check_progress'), v.literal('wait_for_evidence'), v.literal('review_result'),
+      v.literal('revise_request'), v.literal('none'),
+    ),
+  })),
   decision: v.optional(customerRouteDecision),
   confirmation: v.optional(customerRouteConfirmation),
 })
@@ -802,6 +819,114 @@ export const cancelRoute = action({
       summary: 'There is no active request to stop.',
     }))
     return projectStoredRouteRun(current.aggregate, result.run)
+  },
+})
+
+const problemReceipt = v.object({
+  kind: v.literal('problem_reported'), requestRef: v.string(), reportRef: v.string(),
+  state: v.literal('received'), reportedAt: v.number(),
+})
+const problemActionResult = v.union(problemReceipt, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
+type ProblemActionResult = Infer<typeof problemActionResult>
+
+export const reportRouteProblem = action({
+  args: {
+    requestRef: v.string(), idempotencyKey: v.string(),
+    category: v.union(
+      v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
+      v.literal('could_not_stop'), v.literal('other'),
+    ),
+    summary: v.string(), serviceAuth: v.optional(serviceAssertion),
+  },
+  returns: problemActionResult,
+  handler: async (ctx, args): Promise<ProblemActionResult> => {
+    const command = {
+      requestRef: args.requestRef, idempotencyKey: args.idempotencyKey,
+      category: args.category, summary: args.summary,
+    }
+    const caller = await resolveRequestCaller(ctx, 'report', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    const result: Readonly<
+      | { kind: 'reported'; reportRef: string; reportedAt: number }
+      | { kind: 'replayed'; reportRef: string; reportedAt: number }
+      | { kind: 'conflict' }
+      | { kind: 'refused' }
+    > = await ctx.runMutation(internal.customerRequestRouteExecution.reportProblem, {
+      requestId: args.requestRef, idempotencyKey: args.idempotencyKey,
+      category: args.category, summary: args.summary, principalId: caller.principalId,
+    })
+    if (result.kind === 'conflict') return {
+      kind: 'conflict' as const, requestRef: args.requestRef, reason: 'idempotency_key_reused' as const,
+    }
+    if (result.kind === 'refused') return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    return {
+      kind: 'problem_reported' as const, requestRef: args.requestRef,
+      reportRef: result.reportRef, state: 'received' as const, reportedAt: result.reportedAt,
+    }
+  },
+})
+
+const evidenceExport = v.object({
+  kind: v.literal('evidence'), requestRef: v.string(),
+  state: v.union(
+    v.literal('queued'), v.literal('running'), v.literal('outcome_unknown'),
+    v.literal('completed'), v.literal('failed'), v.literal('cancelled'),
+  ),
+  generatedAt: v.number(),
+  steps: v.array(v.object({
+    step: v.number(),
+    state: v.union(
+      v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+      v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
+    ),
+    observedAt: v.number(), evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+  })),
+  result: v.optional(v.any()), // runtime-validated JsonValue boundary
+})
+const evidenceActionResult = v.union(evidenceExport, v.object({ kind: v.literal('refused'), reason: refusedReason }))
+type EvidenceActionResult = Infer<typeof evidenceActionResult>
+
+export const exportRouteEvidence = action({
+  args: { requestRef: v.string(), serviceAuth: v.optional(serviceAssertion) },
+  returns: evidenceActionResult,
+  handler: async (ctx, args): Promise<EvidenceActionResult> => {
+    const command = { requestRef: args.requestRef }
+    const caller = await resolveRequestCaller(ctx, 'evidence', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused' as const, reason: 'authentication_required' as const }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    }
+    const exported: Readonly<
+      | { kind: 'none' }
+      | {
+          kind: 'found'
+          state: 'queued' | 'running' | 'outcome_unknown' | 'completed' | 'failed' | 'cancelled'
+          generatedAt: number
+          resultJson?: string
+          steps: readonly Readonly<{
+            step: number
+            state: 'queued' | 'contacting' | 'awaiting_result' | 'completed' | 'failed' | 'outcome_unknown' | 'cancelled'
+            observedAt: number
+            evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
+          }>[]
+        }
+    > = await ctx.runQuery(internal.customerRequestRouteExecution.exportCustomerEvidence, {
+      requestId: args.requestRef, principalId: caller.principalId,
+    })
+    if (exported.kind === 'none') return { kind: 'refused' as const, reason: 'request_not_found' as const }
+    const result = exported.resultJson === undefined ? undefined : parseCustomerRouteResult(exported.resultJson)
+    return {
+      kind: 'evidence' as const, requestRef: args.requestRef, state: exported.state,
+      generatedAt: exported.generatedAt, steps: exported.steps.map((step) => ({
+        ...step, evidence: step.evidence.map((item) => ({ ...item })),
+      })),
+      ...(result === undefined ? {} : { result }),
+    }
   },
 })
 
@@ -2050,6 +2175,7 @@ function projectStoredRouteRun(
     requestRef: run.requestId,
     revision: run.requestRevision,
     criteria,
+    updatedAt: run.updatedAt,
   }))
   if (run.state === 'failed' && result !== undefined) return writableView(projectCustomerActionStatus({
     requestRef: run.requestId,
@@ -2071,12 +2197,14 @@ function projectStoredRouteRun(
     completed: run.completedSteps,
     total: run.totalSteps,
     current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
+    updatedAt: run.updatedAt,
+    cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
     criteria,
   }))
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, clarification, preparedAction, action, progress, decision, confirmation } = view
+  const { disclosureReview, optionSet, clarification, preparedAction, action, progress, activity, decision, confirmation } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
     ...(view.routeGenerationRef === undefined ? {} : { routeGenerationRef: view.routeGenerationRef }),
@@ -2113,6 +2241,11 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
     } }),
     ...(progress === undefined ? {} : { progress: {
       ...progress, current: { ...progress.current },
+    } }),
+    ...(activity === undefined ? {} : { activity: {
+      actor: activity.actor, certainty: activity.certainty, updatedAt: activity.updatedAt,
+      retry: activity.retry, cancellation: activity.cancellation, safeNextAction: activity.safeNextAction,
+      ...(activity.nextCheckAt === undefined ? {} : { nextCheckAt: activity.nextCheckAt }),
     } }),
     ...(decision === undefined ? {} : {
       decision: writableClone(decision),
@@ -2169,7 +2302,7 @@ type RequestCaller = Readonly<{
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'confirm' | 'run' | 'cancel' | 'authorize' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'evidence' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,

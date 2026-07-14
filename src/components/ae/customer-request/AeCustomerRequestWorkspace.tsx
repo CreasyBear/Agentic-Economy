@@ -196,6 +196,36 @@ export function AeCustomerRequestWorkspace() {
     }
   }
 
+  async function actOnRoute(projection: CustomerRequestView, operation: 'run' | 'cancellation') {
+    setState({ kind: 'refreshing', projection })
+    try {
+      const response = await fetch(`/api/requests/${encodeURIComponent(projection.requestRef)}/${operation}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: operation === 'run'
+            ? `run:${projection.requestRef}:${projection.confirmation?.confirmationRef ?? projection.routeGenerationRef ?? projection.revision}`
+            : `cancellation:${projection.requestRef}:${projection.activity?.updatedAt ?? projection.revision}`,
+        }),
+      })
+      const result: SubmitResponse = await response.json()
+      if (!response.ok || !('kind' in result) || result.kind !== 'request') {
+        setState(errorState(response.status, operation === 'run'
+          ? 'AE could not start this request. Nothing was sent twice.'
+          : 'AE could not confirm that this request stopped. Check its current state.'))
+        return
+      }
+      setState({ kind: 'request', projection: result })
+    } catch {
+      setState({
+        kind: 'error',
+        message: operation === 'run'
+          ? 'AE could not be reached. Check this Request before trying again.'
+          : 'AE could not be reached. Check whether this Request stopped before doing anything else.',
+        authenticationRequired: false,
+      })
+    }
+  }
+
   return (
     <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
       <header className="mx-auto grid max-w-3xl gap-3 text-center">
@@ -212,13 +242,13 @@ export function AeCustomerRequestWorkspace() {
         </form>
         <Text type="supporting" color="secondary" className="text-center">No budget or full specification required to start.</Text>
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
-        {state.kind === 'error' ? <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
-      </section> : <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
+        {state.kind === 'error' ? <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
+      </section> : <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
     </main>
   )
 }
 
-function RequestResult({ state, compare, confirmRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
+function RequestResult({ state, compare, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
   if (state.kind === 'conflict') return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
     <div className="grid gap-4">
@@ -230,7 +260,7 @@ function RequestResult({ state, compare, confirmRoute, authorize, refresh, conti
     </div>
   </Card>
   if (state.kind === 'request' && state.projection.confirmation !== undefined) {
-    return <RouteConfirmationCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
+    return <RouteConfirmationCard projection={state.projection} turns={turns} start={() => actOnRoute(state.projection, 'run')} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request' && state.projection.decision !== undefined) {
     return <RouteDecisionCard projection={state.projection} turns={turns} confirm={(routeRef) => confirmRoute(state.projection, routeRef)} check={() => compare(state.projection)} edit={() => edit(state.projection)} restart={restart} />
@@ -238,6 +268,7 @@ function RequestResult({ state, compare, confirmRoute, authorize, refresh, conti
   if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'needs_authorization') return <DisclosureReview projection={state.projection} turns={turns} authorize={() => authorize(state.projection)} edit={() => edit(state.projection)} restart={restart} />
+  if (state.kind === 'request' && state.projection.state === 'in_progress') return <RouteProgressCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} cancel={() => actOnRoute(state.projection, 'cancellation')} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && (state.projection.state === 'outcome_unknown'
     || state.projection.state === 'completed' || state.projection.state === 'failed')) {
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
@@ -292,7 +323,6 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
             {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">
               Expected result: {route.result.deliverables.join(', ')}
             </Text>}
-            <Text type="supporting" color="secondary">Option fingerprint {route.quoteDigest}</Text>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -382,9 +412,10 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
   </section>
 }
 
-function RouteConfirmationCard({ projection, turns, edit, restart }: {
+function RouteConfirmationCard({ projection, turns, start, edit, restart }: {
   projection: CustomerRequestView
   turns: readonly ConversationTurn[]
+  start: () => Promise<void>
   edit: () => void
   restart: () => void
 }) {
@@ -412,11 +443,54 @@ function RouteConfirmationCard({ projection, turns, edit, restart }: {
         <div><Text weight="semibold">Fallback</Text><Text color="secondary" className="mt-1">{route.fallback.available ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before work starts.` : 'No alternative way is currently declared.'}</Text></div>
         <div><Text weight="semibold">Cancellation</Text><Text color="secondary" className="mt-1">{route.cancellation.summary}</Text></div>
         <div><Text weight="semibold">Recovery by step</Text><ul className="mt-2 grid gap-1 text-sm text-secondary">{route.recovery.map((recovery) => <li key={recovery.step}>Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe' ? 'AE can safely retry after a confirmed failure.' : 'AE must check what happened before any retry.'}</li>)}</ul></div>
-        <Text type="supporting" color="secondary">Option fingerprint {route.quoteDigest}</Text>
-        <Text type="supporting" color="secondary">Confirmation reference {confirmation.confirmationRef}</Text>
+        <Text type="supporting" color="secondary">Confirmation code {confirmation.confirmationRef}</Text>
+        <Button label="Start now" variant="primary" clickAction={start} />
       </div>
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
+  </section>
+}
+
+function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }: {
+  projection: CustomerRequestView
+  turns: readonly ConversationTurn[]
+  refresh: () => Promise<void>
+  cancel: () => Promise<void>
+  edit: () => void
+  restart: () => void
+}) {
+  const progress = projection.progress
+  if (progress === undefined) return null
+  const stateLabel = progress.current.state === 'queued'
+    ? 'Waiting to begin'
+    : progress.current.state === 'contacting'
+      ? 'Contacting the business'
+      : progress.current.state === 'awaiting_result'
+        ? 'Waiting for the business result'
+        : progress.current.state === 'validating_result'
+          ? 'Checking the result'
+          : 'Needs attention'
+  return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
+    <Conversation turns={turns} />
+    <WorkingUnderstanding projection={projection} correct={edit} />
+    <Card padding={5}>
+      <div className="grid gap-4">
+        <Text className="text-sm font-semibold text-accent">In progress</Text>
+        <Heading level={2}>{projection.summary}</Heading>
+        <Text weight="semibold">Step {progress.current.step} of {progress.total}</Text>
+        <Text color="secondary">{stateLabel}</Text>
+        <Text type="supporting" color="secondary">{progress.completed} of {progress.total} steps completed. Rechecking will not send the work again.</Text>
+        <Text type="supporting" color="secondary">AE is acting only within the choice you confirmed.</Text>
+        <div className="flex flex-wrap gap-3">
+          <Button label="Check progress" variant="primary" clickAction={refresh} />
+          {projection.activity?.cancellation === 'available_before_next_step'
+            ? <Button label="Stop before the next step" variant="secondary" clickAction={cancel} />
+            : null}
+        </div>
+        <RequestRecordLinks requestRef={projection.requestRef} />
+        <RecoveryActions edit={edit} restart={restart} />
+      </div>
+    </Card>
   </section>
 }
 
@@ -699,18 +773,68 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         <Text type="supporting" color="secondary">
           Last checked {new Date(action.observedAt).toLocaleString()}
         </Text>
+        {projection.activity?.nextCheckAt === undefined ? null : <Text type="supporting" color="secondary">
+          Check again after {new Date(projection.activity.nextCheckAt).toLocaleString()}.
+        </Text>}
         {unknown ? <Button label="Check again" variant="primary" clickAction={refresh} /> : null}
+        <RequestRecordLinks requestRef={projection.requestRef} />
         <RecoveryActions edit={edit} restart={restart} />
       </div>
     </Card>
   </section>
+}
+function RequestRecordLinks({ requestRef }: { requestRef: string }) {
+  const [reporting, setReporting] = useState(false)
+  const [summary, setSummary] = useState('')
+  const [receipt, setReceipt] = useState<string | undefined>()
+  const [error, setError] = useState<string | undefined>()
+
+  async function reportProblem() {
+    if (summary.trim().length === 0) return
+    setError(undefined)
+    try {
+      const response = await fetch(`/api/requests/${encodeURIComponent(requestRef)}/problems`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotencyKey: `problem:${requestRef}:${crypto.randomUUID()}`,
+          category: 'other', summary: summary.trim(),
+        }),
+      })
+      const result: unknown = await response.json()
+      if (!response.ok || typeof result !== 'object' || result === null
+        || !('kind' in result) || result.kind !== 'problem_reported'
+        || !('reportRef' in result) || typeof result.reportRef !== 'string') {
+        setError('AE could not record that problem. Your Request is unchanged.')
+        return
+      }
+      setReceipt(result.reportRef)
+      setReporting(false)
+      setSummary('')
+    } catch {
+      setError('AE could not be reached. Your Request is unchanged.')
+    }
+  }
+
+  return <div className="grid gap-3 border-t border-border pt-4">
+    <div className="flex flex-wrap items-center gap-4">
+      <a className="min-h-11 py-2 text-sm font-semibold underline underline-offset-4" href={`/api/requests/${encodeURIComponent(requestRef)}/evidence`}>View activity record</a>
+      <button type="button" className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={() => setReporting((current) => !current)}>Report a problem</button>
+    </div>
+    {reporting ? <form className="grid gap-2" onSubmit={(event) => { event.preventDefault(); void reportProblem() }}>
+      <label htmlFor={`problem-${requestRef}`} className="text-sm font-semibold">What went wrong?</label>
+      <textarea id={`problem-${requestRef}`} value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={1_000} required className="min-h-24 rounded-md border border-border bg-card p-3 outline-none focus:ring-2 focus:ring-accent" />
+      <Button label="Send problem report" variant="secondary" type="submit" />
+    </form> : null}
+    {receipt === undefined ? null : <Text type="supporting" color="secondary">Problem recorded. Report reference {receipt}</Text>}
+    {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}
+  </div>
 }
 function DisclosureReview({ projection, turns, authorize, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; authorize: () => Promise<void>; edit: () => void; restart: () => void }) { const review = projection.disclosureReview; if (review === undefined) return null; return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={projection} correct={edit} /><Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">Before AE contacts businesses</Text><Heading level={2}>Review what would be shared</Heading><Text color="secondary">To {review.purpose.toLocaleLowerCase()}, AE would share the following with up to {review.maximumRecipients} eligible registered {review.maximumRecipients === 1 ? 'business' : 'businesses'}.</Text><ul className="grid gap-2">{review.categories.map((category) => <li key={`${category.label}:${category.classification}`} className="rounded-md border border-border bg-surface px-3 py-2"><strong>{category.label}</strong> <span className="text-secondary">· {category.classification}</span></li>)}</ul><Text weight="semibold">Nothing has been shared. Explicit permission is required before preparation can continue.</Text><Button label="Allow this comparison" variant="primary" clickAction={authorize} /><RecoveryActions edit={edit} restart={restart} /></div></Card></section> }
 function WorkingUnderstanding({ projection, correct }: { projection: CustomerRequestView; correct: () => void }) { const criteria = projection.criteria ?? []; if (criteria.length === 0) return null; return <Card padding={4}><div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><Text className="text-sm font-semibold text-accent">AE’s working understanding</Text><button type="button" onClick={correct} className="min-h-11 text-sm font-semibold underline underline-offset-4">Correct</button></div><div className="flex flex-wrap gap-2">{criteria.map((criterion) => <span key={`${criterion.label}:${String(criterion.value)}`} className="rounded-full border border-border bg-surface px-3 py-1.5 text-sm"><strong>{criterion.label}:</strong> {String(criterion.value)} <span className="text-secondary">· {criterion.basis === 'customer_provided' ? 'you provided' : 'from your request'}</span></span>)}</div></div></Card> }
 function RecoveryActions({ edit, restart }: { edit: () => void; restart: () => void }) { return <div className="flex flex-wrap gap-3 border-t border-border pt-4"><Button label="Edit this Request" variant="secondary" clickAction={edit} /><Button label="Start a new Request" variant="ghost" clickAction={restart} /></div> }
 
 function StartExamples() { return <div className="grid gap-2 border-t border-border pt-6 sm:grid-cols-4"><Example label="Place" value="Fremantle" /><Example label="Business type" value="Electrician" /><Example label="Situation" value="A quiet dinner with my parents" /><Example label="Detailed" value="Dog-friendly stay near the beach" /></div> }
-function Example({ label, value }: { label: string; value: string }) { return <div className="rounded-md bg-surface p-4"><Text type="supporting" weight="semibold">{label}</Text><Text color="secondary" className="mt-1">{value}</Text></div> }
+function Example({ label, value }: { label: string; value: string }) { return <div className="grid gap-1 rounded-md bg-surface p-4"><Text type="supporting" weight="semibold">{label}</Text><Text color="secondary">{value}</Text></div> }
 function Conversation({ turns }: { turns: readonly ConversationTurn[] }) { return <div className="grid gap-3" aria-label="Request conversation">{turns.map((turn, index) => turn.speaker === 'customer' ? <div key={`${index}:${turn.text}`} className="ml-auto max-w-[85%] rounded-md bg-accent px-4 py-3 text-on-accent">{turn.text}</div> : <div key={`${index}:${turn.text}`} className="max-w-[90%] border-l-2 border-accent py-1 pl-4"><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1">{turn.text}</Heading></div>)}</div> }
 function Clarification({ projection, answer, setAnswer, submit }: { projection: CustomerRequestView; answer: string; setAnswer: (answer: string) => void; submit: () => void }) { return <form className="grid gap-3 border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); submit() }}><label htmlFor="clarification-answer" className="text-sm font-semibold">Your answer</label><div className="flex flex-col gap-2 sm:flex-row"><input id="clarification-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder={projection.clarification?.answerKind === 'natural_language' ? 'Describe it in your own words' : projection.clarification?.prompt} className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 outline-none focus:ring-2 focus:ring-accent" /><button type="submit" disabled={!answer.trim()} className="min-h-11 rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Continue</button></div></form> }
 function statusLabel(state: CustomerRequestView['state']): string {

@@ -4,9 +4,19 @@ import { defineAction, type ActionParameter } from '@/modules/common/action'
 
 import {
   customerRequestAgentResultSchema,
+  customerRequestEvidenceResultSchema,
+  customerRequestProblemInputSchema,
+  customerRequestProblemResultSchema,
+  customerRequestRouteActionInputSchema,
   customerRequestRouteConfirmationInputSchema,
 } from './agent-contract'
-import { confirmCustomerRequestThroughSource } from './customer-request.functions'
+import {
+  cancelCustomerRequestThroughSource,
+  confirmCustomerRequestThroughSource,
+  runCustomerRequestThroughSource,
+  inspectCustomerRequestEvidenceThroughSource,
+  reportCustomerRequestProblemThroughSource,
+} from './customer-request.functions'
 
 const confirmationActionInputSchema = customerRequestRouteConfirmationInputSchema.extend({
   requestRef: z.string().trim().min(1).max(200),
@@ -34,4 +44,91 @@ export const customerRequestConfirmAction = defineAction({
   readOnly: false,
   surfaces: ['ui', 'http', 'agentJson'],
   run: async ({ data }) => confirmCustomerRequestThroughSource(data),
+})
+
+const routeActionInputSchema = customerRequestRouteActionInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+}).strict()
+
+const routeActionParameters: readonly ActionParameter[] = [
+  { name: 'requestRef', type: 'string', description: 'The confirmed Customer Request to continue.', required: true },
+  { name: 'idempotencyKey', type: 'string', description: 'A stable retry key for this operation.', required: true },
+]
+
+export const customerRequestRunAction = defineAction({
+  id: 'customerRequest.run',
+  name: 'Start a confirmed Customer Request',
+  summary: 'Start or safely resume the exact option already confirmed for this Request.',
+  boundaries: [
+    'Does not let the caller choose businesses, steps, costs, data recipients, or execution mechanics.',
+    'Only the current unexpired confirmation can start.',
+    'Repeating the same operation key does not duplicate the work.',
+  ],
+  schema: routeActionInputSchema,
+  outputSchema: customerRequestAgentResultSchema,
+  parameters: routeActionParameters,
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => runCustomerRequestThroughSource(data),
+})
+
+export const customerRequestCancelAction = defineAction({
+  id: 'customerRequest.cancel',
+  name: 'Stop a Customer Request',
+  summary: 'Stop the current Request before another business step begins when that remains safe.',
+  boundaries: [
+    'Does not claim to reverse a business action that may already have happened.',
+    'AE reports when it is too late to stop safely.',
+    'Repeating the same operation key does not duplicate the cancellation.',
+  ],
+  schema: routeActionInputSchema,
+  outputSchema: customerRequestAgentResultSchema,
+  parameters: routeActionParameters,
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => cancelCustomerRequestThroughSource(data),
+})
+
+const problemInputSchema = customerRequestProblemInputSchema.extend({
+  requestRef: z.string().trim().min(1).max(200),
+}).strict()
+
+export const customerRequestReportProblemAction = defineAction({
+  id: 'customerRequest.reportProblem',
+  name: 'Report a problem with a Customer Request',
+  summary: 'Attach a customer-reported problem to the current Request and receive a durable receipt.',
+  boundaries: [
+    'Does not change or retry the work.',
+    'AE derives the current activity and caller identity from the Request.',
+    'A receipt confirms reporting, not resolution.',
+  ],
+  schema: problemInputSchema,
+  outputSchema: customerRequestProblemResultSchema,
+  parameters: [
+    ...routeActionParameters,
+    { name: 'category', type: 'enum', description: 'The customer-visible problem category.', required: true, enum: ['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other'] },
+    { name: 'summary', type: 'string', description: 'A short description of what went wrong.', required: true },
+  ],
+  readOnly: false,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => reportCustomerRequestProblemThroughSource(data),
+})
+
+const evidenceInputSchema = z.strictObject({ requestRef: z.string().trim().min(1).max(200) })
+
+export const customerRequestInspectEvidenceAction = defineAction({
+  id: 'customerRequest.inspectEvidence',
+  name: 'Export Customer Request evidence',
+  summary: 'Return a customer-safe receipt of the observed steps and result for this Request.',
+  boundaries: [
+    'Returns observed evidence only and never manufactures completion.',
+    'Does not expose credentials, transport payloads, or routing internals.',
+    'Does not retry or change the Request.',
+  ],
+  schema: evidenceInputSchema,
+  outputSchema: customerRequestEvidenceResultSchema,
+  parameters: [{ name: 'requestRef', type: 'string', description: 'The Customer Request to inspect.', required: true }],
+  readOnly: true,
+  surfaces: ['ui', 'http', 'agentJson'],
+  run: async ({ data }) => inspectCustomerRequestEvidenceThroughSource(data),
 })

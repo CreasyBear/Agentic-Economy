@@ -831,6 +831,43 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })).resolves.toEqual({ kind: 'none' })
   })
 
+  it('reports problems idempotently and exports customer-safe evidence from the same Request', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(4_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'recovery-contract')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:recovery-contract',
+    })
+
+    const command = {
+      requestRef: confirmed.requestRef, idempotencyKey: 'problem:recovery-contract',
+      category: 'incorrect_result' as const, summary: 'The returned result does not match the confirmed choice.',
+    }
+    const reported = await admin.action(api.customerRequestApplication.reportRouteProblem, command)
+    expect(reported).toMatchObject({
+      kind: 'problem_reported', requestRef: confirmed.requestRef, state: 'received', reportedAt: 4_000,
+    })
+    await expect(admin.action(api.customerRequestApplication.reportRouteProblem, command)).resolves.toEqual(reported)
+    await expect(admin.action(api.customerRequestApplication.reportRouteProblem, {
+      ...command, summary: 'A different report under the same key.',
+    })).resolves.toEqual({
+      kind: 'conflict', requestRef: confirmed.requestRef, reason: 'idempotency_key_reused',
+    })
+
+    const exported = await admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })
+    expect(exported).toMatchObject({
+      kind: 'evidence', requestRef: confirmed.requestRef, state: 'queued', generatedAt: 4_000,
+      steps: [{ step: 1, state: 'queued', evidence: [] }],
+    })
+    expect(JSON.stringify(exported)).not.toMatch(/transport|mandate|capability|binding|operationKey|inputJson/u)
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteProblemReports').collect()).toHaveLength(1)
+    })
+  })
+
   it('refuses to report cancellation after a business step was released', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)

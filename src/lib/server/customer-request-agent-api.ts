@@ -11,6 +11,18 @@ import {
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
+import type {
+  CustomerRequestEvidenceResult,
+  CustomerRequestProblemResult,
+} from '@/modules/customer-request/agent-contract'
+import {
+  handleCustomerRequestCancelPost,
+  handleCustomerRequestRunPost,
+} from '@/lib/server/customer-request-route-action-api'
+import {
+  handleCustomerRequestEvidenceGet,
+  handleCustomerRequestProblemPost,
+} from '@/lib/server/customer-request-recovery-api'
 
 type HandlerOptions = Readonly<{
   authenticate?: NonNullable<Parameters<typeof authenticateCustomerRequestAgent>[0]>['authenticate']
@@ -20,6 +32,7 @@ type HandlerOptions = Readonly<{
 }>
 
 type AgentActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult | ConfirmationResult
+  | CustomerRequestProblemResult | CustomerRequestEvidenceResult
 
 export async function handleAgentCustomerRequestPost(request: Request, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
@@ -81,6 +94,54 @@ export async function handleAgentCustomerRequestConfirmationPost(
   })
 }
 
+export async function handleAgentCustomerRequestRunPost(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestRunPost(request, requestRef, {
+    run: async (args) => await callAsAgent('customerRequestApplication:runRoute', 'run', args, admitted.principal, options),
+  })
+}
+
+export async function handleAgentCustomerRequestCancelPost(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestCancelPost(request, requestRef, {
+    cancel: async (args) => await callAsAgent('customerRequestApplication:cancelRoute', 'cancel', args, admitted.principal, options),
+  })
+}
+
+export async function handleAgentCustomerRequestProblemPost(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestProblemPost(request, requestRef, {
+    report: async (args) => await callAsAgent('customerRequestApplication:reportRouteProblem', 'report', args, admitted.principal, options),
+  })
+}
+
+export async function handleAgentCustomerRequestEvidenceGet(
+  request: Request,
+  requestRef: string,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
+  if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
+  return await handleCustomerRequestEvidenceGet(request, requestRef, {
+    inspect: async (args) => await callAsAgent('customerRequestApplication:exportRouteEvidence', 'evidence', args, admitted.principal, options),
+  })
+}
+
 export async function handleAgentCustomerRequestGet(requestRef: string, options: HandlerOptions = {}): Promise<Response> {
   const admitted = await authenticateCustomerRequestAgent({ ...(options.authenticate === undefined ? {} : { authenticate: options.authenticate }) })
   if (admitted.kind === 'refused') return refusal(admitted.reason, admitted.status)
@@ -91,7 +152,7 @@ export async function handleAgentCustomerRequestGet(requestRef: string, options:
 
 async function callAsAgent<Result = SubmitResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'resume',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'confirm' | 'run' | 'cancel' | 'report' | 'evidence' | 'resume',
   command: Record<string, unknown>,
   principal: CustomerRequestAgentPrincipal,
   options: HandlerOptions,

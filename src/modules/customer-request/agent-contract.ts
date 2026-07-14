@@ -50,6 +50,34 @@ export const customerRequestRouteConfirmationInputSchema = z.object({
   revision: safePositiveInteger, routeRef: boundedText(300), idempotencyKey: boundedText(200),
 }).strict()
 
+export const customerRequestRouteActionInputSchema = z.strictObject({
+  idempotencyKey: boundedText(200),
+})
+
+export const customerRequestProblemInputSchema = z.strictObject({
+  idempotencyKey: boundedText(200),
+  category: z.enum(['incorrect_result', 'unexpected_cost', 'privacy_concern', 'could_not_stop', 'other']),
+  summary: boundedText(1_000),
+})
+
+export const customerRequestProblemReceiptSchema = z.strictObject({
+  kind: z.literal('problem_reported'), requestRef: z.string(), reportRef: z.string(),
+  state: z.literal('received'), reportedAt: safeNonnegativeInteger,
+})
+
+export const customerRequestEvidenceExportSchema = z.strictObject({
+  kind: z.literal('evidence'), requestRef: z.string(),
+  state: z.enum(['queued', 'running', 'outcome_unknown', 'completed', 'failed', 'cancelled']),
+  generatedAt: safeNonnegativeInteger,
+  steps: z.array(z.strictObject({
+    step: safePositiveInteger,
+    state: z.enum(['queued', 'contacting', 'awaiting_result', 'completed', 'failed', 'outcome_unknown', 'cancelled']),
+    observedAt: safeNonnegativeInteger,
+    evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
+  })),
+  result: customerRequestJsonValueSchema.optional(),
+})
+
 export const customerRequestAuthorizationInputSchema = z.object({
   revision: safePositiveInteger, preparationRef: boundedText(300), idempotencyKey: boundedText(200),
 }).strict()
@@ -323,7 +351,7 @@ export const customerPreparedActionSchema = z.object({
   }).strict()),
 }).strict()
 
-export const customerRequestViewSchema = z.object({
+export const customerRequestViewSchema = z.strictObject({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   routeGenerationRef: z.string().optional(),
   state: z.enum([
@@ -371,9 +399,18 @@ export const customerRequestViewSchema = z.object({
       state: z.enum(['queued', 'contacting', 'awaiting_result', 'validating_result', 'needs_attention']),
     }).strict(),
   }).strict().optional(),
+  activity: z.strictObject({
+    actor: z.literal('ae_for_customer'),
+    certainty: z.enum(['pending', 'unknown', 'confirmed', 'failed', 'cancelled']),
+    updatedAt: safeNonnegativeInteger,
+    nextCheckAt: safeNonnegativeInteger.optional(),
+    retry: z.enum(['not_needed', 'blocked_until_reconciled', 'manual_after_failure']),
+    cancellation: z.enum(['available_before_next_step', 'too_late_or_unsupported', 'complete']),
+    safeNextAction: z.enum(['check_progress', 'wait_for_evidence', 'review_result', 'revise_request', 'none']),
+  }).optional(),
   decision: customerRoutePlanDecisionSchema.optional(),
   confirmation: customerRouteConfirmationSchema.optional(),
-}).strict().superRefine((view, context) => {
+}).superRefine((view, context) => {
   if (view.state === 'routes_ready' && view.decision === undefined) {
     context.addIssue({
       code: 'custom', path: ['decision'], message: 'route_decision_required',
@@ -418,6 +455,14 @@ export const customerRequestAgentResultSchema = z.union([
   customerRequestViewSchema, customerRequestConflictSchema, customerRequestRefusalSchema,
 ])
 
+export const customerRequestProblemResultSchema = z.union([
+  customerRequestProblemReceiptSchema, customerRequestConflictSchema, customerRequestRefusalSchema,
+])
+
+export const customerRequestEvidenceResultSchema = z.union([
+  customerRequestEvidenceExportSchema, customerRequestRefusalSchema,
+])
+
 export const customerRequestInspectResultSchema = z.union([
   customerRequestViewSchema,
   z.object({
@@ -439,6 +484,12 @@ export type CustomerRoutePlan = DeepReadonly<z.infer<typeof customerRoutePlanSch
 export type CustomerRoutePlanDecision = DeepReadonly<z.infer<typeof customerRoutePlanDecisionSchema>>
 export type CustomerRouteConfirmation = DeepReadonly<z.infer<typeof customerRouteConfirmationSchema>>
 export type CustomerRequestRouteConfirmationInput = DeepReadonly<z.infer<typeof customerRequestRouteConfirmationInputSchema>>
+export type CustomerRequestRouteActionInput = DeepReadonly<z.infer<typeof customerRequestRouteActionInputSchema>>
+export type CustomerRequestProblemInput = DeepReadonly<z.infer<typeof customerRequestProblemInputSchema>>
+export type CustomerRequestProblemReceipt = DeepReadonly<z.infer<typeof customerRequestProblemReceiptSchema>>
+export type CustomerRequestEvidenceExport = DeepReadonly<z.infer<typeof customerRequestEvidenceExportSchema>>
+export type CustomerRequestProblemResult = DeepReadonly<z.infer<typeof customerRequestProblemResultSchema>>
+export type CustomerRequestEvidenceResult = DeepReadonly<z.infer<typeof customerRequestEvidenceResultSchema>>
 export type CustomerRequestAgentResult = DeepReadonly<z.infer<typeof customerRequestAgentResultSchema>>
 export type CustomerPreparedAction = DeepReadonly<z.infer<typeof customerPreparedActionSchema>>
 export type CustomerRequestView = DeepReadonly<z.infer<typeof customerRequestViewSchema>>

@@ -231,7 +231,7 @@ describe('customer Request workspace', () => {
     expect(screen.getByRole('heading', { name: 'Prepare a governed result.' })).toBeTruthy()
     expect(screen.getByText('Through North Star Services and City Ledger')).toBeTruthy()
     expect(screen.getByText('Maximum $14.00')).toBeTruthy()
-    expect(screen.getByText('Option fingerprint quote:opaque')).toBeTruthy()
+    expect(screen.queryByText(/Option fingerprint/i)).toBeNull()
     expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
@@ -244,7 +244,7 @@ describe('customer Request workspace', () => {
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
   })
 
-  it('confirms the displayed choice without implying that business work started', async () => {
+  it('confirms the displayed choice, then starts and follows it without exposing kernel choreography', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-confirm' })
     const route = routeChoice('route:confirm', 'current')
     const preview = {
@@ -272,6 +272,15 @@ describe('customer Request workspace', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json(preview))
       .mockResolvedValueOnce(Response.json(confirmed))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:confirm', revision: 2,
+        routeGenerationRef: 'generation:confirm', state: 'in_progress',
+        summary: 'Your request is in progress.', nextAction: 'wait', missingFields: [], criteria: [], options: [],
+        progress: {
+          completed: 0, total: 1,
+          current: { step: 1, state: 'contacting' },
+        },
+      }))
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
 
@@ -281,14 +290,27 @@ describe('customer Request workspace', () => {
 
     expect(await screen.findByText('Choice confirmed')).toBeTruthy()
     expect(screen.getByText(/Nothing has started yet/)).toBeTruthy()
-    expect(screen.getByText('Confirmation reference confirmation:opaque')).toBeTruthy()
-    expect(screen.getByText(`Option fingerprint ${route.quoteDigest}`)).toBeTruthy()
+    expect(screen.getByText('Confirmation code confirmation:opaque')).toBeTruthy()
+    expect(screen.queryByText(/Option fingerprint/i)).toBeNull()
     expect(screen.getByText('No uncertainty is declared for this choice.')).toBeTruthy()
     expect(screen.getByText('No alternative way is currently declared.')).toBeTruthy()
     expect(screen.getByText(/Step 1, Business route:confirm: AE can safely retry/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Start now' }))
+
+    expect(await screen.findByRole('heading', { name: 'Your request is in progress.' })).toBeTruthy()
+    expect(screen.getByText('Step 1 of 1')).toBeTruthy()
+    expect(screen.getByText('Contacting the business')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check progress' })).toBeTruthy()
+    expect(screen.queryByText(/capability|binding|transport|mandate|graph node/i)).toBeNull()
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aconfirm/confirmation', expect.objectContaining({
       method: 'POST',
     }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/requests/request%3Aconfirm/run', expect.objectContaining({
+      method: 'POST',
+    }))
+    expect(JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body))).toEqual({
+      idempotencyKey: 'run:request:confirm:confirmation:opaque',
+    })
   })
 
   it('distinguishes revising the same Request from starting a new one', async () => {

@@ -12,7 +12,13 @@
  */
 
 import type { AnyAction } from '@/modules/common/action'
-import { customerRequestConfirmAction } from '@/modules/customer-request/customer-request.actions'
+import {
+  customerRequestCancelAction,
+  customerRequestConfirmAction,
+  customerRequestInspectEvidenceAction,
+  customerRequestReportProblemAction,
+  customerRequestRunAction,
+} from '@/modules/customer-request/customer-request.actions'
 import { demandCaptureAction } from '@/modules/demand/demand.actions'
 import { readCustomerRecordAction, submitInquiryAction } from '@/modules/inquiries/inquiry.actions'
 import {
@@ -25,6 +31,10 @@ import { storefrontImportDraftAction } from '@/modules/storefront/storefront.act
 
 const actions: readonly AnyAction[] = [
   customerRequestConfirmAction,
+  customerRequestRunAction,
+  customerRequestCancelAction,
+  customerRequestReportProblemAction,
+  customerRequestInspectEvidenceAction,
   submitInquiryAction,
   readCustomerRecordAction,
   registryListAction,

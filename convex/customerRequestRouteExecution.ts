@@ -786,6 +786,105 @@ export const getCurrent = internalQuery({
   },
 })
 
+const problemCategory = v.union(
+  v.literal('incorrect_result'), v.literal('unexpected_cost'), v.literal('privacy_concern'),
+  v.literal('could_not_stop'), v.literal('other'),
+)
+
+export const reportProblem = internalMutation({
+  args: {
+    requestId: v.string(), principalId: v.string(), idempotencyKey: v.string(),
+    category: problemCategory, summary: v.string(),
+  },
+  returns: v.union(
+    v.object({ kind: v.literal('reported'), reportRef: v.string(), reportedAt: v.number() }),
+    v.object({ kind: v.literal('replayed'), reportRef: v.string(), reportedAt: v.number() }),
+    v.object({ kind: v.literal('conflict') }),
+    v.object({ kind: v.literal('refused') }),
+  ),
+  handler: async (ctx, args) => {
+    const head = await ctx.db.query('customerRequestRouteRunHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head === null || head.principalId !== args.principalId
+      || args.idempotencyKey.trim().length === 0 || args.summary.trim().length === 0 || args.summary.length > 1_000) {
+      return { kind: 'refused' as const }
+    }
+    const commandKey = `route-problem:v1:${canonicalDigest({
+      principalId: args.principalId, requestId: args.requestId, idempotencyKey: args.idempotencyKey,
+    })}`
+    const commandDigest = canonicalDigest(args)
+    const prior = await ctx.db.query('customerRequestRouteProblemReports')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
+    if (prior !== null) return prior.commandDigest === commandDigest
+      ? { kind: 'replayed' as const, reportRef: prior.reportRef, reportedAt: prior.createdAt }
+      : { kind: 'conflict' as const }
+    const reportedAt = Date.now()
+    const reportRef = `problem:${canonicalDigest({ commandKey, commandDigest, runRef: head.currentRunRef })}`
+    await ctx.db.insert('customerRequestRouteProblemReports', {
+      reportRef, commandKey, commandDigest, principalId: args.principalId,
+      requestId: args.requestId, runRef: head.currentRunRef,
+      category: args.category, summary: args.summary.trim(), createdAt: reportedAt,
+    })
+    return { kind: 'reported' as const, reportRef, reportedAt }
+  },
+})
+
+const exportedStepState = v.union(
+  v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'), v.literal('completed'),
+  v.literal('failed'), v.literal('outcome_unknown'), v.literal('cancelled'),
+)
+
+export const exportCustomerEvidence = internalQuery({
+  args: { requestId: v.string(), principalId: v.string() },
+  returns: v.union(
+    v.object({ kind: v.literal('none') }),
+    v.object({
+      kind: v.literal('found'),
+      state: v.union(
+        v.literal('queued'), v.literal('running'), v.literal('outcome_unknown'),
+        v.literal('completed'), v.literal('failed'), v.literal('cancelled'),
+      ),
+      generatedAt: v.number(), resultJson: v.optional(v.string()),
+      steps: v.array(v.object({
+        step: v.number(), state: exportedStepState, observedAt: v.number(),
+        evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+      })),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const head = await ctx.db.query('customerRequestRouteRunHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head === null || head.principalId !== args.principalId) return { kind: 'none' as const }
+    const run = await ctx.db.query('customerRequestRouteRuns')
+      .withIndex('by_runRef', (query) => query.eq('runRef', head.currentRunRef)).unique()
+    if (run === null || run.principalId !== args.principalId) throw new Error('customer_request_route_run_integrity_failure')
+    const attempts = await ctx.db.query('customerRequestRouteStepAttempts')
+      .withIndex('by_runRef_and_position', (query) => query.eq('runRef', run.runRef)).take(run.totalSteps + 1)
+    if (attempts.length === 0 || attempts.length > run.totalSteps
+      || attempts.some((attempt) => !routeAttemptIntegrityValid(attempt))) {
+      throw new Error('customer_request_route_run_attempt_integrity_failure')
+    }
+    return {
+      kind: 'found' as const, state: run.state, generatedAt: Date.now(),
+      ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
+      steps: attempts.sort((left, right) => left.position - right.position).map((attempt) => ({
+        step: attempt.position, state: exportState(attempt.state), observedAt: attempt.updatedAt,
+        evidence: (attempt.evidence ?? []).map((item, index) => ({
+          receiptRef: `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
+          label: `Result evidence ${index + 1}`,
+        })),
+      })),
+    }
+  },
+})
+
+function exportState(state: Doc<'customerRequestRouteStepAttempts'>['state']): Infer<typeof exportedStepState> {
+  if (state === 'leased' || state === 'dispatched') return 'contacting'
+  if (state === 'accepted') return 'awaiting_result'
+  if (state === 'succeeded') return 'completed'
+  return state
+}
+
 async function readRunProjection(
   ctx: MutationCtx | QueryCtx,
   runRef: string,
