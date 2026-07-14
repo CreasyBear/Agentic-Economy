@@ -42,6 +42,7 @@ import {
   getActiveExactCapabilityContract,
   getExactRegisteredCapabilityContract,
 } from './capabilityContractDocuments'
+import { supersedeCurrentRouteMandate } from './customerRequestRouteMandateLifecycle'
 
 type Aggregate = Infer<typeof customerRequestV2AggregateValue>
 type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
@@ -189,6 +190,16 @@ export const commitAggregate = internalMutation({
             query.eq('requestId', snapshot.requestId).eq('generation', args.routeGeneration!.generation)
           )).unique()
     if (existingGeneration !== null) return { kind: 'route_generation_conflict' as const }
+
+    await supersedeCurrentRouteMandate(ctx.db, {
+      requestId: snapshot.requestId,
+      nextRequestRevision: snapshot.revision,
+      ...(args.routeGeneration === undefined
+        ? {}
+        : { nextGenerationRef: args.routeGeneration.generationRef }),
+      reason: 'request_revised',
+      recordedAt: snapshot.recordedAt,
+    })
 
     await ctx.db.insert('customerRequestV2Revisions', {
       requestId: snapshot.requestId, requestRevision: snapshot.revision, aggregate: writableAggregate(args.aggregate),
@@ -385,6 +396,17 @@ export const refreshRoutePlanGeneration = internalMutation({
         currentDecisionCommandKey: undefined,
         currentDecisionCommandDigest: undefined,
         updatedAt: args.candidateRouteGeneration.createdAt,
+      })
+    }
+    if (resultKind !== 'unchanged') {
+      await supersedeCurrentRouteMandate(ctx.db, {
+        requestId: args.requestId,
+        nextRequestRevision: args.expectedRequestRevision,
+        ...(resultingGeneration === undefined
+          ? {}
+          : { nextGenerationRef: resultingGeneration.generationRef }),
+        reason: 'route_generation_superseded',
+        recordedAt: candidate.snapshot.recordedAt,
       })
     }
     await ctx.db.insert('customerRequestV2RoutePlanGenerationCommands', {
@@ -948,6 +970,69 @@ async function readExactRoutePlanGeneration(
       row.generation - 1,
     )) throw new Error('customer_request_route_plan_generation_integrity_failure')
   return { kind: 'found' as const, routeGeneration: row.routeGeneration }
+}
+
+export async function currentRoutePlanGenerationGraphStatus(
+  db: QueryCtx['db'],
+  requestId: string,
+  generationRef: string,
+): Promise<'current' | 'stale' | 'invalid'> {
+  const head = await db.query('customerRequestV2Heads')
+    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
+  if (head === null) return 'invalid'
+  const revision = await db.query('customerRequestV2Revisions')
+    .withIndex('by_requestId_and_requestRevision', (query) => (
+      query.eq('requestId', requestId).eq('requestRevision', head.currentRevision)
+    )).unique()
+  if (revision === null || 'routes' in revision.aggregate.plan) return 'invalid'
+  const generation = await readExactRoutePlanGeneration(db, requestId, generationRef)
+  if (generation.kind !== 'found'
+    || generation.routeGeneration.requestRevision !== head.currentRevision) return 'invalid'
+  const currentSupply = await listEligibleCapabilitySupply(db, {
+    networkId: revision.aggregate.snapshot.networkId,
+    limit: 64,
+  })
+  if (currentSupply.kind !== 'available') return 'stale'
+  const bindings: RegisteredEvaluationBinding[] = currentSupply.supplies.map(({ offering, binding, publication }) => ({
+    businessId: String(offering.businessId),
+    offeringId: offering.offeringId,
+    bindingId: binding.bindingId,
+    contractRef: {
+      capabilityId: binding.capabilityId,
+      version: binding.version,
+      contractDigest: binding.contractDigest,
+    },
+    offeringRegistrationHash: offering.registrationHash,
+    bindingRegistrationHash: binding.registrationHash,
+    price: offering.presentation.price,
+    cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
+    ...(publication === undefined ? {} : {
+      publicationRef: publication.publicationRef,
+      publicationRevision: publication.revision,
+      readinessValidUntil: publication.readinessValidUntil,
+    }),
+  }))
+  if (requestRegistrySnapshotDigest(bindings) !== generation.routeGeneration.registrySnapshotDigest) return 'invalid'
+  const routesAreCurrent = generation.routeGeneration.routes.every((route) => (
+    route.expiresAt > Date.now()
+    && route.steps.every((step) => bindings.some((binding) => (
+      binding.businessId === step.businessId
+      && binding.offeringId === step.offeringId
+      && binding.bindingId === step.bindingId
+      && sameCapabilityContractRef(binding.contractRef, step.contractRef)
+      && binding.offeringRegistrationHash === step.offeringRegistrationHash
+      && binding.bindingRegistrationHash === step.bindingRegistrationHash
+      && binding.publicationRef === step.publicationRef
+      && binding.publicationRevision === step.publicationRevision
+      && binding.readinessValidUntil !== undefined
+      && binding.readinessValidUntil >= route.expiresAt
+      && binding.price !== undefined
+      && canonicalDigest(binding.price) === canonicalDigest(step.price)
+      && step.cancellation !== undefined
+      && canonicalDigest(binding.cancellation) === canonicalDigest(step.cancellation)
+    )))
+  ))
+  return routesAreCurrent ? 'current' : 'stale'
 }
 
 function writableRouteGeneration(generation: RouteGeneration): RouteGeneration {
