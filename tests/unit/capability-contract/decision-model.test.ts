@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   defineCapabilityContract,
   openCapabilityDecisionModel,
+  projectCapabilityInputValueSchema,
+  projectCapabilityInputValueSchemas,
   sameCapabilityContractRef,
   samePointedSchema,
 } from '@/modules/capability-contract/public'
@@ -51,6 +53,44 @@ describe('capability decision model', () => {
     const forged = { ...contract, ref: { ...contract.ref, contractDigest: `sha256:${'0'.repeat(64)}` } }
 
     expect(() => openCapabilityDecisionModel(forged)).toThrowError('capability_contract_ref_mismatch')
+  })
+
+  it('bounds cumulative input projections when local references expand the same schema repeatedly', () => {
+    const sharedSchema = { type: 'string', minLength: 1, examples: ['x'.repeat(256)] }
+    const contract = defineCapabilityContract(capabilityContractV2({
+      inputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        $defs: { shared: sharedSchema },
+        properties: { first: { $ref: '#/$defs/shared' }, second: { $ref: '#/$defs/shared' } },
+        required: ['first', 'second'],
+        additionalProperties: false,
+      },
+      customerAnnotations: [
+        { annotationId: 'first', document: 'input', pointer: '/first', label: 'First', role: 'request' },
+        { annotationId: 'second', document: 'input', pointer: '/second', label: 'Second', role: 'constraint' },
+        { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
+      ],
+      dataUse: [dataUse('first_release', '/first'), dataUse('second_release', '/second')],
+      effects: [dataEffect('first_release'), dataEffect('second_release')],
+    }))
+    const model = openCapabilityDecisionModel(contract)
+    const first = requiredInput(model, 'first')
+    const firstProjection = {
+      inputKey: first.key,
+      valueSchema: projectCapabilityInputValueSchema(contract.inputSchema, first),
+    }
+    const oneProjectionBytes = new TextEncoder().encode(JSON.stringify(firstProjection)).byteLength
+
+    expect(model.inputs.map((input) => projectCapabilityInputValueSchema(contract.inputSchema, input))).toEqual([
+      sharedSchema,
+      sharedSchema,
+    ])
+    expect(() => projectCapabilityInputValueSchemas(
+      contract.inputSchema,
+      model.inputs,
+      oneProjectionBytes,
+    )).toThrow('capability_input_schema_projection_too_large')
   })
 
   it('rejects contracts whose required customer input cannot be projected unambiguously', () => {

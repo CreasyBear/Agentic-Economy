@@ -2,6 +2,7 @@ import {
   sameCapabilityContractRef,
   type CapabilityContractRef,
   type CapabilityDecisionModel,
+  type CapabilityInputSemantic,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
@@ -15,7 +16,10 @@ import {
   type RequestEvaluation,
   type RequestFact,
 } from './evaluation'
-import type { CustomerRequestSemanticProposal } from './semantic-interpreter'
+import {
+  deriveCustomerDecisionPreference,
+  type CustomerRequestSemanticProposal,
+} from './semantic-interpreter'
 
 const MAX_SELECTIONS = 64
 const MAX_FACTS = 128
@@ -84,13 +88,14 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
   const models = exactModelRegistry(command.models)
   if (models === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const registrySnapshotDigest = requestRegistrySnapshotDigest(command.bindings)
-  const selected = command.proposal.kind === 'needs_intent_direction' ? [] : command.proposal.selections
+  const selected = command.proposal.kind === 'needs_intent_direction'
+    ? []
+    : normalizeInferredFacts(command, models)
+  if (selected === undefined) return { kind: 'refused', reason: 'unsafe_interpretation' }
   const proposalFacts = selected.flatMap((selection) => selection.facts)
-  if (!proposalFacts.every((fact) => factBelongsToExactModel(fact, models))) {
-    return { kind: 'refused', reason: 'unsafe_interpretation' }
-  }
   const facts = mergeFacts(command.priorFacts ?? [], proposalFacts)
   if (facts === undefined) return { kind: 'refused', reason: 'unsafe_interpretation' }
+  const decisionPreference = deriveCustomerDecisionPreference(command.intent)
   const actions = selected.map((selection, index): ProposedRequestAction => {
     const model = resolveExactModel(models, selection.contractRef)
     if (model === undefined || model.selectionKey !== selection.selectionKey) {
@@ -130,9 +135,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
         intent: command.intent,
         facts,
         registrySnapshotDigest,
-        ...(command.proposal.decisionPreference === undefined
+        ...(decisionPreference === undefined
           ? {}
-          : { decisionPreference: command.proposal.decisionPreference }),
+          : { decisionPreference }),
         candidates: discoverRequestEvaluationCandidates({
           selectedCapabilities: selected.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
           bindings: command.bindings,
@@ -191,6 +196,37 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     kind: 'compiled',
     aggregate: Object.freeze({ ...aggregateMaterial, aggregateDigest: canonicalDigest(aggregateMaterial) }),
   }
+}
+
+type CapabilitySelections = Extract<
+  CustomerRequestSemanticProposal,
+  { kind: 'capability_candidates' }
+>['selections']
+
+function normalizeInferredFacts(
+  command: CompileCustomerRequestCommand,
+  models: ReadonlyMap<string, CapabilityDecisionModel>,
+): CapabilitySelections | undefined {
+  if (command.proposal.kind !== 'capability_candidates') return Object.freeze([])
+  const normalized = []
+  for (const selection of command.proposal.selections) {
+    const model = resolveExactModel(models, selection.contractRef)
+    if (model === undefined || model.selectionKey !== selection.selectionKey) return undefined
+    const accepted: RequestFact[] = []
+    for (const fact of selection.facts) {
+      const input = exactInputForFact(fact, model)
+      if (input === undefined) return undefined
+      if (factBelongsToExactModel(fact, models)) {
+        accepted.push(fact)
+      } else if (fact.source.kind === 'agent_inference') {
+        continue
+      } else {
+        return undefined
+      }
+    }
+    normalized.push(Object.freeze({ ...selection, facts: Object.freeze(accepted) }))
+  }
+  return Object.freeze(normalized)
 }
 
 export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2Aggregate) {
@@ -302,6 +338,20 @@ function factBelongsToExactModel(
     facts: [{ input: fact.inputKey, inputPointer: fact.inputPointer, value: fact.value }],
   })
   return assessment.kind !== 'incompatible'
+}
+
+function exactInputForFact(
+  fact: RequestFact,
+  model: CapabilityDecisionModel,
+): CapabilityInputSemantic | undefined {
+  if (!sameCapabilityContractRef(model.contractRef, fact.contractRef)
+    || model.selectionKey !== fact.selectionKey) return undefined
+  const input = model.inputs.find((candidate) => candidate.key === fact.inputKey)
+  return input !== undefined
+    && input.inputPointer === fact.inputPointer
+    && input.schemaIdentity === fact.schemaIdentity
+    ? input
+    : undefined
 }
 
 function mergeFacts(prior: readonly RequestFact[], proposed: readonly RequestFact[]): readonly RequestFact[] | undefined {

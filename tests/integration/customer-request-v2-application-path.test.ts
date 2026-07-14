@@ -247,7 +247,7 @@ describe('current V2 Customer Request application path', () => {
     expect(generate).toHaveBeenCalledTimes(1)
   })
 
-  it('retries one unsafe model proposal without weakening contract validation', async () => {
+  it('discards an invalid inferred shape and asks for the exact registered input once', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
     await admitSandboxSupply(backend)
@@ -260,24 +260,45 @@ describe('current V2 Customer Request application path', () => {
         selections: [{ selectionKey: model.selectionKey, facts: [{ inputKey: requestInput.key, value }] }],
       }) } }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
-    const generate = vi.fn()
-      .mockResolvedValueOnce(modelResponse(42))
-      .mockResolvedValueOnce(modelResponse('Compare labelled sandbox options'))
+    const generate = vi.fn().mockImplementation(async () => modelResponse({
+      criteria: 'cheapest labelled sandbox',
+    }))
     vi.stubGlobal('fetch', generate)
     vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
     const customer = backend.withIdentity(identity)
 
     const submitted = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:retry', requestId: 'request:v2:retry',
-      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Find the cheapest labelled sandbox option.',
       routing: { networkId: 'ae:public' },
     })
 
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:v2:retry', revision: 1,
-      state: 'ready_to_compare', nextAction: 'prepare_options',
+      state: 'needs_information', nextAction: 'provide_information',
+      clarification: { kind: 'contract_fact' },
     })
-    expect(generate).toHaveBeenCalledTimes(2)
+    expect(generate).toHaveBeenCalledTimes(1)
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('expected exact contract clarification')
+    }
+    const persisted = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Revisions')
+        .withIndex('by_requestId_and_requestRevision', (query) => (
+          query.eq('requestId', 'request:v2:retry').eq('requestRevision', 1)
+        )).unique()
+    ))
+    expect(persisted?.aggregate.snapshot.facts).toEqual([])
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef,
+      expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:retry',
+      requirementKey: submitted.clarification.requirementKey,
+      value: 'Find the cheapest labelled sandbox option.',
+    })
+    expect(answered).toMatchObject({
+      kind: 'request', revision: 2, state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
   })
 
   it('lets an external agent prepare but never promotes its API signature into customer authority', async () => {

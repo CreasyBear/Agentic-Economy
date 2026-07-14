@@ -307,6 +307,43 @@ export function samePointedSchema(left: PointedSchemaIdentity, right: PointedSch
   return left === right
 }
 
+export function projectCapabilityInputValueSchema(
+  inputSchema: CapabilityContractDocument['inputSchema'],
+  input: CapabilityInputSemantic,
+): Readonly<Record<string, JsonValue>> {
+  const pointedSchema = resolvePointedSchema(inputSchema, input.inputPointer)
+  if (pointedSchema === undefined
+    || canonicalDigest(pointedSchema as StableHashValue) !== input.schemaIdentity) {
+    throw new Error('capability_input_schema_projection_mismatch')
+  }
+  return pointedSchema
+}
+
+export function projectCapabilityInputValueSchemas(
+  inputSchema: CapabilityContractDocument['inputSchema'],
+  inputs: readonly CapabilityInputSemantic[],
+  maximumBytes: number,
+): readonly Readonly<{
+  inputKey: CapabilityInputKey
+  valueSchema: Readonly<Record<string, JsonValue>>
+}>[] {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes <= 0) {
+    throw new Error('capability_input_schema_projection_limit_invalid')
+  }
+  let projectedBytes = 0
+  const projections = []
+  for (const input of inputs) {
+    const projection = Object.freeze({
+      inputKey: input.key,
+      valueSchema: projectCapabilityInputValueSchema(inputSchema, input),
+    })
+    projectedBytes += new TextEncoder().encode(JSON.stringify(projection)).byteLength
+    if (projectedBytes > maximumBytes) throw new Error('capability_input_schema_projection_too_large')
+    projections.push(projection)
+  }
+  return Object.freeze(projections)
+}
+
 export function openCapabilityDecisionModel(contract: CapabilityContract): CapabilityDecisionModel {
   let exactContract = contract
   if (!definedContracts.has(contract)) {

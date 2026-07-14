@@ -36,4 +36,19 @@ describe('OpenRouter customer request transport', () => {
     await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_503')
     await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_invalid')
   })
+
+  it('refuses an oversized serialized request before network release', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const transport = createOpenRouterCustomerRequestTransport({ apiKey: 'secret', model: 'model:test' })
+
+    await expect(transport.generateJson({
+      systemInstruction: 'system',
+      payload: {
+        customerJob: 'x'.repeat(1_000_000), knownFacts: {}, knownFactFields: [], capabilities: [],
+      },
+      signal: new AbortController().signal,
+    })).rejects.toThrow('customer_request_interpretation_request_too_large')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

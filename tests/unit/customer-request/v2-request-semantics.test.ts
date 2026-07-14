@@ -4,6 +4,7 @@ import {
   defineCapabilityContract,
   isBoundedJsonValue,
   openCapabilityDecisionModel,
+  projectCapabilityInputValueSchema,
 } from '@/modules/capability-contract/public'
 import {
   discoverRequestEvaluationCandidates,
@@ -32,7 +33,8 @@ describe('V2 Request semantics', () => {
       }),
     })
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
-      interpreterId: 'interpreter:test', transport: { generateJson }, timeoutMs: 1_000, maximumResponseBytes: 8_000,
+      interpreterId: 'interpreter:test', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
     const proposal = await interpreter.propose({
@@ -43,6 +45,7 @@ describe('V2 Request semantics', () => {
         name: 'Search data',
         description: 'Returns matching data.',
         inputs: model.inputs,
+        valueSchemas: inputValueSchemas(model, structuredInputSchema()),
         evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
       })],
     })
@@ -63,6 +66,18 @@ describe('V2 Request semantics', () => {
     expect(sent).not.toContain(model.contractRef.capabilityId)
     expect(sent).not.toContain(model.contractRef.contractDigest)
     expect(sent).not.toMatch(/"version"|"inputPointer"|"evidenceId"|"operation"|"provider/i)
+    const sentRequestInput = generateJson.mock.calls[0]?.[0].payload.capabilities[0]?.inputs.find((input: { inputKey: string }) => (
+      input.inputKey === requestInput.key
+    ))
+    expect(sentRequestInput).toMatchObject({
+      inputKey: requestInput.key,
+      valueSchema: {
+        type: 'object',
+        properties: { topic: { type: 'string', minLength: 1 } },
+        required: ['topic'],
+        additionalProperties: false,
+      },
+    })
   })
 
   it('derives option viability from the V2 model without requiring commitment-only input', () => {
@@ -94,6 +109,29 @@ describe('V2 Request semantics', () => {
       viability: { kind: 'viable' },
     })
     expect(evaluation.nextRequirement).toBeUndefined()
+  })
+
+  it('refuses an expanded descriptor payload before calling the model transport', async () => {
+    const model = decisionModelWithCommitment()
+    const generateJson = vi.fn()
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:bounded-payload', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 1, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Find market data.',
+      capabilities: [bindCustomerCapabilityDescriptor({
+        contractRef: model.contractRef,
+        selectionKey: model.selectionKey,
+        name: 'Search data',
+        description: 'Returns matching data.',
+        inputs: model.inputs,
+        valueSchemas: inputValueSchemas(model, structuredInputSchema()),
+        evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+      })],
+    })).rejects.toThrow('customer_request_semantic_interpretation_payload_too_large')
+    expect(generateJson).not.toHaveBeenCalled()
   })
 
   it('uses the capability-owned projection to disclose missing preparation input before collection', () => {
@@ -218,6 +256,42 @@ describe('V2 Request semantics', () => {
     expect(result).toEqual({ kind: 'refused', reason: 'unsafe_interpretation' })
   })
 
+  it('keeps structured request input missing when verbatim customer text does not satisfy its registered schema', () => {
+    const model = decisionModelWithCommitment()
+    const requestInput = requiredInput(model, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:structured-recovery', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find market data about routing.', networkId: 'ae:public',
+      proposal: {
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          contractRef: model.contractRef,
+          facts: [{
+            contractRef: model.contractRef,
+            selectionKey: model.selectionKey,
+            inputKey: requestInput.key,
+            inputPointer: requestInput.inputPointer,
+            schemaIdentity: requestInput.schemaIdentity,
+            value: 'Find market data about routing.',
+            source: { kind: 'agent_inference', inferenceRef: 'inference:wrong-shape' },
+          }],
+        }],
+      },
+      interpreterId: 'interpreter:test', bindings: [supply('binding:structured', model)], models: [model], now: 1,
+    })
+
+    expect(result).toMatchObject({
+      kind: 'compiled',
+      aggregate: {
+        outcome: 'needs_information',
+        snapshot: { facts: [] },
+        evaluation: { nextRequirement: { kind: 'contract_fact' } },
+      },
+    })
+  })
+
   it('derives ranking intent from customer text only and rejects model-injected preference', async () => {
     expect(deriveCustomerDecisionPreference('Find the cheapest suitable option')).toMatchObject({
       objective: 'lowest_maximum_price', basis: 'extracted_from_request',
@@ -229,7 +303,7 @@ describe('V2 Request semantics', () => {
       transport: { generateJson: async () => ({ content: JSON.stringify({
         kind: 'capability_candidates', selections: [], decisionPreference: 'lowest_maximum_price',
       }) }) },
-      timeoutMs: 1_000, maximumResponseBytes: 8_000,
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
     })
 
     await expect(interpreter.propose({
@@ -237,6 +311,7 @@ describe('V2 Request semantics', () => {
       capabilities: [bindCustomerCapabilityDescriptor({
         contractRef: model.contractRef, selectionKey: model.selectionKey,
         name: 'Search data', description: 'Returns matching data.', inputs: model.inputs,
+        valueSchemas: inputValueSchemas(model, structuredInputSchema()),
         evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
       })],
     })).rejects.toThrow('customer_request_semantic_interpretation_invalid')
@@ -311,6 +386,16 @@ function requiredInput(model: ReturnType<typeof decisionModelWithCommitment>, an
   const input = model.inputs.find((candidate) => candidate.annotationId === annotationId)
   if (input === undefined) throw new Error(`missing test input: ${annotationId}`)
   return input
+}
+
+function inputValueSchemas(
+  model: ReturnType<typeof decisionModelWithCommitment>,
+  inputSchema: ReturnType<typeof structuredInputSchema>,
+) {
+  return model.inputs.map((input) => ({
+    inputKey: input.key,
+    valueSchema: projectCapabilityInputValueSchema(inputSchema, input),
+  }))
 }
 
 function supply(bindingId: string, model: ReturnType<typeof decisionModelWithCommitment>) {

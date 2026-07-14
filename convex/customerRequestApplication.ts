@@ -2,6 +2,7 @@ import { v, type Infer } from 'convex/values'
 
 import {
   openCapabilityDecisionModel,
+  projectCapabilityInputValueSchemas,
   sameCapabilityContractRef,
   isBoundedJsonValue,
   type CapabilityContractRef,
@@ -41,6 +42,9 @@ import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-reques
 import { internal } from './_generated/api'
 import { action, type ActionCtx } from './_generated/server'
 import type { CustomerActionStatusV2 } from './customerRequestV2ProviderReconciliation'
+
+const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
+const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
 
 const serviceAssertion = v.object({
   principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
@@ -730,6 +734,7 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
       ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
     }),
     timeoutMs: 20_000,
+    maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
     maximumResponseBytes: 64_000,
   })
   const priorFacts = rebindStoredFacts(input.priorFacts, graph.models)
@@ -876,6 +881,7 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
   if (supply.kind !== 'available' || supply.supplies.length === 0) return { kind: 'unavailable' }
   const modelsByRef = new Map<string, CapabilityDecisionModel>()
   const descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[] = []
+  let descriptorBytes = 0
   const bindings = []
   for (const item of supply.supplies) {
     const contractRef = {
@@ -894,14 +900,27 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
       if (!sameCapabilityContractRef(decoded.contract.ref, contractRef)) return { kind: 'unavailable' }
       model = openCapabilityDecisionModel(decoded.contract)
       modelsByRef.set(key, model)
-      descriptors.push(bindCustomerCapabilityDescriptor({
-        contractRef: model.contractRef,
-        selectionKey: model.selectionKey,
-        name: decoded.contract.name,
-        description: decoded.contract.description,
-        inputs: model.inputs,
-        evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
-      }))
+      let descriptor: ReturnType<typeof bindCustomerCapabilityDescriptor>
+      try {
+        descriptor = bindCustomerCapabilityDescriptor({
+          contractRef: model.contractRef,
+          selectionKey: model.selectionKey,
+          name: decoded.contract.name,
+          description: decoded.contract.description,
+          inputs: model.inputs,
+          valueSchemas: projectCapabilityInputValueSchemas(
+            decoded.contract.inputSchema,
+            model.inputs,
+            MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES,
+          ),
+          evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+        })
+      } catch {
+        return { kind: 'unavailable' }
+      }
+      descriptorBytes += new TextEncoder().encode(JSON.stringify(descriptor)).byteLength
+      if (descriptorBytes > MAX_INTERPRETER_DESCRIPTOR_BYTES) return { kind: 'unavailable' }
+      descriptors.push(descriptor)
     }
     bindings.push({
       businessId: String(item.offering.businessId),

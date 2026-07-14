@@ -7,6 +7,8 @@ type OpenRouterConfiguration = Readonly<{
   siteUrl?: string
 }>
 
+const MAX_OPENROUTER_REQUEST_BYTES = 1_000_000
+
 export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
   return createOpenRouterJsonTransport(config)
 }
@@ -21,6 +23,18 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
   if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
   return Object.freeze({
     generateJson: async ({ systemInstruction, payload, signal }) => {
+      const requestBody = JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: JSON.stringify(payload) },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      })
+      if (new TextEncoder().encode(requestBody).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {
+        throw new Error('customer_request_interpretation_request_too_large')
+      }
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -29,15 +43,7 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
           'HTTP-Referer': config.siteUrl ?? 'https://agentic-economy-phi.vercel.app',
           'X-Title': 'Agentic Economy',
         },
-        body: JSON.stringify({
-          model: config.model,
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: JSON.stringify(payload) },
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0,
-        }),
+        body: requestBody,
         signal,
       })
       if (!response.ok) throw new Error(`customer_request_interpretation_provider_${response.status}`)
