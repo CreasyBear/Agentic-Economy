@@ -379,10 +379,12 @@ export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvalu
 }
 
 function factsForModel(facts: readonly RequestFact[], model: CapabilityDecisionModel): readonly CapabilityInputFact[] {
-  return facts.filter((fact) => (
+  return facts.flatMap((fact) => (
     fact.selectionKey === model.selectionKey
-    && sameCapabilityContractRef(fact.contractRef, model.contractRef)
-  )).map((fact) => ({ input: fact.inputKey, inputPointer: fact.inputPointer, value: fact.value }))
+      && sameCapabilityContractRef(fact.contractRef, model.contractRef)
+      ? [{ input: fact.inputKey, inputPointer: fact.inputPointer, value: fact.value }]
+      : []
+  ))
 }
 
 function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]): InformationRequirement | undefined {
@@ -503,14 +505,16 @@ function deriveCompletionRequirements(
       || !sameCapabilityContractRef(model.contractRef, action.contractRef)) {
       throw new Error('request_action_contract_mismatch')
     }
-    return model.evidence.filter((evidence) => evidence.purpose === 'completion').map((evidence) => Object.freeze({
-      actionId: action.actionId,
-      contractRef: action.contractRef,
-      evidenceId: evidence.evidenceId,
-      outputPointer: evidence.outputPointer,
-      purpose: 'completion' as const,
-      schemaIdentity: evidence.schemaIdentity,
-    }))
+    return model.evidence.flatMap((evidence) => evidence.purpose === 'completion'
+      ? [Object.freeze({
+          actionId: action.actionId,
+          contractRef: action.contractRef,
+          evidenceId: evidence.evidenceId,
+          outputPointer: evidence.outputPointer,
+          purpose: 'completion' as const,
+          schemaIdentity: evidence.schemaIdentity,
+        })]
+      : [])
   }).sort((left, right) => left.actionId.localeCompare(right.actionId) || left.outputPointer.localeCompare(right.outputPointer)))
 }
 

@@ -253,7 +253,8 @@ export class HarnessRunCollector {
       ...this.modelRecords.map((record) => record.status),
       ...gateRecords.map((record) => record.status),
     ]
-    const statuses = HarnessToolStatusValues.filter((candidate) => recordedStatuses.includes(candidate))
+    const recordedStatusSet = new Set(recordedStatuses)
+    const statuses = HarnessToolStatusValues.filter((candidate) => recordedStatusSet.has(candidate))
 
     const summary: HarnessRunSummary = {
       schemaVersion: 1,

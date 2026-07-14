@@ -155,9 +155,11 @@ export async function recordProviderOutcomeTransaction(
   db: MutationCtx['db'], args: OutcomeCommand,
 ): Promise<OutcomeResult> {
   if (!validOutcomeCommand(args)) return { kind: 'refused', reason: 'response_invalid' }
-  const replay = await db.query('customerRequestV2ProviderOutcomes')
-    .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
-  const material = await openReleaseMaterial(db, args.actionAttemptRef)
+  const [replay, material] = await Promise.all([
+    db.query('customerRequestV2ProviderOutcomes')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique(),
+    openReleaseMaterial(db, args.actionAttemptRef),
+  ])
   if (material.kind !== 'ready') return material
   if (replay !== null) {
     if (replay.commandDigest !== args.commandDigest || replay.actionAttemptRef !== args.actionAttemptRef) {

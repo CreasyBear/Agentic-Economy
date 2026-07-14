@@ -565,10 +565,12 @@ export const readCapabilityPublication = query({
         { state: 'incompatible', reasons: ['incompatible_revision'] },
       )
     }
-    const offering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
-    const binding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    const [offering, binding] = await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
+    ])
     if (offering === null || binding === null) return null
     return publicationProjection(
       contractRefFromRow(publication), publication.offeringId, publication.bindingId,
@@ -615,10 +617,12 @@ export const observeCapabilityReadiness = internalMutation({
       readinessValidUntil: args.validUntil,
       updatedAt: now,
     })
-    const offering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
-    const binding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    const [offering, binding] = await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
+    ])
     if (offering === null || binding === null) throw new Error('capability_publication_supply_integrity_failure')
     return {
       kind: 'observed' as const,
@@ -677,10 +681,12 @@ export const readCapabilityProbeTarget = internalQuery({
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
     if (publication === null || publication.disposition !== 'current') return { kind: 'unavailable' as const }
-    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique()
-    const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique()
-    const business = await publishedBusiness(ctx.db, publication.businessId)
-    const contract = await getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication))
+    const [offering, binding, business, contract] = await Promise.all([
+      ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique(),
+      ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique(),
+      publishedBusiness(ctx.db, publication.businessId),
+      getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication)),
+    ])
     if (offering === null || binding === null || business === null || contract.kind !== 'found'
       || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
       || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
@@ -713,10 +719,12 @@ export const recordCapabilityProbeResult = internalMutation({
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
     if (publication === null || publication.disposition !== 'current') return { kind: 'refused' as const, reason: 'revision_changed' as const }
-    const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique()
-    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique()
-    const business = await publishedBusiness(ctx.db, publication.businessId)
-    const contract = await getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication))
+    const [binding, offering, business, contract] = await Promise.all([
+      ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique(),
+      ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique(),
+      publishedBusiness(ctx.db, publication.businessId),
+      getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication)),
+    ])
     if (binding === null || offering === null || business === null || contract.kind !== 'found'
       || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
       || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
@@ -757,10 +765,12 @@ export const withdrawCapability = mutation({
     if (publication.disposition !== 'current') {
       return { kind: 'refused' as const, reason: 'revision_changed' as const }
     }
-    const offering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
-    const binding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    const [offering, binding] = await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
+    ])
     if (offering === null || binding === null) throw new Error('capability_publication_supply_integrity_failure')
     const revoked = await setCapabilitySupplyEligibility(ctx.db, {
       offeringId: offering.offeringId,
@@ -872,10 +882,12 @@ export const refreshCapability = mutation({
     } as StableHashValue)
     const now = Date.now()
     const revision = publication.revision + 1
-    const currentOffering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique()
-    const currentBinding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique()
+    const [currentOffering, currentBinding] = await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (index) => index.eq('offeringId', publication.offeringId)).unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (index) => index.eq('bindingId', publication.bindingId)).unique(),
+    ])
     if (currentOffering === null || currentBinding === null) {
       throw new Error('capability_publication_supply_integrity_failure')
     }
@@ -1669,10 +1681,12 @@ export async function getEligibleExactCapabilitySupply(
     expectedBindingRegistrationHash: string
   }>,
 ) {
-  const offering = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', input.offeringId)).unique()
-  const binding = await db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique()
+  const [offering, binding] = await Promise.all([
+    db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', input.offeringId)).unique(),
+    db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', input.bindingId)).unique(),
+  ])
   if (offering === null || binding === null
     || String(offering.businessId) !== input.businessId
     || offering.networkId !== input.networkId || binding.networkId !== input.networkId

@@ -146,8 +146,8 @@ export function AeGenerativeAnswer({
         />
       ) : null}
 
-      {parts.map((part, index) => (
-        <AnswerPartView key={`${part.kind}-${index}`} part={part} query={query} empty={empty} phase={phase} threadId={threadId} />
+      {parts.map((part) => (
+        <AnswerPartView key={part.kind} part={part} query={query} empty={empty} phase={phase} threadId={threadId} />
       ))}
 
       {phase === 'complete' && !empty ? (

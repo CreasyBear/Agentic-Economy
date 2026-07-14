@@ -75,11 +75,6 @@ function NestedOperatorShell({
   sectionId,
   children,
 }: AeOperatorShellProps & { parentShell: OperatorShellChromeRegistration }) {
-  const breadcrumbsKey = useMemo(
-    () => JSON.stringify(breadcrumbs?.map((item) => [item.label, item.href ?? null]) ?? []),
-    [breadcrumbs],
-  )
-  const navBadgesKey = useMemo(() => JSON.stringify(navBadges ?? {}), [navBadges])
   const chrome = useMemo<OperatorShellChrome>(
     () => ({
       operatorRole,
@@ -93,7 +88,7 @@ function NestedOperatorShell({
       ...(navBadges === undefined ? {} : { navBadges }),
       ...(sectionId === undefined ? {} : { sectionId }),
     }),
-    [operatorRole, title, description, eyebrow, currentPath, mainContentId, breadcrumbsKey, navBadgesKey, sectionId],
+    [operatorRole, title, description, eyebrow, actions, currentPath, mainContentId, breadcrumbs, navBadges, sectionId],
   )
 
   useLayoutEffect(() => {

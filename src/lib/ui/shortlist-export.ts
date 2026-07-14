@@ -35,11 +35,15 @@ export type ShortlistExportPreview = {
 export function createShortlistExportPreview(input: ShortlistExportInput): ShortlistExportPreview {
   const sanitized = input.sanitized ?? true
   const selectedIds = input.selectedFieldIds === undefined ? null : new Set(input.selectedFieldIds)
-  const fields = input.providers.flatMap((business, index) => businessFields(business, index + 1, input.origin))
-    .map((field) => ({
-      ...field,
-      selected: selectedIds === null ? !field.sensitive : selectedIds.has(field.id),
-    }))
+  const fields: ShortlistExportField[] = []
+  for (const [index, business] of input.providers.entries()) {
+    for (const field of businessFields(business, index + 1, input.origin)) {
+      fields.push({
+        ...field,
+        selected: selectedIds === null ? !field.sensitive : selectedIds.has(field.id),
+      })
+    }
+  }
   const preview = {
     threadId: input.threadId,
     revision: input.revision,
@@ -54,9 +58,10 @@ export function createShortlistExportPreview(input: ShortlistExportInput): Short
 export function serializeShortlistExport(
   preview: Omit<ShortlistExportPreview, 'text'> | ShortlistExportPreview,
 ): string {
-  const selected = preview.fields
-    .filter((field) => field.selected)
-    .map((field) => `${safeRecordValue(field.label)}: ${safeRecordValue(field.value)}`)
+  const selected: string[] = []
+  for (const field of preview.fields) {
+    if (field.selected) selected.push(`${safeRecordValue(field.label)}: ${safeRecordValue(field.value)}`)
+  }
 
   return [
     'Shortlist summary',

@@ -1,7 +1,7 @@
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
-import { validateOwnerPublishedPhone } from '@/modules/business/public'
 import { allocateDeterministicSlug, assertCsrf, detectDuplicateClaim, rateLimitClaim } from '@/modules/security/public'
+import { validateOwnerPublishedPhone } from './published-phone'
 import type {
   BusinessContextRecord,
   BusinessRecord,

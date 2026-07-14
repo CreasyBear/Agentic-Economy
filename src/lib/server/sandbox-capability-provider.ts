@@ -7,24 +7,24 @@ import { SANDBOX_PROVIDER_PROFILES } from '@/modules/sandbox-supply/public'
 const MAX_BODY_BYTES = 64 * 1024
 const SANDBOX_OFFER_EXPIRES_AT = Date.UTC(2035, 0, 1)
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
-const preparationEgressBody = z.object({
+const preparationEgressBody = z.strictObject({
   protocol: z.literal('ae.preparation-egress:v1'),
   operationRef: z.string().min(1).max(500),
-  contractRef: z.object({
+  contractRef: z.strictObject({
     capabilityId: z.string().min(1).max(500),
     version: z.number().int().positive(),
     contractDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  }).strict(),
+  }),
   selectionKey: z.string().min(1).max(500),
   semanticDigest: z.string().min(1).max(500),
   facts: z.array(z.record(z.string(), z.unknown())).max(128),
-}).strict()
-const requestBody = z.object({
+})
+const requestBody = z.looseObject({
   protocolVersion: z.literal('ae-capability:v1'),
   operation: z.enum(['quote', 'structured_quote', 'structured_quote_reconcile', 'execute', 'reconcile', 'cancel']),
   bindingId: z.string().min(1).max(200),
   capabilityContractId: z.string().min(1).max(200),
-}).passthrough()
+})
 
 type SandboxProfile = (typeof SANDBOX_PROVIDER_PROFILES)[keyof typeof SANDBOX_PROVIDER_PROFILES]
 type HandlerOptions = Readonly<{

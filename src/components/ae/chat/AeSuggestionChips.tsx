@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
 import { useClientMounted } from '@/hooks/use-client-mounted'
+import { loadEnabledFollowUpChips } from '@/modules/answer-thread/client'
 import type { PublicThreadTurn } from '@/modules/answer-thread/public'
 import {
   buildDeterministicFollowUpChips,
@@ -76,45 +77,15 @@ export function AeFollowUpChips({ turn, onSelect, contextPlacement = 'current' }
   const [chips, setChips] = useState<FollowUpChip[]>(() => buildDeterministicFollowUpChips(turn))
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     setChips(buildDeterministicFollowUpChips(turn))
 
-    void fetch('/api/answer/eval-status')
-      .then(async (response) => {
-        if (!response.ok || cancelled) {
-          return false
-        }
-        const body = (await response.json()) as { llmChipsEnabled?: boolean }
-        return body.llmChipsEnabled === true
-      })
-      .then(async (llmChipsEnabled) => {
-        if (!llmChipsEnabled || cancelled) {
-          return
-        }
-
-        const providers = extractProviders(turn)
-        const response = await fetch('/api/answer/follow-up-chips', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: turn.query, providers }),
-        })
-        if (!response.ok || cancelled) {
-          return
-        }
-
-        const body = (await response.json()) as { chips?: FollowUpChip[] }
-        if (cancelled || !Array.isArray(body.chips) || body.chips.length === 0) {
-          return
-        }
-        setChips(body.chips)
-      })
-      .catch(() => {
-        // Deterministic chips already shown.
-      })
+    void loadEnabledFollowUpChips(turn, controller.signal).then((loadedChips) => {
+      if (loadedChips !== undefined && !controller.signal.aborted) setChips([...loadedChips])
+    })
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [turn])
 

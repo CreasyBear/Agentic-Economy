@@ -104,6 +104,26 @@ describe('shortlist export preview', () => {
     expect(preview.text).toBe(text)
   })
 
+  it('preserves provider order and field order across a multi-business export', () => {
+    const preview = createShortlistExportPreview({
+      threadId: 'thread-multi-provider',
+      revision: 'turn-2',
+      providers: [
+        provider(),
+        provider({ slug: 'second-electrician', name: 'Second Electrician', suburb: 'Perth', stateTerritory: 'WA' }),
+      ],
+      generatedAt: '2026-07-13T04:05:06.000Z',
+      origin: 'https://agentic.example',
+    })
+
+    expect(preview.fields.map((field) => field.id)).toEqual([
+      'business-1-name', 'business-1-location', 'business-1-page',
+      'business-2-name', 'business-2-location', 'business-2-page',
+    ])
+    expect(preview.text.indexOf('Business 1 name: Demo Plumbing'))
+      .toBeLessThan(preview.text.indexOf('Business 2 name: Second Electrician'))
+  })
+
   it('binds a preview to its semantic revision', () => {
     const preview = createShortlistExportPreview({
       threadId: 'thread-revision',

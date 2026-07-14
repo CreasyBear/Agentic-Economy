@@ -7,19 +7,19 @@ import { stableStringify, type StableHashValue } from '@/modules/common/stable-h
 
 const MAX_ADAPTER_CONFIG_BYTES = 65_536
 const encoder = new TextEncoder()
-const httpJsonConfiguration = z.object({
+const httpJsonConfiguration = z.strictObject({
   method: z.literal('POST'),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
-  reconciliation: z.object({
+  reconciliation: z.strictObject({
     path: z.string().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{1,1000}$/),
     requestTimeoutMs: z.number().int().min(100).max(120_000),
-  }).strict().optional(),
-}).strict()
-const mcpJsonRpcConfiguration = z.object({
+  }).optional(),
+})
+const mcpJsonRpcConfiguration = z.strictObject({
   protocolVersion: z.string().trim().min(1).max(64),
   toolName: z.string().trim().min(1).max(200),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
-}).strict()
+})
 
 export type TransportAdmissionInput = Readonly<{
   adapterId: string

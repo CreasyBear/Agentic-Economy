@@ -58,7 +58,10 @@ export function AeExportPreview({
 
   function updateField(fieldId: string, selected: boolean) {
     if (!current || preview === null) return
-    const fields = preview.fields.map((field) => field.id === fieldId ? { ...field, selected } : field)
+    const selectedFieldIds: string[] = []
+    for (const field of preview.fields) {
+      if (field.id === fieldId ? selected : field.selected) selectedFieldIds.push(field.id)
+    }
     setPreview(createShortlistExportPreview({
       threadId,
       revision,
@@ -66,7 +69,7 @@ export function AeExportPreview({
       generatedAt: preview.generatedAt,
       origin: resolvedOrigin(origin),
       sanitized: preview.sanitized,
-      selectedFieldIds: fields.filter((field) => field.selected).map((field) => field.id),
+      selectedFieldIds,
       ...(preview.sourceAt === undefined ? {} : { sourceAt: preview.sourceAt }),
     }))
     setArtifactStatus('idle')

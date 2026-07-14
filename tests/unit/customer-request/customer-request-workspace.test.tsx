@@ -153,6 +153,7 @@ describe('customer Request workspace', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json(projection))
       .mockResolvedValueOnce(Response.json({ ...projection, revision: 2, state: 'ready_to_compare', nextAction: 'prepare_options' }))
+      .mockResolvedValueOnce(Response.json({ ...projection, requestRef: 'request:uuid-3' }))
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Fremantle' } })
@@ -168,6 +169,12 @@ describe('customer Request workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start a new Request' }))
     await waitFor(() => expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value).toBe(''))
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'A separate request' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    await screen.findByRole('button', { name: 'Edit this Request' })
+    const thirdBody = JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body))
+    expect(thirdBody).toMatchObject({ requestRef: 'request:uuid-3', agentRef: 'web:uuid-4', request: 'A separate request' })
+    expect(thirdBody).not.toHaveProperty('expectedRevision')
   })
 
   it('explains protected data sharing before any provider preparation', async () => {

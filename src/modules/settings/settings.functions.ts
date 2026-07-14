@@ -17,9 +17,9 @@ import {
 } from '@/modules/settings/public'
 import type { OwnerId } from '@/modules/common/ids'
 
-export const ownerNotificationPreferencesInputSchema = z.object({
+export const ownerNotificationPreferencesInputSchema = z.strictObject({
   newInquiryEmailEnabled: z.boolean(),
-}).strict()
+})
 
 export type OwnerNotificationPreferencesInput = z.infer<typeof ownerNotificationPreferencesInputSchema>
 

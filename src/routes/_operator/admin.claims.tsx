@@ -6,7 +6,7 @@ import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPa
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAdminClaimsThroughSource } from '@/modules/security/admin-readback.functions'
 
-export const readAdminClaimsServer = createServerFn().handler(() => readAdminClaimsThroughSource())
+const readAdminClaimsServer = createServerFn().handler(() => readAdminClaimsThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/claims')({
   ...operatorRouteOptions,

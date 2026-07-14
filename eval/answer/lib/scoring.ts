@@ -610,8 +610,9 @@ function timingExpectationsPass(
   expected: AnswerTurnEvalCase['expected'],
   timingNames: readonly string[],
 ): boolean {
-  const includesPass = (expected.includeTimingNames ?? []).every((name) => timingNames.includes(name))
-  const excludesPass = (expected.excludeTimingNames ?? []).every((name) => !timingNames.includes(name))
+  const timingNameSet = new Set(timingNames)
+  const includesPass = (expected.includeTimingNames ?? []).every((name) => timingNameSet.has(name))
+  const excludesPass = (expected.excludeTimingNames ?? []).every((name) => !timingNameSet.has(name))
   return includesPass && excludesPass
 }
 

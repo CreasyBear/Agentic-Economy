@@ -8,6 +8,22 @@ const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
 
 describe('V2-only sandbox supply registration', () => {
+  it('replays the test capability publication against the seeded exact supply', async () => {
+    const backend = convexTest(schema, modules)
+    const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
+
+    const replay = await backend.mutation(internal.devSeed.seedTestCapabilityPublication, {})
+
+    expect(replay).toEqual({
+      publicationRef: seeded.sandboxCapabilityPublicationRef,
+      credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+    })
+    const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
+    expect(publications.filter((publication) => (
+      publication.publicationRef === replay.publicationRef
+    ))).toHaveLength(1)
+  })
+
   it('does not dual-write V1 contracts or bindings while seeding the V2 registrations', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})

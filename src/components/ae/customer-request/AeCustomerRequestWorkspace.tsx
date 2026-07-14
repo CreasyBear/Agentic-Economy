@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
@@ -15,19 +15,21 @@ type WorkspaceState =
   | Readonly<{ kind: 'error'; message: string; authenticationRequired: boolean }>
 type ConversationTurn = Readonly<{ speaker: 'customer' | 'ae'; text: string }>
 
+const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' })
+
 export function AeCustomerRequestWorkspace() {
   const [need, setNeed] = useState('')
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([])
   const [editingRevision, setEditingRevision] = useState<number | undefined>()
-  const [requestIdentity, setRequestIdentity] = useState<Readonly<{ requestRef: string; agentRef: string }> | undefined>()
+  const requestIdentityRef = useRef<Readonly<{ requestRef: string; agentRef: string }> | undefined>(undefined)
 
   async function submit() {
     if (need.trim().length === 0 || state.kind === 'submitting'
       || state.kind === 'comparing' || state.kind === 'refreshing') return
-    const identity = requestIdentity ?? { requestRef: `request:${crypto.randomUUID()}`, agentRef: `web:${crypto.randomUUID()}` }
-    setRequestIdentity(identity)
+    const identity = requestIdentityRef.current ?? { requestRef: `request:${crypto.randomUUID()}`, agentRef: `web:${crypto.randomUUID()}` }
+    requestIdentityRef.current = identity
     setState({ kind: 'submitting' })
     try {
       const response = await fetch('/api/requests', {
@@ -64,7 +66,7 @@ export function AeCustomerRequestWorkspace() {
     setAnswer('')
     setTurns([])
     setEditingRevision(undefined)
-    setRequestIdentity(undefined)
+    requestIdentityRef.current = undefined
     setState({ kind: 'idle' })
   }
 
@@ -279,7 +281,7 @@ function RecoveryActions({ edit, restart }: { edit: () => void; restart: () => v
 function StartExamples() { return <div className="grid gap-2 border-t border-border pt-6 sm:grid-cols-4"><Example label="Place" value="Fremantle" /><Example label="Business type" value="Electrician" /><Example label="Situation" value="A quiet dinner with my parents" /><Example label="Detailed" value="Dog-friendly stay near the beach" /></div> }
 function Example({ label, value }: { label: string; value: string }) { return <div className="rounded-md bg-surface p-4"><Text type="supporting" weight="semibold">{label}</Text><Text color="secondary" className="mt-1">{value}</Text></div> }
 function Conversation({ turns }: { turns: readonly ConversationTurn[] }) { return <div className="grid gap-3" aria-label="Request conversation">{turns.map((turn, index) => turn.speaker === 'customer' ? <div key={`${index}:${turn.text}`} className="ml-auto max-w-[85%] rounded-md bg-accent px-4 py-3 text-on-accent">{turn.text}</div> : <div key={`${index}:${turn.text}`} className="max-w-[90%] border-l-2 border-accent py-1 pl-4"><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1">{turn.text}</Heading></div>)}</div> }
-function Clarification({ projection, answer, setAnswer, submit }: { projection: CustomerRequestView; answer: string; setAnswer: (answer: string) => void; submit: () => void }) { return <form className="grid gap-3 border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); submit() }}><label htmlFor="clarification-answer" className="text-sm font-semibold">Your answer</label><div className="flex flex-col gap-2 sm:flex-row"><input id="clarification-answer" autoFocus value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder={projection.clarification?.answerKind === 'natural_language' ? 'Describe it in your own words' : projection.clarification?.prompt} className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 outline-none focus:ring-2 focus:ring-accent" /><button type="submit" disabled={!answer.trim()} className="min-h-11 rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Continue</button></div></form> }
+function Clarification({ projection, answer, setAnswer, submit }: { projection: CustomerRequestView; answer: string; setAnswer: (answer: string) => void; submit: () => void }) { return <form className="grid gap-3 border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); submit() }}><label htmlFor="clarification-answer" className="text-sm font-semibold">Your answer</label><div className="flex flex-col gap-2 sm:flex-row"><input id="clarification-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder={projection.clarification?.answerKind === 'natural_language' ? 'Describe it in your own words' : projection.clarification?.prompt} className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 outline-none focus:ring-2 focus:ring-accent" /><button type="submit" disabled={!answer.trim()} className="min-h-11 rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Continue</button></div></form> }
 function statusLabel(state: CustomerRequestView['state']): string {
   if (state === 'ready_to_compare') return 'Ready to compare'
   if (state === 'needs_information') return 'More information needed'
@@ -302,5 +304,5 @@ function readableResult(value: unknown): string {
   return 'Evidence is available for this result.'
 }
 function formatMoney(currency: string, amountMinor: number): string { return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amountMinor / 100) }
-function formatOptionTime(timestamp: number): string { return new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp) }
+function formatOptionTime(timestamp: number): string { return optionTimeFormatter.format(timestamp) }
 function errorState(status: number, message: string): WorkspaceState { return { kind: 'error', message: status === 401 ? 'Sign in so AE can keep this request private and resumable.' : message, authenticationRequired: status === 401 } }

@@ -169,15 +169,15 @@ export function reconcileProviderOutcomeV2(input: Readonly<{
     if (validated.kind !== 'valid') reason = 'provider_output_invalid'
     else {
       const purpose = parsed.disposition === 'succeeded' ? 'completion' as const : 'recovery' as const
-      const evidence = model.evidence.filter((requirement) => requirement.purpose === purpose)
-        .flatMap((requirement) => {
+      const requirements = model.evidence.filter((requirement) => requirement.purpose === purpose)
+      const evidence = requirements.flatMap((requirement) => {
           const value = valueAtPointer(validated.value, requirement.outputPointer)
           return value === undefined ? [] : [{
             evidenceId: requirement.evidenceId, purpose, outputPointer: requirement.outputPointer,
             schemaIdentity: requirement.schemaIdentity, value, valueDigest: canonicalDigest(value as StableHashValue),
           }]
         })
-      const requiredCount = model.evidence.filter((requirement) => requirement.purpose === purpose).length
+      const requiredCount = requirements.length
       if (requiredCount === 0 || evidence.length !== requiredCount) reason = 'terminal_evidence_missing'
       else {
         state = parsed.disposition

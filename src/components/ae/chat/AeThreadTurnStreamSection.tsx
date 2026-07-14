@@ -12,7 +12,7 @@ import { AeAnswerThinkingTrace } from './AeAnswerThinkingTrace'
 import { AeThreadTurnQueryHeader } from './AeThreadTurnQueryHeader'
 import { AeTurnContextLine } from './AeTurnContextLine'
 import { ANSWER_SECTION_CLASS } from './thread-turn-view'
-import { orderShortlistArtifacts } from './AeShortlistTerminal'
+import { orderShortlistArtifacts } from './shortlist-projection'
 import type { StreamAnswerResult } from './answer-stream'
 import {
   initialAnswerTurnUiState,
@@ -64,18 +64,22 @@ export function AeThreadTurnStreamSection({
   const latestStateRef = useRef<AnswerTurnUiState>(initialAnswerTurnUiState)
   const turnMetaRef = useRef<{ threadId: string; turnId: string; turnSeq: number } | null>(null)
   const requestThreadIdRef = useRef<string | undefined>(threadId)
+  const requestIntentRef = useRef<FollowUpIntent>(intent)
   const streamKey = `${generation}:${query}:${stableAeSearchContextKey(searchContext)}`
 
-  generationRef.current = generation
-  onStreamEndRef.current = onStreamEnd
-  onThreadCreatedRef.current = onThreadCreated
-  onSettledTurnRef.current = onSettledTurn
+  useLayoutEffect(() => {
+    generationRef.current = generation
+    onStreamEndRef.current = onStreamEnd
+    onThreadCreatedRef.current = onThreadCreated
+    onSettledTurnRef.current = onSettledTurn
+  })
 
   // Freeze thread id at generation boundaries so remounts do not POST a just-created
   // thread id before Convex persistence finishes.
   useLayoutEffect(() => {
     requestThreadIdRef.current = threadId
-    // oxlint-disable-next-line react-doctor/exhaustive-deps -- threadId is intentionally frozen until generation changes.
+    requestIntentRef.current = intent
+    // oxlint-disable-next-line react-doctor/exhaustive-deps -- threadId and intent are intentionally frozen until generation changes.
   }, [generation])
 
   useEffect(() => {
@@ -95,6 +99,50 @@ export function AeThreadTurnStreamSection({
     const activeGeneration = generation
     const threadIdAtStart = requestThreadIdRef.current
 
+    function applyEvent(event: AnswerEvent) {
+      if (!mountedRef.current || generationRef.current !== activeGeneration) return
+      if (event.type === 'complete') completeRef.current = true
+      latestStateRef.current = reduceAnswerTurnEvent(latestStateRef.current, event)
+      sendTurnUpdate({ type: 'event', event })
+    }
+
+    function handleStreamResult(result: StreamAnswerResult) {
+      if (!mountedRef.current || generationRef.current !== activeGeneration) return
+
+      if (result === 'aborted') {
+        if (userStopRef.current) {
+          userStopRef.current = false
+          onStreamEndRef.current?.('stopped')
+        }
+        return
+      }
+
+      if (result === 'rate_limited') {
+        sendTurnUpdate({ type: 'rate_limited' })
+        onStreamEndRef.current?.('rate_limited')
+        return
+      }
+
+      if (result === 'error') {
+        sendTurnUpdate({ type: 'stream_failed' })
+        onStreamEndRef.current?.('error')
+        return
+      }
+
+      if (result === 'done') {
+        sendTurnUpdate({ type: 'stream_finished' })
+        const settledTurn = buildOptimisticSettledTurn({
+          state: latestStateRef.current,
+          meta: turnMetaRef.current,
+          query,
+          intent: requestIntentRef.current,
+          searchContext,
+        })
+        if (settledTurn !== null) onSettledTurnRef.current?.(settledTurn, activeGeneration)
+        onStreamEndRef.current?.(completeRef.current ? 'complete' : 'error')
+      }
+    }
+
     const detach = attachAnswerTurnStream({
       key: streamKey,
       query,
@@ -108,8 +156,8 @@ export function AeThreadTurnStreamSection({
           turnMetaRef.current = meta
           onThreadCreatedRef.current?.(meta.threadId, { turnId: meta.turnId, turnSeq: meta.turnSeq })
         },
-        onFrame: (frame) => applyEvent(frame.event, activeGeneration),
-        onResult: (result) => handleStreamResult(result, activeGeneration, streamKey),
+        onFrame: (frame) => applyEvent(frame.event),
+        onResult: handleStreamResult,
       },
     })
 
@@ -121,62 +169,6 @@ export function AeThreadTurnStreamSection({
       }
     }
   }, [query, searchContext, generation, streamKey])
-
-  function applyEvent(event: AnswerEvent, activeGeneration: number) {
-    if (!mountedRef.current || generationRef.current !== activeGeneration) {
-      return
-    }
-    if (event.type === 'complete') {
-      completeRef.current = true
-    }
-    latestStateRef.current = reduceAnswerTurnEvent(latestStateRef.current, event)
-    sendTurnUpdate({ type: 'event', event })
-  }
-
-  function handleStreamResult(result: StreamAnswerResult, activeGeneration: number, streamKey: string) {
-    if (!mountedRef.current || generationRef.current !== activeGeneration) {
-      return
-    }
-
-    if (result === 'aborted') {
-      if (userStopRef.current) {
-        userStopRef.current = false
-        onStreamEndRef.current?.('stopped')
-      }
-      return
-    }
-
-    if (result === 'rate_limited') {
-      sendTurnUpdate({ type: 'rate_limited' })
-      onStreamEndRef.current?.('rate_limited')
-      return
-    }
-
-    if (result === 'error') {
-      sendTurnUpdate({ type: 'stream_failed' })
-      onStreamEndRef.current?.('error')
-      return
-    }
-
-    if (result === 'done') {
-      sendTurnUpdate({ type: 'stream_finished' })
-      const settledTurn = buildOptimisticSettledTurn({
-        state: latestStateRef.current,
-        meta: turnMetaRef.current,
-        query,
-        intent,
-        searchContext,
-      })
-      if (settledTurn !== null) {
-        onSettledTurnRef.current?.(settledTurn, activeGeneration)
-      }
-      if (completeRef.current) {
-        onStreamEndRef.current?.('complete')
-      } else {
-        onStreamEndRef.current?.('error')
-      }
-    }
-  }
 
   function stop() {
     if (userStopRef.current || !mountedRef.current) {

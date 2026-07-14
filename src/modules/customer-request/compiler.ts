@@ -426,19 +426,20 @@ export function compileRoutePlans(input: Readonly<{
   objective?: 'lowest_maximum_price'
 }>): readonly CustomerRequestRoutePlan[] | undefined {
   if (input.actions.length === 0) return Object.freeze([])
-  const choices = input.actions.map((action) => input.candidates.filter(isRouteCandidate).filter((candidate) => (
-    candidate.viability.kind === 'viable'
-    && candidate.selectionKey === action.selectionKey
-    && sameCapabilityContractRef(candidate.contractRef, action.contractRef)
-    && candidate.readinessValidUntil > input.now
-  )))
+  const choices = input.actions.map((action) => input.candidates.filter(
+    (candidate): candidate is RouteCandidate => isRouteCandidate(candidate)
+      && candidate.viability.kind === 'viable'
+      && candidate.selectionKey === action.selectionKey
+      && sameCapabilityContractRef(candidate.contractRef, action.contractRef)
+      && candidate.readinessValidUntil > input.now,
+  ))
   if (choices.some((items) => items.length === 0)) return Object.freeze([])
   let combinations: RouteCandidate[][] = [[]]
   for (const candidates of choices) {
     combinations = combinations.flatMap((combination) => candidates.map((candidate) => [...combination, candidate]))
     if (combinations.length > MAX_ROUTE_PLANS) return undefined
   }
-  const drafts = combinations.map((combination) => {
+  const drafts = combinations.flatMap((combination) => {
     const steps = input.actions.map((action, index) => {
       const candidate = combination[index]
       if (candidate === undefined) throw new Error('customer_request_route_candidate_missing')
@@ -456,7 +457,7 @@ export function compileRoutePlans(input: Readonly<{
       })
     })
     const cost = maximumRouteCost(steps.map((step) => step.price))
-    if (cost === undefined) return undefined
+    if (cost === undefined) return []
     const edges = input.actions.flatMap((action) => action.inputMappings.map((mapping) => Object.freeze({
       ...mapping, fromStep: mapping.source.actionId, toStep: action.actionId,
     })))
@@ -476,18 +477,25 @@ export function compileRoutePlans(input: Readonly<{
       uncertainty: cost.kind === 'requires_preparation' ? ['cost_requires_preparation' as const] : [],
       comparison, authority: 'proposal_only' as const,
     }
-    return Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })
-  }).filter((route): route is NonNullable<typeof route> => route !== undefined)
+    return [Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })]
+  })
   const rankedObjective = canRankByLowestMaximumPrice(drafts) ? input.objective : undefined
   const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, rankedObjective))
   return Object.freeze(ordered.map((draft, index): CustomerRequestRoutePlan => {
+    const alternatives: Array<Readonly<{
+      alternativeRouteRef: string
+      when: 'route_unavailable_before_approval'
+    }>> = []
+    for (const alternative of ordered) {
+      if (alternative.routePlanId === draft.routePlanId || !routesUseDisjointProviders(draft, alternative)) continue
+      alternatives.push(Object.freeze({
+        alternativeRouteRef: alternative.routePlanId,
+        when: 'route_unavailable_before_approval',
+      }))
+    }
     const fallbacks = Object.freeze({
       ordering: 'unranked' as const,
-      alternatives: Object.freeze(ordered.filter((alternative) => alternative.routePlanId !== draft.routePlanId
-        && routesUseDisjointProviders(draft, alternative)).map((alternative) => Object.freeze({
-        alternativeRouteRef: alternative.routePlanId,
-        when: 'route_unavailable_before_approval' as const,
-      }))),
+      alternatives: Object.freeze(alternatives),
     })
     const ordering = rankedObjective === 'lowest_maximum_price'
       ? Object.freeze({ kind: 'ranked' as const, objective: rankedObjective, position: index + 1 })
@@ -571,10 +579,16 @@ export function composeRequestActions(
         if (sourceAction.actionId === action.actionId) return []
         const sourceModel = resolveExactModel(models, sourceAction.contractRef)
         if (sourceModel === undefined) return []
-        return sourceModel.evidence.filter((evidence) => evidence.guaranteed
-          && target.semanticIdentity !== undefined
-          && evidence.semanticIdentity === target.semanticIdentity
-          && evidence.schemaIdentity === target.schemaIdentity).map((evidence) => ({ sourceAction, evidence }))
+        const matchingEvidence = []
+        for (const evidence of sourceModel.evidence) {
+          if (evidence.guaranteed
+            && target.semanticIdentity !== undefined
+            && evidence.semanticIdentity === target.semanticIdentity
+            && evidence.schemaIdentity === target.schemaIdentity) {
+            matchingEvidence.push({ sourceAction, evidence })
+          }
+        }
+        return matchingEvidence
       })
       if (producers.length !== 1) continue
       const producer = producers[0]

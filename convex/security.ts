@@ -285,10 +285,8 @@ export const cleanupExpiredAbuseRateLimitBuckets = internalMutation({
         .withIndex('by_state_resetAt', (query) => query.eq('state', state).lte('resetAt', cutoff))
         .take(batchSize - deleted)
 
-      for (const bucket of expiredBuckets) {
-        await ctx.db.delete(bucket._id)
-        deleted += 1
-      }
+      await Promise.all(expiredBuckets.map(({ _id }) => ctx.db.delete(_id)))
+      deleted += expiredBuckets.length
     }
 
     const rescheduled = deleted >= batchSize

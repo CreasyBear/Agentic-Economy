@@ -8,19 +8,19 @@ import {
 } from '@/modules/demand/demand.functions'
 
 const demandCaptureOutputSchema = z.discriminatedUnion('kind', [
-  z.object({
+  z.strictObject({
     kind: z.literal('ok'),
     code: z.literal('demand_signal_captured'),
     signalId: z.string(),
     createdAt: z.number(),
-  }).strict(),
-  z.object({
+  }),
+  z.strictObject({
     kind: z.literal('error'),
     code: z.enum(['demand_capture_failed', 'demand_capture_invalid_input', 'missing_convex_url']),
     retryable: z.boolean(),
     reason: z.string(),
     field: z.enum(['service', 'suburb', 'note', 'queryText']).optional(),
-  }).strict(),
+  }),
 ]) as z.ZodType<DemandCaptureServerResult>
 
 const demandCaptureParameters: readonly ActionParameter[] = [

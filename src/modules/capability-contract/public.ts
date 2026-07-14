@@ -59,7 +59,7 @@ const jsonSchema = z.record(z.string(), jsonValueSchema).superRefine((schema, co
   }
 })
 const schemaMetaValidator = createSchemaMetaValidator()
-const customerAnnotation = z.object({
+const customerAnnotation = z.strictObject({
   annotationId: identifier,
   semanticIdentity: identifier.optional(),
   document: z.enum(['input', 'output']),
@@ -67,35 +67,35 @@ const customerAnnotation = z.object({
   label: z.string().trim().min(1).max(160),
   role: z.enum(['request', 'constraint', 'comparison', 'commitment', 'result', 'completion_evidence', 'recovery']),
   inference: z.enum(['allowed', 'customer_required']).optional(),
-}).strict()
-const dataUse = z.object({
+})
+const dataUse = z.strictObject({
   effectId: identifier,
   inputPointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
   classification: z.enum(['public', 'personal', 'sensitive', 'credential']),
   phase: z.enum(['preparation', 'execution']),
   recipient: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('candidate_binding') }).strict(),
-    z.object({ kind: z.literal('selected_binding') }).strict(),
-    z.object({ kind: z.literal('named_recipient'), recipientId: identifier }).strict(),
+    z.strictObject({ kind: z.literal('candidate_binding') }),
+    z.strictObject({ kind: z.literal('selected_binding') }),
+    z.strictObject({ kind: z.literal('named_recipient'), recipientId: identifier }),
   ]),
   purposes: z.array(identifier).min(1).max(16),
-}).strict()
-const effect = z.object({
+})
+const effect = z.strictObject({
   effectId: identifier,
   class: z.enum(['data_release', 'financial_exposure', 'external_state_change']),
   authority: z.enum(['none', 'explicit', 'mandate_or_explicit']),
   reversibility: z.enum(['not_applicable', 'reversible', 'conditional', 'irreversible']),
-}).strict()
-const evidence = z.object({
+})
+const evidence = z.strictObject({
   evidenceId: identifier,
   outputPointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
   purpose: z.enum(['comparison', 'completion', 'recovery']),
-}).strict()
-const lifecycle = z.object({
+})
+const lifecycle = z.strictObject({
   idempotency: z.enum(['not_applicable', 'required']),
   recovery: z.enum(['retry_safe', 'reconcile_required']),
-}).strict()
-const contractDocumentSchema = z.object({
+})
+const contractDocumentSchema = z.strictObject({
   contractFormat: z.literal(CAPABILITY_CONTRACT_FORMAT),
   capabilityId: identifier.regex(/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/),
   version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -108,7 +108,7 @@ const contractDocumentSchema = z.object({
   effects: z.array(effect).max(64),
   evidence: z.array(evidence).min(1).max(64),
   lifecycle,
-}).strict()
+})
 
 export type CapabilityContractDocument = Readonly<z.infer<typeof contractDocumentSchema>>
 export type CapabilityContractRef = Readonly<{
@@ -254,9 +254,10 @@ export function defineCapabilityContract(input: unknown): CapabilityContract {
   if (!schemaIsClosedObject(document.inputSchema, document.inputSchema, new Set())) {
     throw new Error('capability_input_schema_profile_invalid')
   }
-  const inputAnnotationPointers = new Set(document.customerAnnotations
-    .filter((annotation) => annotation.document === 'input')
-    .map((annotation) => annotation.pointer))
+  const inputAnnotationPointers = new Set<string>()
+  for (const annotation of document.customerAnnotations) {
+    if (annotation.document === 'input') inputAnnotationPointers.add(annotation.pointer)
+  }
   if (!inputSchemaSupportsStageProjection(document.inputSchema, document.inputSchema, '', inputAnnotationPointers, new Set())) {
     throw new Error('capability_input_schema_projection_invalid')
   }
@@ -415,6 +416,16 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     const schema = resolvePointedSchema(exactContract.inputSchema, declaration.inputPointer)
     const linkedEffect = exactContract.effects.find((declaredEffect) => declaredEffect.effectId === declaration.effectId)
     if (schema === undefined || linkedEffect === undefined) throw new Error('capability_semantic_projection_failed')
+    const overlappingInputs: Array<CapabilityPreparationDataUse['inputs'][number]> = []
+    for (const input of inputs) {
+      if (!pointersOverlap(declaration.inputPointer, input.inputPointer)) continue
+      overlappingInputs.push({
+        inputKey: input.key,
+        inputPointer: input.inputPointer,
+        label: input.label,
+        schemaIdentity: input.schemaIdentity,
+      })
+    }
     const projection: CapabilityPreparationDataUse = {
       declarationKey: `ae_data_use:${canonicalDigest({
         contractRef: exactContract.ref,
@@ -428,14 +439,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       recipient: declaration.recipient,
       purposes: declaration.purposes,
       effect: linkedEffect,
-      inputs: inputs
-        .filter((input) => pointersOverlap(declaration.inputPointer, input.inputPointer))
-        .map((input) => ({
-          inputKey: input.key,
-          inputPointer: input.inputPointer,
-          label: input.label,
-          schemaIdentity: input.schemaIdentity,
-        })),
+      inputs: overlappingInputs,
     }
     return {
       projection,
@@ -545,12 +549,15 @@ function applicablePreparationDataUse(
   }>[],
   inputs: ReadonlySet<CapabilityInputKey>,
 ): readonly CapabilityPreparationDataUse[] {
-  return declarations
-    .filter((declaration) => declaration.coveredInputs.some((input) => inputs.has(input)))
-    .map((declaration) => ({
+  const applicable: CapabilityPreparationDataUse[] = []
+  for (const declaration of declarations) {
+    if (!declaration.coveredInputs.some((input) => inputs.has(input))) continue
+    applicable.push({
       ...declaration.projection,
       inputs: declaration.projection.inputs.filter((input) => inputs.has(input.inputKey)),
-    }))
+    })
+  }
+  return applicable
 }
 
 function assertSchemaIsSafeAndValid(schema: Readonly<Record<string, JsonValue>>): void {
@@ -604,7 +611,7 @@ function createInterpreterValidator(schema: Readonly<Record<string, JsonValue>>)
 }
 
 function mutableInterpreterSchema(input: unknown): Schema {
-  const clone = jsonValueSchema.parse(JSON.parse(JSON.stringify(input)))
+  const clone = jsonValueSchema.parse(structuredClone(input))
   if (!isJsonRecord(clone)) throw new Error('capability_json_schema_invalid')
   stripSchemaFormats(clone)
   return clone as Schema
@@ -641,9 +648,10 @@ function assertCustomerAnnotationsAreProjectable(document: CapabilityContractDoc
   if (new Set(pointerKeys).size !== pointerKeys.length) {
     throw new Error('capability_customer_annotation_pointer_ambiguous')
   }
-  const inputPointers = document.customerAnnotations
-    .filter((annotation) => annotation.document === 'input')
-    .map((annotation) => annotation.pointer)
+  const inputPointers: string[] = []
+  for (const annotation of document.customerAnnotations) {
+    if (annotation.document === 'input') inputPointers.push(annotation.pointer)
+  }
   if (inputPointers.some((pointer, index) => inputPointers.some((other, otherIndex) => (
     index !== otherIndex && pointerCovers(pointer, other)
   )))) {
@@ -760,7 +768,12 @@ function requiredInputPointers(
   for (const keyword of ['allOf', 'anyOf', 'oneOf'] as const) {
     const alternatives = schema[keyword]
     if (!Array.isArray(alternatives)) continue
-    const sets = alternatives.filter(isJsonRecord).map((candidate) => new Set(requiredInputPointers(candidate, root, prefix, seenReferences)))
+    const sets: Array<Set<string>> = []
+    for (const candidate of alternatives) {
+      if (isJsonRecord(candidate)) {
+        sets.push(new Set(requiredInputPointers(candidate, root, prefix, seenReferences)))
+      }
+    }
     if (keyword === 'allOf') {
       for (const set of sets) for (const pointer of set) pointers.add(pointer)
     } else if (sets.length > 0) {
@@ -1134,10 +1147,12 @@ function resolveInstanceSchemaSegments(
   for (const keyword of ['allOf', 'anyOf', 'oneOf'] as const) {
     const candidates = schema[keyword]
     if (!Array.isArray(candidates)) continue
-    const resolved = candidates
-      .filter(isJsonRecord)
-      .map((candidate) => resolveInstanceSchemaSegments(candidate, segments, root, seenReferences))
-      .filter((candidate): candidate is Readonly<Record<string, JsonValue>> => candidate !== undefined)
+    const resolved: Array<Readonly<Record<string, JsonValue>>> = []
+    for (const candidate of candidates) {
+      if (!isJsonRecord(candidate)) continue
+      const branch = resolveInstanceSchemaSegments(candidate, segments, root, seenReferences)
+      if (branch !== undefined) resolved.push(branch)
+    }
     if (resolved.length > 0 && resolved.every((candidate) => canonicalDigest(candidate as StableHashValue) === canonicalDigest(resolved[0] as StableHashValue))) {
       return resolved[0]
     }

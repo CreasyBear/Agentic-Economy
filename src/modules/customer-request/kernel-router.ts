@@ -42,18 +42,41 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
   if (purpose === undefined) return { kind: 'no_route', reason: 'structured_preparation_not_registered' }
   const preparationFields = Object.entries(input.contract.input)
     .filter(([, field]) => field.disclosure?.phase === 'preparation')
-  const protectedFieldNames = preparationFields
-    .filter(([, field]) => field.disclosure?.classification !== 'public')
-    .map(([field]) => field)
+  const protectedFieldNames: string[] = []
+  const requiredFields: string[] = []
+  for (const [fieldName, field] of preparationFields) {
+    if (field.disclosure?.classification !== 'public') protectedFieldNames.push(fieldName)
+    if (field.required) requiredFields.push(fieldName)
+  }
+  const protectedFieldNameSet = new Set(protectedFieldNames)
   if (protectedFieldNames.length > 0 && input.releasePreparationData === undefined) {
     return { kind: 'no_route', reason: 'preparation_authority_required' }
   }
-  const requiredFields = preparationFields.filter(([, field]) => field.required).map(([field]) => field)
   if (requiredFields.some((field) => input.publicInput[field] === undefined)) {
     return { kind: 'no_route', reason: 'action_input_unresolved' }
   }
   const releasedFields = preparationFields.map(([field]) => field)
     .filter((field) => input.publicInput[field] !== undefined).sort()
+  const allowedExecutionDataFields: string[] = []
+  for (const [fieldName, field] of Object.entries(input.contract.input)) {
+    if (field.disclosure?.phase === 'execution') allowedExecutionDataFields.push(fieldName)
+  }
+  allowedExecutionDataFields.sort()
+  const registeredOfferOutputs: Array<{
+    field: string
+    valueType: 'string' | 'integer' | 'boolean' | 'url' | 'money_minor'
+    required: boolean
+  }> = []
+  for (const [fieldName, definition] of Object.entries(input.contract.output)) {
+    if (definition.decisionRelevance === 'option_selection' && definition.valueType !== 'provider_offer_ref') {
+      registeredOfferOutputs.push({
+        field: fieldName,
+        valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor',
+        required: definition.required,
+      })
+    }
+  }
+  registeredOfferOutputs.sort((left, right) => left.field.localeCompare(right.field))
   const prepared = await kernel.operations.prepareStructuredQuotes({
     preparationRequestId: input.preparationRequestId,
     customerRequestId: input.request.requestId,
@@ -71,15 +94,8 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
     ...(input.maximumSpendMinor === undefined ? {} : { maximumSpendMinor: input.maximumSpendMinor }),
     purpose,
     protectedFieldNames: releasedFields,
-    allowedExecutionDataFields: Object.entries(input.contract.input)
-      .filter(([, field]) => field.disclosure?.phase === 'execution')
-      .map(([field]) => field).sort(),
-    registeredOfferOutputs: Object.entries(input.contract.output)
-      .filter(([, field]) => field.decisionRelevance === 'option_selection'
-        && field.valueType !== 'provider_offer_ref')
-      .map(([field, definition]) => ({
-        field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor', required: definition.required,
-      })).sort((left, right) => left.field.localeCompare(right.field)),
+    allowedExecutionDataFields,
+    registeredOfferOutputs,
     resolveCandidatePresentation: async ({ bindingId, nodeId }) => {
       const [presentation] = await directory.resolve([bindingId])
       if (presentation === undefined || presentation.nodeId !== nodeId) return undefined
@@ -105,7 +121,7 @@ export async function prepareKernelCustomerRequestEvaluationOptions(
           },
           purpose: release.purpose,
           purposeLabel: input.contract.preparation!.customerLabel,
-          fields: release.fields.filter((field) => protectedFieldNames.includes(field)),
+          fields: release.fields.filter((field) => protectedFieldNameSet.has(field)),
           release: async ({ allocationId, protectedValues }) => await release.release({ allocationId, protectedValues }),
         })
         return result.kind === 'released'
@@ -141,14 +157,35 @@ export function createKernelCustomerRequestActionRouter(
     route: async (input) => {
       const hasStructuredPreparation = input.contract.preparation !== undefined
       if (hasStructuredPreparation) {
-        const preparationFieldNames = Object.entries(input.contract.input)
-          .filter(([, field]) => field.disclosure?.phase === 'preparation')
-          .map(([field]) => field)
-          .sort()
-        const protectedFieldNames = Object.entries(input.contract.input)
-          .filter(([, field]) => field.disclosure?.phase === 'preparation' && field.disclosure.classification !== 'public')
-          .map(([field]) => field)
-          .sort()
+        const preparationFieldNames: string[] = []
+        const protectedFieldNames: string[] = []
+        const allowedExecutionDataFields: string[] = []
+        for (const [fieldName, field] of Object.entries(input.contract.input)) {
+          if (field.disclosure?.phase === 'preparation') {
+            preparationFieldNames.push(fieldName)
+            if (field.disclosure.classification !== 'public') protectedFieldNames.push(fieldName)
+          }
+          if (field.disclosure?.phase === 'execution') allowedExecutionDataFields.push(fieldName)
+        }
+        preparationFieldNames.sort()
+        protectedFieldNames.sort()
+        allowedExecutionDataFields.sort()
+        const protectedFieldNameSet = new Set(protectedFieldNames)
+        const registeredOfferOutputs: Array<{
+          field: string
+          valueType: 'string' | 'integer' | 'boolean' | 'url' | 'money_minor'
+          required: boolean
+        }> = []
+        for (const [fieldName, definition] of Object.entries(input.contract.output)) {
+          if (definition.decisionRelevance === 'option_selection' && definition.valueType !== 'provider_offer_ref') {
+            registeredOfferOutputs.push({
+              field: fieldName,
+              valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor',
+              required: definition.required,
+            })
+          }
+        }
+        registeredOfferOutputs.sort((left, right) => left.field.localeCompare(right.field))
         if (protectedFieldNames.length > 0 && input.releasePreparationData === undefined) {
           return { kind: 'no_route' as const, reason: 'preparation_authority_required' }
         }
@@ -170,17 +207,8 @@ export function createKernelCustomerRequestActionRouter(
           maximumSpendMinor: input.request.routing.maximumSpendMinor,
           purpose,
           protectedFieldNames: preparationFieldNames,
-          allowedExecutionDataFields: Object.entries(input.contract.input)
-            .filter(([, field]) => field.disclosure?.phase === 'execution')
-            .map(([field]) => field)
-            .sort(),
-          registeredOfferOutputs: Object.entries(input.contract.output)
-            .filter(([, field]) => field.decisionRelevance === 'option_selection'
-              && field.valueType !== 'provider_offer_ref')
-            .map(([field, definition]) => ({
-              field, valueType: definition.valueType as 'string' | 'integer' | 'boolean' | 'url' | 'money_minor', required: definition.required,
-            }))
-            .sort((left, right) => left.field.localeCompare(right.field)),
+          allowedExecutionDataFields,
+          registeredOfferOutputs,
           resolveCandidatePresentation: async ({ bindingId, nodeId }) => {
             const [presentation] = await directory.resolve([bindingId])
             if (presentation === undefined || presentation.nodeId !== nodeId) return undefined
@@ -221,7 +249,7 @@ export function createKernelCustomerRequestActionRouter(
               },
               purpose: release.purpose,
               purposeLabel: input.contract.preparation!.customerLabel,
-              fields: release.fields.filter((field) => protectedFieldNames.includes(field)),
+              fields: release.fields.filter((field) => protectedFieldNameSet.has(field)),
               release: async ({ allocationId, protectedValues }) => await release.release({
                 allocationId, protectedValues: { ...input.publicInput, ...protectedValues },
               }),

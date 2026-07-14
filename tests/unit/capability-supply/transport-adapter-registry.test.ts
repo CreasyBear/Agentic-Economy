@@ -47,6 +47,20 @@ describe('capability supply transport adapter registry', () => {
     })).toMatchObject({ kind: 'admitted', transport: { adapterId: 'http-json:v1' } })
   })
 
+  it('rejects undeclared nested adapter configuration fields', () => {
+    expect(admitRegisteredTransport({
+      adapterId: 'http-json:v1',
+      endpointUrl: 'https://example.test/capability',
+      credentialRef: 'env:CAPABILITY_KEY',
+      continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000,
+        reconciliation: { path: '/ae/reconcile', requestTimeoutMs: 3_000, undeclared: true },
+      },
+    })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
+  })
+
   it('refuses insecure endpoints, non-environment credentials, extra config and oversized values', () => {
     const base = {
       adapterId: 'http-json:v1',

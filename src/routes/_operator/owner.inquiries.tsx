@@ -53,7 +53,7 @@ export function readOwnerInquiriesRouteReadback(input: OwnerInquiriesRouteInput 
   }
 }
 
-export function ownerInboxServerToRouteReadback(result: OwnerInboxServerResult): OwnerInquiriesRouteReadback {
+function ownerInboxServerToRouteReadback(result: OwnerInboxServerResult): OwnerInquiriesRouteReadback {
   if (result.kind === 'ok') {
     return { inbox: result.inbox }
   }

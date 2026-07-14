@@ -97,6 +97,18 @@ describe('capability readiness probe', () => {
     expect(result.outcome).toBe('response_invalid')
   })
 
+  it('accepts extension metadata at MCP response extension points', async () => {
+    const result = await runCapabilityReadinessProbe({ ...target, adapterId: 'mcp-jsonrpc:v1', probeKind: 'mcp' }, {
+      resolveCredential: async () => 'test-secret', validateTarget: async () => true,
+      send: async () => Response.json({
+        jsonrpc: '2.0', id: 'ae-readiness-probe', extension: 'outer',
+        result: { extension: 'result', tools: [{ name: 'reference.lookup', extension: 'tool' }] },
+      }),
+      now: () => 10_000,
+    })
+    expect(result.outcome).toBe('healthy')
+  })
+
   it('uses a non-effecting HEAD check for imported HTTP descriptions', async () => {
     const send = vi.fn(async (request: Request) => {
       expect(request.method).toBe('HEAD')

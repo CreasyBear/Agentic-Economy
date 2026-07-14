@@ -17,12 +17,12 @@ import type { ActionPreparationLineage } from './action-preparation'
 
 const identifier = z.string().trim().min(1).max(500)
 const digest = z.string().regex(/^sha256:[0-9a-f]{64}$/)
-const contractRef = z.object({
+const contractRef = z.strictObject({
   capabilityId: identifier,
   version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   contractDigest: digest,
-}).strict()
-const providerOptionEnvelope = z.object({
+})
+const providerOptionEnvelope = z.strictObject({
   format: z.literal('ae.provider-option:v1'),
   operationRef: identifier,
   contractRef,
@@ -32,7 +32,7 @@ const providerOptionEnvelope = z.object({
   assertedAt: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   validUntil: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   output: z.unknown(),
-}).strict()
+})
 
 type OfferingPresentation = CapabilityOfferingRegistration['presentation']
 

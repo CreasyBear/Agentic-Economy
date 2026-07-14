@@ -42,34 +42,34 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
   verifyAnonymousRefusal?: () => Promise<void>
 }>
 
-export const hostedCustomerRequestJourneyProofSchema = z.object({
+export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   kind: z.literal('cold_external_agent_journey'),
-  agent: z.object({ name: z.string(), version: z.string() }).strict(),
-  release: z.object({
+  agent: z.strictObject({ name: z.string(), version: z.string() }),
+  release: z.strictObject({
     revision: z.string().regex(/^[a-f0-9]{40}$/u), deploymentId: z.string().startsWith('dpl_'),
     environment: z.literal('production'), baseUrl: z.url().startsWith('https://'),
-  }).strict(),
+  }),
   observedAt: z.iso.datetime(),
-  input: z.object({
+  input: z.strictObject({
     request: z.string(),
-    facts: z.array(z.object({ requirementKey: z.string(), valueDigest: z.string() }).strict()).min(1),
-    messages: z.array(z.object({ index: z.number().int().nonnegative(), valueDigest: z.string() }).strict()),
-  }).strict(),
+    facts: z.array(z.strictObject({ requirementKey: z.string(), valueDigest: z.string() })).min(1),
+    messages: z.array(z.strictObject({ index: z.number().int().nonnegative(), valueDigest: z.string() })),
+  }),
   observedStates: z.array(z.enum([
     'needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options',
     'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
   ])),
   authorityStops: z.array(z.enum(['preparation_disclosure', 'prepared_action_approval'])),
-  final: z.object({
+  final: z.strictObject({
     requestRef: z.string(), state: z.literal('options_ready'), businessName: z.string(),
-    approval: z.object({
+    approval: z.strictObject({
       state: z.literal('recorded'), currency: z.string(), maximumSpendMinor: z.number().int().nonnegative(),
       expiresAt: z.number().int().positive(), recordedAt: z.number().int().nonnegative(),
-    }).strict(),
-  }).strict(),
+    }),
+  }),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
-}).strict()
+})
 
 export type HostedCustomerRequestJourneyProof = Readonly<z.infer<typeof hostedCustomerRequestJourneyProofSchema>>
 

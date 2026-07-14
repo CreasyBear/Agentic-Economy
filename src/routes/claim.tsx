@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useReducer, useState, type FormEvent } from 'react'
 import { Outlet, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowRightIcon } from 'lucide-react'
@@ -19,6 +19,14 @@ import { AePageHeader } from '@/components/ae/layout/AePageHeader'
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { submitOwnerClaimServer } from '@/modules/catalog/owner-claim.functions'
+import {
+  emptyPublicOwnerClaimInput,
+  initialClaimDraftState,
+  reduceClaimDraft,
+  snapshotClaimDraft,
+  type ClaimDraftSnapshot,
+  type TextClaimField,
+} from '@/modules/catalog/claim-draft'
 import { importStorefrontDraftServer } from '@/modules/storefront/storefront.functions'
 import { requireClaimOwnerSession } from '@/lib/server/claim-owner-session'
 import { validatePublicOwnerClaimFlowInput } from '@/modules/catalog/public'
@@ -26,35 +34,12 @@ import type { PublicOwnerClaimField, PublicOwnerClaimFlowInput, PublicOwnerClaim
 import type { StorefrontImportDraft } from '@/modules/storefront/public'
 import { useClientMounted } from '@/hooks/use-client-mounted'
 
-type TextClaimField = Exclude<PublicOwnerClaimField, 'firstRequestMode'>
-
 type FieldConfig = {
   field: TextClaimField
   label: string
   description: string
   control: 'input' | 'tel' | 'textarea'
 }
-
-const emptyPublicOwnerClaimInput = {
-  businessName: '',
-  category: '',
-  suburb: '',
-  stateTerritory: '',
-  requestedSlug: '',
-  publishedPhone: '',
-  ownerMessage: '',
-  sourceLabel: '',
-  serviceName: '',
-  serviceCategory: '',
-  serviceSummary: '',
-  serviceArea: '',
-  hoursOrUnknown: '',
-  photoUrl: '',
-  responseTimeMinutes: '',
-  firstRequestMode: 'not_available_yet',
-  publicDisclosure: '',
-  noContactReason: '',
-} satisfies PublicOwnerClaimFlowInput
 
 const textClaimFields = [
   'businessName',
@@ -77,14 +62,9 @@ const textClaimFields = [
 ] as const satisfies readonly TextClaimField[]
 
 const claimFields = [...textClaimFields, 'firstRequestMode'] as const satisfies readonly PublicOwnerClaimField[]
+const claimFieldSet = new Set<PublicOwnerClaimField>(claimFields)
 
 const CLAIM_DRAFT_STORAGE_KEY = 'ae.claimFormDraft.v1'
-
-type ClaimDraftSnapshot = {
-  value: PublicOwnerClaimFlowInput
-  factsConfirmed: boolean
-  dirtyFields: readonly PublicOwnerClaimField[]
-}
 
 function readStoredClaimDraft(): ClaimDraftSnapshot | undefined {
   if (typeof window === 'undefined') {
@@ -147,27 +127,7 @@ function normalizeStoredDirtyFields(value: unknown): readonly PublicOwnerClaimFi
     return []
   }
 
-  return value.filter((field): field is PublicOwnerClaimField => claimFields.includes(field as PublicOwnerClaimField))
-}
-
-function mergeClaimInputPreservingDirty(
-  current: PublicOwnerClaimFlowInput,
-  incoming: PublicOwnerClaimFlowInput,
-  dirtyFields: ReadonlySet<PublicOwnerClaimField>,
-): PublicOwnerClaimFlowInput {
-  const next = { ...incoming }
-
-  for (const field of textClaimFields) {
-    if (dirtyFields.has(field)) {
-      next[field] = current[field]
-    }
-  }
-
-  if (dirtyFields.has('firstRequestMode')) {
-    next.firstRequestMode = current.firstRequestMode
-  }
-
-  return next
+  return value.filter((field): field is PublicOwnerClaimField => claimFieldSet.has(field as PublicOwnerClaimField))
 }
 
 function readClaimInputWithStateFallback(
@@ -353,50 +313,35 @@ function ClaimRoute() {
   const navigate = useNavigate()
   const submitClaim = useServerFn(submitClaimServer)
   const hydrated = useClientMounted()
-  const [value, setValue] = useState<PublicOwnerClaimFlowInput>(emptyPublicOwnerClaimInput)
+  const [draftState, dispatchDraft] = useReducer(reduceClaimDraft, initialClaimDraftState)
+  const { value, factsConfirmed, dirtyFields } = draftState
   const [errors, setErrors] = useState<readonly PublicOwnerClaimValidationError[]>([])
   const [message, setMessage] = useState<string | undefined>()
   const [pending, setPending] = useState(false)
   const importDraft = useServerFn(importDraftServer)
-  const [factsConfirmed, setFactsConfirmed] = useState(false)
   const [importWebsiteUrl, setImportWebsiteUrl] = useState('')
   const [importAbn, setImportAbn] = useState('')
   const [importPending, setImportPending] = useState(false)
   const [importDraftResult, setImportDraftResult] = useState<StorefrontImportDraft | undefined>()
   const [importMessage, setImportMessage] = useState<string | undefined>()
-  const dirtyFieldsRef = useRef<Set<PublicOwnerClaimField>>(new Set())
-  const [storageReady, setStorageReady] = useState(false)
   const errorByField = new Map(errors.map((error) => [error.field, error.message]))
   const firstRequestModeError = errorByField.get('firstRequestMode')
   const firstRequestModeInvalid = firstRequestModeError !== undefined
 
   useEffect(() => {
-    if (!hydrated || storageReady) {
+    if (!hydrated || draftState.phase !== 'awaiting_storage') {
       return
     }
 
     const storedDraft = readStoredClaimDraft()
-    if (storedDraft !== undefined) {
-      const storedDirtyFields = new Set(storedDraft.dirtyFields)
-      setValue((current) => mergeClaimInputPreservingDirty(current, storedDraft.value, dirtyFieldsRef.current))
-      setFactsConfirmed(storedDraft.factsConfirmed)
-      dirtyFieldsRef.current = new Set([...storedDirtyFields, ...dirtyFieldsRef.current])
-    }
-
-    setStorageReady(true)
-  }, [hydrated, storageReady])
+    dispatchDraft(storedDraft === undefined ? { type: 'hydrate' } : { type: 'hydrate', snapshot: storedDraft })
+  }, [draftState.phase, hydrated])
 
   useEffect(() => {
-    if (!hydrated || !storageReady) {
-      return
-    }
-
-    writeStoredClaimDraft({
-      value,
-      factsConfirmed,
-      dirtyFields: Array.from(dirtyFieldsRef.current),
-    })
-  }, [factsConfirmed, hydrated, storageReady, value])
+    if (!hydrated) return
+    const snapshot = snapshotClaimDraft(draftState)
+    if (snapshot !== undefined) writeStoredClaimDraft(snapshot)
+  }, [draftState, hydrated])
 
   useEffect(() => {
     focusFirstError(errors)
@@ -407,8 +352,7 @@ function ClaimRoute() {
   }
 
   function updateTextField(field: TextClaimField, nextValue: string) {
-    dirtyFieldsRef.current.add(field)
-    setValue((current) => ({ ...current, [field]: nextValue }))
+    dispatchDraft({ type: 'edit_text', field, value: nextValue })
   }
 
   async function handleImportDraft() {
@@ -423,8 +367,7 @@ function ClaimRoute() {
       })
       if (result.kind === 'ok') {
         setImportDraftResult(result.draft)
-        setValue((current) => mergeClaimInputPreservingDirty(current, result.draft.profile, dirtyFieldsRef.current))
-        setFactsConfirmed(false)
+        dispatchDraft({ type: 'import', value: result.draft.profile })
         setImportMessage('Review the imported draft below. Nothing publishes until you confirm and submit.')
         return
       }
@@ -438,16 +381,17 @@ function ClaimRoute() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setMessage(undefined)
-    const nextValue = readClaimInputWithStateFallback(event.currentTarget, value, dirtyFieldsRef.current)
+    const nextValue = readClaimInputWithStateFallback(event.currentTarget, value, dirtyFields)
+    const submittedDirtyFields: PublicOwnerClaimField[] = []
     for (const field of textClaimFields) {
       if (nextValue[field].trim().length > 0) {
-        dirtyFieldsRef.current.add(field)
+        submittedDirtyFields.push(field)
       }
     }
     if (nextValue.firstRequestMode !== emptyPublicOwnerClaimInput.firstRequestMode) {
-      dirtyFieldsRef.current.add('firstRequestMode')
+      submittedDirtyFields.push('firstRequestMode')
     }
-    setValue(nextValue)
+    dispatchDraft({ type: 'replace_from_form', value: nextValue, dirtyFields: submittedDirtyFields })
     const validation = validatePublicOwnerClaimFlowInput(nextValue)
     if (validation.kind === 'invalid') {
       setErrors(validation.errors)
@@ -557,11 +501,7 @@ function ClaimRoute() {
                 aria-invalid={firstRequestModeInvalid}
                 disabled={pending}
                 onValueChange={(nextValue) => {
-                  dirtyFieldsRef.current.add('firstRequestMode')
-                  setValue((current) => ({
-                    ...current,
-                    firstRequestMode: toFirstRequestMode(nextValue),
-                  }))
+                  dispatchDraft({ type: 'edit_first_request_mode', value: toFirstRequestMode(nextValue) })
                 }}
               />
             </Field>
@@ -610,7 +550,7 @@ function ClaimRoute() {
           description="Review what will appear before continuing."
           checked={factsConfirmed}
           disabled={pending}
-          onCheckedChange={setFactsConfirmed}
+          onCheckedChange={(nextValue) => dispatchDraft({ type: 'set_facts_confirmed', value: nextValue })}
         />
         <div className="flex flex-wrap items-center gap-3">
           <AeActionButton

@@ -88,14 +88,11 @@ export const allocate = internalMutation({
     }
 
     const exposureUnits = [...new Map(preparationDeclarations.flatMap((declaration) => (
-      declaration.inputs.flatMap((item) => declaration.purposes.map((purpose) => ({
-        key: canonicalDigest({
+      declaration.inputs.flatMap((item) => declaration.purposes.map((purpose) => [canonicalDigest({
           declarationKey: declaration.declarationKey, inputKey: item.inputKey,
           inputPointer: item.inputPointer, schemaIdentity: item.schemaIdentity, purpose,
-        } as StableHashValue),
-        value: { declaration, item, purpose },
-      })))
-    )).map(({ key, value }) => [key, value])).values()]
+        } as StableHashValue), { declaration, item, purpose }] as const))
+    ))).values()]
     const requiredRecipients = supplies.length
     const requiredOperations = supplies.length
     const requiredExposures = supplies.length * exposureUnits.length
@@ -411,8 +408,9 @@ export const status = internalQuery({
   handler: async (ctx, args) => {
     const rows = await ctx.db.query('customerRequestV2PreparationEgressOperations')
       .withIndex('by_preparationRef', (query) => query.eq('preparationRef', args.preparationRef)).take(65)
-    const states = rows.filter(({ lineage }) => lineage.principalId === args.principalId)
-      .map(({ operationRef, state }) => ({ operationRef, state })).sort((a, b) => a.operationRef.localeCompare(b.operationRef))
+    const states = rows.flatMap(({ operationRef, state, lineage }) => (
+      lineage.principalId === args.principalId ? [{ operationRef, state }] : []
+    )).sort((a, b) => a.operationRef.localeCompare(b.operationRef))
     return { operationCount: states.length, states }
   },
 })
@@ -425,11 +423,11 @@ export const unresolvedForRequest = internalQuery({
       .withIndex('by_requestId_and_principalId', (query) => query
         .eq('requestId', args.requestId).eq('principalId', args.principalId)).take(65)
     if (rows.length > 64) throw new Error('customer_request_v2_egress_operation_limit_exceeded')
-    return rows.filter(({ state }) => state === 'allocated' || state === 'dispatching' || state === 'uncertain')
-      .map((operation) => {
-        if (!operationIntegrityValid(operation)) throw new Error('customer_request_v2_egress_operation_integrity_failure')
-        return { operationRef: operation.operationRef, requestRevision: operation.lineage.requestRevision }
-      })
+    return rows.flatMap((operation) => {
+      if (operation.state !== 'allocated' && operation.state !== 'dispatching' && operation.state !== 'uncertain') return []
+      if (!operationIntegrityValid(operation)) throw new Error('customer_request_v2_egress_operation_integrity_failure')
+      return [{ operationRef: operation.operationRef, requestRevision: operation.lineage.requestRevision }]
+    })
   },
 })
 

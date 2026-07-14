@@ -392,22 +392,30 @@ function actionPreparationDisclosureLimits(
   action: ActionPreparationAggregate['plan']['actions'][number],
   declarations: readonly ActionPreparationDataUse[],
 ): ActionPreparationDisclosureLimits {
-  const businesses = new Set(aggregate.evaluation.candidates.filter((candidate) => (
-    candidate.viability.kind === 'viable'
-    && sameCapabilityContractRef(candidate.contractRef, action.contractRef)
-    && candidate.selectionKey === action.selectionKey
-    && candidate.semanticDigest === action.semanticDigest
-  )).map((candidate) => candidate.businessId))
-  const exposureUnits = new Set(declarations.filter((declaration) => declaration.phase === 'preparation'
-    && declaration.recipient.kind === 'candidate_binding').flatMap((declaration) => declaration.inputs.flatMap((item) => (
-    declaration.purposes.map((purpose) => canonicalDigest({
-      declarationKey: declaration.declarationKey,
-      inputKey: item.inputKey,
-      inputPointer: item.inputPointer,
-      schemaIdentity: item.schemaIdentity,
-      purpose,
-    } as StableHashValue))
-  ))))
+  const businesses = new Set<string>()
+  for (const candidate of aggregate.evaluation.candidates) {
+    if (candidate.viability.kind === 'viable'
+      && sameCapabilityContractRef(candidate.contractRef, action.contractRef)
+      && candidate.selectionKey === action.selectionKey
+      && candidate.semanticDigest === action.semanticDigest) {
+      businesses.add(candidate.businessId)
+    }
+  }
+  const exposureUnits = new Set<string>()
+  for (const declaration of declarations) {
+    if (declaration.phase !== 'preparation' || declaration.recipient.kind !== 'candidate_binding') continue
+    for (const item of declaration.inputs) {
+      for (const purpose of declaration.purposes) {
+        exposureUnits.add(canonicalDigest({
+          declarationKey: declaration.declarationKey,
+          inputKey: item.inputKey,
+          inputPointer: item.inputPointer,
+          schemaIdentity: item.schemaIdentity,
+          purpose,
+        } as StableHashValue))
+      }
+    }
+  }
   const maximumRecipients = businesses.size
   return freeze({
     maximumRecipients,

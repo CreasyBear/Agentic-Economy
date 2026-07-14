@@ -33,61 +33,61 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
   z.null(), z.boolean(), z.number().finite(), z.string(), z.array(jsonValueSchema), z.record(z.string(), jsonValueSchema),
 ]))
 const evidenceRefs = z.array(identifier).min(1).max(64)
-const contractRefSchema = z.object({
+const contractRefSchema = z.strictObject({
   capabilityId: identifier,
   version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   contractDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
-}).strict()
-const commercialRelationshipSchema = z.object({
+})
+const commercialRelationshipSchema = z.strictObject({
   kind: z.enum(['none', 'direct', 'affiliate', 'ownership']),
   summary: z.string().trim().min(1).max(1_000),
   influencesEligibility: z.boolean(),
   influencesInclusion: z.boolean(),
   influencesOrder: z.boolean(),
   evidenceRefs,
-}).strict()
+})
 const priceSchema = z.discriminatedUnion('kind', [
-  z.object({
+  z.strictObject({
     kind: z.literal('fixed'),
     currency: z.string().trim().regex(/^[A-Z]{3}$/),
     amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  }).strict(),
-  z.object({
+  }),
+  z.strictObject({
     kind: z.literal('range'),
     currency: z.string().trim().regex(/^[A-Z]{3}$/),
     minimumAmountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     maximumAmountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  }).strict().refine((value) => value.minimumAmountMinor <= value.maximumAmountMinor),
-  z.object({ kind: z.literal('on_request') }).strict(),
+  }).refine((value) => value.minimumAmountMinor <= value.maximumAmountMinor),
+  z.strictObject({ kind: z.literal('on_request') }),
 ])
-const offeringSchema = z.object({
+const offeringSchema = z.strictObject({
   offeringId: identifier,
   businessId: identifier,
   networkId: identifier,
   contractRef: contractRefSchema,
-  presentation: z.object({
+  presentation: z.strictObject({
     label: z.string().trim().min(1).max(160),
     summary: z.string().trim().min(1).max(2_000),
     price: priceSchema,
-    materialTerms: z.array(z.object({
+    materialTerms: z.array(z.strictObject({
       termId: identifier,
       label: z.string().trim().min(1).max(160),
       value: z.string().trim().min(1).max(1_000),
-    }).strict()).max(64),
+    })).max(64),
     commercialRelationship: commercialRelationshipSchema,
-  }).strict(),
+  }),
   searchTerms: z.array(z.string().trim().min(1).max(120)).min(1).max(64),
   registrationEvidenceRefs: evidenceRefs,
-}).strict()
-const continuationSchema = z.object({
+})
+const continuationSchema = z.strictObject({
   kind: z.enum(['single_response', 'adapter_managed']),
   evidenceRefs,
-}).strict()
-const cancellationSchema = z.object({
+})
+const cancellationSchema = z.strictObject({
   kind: z.enum(['unsupported', 'adapter_managed']),
   evidenceRefs,
-}).strict()
-const bindingSchema = z.object({
+})
+const bindingSchema = z.strictObject({
   bindingId: identifier,
   offeringId: identifier,
   networkId: identifier,
@@ -96,9 +96,9 @@ const bindingSchema = z.object({
   credentialRef: z.string().trim().min(1).max(500),
   continuation: continuationSchema,
   cancellation: cancellationSchema,
-  adapter: z.object({ adapterId: identifier, config: jsonValueSchema }).strict(),
+  adapter: z.strictObject({ adapterId: identifier, config: jsonValueSchema }),
   registrationEvidenceRefs: evidenceRefs,
-}).strict()
+})
 
 export type CapabilityOfferingRegistration = Readonly<z.infer<typeof offeringSchema>>
 export type CapabilityTransportBindingRegistration = Readonly<z.infer<typeof bindingSchema>>

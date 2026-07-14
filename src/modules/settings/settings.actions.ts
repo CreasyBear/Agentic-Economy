@@ -8,21 +8,21 @@ import {
 } from '@/modules/settings/settings.functions'
 
 const ownerNotificationPreferencesOutputSchema = z.discriminatedUnion('kind', [
-  z.object({
+  z.strictObject({
     kind: z.literal('ok'),
     code: z.literal('owner_notification_preferences_updated'),
     ownerId: z.string(),
-    preferences: z.object({
+    preferences: z.strictObject({
       newInquiryEmailEnabled: z.boolean(),
       updatedAt: z.number(),
-    }).strict(),
-  }).strict(),
-  z.object({
+    }),
+  }),
+  z.strictObject({
     kind: z.literal('error'),
     code: z.enum(['missing_auth', 'owner_not_found', 'missing_convex_url', 'owner_settings_unavailable']),
     retryable: z.boolean(),
     reason: z.string(),
-  }).strict(),
+  }),
 ]) as z.ZodType<OwnerNotificationPreferencesMutationResult>
 
 const ownerNotificationPreferencesParameters: readonly ActionParameter[] = [

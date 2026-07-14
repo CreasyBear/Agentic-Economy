@@ -255,11 +255,13 @@ async function openCandidate(
   model: ReturnType<typeof openCapabilityDecisionModel>,
 ): Promise<CandidateResult> {
   const evidenceRefs = operation.evidenceRef === undefined ? [] : [operation.evidenceRef]
-  const offering = await db.query('capabilityOfferings')
-    .withIndex('by_offeringId', (query) => query.eq('offeringId', operation.offeringId)).unique()
-  const binding = await db.query('capabilityTransportBindings')
-    .withIndex('by_bindingId', (query) => query.eq('bindingId', operation.bindingId)).unique()
-  const business = await db.get(operation.businessId)
+  const [offering, binding, business] = await Promise.all([
+    db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', operation.offeringId)).unique(),
+    db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', operation.bindingId)).unique(),
+    db.get(operation.businessId),
+  ])
   if (offering === null || binding === null || business === null
     || business.publicStatus !== 'published' || business.claimStatus !== 'published'
     || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'

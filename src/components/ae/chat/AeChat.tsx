@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeftIcon, XIcon } from 'lucide-react'
 
@@ -37,7 +37,7 @@ import { AeThreadHeader } from './AeThreadHeader'
 import { AeThreadScroller } from './AeThreadScroller'
 import { AeThreadSidebar } from './AeThreadSidebar'
 import { AeThreadTranscript } from './AeThreadTranscript'
-import { settledShortlistFromArtifacts } from './AeShortlistTerminal'
+import { settledShortlistFromArtifacts } from './shortlist-projection'
 import { isStructuredAnswerModeEnabled } from './AeStructuredAnswerChat'
 import {
   buildChatCompleteFunnelEvents,
@@ -115,7 +115,9 @@ export function AeChat({ threadId = null, initialQuery = null, initialProjection
   useEffect(() => {
     setRefinementComposerOpen(false)
   }, [routeThreadId])
-  threadsRef.current = threads
+  useLayoutEffect(() => {
+    threadsRef.current = threads
+  }, [threads])
 
   const setThreadRecords = useCallback((updater: ThreadRecordsUpdater) => {
     const nextThreads = typeof updater === 'function' ? updater(threadsRef.current) : updater
@@ -626,9 +628,12 @@ function mergeProjectionWithOptimisticTurns(input: {
     return input.serverProjection
   }
 
-  const scopedOptimisticTurns = input.optimisticTurns
-    .filter((record) => record.threadId === input.streamingThreadId && record.turn.turnId !== input.omitTurnId)
-    .map((record) => record.turn)
+  const scopedOptimisticTurns: PublicThreadProjection['turns'][number][] = []
+  for (const record of input.optimisticTurns) {
+    if (record.threadId === input.streamingThreadId && record.turn.turnId !== input.omitTurnId) {
+      scopedOptimisticTurns.push(record.turn)
+    }
+  }
 
   if (scopedOptimisticTurns.length === 0) {
     return input.serverProjection

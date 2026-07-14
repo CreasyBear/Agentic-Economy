@@ -23,12 +23,12 @@ const optionalDemandQueryTextSchema = z.preprocess(
   z.string().trim().max(120).optional(),
 )
 
-export const demandCaptureInputSchema = z.object({
+export const demandCaptureInputSchema = z.strictObject({
   service: z.string().trim().min(1).max(80),
   suburb: z.string().trim().min(1).max(80),
   note: optionalDemandNoteSchema,
   queryText: optionalDemandQueryTextSchema,
-}).strict()
+})
 
 export type DemandCaptureInput = z.infer<typeof demandCaptureInputSchema>
 

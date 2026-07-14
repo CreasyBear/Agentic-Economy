@@ -27,7 +27,7 @@ export const AeSearchContextSchema = z.object({
   location: AeSearchLocationSchema.optional(),
   allowOutsideArea: z.boolean().optional(),
   timing: z.enum(NeedTimingValues).optional(),
-  timingDate: z.string().date().optional(),
+  timingDate: z.iso.date().optional(),
 }).refine((context) => context.timing === 'date' ? context.timingDate !== undefined : context.timingDate === undefined, {
   message: 'A timing date is required only for date timing.',
   path: ['timingDate'],

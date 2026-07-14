@@ -78,24 +78,30 @@ export const seedTestCapabilityPublication = internalMutation({
   returns: v.object({ publicationRef: v.string(), credentialRef: v.string() }),
   handler: async (ctx) => {
     const profile = SANDBOX_PROVIDER_PROFILES.one
-    const business = await ctx.db.query('businesses')
-      .withIndex('by_slug', (query) => query.eq('slug', profile.slug))
-      .unique()
-    let offering = await ctx.db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
-      .unique()
-    let binding = await ctx.db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
-      .unique()
+    const [business, initialOffering, initialBinding] = await Promise.all([
+      ctx.db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', profile.slug))
+        .unique(),
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+        .unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
+        .unique(),
+    ])
+    let offering = initialOffering
+    let binding = initialBinding
     if (business !== null && (offering === null || binding === null)) {
       const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, Date.now())
       await admitSandboxV2Supply(ctx.db, registrations, Date.now() + 500)
-      offering = await ctx.db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
-        .unique()
-      binding = await ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
-        .unique()
+      ;[offering, binding] = await Promise.all([
+        ctx.db.query('capabilityOfferings')
+          .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+          .unique(),
+        ctx.db.query('capabilityTransportBindings')
+          .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
+          .unique(),
+      ])
     }
     if (business === null || offering === null || binding === null || offering.businessId !== business._id) {
       throw new Error('sandbox_capability_publication_supply_missing')

@@ -7,7 +7,8 @@ import { AeThreadTurnReplaySection } from './AeThreadTurnReplaySection'
 import { AeThreadTurnStreamSection } from './AeThreadTurnStreamSection'
 import { AeFollowUpChips } from './AeSuggestionChips'
 import { toThreadViewModel } from './thread-turn-view'
-import { AeShortlistTerminal, settledShortlistFromArtifacts } from './AeShortlistTerminal'
+import { AeShortlistTerminal } from './AeShortlistTerminal'
+import { settledShortlistFromArtifacts } from './shortlist-projection'
 
 export type AeThreadTranscriptProps = {
   threadId?: string | null

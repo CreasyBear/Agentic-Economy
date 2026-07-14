@@ -1,11 +1,6 @@
-import { createDefaultRegistrySourceState } from '../../../src/modules/registry/public'
-import type { RegistrySourceState } from '../../../src/modules/registry/public'
 import {
-  buildDevSeedCatalogState,
   type DevSeedBusinessFixture,
 } from '../../../src/modules/dev/internal/dev-seed-fixture'
-
-export type AnswerEvalRegistrySeed = 'default' | 'broad'
 
 type EvalIndustryTemplate = {
   slug: string
@@ -141,16 +136,6 @@ export const BROAD_ANSWER_EVAL_BUSINESS_FIXTURES: readonly DevSeedBusinessFixtur
       buildFixture(locale, industry, localeIndex, industryIndex),
     ),
   )
-
-export function createAnswerEvalRegistrySourceState(
-  seed: AnswerEvalRegistrySeed = 'default',
-): RegistrySourceState {
-  if (seed === 'broad') {
-    return buildDevSeedCatalogState(BROAD_ANSWER_EVAL_BUSINESS_FIXTURES).state
-  }
-
-  return createDefaultRegistrySourceState()
-}
 
 function buildFixture(
   locale: EvalLocale,

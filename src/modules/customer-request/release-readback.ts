@@ -21,30 +21,30 @@ const gitRevision = /^[a-f0-9]{40}$/
 const deploymentId = /^dpl_[A-Za-z0-9]+$/
 const vercelHostname = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
-const customerRequestReleaseReadbackSchema = z.object({
+const customerRequestReleaseReadbackSchema = z.strictObject({
   kind: z.literal('release_readback'),
   schemaVersion: z.literal(RELEASE_SCHEMA_VERSION),
-  source: z.object({
+  source: z.strictObject({
     provider: z.literal('github'),
     repository: z.literal(SOURCE_REPOSITORY),
     revision: z.string().regex(gitRevision),
-  }).strict(),
-  deployment: z.object({
+  }),
+  deployment: z.strictObject({
     provider: z.literal('vercel'),
     id: z.string().regex(deploymentId),
     environment: z.literal('production'),
     targetEnvironment: z.literal('production'),
     url: z.url().startsWith('https://'),
     productionUrl: z.url().startsWith('https://'),
-  }).strict(),
-  requestEntrypoint: z.object({
+  }),
+  requestEntrypoint: z.strictObject({
     contract: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.contract),
     method: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.method),
     path: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.path),
     authentication: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.authentication),
     requiredScope: z.literal(CUSTOMER_REQUEST_AGENT_ENTRYPOINT.requiredScope),
-  }).strict(),
-  evidence: z.object({
+  }),
+  evidence: z.strictObject({
     observedAt: z.iso.datetime(),
     inputs: z.tuple([
       z.literal('VERCEL'),
@@ -58,12 +58,12 @@ const customerRequestReleaseReadbackSchema = z.object({
       z.literal('VERCEL_GIT_REPO_SLUG'),
       z.literal('VERCEL_GIT_COMMIT_SHA'),
     ]),
-    sandbox: z.object({
+    sandbox: z.strictObject({
       involved: z.literal(false),
       reason: z.literal('release readback does not discover or execute supply'),
-    }).strict(),
-  }).strict(),
-}).strict()
+    }),
+  }),
+})
 
 export type CustomerRequestReleaseReadback = Readonly<{
   kind: 'release_readback'

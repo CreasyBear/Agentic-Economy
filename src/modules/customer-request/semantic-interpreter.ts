@@ -98,17 +98,17 @@ const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
   z.array(jsonValueSchema).max(256), z.record(z.string(), jsonValueSchema),
 ]))
 const identifier = z.string().trim().min(1).max(300)
-const capabilityProposalSchema = z.object({
+const capabilityProposalSchema = z.strictObject({
   kind: z.literal('capability_candidates'),
-  selections: z.array(z.object({
+  selections: z.array(z.strictObject({
     selectionKey: identifier,
-    facts: z.array(z.object({ inputKey: identifier, value: jsonValueSchema }).strict()).max(128),
-  }).strict()).max(64),
-}).strict()
-const intentDirectionProposalSchema = z.object({
+    facts: z.array(z.strictObject({ inputKey: identifier, value: jsonValueSchema })).max(128),
+  })).max(64),
+})
+const intentDirectionProposalSchema = z.strictObject({
   kind: z.literal('needs_intent_direction'),
   prompt: z.string().trim().min(1).max(240),
-}).strict()
+})
 const proposalSchema = z.union([capabilityProposalSchema, intentDirectionProposalSchema])
 
 const SYSTEM_INSTRUCTION = [

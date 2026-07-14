@@ -219,9 +219,7 @@ export const cleanupExpiredSourceWriteNonces = internalMutation({
       .withIndex('by_expiresAt', (query) => query.lt('expiresAt', cutoff))
       .take(batchSize)
 
-    for (const expiredNonce of expiredNonces) {
-      await ctx.db.delete(expiredNonce._id)
-    }
+    await Promise.all(expiredNonces.map(({ _id }) => ctx.db.delete(_id)))
 
     const deleted = expiredNonces.length
     const rescheduled = deleted >= batchSize

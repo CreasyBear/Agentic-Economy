@@ -1,7 +1,7 @@
 import type { AnswerLayoutProfile, AnswerWorkStep } from '@/modules/answer/public'
 import type { AnswerArtifact } from '@/modules/answer/public'
 import type { FollowUpIntent, PublicAnswerCheckSummary, PublicThreadTurn } from '@/modules/answer-thread/public'
-import { orderShortlistArtifacts } from './AeShortlistTerminal'
+import { orderShortlistArtifacts } from './shortlist-projection'
 
 /** Assistant answer block: "AE" monogram avatar + vertical connector, bridge-only. */
 export const ANSWER_SECTION_CLASS =

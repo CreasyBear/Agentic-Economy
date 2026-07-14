@@ -4,18 +4,18 @@ const HEALTHY_TTL_MS = 5 * 60_000
 const UNHEALTHY_TTL_MS = 60_000
 const MAX_RESPONSE_BYTES = 64 * 1024
 
-const quoteResponse = z.object({
+const quoteResponse = z.looseObject({
   kind: z.literal('quoted'),
   expectedCost: z.object({ currency: z.string().regex(/^[A-Z]{3}$/), amountMinor: z.number().int().nonnegative() }),
   maximumCost: z.object({ currency: z.string().regex(/^[A-Z]{3}$/), amountMinor: z.number().int().nonnegative() }),
   expectedLatencyMs: z.number().int().nonnegative(),
   dataFields: z.array(z.string()).max(128),
   disclosures: z.array(z.string()).max(64),
-}).passthrough()
-const mcpToolsResponse = z.object({
+})
+const mcpToolsResponse = z.looseObject({
   jsonrpc: z.literal('2.0'), id: z.literal('ae-readiness-probe'),
-  result: z.object({ tools: z.array(z.object({ name: z.string().min(1) }).passthrough()) }).passthrough(),
-}).passthrough()
+  result: z.looseObject({ tools: z.array(z.looseObject({ name: z.string().min(1) })) }),
+})
 
 export type CapabilityProbeTarget = Readonly<{
   publicationRef: string

@@ -6,7 +6,7 @@ import { AeAdminReadbackPanel } from '@/components/ae/readback/AeAdminReadbackPa
 import { operatorRouteOptions } from '@/lib/operator/route-options'
 import { readAdminAuditEventsThroughSource } from '@/modules/security/admin-readback.functions'
 
-export const readAdminAuditEventsServer = createServerFn().handler(() => readAdminAuditEventsThroughSource())
+const readAdminAuditEventsServer = createServerFn().handler(() => readAdminAuditEventsThroughSource())
 
 export const Route = createFileRoute('/_operator/admin/audit-events')({
   ...operatorRouteOptions,

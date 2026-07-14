@@ -14,17 +14,18 @@ export function AeOperatorBreadcrumbs({ items }: AeOperatorBreadcrumbsProps) {
     <Breadcrumbs label="Breadcrumb">
       {items.map((item, index) => {
         const isCurrent = index === items.length - 1 || item.href === undefined
+        const itemKey = `${item.href ?? 'current'}:${item.label}`
 
         if (item.href === undefined) {
           return (
-            <BreadcrumbItem key={`${item.label}-${index}`} isCurrent={isCurrent}>
+            <BreadcrumbItem key={itemKey} isCurrent={isCurrent}>
               {item.label}
             </BreadcrumbItem>
           )
         }
 
         return (
-          <BreadcrumbItem key={`${item.label}-${index}`} href={item.href} isCurrent={isCurrent}>
+          <BreadcrumbItem key={itemKey} href={item.href} isCurrent={isCurrent}>
             {item.label}
           </BreadcrumbItem>
         )

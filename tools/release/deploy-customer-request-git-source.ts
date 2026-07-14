@@ -5,18 +5,18 @@ const PROJECT_NAME = 'agentic-economy' as const
 const GITHUB_REPOSITORY_ID = 1_283_024_672 as const
 const PRODUCTION_REF = 'main' as const
 const gitRevision = /^[a-f0-9]{40}$/
-const deploymentSchema = z.object({
+const deploymentSchema = z.looseObject({
   id: z.string().startsWith('dpl_'),
   url: z.string().min(1),
   readyState: z.enum(['QUEUED', 'INITIALIZING', 'BUILDING', 'READY', 'ERROR', 'CANCELED']),
   createdAt: z.number().int().nonnegative(),
-  gitSource: z.object({
+  gitSource: z.looseObject({
     type: z.literal('github'),
     repoId: z.literal(GITHUB_REPOSITORY_ID),
     ref: z.literal(PRODUCTION_REF),
     sha: z.string().regex(gitRevision),
-  }).passthrough(),
-}).passthrough()
+  }),
+})
 
 type DeployOptions = Readonly<{
   token: string

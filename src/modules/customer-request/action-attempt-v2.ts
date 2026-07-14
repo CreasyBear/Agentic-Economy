@@ -188,7 +188,9 @@ export function admitActionAttemptV2(input: Readonly<{
     approvalGrantDigest: authority.approvalGrantDigest,
     authorityLineageDigest,
   }
-  const dataScope = authority.dataScope.filter(({ phase }) => phase === 'execution').map(cloneDataUse)
+  const dataScope = authority.dataScope.flatMap((declaration) => (
+    declaration.phase === 'execution' ? [cloneDataUse(declaration)] : []
+  ))
   const scopeDigest = canonicalDigest(dataScope as StableHashValue)
   const exposureUnits = dataScope.flatMap((declaration) => declaration.purposes.map((purpose) => ({
     effectId: declaration.effectId,

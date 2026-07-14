@@ -164,9 +164,11 @@ export async function reconcileProviderOutcomeTransaction(
   db: MutationCtx['db'], args: ReconciliationCommand,
 ): Promise<ReconciliationResult> {
   if (!validCommand(args)) return { kind: 'refused', reason: 'report_invalid' }
-  const replay = await db.query('customerRequestV2ProviderReconciliationCommands')
-    .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
-  const material = await openExactProviderOutcomeForReconciliation(db, args.actionAttemptRef)
+  const [replay, material] = await Promise.all([
+    db.query('customerRequestV2ProviderReconciliationCommands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique(),
+    openExactProviderOutcomeForReconciliation(db, args.actionAttemptRef),
+  ])
   if (material.kind !== 'ready') return {
     kind: 'refused',
     reason: material.reason === 'outcome_not_found' ? 'unknown_outcome_not_found' : 'reconciliation_integrity_failure',

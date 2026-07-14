@@ -11,20 +11,20 @@ import {
 const REQUIRED_SCOPE = 'customer_requests:create'
 const ACCEPTANCE_PRIMARY_EMAIL = 'joel@agentic-economy.ai'
 const CLERK_API = 'https://api.clerk.com/v1'
-const instanceSchema = z.object({ id: z.string().min(1), environment_type: z.string().min(1) }).passthrough()
-const userSchema = z.object({
+const instanceSchema = z.looseObject({ id: z.string().min(1), environment_type: z.string().min(1) })
+const userSchema = z.looseObject({
   id: z.string().min(1), banned: z.boolean(), locked: z.boolean(),
   primary_email_address_id: z.string().min(1),
-  email_addresses: z.array(z.object({
-    id: z.string().min(1), email_address: z.string().email(),
-    verification: z.object({ status: z.string().min(1) }).passthrough(),
-  }).passthrough()),
-}).passthrough()
-const createdKeyIdentitySchema = z.object({ id: z.string().min(1) }).passthrough()
-const createdKeySchema = z.object({ id: z.string().min(1), secret: z.string().min(1) }).passthrough()
-const createdSessionSchema = z.object({ id: z.string().min(1), status: z.string().min(1) }).passthrough()
-const createdSessionIdentitySchema = z.object({ id: z.string().min(1) }).passthrough()
-const sessionTokenSchema = z.object({ jwt: z.string().min(1) }).passthrough()
+  email_addresses: z.array(z.looseObject({
+    id: z.string().min(1), email_address: z.email(),
+    verification: z.looseObject({ status: z.string().min(1) }),
+  })),
+})
+const createdKeyIdentitySchema = z.looseObject({ id: z.string().min(1) })
+const createdKeySchema = z.looseObject({ id: z.string().min(1), secret: z.string().min(1) })
+const createdSessionSchema = z.looseObject({ id: z.string().min(1), status: z.string().min(1) })
+const createdSessionIdentitySchema = z.looseObject({ id: z.string().min(1) })
+const sessionTokenSchema = z.looseObject({ jwt: z.string().min(1) })
 
 export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   clerkSecretKey: string

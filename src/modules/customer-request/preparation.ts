@@ -660,7 +660,8 @@ function validateReleaseRequest(
   contract: CapabilityContract,
   protectedFields: readonly string[],
 ): 'preparation_release_contract_mismatch' | undefined {
-  if (input.fields.length === 0 || input.fields.some((field) => !protectedFields.includes(field))) return 'preparation_release_contract_mismatch'
+  const protectedFieldSet = new Set(protectedFields)
+  if (input.fields.length === 0 || input.fields.some((field) => !protectedFieldSet.has(field))) return 'preparation_release_contract_mismatch'
   if (contract.preparation?.purpose !== input.purpose || contract.preparation.customerLabel !== input.purposeLabel) {
     return 'preparation_release_contract_mismatch'
   }

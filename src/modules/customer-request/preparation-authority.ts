@@ -500,7 +500,8 @@ function validateAuthorityScope(
   if (authority.grantedAt > now) return 'authority_not_yet_valid'
   if (authority.expiresAt <= now) return 'authority_expired'
   const fields = [...new Set(command.fields)]
-  if (fields.length === 0 || fields.some((field) => !authority.permittedFields.includes(field))) return 'authority_field_denied'
+  const permittedFields = new Set(authority.permittedFields)
+  if (fields.length === 0 || fields.some((field) => !permittedFields.has(field))) return 'authority_field_denied'
   const protectedValueFields = Object.keys(command.protectedValues).sort()
   const categoryFields = command.fieldCategories.map((item) => item.field).sort()
   if (JSON.stringify([...fields].sort()) !== JSON.stringify(protectedValueFields)

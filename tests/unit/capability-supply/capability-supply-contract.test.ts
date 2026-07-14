@@ -41,6 +41,30 @@ describe('capability supply registration contract', () => {
       .toThrowError('capability_binding_invalid')
   })
 
+  it('retains strict rejection at nested registration authority boundaries', () => {
+    const offering = offeringInput()
+    const binding = bindingInput()
+    expect(() => defineCapabilityOfferingRegistration({
+      ...offering,
+      presentation: { ...offering.presentation, undeclared: true },
+    })).toThrowError('capability_offering_invalid')
+    expect(() => defineCapabilityOfferingRegistration({
+      ...offering,
+      presentation: {
+        ...offering.presentation,
+        materialTerms: [{ ...offering.presentation.materialTerms[0], undeclared: true }],
+      },
+    })).toThrowError('capability_offering_invalid')
+    expect(() => defineCapabilityTransportBindingRegistration({
+      ...binding,
+      continuation: { ...binding.continuation, undeclared: true },
+    })).toThrowError('capability_binding_invalid')
+    expect(() => defineCapabilityTransportBindingRegistration({
+      ...binding,
+      adapter: { ...binding.adapter, undeclared: true },
+    })).toThrowError('capability_binding_invalid')
+  })
+
   it('changes each immutable registration hash when any exact-ref member changes', () => {
     const offering = defineCapabilityOfferingRegistration(offeringInput())
     const binding = defineCapabilityTransportBindingRegistration(bindingInput())
