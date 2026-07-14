@@ -17,7 +17,7 @@
 - `ANSWER-AI-CONTRACT.md` — answer/thread synthesis, retrieval/prose/gate pipeline, SSE contract, and LLM posture.
 - `SEO-AEO-SPEC.md` — public business service catalog SEO, sitemap, robots, llms, schema, and AI visibility proof.
 - `GTM-READINESS.md` — launch proof, activation, claims register, and support/commercial readiness.
-- `FRONTEND-DESIGN-FRAMEWORK.md` — frontend design architecture and UI proof posture.
+- `design/README.md` — canonical design document set (PRINCIPLES, JOURNEY, CONVERSATION-ITEM-SPEC, WEDGE-LADDER) with precedence and drift protocol.
 - `REQUIREMENTS.md` — active requirements baseline.
 - `../DESIGN.md` — machine-readable visual seed for Agentic Economy colors, typography, spacing, radii, and component hints.
 - `../.impeccable/design.json` — rich design sidecar for agents/panels.

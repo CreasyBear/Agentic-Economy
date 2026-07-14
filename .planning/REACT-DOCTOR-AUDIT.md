@@ -713,3 +713,19 @@ projections.
 The full rescan reports zero errors and 189 warnings across 68 files. The sole
 `no-fetch-in-effect` diagnostic is gone. The new client module is not reported,
 and no new finding was introduced by this slice.
+
+## Pass twenty-six — post-checkpoint full refresh
+
+Re-ran the canonical full local scan after checkpointing the remediation work
+and refreshing the codebase map. The live baseline is zero errors and 187
+warnings across 67 files. The only delta from pass twenty-five is removal of
+two synthetic `require-pnpm-hardening` findings previously attributed to a
+transient `pnpm-workspace.yaml`; no new diagnostic appeared.
+
+The remaining distribution is 108 maintainability, 66 performance, 10 bug,
+two accessibility, and one security warning. The largest rule families remain
+50 ordered or authority-sensitive await loops, 45 retired/colliding Zod forms,
+31 cohesive multi-module-file findings, and 20 framework or ownership-sensitive
+unused entrypoints. This refresh changes the measured snapshot only; it does
+not reclassify any surviving occurrence or claim that deferred product and CI
+decisions have been resolved.

@@ -120,7 +120,7 @@ Implementation must follow:
 - `AI-SPEC.md`
 - `SEO-AEO-SPEC.md`
 - `GTM-READINESS.md`
-- `FRONTEND-DESIGN-FRAMEWORK.md`
+- `design/README.md`
 - `../DESIGN.md`
 - `../.impeccable/design.json`
 - `archive/phases/01-ten-star-spine-foundation/01-UI-SPEC.md`

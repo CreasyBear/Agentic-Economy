@@ -59,6 +59,7 @@ Exercise all six admitted entries named by C1. For each:
 - **CS5 — open for end-to-end proof:** visible `Contact AE` escape is required on confirm and record surfaces.
 - **CS7 — specified:** V1 review is one calm page; mechanics remain enforced without ceremony.
 - **K12 — hard blocker:** no first record may persist before canonical bytes/digest bind every projection.
+- **K3/privacy — public-release blocker:** governed receipt exact bytes remain append-only authority, but current `deleteInquiryPrivateContent` does not erase them. Before public R1 release, envelope-encrypt canonical bytes, destroy the receipt-scoped key on valid erasure, append erasure tombstone/lineage without rewriting receipt evidence metadata, and stop payload-verification claims after key destruction.
 - <!-- stupid-shit: S2 --> **blocked-by:** admitted supply (J6); zero admitted businesses = zero sends by design.
 - <!-- stupid-shit: S1 --> **A2 — resolved:** one canonical `/t/:threadId` route; visibility-granted and key-granted access postures select projection scope, and legacy `/i/:threadId?k=` permanently redirects.
 
