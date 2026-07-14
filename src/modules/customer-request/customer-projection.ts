@@ -3,7 +3,7 @@ import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
 import type {
-  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRoutePlan,
+  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView,
 } from './agent-contract'
 
 export type CustomerRequestState =
@@ -32,7 +32,7 @@ export type CustomerRequestNextAction =
   | 'none'
 
 export type {
-  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRoutePlan,
+  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView,
 } from './agent-contract'
 export type CustomerCriterion = Readonly<{
   label: string
@@ -43,34 +43,6 @@ export type CustomerCriterion = Readonly<{
 export type CustomerRequestProjection =
   | CustomerRequestView
   | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'identity_changed' | 'idempotency_key_reused' }>
-
-type RoutePlanProjectionInput = Readonly<{
-  routePlanId: string
-  steps: readonly Readonly<{
-    businessId: string
-    dataUse: readonly Readonly<{
-      recipient:
-        | Readonly<{ kind: 'candidate_binding' | 'selected_binding' }>
-        | Readonly<{ kind: 'named_recipient'; recipientId: string }>
-      purposes: readonly string[]
-    }>[]
-    effects: readonly Readonly<{ reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible' }>[]
-    recovery: Readonly<{ recovery: 'retry_safe' | 'reconcile_required' }>
-  }>[]
-  maximumTotalCost: CustomerRoutePlan['maximumTotalCost']
-  expiresAt: number
-  fallbacks: CustomerRoutePlan['fallbacks']
-  uncertainty: CustomerRoutePlan['uncertainty']
-  comparison: Readonly<{
-    fit: 'all_steps_viable'
-    completeness: 'complete'
-    dataExposureCount: number
-    irreversibleEffectCount: number
-    evidenceRequirementCount: number
-    trust: 'registered_live_supply'
-    ordering: CustomerRoutePlan['comparison']['ordering']
-  }>
-}>
 
 /** @deprecated Use CustomerRequestView. Kept as a source-compatible migration alias. */
 export type CustomerOptionsProjection =
@@ -107,15 +79,26 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
       : 'This request could not be interpreted safely.',
     nextAction: 'retry',
   })
-  return projectRequestEvaluation({ snapshot: result.aggregate.snapshot, evaluation: result.aggregate.evaluation })
+  return projectRequestEvaluation({
+    snapshot: result.aggregate.snapshot,
+    evaluation: result.aggregate.evaluation,
+    ...(result.routeGeneration === undefined
+      ? {}
+      : { routeGenerationRef: result.routeGeneration.generationRef }),
+  })
 }
 
 export function projectRequestEvaluation(input: Readonly<{
   snapshot: Readonly<{ requestId: string; revision: number; intent: string }>
   evaluation: RequestEvaluationProjectionInput
+  routeGenerationRef?: string
 }>): CustomerRequestView {
   const criteria = input.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const routeGeneration = input.routeGenerationRef === undefined
+    ? {}
+    : { routeGenerationRef: input.routeGenerationRef }
   if (input.evaluation.posture === 'unsupported') return requestView({
+    ...routeGeneration,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
@@ -124,6 +107,7 @@ export function projectRequestEvaluation(input: Readonly<{
     criteria,
   })
   if (input.evaluation.nextRequirement !== undefined) return requestView({
+    ...routeGeneration,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'needs_information',
@@ -143,6 +127,7 @@ export function projectRequestEvaluation(input: Readonly<{
     criteria,
   })
   if (input.evaluation.preparationDisclosure !== undefined) return requestView({
+    ...routeGeneration,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'needs_authorization',
@@ -156,6 +141,7 @@ export function projectRequestEvaluation(input: Readonly<{
     },
   })
   return requestView({
+    ...routeGeneration,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'ready_to_compare',
@@ -227,72 +213,18 @@ export function projectNeedsAttention(input: Readonly<{
 export function projectRoutePlansReady(input: Readonly<{
   requestRef: string
   revision: number
+  routeGenerationRef: string
   summary: string
   criteria?: readonly CustomerCriterion[]
-  routes: readonly RoutePlanProjectionInput[]
 }>): CustomerRequestView {
   return requestView({
     requestRef: input.requestRef,
     revision: input.revision,
+    routeGenerationRef: input.routeGenerationRef,
     state: 'routes_ready',
     summary: input.summary,
-    nextAction: 'inspect_routes',
+    nextAction: 'wait',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
-    routes: input.routes.map(projectRoutePlan),
-  })
-}
-
-function projectRoutePlan(route: RoutePlanProjectionInput): CustomerRoutePlan {
-  const purposes = [...new Set(route.steps.flatMap((step) => step.dataUse.flatMap((item) => item.purposes)))].sort()
-  const recipientPurposes = new Map<string, Readonly<{
-    recipient: CustomerRoutePlan['dataUse']['recipients'][number]
-    purposes: Set<string>
-  }>>()
-  for (const step of route.steps) {
-    for (const declaration of step.dataUse) {
-      const recipient = declaration.recipient.kind === 'named_recipient'
-        ? { kind: 'named' as const, recipientRef: declaration.recipient.recipientId, purposes: [] }
-        : { kind: 'business' as const, businessRef: step.businessId, purposes: [] }
-      const key = recipient.kind === 'named' ? `named:${recipient.recipientRef}` : `business:${recipient.businessRef}`
-      const existing = recipientPurposes.get(key) ?? { recipient, purposes: new Set<string>() }
-      for (const purpose of declaration.purposes) existing.purposes.add(purpose)
-      recipientPurposes.set(key, existing)
-    }
-  }
-  const recipients = [...recipientPurposes.entries()].sort(([left], [right]) => left.localeCompare(right))
-    .map(([, { recipient, purposes: recipientPurposeSet }]) => Object.freeze({
-      ...recipient, purposes: Object.freeze([...recipientPurposeSet].sort()),
-    }))
-  return Object.freeze({
-    routeRef: route.routePlanId,
-    stepCount: route.steps.length,
-    providers: Object.freeze([...new Set(route.steps.map((step) => step.businessId))]
-      .sort().map((businessRef) => Object.freeze({ businessRef }))),
-    maximumTotalCost: { ...route.maximumTotalCost },
-    dataUse: Object.freeze({
-      recipientCount: recipients.length,
-      recipients: Object.freeze(recipients),
-      purposes: Object.freeze(purposes),
-    }),
-    effects: Object.freeze({
-      totalCount: route.steps.reduce((count, step) => count + step.effects.length, 0),
-      irreversibleCount: route.comparison.irreversibleEffectCount,
-    }),
-    evidence: Object.freeze({ requirementCount: route.comparison.evidenceRequirementCount }),
-    recovery: Object.freeze({ steps: Object.freeze(route.steps.map((step, index) => Object.freeze({
-      stepRef: `step:${index + 1}`, businessRef: step.businessId, posture: step.recovery.recovery,
-    }))) }),
-    validUntil: route.expiresAt,
-    fallbacks: Object.freeze({
-      ordering: route.fallbacks.ordering,
-      alternatives: Object.freeze(route.fallbacks.alternatives.map((fallback) => Object.freeze({ ...fallback }))),
-    }),
-    uncertainty: Object.freeze([...route.uncertainty]),
-    comparison: Object.freeze({
-      fit: route.comparison.fit, completeness: route.comparison.completeness, trust: route.comparison.trust,
-      ordering: Object.freeze({ ...route.comparison.ordering }),
-    }),
-    authority: 'proposal_only',
   })
 }
 
@@ -348,6 +280,7 @@ export function projectCustomerActionStatus(input: Readonly<{
 function requestView(input: Readonly<{
   requestRef: string
   revision: number
+  routeGenerationRef?: string
   state: CustomerRequestState
   summary: string
   nextAction: CustomerRequestNextAction
@@ -359,13 +292,13 @@ function requestView(input: Readonly<{
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
   preparedAction?: CustomerPreparedAction
-  routes?: readonly CustomerRoutePlan[]
   action?: CustomerRequestView['action']
 }>): CustomerRequestView {
   return Object.freeze({
     kind: 'request',
     requestRef: input.requestRef,
     revision: input.revision,
+    ...(input.routeGenerationRef === undefined ? {} : { routeGenerationRef: input.routeGenerationRef }),
     state: input.state,
     summary: input.summary,
     nextAction: input.nextAction,
@@ -379,28 +312,6 @@ function requestView(input: Readonly<{
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
     ...(input.preparedAction === undefined ? {} : { preparedAction: Object.freeze({ ...input.preparedAction }) }),
-    ...(input.routes === undefined ? {} : { routes: Object.freeze(input.routes.map((route) => Object.freeze({
-      ...route,
-      providers: Object.freeze(route.providers.map((provider) => Object.freeze({ ...provider }))),
-      maximumTotalCost: Object.freeze({ ...route.maximumTotalCost }),
-      dataUse: Object.freeze({
-        ...route.dataUse,
-        recipients: Object.freeze(route.dataUse.recipients.map((recipient) => Object.freeze({
-          ...recipient, purposes: Object.freeze([...recipient.purposes]),
-        }))),
-        purposes: Object.freeze([...route.dataUse.purposes]),
-      }),
-      effects: Object.freeze({ ...route.effects }), evidence: Object.freeze({ ...route.evidence }),
-      recovery: Object.freeze({
-        steps: Object.freeze(route.recovery.steps.map((step) => Object.freeze({ ...step }))),
-      }),
-      fallbacks: Object.freeze({
-        ordering: route.fallbacks.ordering,
-        alternatives: Object.freeze(route.fallbacks.alternatives.map((fallback) => Object.freeze({ ...fallback }))),
-      }),
-      uncertainty: Object.freeze([...route.uncertainty]),
-      comparison: Object.freeze({ ...route.comparison, ordering: Object.freeze({ ...route.comparison.ordering }) }),
-    }))) }),
     ...(input.action === undefined ? {} : { action: Object.freeze({
       ...input.action,
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),

@@ -42,4 +42,5 @@ export {
   preparedActionV2Value,
   requestEvaluationCandidateV2Value,
   requestFactV2Value,
+  routePlanGenerationV2Value,
 } from './internal/convex-v2-schema'

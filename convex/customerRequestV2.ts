@@ -16,23 +16,34 @@ import {
   requestRegistrySnapshotDigest,
   type RegisteredEvaluationBinding,
 } from '@/modules/customer-request/evaluation'
-import { customerRequestV2AggregateValue } from '@/modules/customer-request/runtime'
+import {
+  customerRequestV2AggregateValue,
+  routePlanGenerationV2Value,
+} from '@/modules/customer-request/runtime'
 import {
   compileRoutePlans, composeRequestActions, CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
+  type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import { deriveCustomerDecisionPreference } from '@/modules/customer-request/semantic-interpreter'
+import {
+  routePlanGenerationIsInternallyConsistent,
+  routePlanGenerationMatchesAggregate,
+  type CustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
 
-import { internalMutation, internalQuery } from './_generated/server'
+import { internalMutation, internalQuery, type QueryCtx } from './_generated/server'
 import { listEligibleCapabilitySupply } from './capabilitySupply'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 
 type Aggregate = Infer<typeof customerRequestV2AggregateValue>
+type RouteGeneration = Infer<typeof routePlanGenerationV2Value>
 const MAX_AGGREGATE_BYTES = 700_000
 
 const commitResult = v.union(
   v.object({ kind: v.literal('stored'), requestId: v.string(), revision: v.number() }),
   v.object({ kind: v.literal('replayed'), requestId: v.string(), revision: v.number() }),
   v.object({ kind: v.literal('revision_conflict') }),
+  v.object({ kind: v.literal('route_generation_conflict') }),
   v.object({ kind: v.literal('identity_conflict') }),
   v.object({ kind: v.literal('command_conflict') }),
   v.object({ kind: v.literal('aggregate_invalid') }),
@@ -40,40 +51,67 @@ const commitResult = v.union(
 )
 
 const currentAggregateResult = v.union(
-  v.object({ kind: v.literal('current'), aggregate: customerRequestV2AggregateValue }),
+  v.object({
+    kind: v.literal('current'), aggregate: customerRequestV2AggregateValue,
+    routeGenerationNumber: v.number(),
+    routeGenerationRef: v.optional(v.string()),
+  }),
   v.object({
     kind: v.literal('needs_attention'), requestId: v.string(),
     reason: v.literal('historical_request_resubmit_required'), resumable: v.literal(false),
   }),
   v.object({ kind: v.literal('not_found') }),
 )
+const routePlanGenerationResult = v.union(
+  v.object({ kind: v.literal('found'), routeGeneration: routePlanGenerationV2Value }),
+  v.object({ kind: v.literal('not_found') }),
+)
 const commandReplayResult = v.union(
   v.object({ kind: v.literal('not_found') }),
   v.object({ kind: v.literal('conflict') }),
-  v.object({ kind: v.literal('replayed'), aggregate: customerRequestV2AggregateValue }),
+  v.object({
+    kind: v.literal('needs_attention'), requestId: v.string(),
+    reason: v.literal('historical_request_resubmit_required'), resumable: v.literal(false),
+  }),
+  v.object({
+    kind: v.literal('replayed'), aggregate: customerRequestV2AggregateValue,
+    routeGenerationRef: v.optional(v.string()),
+  }),
 )
 
 export const commitAggregate = internalMutation({
   args: {
     commandKey: v.string(), commandDigest: v.string(), expectedRevision: v.number(),
-    aggregate: customerRequestV2AggregateValue,
+    expectedRouteGeneration: v.number(), aggregate: customerRequestV2AggregateValue,
+    routeGeneration: v.optional(routePlanGenerationV2Value),
   },
   returns: commitResult,
   handler: async (ctx, args) => {
     if (!aggregateIsInternallyConsistent(args.aggregate, args.expectedRevision)) {
       return { kind: 'aggregate_invalid' as const }
     }
+    if (!routePlanGenerationMatchesAggregate(
+      domainRouteGeneration(args.routeGeneration),
+      domainAggregate(args.aggregate),
+      args.expectedRouteGeneration,
+    )) {
+      return { kind: 'aggregate_invalid' as const }
+    }
     const snapshot = args.aggregate.snapshot
     const prior = await ctx.db.query('customerRequestV2Commands')
       .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
     if (prior !== null) {
-      return prior.commandDigest === args.commandDigest
+      const matches = prior.commandDigest === args.commandDigest
         && prior.aggregateDigest === args.aggregate.aggregateDigest
         && prior.requestId === snapshot.requestId
-        ? { kind: 'replayed' as const, requestId: prior.requestId, revision: prior.resultingRevision }
-        : { kind: 'command_conflict' as const }
+        && prior.expectedRouteGeneration === args.expectedRouteGeneration
+        && prior.resultingRouteGenerationRef === args.routeGeneration?.generationRef
+      if (!matches) return { kind: 'command_conflict' as const }
+      const verified = await readVerifiedCommandReplay(ctx.db, prior)
+      if (verified.kind !== 'current') throw new Error('customer_request_v2_command_integrity_failure')
+      return { kind: 'replayed' as const, requestId: prior.requestId, revision: prior.resultingRevision }
     }
-    const context = await validateAggregateAgainstCurrentCapabilityGraph(ctx.db, args.aggregate)
+    const context = await validateAggregateAgainstCurrentCapabilityGraph(ctx.db, args.aggregate, args.routeGeneration)
     if (context === 'stale') return { kind: 'context_stale' as const }
     if (context === 'invalid') return { kind: 'aggregate_invalid' as const }
     const head = await ctx.db.query('customerRequestV2Heads')
@@ -81,15 +119,63 @@ export const commitAggregate = internalMutation({
     if ((head?.currentRevision ?? 0) !== args.expectedRevision) return { kind: 'revision_conflict' as const }
     if (head !== null && (head.principalId !== snapshot.principalId
       || head.delegatedAgentId !== snapshot.delegatedAgentId)) return { kind: 'identity_conflict' as const }
+    const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', snapshot.requestId)).unique()
+    if ((routeHead?.currentGeneration ?? 0) !== args.expectedRouteGeneration) {
+      return { kind: 'route_generation_conflict' as const }
+    }
     const existingRevision = await ctx.db.query('customerRequestV2Revisions')
       .withIndex('by_requestId_and_requestRevision', (query) => (
         query.eq('requestId', snapshot.requestId).eq('requestRevision', snapshot.revision)
       )).unique()
     if (existingRevision !== null) return { kind: 'revision_conflict' as const }
+    const existingGeneration = args.routeGeneration === undefined ? null
+      : await ctx.db.query('customerRequestV2RoutePlanGenerations')
+          .withIndex('by_requestId_and_generation', (query) => (
+            query.eq('requestId', snapshot.requestId).eq('generation', args.routeGeneration!.generation)
+          )).unique()
+    if (existingGeneration !== null) return { kind: 'route_generation_conflict' as const }
 
     await ctx.db.insert('customerRequestV2Revisions', {
       requestId: snapshot.requestId, requestRevision: snapshot.revision, aggregate: writableAggregate(args.aggregate),
     })
+    if (args.routeGeneration !== undefined) {
+      await ctx.db.insert('customerRequestV2RoutePlanGenerations', {
+        requestId: snapshot.requestId,
+        generation: args.routeGeneration.generation,
+        generationRef: args.routeGeneration.generationRef,
+        generationDigest: args.routeGeneration.generationDigest,
+        requestRevision: snapshot.revision,
+        routeGeneration: writableRouteGeneration(args.routeGeneration),
+        recordedAt: snapshot.recordedAt,
+      })
+      if (routeHead === null) {
+        await ctx.db.insert('customerRequestV2RoutePlanHeads', {
+          requestId: snapshot.requestId,
+          currentGeneration: args.routeGeneration.generation,
+          currentRequestRevision: snapshot.revision,
+          currentGenerationRef: args.routeGeneration.generationRef,
+          currentGenerationDigest: args.routeGeneration.generationDigest,
+          createdAt: snapshot.recordedAt,
+          updatedAt: snapshot.recordedAt,
+        })
+      } else {
+        await ctx.db.patch(routeHead._id, {
+          currentGeneration: args.routeGeneration.generation,
+          currentRequestRevision: snapshot.revision,
+          currentGenerationRef: args.routeGeneration.generationRef,
+          currentGenerationDigest: args.routeGeneration.generationDigest,
+          updatedAt: snapshot.recordedAt,
+        })
+      }
+    } else if (routeHead !== null) {
+      await ctx.db.patch(routeHead._id, {
+        currentRequestRevision: snapshot.revision,
+        currentGenerationRef: undefined,
+        currentGenerationDigest: undefined,
+        updatedAt: snapshot.recordedAt,
+      })
+    }
     if (head === null) {
       await ctx.db.insert('customerRequestV2Heads', {
         requestId: snapshot.requestId,
@@ -115,6 +201,10 @@ export const commitAggregate = internalMutation({
       expectedRevision: args.expectedRevision,
       resultingRevision: snapshot.revision,
       aggregateDigest: args.aggregate.aggregateDigest,
+      expectedRouteGeneration: args.expectedRouteGeneration,
+      ...(args.routeGeneration === undefined
+        ? {}
+        : { resultingRouteGenerationRef: args.routeGeneration.generationRef }),
       committedAt: snapshot.recordedAt,
     })
     return { kind: 'stored' as const, requestId: snapshot.requestId, revision: snapshot.revision }
@@ -132,11 +222,62 @@ export const getCurrentAggregate = internalQuery({
         .withIndex('by_requestId_and_requestRevision', (query) => (
           query.eq('requestId', args.requestId).eq('requestRevision', head.currentRevision)
         )).unique()
+      if (revision !== null && 'routes' in revision.aggregate.plan) {
+        if (revision.aggregate.aggregateDigest !== head.currentAggregateDigest
+          || !legacyAggregateIsInternallyConsistent(revision.aggregate)) {
+          throw new Error('customer_request_v2_legacy_aggregate_integrity_failure')
+        }
+        return {
+          kind: 'needs_attention' as const,
+          requestId: args.requestId,
+          reason: 'historical_request_resubmit_required' as const,
+          resumable: false as const,
+        }
+      }
       if (revision === null || revision.aggregate.aggregateDigest !== head.currentAggregateDigest
         || !aggregateIsInternallyConsistent(revision.aggregate, head.currentRevision - 1)) {
         throw new Error('customer_request_v2_aggregate_integrity_failure')
       }
-      return { kind: 'current' as const, aggregate: revision.aggregate }
+      const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
+        .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+      if (routeHead !== null && routeHead.currentRequestRevision !== head.currentRevision) {
+        throw new Error('customer_request_route_plan_head_integrity_failure')
+      }
+      if (routeHead !== null && (!Number.isSafeInteger(routeHead.currentGeneration)
+        || routeHead.currentGeneration < 1
+        || (routeHead.currentGenerationRef === undefined)
+          !== (routeHead.currentGenerationDigest === undefined))) {
+        throw new Error('customer_request_route_plan_head_integrity_failure')
+      }
+      const hasCurrentGeneration = routeHead?.currentGenerationRef !== undefined
+      if ((revision.aggregate.outcome === 'plan_ready') !== hasCurrentGeneration) {
+        throw new Error('customer_request_route_plan_head_integrity_failure')
+      }
+      if (routeHead?.currentGenerationRef !== undefined) {
+        const currentGeneration = await readExactRoutePlanGeneration(
+          ctx.db,
+          args.requestId,
+          routeHead.currentGenerationRef,
+        )
+        if (currentGeneration.kind !== 'found'
+          || currentGeneration.routeGeneration.generation !== routeHead.currentGeneration
+          || currentGeneration.routeGeneration.generationDigest !== routeHead.currentGenerationDigest
+          || !routePlanGenerationMatchesAggregate(
+            domainRouteGeneration(currentGeneration.routeGeneration),
+            domainAggregate(revision.aggregate),
+            routeHead.currentGeneration - 1,
+          )) {
+          throw new Error('customer_request_route_plan_head_integrity_failure')
+        }
+      }
+      return {
+        kind: 'current' as const,
+        aggregate: revision.aggregate,
+        routeGenerationNumber: routeHead?.currentGeneration ?? 0,
+        ...(routeHead?.currentGenerationRef === undefined
+          ? {}
+          : { routeGenerationRef: routeHead.currentGenerationRef }),
+      }
     }
     const historicalSnapshot = await ctx.db.query('customerRequestHeads')
       .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
@@ -154,6 +295,29 @@ export const getCurrentAggregate = internalQuery({
   },
 })
 
+export const getCurrentRoutePlanGeneration = internalQuery({
+  args: { requestId: v.string() },
+  returns: routePlanGenerationResult,
+  handler: async (ctx, args) => {
+    const head = await ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (head?.currentGenerationRef === undefined) return { kind: 'not_found' as const }
+    const result = await readExactRoutePlanGeneration(ctx.db, args.requestId, head.currentGenerationRef)
+    if (result.kind !== 'found'
+      || result.routeGeneration.generation !== head.currentGeneration
+      || result.routeGeneration.generationDigest !== head.currentGenerationDigest) {
+      throw new Error('customer_request_route_plan_head_integrity_failure')
+    }
+    return result
+  },
+})
+
+export const getRoutePlanGeneration = internalQuery({
+  args: { requestId: v.string(), generationRef: v.string() },
+  returns: routePlanGenerationResult,
+  handler: async (ctx, args) => await readExactRoutePlanGeneration(ctx.db, args.requestId, args.generationRef),
+})
+
 export const getCommandReplay = internalQuery({
   args: {
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
@@ -165,25 +329,82 @@ export const getCommandReplay = internalQuery({
     if (command === null) return { kind: 'not_found' as const }
     if (command.commandDigest !== args.commandDigest || command.principalId !== args.principalId
       || command.requestId !== args.requestId) return { kind: 'conflict' as const }
-    const revision = await ctx.db.query('customerRequestV2Revisions')
-      .withIndex('by_requestId_and_requestRevision', (query) => (
-        query.eq('requestId', command.requestId).eq('requestRevision', command.resultingRevision)
-      )).unique()
-    if (revision === null || revision.aggregate.aggregateDigest !== command.aggregateDigest
-      || !aggregateIsInternallyConsistent(revision.aggregate, command.resultingRevision - 1)) {
-      throw new Error('customer_request_v2_command_integrity_failure')
+    const verified = await readVerifiedCommandReplay(ctx.db, command)
+    if (verified.kind === 'legacy') {
+      return {
+        kind: 'needs_attention' as const,
+        requestId: command.requestId,
+        reason: 'historical_request_resubmit_required' as const,
+        resumable: false as const,
+      }
     }
-    return { kind: 'replayed' as const, aggregate: revision.aggregate }
+    return {
+      kind: 'replayed' as const,
+      aggregate: verified.aggregate,
+      ...(command.resultingRouteGenerationRef === undefined
+        ? {}
+        : { routeGenerationRef: command.resultingRouteGenerationRef }),
+    }
   },
 })
 
+async function readVerifiedCommandReplay(
+  db: QueryCtx['db'],
+  command: Readonly<{
+    requestId: string
+    resultingRevision: number
+    aggregateDigest: string
+    expectedRouteGeneration?: number
+    resultingRouteGenerationRef?: string
+  }>,
+): Promise<Readonly<{ kind: 'legacy' } | { kind: 'current'; aggregate: Aggregate }>> {
+  const revision = await db.query('customerRequestV2Revisions')
+    .withIndex('by_requestId_and_requestRevision', (query) => (
+      query.eq('requestId', command.requestId).eq('requestRevision', command.resultingRevision)
+    )).unique()
+  if (revision === null) throw new Error('customer_request_v2_command_integrity_failure')
+  if ('routes' in revision.aggregate.plan) {
+    if (revision.aggregate.aggregateDigest !== command.aggregateDigest
+      || !legacyAggregateIsInternallyConsistent(revision.aggregate)) {
+      throw new Error('customer_request_v2_legacy_command_integrity_failure')
+    }
+    return { kind: 'legacy' }
+  }
+  if (revision.aggregate.aggregateDigest !== command.aggregateDigest
+    || !aggregateIsInternallyConsistent(revision.aggregate, command.resultingRevision - 1)) {
+    throw new Error('customer_request_v2_command_integrity_failure')
+  }
+  if ((revision.aggregate.outcome === 'plan_ready')
+    !== (command.resultingRouteGenerationRef !== undefined)) {
+    throw new Error('customer_request_v2_command_generation_integrity_failure')
+  }
+  if (command.resultingRouteGenerationRef !== undefined) {
+    if (command.expectedRouteGeneration === undefined) {
+      throw new Error('customer_request_v2_command_generation_integrity_failure')
+    }
+    const generation = await readExactRoutePlanGeneration(
+      db, command.requestId, command.resultingRouteGenerationRef,
+    )
+    if (generation.kind !== 'found'
+      || generation.routeGeneration.requestRevision !== command.resultingRevision
+      || !routePlanGenerationMatchesAggregate(
+        domainRouteGeneration(generation.routeGeneration),
+        domainAggregate(revision.aggregate),
+        command.expectedRouteGeneration,
+      )) {
+      throw new Error('customer_request_v2_command_generation_integrity_failure')
+    }
+  }
+  return { kind: 'current', aggregate: revision.aggregate }
+}
+
 export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRevision: number): boolean {
   const { aggregateDigest: _aggregateDigest, ...material } = aggregate
-  const outcome = aggregate.evaluation.posture === 'unsupported'
-    ? 'unsupported'
+  const outcomeIsConsistent = aggregate.evaluation.posture === 'unsupported'
+    ? aggregate.outcome === 'unsupported'
     : aggregate.evaluation.posture === 'needs_information'
-      ? 'needs_information'
-      : aggregate.plan.actions.length > 0 && aggregate.plan.routes.length === 0 ? 'unsupported' : 'plan_ready'
+      ? aggregate.outcome === 'needs_information'
+      : aggregate.outcome === 'plan_ready' || aggregate.outcome === 'unsupported'
   return aggregate.aggregateVersion === 2
     && aggregateByteLengthWithinLimit(aggregate)
     && aggregate.snapshot.revision === expectedRevision + 1
@@ -192,7 +413,7 @@ export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRe
     && aggregate.plan.requestId === aggregate.snapshot.requestId
     && aggregate.plan.requestRevision === aggregate.snapshot.revision
     && aggregate.plan.registrySnapshotDigest === aggregate.evaluation.registrySnapshotDigest
-    && aggregate.outcome === outcome
+    && outcomeIsConsistent
     && aggregate.snapshot.facts.length <= 128
     && aggregate.evaluation.facts.length <= 128
     && aggregate.plan.actions.length <= 64
@@ -216,8 +437,55 @@ export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRe
     && canonicalDigest(material as StableHashValue) === aggregate.aggregateDigest
 }
 
+function legacyAggregateIsInternallyConsistent(aggregate: Aggregate): boolean {
+  if (!('routes' in aggregate.plan)) return false
+  const { planRevisionId, planDigest, createdAt: _createdAt, ...planMaterial } = aggregate.plan
+  const { aggregateDigest, ...aggregateMaterial } = aggregate
+  return planDigest === canonicalDigest(planMaterial as StableHashValue)
+    && planRevisionId === `plan:${planDigest}`
+    && aggregateDigest === canonicalDigest(aggregateMaterial as StableHashValue)
+}
+
+async function readExactRoutePlanGeneration(
+  db: QueryCtx['db'],
+  requestId: string,
+  generationRef: string,
+) {
+  const row = await db.query('customerRequestV2RoutePlanGenerations')
+    .withIndex('by_requestId_and_generationRef', (query) => (
+      query.eq('requestId', requestId).eq('generationRef', generationRef)
+    )).unique()
+  if (row === null) return { kind: 'not_found' as const }
+  if (row.requestId !== row.routeGeneration.requestId
+    || row.requestRevision !== row.routeGeneration.requestRevision
+    || row.generation !== row.routeGeneration.generation
+    || row.generationRef !== row.routeGeneration.generationRef
+    || row.generationDigest !== row.routeGeneration.generationDigest
+    || !routePlanGenerationIsInternallyConsistent(
+      domainRouteGeneration(row.routeGeneration),
+      row.generation - 1,
+    )) throw new Error('customer_request_route_plan_generation_integrity_failure')
+  return { kind: 'found' as const, routeGeneration: row.routeGeneration }
+}
+
+function writableRouteGeneration(generation: RouteGeneration): RouteGeneration {
+  return structuredClone(generation)
+}
+
+function domainRouteGeneration(value: RouteGeneration): CustomerRequestRoutePlanGeneration
+function domainRouteGeneration(value: undefined): undefined
+function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined
+function domainRouteGeneration(value: unknown): CustomerRequestRoutePlanGeneration | undefined {
+  return value as CustomerRequestRoutePlanGeneration | undefined
+}
+
+function domainAggregate(value: unknown): CustomerRequestV2Aggregate {
+  return value as CustomerRequestV2Aggregate
+}
+
 async function validateAggregateAgainstCurrentCapabilityGraph(
   db: Parameters<typeof listEligibleCapabilitySupply>[0], aggregate: Aggregate,
+  routeGeneration: RouteGeneration | undefined,
 ): Promise<'current' | 'stale' | 'invalid'> {
   const currentSupply = await listEligibleCapabilitySupply(db, {
     networkId: aggregate.snapshot.networkId,
@@ -322,8 +590,14 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     models,
     ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
   })
+  const unknownCostFailsClosed = routeGeneration === undefined
+    && aggregate.outcome === 'unsupported'
+    && routes !== undefined
+    && routes.length > 0
+    && routes.some((route) => route.maximumTotalCost.kind !== 'known')
   return routes !== undefined
-    && canonicalDigest(routes as StableHashValue) === canonicalDigest(aggregate.plan.routes as StableHashValue)
+    && (unknownCostFailsClosed
+      || canonicalDigest(routes as StableHashValue) === canonicalDigest(routeGeneration?.routes ?? [] as StableHashValue))
     ? 'current' : 'invalid'
 }
 
@@ -398,7 +672,6 @@ function planAuthorityIsConsistent(aggregate: Aggregate): boolean {
     completionRequirements: aggregate.evaluation.completionRequirements,
     compilerVersion: CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
     authority: 'proposal_only' as const,
-    routes: aggregate.plan.routes,
   }
   const planDigest = canonicalDigest(planMaterial)
   return aggregate.plan.proposedByAgentId === aggregate.snapshot.delegatedAgentId

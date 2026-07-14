@@ -10,6 +10,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { evaluateCustomerRequestSnapshot } from '@/modules/customer-request/evaluation'
+import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 
@@ -19,9 +20,10 @@ const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path,
 describe('atomic V2 Customer Request aggregate persistence', () => {
   it('commits snapshot, evaluation, exact plan authority and idempotency receipt together', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const command = {
-      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64), expectedRevision: 0, aggregate,
+      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     }
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
@@ -56,9 +58,10 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
   it('writes nothing on revision, identity, or idempotency conflict', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const first = {
-      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64), expectedRevision: 0, aggregate,
+      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     }
     await backend.mutation(internal.customerRequestV2.commitAggregate, first)
 
@@ -77,21 +80,61 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     expect(persisted.commands).toHaveLength(1)
   })
 
+  it('fails replay when its immutable route generation is missing', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const command = {
+      commandKey: 'command:v2:generation-replay', commandDigest: 'sha256:' + '2'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    }
+    await backend.mutation(internal.customerRequestV2.commitAggregate, command)
+    await backend.run(async (ctx) => {
+      const generation = await ctx.db.query('customerRequestV2RoutePlanGenerations').first()
+      if (generation === null) throw new Error('generation fixture missing')
+      await ctx.db.delete(generation._id)
+    })
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
+      .rejects.toThrow('customer_request_v2_command_generation_integrity_failure')
+    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
+      commandKey: command.commandKey,
+      commandDigest: command.commandDigest,
+      principalId: aggregate.snapshot.principalId,
+      requestId: aggregate.snapshot.requestId,
+    })).rejects.toThrow('customer_request_v2_command_generation_integrity_failure')
+  })
+
+  it('fails current readback when a plan-ready aggregate has no generation head', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:missing-route-head', commandDigest: 'sha256:' + '3'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    })
+    await backend.run(async (ctx) => {
+      const head = await ctx.db.query('customerRequestV2RoutePlanHeads').first()
+      if (head === null) throw new Error('route head fixture missing')
+      await ctx.db.delete(head._id)
+    })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).rejects.toThrow('customer_request_route_plan_head_integrity_failure')
+  })
+
   it('writes nothing when the registered capability graph changes before commit', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     await revokeFirstSupply(backend)
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:stale-graph', commandDigest: 'sha256:' + 'd'.repeat(64),
-      expectedRevision: 0, aggregate,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     })).resolves.toEqual({ kind: 'context_stale' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
   it('writes nothing when a caller recomputes the digest over forged semantic authority', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     forged.outcome = 'unsupported'
     const { aggregateDigest: _discarded, ...forgedMaterial } = forged
@@ -99,14 +142,37 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:forged', commandDigest: 'sha256:' + 'e'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
+  it('refuses incomplete data, effect, and evidence declarations before generation persistence', async () => {
+    for (const declaration of ['dataUse', 'effects', 'evidence'] as const) {
+      const backend = convexTest(schema, modules)
+      const { aggregate, routeGeneration } = await compiledAggregate(backend)
+      const incomplete = structuredClone(routeGeneration)
+      const step = incomplete.routes[0]?.steps[0]
+      if (step === undefined) throw new Error('route declaration test step missing')
+      step[declaration] = []
+      await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+        commandKey: `command:v2:incomplete:${declaration}`,
+        commandDigest: canonicalDigest({ declaration }),
+        expectedRevision: 0,
+        expectedRouteGeneration: 0,
+        aggregate,
+        routeGeneration: incomplete,
+      })).resolves.toEqual({ kind: 'aggregate_invalid' })
+      await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
+      await expect(backend.query(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+        requestId: aggregate.snapshot.requestId,
+      })).resolves.toEqual({ kind: 'not_found' })
+    }
+  })
+
   it('reopens registered contracts and rejects a fully re-digested invented composition edge', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     const action = forged.plan.actions[0]
     if (action === undefined) throw new Error('test action missing')
@@ -130,14 +196,14 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:invented-mapping', commandDigest: 'sha256:' + '7'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
   it('reopens the exact contract and rejects invented completion evidence even when every caller digest is recomputed', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     for (const requirement of forged.evaluation.completionRequirements) requirement.evidenceId = 'invented_evidence'
     for (const requirement of forged.plan.completionRequirements) requirement.evidenceId = 'invented_evidence'
@@ -156,14 +222,14 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:invented-evidence', commandDigest: 'sha256:' + 'f'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
   it('rejects a fully re-digested aggregate whose structured input violates the exact contract schema', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const facts = aggregate.snapshot.facts.map((fact) => ({ ...fact, value: 42 }))
     const actions = aggregate.plan.actions.map((action) => ({ ...action, inputs: facts }))
@@ -211,7 +277,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:wrong-type', commandDigest: 'sha256:' + '9'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
@@ -254,6 +320,81 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       heads: [], revisions: [], commands: [], preparations: [], preparationCommands: [],
     })
   })
+
+  it('retains an exact embedded-route revision as immutable history and requires resubmission', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const { planRevisionId: _planRevisionId, planDigest: _planDigest, createdAt, ...planMaterial } = aggregate.plan
+    const legacyRoutes = routeGeneration.routes.map((route) => ({
+      ...route,
+      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }) => step),
+    }))
+    const legacyPlanMaterial = { ...planMaterial, routes: legacyRoutes }
+    const planDigest = canonicalDigest(legacyPlanMaterial)
+    const legacyPlan = { planRevisionId: `plan:${planDigest}`, ...legacyPlanMaterial, planDigest, createdAt }
+    const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = aggregate
+    const legacyAggregateMaterial = { ...aggregateMaterial, plan: legacyPlan }
+    const legacyAggregate = { ...legacyAggregateMaterial, aggregateDigest: canonicalDigest(legacyAggregateMaterial) }
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('customerRequestV2Revisions', {
+        requestId: aggregate.snapshot.requestId,
+        requestRevision: aggregate.snapshot.revision,
+        aggregate: legacyAggregate,
+      })
+      await ctx.db.insert('customerRequestV2Heads', {
+        requestId: aggregate.snapshot.requestId,
+        principalId: aggregate.snapshot.principalId,
+        delegatedAgentId: aggregate.snapshot.delegatedAgentId,
+        currentRevision: aggregate.snapshot.revision,
+        currentAggregateDigest: legacyAggregate.aggregateDigest,
+        createdAt: aggregate.snapshot.recordedAt,
+        updatedAt: aggregate.snapshot.recordedAt,
+      })
+      await ctx.db.insert('customerRequestV2Commands', {
+        commandKey: 'command:v2:legacy-replay',
+        commandDigest: 'sha256:' + '4'.repeat(64),
+        principalId: aggregate.snapshot.principalId,
+        requestId: aggregate.snapshot.requestId,
+        expectedRevision: 0,
+        resultingRevision: aggregate.snapshot.revision,
+        aggregateDigest: legacyAggregate.aggregateDigest,
+        committedAt: aggregate.snapshot.recordedAt,
+      })
+    })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toEqual({
+      kind: 'needs_attention', requestId: aggregate.snapshot.requestId,
+      reason: 'historical_request_resubmit_required', resumable: false,
+    })
+    const persisted = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Revisions').first()
+    ))
+    expect(persisted?.aggregate).toEqual(legacyAggregate)
+    expect(persisted?.aggregate.plan).toHaveProperty('routes')
+    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
+      commandKey: 'command:v2:legacy-replay',
+      commandDigest: 'sha256:' + '4'.repeat(64),
+      principalId: aggregate.snapshot.principalId,
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toEqual({
+      kind: 'needs_attention', requestId: aggregate.snapshot.requestId,
+      reason: 'historical_request_resubmit_required', resumable: false,
+    })
+    await backend.run(async (ctx) => {
+      const revision = await ctx.db.query('customerRequestV2Revisions').first()
+      if (revision === null || !('routes' in revision.aggregate.plan)) throw new Error('legacy revision missing')
+      await ctx.db.patch(revision._id, {
+        aggregate: {
+          ...revision.aggregate,
+          plan: { ...revision.aggregate.plan, proposalDigest: 'sha256:' + '5'.repeat(64) },
+        },
+      })
+    })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).rejects.toThrow('customer_request_v2_legacy_aggregate_integrity_failure')
+  })
 })
 
 async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
@@ -292,7 +433,11 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
     models: [model], now: 1_000,
   })
   if (result.kind !== 'compiled') throw new Error(`compile failed: ${result.reason}`)
-  return writableCustomerRequestV2Aggregate(result.aggregate)
+  if (result.routeGeneration === undefined) throw new Error('route generation missing')
+  return {
+    aggregate: writableCustomerRequestV2Aggregate(result.aggregate),
+    routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
+  }
 }
 
 async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {

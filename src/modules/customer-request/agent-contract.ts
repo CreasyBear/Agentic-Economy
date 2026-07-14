@@ -202,6 +202,7 @@ export const customerPreparedActionSchema = z.object({
 
 export const customerRequestViewSchema = z.object({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
+  routeGenerationRef: z.string().optional(),
   state: z.enum([
     'needs_information', 'ready_to_compare', 'routes_ready', 'preparing_options', 'options_ready', 'no_options',
     'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
@@ -233,7 +234,6 @@ export const customerRequestViewSchema = z.object({
     }).strict(),
   ]).optional(),
   options: z.array(customerOptionSchema), optionSet: customerOptionSetSchema.optional(),
-  routes: z.array(customerRoutePlanSchema).optional(),
   preparedAction: customerPreparedActionSchema.optional(),
   action: z.object({
     state: z.enum(['unknown', 'completed', 'failed']),

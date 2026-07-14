@@ -13,6 +13,7 @@ import {
   type RegisteredSupplyPrice,
 } from '@/modules/customer-request/evaluation'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
+import { routePlanGenerationIsInternallyConsistent } from '@/modules/customer-request/route-plan-generation'
 import {
   bindCustomerCapabilityDescriptor,
   createJsonCustomerRequestSemanticInterpreter,
@@ -273,8 +274,12 @@ describe('V2 Request semantics', () => {
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
     const lookupRequest = requiredInput(lookup, 'request')
-    const compile = (models: [typeof lookup, typeof shipping]) => compileCustomerRequest({
-      requestId: 'request:composed', expectedRevision: 4,
+    const compile = (
+      models: [typeof lookup, typeof shipping],
+      expectedRouteGeneration = 0,
+      downstreamPriceMinor = 100,
+    ) => compileCustomerRequest({
+      requestId: 'request:composed', expectedRevision: 4, expectedRouteGeneration,
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: 'Find an option and get its shipping quote.', networkId: 'ae:public',
       proposal: {
@@ -290,42 +295,26 @@ describe('V2 Request semantics', () => {
         })),
       },
       interpreterId: 'interpreter:test',
-      bindings: models.map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      bindings: models.map((model) => ({
+        ...supply(`binding:${model.contractRef.capabilityId}`, model),
+        price: {
+          kind: 'fixed' as const, currency: 'AUD',
+          amountMinor: model === shipping ? downstreamPriceMinor : 100,
+        },
+      })),
       models, now: 10_000,
     })
 
     const first = compile([lookup, shipping])
     const permuted = compile([shipping, lookup])
+    const nextOrdinal = compile([lookup, shipping], 1)
+    const changedPrice = compile([lookup, shipping], 0, 101)
     expect(first).toMatchObject({
       kind: 'compiled', aggregate: {
         outcome: 'plan_ready',
         plan: {
           requestRevision: 5,
           authority: 'proposal_only',
-          routes: [{
-            maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
-            expiresAt: 20_000,
-            steps: [
-              {
-                contractRef: lookup.contractRef, publicationRevision: 1,
-                price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
-                dataUse: [{ purposes: ['return_requested_result'] }],
-                effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
-                evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
-                recovery: { idempotency: 'required', recovery: 'retry_safe' },
-              },
-              {
-                contractRef: shipping.contractRef, publicationRevision: 1,
-                price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
-              },
-            ],
-            edges: [{ authority: 'registered_contract_semantics' }],
-            fallbacks: { ordering: 'unranked', alternatives: [] },
-            comparison: {
-              fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
-              ordering: { kind: 'unranked' },
-            },
-          }],
           actions: [
             { contractRef: lookup.contractRef, dependsOn: [], inputMappings: [] },
             {
@@ -342,8 +331,47 @@ describe('V2 Request semantics', () => {
           ],
         },
       },
+      routeGeneration: { routes: [{
+        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
+        expiresAt: 20_000,
+        steps: [
+          {
+            contractRef: lookup.contractRef, publicationRevision: 1,
+            resolvedInputs: [expect.objectContaining({ inputPointer: '/request' })], deferredInputs: [],
+            price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+            dataUse: [{ purposes: ['return_requested_result'] }],
+            effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
+            evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
+            recovery: { idempotency: 'required', recovery: 'retry_safe' },
+          },
+          {
+            contractRef: shipping.contractRef, publicationRevision: 1,
+            resolvedInputs: [], deferredInputs: [expect.objectContaining({ semanticIdentity: 'ae.option_id:v1' })],
+            price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+          },
+        ],
+        edges: [{ authority: 'registered_contract_semantics' }],
+        fallbacks: { ordering: 'unranked', alternatives: [] },
+        comparison: {
+          fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
+          ordering: { kind: 'unranked' },
+        },
+      }] },
     })
     expect(permuted).toEqual(first)
+    if (first.kind !== 'compiled' || first.routeGeneration === undefined
+      || nextOrdinal.kind !== 'compiled' || nextOrdinal.routeGeneration === undefined
+      || changedPrice.kind !== 'compiled' || changedPrice.routeGeneration === undefined) {
+      throw new Error('route generation digest setup failed')
+    }
+    expect(nextOrdinal.routeGeneration.generation).toBe(2)
+    expect(nextOrdinal.routeGeneration.generationDigest).toBe(first.routeGeneration.generationDigest)
+    expect(nextOrdinal.routeGeneration.generationRef).not.toBe(first.routeGeneration.generationRef)
+    expect(changedPrice.routeGeneration.generationDigest).not.toBe(first.routeGeneration.generationDigest)
+    expect(routePlanGenerationIsInternallyConsistent({
+      ...first.routeGeneration,
+      createdAt: first.routeGeneration.createdAt + 1,
+    }, 0)).toBe(false)
   })
 
   it('asks for the downstream fact instead of guessing between ambiguous registered producers', () => {
@@ -377,7 +405,7 @@ describe('V2 Request semantics', () => {
     expect(shippingAction).toMatchObject({ dependsOn: [], inputMappings: [] })
   })
 
-  it('fails closed on unsafe aggregate money and marks on-request cost as uncertain preparation', () => {
+  it('fails closed unless every route has a known safe maximum cost', () => {
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
     const request = requiredInput(lookup, 'request')
@@ -403,21 +431,24 @@ describe('V2 Request semantics', () => {
       })
     )
 
-    expect(compileWithPrices([
+    const mixedCurrency = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
       { kind: 'fixed', currency: 'USD', amountMinor: 100 },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
-    expect(compileWithPrices([
+    ])
+    expect(mixedCurrency).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(mixedCurrency).not.toHaveProperty('routeGeneration')
+    const unsafeSum = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },
       { kind: 'fixed', currency: 'AUD', amountMinor: 1 },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
-    expect(compileWithPrices([
+    ])
+    expect(unsafeSum).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(unsafeSum).not.toHaveProperty('routeGeneration')
+    const onRequest = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
       { kind: 'on_request' },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'plan_ready', plan: { routes: [{
-      maximumTotalCost: { kind: 'requires_preparation' }, uncertainty: ['cost_requires_preparation'],
-      comparison: { ordering: { kind: 'unranked' } },
-    }] } } })
+    ])
+    expect(onRequest).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(onRequest).not.toHaveProperty('routeGeneration')
   })
 
   it('declares only provider-disjoint fallbacks and ranks same-currency routes on an explicit price objective', () => {
@@ -450,8 +481,9 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test', bindings, models: [lookup, shipping], now: 10_000,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
-    expect(result.aggregate.plan.routes).toHaveLength(6)
-    expect(result.aggregate.plan.routes.map((route) => route.maximumTotalCost)).toEqual([
+    if (result.routeGeneration === undefined) throw new Error('route generation missing')
+    expect(result.routeGeneration.routes).toHaveLength(6)
+    expect(result.routeGeneration.routes.map((route) => route.maximumTotalCost)).toEqual([
       { kind: 'known', currency: 'AUD', amountMinor: 200 },
       { kind: 'known', currency: 'AUD', amountMinor: 250 },
       { kind: 'known', currency: 'AUD', amountMinor: 300 },
@@ -459,7 +491,7 @@ describe('V2 Request semantics', () => {
       { kind: 'known', currency: 'AUD', amountMinor: 450 },
       { kind: 'known', currency: 'AUD', amountMinor: 500 },
     ])
-    for (const [index, route] of result.aggregate.plan.routes.entries()) {
+    for (const [index, route] of result.routeGeneration.routes.entries()) {
       expect(route.comparison.ordering).toEqual({
         kind: 'ranked', objective: 'lowest_maximum_price', position: index + 1,
       })
@@ -468,7 +500,7 @@ describe('V2 Request semantics', () => {
       const bindingsInRoute = new Set(route.steps.map((step) => step.bindingId))
       const businessesInRoute = new Set(route.steps.map((step) => step.businessId))
       for (const fallback of route.fallbacks.alternatives) {
-        const alternative = result.aggregate.plan.routes.find((candidate) => (
+        const alternative = result.routeGeneration.routes.find((candidate) => (
           candidate.routePlanId === fallback.alternativeRouteRef
         ))
         if (alternative === undefined) throw new Error('declared fallback missing')
@@ -501,7 +533,8 @@ describe('V2 Request semantics', () => {
       ],
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
-    expect(result.aggregate.plan.routes.map((route) => route.comparison.ordering)).toEqual([
+    if (result.routeGeneration === undefined) throw new Error('route generation missing')
+    expect(result.routeGeneration.routes.map((route) => route.comparison.ordering)).toEqual([
       { kind: 'unranked' }, { kind: 'unranked' },
     ])
   })

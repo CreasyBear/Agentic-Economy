@@ -7,6 +7,7 @@ import schema from '../../convex/schema'
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { aggregateIsInternallyConsistent } from '../../convex/customerRequestV2'
 
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
@@ -72,7 +73,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
     }
     const result = compileCustomerRequest({
-      requestId: 'request:multi-capability:1', expectedRevision: 0,
+      requestId: 'request:multi-capability:1', expectedRevision: 0, expectedRouteGeneration: 0,
       principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
       intent: 'Find the referenced service and prepare its quote', networkId: 'ae:public',
       proposal: { kind: 'capability_candidates', selections: [
@@ -90,16 +91,30 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       models: [upstreamModel, downstreamModel], now: Date.now(),
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
+    expect(result).toHaveProperty('routeGeneration')
+    expect(result.aggregate.plan).not.toHaveProperty('routes')
+    if (result.routeGeneration === undefined) throw new Error('route generation missing')
     const aggregate = writableCustomerRequestV2Aggregate(result.aggregate)
     expect(aggregateIsInternallyConsistent(aggregate, 0)).toBe(true)
-    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+    const command = {
       commandKey: 'command:multi-capability:1', commandDigest: canonicalDigest({ request: 'multi-capability:1' }),
-      expectedRevision: 0, aggregate,
-    })).resolves.toEqual({ kind: 'stored', requestId: 'request:multi-capability:1', revision: 1 })
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate,
+      routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
+    }
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
+      .resolves.toEqual({ kind: 'stored', requestId: 'request:multi-capability:1', revision: 1 })
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
+      .resolves.toEqual({ kind: 'replayed', requestId: 'request:multi-capability:1', revision: 1 })
 
     const readback = await backend.query(internal.customerRequestV2.getCurrentAggregate, { requestId: 'request:multi-capability:1' })
     if (readback.kind !== 'current') throw new Error(`aggregate readback failed: ${readback.kind}`)
-    const route = readback.aggregate.plan.routes[0]
+    expect(readback.routeGenerationRef).toBe(result.routeGeneration.generationRef)
+    const historical = await backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
+      requestId: 'request:multi-capability:1', generationRef: result.routeGeneration.generationRef,
+    })
+    if (historical.kind !== 'found') throw new Error('durable route generation missing')
+    expect(historical.routeGeneration).toEqual(writableCustomerRequestRoutePlanGeneration(result.routeGeneration))
+    const route = historical.routeGeneration.routes[0]
     expect(route).toMatchObject({
       requestRevision: 1, authority: 'proposal_only',
       maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
@@ -110,10 +125,11 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(route?.steps.map((step) => ({
       capabilityId: step.contractRef.capabilityId, version: step.contractRef.version,
       publicationRef: step.publicationRef, publicationRevision: step.publicationRevision,
+      resolvedInputCount: step.resolvedInputs.length, deferredInputCount: step.deferredInputs.length,
       dataUse: step.dataUse, effects: step.effects, evidence: step.evidence, recovery: step.recovery,
     }))).toEqual([
-      expect.objectContaining({ capabilityId: upstreamDocument.capabilityId, version: 2, publicationRef: first.publicationRef, publicationRevision: first.revision, recovery: { idempotency: 'required', recovery: 'retry_safe' } }),
-      expect.objectContaining({ capabilityId: downstreamDocument.capabilityId, version: 1, publicationRef: second.publicationRef, publicationRevision: second.revision, recovery: { idempotency: 'required', recovery: 'reconcile_required' } }),
+      expect.objectContaining({ capabilityId: upstreamDocument.capabilityId, version: 2, publicationRef: first.publicationRef, publicationRevision: first.revision, resolvedInputCount: 1, deferredInputCount: 0, recovery: { idempotency: 'required', recovery: 'retry_safe' } }),
+      expect.objectContaining({ capabilityId: downstreamDocument.capabilityId, version: 1, publicationRef: second.publicationRef, publicationRevision: second.revision, resolvedInputCount: 0, deferredInputCount: 1, recovery: { idempotency: 'required', recovery: 'reconcile_required' } }),
     ])
     expect(route?.edges).toEqual([expect.objectContaining({
       semanticIdentity: 'ae.service-reference:v1', authority: 'registered_contract_semantics',
@@ -126,6 +142,85 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     ])
     expect(JSON.stringify(route)).not.toContain('grant')
     expect(JSON.stringify(route)).not.toContain('execute')
+
+    const stale = compileCustomerRequest({
+      requestId: 'request:multi-capability:1', expectedRevision: 1, expectedRouteGeneration: 0,
+      principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
+      intent: 'Find the referenced service and prepare its quote', networkId: 'ae:public',
+      priorFacts: result.aggregate.snapshot.facts,
+      proposal: { kind: 'capability_candidates', selections: [
+        { selectionKey: upstreamModel.selectionKey, contractRef: upstreamModel.contractRef, facts: [] },
+        { selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
+      ] },
+      interpreterId: 'interpreter:production-route-test',
+      bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
+        businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
+        contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
+        offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
+        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+        readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+      }]),
+      models: [upstreamModel, downstreamModel], now: Date.now() + 1,
+    })
+    if (stale.kind !== 'compiled' || stale.routeGeneration === undefined) throw new Error('stale generation setup failed')
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:multi-capability:stale-generation',
+      commandDigest: canonicalDigest({ request: 'multi-capability:stale-generation' }),
+      expectedRevision: 1,
+      expectedRouteGeneration: 0,
+      aggregate: writableCustomerRequestV2Aggregate(stale.aggregate),
+      routeGeneration: writableCustomerRequestRoutePlanGeneration(stale.routeGeneration),
+    })).resolves.toEqual({ kind: 'route_generation_conflict' })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: 'request:multi-capability:1',
+    })).resolves.toMatchObject({
+      kind: 'current', aggregate: { snapshot: { revision: 1 } },
+      routeGenerationRef: result.routeGeneration.generationRef,
+    })
+    await expect(backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
+      requestId: 'request:multi-capability:1', generationRef: stale.routeGeneration.generationRef,
+    })).resolves.toEqual({ kind: 'not_found' })
+
+    const needsInformation = compileCustomerRequest({
+      requestId: 'request:multi-capability:1', expectedRevision: 1, expectedRouteGeneration: 1,
+      principalId: 'principal:customer:1', delegatedAgentId: 'agent:customer:1',
+      intent: 'Help me decide what service I need', networkId: 'ae:public',
+      priorFacts: result.aggregate.snapshot.facts,
+      proposal: {
+        kind: 'needs_intent_direction',
+        prompt: 'What result should the businesses help you produce?',
+      },
+      interpreterId: 'interpreter:production-route-test',
+      bindings: supply.supplies.flatMap(({ offering, binding, publication }) => publication === undefined ? [] : [{
+        businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
+        contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
+        offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
+        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+        readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+      }]),
+      models: [upstreamModel, downstreamModel], now: Date.now() + 2,
+    })
+    if (needsInformation.kind !== 'compiled') throw new Error('needs-information generation setup failed')
+    expect(needsInformation).not.toHaveProperty('routeGeneration')
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:multi-capability:needs-information',
+      commandDigest: canonicalDigest({ request: 'multi-capability:needs-information' }),
+      expectedRevision: 1,
+      expectedRouteGeneration: 1,
+      aggregate: writableCustomerRequestV2Aggregate(needsInformation.aggregate),
+    })).resolves.toEqual({ kind: 'stored', requestId: 'request:multi-capability:1', revision: 2 })
+    const withoutCurrentRoute = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: 'request:multi-capability:1',
+    })
+    expect(withoutCurrentRoute).toMatchObject({
+      kind: 'current', aggregate: { snapshot: { revision: 2 } }, routeGenerationNumber: 1,
+    })
+    expect(withoutCurrentRoute).not.toHaveProperty('routeGenerationRef')
+    await expect(backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
+      requestId: 'request:multi-capability:1', generationRef: result.routeGeneration.generationRef,
+    })).resolves.toMatchObject({
+      kind: 'found', routeGeneration: { generation: 1, requestRevision: 1 },
+    })
   })
 
   it('compiles and persists the governed DAG through the authenticated public submit action', async () => {
@@ -164,7 +259,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:multi-capability:public', revision: 1,
-      state: 'ready_to_compare', nextAction: 'prepare_options',
+      state: 'ready_to_compare', nextAction: 'prepare_options', routeGenerationRef: expect.any(String),
     })
     if (submitted.kind !== 'request') throw new Error(`public submit failed: ${submitted.kind}`)
     expect(generate).toHaveBeenCalledTimes(1)
@@ -173,7 +268,12 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestId: 'request:multi-capability:public',
     })
     if (persisted.kind !== 'current') throw new Error(`public submit aggregate missing: ${persisted.kind}`)
-    const route = persisted.aggregate.plan.routes[0]
+    if (persisted.routeGenerationRef === undefined) throw new Error('public submit generation reference missing')
+    const routeReadback = await backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
+      requestId: 'request:multi-capability:public', generationRef: persisted.routeGenerationRef,
+    })
+    if (routeReadback.kind !== 'found') throw new Error('public submit route generation missing')
+    const route = routeReadback.routeGeneration.routes[0]
     if (route === undefined) throw new Error('public submit route missing')
     expect(persisted.aggregate.plan.interpretationEvidence).toMatchObject({
       kind: 'model_output',
@@ -200,23 +300,10 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(compared).toMatchObject({
       kind: 'request', requestRef: submitted.requestRef, revision: submitted.revision,
-      state: 'routes_ready', nextAction: 'inspect_routes',
-      routes: [{
-        authority: 'proposal_only', stepCount: 2,
-        dataUse: { recipientCount: 2 },
-        recovery: { steps: expect.arrayContaining([
-          { stepRef: 'step:1', businessRef: expect.any(String), posture: 'retry_safe' },
-          { stepRef: 'step:2', businessRef: expect.any(String), posture: 'reconcile_required' },
-        ]) },
-      }],
+      state: 'routes_ready', nextAction: 'wait',
+      routeGenerationRef: persisted.routeGenerationRef,
     })
-    if (compared.kind !== 'request' || compared.routes?.[0] === undefined) {
-      throw new Error('projected route missing')
-    }
-    expect(compared.routes[0].dataUse.recipients).toEqual(expect.arrayContaining([
-      { kind: 'business', businessRef: expect.any(String), purposes: ['resolve_service_reference'] },
-      { kind: 'named', recipientRef: 'carrier-network', purposes: ['prepare_service_quote'] },
-    ]))
+    expect(compared).not.toHaveProperty('routes')
 
     const expiredClock = vi.spyOn(Date, 'now').mockReturnValue(route.expiresAt + 1)
     const expiredComparison = await customer.action(api.customerRequestApplication.compare, {
@@ -256,7 +343,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     expect(refined).toMatchObject({
       kind: 'request', requestRef: submitted.requestRef, revision: 2,
-      state: 'ready_to_compare', nextAction: 'prepare_options',
+      state: 'ready_to_compare', nextAction: 'prepare_options', routeGenerationRef: expect.any(String),
     })
     expect(generate).toHaveBeenCalledTimes(2)
 
@@ -274,8 +361,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     if (revised.kind !== 'current') throw new Error(`revised aggregate missing: ${revised.kind}`)
     expect(revised.aggregate.snapshot.revision).toBe(2)
-    expect(revised.aggregate.plan.routes[0]).toMatchObject({ requestRevision: 2 })
-    expect(revised.aggregate.plan.routes[0]?.routePlanId).not.toBe(route.routePlanId)
+    if (revised.routeGenerationRef === undefined) throw new Error('revised generation reference missing')
+    const revisedRouteReadback = await backend.query(internal.customerRequestV2.getRoutePlanGeneration, {
+      requestId: submitted.requestRef, generationRef: revised.routeGenerationRef,
+    })
+    if (revisedRouteReadback.kind !== 'found') throw new Error('revised route generation missing')
+    expect(revisedRouteReadback.routeGeneration.routes[0]).toMatchObject({ requestRevision: 2 })
+    expect(revisedRouteReadback.routeGeneration.routes[0]?.routePlanId).not.toBe(route.routePlanId)
   })
 })
 
