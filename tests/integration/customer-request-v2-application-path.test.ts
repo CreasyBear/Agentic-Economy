@@ -759,7 +759,7 @@ describe('current V2 Customer Request application path', () => {
       preparedAction: {
         format: 'ae.prepared-action:v2', business: { name: 'Sandbox Option Two' },
         offering: { offeringId: 'offering:sandbox-option-two:reference-lookup' },
-        binding: { bindingId: 'binding:sandbox-option-two:http-json' },
+        binding: { bindingId: 'binding:sandbox-option-two:http-json:v2' },
         price: { currency: 'AUD', maximumAmountMinor: 900 },
         comparison: { kind: 'lowest_maximum_price', candidateCount: 2 },
       },

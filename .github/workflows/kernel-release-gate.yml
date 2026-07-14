@@ -68,6 +68,14 @@ jobs:
       - name: Refuse a checkout other than the triggering revision
         run: test "$(git rev-parse HEAD)" = "${AE_RELEASE_SOURCE_REVISION}" && test -z "$(git status --porcelain)"
 
+      - name: Deploy the dual-compatible exact clean source revision
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          deployment="$(npm exec -- tsx tools/release/deploy-customer-request-git-source.ts)"
+          echo "deployment_id=$(printf '%s' "${deployment}" | jq -r '.deploymentId')" >> "${GITHUB_OUTPUT}"
+
       - name: Deploy the exact-revision Convex schema and functions
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
@@ -77,14 +85,6 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod
-
-      - name: Deploy the exact clean source revision
-        id: deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          deployment="$(npm exec -- tsx tools/release/deploy-customer-request-git-source.ts)"
-          echo "deployment_id=$(printf '%s' "${deployment}" | jq -r '.deploymentId')" >> "${GITHUB_OUTPUT}"
 
       - name: Verify authenticated deployment readback
         env:

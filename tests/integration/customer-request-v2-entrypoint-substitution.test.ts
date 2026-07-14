@@ -40,8 +40,7 @@ describe('V2 Request registration-only business substitution', () => {
 
   it('adds and removes a conformant business without changing the Request or caller contract', async () => {
     vi.stubEnv('AE_SITE_URL', 'https://sandbox-ae.example.test')
-    vi.stubEnv('AE_SANDBOX_PROVIDER_ONE_KEY', 'sandbox-provider-one-test-key')
-    vi.stubEnv('AE_SANDBOX_PROVIDER_TWO_KEY', 'sandbox-provider-two-test-key')
+    vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-test-key')
     vi.stubEnv('AE_SANDBOX_PROVIDER_THREE_KEY', 'sandbox-provider-three-test-key')
     vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     const backend = createBackend()
@@ -337,13 +336,13 @@ function registeredProviderFor(endpoint: URL) {
   const profile = endpoint.searchParams.get('profile')
   if (profile === 'one') return {
     offeringId: 'offering:sandbox-option-one:reference-lookup',
-    bindingId: 'binding:sandbox-option-one:http-json',
-    credential: 'sandbox-provider-one-test-key',
+    bindingId: 'binding:sandbox-option-one:http-json:v2',
+    credential: 'sandbox-provider-test-key',
   }
   if (profile === 'two') return {
     offeringId: 'offering:sandbox-option-two:reference-lookup',
-    bindingId: 'binding:sandbox-option-two:http-json',
-    credential: 'sandbox-provider-two-test-key',
+    bindingId: 'binding:sandbox-option-two:http-json:v2',
+    credential: 'sandbox-provider-test-key',
   }
   if (endpoint.hostname === 'sandbox-three.example.test') return {
     offeringId: 'offering:sandbox-option-three:reference-lookup',

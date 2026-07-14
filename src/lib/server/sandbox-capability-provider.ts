@@ -39,6 +39,10 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   const url = new URL(request.url)
   const profile = SANDBOX_PROVIDER_PROFILES[url.searchParams.get('profile') as keyof typeof SANDBOX_PROVIDER_PROFILES]
   if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  const bindingVersion = url.searchParams.get('binding')
+  if (bindingVersion !== null && bindingVersion !== 'v2') {
+    return json({ kind: 'refused', reason: 'sandbox_binding_unknown' }, 404)
+  }
   const scenarioResult = scenarioValue.safeParse(url.searchParams.get('scenario') ?? 'success')
   if (!scenarioResult.success) return json({ kind: 'refused', reason: 'sandbox_scenario_unknown' }, 400)
   const scenario = scenarioResult.data
@@ -47,7 +51,10 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   let parsedJson: unknown
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
   const preparationEgress = preparationEgressBody.safeParse(parsedJson)
-  if (preparationEgress.success) return providerOption(profile, preparationEgress.data)
+  if (preparationEgress.success) {
+    const bindingId = bindingVersion === 'v2' ? profile.v2BindingId : profile.legacyV2BindingId
+    return providerOption(profile, bindingId, preparationEgress.data)
+  }
   const parsed = requestBody.safeParse(parsedJson)
   if (!parsed.success || (parsed.data.bindingId !== profile.bindingId && parsed.data.bindingId !== profile.v2BindingId)) {
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)
@@ -94,19 +101,23 @@ function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>,
   })
 }
 
-function providerOption(profile: SandboxProfile, body: z.infer<typeof preparationEgressBody>): Response {
+function providerOption(
+  profile: SandboxProfile,
+  bindingId: string,
+  body: z.infer<typeof preparationEgressBody>,
+): Response {
   const assertedAt = Date.UTC(2026, 0, 1)
   const assertionRef = `sandbox-option:${canonicalDigest({
     operationRef: body.operationRef,
     contractRef: body.contractRef,
-    bindingId: profile.v2BindingId,
+    bindingId,
   }).slice(7, 31)}`
   return json({
     format: 'ae.provider-option:v1',
     operationRef: body.operationRef,
     contractRef: body.contractRef,
     offeringId: profile.offeringId,
-    bindingId: profile.v2BindingId,
+    bindingId,
     assertionRef,
     assertedAt,
     validUntil: SANDBOX_OFFER_EXPIRES_AT,

@@ -15,32 +15,20 @@ describe('sandbox capability provider', () => {
   })
 
   it('accepts and exactly echoes the registered V2 binding identity', async () => {
-    const response = await call('one', 'binding:sandbox-option-one:http-json')
+    const response = await call('one', 'binding:sandbox-option-one:http-json:v2')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      issuerBindingId: 'binding:sandbox-option-one:http-json',
+      issuerBindingId: 'binding:sandbox-option-one:http-json:v2',
       expectedCost: { amountMinor: 1_200 },
     })
   })
 
   it('returns the registered V2 provider option envelope for preparation egress', async () => {
-    const response = await handleSandboxCapabilityRequest(new Request(
-      'https://ae.test/api/sandbox/capability?profile=one',
-      {
-        method: 'POST', headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          protocol: 'ae.preparation-egress:v1',
-          operationRef: 'preparation-egress:test-v2',
-          contractRef: {
-            capabilityId: 'sandbox.reference.lookup', version: 1,
-            contractDigest: 'sha256:' + 'a'.repeat(64),
-          },
-          selectionKey: 'ae_selection:test', semanticDigest: 'sha256:' + 'b'.repeat(64),
-          facts: [{ inputPointer: '/requestContext', value: 'Compare sandbox options' }],
-        }),
-      },
-    ), { providerKey: 'secret' })
+    const response = await handleSandboxCapabilityRequest(
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v2'),
+      { providerKey: 'secret' },
+    )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
@@ -48,10 +36,24 @@ describe('sandbox capability provider', () => {
       operationRef: 'preparation-egress:test-v2',
       contractRef: { capabilityId: 'sandbox.reference.lookup', version: 1 },
       offeringId: 'offering:sandbox-option-one:reference-lookup',
-      bindingId: 'binding:sandbox-option-one:http-json',
+      bindingId: 'binding:sandbox-option-one:http-json:v2',
       assertionRef: expect.stringMatching(/^sandbox-option:/),
       output: { optionSummary: 'Sandbox Option One — sandbox verification only' },
     })
+  })
+
+  it('supports the legacy and corrected binding endpoints during an ordered deployment', async () => {
+    const legacy = await handleSandboxCapabilityRequest(
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one'),
+      { providerKey: 'secret' },
+    )
+    const corrected = await handleSandboxCapabilityRequest(
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v2'),
+      { providerKey: 'secret' },
+    )
+
+    await expect(legacy.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json' })
+    await expect(corrected.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v2' })
   })
 
   it('refuses missing credentials and never commits a real-world effect', async () => {
@@ -147,6 +149,21 @@ function request(profile: string, body: Record<string, unknown>, scenario = 'suc
   return new Request(`https://ae.test/api/sandbox/capability?profile=${profile}&scenario=${scenario}`, {
     method: 'POST', headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
     body: JSON.stringify({ protocolVersion: 'ae-capability:v1', ...body }),
+  })
+}
+
+function preparationRequest(url: string): Request {
+  return new Request(url, {
+    method: 'POST', headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      protocol: 'ae.preparation-egress:v1', operationRef: 'preparation-egress:test-v2',
+      contractRef: {
+        capabilityId: 'sandbox.reference.lookup', version: 1,
+        contractDigest: 'sha256:' + 'a'.repeat(64),
+      },
+      selectionKey: 'ae_selection:test', semanticDigest: 'sha256:' + 'b'.repeat(64),
+      facts: [{ inputPointer: '/requestContext', value: 'Compare sandbox options' }],
+    }),
   })
 }
 

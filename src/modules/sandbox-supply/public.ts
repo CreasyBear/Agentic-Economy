@@ -69,13 +69,17 @@ export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
 export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
   one: Object.freeze({
     slug: 'sandbox-option-one', bindingId: 'sandbox.option.one:v1', nodeId: 'sandbox:option-one',
-    offeringId: 'offering:sandbox-option-one:reference-lookup', v2BindingId: 'binding:sandbox-option-one:http-json',
+    offeringId: 'offering:sandbox-option-one:reference-lookup',
+    legacyV2BindingId: 'binding:sandbox-option-one:http-json',
+    v2BindingId: 'binding:sandbox-option-one:http-json:v2',
     label: 'Sandbox Option One', amountMinor: 1_200, latencyMs: 120,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),
   two: Object.freeze({
     slug: 'sandbox-option-two', bindingId: 'sandbox.option.two:v1', nodeId: 'sandbox:option-two',
-    offeringId: 'offering:sandbox-option-two:reference-lookup', v2BindingId: 'binding:sandbox-option-two:http-json',
+    offeringId: 'offering:sandbox-option-two:reference-lookup',
+    legacyV2BindingId: 'binding:sandbox-option-two:http-json',
+    v2BindingId: 'binding:sandbox-option-two:http-json:v2',
     label: 'Sandbox Option Two', amountMinor: 900, latencyMs: 180,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),

@@ -16,8 +16,8 @@ describe('V2-only sandbox supply registration', () => {
     expect(first).not.toHaveProperty('sandboxBindings')
     expect(replay).toEqual(first)
     expect(first.sandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json',
-      'binding:sandbox-option-two:http-json',
+      'binding:sandbox-option-one:http-json:v2',
+      'binding:sandbox-option-two:http-json:v2',
     ])
     const state = await backend.run(async (ctx) => {
       const businesses = await Promise.all(['sandbox-option-one', 'sandbox-option-two'].map(async (slug) => await ctx.db
