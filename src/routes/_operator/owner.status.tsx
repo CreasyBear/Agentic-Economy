@@ -69,7 +69,7 @@ function OwnerStatusRoute() {
     <AeOperatorShell
       operatorRole="owner"
       title="Service page status"
-      description="See whether your page is published, searchable, and ready for inquiries. Copy the public URL to share with customers."
+      description="See whether your page is published and searchable, and what must change before it can receive requests."
       currentPath="/owner/status"
     >
       <div className="grid gap-6">

@@ -32,6 +32,7 @@ import type {
   PublicOwnerUnavailableCapability,
 } from './internal/owner-public-flow'
 import { publishBusinessCatalog as publishBusinessCatalogImpl } from './internal/publish'
+import type { R1TargetAdmission } from '@/modules/inquiries/public'
 
 export type { PublicBusinessPhoto } from '@/modules/business/public'
 
@@ -120,6 +121,7 @@ export type PublicRouteCatalogContract = Omit<PublicCatalogContract, 'sourceHash
 
 export type PublicOwnerStatusRouteReadback = Omit<PublicOwnerStatusReadback, 'catalog'> & {
   catalog: PublicRouteCatalogContract
+  admission: R1TargetAdmission
 }
 
 export type PublicOwnerStatusRouteReadbackResult =

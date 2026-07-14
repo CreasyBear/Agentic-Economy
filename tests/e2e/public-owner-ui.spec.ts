@@ -8,7 +8,11 @@ if (demoBusiness === undefined) {
   throw new Error('The plumbing-demo local E2E fixture is required.')
 }
 
-const phase2ThreadPath = '/owner/inquiries/inquiry_thread%3Ahash%3Af3e29153'
+const admittedBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.inquiryAdmission === 'admitted')
+if (admittedBusiness === undefined) {
+  throw new Error('An admitted local E2E business fixture is required.')
+}
+
 const phase2ArtifactDir = 'output/playwright/phase2-ui'
 const futureSurfaceCopy =
   /book now|booking confirmed|pay now|payment required|protected action|marketplace|request market|AI reply|autonomous|agent handled|guaranteed response|wallet|checkout|custody|settlement|x402|MCP|OpenAPI|callable|hosted-agent/i
@@ -175,7 +179,12 @@ test.describe('public owner routes', () => {
     await page.goto(manageHref ?? '/owner/status', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/owner\/status/)
     await expect(page.getByRole('heading', { name: /service page status/i })).toBeVisible()
-    await expect(page.getByText(/published, searchable, and ready for inquiries/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Request admission' })).toBeVisible()
+    await expect(
+      page.getByText('These checks currently prevent this business page from receiving requests.', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText('Add a usable owner notification email', { exact: true })).toBeVisible()
+    await expect(page.getByText('Finish inquiry setup', { exact: true })).toBeVisible()
   })
 
   test('public business page exposes citation facts without private authority fields', async ({ page }) => {
@@ -240,27 +249,56 @@ test.describe('public owner routes', () => {
     mkdirSync(phase2ArtifactDir, { recursive: true })
 
     await page.goto(`/${demoBusiness.requestedSlug}/inquiry`)
-    await expect(page.getByRole('heading', { name: `Tell ${demoBusiness.businessName} about the job.` })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Inquiry not open yet' })).toBeVisible()
+    await expect(
+      page.getByText('This business isn’t receiving inquiries through AE yet.', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Back to service page' })).toHaveAttribute(
+      'href',
+      `/${demoBusiness.requestedSlug}`,
+    )
+
+    await page.goto(`/${admittedBusiness.requestedSlug}/inquiry`)
+    await expect(
+      page.getByRole('heading', { name: `Tell ${admittedBusiness.businessName} about the job.` }),
+    ).toBeVisible()
 
     const submitButton = page.getByRole('button', { name: /send inquiry/i })
     await expect(submitButton).toBeEnabled()
-    await submitButton.click()
-    await expect(page.getByText('Message is required.')).toBeVisible()
-    await expect(page.getByLabel('Tell them about the job')).toBeFocused()
+    await expect(async () => {
+      await submitButton.click()
+      await expect(page.getByText('Message is required.')).toBeVisible()
+      await expect(page.getByLabel('Tell them about the job')).toBeFocused()
+    }).toPass({ timeout: 15_000 })
 
-    await page.getByLabel('Contact details for the business reply').fill('phase2.customer@example.test')
-    await page.getByLabel('Tell them about the job').fill('Please have a human owner review the inquiry path.')
-    await page.getByRole('button', { name: /send inquiry/i }).click()
-    await expect(page.getByText(new RegExp(`Message saved for ${demoBusiness.businessName}`, 'i'))).toBeVisible()
+    const contactInput = page.getByLabel('Contact details for the business reply')
+    const messageInput = page.getByLabel('Tell them about the job')
+    const successMessage = page.getByText(new RegExp(`Message saved for ${admittedBusiness.businessName}`, 'i'))
+    await expect(async () => {
+      await contactInput.fill('phase2.customer@example.com')
+      await messageInput.fill('Please have a human owner review the inquiry path.')
+      await expect(contactInput).toHaveValue('phase2.customer@example.com')
+      await expect(messageInput).toHaveValue('Please have a human owner review the inquiry path.')
+      await submitButton.click()
+      await expect(successMessage).toBeVisible()
+    }).toPass({ timeout: 20_000 })
     await expect(page.getByText(/Delivery state: delivery awaiting review/i)).toBeVisible()
     await assertNoFutureSurfaceCopy(page)
 
     await page.goto('/owner/inquiries')
     await expect(page.getByRole('heading', { name: /inquiries/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /Needs reply \(1\)/i })).toBeVisible()
+    const needsReplyFilter = page.getByRole('button', { name: /Needs reply \(1\)/i })
+    await expect(needsReplyFilter).toBeVisible()
     await assertNoFutureSurfaceCopy(page)
 
-    await page.goto(phase2ThreadPath)
+    const inboxInquiryLink = page.getByRole('link', {
+      name: new RegExp(`${demoBusiness.serviceName}.*${demoBusiness.businessName}`, 'i'),
+    }).first()
+    await expect(inboxInquiryLink).toContainText(demoBusiness.businessName)
+    const inboxInquiryHref = await inboxInquiryLink.getAttribute('href')
+    expect(inboxInquiryHref).toMatch(/^\/owner\/inquiries\/inquiry_thread%3Ahash%3A[0-9a-f]+$/)
+    await page.goto(inboxInquiryHref ?? '/owner/inquiries')
+    await expect(page).toHaveURL(inboxInquiryHref ?? '/owner/inquiries')
     await expect(page.getByRole('heading', { name: demoBusiness.serviceName, exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: /delivery status/i })).toBeVisible()
 

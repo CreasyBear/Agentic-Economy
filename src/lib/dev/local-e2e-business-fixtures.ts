@@ -11,6 +11,7 @@ export type LocalE2eBusinessFixture = {
   serviceArea: string
   hoursOrUnknown: string
   responseTimeMinutes?: number
+  inquiryAdmission?: 'admitted'
 }
 
 export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
@@ -40,6 +41,7 @@ export const LOCAL_E2E_BUSINESS_FIXTURES: readonly LocalE2eBusinessFixture[] = [
     serviceArea: 'Joondalup and nearby suburbs',
     hoursOrUnknown: 'Mon–Fri 7am–5pm',
     responseTimeMinutes: 20,
+    inquiryAdmission: 'admitted',
   },
   {
     requestedSlug: 'fremantle-coastal-electrical',

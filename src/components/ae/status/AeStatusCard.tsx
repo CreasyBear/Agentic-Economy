@@ -3,7 +3,7 @@ import { ExternalLinkIcon } from 'lucide-react'
 import { AeCopyPublicUrlButton } from '@/components/ae/forms/AeCopyPublicUrlButton'
 import { readPublicCatalogActivationRef } from '@/modules/catalog/public'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
-import type { TrustTier } from '@/modules/business/public'
+import type { AdmissionBlocker } from '@/modules/inquiries/public'
 import { AeStatusBadge } from '@/components/ae/status/AeStatusBadge'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
@@ -21,51 +21,26 @@ type AeStatusCardProps = {
   readback: PublicOwnerStatusRouteReadback
 }
 
-export type OwnerTrustTierProgressStep = {
-  tier: TrustTier
-  label: string
-  state: 'reached' | 'current' | 'next'
-  action: string
-}
 
-const ownerTrustTierOrder: readonly TrustTier[] = ['claimed', 'contact_confirmed', 'listed', 'registry_verified']
+type AdmissionOwnerAction =
+  | Readonly<{ kind: 'link'; href: '/claim' | '/owner/settings'; label: string }>
+  | Readonly<{ kind: 'instruction'; label: string }>
 
-const ownerTrustTierCopy = {
-  claimed: {
-    label: 'Claimed',
-    reached: 'Owner claim recorded.',
-    action: 'Submit a signed-in claim with business name, category, suburb, state, slug, and at least one fact note.',
-  },
-  contact_confirmed: {
-    label: 'Contact confirmed',
-    reached: 'Contact evidence recorded.',
-    action: 'Send AE the public contact evidence you want recorded for this page.',
-  },
-  listed: {
-    label: 'Listed',
-    reached: 'Published service page is live.',
-    action: 'Publish at least one service with service area, hours, and first-request instructions.',
-  },
-  registry_verified: {
-    label: 'Registry checked',
-    reached: 'Registry check recorded.',
-    action: 'Ask AE to run and record the registry check for this page.',
-  },
-} satisfies Record<TrustTier, { label: string; reached: string; action: string }>
-
-export function buildOwnerTrustTierProgress(currentTier: TrustTier): readonly OwnerTrustTierProgressStep[] {
-  const currentIndex = ownerTrustTierOrder.indexOf(currentTier)
-  return ownerTrustTierOrder.map((tier, index) => {
-    const copy = ownerTrustTierCopy[tier]
-    const isReached = index < currentIndex
-    const isCurrent = index === currentIndex
-    return {
-      tier,
-      label: copy.label,
-      state: isCurrent ? 'current' : isReached ? 'reached' : 'next',
-      action: isReached || isCurrent ? copy.reached : copy.action,
-    }
-  })
+function ownerActionForAdmissionBlocker(blocker: AdmissionBlocker): AdmissionOwnerAction {
+  switch (blocker.kind) {
+    case 'not_published':
+      return { kind: 'link', href: '/claim', label: 'Publish this business page' }
+    case 'not_claimed':
+      return { kind: 'instruction', label: 'Contact AE support to repair this business claim.' }
+    case 'destination_unverified':
+      return { kind: 'instruction', label: 'Contact AE support to record a destination check.' }
+    case 'recipient_unresolvable':
+      return { kind: 'instruction', label: 'Contact AE support to refresh the owner email proof.' }
+    case 'suppressed':
+      return { kind: 'instruction', label: 'Contact AE support to restore inquiry receiving.' }
+    case 'not_ready':
+      return { kind: 'instruction', label: 'AE must finish inquiry setup before requests can be received.' }
+  }
 }
 
 export function AeStatusCard({ readback }: AeStatusCardProps) {
@@ -100,18 +75,10 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         <Divider />
         <VStack gap={4}>
           <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2">
-            <li>
-              <AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} />
-            </li>
-            <li>
-              <AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} />
-            </li>
-            <li>
-              <AeStatusBadge status={indexStatusToAeStatus(readback.catalog.indexStatus)} />
-            </li>
-            <li>
-              <AeStatusBadge status={discoveryStatusToAeStatus(readback.catalog.discoveryStatus)} />
-            </li>
+            <li><AeStatusBadge status={publicStatusToAeStatus(readback.catalog.publicStatus)} /></li>
+            <li><AeStatusBadge status={trustTierToAeStatus(readback.catalog.trustTier)} /></li>
+            <li><AeStatusBadge status={indexStatusToAeStatus(readback.catalog.indexStatus)} /></li>
+            <li><AeStatusBadge status={discoveryStatusToAeStatus(readback.catalog.discoveryStatus)} /></li>
           </ul>
           {hasUnavailableCapabilities ? (
             <ul className="m-0 grid list-none gap-3 p-0">
@@ -126,27 +93,31 @@ export function AeStatusCard({ readback }: AeStatusCardProps) {
         </VStack>
         <Divider />
         <VStack gap={3}>
-          <VStack gap={1}>
-            <Text as="h2" type="large" weight="semibold" color="primary" display="block">Page progress</Text>
-            <Text type="supporting" color="secondary" display="block">
-              Each step shows what AE has recorded for this business page and the next concrete owner action.
-            </Text>
-          </VStack>
-          <ol className="m-0 grid list-none gap-3 p-0 md:grid-cols-4" aria-label="Business page progress">
-            {buildOwnerTrustTierProgress(readback.catalog.trustTier).map((step, index) => (
-              <li
-                key={step.tier}
-                className="rounded-lg border border-border bg-card p-3"
-                data-tier={step.tier}
-                data-state={step.state}
-                aria-current={step.state === 'current' ? 'step' : undefined}
-              >
-                <Text type="supporting" color="secondary" display="block">Step {index + 1}</Text>
-                <Text weight="medium" color="primary" display="block">{step.label}</Text>
-                <Text type="supporting" color="secondary" display="block">{step.action}</Text>
-              </li>
-            ))}
-          </ol>
+          <Text as="h2" type="large" weight="semibold" color="primary" display="block">Request admission</Text>
+          {readback.admission.admitted ? (
+            <Text color="primary" display="block">Your business page can receive requests.</Text>
+          ) : (
+            <VStack gap={2}>
+              <Text type="supporting" color="secondary" display="block">
+                These checks currently prevent this business page from receiving requests.
+              </Text>
+              <ul className="m-0 grid list-none gap-3 p-0">
+                {readback.admission.blockers.map((blocker) => {
+                  const action = ownerActionForAdmissionBlocker(blocker)
+                  return (
+                    <li key={blocker.kind} className="rounded-lg border border-border p-3">
+                      <Text weight="medium" color="primary" display="block">{blocker.ownerLabel}</Text>
+                      {action.kind === 'link' ? (
+                        <Button href={action.href} variant="secondary" size="sm" label={action.label} />
+                      ) : (
+                        <Text type="supporting" color="secondary" display="block">{action.label}</Text>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </VStack>
+          )}
         </VStack>
         <Text type="supporting" color="secondary" display="block">{readback.nextAction}</Text>
       </VStack>

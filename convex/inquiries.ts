@@ -13,12 +13,13 @@ import { brandNonEmpty } from '../src/modules/common/ids'
 import { stableHash } from '../src/modules/common/stable-hash'
 import { CapabilityKindValues } from '../src/modules/catalog/public'
 import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '../src/modules/catalog/public'
-import type { BusinessRecord } from '../src/modules/business/public'
+import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '../src/modules/business/public'
 import {
   bindInquiryNotificationDispatches as bindInquiryNotificationDispatchesModule,
   createEmptyInquirySourceState,
   closeInquiry as closeInquiryModule,
   deleteInquiryPrivateContent as deleteInquiryPrivateContentModule,
+  evaluateR1TargetAdmission,
   InquiryNotificationDispatchProviderValues,
   InquiryNotificationStatusValues,
   InquiryNotificationDispatchStatusValues,
@@ -59,6 +60,7 @@ import type {
   InquiryOperationRecord,
   InquiryPrivacyTombstoneRecord,
   InquirySourceState,
+  ResolvableOwnerRecipient,
   InquiryThreadRecord,
   OwnerInboxReadback,
   OwnerInquiryDetailReadback,
@@ -107,10 +109,50 @@ const csrfArgs = {
   ...sourceWriteArgs,
 } as const
 
+const admissionBlocker = v.union(
+  v.object({ kind: v.literal('not_published'), ownerLabel: v.literal('Publish this business page') }),
+  v.object({ kind: v.literal('not_claimed'), ownerLabel: v.literal('Complete the business claim') }),
+  v.object({ kind: v.literal('destination_unverified'), ownerLabel: v.literal('Verify the inquiry destination') }),
+  v.object({ kind: v.literal('recipient_unresolvable'), ownerLabel: v.literal('Add a usable owner notification email') }),
+  v.object({ kind: v.literal('suppressed'), ownerLabel: v.literal('Turn inquiry receiving back on') }),
+  v.object({ kind: v.literal('not_ready'), ownerLabel: v.literal('Finish inquiry setup') }),
+)
+
+const r1TargetAdmission = v.union(
+  v.object({
+    version: v.literal('r1-target-admitted:v1'),
+    admitted: v.literal(true),
+    proof: v.object({
+      kind: v.literal('claimed_owner'),
+      claimRef: v.string(),
+      recipientRef: v.string(),
+      destinationVerifiedAt: v.optional(v.number()),
+    }),
+  }),
+  v.object({
+    version: v.literal('r1-target-admitted:v1'),
+    admitted: v.literal(false),
+    blockers: v.array(admissionBlocker),
+  }),
+)
+
+const ownerTargetAdmissionResult = v.union(
+  v.object({ kind: v.literal('ok'), admission: r1TargetAdmission }),
+  v.object({
+    kind: v.literal('error'),
+    code: v.union(
+      v.literal('owner_not_found'),
+      v.literal('inquiry_target_not_found'),
+      v.literal('inquiry_target_wrong_owner'),
+    ),
+    retryable: v.boolean(),
+    reason: v.string(),
+  }),
+)
+
 const submitInquiryErrorCode = v.union(
-  v.literal('inquiry_target_unavailable'),
-  v.literal('inquiry_target_suppressed'),
-  v.literal('inquiry_target_not_ready'),
+  v.literal('inquiry_target_not_admitted'),
+  v.literal('inquiry_target_admission_conflict'),
   v.literal('inquiry_invalid_input'),
   v.literal('inquiry_duplicate_conflict'),
   v.literal('inquiry_rate_limited'),
@@ -141,6 +183,7 @@ const submitInquiryResult = v.union(
     code: submitInquiryErrorCode,
     retryable: v.boolean(),
     reason: v.string(),
+    blockers: v.optional(v.array(admissionBlocker)),
     field: v.optional(v.string()),
     retryAfter: v.optional(v.number()),
   })
@@ -748,6 +791,70 @@ export const listCurrentOwnerInbox = queryGeneric({
   },
 })
 
+export const readPublicTargetAdmission = queryGeneric({
+  args: inquiryTarget,
+  returns: r1TargetAdmission,
+  handler: async (ctx, args) => {
+    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const admission = evaluateR1TargetAdmission(state, {
+      businessId: brandNonEmpty(args.businessId, 'BusinessId'),
+      serviceId: brandNonEmpty(args.serviceId, 'ServiceId'),
+      capabilityKind: args.capabilityKind,
+    })
+    return admission.admitted
+      ? { ...admission, proof: { ...admission.proof } }
+      : { ...admission, blockers: [...admission.blockers] }
+  },
+})
+
+export const readCurrentOwnerTargetAdmission = queryGeneric({
+  args: inquiryTarget,
+  returns: ownerTargetAdmissionResult,
+  handler: async (ctx, args) => {
+    const owner = await readCurrentOwner(ctx)
+    if (owner.kind === 'denied') {
+      return { kind: 'error' as const, code: 'owner_not_found' as const, retryable: false, reason: owner.reason }
+    }
+
+    const state = await loadInquirySourceState(runtimeDb(ctx.db))
+    const business = state.businesses.find((candidate) => candidate.businessId === args.businessId)
+    const service = state.businessServices.find((candidate) =>
+      candidate.businessId === args.businessId && candidate.serviceId === args.serviceId)
+    const capability = state.serviceCapabilities.find((candidate) =>
+      candidate.businessId === args.businessId
+      && candidate.serviceId === args.serviceId
+      && candidate.kind === args.capabilityKind)
+    if (business === undefined || service === undefined || capability === undefined) {
+      return {
+        kind: 'error' as const,
+        code: 'inquiry_target_not_found' as const,
+        retryable: false,
+        reason: 'Inquiry target was not found.',
+      }
+    }
+    if (business.ownerId !== owner.ownerId) {
+      return {
+        kind: 'error' as const,
+        code: 'inquiry_target_wrong_owner' as const,
+        retryable: false,
+        reason: 'Inquiry target does not belong to the current owner.',
+      }
+    }
+
+    const admission = evaluateR1TargetAdmission(state, {
+      businessId: brandNonEmpty(args.businessId, 'BusinessId'),
+      serviceId: brandNonEmpty(args.serviceId, 'ServiceId'),
+      capabilityKind: args.capabilityKind,
+    })
+    return {
+      kind: 'ok' as const,
+      admission: admission.admitted
+        ? { ...admission, proof: { ...admission.proof } }
+        : { ...admission, blockers: [...admission.blockers] },
+    }
+  },
+})
+
 export const readOperatorInquiryReconstruction = queryGeneric({
   args: {
     threadId: v.optional(v.string()),
@@ -1333,6 +1440,8 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     businessServices,
     serviceCapabilities,
     suppressionRules,
+    owners,
+    claims,
     threads,
     messages,
     notifications,
@@ -1346,6 +1455,8 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     collect(db, 'businessServices'),
     collect(db, 'serviceCapabilities'),
     collect(db, 'suppressionRules'),
+    collect(db, 'owners'),
+    collect(db, 'claims'),
     collect(db, 'inquiryThreads'),
     collect(db, 'inquiryMessages'),
     collect(db, 'inquiryNotifications'),
@@ -1384,6 +1495,9 @@ async function loadInquirySourceState(db: RuntimeDb): Promise<InquirySourceState
     businessServices: businessServices.map(toBusinessServiceRecord),
     serviceCapabilities: serviceCapabilities.map(toServiceCapabilityRecord),
     suppressionRules: suppressionRules.map(toSuppressionRuleRecord),
+    owners: owners.map(toBusinessOwnerRecord),
+    claims: claims.map(toClaimRecord),
+    resolvableOwnerRecipients: owners.flatMap(toResolvableOwnerRecipient),
     threads: threads.map(toInquiryThreadRecord),
     messages: messages.map(toInquiryMessageRecord),
     notifications: notifications.map(toInquiryNotificationRecord),
@@ -1668,6 +1782,44 @@ function toBusinessRecord(row: RuntimeDocument): BusinessRecord {
     createdAt: numberField(row, 'createdAt'),
     updatedAt: numberField(row, 'updatedAt'),
   }
+}
+
+function toBusinessOwnerRecord(row: RuntimeDocument): BusinessOwnerRecord {
+  const displayName = optionalStringField(row, 'displayName')
+  const emailHash = optionalStringField(row, 'emailHash')
+  return {
+    ownerId: brandNonEmpty(row._id, 'OwnerId'),
+    clerkUserId: stringField(row, 'clerkUserId'),
+    ...(displayName === undefined ? {} : { displayName }),
+    ...(emailHash === undefined ? {} : { emailHash }),
+    createdAt: numberField(row, 'createdAt'),
+    updatedAt: numberField(row, 'updatedAt'),
+  }
+}
+
+function toClaimRecord(row: RuntimeDocument): ClaimRecord {
+  const businessId = optionalStringField(row, 'businessId')
+  return {
+    claimId: brandNonEmpty(row._id, 'ClaimId'),
+    ownerId: brandNonEmpty(stringField(row, 'ownerId'), 'OwnerId'),
+    ...(businessId === undefined ? {} : { businessId: brandNonEmpty(businessId, 'BusinessId') }),
+    slug: brandNonEmpty(stringField(row, 'slug'), 'Slug'),
+    status: claimRecordStatus(row),
+    submittedFactsHash: brandNonEmpty(stringField(row, 'submittedFactsHash'), 'SourceHash'),
+    createdAt: numberField(row, 'createdAt'),
+    updatedAt: numberField(row, 'updatedAt'),
+  }
+}
+
+function toResolvableOwnerRecipient(row: RuntimeDocument): ResolvableOwnerRecipient[] {
+  const clerkUserId = stringField(row, 'clerkUserId').trim()
+  const emailHash = optionalStringField(row, 'emailHash')?.trim()
+  if (clerkUserId.length === 0 || emailHash === undefined || emailHash.length === 0) return []
+  return [{
+    ownerId: brandNonEmpty(row._id, 'OwnerId'),
+    recipientRef: `clerk-owner-email:${emailHash}`,
+    resolvedAt: numberField(row, 'updatedAt'),
+  }]
 }
 
 function toBusinessServiceRecord(row: RuntimeDocument): BusinessServiceRecord {
@@ -2041,6 +2193,7 @@ function summarizeSubmitError(result: Extract<ReturnType<typeof submitInquiryMod
     code: result.code,
     retryable: result.retryable,
     reason: result.reason,
+    ...(result.blockers === undefined ? {} : { blockers: [...result.blockers] }),
     ...(result.field === undefined ? {} : { field: result.field }),
     ...(result.retryAfter === undefined ? {} : { retryAfter: result.retryAfter }),
   }
@@ -2593,6 +2746,13 @@ function trustTier(row: RuntimeDocument): BusinessRecord['trustTier'] {
 
 function claimStatus(row: RuntimeDocument): BusinessRecord['claimStatus'] {
   const value = stringField(row, 'claimStatus')
+  return value === 'published' || value === 'contested' || value === 'disputed' || value === 'suppressed' || value === 'draft'
+    ? value
+    : 'authenticated'
+}
+
+function claimRecordStatus(row: RuntimeDocument): ClaimRecord['status'] {
+  const value = stringField(row, 'status')
   return value === 'published' || value === 'contested' || value === 'disputed' || value === 'suppressed' || value === 'draft'
     ? value
     : 'authenticated'

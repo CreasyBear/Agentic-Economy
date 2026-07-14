@@ -8,8 +8,11 @@ import {
   sanitizeInquirySlug,
   validateInquirySearch,
 } from '@/modules/inquiries/inquiry-prefill'
-import { buildPublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+import { buildPublicInquiryAffordance, selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
 import { brandNonEmpty } from '@/modules/common/ids'
+import { stableHash } from '@/modules/common/stable-hash'
+import * as inquiries from '@/modules/inquiries/public'
+import type { CapabilityLaunchSupportRecord, InquirySourceState } from '@/modules/inquiries/public'
 import type { PublicRouteCatalogContract, PublicRouteServiceContract } from '@/modules/catalog/public'
 
 describe('sanitizeInquiryDraft', () => {
@@ -103,6 +106,9 @@ describe('buildAnswerInquiryHref', () => {
 })
 
 const DEMO_BUSINESS_ID = brandNonEmpty('business:demo', 'BusinessId')
+const DEMO_OWNER_ID = brandNonEmpty('owner:demo', 'OwnerId')
+const DEMO_CLAIM_ID = brandNonEmpty('claim:demo', 'ClaimId')
+const NOW = 1_900_000_000_000
 
 function inquiryService(slug: string, name: string): PublicRouteServiceContract {
   const serviceId = brandNonEmpty(`service:${slug}`, 'ServiceId')
@@ -160,9 +166,127 @@ function twoServiceCatalog(): PublicRouteCatalogContract {
   }
 }
 
+function admittedInquiryState(catalog: PublicRouteCatalogContract): InquirySourceState {
+  return inquiries.createEmptyInquirySourceState({
+    businesses: [
+      {
+        businessId: catalog.businessId,
+        ownerId: DEMO_OWNER_ID,
+        slug: catalog.slug,
+        name: catalog.name,
+        normalizedName: catalog.name.toLowerCase(),
+        category: catalog.category,
+        suburb: catalog.suburb,
+        stateTerritory: catalog.stateTerritory,
+        publicStatus: 'published',
+        trustTier: catalog.trustTier,
+        claimStatus: 'published',
+        sourceHash: stableHash({ businessId: catalog.businessId }),
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
+    businessServices: catalog.services.map((service, sortOrder) => ({
+      serviceId: service.serviceId,
+      serviceSlug: service.serviceSlug,
+      businessId: catalog.businessId,
+      name: service.name,
+      category: service.category,
+      summary: service.summary,
+      serviceArea: service.serviceArea,
+      hoursOrUnknown: service.hoursOrUnknown,
+      status: service.status,
+      sortOrder,
+      sourceHash: stableHash({ serviceId: service.serviceId }),
+      createdAt: NOW,
+      updatedAt: NOW,
+    })),
+    serviceCapabilities: catalog.services.flatMap((service) => service.capabilities.map((capability) => ({
+      businessId: catalog.businessId,
+      serviceId: service.serviceId,
+      kind: capability.kind,
+      status: capability.status,
+      firstRequest: capability.firstRequest,
+      callable: capability.callable,
+      paymentRequired: capability.paymentRequired,
+      sourceHash: stableHash({ serviceId: service.serviceId, capability: capability.kind }),
+      createdAt: NOW,
+      updatedAt: NOW,
+      ...(capability.reason === undefined ? {} : { reason: capability.reason }),
+    }))),
+    owners: [
+      {
+        ownerId: DEMO_OWNER_ID,
+        clerkUserId: 'clerk:owner-demo',
+        displayName: 'Demo Plumbing Owner',
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
+    claims: [
+      {
+        claimId: DEMO_CLAIM_ID,
+        ownerId: DEMO_OWNER_ID,
+        businessId: catalog.businessId,
+        slug: catalog.slug,
+        status: 'published',
+        submittedFactsHash: stableHash({ claimId: DEMO_CLAIM_ID }),
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
+    resolvableOwnerRecipients: [
+      {
+        ownerId: DEMO_OWNER_ID,
+        recipientRef: 'email:owner@demo-plumbing.example.test',
+        resolvedAt: NOW,
+      },
+    ],
+    capabilityLaunchSupportRecords: [inquirySupportRecord()],
+  })
+}
+
+function inquirySupportRecord(): CapabilityLaunchSupportRecord {
+  return {
+    capability: 'human_inquiry_owner_inbox',
+    primaryOwnerRef: 'owner:demo',
+    primaryAdminOperatorRef: 'admin:demo-primary',
+    backupOwnerRef: 'owner:demo-backup',
+    backupAdminOperatorRef: 'admin:demo-backup',
+    supportedStage: 'manual_support',
+    supportedChannels: ['public_inquiry'],
+    capacityThreshold: { maxOpenThreads: 10, maxFailedNotifications: 2 },
+    backlogAgeThresholdMs: 86_400_000,
+    phaseIncidentCounts: {
+      retryExhausted: 0,
+      noRepair: 0,
+      unresolvedDeliveryFailures: 0,
+      abuseBlocked: 0,
+      privacyDeletes: 0,
+    },
+    supportEscalationPath: 'Demo inquiry support queue.',
+    claimDisablePath: 'Disable the demo inquiry capability.',
+    perChannelKillRules: [
+      {
+        channel: 'public_claim',
+        trigger: 'Inquiry admission becomes unavailable.',
+        action: 'Hide inquiry availability.',
+      },
+    ],
+    evidenceRefs: ['tests/unit/inquiries/inquiry-prefill.test.ts'],
+    sourceHash: stableHash({ support: 'demo-inquiry' }),
+    correlationId: brandNonEmpty('correlation:demo-inquiry', 'CorrelationId'),
+    lastReviewedAt: NOW,
+  }
+}
+
 describe('buildPublicInquiryAffordance service preselection', () => {
-  it('resolves the first inquiry-ready service by default', () => {
-    expect(buildPublicInquiryAffordance(twoServiceCatalog())).toMatchObject({
+  it('resolves the first inquiry-ready service from canonical admission by default', () => {
+    const catalog = twoServiceCatalog()
+    const target = selectPublicInquiryTarget(catalog)
+    if (target === undefined) throw new Error('Expected an inquiry target.')
+    const admission = inquiries.evaluateR1TargetAdmission(admittedInquiryState(catalog), target)
+    expect(buildPublicInquiryAffordance(catalog, undefined, admission)).toMatchObject({
       kind: 'available',
       serviceName: 'Emergency plumbing',
       target: { serviceId: 'service:emergency-plumbing' },
@@ -170,7 +294,8 @@ describe('buildPublicInquiryAffordance service preselection', () => {
   })
 
   it('preselects a published service when the prefill names it', () => {
-    expect(buildPublicInquiryAffordance(twoServiceCatalog(), 'blocked-drains')).toMatchObject({
+    const catalog = twoServiceCatalog()
+    expect(buildPublicInquiryAffordance(catalog, 'blocked-drains', admittedInquiryState(catalog))).toMatchObject({
       kind: 'available',
       serviceName: 'Blocked drains',
       target: { serviceId: 'service:blocked-drains' },
@@ -178,7 +303,8 @@ describe('buildPublicInquiryAffordance service preselection', () => {
   })
 
   it('falls back to the first inquiry-ready service when the preselect is unknown', () => {
-    expect(buildPublicInquiryAffordance(twoServiceCatalog(), 'does-not-exist')).toMatchObject({
+    const catalog = twoServiceCatalog()
+    expect(buildPublicInquiryAffordance(catalog, 'does-not-exist', admittedInquiryState(catalog))).toMatchObject({
       kind: 'available',
       serviceName: 'Emergency plumbing',
     })

@@ -7,6 +7,8 @@ import {
   listCurrentOwnerInbox,
   markCurrentOwnerInquiryRead,
   readCurrentOwnerInquiryDeliveryReadback,
+  readPublicTargetAdmission,
+  readCurrentOwnerTargetAdmission,
   readCurrentOwnerInquiry,
   readCurrentOwnerInquiryPrivacyTombstone,
   replyToCurrentOwnerInquiry,
@@ -73,6 +75,16 @@ type SubmitOk = {
   code: 'inquiry_submitted' | 'inquiry_replayed'
   thread: { threadId: string }
 }
+
+const publicTargetAdmissionQuery = readPublicTargetAdmission as unknown as {
+  _handler: (ctx: AuthCtx, args: SubmitArgs['target']) => Promise<unknown>
+}
+const publicTargetAdmissionHandler = publicTargetAdmissionQuery._handler
+
+const targetAdmissionQuery = readCurrentOwnerTargetAdmission as unknown as {
+  _handler: (ctx: AuthCtx, args: SubmitArgs['target']) => Promise<unknown>
+}
+const targetAdmissionHandler = targetAdmissionQuery._handler
 
 const submitHandler = (submitPublicInquiry as unknown as { _handler: (ctx: AuthCtx, args: SubmitArgs) => Promise<unknown> })._handler
 const listHandler = (listCurrentOwnerInbox as unknown as { _handler: (ctx: AuthCtx, args: Record<string, never>) => Promise<unknown> })._handler
@@ -193,6 +205,101 @@ describe('Convex inquiry runtime bridge', () => {
         messages: [expect.objectContaining({ body: 'Pipe burst under the sink. Please ask the owner to contact me.' })],
       },
     })
+  })
+
+  it('returns canonical public target admission without owner source records', async () => {
+    const db = seededInquiryDb()
+    const admission = await publicTargetAdmissionHandler(authCtx(db, null), {
+      businessId: 'businesses:1',
+      serviceId: 'businessServices:1',
+      capabilityKind: 'phone_inquiry',
+    })
+
+    expect(admission).toEqual({
+      version: 'r1-target-admitted:v1',
+      admitted: true,
+      proof: {
+        kind: 'claimed_owner',
+        claimRef: 'claims:1',
+        recipientRef: 'clerk-owner-email:email:user_sam',
+      },
+    })
+    expect(admission).not.toHaveProperty('owner')
+    expect(admission).not.toHaveProperty('claim')
+    expect(admission).not.toHaveProperty('address')
+  })
+
+  it('reads canonical target admission only for its authenticated owner and distinguishes an unknown target', async () => {
+    const db = seededInquiryDb()
+    const target: SubmitArgs['target'] = {
+      businessId: 'businesses:1',
+      serviceId: 'businessServices:1',
+      capabilityKind: 'phone_inquiry',
+    }
+
+    await expect(targetAdmissionHandler(authCtx(db, sam()), target)).resolves.toEqual({
+      kind: 'ok',
+      admission: {
+        version: 'r1-target-admitted:v1',
+        admitted: true,
+        proof: {
+          kind: 'claimed_owner',
+          claimRef: 'claims:1',
+          recipientRef: 'clerk-owner-email:email:user_sam',
+        },
+      },
+    })
+    await expect(targetAdmissionHandler(authCtx(db, alex()), target)).resolves.toEqual({
+      kind: 'error',
+      code: 'inquiry_target_wrong_owner',
+      retryable: false,
+      reason: 'Inquiry target does not belong to the current owner.',
+    })
+    await expect(targetAdmissionHandler(authCtx(db, sam()), {
+      ...target,
+      serviceId: 'businessServices:unknown',
+    })).resolves.toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_found',
+      retryable: false,
+      reason: 'Inquiry target was not found.',
+    })
+  })
+
+  it('refuses an otherwise ready published target without a matching published claim and persists no inquiry effects', async () => {
+    const db = seededInquiryDb()
+    db.remove('claims', 'claims:1')
+
+    const rejectedSubmit = await submitHandler(authCtx(db, null), submitArgs('missing-claim'))
+
+    expect(rejectedSubmit).toMatchObject({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      blockers: [{ kind: 'not_claimed', ownerLabel: 'Complete the business claim' }],
+    })
+    expect(db.dump('inquiryThreads')).toHaveLength(0)
+    expect(db.dump('inquiryMessages')).toHaveLength(0)
+    expect(db.dump('inquiryNotifications')).toHaveLength(0)
+  })
+
+  it('refuses a claimed owner with Clerk identity but no email recipient and persists no inquiry effects', async () => {
+    const db = seededInquiryDb()
+    await db.patch('owners:1', { emailHash: undefined })
+
+    const rejectedSubmit = await submitHandler(authCtx(db, null), submitArgs('missing-owner-email'))
+
+    expect(rejectedSubmit).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
+    })
+    expect(db.dump('inquiryThreads')).toHaveLength(0)
+    expect(db.dump('inquiryMessages')).toHaveLength(0)
+    expect(db.dump('inquiryNotifications')).toHaveLength(0)
+    expect(db.dump('notificationDispatches')).toHaveLength(0)
   })
 
   it('rejects raw source-write nonce replay before downstream inquiry idempotency', async () => {
@@ -599,6 +706,15 @@ class FakeDb implements Db {
     this.table(tableName).push(row)
   }
 
+  remove(tableName: string, id: string): void {
+    const rows = this.table(tableName)
+    const index = rows.findIndex((row) => row._id === id)
+    if (index === -1) {
+      throw new Error(`Missing row ${id}`)
+    }
+    rows.splice(index, 1)
+  }
+
   dump(tableName: string): Row[] {
     return [...this.table(tableName)]
   }
@@ -658,6 +774,17 @@ function seededInquiryDb(): FakeDb {
     sourceHash: 'source:business:sam',
     createdAt: 3,
     updatedAt: 3,
+  })
+  db.seed('claims', {
+    _id: 'claims:1',
+    _creationTime: 4,
+    ownerId: 'owners:1',
+    businessId: 'businesses:1',
+    slug: 'sam-plumbing',
+    status: 'published',
+    submittedFactsHash: 'source:business:sam',
+    createdAt: 4,
+    updatedAt: 4,
   })
   db.seed('businessServices', {
     _id: 'businessServices:1',

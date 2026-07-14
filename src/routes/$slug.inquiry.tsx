@@ -21,11 +21,13 @@ import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { AeActionButton } from '@/components/ae/motion/AeActionButton'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
 import {
+  readPublicTargetAdmissionServer,
   submitPublicInquiryServer,
   type PublicInquirySubmitServerResult,
 } from '@/modules/inquiries/inquiry.functions'
 import {
   readPublicInquiryRouteReadback,
+  selectPublicInquiryTarget,
   validatePublicInquiryFormInput,
   type PublicInquiryFormInput,
   type PublicInquiryFormField,
@@ -62,7 +64,18 @@ export const Route = createFileRoute('/$slug/inquiry')({
   },
   loader: async ({ params }) => {
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
-    return readPublicInquiryRouteReadback({ slug: params.slug, page })
+    if (page.kind !== 'available') {
+      return readPublicInquiryRouteReadback({ slug: params.slug, page })
+    }
+    const target = selectPublicInquiryTarget(page.catalog)
+    const admissionResult = target === undefined
+      ? undefined
+      : await readPublicTargetAdmissionServer({ data: target })
+    return readPublicInquiryRouteReadback({
+      slug: params.slug,
+      page,
+      ...(admissionResult?.kind === 'ok' ? { admission: admissionResult.admission } : {}),
+    })
   },
   head: () => ({
     meta: [

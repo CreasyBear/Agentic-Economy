@@ -19,6 +19,8 @@ import {
   submitDurablePublicOwnerClaimFlow,
   submitPublicOwnerClaimFlow,
 } from '@/modules/catalog/public'
+import { readCurrentOwnerTargetAdmissionThroughSource } from '@/modules/inquiries/inquiry.functions'
+import { selectOwnerAdmissionTarget } from '@/modules/inquiries/route-readbacks'
 import { SourceWriteAdmissionError, type SourceWriteAdmission } from '@/modules/security/source-write-admission'
 import type {
   PublicBusinessPageRouteReadbackResult,
@@ -174,7 +176,7 @@ async function submitOwnerClaimThroughSource(
   context?: unknown
 ): Promise<PublicOwnerClaimFlowRouteResult> {
   if (isLocalE2EAuthBypassEnabled()) {
-    return redactOwnerClaimResult(submitDurablePublicOwnerClaimFlow(input))
+    return await redactOwnerClaimResult(submitDurablePublicOwnerClaimFlow(input))
   }
 
   try {
@@ -243,10 +245,7 @@ async function submitOwnerClaimThroughSource(
       kind: 'ok',
       code: 'claim_flow_published',
       catalog: publicCatalog,
-      readback: {
-        ...redactOwnerStatusReadback(buildPublicOwnerStatusReadback(publish.catalog)),
-        catalog: publicCatalog,
-      },
+      readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(publish.catalog)),
     }
   } catch (error) {
     return ownerClaimSourceWriteError(error)
@@ -271,24 +270,24 @@ export async function readOwnerStatusThroughSource(slug: string | undefined): Pr
       : await ownerCatalogSourcePort().readPublicCatalogBySlug({ slug })
 
     return result.kind === 'available'
-      ? { kind: 'available', readback: redactOwnerStatusReadback(buildPublicOwnerStatusReadback(result.catalog)) }
+      ? { kind: 'available', readback: await buildOwnerStatusRouteReadback(buildPublicOwnerStatusReadback(result.catalog)) }
       : { kind: 'not_found', reason: result.reason }
   } catch {
     return { kind: 'unavailable', reason: 'source_unavailable', retryable: true }
   }
 }
 
-function readLocalOwnerStatus(slug: string | undefined): PublicOwnerStatusRouteReadbackResult {
+async function readLocalOwnerStatus(slug: string | undefined): Promise<PublicOwnerStatusRouteReadbackResult> {
   const defaultReadback = getDefaultPublicOwnerStatusReadback()
   const normalizedSlug = slug?.trim()
   if (normalizedSlug === undefined || normalizedSlug.length === 0 || normalizedSlug === defaultReadback.catalog.slug) {
-    return { kind: 'available', readback: redactOwnerStatusReadback(defaultReadback) }
+    return { kind: 'available', readback: await buildOwnerStatusRouteReadback(defaultReadback) }
   }
 
   const readback = getPublicOwnerStatusReadbackBySlug(normalizedSlug)
   return readback === undefined
     ? { kind: 'not_found', reason: 'not_public' }
-    : { kind: 'available', readback: redactOwnerStatusReadback(readback) }
+    : { kind: 'available', readback: await buildOwnerStatusRouteReadback(readback) }
 }
 
 async function readPublicBusinessPageThroughSource(slug: string): Promise<PublicBusinessPageRouteReadbackResult> {
@@ -302,7 +301,7 @@ async function readPublicBusinessPageThroughSource(slug: string): Promise<Public
     : { kind: 'not_found', reason: 'not_public' }
 }
 
-function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): PublicOwnerClaimFlowRouteResult {
+async function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): Promise<PublicOwnerClaimFlowRouteResult> {
   if (result.kind === 'error') {
     return result
   }
@@ -311,19 +310,25 @@ function redactOwnerClaimResult(result: PublicOwnerClaimFlowResult): PublicOwner
   return {
     ...result,
     catalog,
-    readback: {
-      ...redactOwnerStatusReadback(result.readback),
-      catalog,
-    },
+    readback: await buildOwnerStatusRouteReadback(result.readback),
   }
 }
 
-function redactOwnerStatusReadback(readback: PublicOwnerStatusReadback): PublicOwnerStatusRouteReadback {
+async function buildOwnerStatusRouteReadback(readback: PublicOwnerStatusReadback): Promise<PublicOwnerStatusRouteReadback> {
+  const target = selectOwnerAdmissionTarget(readback.catalog)
+  if (target === undefined) throw new Error('No inquiry target exists for this business page.')
+  const result = await readCurrentOwnerTargetAdmissionThroughSource(target)
+  if (result.kind === 'error') {
+    throw new Error(result.reason)
+  }
+
   return {
     ...readback,
     catalog: redactCatalogSourceHashes(readback.catalog),
+    admission: result.admission,
   }
 }
+
 
 function redactPublicBusinessPageReadback(readback: PublicBusinessPageReadbackResult): PublicBusinessPageRouteReadbackResult {
   return readback.kind === 'available' ? { ...readback, catalog: redactCatalogSourceHashes(readback.catalog) } : readback

@@ -10,7 +10,8 @@ import { AeProviderListingPage } from '@/components/ae/listing/AeProviderListing
 import { AePublicShell } from '@/components/ae/layout/AePublicShell'
 import { readCanonicalBaseUrlServer } from '@/lib/server/canonical-url.functions'
 import { readPublicBusinessPageServer } from '@/modules/catalog/owner-claim.functions'
-import { buildPublicInquiryAffordance } from '@/modules/inquiries/route-readbacks'
+import { readPublicTargetAdmissionServer } from '@/modules/inquiries/inquiry.functions'
+import { buildPublicInquiryAffordance, selectPublicInquiryTarget } from '@/modules/inquiries/route-readbacks'
 import { serializeJsonLd } from '@/modules/seo/public'
 import { buildPublicBusinessRouteSeo } from '@/modules/seo/public-route'
 
@@ -31,10 +32,18 @@ export const Route = createFileRoute('/$slug')({
   loader: async ({ params }) => {
     const page = await readPublicBusinessPageServer({ data: { slug: params.slug } })
     if (page.kind === 'not_found') {
-      return { page, seo: undefined }
+      return { page, seo: undefined, admission: undefined }
     }
+    const target = selectPublicInquiryTarget(page.catalog)
+    const admissionResult = target === undefined
+      ? undefined
+      : await readPublicTargetAdmissionServer({ data: target })
     const seo = buildPublicBusinessRouteSeo(page.catalog, await readCanonicalBaseUrlServer())
-    return { page, seo }
+    return {
+      page,
+      seo,
+      admission: admissionResult?.kind === 'ok' ? admissionResult.admission : undefined,
+    }
   },
   head: ({ loaderData }) => {
     if (loaderData?.seo === undefined) {
@@ -203,7 +212,7 @@ function PublicBusinessRoute() {
   const { slug } = Route.useParams()
   const { from, id } = Route.useSearch()
   const location = useLocation()
-  const { page } = Route.useLoaderData()
+  const { page, admission } = Route.useLoaderData()
 
   if (location.pathname !== `/${slug}`) {
     return <Outlet />
@@ -224,7 +233,7 @@ function PublicBusinessRoute() {
   }
 
   const catalog = page.catalog
-  const inquiryAffordance = buildPublicInquiryAffordance(catalog)
+  const inquiryAffordance = buildPublicInquiryAffordance(catalog, undefined, admission)
   const agentJsonUrl = `/api/businesses/${catalog.slug}`
 
   return (

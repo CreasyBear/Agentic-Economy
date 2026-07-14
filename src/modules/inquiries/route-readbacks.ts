@@ -8,14 +8,16 @@ import type {
 import type { OperationKey, CorrelationId } from '@/modules/common/ids'
 import {
   createEmptyInquirySourceState,
-  evaluateInquiryLaunchSupportReadiness,
+  evaluateR1TargetAdmission,
   submitInquiry,
+  type AdmissionBlocker,
   type InquiryNotificationStatus,
   type InquiryOriginRef,
   type InquirySourceState,
   type InquiryTargetRef,
   type PublicInquiryContactInput,
   type SubmitInquiryErrorCode,
+  type R1TargetAdmission,
 } from '@/modules/inquiries/public'
 
 export type PublicInquiryFormInput = {
@@ -50,6 +52,7 @@ export type PublicInquiryAffordance =
       kind: 'unavailable'
       label: 'Inquiry unavailable'
       reason: string
+      blockers?: readonly AdmissionBlocker[]
       businessName: string
       serviceName?: string
     }
@@ -69,6 +72,7 @@ export type PublicInquiryRouteReadback =
       kind: 'unavailable'
       slug: string
       reason: string
+      blockers?: readonly AdmissionBlocker[]
       businessName?: string
       serviceName?: string
     }
@@ -87,6 +91,7 @@ export type PublicInquiryRouteInput = {
   slug: string
   page?: PublicBusinessPageRouteReadbackResult
   state?: InquirySourceState
+  admission?: R1TargetAdmission
   preferredServiceSlug?: string
 }
 
@@ -117,6 +122,7 @@ export type PublicInquiryRouteSubmitResult =
       code: SubmitInquiryErrorCode
       reason: string
       retryable: boolean
+      blockers?: readonly AdmissionBlocker[]
       field?: string
       retryAfter?: number
       state?: InquirySourceState
@@ -165,6 +171,7 @@ export function validatePublicInquiryFormInput(input: PublicInquiryFormInput): P
 export function buildPublicInquiryAffordance(
   catalog: PublicRouteCatalogContract,
   preferredServiceSlug?: string,
+  admissionOrState?: R1TargetAdmission | InquirySourceState,
 ): PublicInquiryAffordance {
   const match = firstInquiryCapability(catalog, preferredServiceSlug)
   if (match === undefined) {
@@ -178,6 +185,27 @@ export function buildPublicInquiryAffordance(
     }
   }
 
+  const target = {
+    businessId: catalog.businessId,
+    serviceId: match.service.serviceId,
+    capabilityKind: match.capability.kind,
+  } satisfies InquiryTargetRef
+  const admission = admissionOrState === undefined
+    ? undefined
+    : 'version' in admissionOrState
+      ? admissionOrState
+      : evaluateR1TargetAdmission(admissionOrState, target)
+  if (admission?.admitted !== true) {
+    return {
+      kind: 'unavailable',
+      label: 'Inquiry unavailable',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
+      businessName: catalog.name,
+      serviceName: match.service.name,
+      ...(admission === undefined ? {} : { blockers: admission.blockers }),
+    }
+  }
+
   return {
     kind: 'available',
     label: 'Send inquiry',
@@ -185,11 +213,7 @@ export function buildPublicInquiryAffordance(
     businessName: catalog.name,
     serviceName: match.service.name,
     disclosure: match.capability.firstRequest.publicDisclosure,
-    target: {
-      businessId: catalog.businessId,
-      serviceId: match.service.serviceId,
-      capabilityKind: match.capability.kind,
-    },
+    target,
   }
 }
 
@@ -203,26 +227,18 @@ export function readPublicInquiryRouteReadback(input: PublicInquiryRouteInput): 
     }
   }
 
-  if (input.state !== undefined) {
-    const supportReadiness = evaluateInquiryLaunchSupportReadiness(input.state)
-    if (supportReadiness.kind !== 'ready') {
-      const serviceName = page.catalog.services[0]?.name
-      return {
-        kind: 'unavailable',
-        slug: input.slug,
-        reason: supportReadiness.reason,
-        businessName: page.catalog.name,
-        ...(serviceName === undefined ? {} : { serviceName }),
-      }
-    }
-  }
 
-  const affordance = buildPublicInquiryAffordance(page.catalog, input.preferredServiceSlug)
+  const affordance = buildPublicInquiryAffordance(
+    page.catalog,
+    input.preferredServiceSlug,
+    input.admission ?? input.state,
+  )
   if (affordance.kind === 'unavailable') {
     return {
       kind: 'unavailable',
       slug: input.slug,
       reason: affordance.reason,
+      ...(affordance.blockers === undefined ? {} : { blockers: affordance.blockers }),
       businessName: affordance.businessName,
       ...(affordance.serviceName === undefined ? {} : { serviceName: affordance.serviceName }),
     }
@@ -256,9 +272,10 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
   if (readback.kind !== 'available') {
     return {
       kind: 'error',
-      code: 'inquiry_target_unavailable',
+      code: 'inquiry_target_not_admitted',
       retryable: false,
       reason: readback.reason,
+      ...(readback.blockers === undefined ? {} : { blockers: readback.blockers }),
     }
   }
 
@@ -283,6 +300,7 @@ export function submitPublicInquiryRouteReadback(input: PublicInquiryRouteSubmit
       code: result.code,
       retryable: result.retryable,
       reason: result.reason,
+      ...(result.blockers === undefined ? {} : { blockers: result.blockers }),
       ...(result.field === undefined ? {} : { field: result.field }),
       ...(result.retryAfter === undefined ? {} : { retryAfter: result.retryAfter }),
       ...(result.state === undefined ? {} : { state: result.state }),
@@ -411,6 +429,37 @@ function firstRequestForService(
       rawContactExcluded: true,
     }
   )
+}
+
+export function selectPublicInquiryTarget(
+  catalog: PublicRouteCatalogContract,
+  preferredServiceSlug?: string,
+): InquiryTargetRef | undefined {
+  const match = firstInquiryCapability(catalog, preferredServiceSlug)
+  return match === undefined
+    ? undefined
+    : {
+        businessId: catalog.businessId,
+        serviceId: match.service.serviceId,
+        capabilityKind: match.capability.kind,
+      }
+}
+
+export function selectOwnerAdmissionTarget(
+  catalog: PublicRouteCatalogContract,
+): InquiryTargetRef | undefined {
+  for (const service of catalog.services) {
+    const capability = service.capabilities[0]
+    if (capability !== undefined) {
+      return {
+        businessId: catalog.businessId,
+        serviceId: service.serviceId,
+        capabilityKind: capability.kind,
+      }
+    }
+  }
+
+  return undefined
 }
 
 function firstInquiryCapability(

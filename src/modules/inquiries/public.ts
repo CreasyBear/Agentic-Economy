@@ -96,6 +96,7 @@ export type {
   OwnerInboxReadback,
   OwnerInquiryDetailReadback,
   PublicInquiryContactInput,
+  ResolvableOwnerRecipient,
 } from './internal/schema'
 export {
   defaultInquiryOperatorControls,
@@ -111,6 +112,16 @@ export {
 } from './internal/schema'
 export { findUnsafeInquiryActionIntent } from './internal/policy'
 export type { InquiryUnsafeActionIntent } from './internal/policy'
+export {
+  evaluateR1TargetAdmission,
+  R1TargetAdmissionVersion,
+} from './internal/admission'
+export type {
+  AdmissionBlocker,
+  AdmissionProofClass,
+  R1TargetAdmission,
+  R1TargetAdmissionState,
+} from './internal/admission'
 
 export const createEmptyInquirySourceState = createEmptyInquirySourceStateImpl
 export const submitInquiry = submitInquiryImpl

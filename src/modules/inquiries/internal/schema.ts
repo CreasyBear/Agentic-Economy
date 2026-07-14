@@ -1,4 +1,4 @@
-import type { BusinessRecord } from '@/modules/business/public'
+import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
 import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '@/modules/catalog/public'
 import type {
   Brand,
@@ -87,6 +87,13 @@ export type InquiryTargetRef = {
   businessId: BusinessId
   serviceId: ServiceId
   capabilityKind: CapabilityKind
+}
+
+export type ResolvableOwnerRecipient = {
+  ownerId: OwnerId
+  recipientRef: string
+  resolvedAt: number
+  destinationVerifiedAt?: number
 }
 
 export type InquiryOriginRef = {
@@ -267,6 +274,9 @@ export type InquirySourceState = {
   businessServices: BusinessServiceRecord[]
   serviceCapabilities: ServiceCapabilityRecord[]
   suppressionRules: SuppressionRuleRecord[]
+  owners: BusinessOwnerRecord[]
+  claims: ClaimRecord[]
+  resolvableOwnerRecipients: ResolvableOwnerRecipient[]
   threads: InquiryThreadRecord[]
   messages: InquiryMessageRecord[]
   notifications: InquiryNotificationRecord[]

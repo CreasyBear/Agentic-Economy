@@ -6,6 +6,7 @@ import { stableHash, type StableHashValue } from '@/modules/common/stable-hash'
 import type { ModuleResult } from '@/modules/common/result'
 import { rateLimitClaim } from '@/modules/security/public'
 import type { SuppressionRuleRecord } from '@/modules/security/public'
+import { evaluateR1TargetAdmission, type AdmissionBlocker, type R1TargetAdmissionState } from './admission'
 import {
   defaultInquiryOperatorControls,
   InquiryUnsafeFutureSurfaceFieldValues,
@@ -66,9 +67,8 @@ export type SubmitInquiryCommand = {
 }
 
 export type SubmitInquiryErrorCode =
-  | 'inquiry_target_unavailable'
-  | 'inquiry_target_suppressed'
-  | 'inquiry_target_not_ready'
+  | 'inquiry_target_not_admitted'
+  | 'inquiry_target_admission_conflict'
   | 'inquiry_invalid_input'
   | 'inquiry_duplicate_conflict'
   | 'inquiry_rate_limited'
@@ -84,7 +84,7 @@ export type SubmitInquiryResult = ModuleResult<
     message: InquiryMessageRecord
     notification: InquiryNotificationRecord
   },
-  { reason: string; field?: string; retryAfter?: number; state?: InquirySourceState }
+  { reason: string; blockers?: readonly AdmissionBlocker[]; field?: string; retryAfter?: number; state?: InquirySourceState }
 >
 
 export type BindInquiryNotificationDispatchesCommand = {
@@ -221,6 +221,9 @@ export function createEmptyInquirySourceState(input: Partial<InquirySourceState>
     businessServices: [],
     serviceCapabilities: [],
     suppressionRules: [],
+    owners: [],
+    claims: [],
+    resolvableOwnerRecipients: [],
     threads: [],
     messages: [],
     notifications: [],
@@ -291,7 +294,11 @@ export function evaluateInquiryLaunchSupportReadiness(state: InquirySourceState)
   }
 }
 
-export function submitInquiry(state: InquirySourceState, command: SubmitInquiryCommand): SubmitInquiryResult {
+export function submitInquiry(
+  state: InquirySourceState,
+  command: SubmitInquiryCommand,
+  commitAdmissionState: R1TargetAdmissionState = state,
+): SubmitInquiryResult {
   const unsafeField = findUnsafeFutureSurfaceField(command.unsafeClientFields)
   if (unsafeField !== undefined) {
     return error('inquiry_unsafe_future_surface_field', 'Public inquiry input cannot carry future-surface fields.', unsafeField)
@@ -335,7 +342,7 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
 
   const target = resolveInquiryTarget(state, command.target)
   if (target.kind !== 'ready') {
-    return error(target.code, target.reason)
+    return admissionError('inquiry_target_not_admitted', target.blockers)
   }
 
   const abuseRateLimitBuckets = state.abuseRateLimitBuckets.map((bucket) => ({ ...bucket }))
@@ -453,6 +460,10 @@ export function submitInquiry(state: InquirySourceState, command: SubmitInquiryC
     messageId,
     notificationId,
   })
+  const commitAdmission = evaluateR1TargetAdmission(commitAdmissionState, command.target)
+  if (!commitAdmission.admitted) {
+    return admissionError('inquiry_target_admission_conflict', commitAdmission.blockers)
+  }
   const nextState: InquirySourceState = {
     ...state,
     threads: [...state.threads, thread],
@@ -963,53 +974,27 @@ function resolveInquiryTarget(
   target: InquiryTargetRef
 ):
   | { kind: 'ready'; business: BusinessRecord; service: BusinessServiceRecord; capability: ServiceCapabilityRecord }
-  | { kind: 'blocked'; code: SubmitInquiryErrorCode; reason: string } {
-  if (!state.operatorControls.inquiriesEnabled || !state.operatorControls.ownerHandlingReady || !state.operatorControls.notificationReadbackReady) {
-    return { kind: 'blocked', code: 'inquiry_target_not_ready', reason: 'Inquiry handling is not ready for this target.' }
-  }
-  const supportReadiness = evaluateInquiryLaunchSupportReadiness(state)
-  if (supportReadiness.kind !== 'ready') {
-    return { kind: 'blocked', code: 'inquiry_target_not_ready', reason: supportReadiness.reason }
+  | { kind: 'blocked'; blockers: readonly AdmissionBlocker[] } {
+  const admission = evaluateR1TargetAdmission(state, target)
+  if (!admission.admitted) {
+    return { kind: 'blocked', blockers: admission.blockers }
   }
 
   const business = state.businesses.find((candidate) => candidate.businessId === target.businessId)
-  if (business === undefined) {
-    return { kind: 'blocked', code: 'inquiry_target_unavailable', reason: 'Business is unavailable.' }
-  }
-  if (business.publicStatus === 'suppressed' || isSuppressed(state.suppressionRules, 'business', business.businessId)) {
-    return { kind: 'blocked', code: 'inquiry_target_suppressed', reason: 'Business is suppressed.' }
-  }
-  if (business.publicStatus !== 'published') {
-    return { kind: 'blocked', code: 'inquiry_target_unavailable', reason: 'Business is not published.' }
-  }
-
   const service = state.businessServices.find(
-    (candidate) => candidate.businessId === business.businessId && candidate.serviceId === target.serviceId
+    (candidate) => candidate.businessId === target.businessId && candidate.serviceId === target.serviceId
   )
-  if (service === undefined) {
-    return { kind: 'blocked', code: 'inquiry_target_unavailable', reason: 'Service is unavailable.' }
-  }
-  if (service.status === 'suppressed' || isSuppressed(state.suppressionRules, 'service', service.serviceId)) {
-    return { kind: 'blocked', code: 'inquiry_target_suppressed', reason: 'Service is suppressed.' }
-  }
-  if (service.status !== 'published') {
-    return { kind: 'blocked', code: 'inquiry_target_unavailable', reason: 'Service is not published.' }
-  }
-
   const capability = state.serviceCapabilities.find(
     (candidate) =>
-      candidate.businessId === business.businessId &&
-      candidate.serviceId === service.serviceId &&
+      candidate.businessId === target.businessId &&
+      candidate.serviceId === target.serviceId &&
       candidate.kind === target.capabilityKind
   )
-  if (capability === undefined) {
-    return { kind: 'blocked', code: 'inquiry_target_not_ready', reason: 'Capability is not ready for inquiry.' }
-  }
-  if (isSuppressed(state.suppressionRules, 'capability', `${service.serviceId}:${capability.kind}`)) {
-    return { kind: 'blocked', code: 'inquiry_target_suppressed', reason: 'Capability is suppressed.' }
-  }
-  if (capability.status !== 'available' || capability.firstRequest.mode !== 'inquiry_available') {
-    return { kind: 'blocked', code: 'inquiry_target_not_ready', reason: 'Capability is not ready for inquiry.' }
+  if (business === undefined || service === undefined || capability === undefined) {
+    return {
+      kind: 'blocked',
+      blockers: [{ kind: 'not_ready', ownerLabel: 'Finish inquiry setup' }],
+    }
   }
 
   return { kind: 'ready', business, service, capability }
@@ -1736,6 +1721,21 @@ function inquiryMessageId(value: StableHashValue): InquiryMessageId {
 
 function inquiryNotificationId(value: StableHashValue): InquiryNotificationId {
   return brandNonEmpty(`inquiry_notification:${stableHash(value)}`, 'InquiryNotificationId')
+}
+
+function admissionError(
+  code: 'inquiry_target_not_admitted' | 'inquiry_target_admission_conflict',
+  blockers: readonly AdmissionBlocker[],
+) {
+  return {
+    kind: 'error' as const,
+    code,
+    retryable: false,
+    reason: code === 'inquiry_target_admission_conflict'
+      ? 'This business can no longer receive this inquiry.'
+      : 'This business cannot receive inquiries yet.',
+    blockers,
+  }
 }
 
 function error<Code extends string>(code: Code, reason: string, field?: string) {

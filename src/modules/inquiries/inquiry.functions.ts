@@ -13,7 +13,7 @@ import {
 import { LOCAL_E2E_BUSINESS_FIXTURES } from '@/lib/dev/local-e2e-business-fixtures'
 import { isLocalE2EAuthBypassEnabled } from '@/lib/server/local-e2e-bypass'
 import { sourceWriteAdmissionFromContext } from '@/lib/server/source-write-admission'
-import type { BusinessRecord } from '@/modules/business/public'
+import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
 import type { BusinessServiceRecord, CapabilityKind, ServiceCapabilityRecord } from '@/modules/catalog/public'
 import type { ActionAgentIdentity, ActionSourceWriteRequest } from '@/modules/common/action'
 import { brandNonEmpty } from '@/modules/common/ids'
@@ -25,6 +25,7 @@ import {
   closeInquiry as closeInquiryLocal,
   createEmptyInquirySourceState,
   listOwnerInbox as listOwnerInboxLocal,
+  evaluateR1TargetAdmission,
   markInquiryRead as markInquiryReadLocal,
   readCustomerRecord as readCustomerRecordLocal,
   readInquiryDeliveryReadback as readInquiryDeliveryReadbackLocal,
@@ -41,10 +42,12 @@ import {
   type InquiryOperatorReconstructionReadback,
   type InquiryPrivacyTombstoneRecord,
   type InquirySourceState,
+  type InquiryTargetRef,
   type InquiryThreadStatus,
   type OwnerInboxReadback,
   type OwnerInquiryDetailReadback,
   type PublicInquiryContactInput,
+  type R1TargetAdmission,
 } from '@/modules/inquiries/public'
 
 const inquiryCapabilityKindSchema = z.enum([
@@ -88,6 +91,14 @@ const customerRecordSchema = z.object({
   accessKey: z.string(),
 })
 
+export const ownerTargetAdmissionSchema = z.object({
+  businessId: z.string().trim().min(1),
+  serviceId: z.string().trim().min(1),
+  capabilityKind: inquiryCapabilityKindSchema,
+}).strict()
+
+export const publicTargetAdmissionSchema = ownerTargetAdmissionSchema
+
 const operatorReconstructionSchema = z
   .object({
     threadId: z.string().optional(),
@@ -126,6 +137,24 @@ type PublicInquirySubmitArgs = {
   origin?: string
   sourceWrite?: SourceWriteAdmission
 }
+
+export type PublicTargetAdmissionReadResult =
+  | Readonly<{ kind: 'ok'; admission: R1TargetAdmission }>
+  | Readonly<{
+      kind: 'error'
+      code: 'source_unavailable'
+      reason: string
+      retryable: true
+    }>
+
+export type OwnerTargetAdmissionReadResult =
+  | Readonly<{ kind: 'ok'; admission: R1TargetAdmission }>
+  | Readonly<{
+      kind: 'error'
+      code: 'owner_not_found' | 'inquiry_target_not_found' | 'inquiry_target_wrong_owner' | 'source_unavailable'
+      reason: string
+      retryable: boolean
+    }>
 
 type ConvexPublicInquirySubmitResult =
   | {
@@ -278,6 +307,15 @@ type ServerErrorResult = {
 const submitPublicInquiryMutation = sourceMutation<PublicInquirySubmitArgs, ConvexPublicInquirySubmitResult>('inquiries:submitPublicInquiry')
 const readCustomerRecordSourceQuery = sourceQuery<{ threadId: string; accessKey: string }, CustomerInquiryRecordServerResult>('inquiries:readCustomerRecord')
 const listOwnerInboxQuery = sourceQuery<Record<string, never>, OwnerInboxSourceResult>('inquiries:listCurrentOwnerInbox')
+const readPublicTargetAdmissionQuery = sourceQuery<
+  z.infer<typeof publicTargetAdmissionSchema>,
+  R1TargetAdmission
+>('inquiries:readPublicTargetAdmission')
+
+const readCurrentOwnerTargetAdmissionQuery = sourceQuery<
+  z.infer<typeof ownerTargetAdmissionSchema>,
+  OwnerTargetAdmissionReadResult
+>('inquiries:readCurrentOwnerTargetAdmission')
 const readOperatorInquiryReconstructionQuery = sourceQuery<
   InquiryOperatorReconstructionFilter,
   InquiryOperatorReconstructionReadback
@@ -297,7 +335,15 @@ export const submitPublicInquiryServer = createServerFn({ method: 'POST' })
   .validator((data) => publicInquirySubmitSchema.parse(data))
   .handler(async ({ data, context }) => submitPublicInquiryThroughSource(data, context))
 
+export const readPublicTargetAdmissionServer = createServerFn()
+  .validator((data) => publicTargetAdmissionSchema.parse(data))
+  .handler(async ({ data }) => readPublicTargetAdmissionThroughSource(data))
+
 export const readCurrentOwnerInboxServer = createServerFn().handler(() => readCurrentOwnerInboxThroughSource())
+
+export const readCurrentOwnerTargetAdmissionServer = createServerFn()
+  .validator((data) => ownerTargetAdmissionSchema.parse(data))
+  .handler(async ({ data }) => readCurrentOwnerTargetAdmissionThroughSource(data))
 
 export const readCustomerRecordServer = createServerFn()
   .validator((data) => customerRecordSchema.parse(data))
@@ -532,6 +578,63 @@ function deniedInquiryOperatorReconstruction(
     publicMessage: 'Admin inquiry reconstruction requires active source-owned membership.',
     filter: compactOperatorFilter(filter),
     rows: [],
+  }
+}
+
+export async function readPublicTargetAdmissionThroughSource(
+  target: z.infer<typeof publicTargetAdmissionSchema>,
+): Promise<PublicTargetAdmissionReadResult> {
+  if (isLocalE2EAuthBypassEnabled()) {
+    const brandedTarget = {
+      businessId: brandNonEmpty(target.businessId, 'BusinessId'),
+      serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
+      capabilityKind: target.capabilityKind,
+    }
+    return {
+      kind: 'ok',
+      admission: evaluateR1TargetAdmission(createLocalPublicAdmissionState(brandedTarget), brandedTarget),
+    }
+  }
+
+  try {
+    return {
+      kind: 'ok',
+      admission: await callPublicSourceQuery(readPublicTargetAdmissionQuery, target),
+    }
+  } catch {
+    return {
+      kind: 'error',
+      code: 'source_unavailable',
+      reason: 'Request admission could not be checked from the source.',
+      retryable: true,
+    }
+  }
+}
+
+export async function readCurrentOwnerTargetAdmissionThroughSource(
+  target: z.infer<typeof ownerTargetAdmissionSchema>,
+): Promise<OwnerTargetAdmissionReadResult> {
+  if (isLocalE2EAuthBypassEnabled()) {
+    const brandedTarget = {
+      businessId: brandNonEmpty(target.businessId, 'BusinessId'),
+      serviceId: brandNonEmpty(target.serviceId, 'ServiceId'),
+      capabilityKind: target.capabilityKind,
+    }
+    return {
+      kind: 'ok',
+      admission: evaluateR1TargetAdmission(createLocalE2eInquiryBaseState(), brandedTarget),
+    }
+  }
+
+  try {
+    return await callSourceQuery(readCurrentOwnerTargetAdmissionQuery, target)
+  } catch {
+    return {
+      kind: 'error',
+      code: 'source_unavailable',
+      reason: 'Request admission could not be checked from the source.',
+      retryable: true,
+    }
   }
 }
 
@@ -945,8 +1048,108 @@ function readEnv(name: string): string | undefined {
 const localE2eCustomerAccessKey = 'local-e2e-customer-record-key-0000000000000000'
 const localE2eNow = 1_777_000_000_000
 const localE2eOwnerId = brandNonEmpty('owner:inquiries-route', 'OwnerId')
+const localPublicAdmittedFixture = (() => {
+  const fixture = LOCAL_E2E_BUSINESS_FIXTURES.find((candidate) => candidate.inquiryAdmission === 'admitted')
+  if (fixture === undefined) throw new Error('One admitted local public inquiry fixture is required.')
+  return fixture
+})()
+const localPublicAdmittedSlug = localPublicAdmittedFixture.requestedSlug
+const localPublicAdmittedBusinessId = brandNonEmpty(`business:${localPublicAdmittedSlug}`, 'BusinessId')
+const localPublicAdmittedServiceId = brandNonEmpty(
+  `service:${localPublicAdmittedBusinessId}:emergency-plumbing`,
+  'ServiceId',
+)
+const localPublicAdmittedOwnerId = brandNonEmpty(`owner:local-e2e:${localPublicAdmittedSlug}`, 'OwnerId')
+
+function createLocalPublicAdmissionState(target: InquiryTargetRef): InquirySourceState {
+  if (target.businessId !== localPublicAdmittedBusinessId
+    || target.serviceId !== localPublicAdmittedServiceId
+    || target.capabilityKind !== 'phone_inquiry') {
+    return createEmptyInquirySourceState()
+  }
+
+  const fixture = localPublicAdmittedFixture
+
+  const business = {
+    businessId: localPublicAdmittedBusinessId,
+    ownerId: localPublicAdmittedOwnerId,
+    slug: brandNonEmpty(fixture.requestedSlug, 'Slug'),
+    name: fixture.businessName,
+    normalizedName: fixture.businessName.toLowerCase(),
+    category: fixture.category,
+    suburb: fixture.suburb,
+    stateTerritory: fixture.stateTerritory,
+    publicStatus: 'published' as const,
+    trustTier: 'contact_confirmed' as const,
+    claimStatus: 'published' as const,
+    sourceHash: stableHash({ businessId: localPublicAdmittedBusinessId }),
+    createdAt: localE2eNow,
+    updatedAt: localE2eNow,
+  } satisfies BusinessRecord
+  const service = {
+    serviceId: localPublicAdmittedServiceId,
+    serviceSlug: brandNonEmpty('emergency-plumbing', 'Slug'),
+    businessId: localPublicAdmittedBusinessId,
+    name: fixture.serviceName,
+    category: fixture.serviceCategory,
+    summary: fixture.serviceSummary,
+    serviceArea: fixture.serviceArea,
+    hoursOrUnknown: fixture.hoursOrUnknown,
+    status: 'published' as const,
+    sortOrder: 0,
+    sourceHash: stableHash({ serviceId: localPublicAdmittedServiceId }),
+    createdAt: localE2eNow,
+    updatedAt: localE2eNow,
+  } satisfies BusinessServiceRecord
+  const capability = {
+    businessId: localPublicAdmittedBusinessId,
+    serviceId: localPublicAdmittedServiceId,
+    kind: 'phone_inquiry' as const,
+    status: 'available' as const,
+    firstRequest: {
+      mode: 'inquiry_available' as const,
+      publicChannel: 'public_business_contact' as const,
+      publicDisclosure: 'Use the inquiry form for a first contact.',
+      rawContactExcluded: true,
+    },
+    callable: false,
+    paymentRequired: false,
+    sourceHash: stableHash({ capability: 'phone_inquiry', serviceId: localPublicAdmittedServiceId }),
+    createdAt: localE2eNow,
+    updatedAt: localE2eNow,
+  } satisfies ServiceCapabilityRecord
+
+  return createEmptyInquirySourceState({
+    businesses: [business],
+    businessServices: [service],
+    serviceCapabilities: [capability],
+    owners: [{
+      ownerId: localPublicAdmittedOwnerId,
+      clerkUserId: `local-e2e:${localPublicAdmittedSlug}`,
+      createdAt: localE2eNow,
+      updatedAt: localE2eNow,
+    }],
+    claims: [{
+      claimId: brandNonEmpty(`claim:${localPublicAdmittedSlug}`, 'ClaimId'),
+      ownerId: localPublicAdmittedOwnerId,
+      businessId: localPublicAdmittedBusinessId,
+      slug: brandNonEmpty(localPublicAdmittedSlug, 'Slug'),
+      status: 'published',
+      submittedFactsHash: stableHash({ businessId: localPublicAdmittedBusinessId, ownerId: localPublicAdmittedOwnerId }),
+      createdAt: localE2eNow,
+      updatedAt: localE2eNow,
+    }],
+    resolvableOwnerRecipients: [{
+      ownerId: localPublicAdmittedOwnerId,
+      recipientRef: `clerk-owner-email:${stableHash(`local-e2e:${localPublicAdmittedSlug}`)}`,
+      resolvedAt: localE2eNow,
+    }],
+    capabilityLaunchSupportRecords: [localE2eSupportRecord()],
+  })
+}
+
 const localE2eBusinessId = brandNonEmpty('business:plumbing-demo', 'BusinessId')
-const localE2eServiceId = brandNonEmpty('service:business:plumbing-demo:emergency-plumbing', 'ServiceId')
+const localE2eServiceId = brandNonEmpty('service:business:plumbing-demo:diagnostic-plumbing', 'ServiceId')
 const localE2eTarget = {
   businessId: localE2eBusinessId,
   serviceId: localE2eServiceId,
@@ -1018,6 +1221,28 @@ function bindLocalE2eInquiryDispatches(state: InquirySourceState): InquirySource
 function createLocalE2eInquiryBaseState(): InquirySourceState {
   return createEmptyInquirySourceState({
     businesses: [localE2eBusiness()],
+    owners: [{
+      ownerId: localE2eOwnerId,
+      clerkUserId: 'clerk:local-e2e-owner',
+      emailHash: stableHash('local-e2e-owner@example.test'),
+      createdAt: localE2eNow,
+      updatedAt: localE2eNow,
+    } satisfies BusinessOwnerRecord],
+    claims: [{
+      claimId: brandNonEmpty('claim:local-e2e-owner', 'ClaimId'),
+      ownerId: localE2eOwnerId,
+      businessId: localE2eBusinessId,
+      slug: brandNonEmpty(localE2eBusinessFixture.requestedSlug, 'Slug'),
+      status: 'published',
+      submittedFactsHash: stableHash({ businessId: localE2eBusinessId, ownerId: localE2eOwnerId }),
+      createdAt: localE2eNow,
+      updatedAt: localE2eNow,
+    } satisfies ClaimRecord],
+    resolvableOwnerRecipients: [{
+      ownerId: localE2eOwnerId,
+      recipientRef: `clerk-owner-email:${stableHash('local-e2e-owner@example.test')}`,
+      resolvedAt: localE2eNow,
+    }],
     businessServices: [localE2eService()],
     serviceCapabilities: [localE2eCapability()],
     capabilityLaunchSupportRecords: [localE2eSupportRecord()],

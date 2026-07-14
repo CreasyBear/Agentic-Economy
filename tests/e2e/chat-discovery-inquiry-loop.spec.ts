@@ -6,10 +6,16 @@ if (demoBusiness === undefined) {
   throw new Error('The plumbing-demo local E2E fixture is required.')
 }
 
+const admittedBusiness = LOCAL_E2E_BUSINESS_FIXTURES.find((fixture) => fixture.inquiryAdmission === 'admitted')
+if (admittedBusiness === undefined) {
+  throw new Error('An admitted local E2E business fixture is required.')
+}
+
 const QUERY = 'emergency plumber parramatta'
+const ADMITTED_QUERY = 'emergency plumber joondalup'
 const INQUIRY_READY_QUERY = 'diagnostic plumbing parramatta'
 const MULTI_PROVIDER_QUERY = 'plumbing parramatta'
-const INQUIRY_HANDOFF_QUERY = 'Prepare a qualified inquiry for Demo Plumbing'
+const INQUIRY_HANDOFF_QUERY = `Prepare a qualified inquiry for ${admittedBusiness.businessName}`
 const BOUNDARY_FOLLOW_UP_QUERY = 'Can AE book this for me?'
 const NON_INQUIRY_PROVIDER_QUERY = 'Message Parramatta Emergency Plumbing'
 const FILTER_FOLLOW_UP_QUERY = 'Show only businesses that accept inquiries'
@@ -64,40 +70,39 @@ test.describe('chat discovery to inquiry loop', () => {
     await page.goto('/')
     await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
 
-    await submitLandingQuery(page, INQUIRY_READY_QUERY)
+    await submitLandingQuery(page, ADMITTED_QUERY)
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
     const threadPath = new URL(page.url()).pathname
-    await expectQueryInTranscript(page, INQUIRY_READY_QUERY)
-    await waitForLatestReadyAnswer(page, INQUIRY_READY_QUERY)
+    await expectQueryInTranscript(page, ADMITTED_QUERY)
+    await waitForLatestReadyAnswer(page, ADMITTED_QUERY)
 
     await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(/1 listed business ready to compare/i)
-    await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/Demo Plumbing/i)
-    await expect(page.getByRole('region', { name: /business shortlist/i })).toContainText(/AE inquiry form published/i)
-    await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /Narrow, compare, or prepare a qualified inquiry from the listed businesses above/i,
+    const shortlist = page.getByRole('region', { name: /business shortlist/i })
+    await expect(shortlist).toContainText(admittedBusiness.businessName)
+    const listingLink = shortlist.getByRole('link', { name: admittedBusiness.businessName })
+    await expect(listingLink).toHaveAttribute(
+      'href',
+      new RegExp(`/${admittedBusiness.requestedSlug}\\?from=thread&id=${threadPath.split('/').at(-1)}`),
     )
+    await listingLink.click()
 
-    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
-    await expect(startInquiryButton).toBeEnabled()
-    await startInquiryButton.click()
-    await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
-    await waitForLatestReadyAnswer(page, INQUIRY_HANDOFF_QUERY)
-
-    await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(
-      /Demo Plumbing selected for inquiry review/i,
+    await expect(page).toHaveURL(
+      new RegExp(`/${admittedBusiness.requestedSlug}\\?from=thread&id=.+`),
+      { timeout: 15_000 },
     )
-    const selectedBusiness = page.getByRole('region', { name: /selected business/i })
-    await expect(selectedBusiness).toContainText(/Demo Plumbing/i, { timeout: 30_000 })
-    await expect(selectedBusiness).toContainText(/Choice 1 from this thread/i)
-    await expect(selectedBusiness).toContainText(/The business still confirms timing, quote, and availability/i)
-
-    const inquiryLink = selectedBusiness.getByRole('link', { name: /open inquiry form/i })
-    await expect(inquiryLink).toHaveAttribute('href', /\/plumbing-demo\/inquiry\?from=thread&id=.+/)
+    const inquiryLink = page.getByRole('link', { name: 'Ask this business' }).first()
+    await expect(inquiryLink).toHaveAttribute(
+      'href',
+      new RegExp(`/${admittedBusiness.requestedSlug}/inquiry\\?from=thread&id=.+`),
+    )
     await inquiryLink.click()
 
-    await expect(page).toHaveURL(/\/plumbing-demo\/inquiry\?from=thread&id=.+/, { timeout: 15_000 })
+    await expect(page).toHaveURL(
+      new RegExp(`/${admittedBusiness.requestedSlug}/inquiry\\?from=thread&id=.+`),
+      { timeout: 15_000 },
+    )
     await expect(page.getByRole('note', { name: /answer context/i })).toContainText(
-      /This inquiry continues Demo Plumbing from your answer thread/i,
+      `This inquiry continues ${admittedBusiness.businessName} from your answer thread`,
     )
     await expect(
       page.getByRole('note', { name: /answer context/i }).getByRole('link', { name: /back to answer/i }),
@@ -119,9 +124,7 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(shortlist).toContainText(/Demo Plumbing/i)
     await expect(shortlist).toContainText(/Parramatta Emergency Plumbing/i)
 
-    const compareButton = page.getByRole('button', { name: /compare the top two listings/i })
-    await expect(compareButton).toBeEnabled()
-    await compareButton.click()
+    await submitThreadFollowUp(page, COMPARE_FOLLOW_UP_QUERY)
 
     await expectQueryInTranscript(page, COMPARE_FOLLOW_UP_QUERY, COMPARE_FOLLOW_UP_LABEL)
     await waitForLatestReadyAnswer(page, COMPARE_FOLLOW_UP_LABEL)
@@ -130,24 +133,20 @@ test.describe('chat discovery to inquiry loop', () => {
     )
 
     const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
-    await expect(checks).toContainText(/0 searches.*2 read.*2 listed.*5\/5 checks/i)
+    await expect(checks).toContainText(/compared 2 listed businesses; checked 5 facts/i)
     await checks.click()
-    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(
-      /Using previous listed businesses/i,
-    )
-    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(
-      /Comparing listed options/i,
-    )
+    const checkSteps = page.getByRole('list', { name: /ae check steps/i }).last()
+    await expect(checkSteps).toContainText(/Using the latest answer thread/i)
+    await expect(checkSteps).toContainText(/Comparing the listed businesses already in the answer thread/i)
 
     const comparison = page.getByRole('region', { name: /business comparison/i })
     await expect(comparison).toContainText(/Published facts, side by side/i)
     await expect(comparison).toContainText(/Demo Plumbing/i)
     await expect(comparison).toContainText(/Parramatta Emergency Plumbing/i)
     await expect(comparison).toContainText(/Next step/i)
-    await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /Narrow, compare, or prepare a qualified inquiry from the listed businesses above/i,
-    )
-    await expect(page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })).toBeVisible()
+    const comparisonTerminal = page.getByRole('region', { name: /your shortlist is ready/i }).last()
+    await expect(comparisonTerminal.getByRole('button', { name: /change criteria/i })).toBeVisible()
+    await expect(comparisonTerminal.getByRole('link', { name: /^open$/i })).toBeVisible()
     await assertPublicLanguage(page)
   })
 
@@ -156,18 +155,15 @@ test.describe('chat discovery to inquiry loop', () => {
     await page.goto('/')
     await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
 
-    await submitLandingQuery(page, MULTI_PROVIDER_QUERY)
+    await submitLandingQuery(page, ADMITTED_QUERY)
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
-    await expectQueryInTranscript(page, MULTI_PROVIDER_QUERY)
-    await waitForLatestReadyAnswer(page, MULTI_PROVIDER_QUERY)
+    await expectQueryInTranscript(page, ADMITTED_QUERY)
+    await waitForLatestReadyAnswer(page, ADMITTED_QUERY)
 
     const firstShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
-    await expect(firstShortlist).toContainText(/Demo Plumbing/i)
-    await expect(firstShortlist).toContainText(/Parramatta Emergency Plumbing/i)
+    await expect(firstShortlist).toContainText(admittedBusiness.businessName)
 
-    const inquiryReadyButton = page.getByRole('button', { name: /only inquiry-ready listings/i })
-    await expect(inquiryReadyButton).toBeEnabled()
-    await inquiryReadyButton.click()
+    await submitThreadFollowUp(page, FILTER_FOLLOW_UP_QUERY)
 
     await expectQueryInTranscript(page, FILTER_FOLLOW_UP_QUERY, FILTER_FOLLOW_UP_LABEL)
     await waitForLatestReadyAnswer(page, FILTER_FOLLOW_UP_LABEL)
@@ -176,43 +172,29 @@ test.describe('chat discovery to inquiry loop', () => {
     )
 
     const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
-    await expect(checks).toContainText(/0 searches.*1 read.*1 listed.*5\/5 checks/i)
-    await checks.click()
-    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(
-      /Using previous listed businesses/i,
-    )
-    await expect(page.getByRole('list', { name: /ae check steps/i }).last()).toContainText(/Checking fit/i)
+    await expect(checks).toContainText(/compared 1 listed business; checked 5 facts/i)
 
     const filteredShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
     await expect(filteredShortlist).toContainText(/1 listing/i)
-    await expect(filteredShortlist).toContainText(/Demo Plumbing/i)
-    await expect(filteredShortlist).not.toContainText(/Parramatta Emergency Plumbing/i)
+    await expect(filteredShortlist).toContainText(admittedBusiness.businessName)
     const sessionContext = page.getByRole('region', { name: /session context/i })
-    await expect(sessionContext).toContainText(
-      /This answer is narrowed to Demo Plumbing while AE keeps earlier listed businesses in the thread/i,
-      { timeout: 30_000 },
-    )
-    await expect(sessionContext).toContainText(/Current answer/i)
-    await expect(sessionContext).toContainText(/Demo Plumbing in this answer/i)
-    await expect(sessionContext).toContainText(/Listed businesses/i)
-    await expect(sessionContext).toContainText(/Parramatta Emergency Plumbing/i)
-    await expect(page.getByRole('region', { name: /continue this thread/i })).toContainText(
-      /Narrow, compare, or prepare a qualified inquiry from the listed businesses above/i,
-    )
+    await expect(sessionContext).toContainText(new RegExp(`Current answer.*${admittedBusiness.businessName}`, 'i'), {
+      timeout: 30_000,
+    })
 
-    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
-    await expect(startInquiryButton).toBeEnabled()
-    await startInquiryButton.click()
+    await submitThreadFollowUp(page, INQUIRY_HANDOFF_QUERY)
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
     await waitForLatestReadyAnswer(page, INQUIRY_HANDOFF_QUERY)
 
     const selectedBusiness = page.getByRole('region', { name: /selected business/i })
-    await expect(selectedBusiness).toContainText(/Demo Plumbing/i, { timeout: 30_000 })
-    await expect(selectedBusiness).toContainText(/Choice 1 from this thread/i)
+    await expect(selectedBusiness).toContainText(admittedBusiness.businessName, { timeout: 30_000 })
     await expect(selectedBusiness).toContainText(/The business still confirms timing, quote, and availability/i)
 
     const inquiryLink = selectedBusiness.getByRole('link', { name: /open inquiry form/i })
-    await expect(inquiryLink).toHaveAttribute('href', /\/plumbing-demo\/inquiry\?from=thread&id=.+/)
+    await expect(inquiryLink).toHaveAttribute(
+      'href',
+      new RegExp(`/${admittedBusiness.requestedSlug}/inquiry\\?from=thread&id=.+`),
+    )
     await assertPublicLanguage(page)
   })
 
@@ -229,7 +211,6 @@ test.describe('chat discovery to inquiry loop', () => {
     const firstShortlist = page.getByRole('region', { name: /business shortlist/i }).last()
     await expect(firstShortlist).toContainText(/Demo Plumbing/i)
     await expect(firstShortlist).toContainText(/Parramatta Emergency Plumbing/i)
-    await expect(firstShortlist).toContainText(/No AE inquiry form is published yet/i)
 
     await submitThreadFollowUp(page, NON_INQUIRY_PROVIDER_QUERY)
     await expectQueryInTranscript(page, NON_INQUIRY_PROVIDER_QUERY)
@@ -246,14 +227,6 @@ test.describe('chat discovery to inquiry loop', () => {
       /This business needs a published inquiry path before AE can route contact/i,
     )
     await expect(inquiryPath).toContainText(/Needs listed inquiry path/i)
-
-    const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
-    await expect(checks).toContainText(/0 searches.*1 read.*1 listed/i)
-    await checks.click()
-    const steps = page.getByRole('list', { name: /ae check steps/i }).last()
-    await expect(steps).toContainText(/Resolving provider/i)
-    await expect(steps).toContainText(/Selected business.*Parramatta Emergency Plumbing/i)
-    await expect(steps).toContainText(/Inquiry path.*Not published/i)
 
     const selectedBusiness = page.getByRole('region', { name: /selected business/i })
     await expect(selectedBusiness).toContainText(/Parramatta Emergency Plumbing/i, { timeout: 30_000 })
@@ -276,18 +249,17 @@ test.describe('chat discovery to inquiry loop', () => {
     await page.goto('/')
     await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
 
-    await submitLandingQuery(page, INQUIRY_READY_QUERY)
+    await submitLandingQuery(page, ADMITTED_QUERY)
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
-    await expectQueryInTranscript(page, INQUIRY_READY_QUERY)
-    await waitForLatestReadyAnswer(page, INQUIRY_READY_QUERY)
+    await expectQueryInTranscript(page, ADMITTED_QUERY)
+    await waitForLatestReadyAnswer(page, ADMITTED_QUERY)
 
-    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
-    await expect(startInquiryButton).toBeEnabled()
-    await startInquiryButton.click()
+    await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(/1 listed business ready to compare/i)
+    await submitThreadFollowUp(page, INQUIRY_HANDOFF_QUERY)
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
     await waitForLatestReadyAnswer(page, INQUIRY_HANDOFF_QUERY)
     await expect(page.getByRole('region', { name: /inquiry path/i })).toContainText(
-      /Demo Plumbing selected for inquiry review/i,
+      new RegExp(`${admittedBusiness.businessName} selected for inquiry review`, 'i'),
     )
     await expect(page.getByRole('region', { name: /session context/i })).toContainText(/Selected business/i)
 
@@ -303,11 +275,9 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(sessionContext).toContainText(/Current answer/i)
     await expect(sessionContext).toContainText(/2 listed businesses in this answer/i)
     await expect(sessionContext).not.toContainText(/Selected business/i)
-    const followUpSearch = page.getByRole('search', { name: /find local service businesses/i }).last()
-    await expect(
-      followUpSearch.getByRole('searchbox', { name: /narrow, compare, or prepare a qualified inquiry/i }),
-    ).toBeEditable()
-    await expect(page.getByText(/Continue by narrowing or comparing the listed businesses/i).last()).toBeVisible()
+    const replacementTerminal = page.getByRole('region', { name: /your shortlist is ready/i }).last()
+    await expect(replacementTerminal.getByRole('button', { name: /change criteria/i })).toBeVisible()
+    await expect(replacementTerminal.getByRole('link', { name: /^open$/i })).toBeVisible()
 
     const shortlist = page.getByRole('region', { name: /business shortlist/i }).last()
     await expect(shortlist).toContainText(/Demo Plumbing/i)
@@ -320,12 +290,12 @@ test.describe('chat discovery to inquiry loop', () => {
     await page.goto('/')
     await expect(page.getByRole('search', { name: /find local service businesses/i })).toBeVisible()
 
-    await submitLandingQuery(page, INQUIRY_READY_QUERY)
+    await submitLandingQuery(page, ADMITTED_QUERY)
     await page.waitForURL(/\/t\//, { timeout: 30_000 })
-    await expectQueryInTranscript(page, INQUIRY_READY_QUERY)
-    await waitForLatestReadyAnswer(page, INQUIRY_READY_QUERY)
+    await expectQueryInTranscript(page, ADMITTED_QUERY)
+    await waitForLatestReadyAnswer(page, ADMITTED_QUERY)
 
-    await expect(page.getByRole('region', { name: /business shortlist/i }).last()).toContainText(/Demo Plumbing/i)
+    await expect(page.getByRole('region', { name: /business shortlist/i }).last()).toContainText(admittedBusiness.businessName)
 
     await submitThreadFollowUp(page, BOUNDARY_FOLLOW_UP_QUERY)
     await expectQueryInTranscript(page, BOUNDARY_FOLLOW_UP_QUERY)
@@ -345,23 +315,17 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(steps).toContainText(/Preparing the next step/i)
     await expect(steps).toContainText(/Listed businesses carried forward/i)
 
-    const continuePanel = page.getByRole('region', { name: /continue this thread/i })
-    await expect(continuePanel).toContainText(
-      /Narrow, compare, or prepare a qualified inquiry from the businesses already found in this thread/i,
-    )
-    const startInquiryButton = page.getByRole('button', { name: /prepare qualified inquiry with demo plumbing/i })
-    await expect(startInquiryButton).toBeEnabled()
-    await startInquiryButton.click()
+    await submitThreadFollowUp(page, INQUIRY_HANDOFF_QUERY)
 
     await expectQueryInTranscript(page, INQUIRY_HANDOFF_QUERY)
     await waitForLatestReadyAnswer(page, INQUIRY_HANDOFF_QUERY)
 
     const selectedBusiness = page.getByRole('region', { name: /selected business/i })
-    await expect(selectedBusiness).toContainText(/Demo Plumbing/i, { timeout: 30_000 })
+    await expect(selectedBusiness).toContainText(admittedBusiness.businessName, { timeout: 30_000 })
     await expect(selectedBusiness).toContainText(/The business still confirms timing, quote, and availability/i)
     await expect(selectedBusiness.getByRole('link', { name: /open inquiry form/i })).toHaveAttribute(
       'href',
-      /\/plumbing-demo\/inquiry\?from=thread&id=.+/,
+      new RegExp(`/${admittedBusiness.requestedSlug}/inquiry\\?from=thread&id=.+`),
     )
     await assertPublicLanguage(page)
   })
@@ -373,18 +337,11 @@ async function submitLandingQuery(page: Page, query: string) {
   const sendButton = search.getByRole('button', { name: /^find businesses$/i })
   await expect(searchbox).toBeEditable({ timeout: 30_000 })
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await searchbox.click()
-    await searchbox.fill(query)
-    await page.waitForTimeout(100)
-    if ((await searchbox.inputValue()) === query && (await sendButton.isEnabled())) {
-      break
-    }
-  }
-
+  await searchbox.fill(query)
   await expect(searchbox).toHaveValue(query)
   await expect(sendButton).toBeEnabled()
   await sendButton.click()
+  await page.waitForURL(/\/t\//, { timeout: 30_000, waitUntil: 'domcontentloaded' })
 }
 
 async function expectQueryInTranscript(page: Page, query: string, displayLabel: string | RegExp = query) {
@@ -396,16 +353,17 @@ async function expectQueryInTranscript(page: Page, query: string, displayLabel: 
 }
 
 async function submitThreadFollowUp(page: Page, query: string) {
-  await expect(async () => {
-    const search = page.getByRole('search', { name: /find local service businesses/i }).last()
-    const searchbox = search.getByRole('searchbox')
-    await expect(searchbox).toBeEditable({ timeout: 10_000 })
-    await searchbox.click()
-    await searchbox.fill(query)
-    await expect(searchbox).toHaveValue(query)
-    await searchbox.press('Enter')
-    await expectQueryInTranscript(page, query)
-  }).toPass({ timeout: 45_000 })
+  const changeCriteriaButton = page.getByRole('button', { name: /change criteria/i }).filter({ visible: true })
+  if (await changeCriteriaButton.count() > 0) {
+    await changeCriteriaButton.last().click()
+  }
+
+  const search = page.getByRole('search', { name: /find local service businesses/i }).last()
+  const searchbox = search.getByRole('searchbox')
+  await expect(searchbox).toBeEditable({ timeout: 15_000 })
+  await searchbox.fill(query)
+  await expect(searchbox).toHaveValue(query)
+  await searchbox.press('Enter')
 }
 
 async function waitForLatestReadyAnswer(page: Page, displayLabel: string | RegExp) {

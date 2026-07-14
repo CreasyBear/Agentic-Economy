@@ -18,6 +18,16 @@ describe('source readback truth seams', () => {
         kind: 'available',
         readback: { catalog: { name: 'Parramatta Emergency Plumbing' } },
       })
+      expect(defaultResult.kind === 'available' ? defaultResult.readback.admission : undefined).toEqual({
+        version: 'r1-target-admitted:v1',
+        admitted: false,
+        blockers: [
+          { kind: 'not_published', ownerLabel: 'Publish this business page' },
+          { kind: 'not_claimed', ownerLabel: 'Complete the business claim' },
+          { kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' },
+          { kind: 'not_ready', ownerLabel: 'Finish inquiry setup' },
+        ],
+      })
     })
   })
 

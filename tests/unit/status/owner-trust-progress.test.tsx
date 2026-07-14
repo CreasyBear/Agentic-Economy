@@ -1,48 +1,97 @@
 /** @vitest-environment jsdom */
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  AeStatusCard,
-  buildOwnerTrustTierProgress,
-} from '@/components/ae/status/AeStatusCard'
+import { AeStatusCard } from '@/components/ae/status/AeStatusCard'
 import { brandNonEmpty } from '@/modules/common/ids'
 import type { PublicOwnerStatusRouteReadback } from '@/modules/catalog/public'
+import {
+  R1TargetAdmissionVersion,
+  type AdmissionBlocker,
+  type R1TargetAdmission,
+} from '@/modules/inquiries/public'
+
+afterEach(cleanup)
 
 const businessId = brandNonEmpty('business:status-card', 'BusinessId')
 const serviceId = brandNonEmpty('service:status-card:emergency-plumbing', 'ServiceId')
 const slug = brandNonEmpty('status-card-plumbing', 'Slug')
 
-const expectedActions = [
-  'Owner claim recorded.',
-  'Contact evidence recorded.',
-  'Publish at least one service with service area, hours, and first-request instructions.',
-  'Ask AE to run and record the registry check for this page.',
-]
+const blockerExpectations = [
+  {
+    blocker: { kind: 'not_published', ownerLabel: 'Publish this business page' },
+    action: { kind: 'link', href: '/claim' },
+  },
+  {
+    blocker: { kind: 'not_claimed', ownerLabel: 'Complete the business claim' },
+    action: { kind: 'instruction', text: 'Contact AE support to repair this business claim.' },
+  },
+  {
+    blocker: { kind: 'destination_unverified', ownerLabel: 'Verify the inquiry destination' },
+    action: { kind: 'instruction', text: 'Contact AE support to record a destination check.' },
+  },
+  {
+    blocker: { kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' },
+    action: { kind: 'instruction', text: 'Contact AE support to refresh the owner email proof.' },
+  },
+  {
+    blocker: { kind: 'suppressed', ownerLabel: 'Turn inquiry receiving back on' },
+    action: { kind: 'instruction', text: 'Contact AE support to restore inquiry receiving.' },
+  },
+  {
+    blocker: { kind: 'not_ready', ownerLabel: 'Finish inquiry setup' },
+    action: { kind: 'instruction', text: 'AE must finish inquiry setup before requests can be received.' },
+  },
+] satisfies readonly Readonly<{
+  blocker: AdmissionBlocker
+  action: Readonly<{ kind: 'link'; href: string }> | Readonly<{ kind: 'instruction'; text: string }>
+}>[]
 
-describe('owner trust-tier progress', () => {
-  it('marks the current trust tier and keeps unreached action text tied to real owner-page requirements', () => {
-    expect(buildOwnerTrustTierProgress('contact_confirmed')).toEqual([
-      { tier: 'claimed', label: 'Claimed', state: 'reached', action: expectedActions[0] },
-      { tier: 'contact_confirmed', label: 'Contact confirmed', state: 'current', action: expectedActions[1] },
-      { tier: 'listed', label: 'Listed', state: 'next', action: expectedActions[2] },
-      { tier: 'registry_verified', label: 'Registry checked', state: 'next', action: expectedActions[3] },
-    ])
+describe('owner request admission', () => {
+  it('renders every canonical blocker label with only actions the owner can take', () => {
+    const admission: R1TargetAdmission = {
+      version: R1TargetAdmissionVersion,
+      admitted: false,
+      blockers: blockerExpectations.map(({ blocker }) => blocker),
+    }
+
+    render(<AeStatusCard readback={ownerReadback(admission)} />)
+
+    for (const { blocker, action } of blockerExpectations) {
+      if (action.kind === 'link') {
+        expect(screen.getByRole('link', { name: blocker.ownerLabel }).getAttribute('href')).toBe(action.href)
+      } else {
+        expect(screen.getByText(blocker.ownerLabel)).toBeTruthy()
+        expect(screen.getByText(action.text)).toBeTruthy()
+        expect(screen.queryByRole('link', { name: blocker.ownerLabel })).toBeNull()
+        expect(screen.queryByRole('link', { name: action.text })).toBeNull()
+      }
+    }
   })
 
-  it('renders the current business tier without exposing a verified badge', () => {
-    const { container } = render(<AeStatusCard readback={ownerReadback()} />)
+  it('states plainly when the business page can receive requests without blocked actions', () => {
+    const admission: R1TargetAdmission = {
+      version: R1TargetAdmissionVersion,
+      admitted: true,
+      proof: {
+        kind: 'claimed_owner',
+        claimRef: 'claim:status-card-plumbing',
+        recipientRef: 'recipient:status-card-plumbing',
+      },
+    }
 
-    expect(screen.getByRole('list', { name: 'Business page progress' })).toBeTruthy()
-    expect(container.querySelector('[data-tier="contact_confirmed"]')?.getAttribute('aria-current')).toBe('step')
-    expect(container.querySelector('[data-tier="listed"]')?.textContent).toContain(expectedActions[2])
-    expect(container.querySelector('[data-tier="registry_verified"]')?.textContent).toContain('Registry checked')
-    expect(container.querySelector('[data-tier="registry_verified"]')?.textContent).not.toContain('Registry verified')
+    render(<AeStatusCard readback={ownerReadback(admission)} />)
+
+    expect(screen.getByText('Your business page can receive requests.')).toBeTruthy()
+    for (const { blocker } of blockerExpectations) {
+      expect(screen.queryByRole('link', { name: blocker.ownerLabel })).toBeNull()
+    }
   })
 })
 
-function ownerReadback(): PublicOwnerStatusRouteReadback {
+function ownerReadback(admission: R1TargetAdmission): PublicOwnerStatusRouteReadback {
   return {
+    admission,
     publicUrl: '/status-card-plumbing',
     noindex: true,
     catalog: {

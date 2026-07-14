@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest'
 
-import type { BusinessRecord } from '@/modules/business/public'
-import type { BusinessServiceRecord, ServiceCapabilityRecord } from '@/modules/catalog/public'
+import type { BusinessOwnerRecord, BusinessRecord, ClaimRecord } from '@/modules/business/public'
+import type {
+  BusinessServiceRecord,
+  PublicRouteCatalogContract,
+  PublicRouteServiceContract,
+  ServiceCapabilityRecord,
+} from '@/modules/catalog/public'
 import { brandNonEmpty } from '@/modules/common/ids'
 import { stableHash } from '@/modules/common/stable-hash'
 import * as inquiries from '@/modules/inquiries/public'
-import type { CapabilityLaunchSupportRecord, InquirySourceState, SubmitInquiryCommand } from '@/modules/inquiries/public'
+import type {
+  CapabilityLaunchSupportRecord,
+  InquirySourceState,
+  ResolvableOwnerRecipient,
+  SubmitInquiryCommand,
+} from '@/modules/inquiries/public'
 import {
   buildPublicInquiryAffordance,
+  selectOwnerAdmissionTarget,
   submitPublicInquiryRouteReadback,
   validatePublicInquiryFormInput,
 } from '@/modules/inquiries/route-readbacks'
@@ -18,6 +29,7 @@ import { readOwnerInquiryThreadRouteReadback } from '@/routes/owner.inquiries.$t
 
 const ownerId = brandNonEmpty('owner:inquiry', 'OwnerId')
 const otherOwnerId = brandNonEmpty('owner:other', 'OwnerId')
+const claimId = brandNonEmpty('claim:inquiry', 'ClaimId')
 const businessId = brandNonEmpty('business:inquiry', 'BusinessId')
 const serviceId = brandNonEmpty('service:emergency-plumbing', 'ServiceId')
 const serviceSlug = brandNonEmpty('emergency-plumbing', 'Slug')
@@ -28,6 +40,144 @@ const target = {
   serviceId,
   capabilityKind: 'phone_inquiry',
 } as const
+
+describe('selectOwnerAdmissionTarget', () => {
+  it('selects the first structural capability tuple even when it is unavailable and not inquiry-ready', () => {
+    const selectedServiceId = brandNonEmpty('service:structural-first', 'ServiceId')
+    const catalog = ownerAdmissionCatalog([
+      ownerAdmissionService(
+        selectedServiceId,
+        brandNonEmpty('structural-first', 'Slug'),
+        [
+          {
+            serviceId: selectedServiceId,
+            kind: 'quote_request',
+            status: 'unavailable',
+            firstRequest: {
+              mode: 'not_available_yet',
+              publicDisclosure: 'No first request path is available.',
+              publicChannel: 'not_available',
+              noContactReason: 'The owner has not published inquiry instructions.',
+              rawContactExcluded: true,
+            },
+            callable: false,
+            paymentRequired: false,
+          },
+          {
+            serviceId: selectedServiceId,
+            kind: 'phone_inquiry',
+            status: 'available',
+            firstRequest: capability().firstRequest,
+            callable: false,
+            paymentRequired: false,
+          },
+        ],
+      ),
+    ])
+
+    expect(selectOwnerAdmissionTarget(catalog)).toEqual({
+      businessId,
+      serviceId: selectedServiceId,
+      capabilityKind: 'quote_request',
+    })
+  })
+
+  it('preserves public catalog service order when selecting the first capable service', () => {
+    const firstServiceId = brandNonEmpty('service:z-catalog-first', 'ServiceId')
+    const secondServiceId = brandNonEmpty('service:a-catalog-second', 'ServiceId')
+    const catalog = ownerAdmissionCatalog([
+      ownerAdmissionService(
+        firstServiceId,
+        brandNonEmpty('z-catalog-first', 'Slug'),
+        [{
+          serviceId: firstServiceId,
+          kind: 'emergency_callout_interest',
+          status: 'available',
+          firstRequest: capability().firstRequest,
+          callable: false,
+          paymentRequired: false,
+        }],
+      ),
+      ownerAdmissionService(
+        secondServiceId,
+        brandNonEmpty('a-catalog-second', 'Slug'),
+        [{
+          serviceId: secondServiceId,
+          kind: 'phone_inquiry',
+          status: 'available',
+          firstRequest: capability().firstRequest,
+          callable: false,
+          paymentRequired: false,
+        }],
+      ),
+    ])
+
+    expect(selectOwnerAdmissionTarget(catalog)).toEqual({
+      businessId,
+      serviceId: firstServiceId,
+      capabilityKind: 'emergency_callout_interest',
+    })
+  })
+
+  it('returns undefined when no service contains a capability tuple', () => {
+    const catalog = ownerAdmissionCatalog([
+      ownerAdmissionService(
+        brandNonEmpty('service:empty-first', 'ServiceId'),
+        brandNonEmpty('empty-first', 'Slug'),
+        [],
+      ),
+      ownerAdmissionService(
+        brandNonEmpty('service:empty-second', 'ServiceId'),
+        brandNonEmpty('empty-second', 'Slug'),
+        [],
+      ),
+    ])
+
+    expect(selectOwnerAdmissionTarget(catalog)).toBeUndefined()
+  })
+})
+
+function ownerAdmissionCatalog(
+  services: PublicRouteCatalogContract['services'],
+): PublicRouteCatalogContract {
+  return {
+    businessId,
+    slug: brandNonEmpty('plumbing-demo', 'Slug'),
+    name: 'Demo Plumbing',
+    category: 'Emergency plumbing',
+    suburb: 'Parramatta',
+    stateTerritory: 'NSW',
+    publicUrl: '/plumbing-demo',
+    publicStatus: 'published',
+    trustTier: 'contact_confirmed',
+    indexStatus: 'queued',
+    discoveryStatus: 'degraded',
+    photos: [],
+    services,
+    schemaVersion: 'public-catalog:v1',
+    updatedAt: now,
+  }
+}
+
+function ownerAdmissionService(
+  selectedServiceId: PublicRouteServiceContract['serviceId'],
+  selectedServiceSlug: PublicRouteServiceContract['serviceSlug'],
+  capabilities: PublicRouteServiceContract['capabilities'],
+): PublicRouteServiceContract {
+  return {
+    serviceId: selectedServiceId,
+    serviceSlug: selectedServiceSlug,
+    businessId,
+    name: String(selectedServiceSlug),
+    category: 'Emergency plumbing',
+    summary: 'Human triage for urgent plumbing issues.',
+    serviceArea: 'Parramatta',
+    hoursOrUnknown: 'Hours supplied by owner',
+    firstRequest: capability().firstRequest,
+    status: 'published',
+    capabilities,
+  }
+}
 
 describe('human inquiry owner inbox slice', () => {
   it('submits, appears in owner inbox, marks read, replies, closes, and renders through the owner route helper', () => {
@@ -163,7 +313,7 @@ describe('human inquiry owner inbox slice', () => {
     })
     if (publicReadback.kind !== 'available') throw new Error(publicReadback.reason)
 
-    expect(buildPublicInquiryAffordance({
+    const catalog = {
       businessId,
       slug: brandNonEmpty('plumbing-demo', 'Slug'),
       name: 'Demo Plumbing',
@@ -202,7 +352,53 @@ describe('human inquiry owner inbox slice', () => {
           ],
         },
       ],
-    })).toMatchObject({ kind: 'available', href: '/plumbing-demo/inquiry' })
+    } satisfies PublicRouteCatalogContract
+
+    expect(buildPublicInquiryAffordance(catalog, undefined, eligibleState)).toMatchObject({
+      kind: 'available',
+      href: '/plumbing-demo/inquiry',
+    })
+    expect(buildPublicInquiryAffordance(catalog)).toEqual({
+      kind: 'unavailable',
+      label: 'Inquiry unavailable',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
+      businessName: 'Demo Plumbing',
+      serviceName: 'Emergency plumbing',
+    })
+    const unadmittedState = sourceState({ resolvableOwnerRecipients: [] })
+    expect(buildPublicInquiryAffordance(catalog, undefined, unadmittedState)).toEqual({
+      kind: 'unavailable',
+      label: 'Inquiry unavailable',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
+      businessName: 'Demo Plumbing',
+      serviceName: 'Emergency plumbing',
+      blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
+    })
+    expect(readPublicInquiryRouteReadback({ state: unadmittedState, slug: 'plumbing-demo' })).toEqual({
+      kind: 'unavailable',
+      slug: 'plumbing-demo',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
+      blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
+      businessName: 'Demo Plumbing',
+      serviceName: 'Emergency plumbing',
+    })
+    expect(submitPublicInquiryRouteReadback({
+      state: unadmittedState,
+      slug: 'plumbing-demo',
+      body: 'Please ask a human owner to contact me about this leak.',
+      contact: { name: 'Route Customer', email: 'route.customer@example.test' },
+      operationKey: operationKey('public-route-unadmitted'),
+      correlationId: correlationId('public-route-unadmitted'),
+      pseudonymousSessionId: 'session:public-route-unadmitted',
+      abuseBucketKey: 'ip:public-route-unadmitted',
+      now,
+    })).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business isn’t receiving inquiries through AE yet.',
+      blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
+    })
 
     const invalid = validatePublicInquiryFormInput({ body: ' ', contact: {} })
     expect(invalid).toMatchObject({ kind: 'invalid', errors: expect.arrayContaining([expect.objectContaining({ field: 'body' })]) })
@@ -295,11 +491,14 @@ describe('human inquiry owner inbox slice', () => {
     })
     expect(readPublicInquiryRouteReadback({ state: missingSupport, slug: 'plumbing-demo' })).toMatchObject({
       kind: 'unavailable',
-      reason: 'Support launch record is not ready for human inquiry.',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
     })
-    expect(inquiries.submitInquiry(missingSupport, submitCommand('missing-support'))).toMatchObject({
+    expect(inquiries.submitInquiry(missingSupport, submitCommand('missing-support'))).toEqual({
       kind: 'error',
-      code: 'inquiry_target_not_ready',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'not_ready', ownerLabel: 'Finish inquiry setup' }],
     })
 
     const seed = inquiries.submitInquiry(sourceState(), submitCommand('support-capacity-seed'))
@@ -319,7 +518,13 @@ describe('human inquiry owner inbox slice', () => {
       reason: 'Inquiry support capacity threshold is exceeded.',
     })
     const secondThreadBlocked = inquiries.submitInquiry(overCapacity, submitCommand('support-capacity-second'))
-    expect(secondThreadBlocked).toMatchObject({ kind: 'error', code: 'inquiry_target_not_ready' })
+    expect(secondThreadBlocked).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'not_ready', ownerLabel: 'Finish inquiry setup' }],
+    })
 
     const failedDelivery = inquiries.submitInquiry(
       sourceState({ capabilityLaunchSupportRecords: [supportRecord({ capacityThreshold: { maxOpenThreads: 10, maxFailedNotifications: 0 } })] }),
@@ -350,7 +555,7 @@ describe('human inquiry owner inbox slice', () => {
     })
     expect(readPublicInquiryRouteReadback({ state: unresolvedIncident, slug: 'plumbing-demo' })).toMatchObject({
       kind: 'unavailable',
-      reason: 'Inquiry support incidents must be reviewed before public claims continue.',
+      reason: 'This business isn’t receiving inquiries through AE yet.',
     })
   })
 
@@ -774,16 +979,97 @@ describe('human inquiry owner inbox slice', () => {
     expect(disabledReply).toMatchObject({ kind: 'error', code: 'inquiry_owner_replies_disabled' })
   })
 
-  it('rejects unavailable, suppressed, not-ready, and unsafe future-surface submissions', () => {
-    const unavailable = inquiries.submitInquiry(sourceState({ businessServices: [{ ...service(), status: 'draft' }] }), submitCommand('unavailable'))
-    expect(unavailable).toMatchObject({ kind: 'error', code: 'inquiry_target_unavailable' })
+  it('returns typed admission blockers for unpublished, suppressed, and not-ready targets', () => {
+    const unpublished = inquiries.submitInquiry(
+      sourceState({ businessServices: [{ ...service(), status: 'draft' }] }),
+      submitCommand('unpublished'),
+    )
+    expect(unpublished).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'not_published', ownerLabel: 'Publish this business page' }],
+    })
 
     const suppressed = inquiries.submitInquiry(sourceState({ suppressionRules: [businessSuppression()] }), submitCommand('suppressed'))
-    expect(suppressed).toMatchObject({ kind: 'error', code: 'inquiry_target_suppressed' })
+    expect(suppressed).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'suppressed', ownerLabel: 'Turn inquiry receiving back on' }],
+    })
 
-    const notReady = inquiries.submitInquiry(sourceState({ serviceCapabilities: [{ ...capability(), status: 'degraded' }] }), submitCommand('not-ready'))
-    expect(notReady).toMatchObject({ kind: 'error', code: 'inquiry_target_not_ready' })
+    const notReady = inquiries.submitInquiry(
+      sourceState({ serviceCapabilities: [{ ...capability(), status: 'degraded' }] }),
+      submitCommand('not-ready'),
+    )
+    expect(notReady).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'not_ready', ownerLabel: 'Finish inquiry setup' }],
+    })
+  })
 
+  it('refuses unclaimed and recipient-unresolvable targets with their exact blocker', () => {
+    const unclaimed = inquiries.submitInquiry(
+      sourceState({ businesses: [{ ...business(), claimStatus: 'draft' }], claims: [] }),
+      submitCommand('unclaimed'),
+    )
+    expect(unclaimed).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'not_claimed', ownerLabel: 'Complete the business claim' }],
+    })
+
+    const missingRecipient = inquiries.submitInquiry(
+      sourceState({ resolvableOwnerRecipients: [] }),
+      submitCommand('missing-recipient'),
+    )
+    expect(missingRecipient).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_not_admitted',
+      retryable: false,
+      reason: 'This business cannot receive inquiries yet.',
+      blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
+    })
+  })
+
+  it('fails closed when owner recipient admission drifts before commit', () => {
+    const reviewState = sourceState()
+    const commitState = { ...reviewState, resolvableOwnerRecipients: [] }
+
+    const result = inquiries.submitInquiry(reviewState, submitCommand('recipient-drift'), commitState)
+
+    expect(result).toEqual({
+      kind: 'error',
+      code: 'inquiry_target_admission_conflict',
+      retryable: false,
+      reason: 'This business can no longer receive this inquiry.',
+      blockers: [{ kind: 'recipient_unresolvable', ownerLabel: 'Add a usable owner notification email' }],
+    })
+    expect(reviewState.threads).toEqual([])
+    expect(reviewState.messages).toEqual([])
+    expect(reviewState.notifications).toEqual([])
+  })
+
+  it('persists an inquiry for a claimed target with a resolvable owner recipient', () => {
+    const result = inquiries.submitInquiry(sourceState(), submitCommand('admitted-target'))
+
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') throw new Error(result.code)
+    expect(result.notification).toMatchObject({ recipientRole: 'owner', status: 'queued' })
+    expect(result.state.threads).toHaveLength(1)
+    expect(result.state.messages).toHaveLength(1)
+    expect(result.state.notifications).toEqual([result.notification])
+  })
+
+  it('rejects unsafe future-surface submissions', () => {
     const unsafe = inquiries.submitInquiry(sourceState(), submitCommand('unsafe', {
       unsafeClientFields: { paymentIntentId: 'pi_123' },
     }))
@@ -822,6 +1108,9 @@ function sourceState(overrides: Partial<InquirySourceState> = {}): InquirySource
     serviceCapabilities: [capability()],
     capabilityLaunchSupportRecords: [supportRecord()],
     suppressionRules: [],
+    owners: [owner()],
+    claims: [claim()],
+    resolvableOwnerRecipients: [resolvableOwnerRecipient()],
     ...overrides,
   })
 }
@@ -842,6 +1131,37 @@ function business(): BusinessRecord {
     sourceHash: stableHash({ businessId: 'business:inquiry' }),
     createdAt: now,
     updatedAt: now,
+  }
+}
+
+function owner(): BusinessOwnerRecord {
+  return {
+    ownerId,
+    clerkUserId: 'clerk:owner-inquiry',
+    displayName: 'Demo Plumbing Owner',
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function claim(): ClaimRecord {
+  return {
+    claimId,
+    ownerId,
+    businessId,
+    slug: brandNonEmpty('plumbing-demo', 'Slug'),
+    status: 'published',
+    submittedFactsHash: stableHash({ claimId: 'claim:inquiry' }),
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+function resolvableOwnerRecipient(): ResolvableOwnerRecipient {
+  return {
+    ownerId,
+    recipientRef: 'email:owner@demo-plumbing.example.test',
+    resolvedAt: now,
   }
 }
 
