@@ -51,6 +51,7 @@ const durableTables = [
   'customerRequestV2RoutePlanGenerations',
   'customerRequestV2RoutePlanHeads',
   'customerRequestV2Commands',
+  'customerRequestV2RoutePlanGenerationCommands',
   'customerRequestV2ActionPreparations',
   'customerRequestV2PreparationCommands',
   'customerRequestV2PreparationDisclosureReviews',
@@ -186,6 +187,9 @@ const requiredIndexes = {
   ],
   customerRequestV2RoutePlanHeads: ['by_requestId'],
   customerRequestV2Commands: ['by_commandKey', 'by_requestId_and_resultingRevision'],
+  customerRequestV2RoutePlanGenerationCommands: [
+    'by_commandKey', 'by_requestId_and_resultingGeneration',
+  ],
   customerRequestV2ActionPreparations: ['by_preparationRef', 'by_requestId_and_requestRevision_and_actionId'],
   customerRequestV2PreparationCommands: ['by_commandKey'],
   customerRequestV2PreparationDisclosureReviews: ['by_reviewRef'],

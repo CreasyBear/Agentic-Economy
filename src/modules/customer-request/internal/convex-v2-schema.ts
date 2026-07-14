@@ -604,7 +604,16 @@ export const routePlanGenerationV2Value = v.object({
     ),
     proposalDigest: v.string(),
   }),
-  registrySnapshotDigest: v.string(), routes: v.array(routePlanV2Value),
+  registrySnapshotDigest: v.string(),
+  // Optional only so immutable generations written before #169 remain readable.
+  // Every new commit path requires this snapshot before accepting a generation.
+  decisionSnapshot: v.optional(v.object({
+    requestSnapshotDigest: v.string(), factsDigest: v.string(),
+    criteria: v.array(criterionV2Value),
+    completionRequirements: v.array(completionRequirementV2Value),
+    evaluationDigest: v.string(), planRevisionId: v.string(), planDigest: v.string(),
+  })),
+  routes: v.array(routePlanV2Value),
   authority: v.literal('proposal_only'), createdAt: v.number(),
 })
 export const customerRequestV2AggregateValue = v.object({
@@ -690,6 +699,7 @@ export const customerRequestV2Tables = {
   customerRequestV2RoutePlanHeads: defineTable({
     requestId: v.string(), currentGeneration: v.number(), currentRequestRevision: v.number(),
     currentGenerationRef: v.optional(v.string()), currentGenerationDigest: v.optional(v.string()),
+    currentDecisionCommandKey: v.optional(v.string()), currentDecisionCommandDigest: v.optional(v.string()),
     createdAt: v.number(), updatedAt: v.number(),
   }).index('by_requestId', ['requestId']),
 
@@ -708,6 +718,27 @@ export const customerRequestV2Tables = {
   })
     .index('by_commandKey', ['commandKey'])
     .index('by_requestId_and_resultingRevision', ['requestId', 'resultingRevision']),
+
+  customerRequestV2RoutePlanGenerationCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+    expectedRequestRevision: v.number(), expectedGeneration: v.number(), expectedGenerationRef: v.string(),
+    expectedDecisionCommandKey: v.optional(v.string()),
+    resultKind: v.union(
+      v.literal('unchanged'), v.literal('superseded'),
+      v.literal('needs_information'), v.literal('unsupported'), v.literal('retryable'),
+    ),
+    retryReason: v.optional(v.union(
+      v.literal('current_supply_unavailable'),
+      v.literal('interpreter_unavailable'),
+      v.literal('interpretation_unusable'),
+      v.literal('context_changed'),
+    )),
+    resultAggregate: v.optional(customerRequestV2AggregateValue),
+    resultingGeneration: v.optional(v.number()), resultingGenerationRef: v.optional(v.string()),
+    resultingGenerationDigest: v.optional(v.string()), committedAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_requestId_and_resultingGeneration', ['requestId', 'resultingGeneration']),
 
   customerRequestV2ActionPreparations: defineTable({
     preparationRef: v.string(), preparationDigest: v.string(), requestId: v.string(), requestRevision: v.number(),

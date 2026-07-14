@@ -244,7 +244,7 @@ export const customerRequestViewSchema = z.object({
 
 export const customerRequestConflictSchema = z.object({
   kind: z.literal('conflict'), requestRef: z.string(),
-  reason: z.enum(['revision_changed', 'identity_changed', 'idempotency_key_reused']),
+  reason: z.enum(['revision_changed', 'options_changed', 'identity_changed', 'idempotency_key_reused']),
 }).strict()
 
 export const customerRequestRefusalSchema = z.object({

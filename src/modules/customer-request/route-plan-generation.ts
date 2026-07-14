@@ -9,6 +9,16 @@ import type {
 
 export const CUSTOMER_REQUEST_ROUTE_PLAN_GENERATION_FORMAT = 'ae.route-plan-generation:v1' as const
 
+export type CustomerRequestRoutePlanDecisionSnapshot = Readonly<{
+  requestSnapshotDigest: CustomerRequestV2Aggregate['snapshot']['snapshotDigest']
+  factsDigest: CustomerRequestV2Aggregate['evaluation']['factsDigest']
+  criteria: CustomerRequestV2Aggregate['evaluation']['criteria']
+  completionRequirements: CustomerRequestV2Aggregate['evaluation']['completionRequirements']
+  evaluationDigest: CustomerRequestV2Aggregate['evaluation']['evaluationDigest']
+  planRevisionId: CustomerRequestV2Aggregate['plan']['planRevisionId']
+  planDigest: CustomerRequestV2Aggregate['plan']['planDigest']
+}>
+
 export type CustomerRequestRoutePlanGeneration = Readonly<{
   format: typeof CUSTOMER_REQUEST_ROUTE_PLAN_GENERATION_FORMAT
   generationRef: string
@@ -23,6 +33,8 @@ export type CustomerRequestRoutePlanGeneration = Readonly<{
     proposalDigest: string
   }>
   registrySnapshotDigest: string
+  /** Optional only for immutable generations written before decision snapshots existed. */
+  decisionSnapshot?: CustomerRequestRoutePlanDecisionSnapshot
   routes: readonly CustomerRequestRoutePlan[]
   authority: 'proposal_only'
   createdAt: number
@@ -34,6 +46,7 @@ export type CreateCustomerRequestRoutePlanGenerationInput = Readonly<{
   requestRevision: number
   compiler: CustomerRequestRoutePlanGeneration['compiler']
   registrySnapshotDigest: string
+  decisionSnapshot: CustomerRequestRoutePlanDecisionSnapshot
   routes: readonly CustomerRequestRoutePlan[]
   createdAt: number
 }>
@@ -44,6 +57,7 @@ type RoutePlanGenerationMaterial = Readonly<{
   requestRevision: number
   compiler: CustomerRequestRoutePlanGeneration['compiler']
   registrySnapshotDigest: string
+  decisionSnapshot?: CustomerRequestRoutePlanDecisionSnapshot
   routes: readonly CustomerRequestRoutePlan[]
   authority: 'proposal_only'
   createdAt: number
@@ -61,6 +75,7 @@ export function createCustomerRequestRoutePlanGeneration(
     requestRevision: input.requestRevision,
     compiler: input.compiler,
     registrySnapshotDigest: input.registrySnapshotDigest,
+    decisionSnapshot: input.decisionSnapshot,
     routes: input.routes,
     authority: 'proposal_only',
     createdAt: input.createdAt,
@@ -119,6 +134,9 @@ export function routePlanGenerationMatchesAggregate(
     && canonicalDigest(generation.compiler.interpretationEvidence as StableHashValue)
       === canonicalDigest(aggregate.plan.interpretationEvidence as StableHashValue)
     && generation.registrySnapshotDigest === aggregate.plan.registrySnapshotDigest
+    && (generation.decisionSnapshot === undefined
+      || canonicalDigest(generation.decisionSnapshot as StableHashValue)
+        === canonicalDigest(routePlanGenerationDecisionSnapshot(aggregate) as StableHashValue))
     && generation.createdAt === aggregate.plan.createdAt
     && generation.routes.every((route) => route.steps.every((step) => {
       const action = aggregate.plan.actions.find(({ actionId }) => actionId === step.actionId)
@@ -128,6 +146,61 @@ export function routePlanGenerationMatchesAggregate(
         && canonicalDigest(step.deferredInputs as StableHashValue)
           === canonicalDigest(action.inputMappings as StableHashValue)
     }))
+}
+
+export function routePlanGenerationDecisionSnapshot(
+  aggregate: Pick<CustomerRequestV2Aggregate, 'snapshot' | 'evaluation' | 'plan'>,
+): CustomerRequestRoutePlanDecisionSnapshot {
+  return Object.freeze({
+    requestSnapshotDigest: aggregate.snapshot.snapshotDigest,
+    factsDigest: aggregate.evaluation.factsDigest,
+    criteria: aggregate.evaluation.criteria,
+    completionRequirements: aggregate.evaluation.completionRequirements,
+    evaluationDigest: aggregate.evaluation.evaluationDigest,
+    planRevisionId: aggregate.plan.planRevisionId,
+    planDigest: aggregate.plan.planDigest,
+  })
+}
+
+export function routePlanGenerationOwnsDecisionSnapshot(
+  generation: CustomerRequestRoutePlanGeneration | undefined,
+): generation is CustomerRequestRoutePlanGeneration & Readonly<{
+  decisionSnapshot: CustomerRequestRoutePlanDecisionSnapshot
+}> {
+  return generation !== undefined && generation.decisionSnapshot !== undefined
+}
+
+export function routePlanGenerationMatchesRequest(
+  generation: CustomerRequestRoutePlanGeneration,
+  request: Readonly<{ requestId: string; revision: number }>,
+  expectedGeneration: number,
+): boolean {
+  return routePlanGenerationIsInternallyConsistent(generation, expectedGeneration)
+    && generation.requestId === request.requestId
+    && generation.requestRevision === request.revision
+}
+
+export function routePlanGenerationMaterialDigest(
+  generation: CustomerRequestRoutePlanGeneration,
+): string {
+  return canonicalDigest({
+    format: generation.format,
+    requestId: generation.requestId,
+    requestRevision: generation.requestRevision,
+    compilerVersion: generation.compiler.compilerVersion,
+    registrySnapshotDigest: generation.registrySnapshotDigest,
+    ...(generation.decisionSnapshot === undefined ? {} : {
+      decisionSnapshot: {
+        requestSnapshotDigest: generation.decisionSnapshot.requestSnapshotDigest,
+        factsDigest: generation.decisionSnapshot.factsDigest,
+        criteria: generation.decisionSnapshot.criteria,
+        completionRequirements: generation.decisionSnapshot.completionRequirements,
+        evaluationDigest: generation.decisionSnapshot.evaluationDigest,
+      },
+    }),
+    routes: generation.routes,
+    authority: generation.authority,
+  } as StableHashValue)
 }
 
 function routesAreInternallyConsistent(generation: CustomerRequestRoutePlanGeneration): boolean {
@@ -162,48 +235,17 @@ function routesAreInternallyConsistent(generation: CustomerRequestRoutePlanGener
 
 export function writableCustomerRequestRoutePlanGeneration(
   generation: CustomerRequestRoutePlanGeneration,
-) {
-  return {
-    ...generation,
-    compiler: {
-      ...generation.compiler,
-      interpretationEvidence: { ...generation.compiler.interpretationEvidence },
-    },
-    routes: generation.routes.map((route) => ({
-      ...route,
-      steps: route.steps.map((step) => ({
-        ...step,
-        contractRef: { ...step.contractRef },
-        resolvedInputs: step.resolvedInputs.map((fact) => ({
-          ...fact,
-          contractRef: { ...fact.contractRef },
-          value: structuredClone(fact.value),
-          source: { ...fact.source },
-        })),
-        deferredInputs: step.deferredInputs.map((mapping) => ({
-          ...mapping, source: { ...mapping.source }, target: { ...mapping.target },
-        })),
-        price: { ...step.price },
-        dataUse: step.dataUse.map((item) => ({
-          ...item, recipient: { ...item.recipient }, purposes: [...item.purposes],
-        })),
-        effects: step.effects.map((effect) => ({ ...effect })),
-        evidence: step.evidence.map((evidence) => ({ ...evidence })),
-        recovery: { ...step.recovery },
-      })),
-      edges: route.edges.map((edge) => ({
-        ...edge, source: { ...edge.source }, target: { ...edge.target },
-      })),
-      maximumTotalCost: { ...route.maximumTotalCost },
-      uncertainty: [...route.uncertainty],
-      fallbacks: {
-        ordering: route.fallbacks.ordering,
-        alternatives: route.fallbacks.alternatives.map((fallback) => ({ ...fallback })),
-      },
-      comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
-    })),
-  }
+): DeepWritable<CustomerRequestRoutePlanGeneration> {
+  return structuredClone(generation) as DeepWritable<CustomerRequestRoutePlanGeneration>
 }
+
+type DeepWritable<T> = T extends string | number | boolean | bigint | null | undefined
+  ? T
+  : T extends readonly (infer Item)[]
+    ? DeepWritable<Item>[]
+    : T extends object
+      ? { -readonly [Key in keyof T]: DeepWritable<T[Key]> }
+      : T
 
 function routePlanGenerationDigestMaterial(
   generation: RoutePlanGenerationMaterial,
@@ -214,6 +256,7 @@ function routePlanGenerationDigestMaterial(
     requestRevision: generation.requestRevision,
     compiler: generation.compiler,
     registrySnapshotDigest: generation.registrySnapshotDigest,
+    ...(generation.decisionSnapshot === undefined ? {} : { decisionSnapshot: generation.decisionSnapshot }),
     routes: generation.routes,
     authority: generation.authority,
     createdAt: generation.createdAt,

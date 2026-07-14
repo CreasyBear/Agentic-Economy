@@ -27,7 +27,10 @@ import {
 import { deriveCustomerDecisionPreference } from '@/modules/customer-request/semantic-interpreter'
 import {
   routePlanGenerationIsInternallyConsistent,
+  routePlanGenerationMatchesRequest,
   routePlanGenerationMatchesAggregate,
+  routePlanGenerationMaterialDigest,
+  routePlanGenerationOwnsDecisionSnapshot,
   type CustomerRequestRoutePlanGeneration,
 } from '@/modules/customer-request/route-plan-generation'
 
@@ -55,6 +58,7 @@ const currentAggregateResult = v.union(
     kind: v.literal('current'), aggregate: customerRequestV2AggregateValue,
     routeGenerationNumber: v.number(),
     routeGenerationRef: v.optional(v.string()),
+    currentDecisionCommandKey: v.optional(v.string()),
   }),
   v.object({
     kind: v.literal('needs_attention'), requestId: v.string(),
@@ -78,6 +82,32 @@ const commandReplayResult = v.union(
     routeGenerationRef: v.optional(v.string()),
   }),
 )
+const generationRefreshResult = v.union(
+  v.object({ kind: v.literal('unchanged'), routeGeneration: routePlanGenerationV2Value }),
+  v.object({ kind: v.literal('superseded'), routeGeneration: routePlanGenerationV2Value }),
+  v.object({ kind: v.literal('needs_information'), aggregate: customerRequestV2AggregateValue }),
+  v.object({ kind: v.literal('unsupported'), aggregate: customerRequestV2AggregateValue }),
+  v.object({
+    kind: v.literal('retryable'),
+    reason: v.union(
+      v.literal('current_supply_unavailable'),
+      v.literal('interpreter_unavailable'),
+      v.literal('interpretation_unusable'),
+      v.literal('context_changed'),
+    ),
+  }),
+  v.object({ kind: v.literal('request_conflict') }),
+  v.object({ kind: v.literal('route_generation_conflict') }),
+  v.object({ kind: v.literal('identity_conflict') }),
+  v.object({ kind: v.literal('command_conflict') }),
+  v.object({ kind: v.literal('candidate_invalid') }),
+  v.object({ kind: v.literal('context_stale') }),
+)
+const generationRefreshReplayResult = v.union(
+  v.object({ kind: v.literal('not_found') }),
+  v.object({ kind: v.literal('command_conflict') }),
+  generationRefreshResult,
+)
 
 export const commitAggregate = internalMutation({
   args: {
@@ -90,8 +120,10 @@ export const commitAggregate = internalMutation({
     if (!aggregateIsInternallyConsistent(args.aggregate, args.expectedRevision)) {
       return { kind: 'aggregate_invalid' as const }
     }
-    if (!routePlanGenerationMatchesAggregate(
-      domainRouteGeneration(args.routeGeneration),
+    const candidateGeneration = domainRouteGeneration(args.routeGeneration)
+    if ((candidateGeneration !== undefined && !routePlanGenerationOwnsDecisionSnapshot(candidateGeneration))
+      || !routePlanGenerationMatchesAggregate(
+      candidateGeneration,
       domainAggregate(args.aggregate),
       args.expectedRouteGeneration,
     )) {
@@ -165,6 +197,8 @@ export const commitAggregate = internalMutation({
           currentRequestRevision: snapshot.revision,
           currentGenerationRef: args.routeGeneration.generationRef,
           currentGenerationDigest: args.routeGeneration.generationDigest,
+          currentDecisionCommandKey: undefined,
+          currentDecisionCommandDigest: undefined,
           updatedAt: snapshot.recordedAt,
         })
       }
@@ -173,6 +207,8 @@ export const commitAggregate = internalMutation({
         currentRequestRevision: snapshot.revision,
         currentGenerationRef: undefined,
         currentGenerationDigest: undefined,
+        currentDecisionCommandKey: undefined,
+        currentDecisionCommandDigest: undefined,
         updatedAt: snapshot.recordedAt,
       })
     }
@@ -211,6 +247,253 @@ export const commitAggregate = internalMutation({
   },
 })
 
+export const refreshRoutePlanGeneration = internalMutation({
+  args: {
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+    expectedRequestRevision: v.number(), expectedGeneration: v.number(), expectedGenerationRef: v.string(),
+    expectedDecisionCommandKey: v.optional(v.string()),
+    candidateAggregate: customerRequestV2AggregateValue,
+    candidateRouteGeneration: v.optional(routePlanGenerationV2Value),
+  },
+  returns: generationRefreshResult,
+  handler: async (ctx, args) => {
+    const prior = await ctx.db.query('customerRequestV2RoutePlanGenerationCommands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
+    if (prior !== null) {
+      if (prior.commandDigest !== args.commandDigest
+        || prior.principalId !== args.principalId
+        || prior.requestId !== args.requestId
+        || prior.expectedRequestRevision !== args.expectedRequestRevision
+        || prior.expectedGeneration !== args.expectedGeneration
+        || prior.expectedGenerationRef !== args.expectedGenerationRef
+        || prior.expectedDecisionCommandKey !== args.expectedDecisionCommandKey) {
+        return { kind: 'command_conflict' as const }
+      }
+      return await readGenerationRefreshCommandResult(ctx.db, prior)
+    }
+    if (!Number.isSafeInteger(args.expectedRequestRevision) || args.expectedRequestRevision < 1
+      || !Number.isSafeInteger(args.expectedGeneration) || args.expectedGeneration < 1
+      || !aggregateIsInternallyConsistent(args.candidateAggregate, args.expectedRequestRevision - 1)
+      || (args.candidateRouteGeneration !== undefined
+        && !routePlanGenerationOwnsDecisionSnapshot(domainRouteGeneration(args.candidateRouteGeneration)))
+      || !routePlanGenerationMatchesAggregate(
+        domainRouteGeneration(args.candidateRouteGeneration),
+        domainAggregate(args.candidateAggregate),
+        args.expectedGeneration,
+      )) return { kind: 'candidate_invalid' as const }
+
+    const requestHead = await ctx.db.query('customerRequestV2Heads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (requestHead === null || requestHead.currentRevision !== args.expectedRequestRevision) {
+      return { kind: 'request_conflict' as const }
+    }
+    if (requestHead.principalId !== args.principalId) return { kind: 'identity_conflict' as const }
+    const revision = await ctx.db.query('customerRequestV2Revisions')
+      .withIndex('by_requestId_and_requestRevision', (query) => (
+        query.eq('requestId', args.requestId).eq('requestRevision', args.expectedRequestRevision)
+      )).unique()
+    if (revision === null || 'routes' in revision.aggregate.plan
+      || revision.aggregate.aggregateDigest !== requestHead.currentAggregateDigest
+      || !aggregateIsInternallyConsistent(revision.aggregate, args.expectedRequestRevision - 1)) {
+      throw new Error('customer_request_v2_refresh_request_integrity_failure')
+    }
+    const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (routeHead?.currentGenerationRef === undefined
+      || routeHead.currentGeneration !== args.expectedGeneration
+      || routeHead.currentGenerationRef !== args.expectedGenerationRef
+      || routeHead.currentDecisionCommandKey !== args.expectedDecisionCommandKey
+      || routeHead.currentRequestRevision !== args.expectedRequestRevision) {
+      return { kind: 'route_generation_conflict' as const }
+    }
+    const candidate = args.candidateAggregate
+    if (candidate.snapshot.requestId !== revision.aggregate.snapshot.requestId
+      || candidate.snapshot.revision !== revision.aggregate.snapshot.revision
+      || candidate.snapshot.principalId !== revision.aggregate.snapshot.principalId
+      || candidate.snapshot.delegatedAgentId !== revision.aggregate.snapshot.delegatedAgentId
+      || candidate.snapshot.intent !== revision.aggregate.snapshot.intent
+      || candidate.snapshot.networkId !== revision.aggregate.snapshot.networkId) {
+      return { kind: 'candidate_invalid' as const }
+    }
+    const context = await validateAggregateAgainstCurrentCapabilityGraph(
+      ctx.db, candidate, args.candidateRouteGeneration,
+    )
+    if (context === 'stale') return { kind: 'context_stale' as const }
+    if (context === 'invalid') return { kind: 'candidate_invalid' as const }
+
+    const current = await readExactRoutePlanGeneration(ctx.db, args.requestId, args.expectedGenerationRef)
+    if (current.kind !== 'found'
+      || current.routeGeneration.generation !== args.expectedGeneration
+      || !routePlanGenerationMatchesRequest(
+        domainRouteGeneration(current.routeGeneration),
+        revision.aggregate.snapshot,
+        args.expectedGeneration - 1,
+      )) throw new Error('customer_request_v2_refresh_generation_integrity_failure')
+
+    let resultKind: 'unchanged' | 'superseded' | 'needs_information' | 'unsupported'
+    let resultingGeneration: RouteGeneration | undefined
+    if (args.candidateRouteGeneration === undefined) {
+      resultKind = candidate.outcome === 'needs_information' ? 'needs_information' : 'unsupported'
+    } else if (routePlanGenerationMaterialDigest(domainRouteGeneration(current.routeGeneration))
+      === routePlanGenerationMaterialDigest(domainRouteGeneration(args.candidateRouteGeneration))) {
+      resultKind = 'unchanged'
+      resultingGeneration = current.routeGeneration
+    } else {
+      resultKind = 'superseded'
+      resultingGeneration = args.candidateRouteGeneration
+      const existing = await ctx.db.query('customerRequestV2RoutePlanGenerations')
+        .withIndex('by_requestId_and_generation', (query) => (
+          query.eq('requestId', args.requestId).eq('generation', args.candidateRouteGeneration!.generation)
+        )).unique()
+      if (existing !== null) return { kind: 'route_generation_conflict' as const }
+      await ctx.db.insert('customerRequestV2RoutePlanGenerations', {
+        requestId: args.requestId,
+        generation: args.candidateRouteGeneration.generation,
+        generationRef: args.candidateRouteGeneration.generationRef,
+        generationDigest: args.candidateRouteGeneration.generationDigest,
+        requestRevision: args.expectedRequestRevision,
+        routeGeneration: writableRouteGeneration(args.candidateRouteGeneration),
+        recordedAt: args.candidateRouteGeneration.createdAt,
+      })
+      await ctx.db.patch(routeHead._id, {
+        currentGeneration: args.candidateRouteGeneration.generation,
+        currentGenerationRef: args.candidateRouteGeneration.generationRef,
+        currentGenerationDigest: args.candidateRouteGeneration.generationDigest,
+        currentDecisionCommandKey: undefined,
+        currentDecisionCommandDigest: undefined,
+        updatedAt: args.candidateRouteGeneration.createdAt,
+      })
+    }
+    await ctx.db.insert('customerRequestV2RoutePlanGenerationCommands', {
+      commandKey: args.commandKey, commandDigest: args.commandDigest,
+      principalId: args.principalId, requestId: args.requestId,
+      expectedRequestRevision: args.expectedRequestRevision,
+      expectedGeneration: args.expectedGeneration, expectedGenerationRef: args.expectedGenerationRef,
+      ...(args.expectedDecisionCommandKey === undefined
+        ? {}
+        : { expectedDecisionCommandKey: args.expectedDecisionCommandKey }),
+      resultKind,
+      ...(resultingGeneration === undefined
+        ? { resultAggregate: writableAggregate(candidate) }
+        : {}),
+      ...(resultingGeneration === undefined ? {} : {
+        resultingGeneration: resultingGeneration.generation,
+        resultingGenerationRef: resultingGeneration.generationRef,
+        resultingGenerationDigest: resultingGeneration.generationDigest,
+      }),
+      committedAt: candidate.snapshot.recordedAt,
+    })
+    if (resultKind === 'needs_information' || resultKind === 'unsupported') {
+      await ctx.db.patch(routeHead._id, {
+        currentDecisionCommandKey: args.commandKey,
+        currentDecisionCommandDigest: args.commandDigest,
+        updatedAt: candidate.snapshot.recordedAt,
+      })
+    } else if (resultKind === 'unchanged') {
+      await ctx.db.patch(routeHead._id, {
+        currentDecisionCommandKey: undefined,
+        currentDecisionCommandDigest: undefined,
+        updatedAt: candidate.snapshot.recordedAt,
+      })
+    }
+    if (resultKind === 'needs_information') return { kind: 'needs_information' as const, aggregate: candidate }
+    if (resultKind === 'unsupported') return { kind: 'unsupported' as const, aggregate: candidate }
+    if (resultKind === 'unchanged' && resultingGeneration !== undefined) {
+      return { kind: 'unchanged' as const, routeGeneration: resultingGeneration }
+    }
+    if (resultKind === 'superseded' && resultingGeneration !== undefined) {
+      return { kind: 'superseded' as const, routeGeneration: resultingGeneration }
+    }
+    throw new Error('customer_request_v2_refresh_result_integrity_failure')
+  },
+})
+
+export const recordRoutePlanGenerationRetry = internalMutation({
+  args: {
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+    expectedRequestRevision: v.number(), expectedGeneration: v.number(), expectedGenerationRef: v.string(),
+    expectedDecisionCommandKey: v.optional(v.string()),
+    reason: v.union(
+      v.literal('current_supply_unavailable'),
+      v.literal('interpreter_unavailable'),
+      v.literal('interpretation_unusable'),
+      v.literal('context_changed'),
+    ),
+    recordedAt: v.number(),
+  },
+  returns: generationRefreshResult,
+  handler: async (ctx, args) => {
+    const prior = await ctx.db.query('customerRequestV2RoutePlanGenerationCommands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
+    if (prior !== null) {
+      if (prior.commandDigest !== args.commandDigest
+        || prior.principalId !== args.principalId
+        || prior.requestId !== args.requestId
+        || prior.expectedRequestRevision !== args.expectedRequestRevision
+        || prior.expectedGeneration !== args.expectedGeneration
+        || prior.expectedGenerationRef !== args.expectedGenerationRef
+        || prior.expectedDecisionCommandKey !== args.expectedDecisionCommandKey) {
+        return { kind: 'command_conflict' as const }
+      }
+      return await readGenerationRefreshCommandResult(ctx.db, prior)
+    }
+    if (!Number.isSafeInteger(args.expectedRequestRevision) || args.expectedRequestRevision < 1
+      || !Number.isSafeInteger(args.expectedGeneration) || args.expectedGeneration < 1
+      || !Number.isSafeInteger(args.recordedAt) || args.recordedAt < 0) {
+      return { kind: 'candidate_invalid' as const }
+    }
+    const requestHead = await ctx.db.query('customerRequestV2Heads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (requestHead === null || requestHead.currentRevision !== args.expectedRequestRevision) {
+      return { kind: 'request_conflict' as const }
+    }
+    if (requestHead.principalId !== args.principalId) return { kind: 'identity_conflict' as const }
+    const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
+      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
+    if (routeHead?.currentGenerationRef === undefined
+      || routeHead.currentGeneration !== args.expectedGeneration
+      || routeHead.currentGenerationRef !== args.expectedGenerationRef
+      || routeHead.currentDecisionCommandKey !== args.expectedDecisionCommandKey
+      || routeHead.currentRequestRevision !== args.expectedRequestRevision) {
+      return { kind: 'route_generation_conflict' as const }
+    }
+    const current = await readExactRoutePlanGeneration(ctx.db, args.requestId, args.expectedGenerationRef)
+    if (current.kind !== 'found'
+      || current.routeGeneration.generation !== args.expectedGeneration
+      || !routePlanGenerationMatchesRequest(
+        domainRouteGeneration(current.routeGeneration),
+        { requestId: args.requestId, revision: args.expectedRequestRevision },
+        args.expectedGeneration - 1,
+      )) throw new Error('customer_request_v2_refresh_generation_integrity_failure')
+    await ctx.db.insert('customerRequestV2RoutePlanGenerationCommands', {
+      commandKey: args.commandKey, commandDigest: args.commandDigest,
+      principalId: args.principalId, requestId: args.requestId,
+      expectedRequestRevision: args.expectedRequestRevision,
+      expectedGeneration: args.expectedGeneration, expectedGenerationRef: args.expectedGenerationRef,
+      ...(args.expectedDecisionCommandKey === undefined
+        ? {}
+        : { expectedDecisionCommandKey: args.expectedDecisionCommandKey }),
+      resultKind: 'retryable', retryReason: args.reason, committedAt: args.recordedAt,
+    })
+    return { kind: 'retryable' as const, reason: args.reason }
+  },
+})
+
+export const getRoutePlanGenerationRefreshReplay = internalQuery({
+  args: {
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+  },
+  returns: generationRefreshReplayResult,
+  handler: async (ctx, args) => {
+    const command = await ctx.db.query('customerRequestV2RoutePlanGenerationCommands')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', args.commandKey)).unique()
+    if (command === null) return { kind: 'not_found' as const }
+    if (command.commandDigest !== args.commandDigest || command.principalId !== args.principalId
+      || command.requestId !== args.requestId) return { kind: 'command_conflict' as const }
+    return await readGenerationRefreshCommandResult(ctx.db, command)
+  },
+})
+
 export const getCurrentAggregate = internalQuery({
   args: { requestId: v.string() },
   returns: currentAggregateResult,
@@ -246,11 +529,14 @@ export const getCurrentAggregate = internalQuery({
       if (routeHead !== null && (!Number.isSafeInteger(routeHead.currentGeneration)
         || routeHead.currentGeneration < 1
         || (routeHead.currentGenerationRef === undefined)
-          !== (routeHead.currentGenerationDigest === undefined))) {
+          !== (routeHead.currentGenerationDigest === undefined)
+        || (routeHead.currentDecisionCommandKey === undefined)
+          !== (routeHead.currentDecisionCommandDigest === undefined))) {
         throw new Error('customer_request_route_plan_head_integrity_failure')
       }
       const hasCurrentGeneration = routeHead?.currentGenerationRef !== undefined
-      if ((revision.aggregate.outcome === 'plan_ready') !== hasCurrentGeneration) {
+      if (routeHead?.currentDecisionCommandKey === undefined
+        && (revision.aggregate.outcome === 'plan_ready') !== hasCurrentGeneration) {
         throw new Error('customer_request_route_plan_head_integrity_failure')
       }
       if (routeHead?.currentGenerationRef !== undefined) {
@@ -262,21 +548,27 @@ export const getCurrentAggregate = internalQuery({
         if (currentGeneration.kind !== 'found'
           || currentGeneration.routeGeneration.generation !== routeHead.currentGeneration
           || currentGeneration.routeGeneration.generationDigest !== routeHead.currentGenerationDigest
-          || !routePlanGenerationMatchesAggregate(
+          || !routePlanGenerationMatchesRequest(
             domainRouteGeneration(currentGeneration.routeGeneration),
-            domainAggregate(revision.aggregate),
+            revision.aggregate.snapshot,
             routeHead.currentGeneration - 1,
           )) {
           throw new Error('customer_request_route_plan_head_integrity_failure')
         }
       }
+      const currentDecision = routeHead?.currentDecisionCommandKey === undefined
+        ? undefined
+        : await readCurrentDecisionAggregate(ctx.db, routeHead, head.principalId)
       return {
         kind: 'current' as const,
-        aggregate: revision.aggregate,
+        aggregate: currentDecision?.aggregate ?? revision.aggregate,
         routeGenerationNumber: routeHead?.currentGeneration ?? 0,
         ...(routeHead?.currentGenerationRef === undefined
           ? {}
           : { routeGenerationRef: routeHead.currentGenerationRef }),
+        ...(currentDecision === undefined
+          ? {}
+          : { currentDecisionCommandKey: currentDecision.commandKey }),
       }
     }
     const historicalSnapshot = await ctx.db.query('customerRequestHeads')
@@ -396,6 +688,93 @@ async function readVerifiedCommandReplay(
     }
   }
   return { kind: 'current', aggregate: revision.aggregate }
+}
+
+async function readGenerationRefreshCommandResult(
+  db: QueryCtx['db'],
+  command: Readonly<{
+    requestId: string
+    resultKind: 'unchanged' | 'superseded' | 'needs_information' | 'unsupported' | 'retryable'
+    retryReason?: 'current_supply_unavailable' | 'interpreter_unavailable' | 'interpretation_unusable' | 'context_changed'
+    resultAggregate?: Aggregate
+    resultingGeneration?: number
+    resultingGenerationRef?: string
+    resultingGenerationDigest?: string
+  }>,
+) {
+  if (command.resultKind === 'retryable') {
+    if (command.retryReason === undefined || command.resultingGeneration !== undefined
+      || command.resultingGenerationRef !== undefined || command.resultingGenerationDigest !== undefined
+      || command.resultAggregate !== undefined) {
+      throw new Error('customer_request_v2_refresh_command_integrity_failure')
+    }
+    return { kind: 'retryable' as const, reason: command.retryReason }
+  }
+  if (command.resultKind === 'needs_information' || command.resultKind === 'unsupported') {
+    if (command.retryReason !== undefined || command.resultingGeneration !== undefined || command.resultingGenerationRef !== undefined
+      || command.resultingGenerationDigest !== undefined || command.resultAggregate === undefined
+      || command.resultAggregate.outcome !== command.resultKind
+      || !aggregateIsInternallyConsistent(
+        command.resultAggregate, command.resultAggregate.snapshot.revision - 1,
+      )) {
+      throw new Error('customer_request_v2_refresh_command_integrity_failure')
+    }
+    return { kind: command.resultKind, aggregate: command.resultAggregate }
+  }
+  if (command.retryReason !== undefined || command.resultingGeneration === undefined || command.resultingGenerationRef === undefined
+    || command.resultingGenerationDigest === undefined || command.resultAggregate !== undefined) {
+    throw new Error('customer_request_v2_refresh_command_integrity_failure')
+  }
+  const generation = await readExactRoutePlanGeneration(db, command.requestId, command.resultingGenerationRef)
+  if (generation.kind !== 'found'
+    || generation.routeGeneration.generation !== command.resultingGeneration
+    || generation.routeGeneration.generationDigest !== command.resultingGenerationDigest) {
+    throw new Error('customer_request_v2_refresh_command_integrity_failure')
+  }
+  return { kind: command.resultKind, routeGeneration: generation.routeGeneration }
+}
+
+async function readCurrentDecisionAggregate(
+  db: QueryCtx['db'],
+  head: Readonly<{
+    requestId: string
+    currentRequestRevision: number
+    currentGeneration: number
+    currentGenerationRef?: string
+    currentDecisionCommandKey?: string
+    currentDecisionCommandDigest?: string
+  }>,
+  principalId: string,
+): Promise<Readonly<{ commandKey: string; aggregate: Aggregate }>> {
+  const commandKey = head.currentDecisionCommandKey
+  const commandDigest = head.currentDecisionCommandDigest
+  if (commandKey === undefined
+    || commandDigest === undefined
+    || head.currentGenerationRef === undefined) {
+    throw new Error('customer_request_v2_current_decision_integrity_failure')
+  }
+  const command = await db.query('customerRequestV2RoutePlanGenerationCommands')
+    .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
+  if (command === null
+    || command.commandDigest !== commandDigest
+    || command.principalId !== principalId
+    || command.requestId !== head.requestId
+    || command.expectedRequestRevision !== head.currentRequestRevision
+    || command.expectedGeneration !== head.currentGeneration
+    || command.expectedGenerationRef !== head.currentGenerationRef
+    || (command.resultKind !== 'needs_information' && command.resultKind !== 'unsupported')) {
+    throw new Error('customer_request_v2_current_decision_integrity_failure')
+  }
+  const result = await readGenerationRefreshCommandResult(db, command)
+  if (result.kind !== 'needs_information' && result.kind !== 'unsupported') {
+    throw new Error('customer_request_v2_current_decision_integrity_failure')
+  }
+  if (result.aggregate.snapshot.requestId !== head.requestId
+    || result.aggregate.snapshot.revision !== head.currentRequestRevision
+    || result.aggregate.snapshot.principalId !== principalId) {
+    throw new Error('customer_request_v2_current_decision_integrity_failure')
+  }
+  return { commandKey: command.commandKey, aggregate: result.aggregate }
 }
 
 export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRevision: number): boolean {

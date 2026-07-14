@@ -25,6 +25,7 @@ import {
 } from './semantic-interpreter'
 import {
   createCustomerRequestRoutePlanGeneration,
+  routePlanGenerationDecisionSnapshot,
   type CustomerRequestRoutePlanGeneration,
 } from './route-plan-generation'
 
@@ -259,23 +260,6 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
   })
   if (routes === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
-  const routeGeneration = routes.length === 0
-    || routes.some((route) => route.maximumTotalCost.kind !== 'known')
-    ? undefined
-    : createCustomerRequestRoutePlanGeneration({
-        generation: (command.expectedRouteGeneration ?? 0) + 1,
-        requestId: command.requestId,
-        requestRevision,
-        compiler: {
-          compilerVersion: CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
-          interpreterId: command.interpreterId,
-          interpretationEvidence,
-          proposalDigest,
-        },
-        registrySnapshotDigest,
-        routes,
-        createdAt: command.now,
-      })
   const planMaterial = {
     requestId: command.requestId,
     requestRevision,
@@ -296,6 +280,24 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     planDigest,
     createdAt: command.now,
   })
+  const routeGeneration = routes.length === 0
+    || routes.some((route) => route.maximumTotalCost.kind !== 'known')
+    ? undefined
+    : createCustomerRequestRoutePlanGeneration({
+        generation: (command.expectedRouteGeneration ?? 0) + 1,
+        requestId: command.requestId,
+        requestRevision,
+        compiler: {
+          compilerVersion: CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
+          interpreterId: command.interpreterId,
+          interpretationEvidence,
+          proposalDigest,
+        },
+        registrySnapshotDigest,
+        decisionSnapshot: routePlanGenerationDecisionSnapshot({ snapshot, evaluation, plan }),
+        routes,
+        createdAt: command.now,
+      })
   const outcome = evaluation.posture === 'unsupported'
     ? 'unsupported' as const
     : evaluation.posture === 'needs_information'

@@ -42,7 +42,10 @@ export type CustomerCriterion = Readonly<{
 
 export type CustomerRequestProjection =
   | CustomerRequestView
-  | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'identity_changed' | 'idempotency_key_reused' }>
+  | Readonly<{
+      kind: 'conflict'; requestRef: string
+      reason: 'revision_changed' | 'options_changed' | 'identity_changed' | 'idempotency_key_reused'
+    }>
 
 /** @deprecated Use CustomerRequestView. Kept as a source-compatible migration alias. */
 export type CustomerOptionsProjection =

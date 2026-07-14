@@ -13,7 +13,11 @@ import {
   type RegisteredSupplyPrice,
 } from '@/modules/customer-request/evaluation'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
-import { routePlanGenerationIsInternallyConsistent } from '@/modules/customer-request/route-plan-generation'
+import {
+  routePlanGenerationIsInternallyConsistent,
+  routePlanGenerationMaterialDigest,
+  writableCustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
 import {
   bindCustomerCapabilityDescriptor,
   createJsonCustomerRequestSemanticInterpreter,
@@ -368,6 +372,79 @@ describe('V2 Request semantics', () => {
     expect(nextOrdinal.routeGeneration.generationDigest).toBe(first.routeGeneration.generationDigest)
     expect(nextOrdinal.routeGeneration.generationRef).not.toBe(first.routeGeneration.generationRef)
     expect(changedPrice.routeGeneration.generationDigest).not.toBe(first.routeGeneration.generationDigest)
+    expect(routePlanGenerationMaterialDigest(nextOrdinal.routeGeneration))
+      .toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    expect(routePlanGenerationMaterialDigest(changedPrice.routeGeneration))
+      .not.toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    const materialVariants = [
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const criterion = changed.decisionSnapshot?.criteria[0]
+        if (criterion === undefined) throw new Error('decision criterion variant missing')
+        criterion.value = 'materially changed customer criterion'
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const step = changed.routes[0]?.steps[0]
+        if (step === undefined) throw new Error('contract variant step missing')
+        step.contractRef.contractDigest = ('sha256:' + '1'.repeat(64)) as typeof step.contractRef.contractDigest
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const input = changed.routes[0]?.steps[0]?.resolvedInputs[0]
+        if (input === undefined) throw new Error('schema variant input missing')
+        input.schemaIdentity = ('sha256:' + '2'.repeat(64)) as typeof input.schemaIdentity
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const dataUse = changed.routes[0]?.steps[0]?.dataUse[0]
+        if (dataUse === undefined) throw new Error('data-use variant missing')
+        dataUse.purposes = ['changed_purpose']
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const effect = changed.routes[0]?.steps[0]?.effects[0]
+        if (effect === undefined) throw new Error('effect variant missing')
+        effect.reversibility = 'reversible'
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const evidence = changed.routes[0]?.steps[0]?.evidence[0]
+        if (evidence === undefined) throw new Error('evidence variant missing')
+        evidence.guaranteed = !evidence.guaranteed
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const route = changed.routes[0]
+        if (route === undefined) throw new Error('expiry variant route missing')
+        route.expiresAt += 1
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const recovery = changed.routes[0]?.steps[0]?.recovery
+        if (recovery === undefined) throw new Error('recovery variant missing')
+        recovery.recovery = recovery.recovery === 'retry_safe' ? 'reconcile_required' : 'retry_safe'
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const route = changed.routes[0]
+        if (route === undefined) throw new Error('shape variant route missing')
+        route.steps = route.steps.slice(0, 1)
+        return changed
+      },
+    ]
+    for (const variant of materialVariants) {
+      expect(routePlanGenerationMaterialDigest(variant(first.routeGeneration)))
+        .not.toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    }
     expect(routePlanGenerationIsInternallyConsistent({
       ...first.routeGeneration,
       createdAt: first.routeGeneration.createdAt + 1,
