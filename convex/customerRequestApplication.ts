@@ -190,9 +190,14 @@ const customerView = v.object({
       v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
       v.object({ kind: v.literal('requires_preparation') }),
     ),
-    dataUse: v.object({ recipientCount: v.number(), purposes: v.array(v.string()) }),
+    dataUse: v.object({
+      recipientCount: v.number(),
+      recipients: v.array(v.object({ businessRef: v.string(), purposes: v.array(v.string()) })),
+      purposes: v.array(v.string()),
+    }),
     effects: v.object({ totalCount: v.number(), irreversibleCount: v.number() }),
     evidence: v.object({ requirementCount: v.number() }), validUntil: v.number(),
+    recovery: v.object({ retrySafeSteps: v.number(), reconcileRequiredSteps: v.number() }),
     fallbacks: v.array(v.object({
       alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
     })),
@@ -1067,6 +1072,15 @@ async function prepareCurrentAction(
     kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
   }
   if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
+    const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
+    const routesAreCurrent = graph.kind === 'available'
+      && graph.registrySnapshotDigest === current.aggregate.evaluation.registrySnapshotDigest
+      && current.aggregate.plan.routes.every((route) => route.expiresAt > Date.now())
+    if (!routesAreCurrent) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      summary: 'The available businesses changed. Review the request again to refresh the options.',
+    }))
     return writableView(projectRoutePlansReady({
       requestRef: args.requestRef,
       revision: args.revision,
@@ -1542,8 +1556,15 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       ...route,
       providers: route.providers.map((provider) => ({ ...provider })),
       maximumTotalCost: { ...route.maximumTotalCost },
-      dataUse: { ...route.dataUse, purposes: [...route.dataUse.purposes] },
+      dataUse: {
+        ...route.dataUse,
+        recipients: route.dataUse.recipients.map((recipient) => ({
+          ...recipient, purposes: [...recipient.purposes],
+        })),
+        purposes: [...route.dataUse.purposes],
+      },
       effects: { ...route.effects }, evidence: { ...route.evidence },
+      recovery: { ...route.recovery },
       fallbacks: route.fallbacks.map((fallback) => ({ ...fallback })),
       uncertainty: [...route.uncertainty],
       comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },

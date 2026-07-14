@@ -127,9 +127,17 @@ const customerRoutePlanSchema = z.object({
     z.object({ kind: z.literal('known'), currency: z.string(), amountMinor: safeNonnegativeInteger }).strict(),
     z.object({ kind: z.literal('requires_preparation') }).strict(),
   ]),
-  dataUse: z.object({ recipientCount: safeNonnegativeInteger, purposes: z.array(z.string()) }).strict(),
+  dataUse: z.object({
+    recipientCount: safeNonnegativeInteger,
+    recipients: z.array(z.object({ businessRef: z.string(), purposes: z.array(z.string()) }).strict()),
+    purposes: z.array(z.string()),
+  }).strict(),
   effects: z.object({ totalCount: safeNonnegativeInteger, irreversibleCount: safeNonnegativeInteger }).strict(),
   evidence: z.object({ requirementCount: safeNonnegativeInteger }).strict(),
+  recovery: z.object({
+    retrySafeSteps: safeNonnegativeInteger,
+    reconcileRequiredSteps: safeNonnegativeInteger,
+  }).strict(),
   validUntil: safePositiveInteger,
   fallbacks: z.array(z.object({
     alternativeRouteRef: z.string(), when: z.literal('route_unavailable_before_approval'),

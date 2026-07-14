@@ -414,15 +414,19 @@ describe('V2 Request semantics', () => {
     expect(compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
       { kind: 'on_request' },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
+    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'plan_ready', plan: { routes: [{
+      maximumTotalCost: { kind: 'requires_preparation' }, uncertainty: ['cost_requires_preparation'],
+      comparison: { ordering: { kind: 'unranked' } },
+    }] } } })
   })
 
-  it('declares one deterministic fallback and ranks only when the customer asks for lowest price', () => {
+  it('declares only provider-disjoint fallbacks and ranks same-currency routes on an explicit price objective', () => {
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
     const request = requiredInput(lookup, 'request')
     const bindings = [
-      supply('binding:lookup', lookup),
+      supply('binding:lookup:cheap', lookup),
+      { ...supply('binding:lookup:expensive', lookup), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 200 } },
       { ...supply('binding:shipping:expensive', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 300 } },
       { ...supply('binding:shipping:cheap', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 } },
     ]
@@ -441,25 +445,51 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test', bindings, models: [lookup, shipping], now: 10_000,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
-    expect(result.aggregate.plan.routes).toHaveLength(2)
-    expect(result.aggregate.plan.routes.map((route) => ({
-      cost: route.maximumTotalCost,
-      ordering: route.comparison.ordering,
-      fallbacks: route.fallbacks,
-    }))).toEqual([
-      {
-        cost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
-        ordering: { kind: 'ranked', objective: 'lowest_maximum_price', position: 1 },
-        fallbacks: [{
-          alternativeRouteRef: expect.stringMatching(/^route:/),
-          when: 'route_unavailable_before_approval',
+    expect(result.aggregate.plan.routes).toHaveLength(4)
+    expect(result.aggregate.plan.routes.map((route) => route.maximumTotalCost)).toEqual([
+      { kind: 'known', currency: 'AUD', amountMinor: 200 },
+      { kind: 'known', currency: 'AUD', amountMinor: 300 },
+      { kind: 'known', currency: 'AUD', amountMinor: 400 },
+      { kind: 'known', currency: 'AUD', amountMinor: 500 },
+    ])
+    for (const [index, route] of result.aggregate.plan.routes.entries()) {
+      expect(route.comparison.ordering).toEqual({
+        kind: 'ranked', objective: 'lowest_maximum_price', position: index + 1,
+      })
+      expect(route.fallbacks).toHaveLength(1)
+      const alternative = result.aggregate.plan.routes.find((candidate) => (
+        candidate.routePlanId === route.fallbacks[0]?.alternativeRouteRef
+      ))
+      if (alternative === undefined) throw new Error('declared fallback missing')
+      const bindingsInRoute = new Set(route.steps.map((step) => step.bindingId))
+      expect(alternative.steps.every((step) => !bindingsInRoute.has(step.bindingId))).toBe(true)
+    }
+  })
+
+  it('does not price-rank otherwise viable routes across currencies', () => {
+    const lookup = compositionLookupModel()
+    const request = requiredInput(lookup, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:cross-currency', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find the cheapest lookup.', networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates', selections: [{
+        selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
+        facts: [{
+          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+          value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
         }],
-      },
-      {
-        cost: { kind: 'known', currency: 'AUD', amountMinor: 400 },
-        ordering: { kind: 'ranked', objective: 'lowest_maximum_price', position: 2 },
-        fallbacks: [],
-      },
+      }] },
+      interpreterId: 'interpreter:test', models: [lookup], now: 10_000,
+      bindings: [
+        supply('binding:lookup:aud', lookup),
+        { ...supply('binding:lookup:usd', lookup), price: { kind: 'fixed' as const, currency: 'USD', amountMinor: 1 } },
+      ],
+    })
+    if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
+    expect(result.aggregate.plan.routes.map((route) => route.comparison.ordering)).toEqual([
+      { kind: 'unranked' }, { kind: 'unranked' },
     ])
   })
 

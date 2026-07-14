@@ -467,20 +467,21 @@ export function compileRoutePlans(input: Readonly<{
       requestId: input.requestId, requestRevision: input.requestRevision,
       registrySnapshotDigest: input.registrySnapshotDigest, steps, edges,
       maximumTotalCost: cost, expiresAt,
-      uncertainty: [] as const,
+      uncertainty: cost.kind === 'requires_preparation' ? ['cost_requires_preparation' as const] : [],
       comparison, authority: 'proposal_only' as const,
     }
     return Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })
   }).filter((route): route is NonNullable<typeof route> => route !== undefined)
-  const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, input.objective))
+  const rankedObjective = canRankByLowestMaximumPrice(drafts) ? input.objective : undefined
+  const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, rankedObjective))
   return Object.freeze(ordered.map((draft, index): CustomerRequestRoutePlan => {
-    const alternative = ordered[index + 1]
-    const fallbacks = alternative === undefined ? [] : [Object.freeze({
+    const fallbacks = ordered.filter((alternative) => alternative.routePlanId !== draft.routePlanId
+      && routesUseDisjointBindings(draft, alternative)).map((alternative) => Object.freeze({
       alternativeRouteRef: alternative.routePlanId,
       when: 'route_unavailable_before_approval' as const,
-    })]
-    const ordering = input.objective === 'lowest_maximum_price'
-      ? Object.freeze({ kind: 'ranked' as const, objective: input.objective, position: index + 1 })
+    }))
+    const ordering = rankedObjective === 'lowest_maximum_price'
+      ? Object.freeze({ kind: 'ranked' as const, objective: rankedObjective, position: index + 1 })
       : Object.freeze({ kind: 'unranked' as const })
     const material = {
       ...draft,
@@ -501,7 +502,9 @@ function isRouteCandidate(candidate: RequestEvaluation['candidates'][number]): c
 }
 
 function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerRequestRoutePlan['maximumTotalCost'] | undefined {
-  if (prices.some((price) => price.kind === 'on_request')) return undefined
+  if (prices.some((price) => price.kind === 'on_request')) {
+    return Object.freeze({ kind: 'requires_preparation' as const })
+  }
   const currencies = new Set(prices.map((price) => price.kind === 'on_request' ? '' : price.currency))
   if (currencies.size !== 1) return undefined
   let amountMinor = 0
@@ -512,6 +515,23 @@ function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerReq
     if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) return undefined
   }
   return Object.freeze({ kind: 'known' as const, currency: [...currencies][0]!, amountMinor })
+}
+
+function canRankByLowestMaximumPrice(
+  routes: readonly Pick<CustomerRequestRoutePlan, 'maximumTotalCost'>[],
+): boolean {
+  if (routes.length === 0 || routes.some((route) => route.maximumTotalCost.kind !== 'known')) return false
+  return new Set(routes.map((route) => route.maximumTotalCost.kind === 'known'
+    ? route.maximumTotalCost.currency
+    : '')).size === 1
+}
+
+function routesUseDisjointBindings(
+  left: Pick<CustomerRequestRoutePlan, 'steps'>,
+  right: Pick<CustomerRequestRoutePlan, 'steps'>,
+): boolean {
+  const leftBindings = new Set(left.steps.map((step) => step.bindingId))
+  return right.steps.every((step) => !leftBindings.has(step.bindingId))
 }
 
 function compareRoutePlans(

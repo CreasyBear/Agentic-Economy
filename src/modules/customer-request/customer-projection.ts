@@ -50,6 +50,7 @@ type RoutePlanProjectionInput = Readonly<{
     businessId: string
     dataUse: readonly Readonly<{ purposes: readonly string[] }>[]
     effects: readonly Readonly<{ reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible' }>[]
+    recovery: Readonly<{ recovery: 'retry_safe' | 'reconcile_required' }>
   }>[]
   maximumTotalCost: CustomerRoutePlan['maximumTotalCost']
   expiresAt: number
@@ -238,18 +239,37 @@ export function projectRoutePlansReady(input: Readonly<{
 
 function projectRoutePlan(route: RoutePlanProjectionInput): CustomerRoutePlan {
   const purposes = [...new Set(route.steps.flatMap((step) => step.dataUse.flatMap((item) => item.purposes)))].sort()
+  const recipientPurposes = new Map<string, Set<string>>()
+  for (const step of route.steps) {
+    if (step.dataUse.length === 0) continue
+    const businessPurposes = recipientPurposes.get(step.businessId) ?? new Set<string>()
+    for (const purpose of step.dataUse.flatMap((item) => item.purposes)) businessPurposes.add(purpose)
+    recipientPurposes.set(step.businessId, businessPurposes)
+  }
+  const recipients = [...recipientPurposes.entries()].sort(([left], [right]) => left.localeCompare(right))
+    .map(([businessRef, businessPurposes]) => Object.freeze({
+      businessRef, purposes: Object.freeze([...businessPurposes].sort()),
+    }))
   return Object.freeze({
     routeRef: route.routePlanId,
     stepCount: route.steps.length,
     providers: Object.freeze([...new Set(route.steps.map((step) => step.businessId))]
       .sort().map((businessRef) => Object.freeze({ businessRef }))),
     maximumTotalCost: { ...route.maximumTotalCost },
-    dataUse: Object.freeze({ recipientCount: route.comparison.dataExposureCount, purposes: Object.freeze(purposes) }),
+    dataUse: Object.freeze({
+      recipientCount: recipients.length,
+      recipients: Object.freeze(recipients),
+      purposes: Object.freeze(purposes),
+    }),
     effects: Object.freeze({
       totalCount: route.steps.reduce((count, step) => count + step.effects.length, 0),
       irreversibleCount: route.comparison.irreversibleEffectCount,
     }),
     evidence: Object.freeze({ requirementCount: route.comparison.evidenceRequirementCount }),
+    recovery: Object.freeze({
+      retrySafeSteps: route.steps.filter((step) => step.recovery.recovery === 'retry_safe').length,
+      reconcileRequiredSteps: route.steps.filter((step) => step.recovery.recovery === 'reconcile_required').length,
+    }),
     validUntil: route.expiresAt,
     fallbacks: Object.freeze(route.fallbacks.map((fallback) => Object.freeze({ ...fallback }))),
     uncertainty: Object.freeze([...route.uncertainty]),
@@ -348,8 +368,15 @@ function requestView(input: Readonly<{
       ...route,
       providers: Object.freeze(route.providers.map((provider) => Object.freeze({ ...provider }))),
       maximumTotalCost: Object.freeze({ ...route.maximumTotalCost }),
-      dataUse: Object.freeze({ ...route.dataUse, purposes: Object.freeze([...route.dataUse.purposes]) }),
+      dataUse: Object.freeze({
+        ...route.dataUse,
+        recipients: Object.freeze(route.dataUse.recipients.map((recipient) => Object.freeze({
+          ...recipient, purposes: Object.freeze([...recipient.purposes]),
+        }))),
+        purposes: Object.freeze([...route.dataUse.purposes]),
+      }),
       effects: Object.freeze({ ...route.effects }), evidence: Object.freeze({ ...route.evidence }),
+      recovery: Object.freeze({ ...route.recovery }),
       fallbacks: Object.freeze(route.fallbacks.map((fallback) => Object.freeze({ ...fallback }))),
       uncertainty: Object.freeze([...route.uncertainty]),
       comparison: Object.freeze({ ...route.comparison, ordering: Object.freeze({ ...route.comparison.ordering }) }),

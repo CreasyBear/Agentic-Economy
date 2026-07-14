@@ -201,8 +201,29 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(compared).toMatchObject({
       kind: 'request', requestRef: submitted.requestRef, revision: submitted.revision,
       state: 'routes_ready', nextAction: 'inspect_routes',
-      routes: [{ authority: 'proposal_only', stepCount: 2 }],
+      routes: [{
+        authority: 'proposal_only', stepCount: 2,
+        dataUse: { recipientCount: 2 },
+        recovery: { retrySafeSteps: 1, reconcileRequiredSteps: 1 },
+      }],
     })
+    if (compared.kind !== 'request' || compared.routes?.[0] === undefined) {
+      throw new Error('projected route missing')
+    }
+    expect(compared.routes[0].dataUse.recipients.map((recipient) => recipient.purposes).sort()).toEqual([
+      ['prepare_service_quote'], ['resolve_service_reference'],
+    ])
+
+    const expiredClock = vi.spyOn(Date, 'now').mockReturnValue(route.expiresAt + 1)
+    const expiredComparison = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      idempotencyKey: 'compare:multi-capability:expired',
+    })
+    expect(expiredComparison).toMatchObject({
+      kind: 'request', state: 'needs_attention', nextAction: 'retry',
+    })
+    expiredClock.mockRestore()
 
     const refined = await customer.action(api.customerRequestApplication.refine, {
       requestRef: submitted.requestRef,
