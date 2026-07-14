@@ -16,7 +16,9 @@ import {
   writableCustomerRequestV2Aggregate,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
-import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
+import {
+  requestRegistrySnapshotDigest, type RegisteredEvaluationBinding, type RegisteredSupplyPrice, type RequestFact,
+} from '@/modules/customer-request/evaluation'
 import {
   actionAttemptV2Value,
   approvalGrantV2Value,
@@ -854,8 +856,12 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
 type EligibleSupply = Readonly<{
   offering: Readonly<{
     offeringId: string; businessId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
-    presentation: Readonly<{ label: string; summary: string }>; registrationHash: string
+    presentation: Readonly<{
+      label: string; summary: string
+      price: RegisteredSupplyPrice
+    }>; registrationHash: string
   }>
+  publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
   binding: Readonly<{
     bindingId: string; offeringId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
     registrationHash: string
@@ -869,10 +875,7 @@ type RequestGraph = Readonly<{
   kind: 'available'
   models: readonly CapabilityDecisionModel[]
   descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[]
-  bindings: readonly Readonly<{
-    businessId: string; offeringId: string; bindingId: string; contractRef: CapabilityContractRef
-    offeringRegistrationHash: string; bindingRegistrationHash: string
-  }>[]
+  bindings: readonly RegisteredEvaluationBinding[]
   registrySnapshotDigest: string
 }>
 
@@ -929,6 +932,12 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
       contractRef: model.contractRef,
       offeringRegistrationHash: item.offering.registrationHash,
       bindingRegistrationHash: item.binding.registrationHash,
+      price: item.offering.presentation.price,
+      ...(item.publication === undefined ? {} : {
+        publicationRef: item.publication.publicationRef,
+        publicationRevision: item.publication.revision,
+        readinessValidUntil: item.publication.readinessValidUntil,
+      }),
     })
   }
   const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)

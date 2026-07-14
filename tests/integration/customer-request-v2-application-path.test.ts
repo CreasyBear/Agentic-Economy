@@ -366,6 +366,7 @@ describe('current V2 Customer Request application path', () => {
     if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
       throw new Error('expected external contract fact')
     }
+    await observeSandboxPublications(backend)
     const factsCommand = {
       requestRef: submitted.requestRef, expectedRevision: submitted.revision,
       idempotencyKey: 'facts:external:1', requirementKey: submitted.clarification.requirementKey,
@@ -1957,4 +1958,22 @@ async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
       if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.reason}`)
     }
   })
+  await observeSandboxPublications(backend, true)
+}
+
+async function observeSandboxPublications(backend: ReturnType<typeof convexTest>, drainProbe = false) {
+  const publications = await backend.run(async (ctx) => ctx.db.query('capabilityPublications').collect())
+  const now = Date.now()
+  for (const publication of publications) {
+    if (drainProbe) await backend.action(internal.capabilitySupplyReadiness.probe, {
+      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+    })
+    const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+      credentialState: 'ready', healthState: 'healthy', validUntil: now + 300_000,
+      operationKey: `test:application-readiness:${publication.publicationRef}`,
+      correlationId: 'test:application-readiness', reasonCode: 'test_readiness', evidenceRefs: ['test:readiness'],
+    })
+    if (observed.kind !== 'observed') throw new Error(`sandbox readiness failed: ${observed.reason}`)
+  }
 }

@@ -17,6 +17,9 @@ import {
   type RegisteredEvaluationBinding,
 } from '@/modules/customer-request/evaluation'
 import { customerRequestV2AggregateValue } from '@/modules/customer-request/runtime'
+import {
+  compileRoutePlans, composeRequestActions, CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
+} from '@/modules/customer-request/compiler'
 import { deriveCustomerDecisionPreference } from '@/modules/customer-request/semantic-interpreter'
 
 import { internalMutation, internalQuery } from './_generated/server'
@@ -178,7 +181,9 @@ export function aggregateIsInternallyConsistent(aggregate: Aggregate, expectedRe
   const { aggregateDigest: _aggregateDigest, ...material } = aggregate
   const outcome = aggregate.evaluation.posture === 'unsupported'
     ? 'unsupported'
-    : aggregate.evaluation.posture === 'needs_information' ? 'needs_information' : 'plan_ready'
+    : aggregate.evaluation.posture === 'needs_information'
+      ? 'needs_information'
+      : aggregate.plan.actions.length > 0 && aggregate.plan.routes.length === 0 ? 'unsupported' : 'plan_ready'
   return aggregate.aggregateVersion === 2
     && aggregateByteLengthWithinLimit(aggregate)
     && aggregate.snapshot.revision === expectedRevision + 1
@@ -219,7 +224,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     limit: 64,
   })
   if (currentSupply.kind !== 'available') return 'stale'
-  const bindings: RegisteredEvaluationBinding[] = currentSupply.supplies.map(({ offering, binding }) => ({
+  const bindings: RegisteredEvaluationBinding[] = currentSupply.supplies.map(({ offering, binding, publication }) => ({
     businessId: String(offering.businessId),
     offeringId: offering.offeringId,
     bindingId: binding.bindingId,
@@ -230,6 +235,11 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     },
     offeringRegistrationHash: offering.registrationHash,
     bindingRegistrationHash: binding.registrationHash,
+    price: offering.presentation.price,
+    ...(publication === undefined ? {} : {
+      publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+      readinessValidUntil: publication.readinessValidUntil,
+    }),
   }))
   if (requestRegistrySnapshotDigest(bindings) !== aggregate.evaluation.registrySnapshotDigest) return 'stale'
   const models = new Map<string, CapabilityDecisionModel>()
@@ -250,7 +260,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
   const facts = rebindAggregateFacts(aggregate.snapshot.facts, models)
   if (facts === undefined) return 'invalid'
   const resolveModel = (ref: Aggregate['plan']['actions'][number]['contractRef']) => models.get(exactRefKey(ref))
-  const actions = aggregate.plan.actions.flatMap((action, ordinal) => {
+  const baseActions = [...aggregate.plan.actions].sort((left, right) => left.selectionKey.localeCompare(right.selectionKey)).flatMap((action, ordinal) => {
     const model = resolveModel(action.contractRef)
     if (model === undefined || model.selectionKey !== action.selectionKey || model.semanticDigest !== action.semanticDigest) return []
     const actionMaterial = {
@@ -269,8 +279,11 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
       dependsOn: [],
       inputs: facts.filter((fact) => fact.selectionKey === model.selectionKey
         && sameCapabilityContractRef(fact.contractRef, model.contractRef)),
+      inputMappings: [],
     }]
   })
+  const actions = composeRequestActions(baseActions, models)
+  if (actions === undefined) return 'invalid'
   if (actions.length !== aggregate.plan.actions.length
     || canonicalDigest(actions as StableHashValue) !== canonicalDigest(aggregate.plan.actions as StableHashValue)) return 'invalid'
   const evaluation = aggregate.plan.actions.length === 0 && aggregate.evaluation.nextRequirement?.kind === 'intent_direction'
@@ -301,9 +314,16 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
         resolveModel,
       })
   if (evaluation.candidates.some((candidate) => candidate.viability.kind === 'incompatible')) return 'invalid'
-  return canonicalDigest(evaluation as StableHashValue) === canonicalDigest(aggregate.evaluation as StableHashValue)
-    ? 'current'
-    : 'invalid'
+  if (canonicalDigest(evaluation as StableHashValue) !== canonicalDigest(aggregate.evaluation as StableHashValue)) return 'invalid'
+  const routes = compileRoutePlans({
+    requestId: aggregate.snapshot.requestId, requestRevision: aggregate.snapshot.revision,
+    registrySnapshotDigest: aggregate.evaluation.registrySnapshotDigest,
+    actions, candidates: evaluation.candidates, now: aggregate.snapshot.recordedAt,
+    models,
+  })
+  return routes !== undefined
+    && canonicalDigest(routes as StableHashValue) === canonicalDigest(aggregate.plan.routes as StableHashValue)
+    ? 'current' : 'invalid'
 }
 
 function rebindAggregateFacts(
@@ -329,7 +349,11 @@ function rebindAggregateFacts(
 }
 
 function planAuthorityIsConsistent(aggregate: Aggregate): boolean {
-  const expectedActions = aggregate.plan.actions.map((action, ordinal) => {
+  const ordinals = new Map([...aggregate.plan.actions].sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
+    .map((action, ordinal) => [action.actionId, ordinal]))
+  const expectedActions = aggregate.plan.actions.map((action) => {
+    const ordinal = ordinals.get(action.actionId)
+    if (ordinal === undefined) return undefined
     const actionMaterial = {
       requestId: aggregate.snapshot.requestId,
       requestRevision: aggregate.snapshot.revision,
@@ -345,16 +369,20 @@ function planAuthorityIsConsistent(aggregate: Aggregate): boolean {
       contractRef: action.contractRef,
       selectionKey: action.selectionKey,
       semanticDigest: action.semanticDigest,
-      dependsOn: [],
+      dependsOn: action.dependsOn,
       inputs,
+      inputMappings: action.inputMappings,
     }
   })
+  if (expectedActions.some((action) => action === undefined)) return false
   if (canonicalDigest(expectedActions as StableHashValue) !== canonicalDigest(aggregate.plan.actions as StableHashValue)) {
     return false
   }
   const proposalDigest = canonicalDigest({
     interpreterId: aggregate.plan.interpreterId,
-    selected: aggregate.plan.actions.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
+    selected: [...aggregate.plan.actions]
+      .sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
+      .map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
     facts: aggregate.snapshot.facts,
   })
   const planMaterial = {
@@ -366,10 +394,15 @@ function planAuthorityIsConsistent(aggregate: Aggregate): boolean {
     registrySnapshotDigest: aggregate.evaluation.registrySnapshotDigest,
     actions: aggregate.plan.actions,
     completionRequirements: aggregate.evaluation.completionRequirements,
+    compilerVersion: CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
+    authority: 'proposal_only' as const,
+    routes: aggregate.plan.routes,
   }
   const planDigest = canonicalDigest(planMaterial)
   return aggregate.plan.proposedByAgentId === aggregate.snapshot.delegatedAgentId
     && aggregate.plan.proposalDigest === proposalDigest
+    && aggregate.plan.compilerVersion === CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION
+    && aggregate.plan.authority === 'proposal_only'
     && aggregate.plan.planDigest === planDigest
     && aggregate.plan.planRevisionId === `plan:${planDigest}`
     && aggregate.plan.createdAt === aggregate.snapshot.recordedAt

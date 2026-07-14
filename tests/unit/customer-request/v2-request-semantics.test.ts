@@ -10,6 +10,7 @@ import {
   discoverRequestEvaluationCandidates,
   evaluateCustomerRequestSnapshot,
   requestRegistrySnapshotDigest,
+  type RegisteredSupplyPrice,
 } from '@/modules/customer-request/evaluation'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import {
@@ -215,6 +216,7 @@ describe('V2 Request semantics', () => {
       proposedActions: [{
         actionId: 'action:one', contractRef: model.contractRef,
         selectionKey: model.selectionKey, semanticDigest: model.semanticDigest, dependsOn: [], inputs: [],
+        inputMappings: [],
       }],
       resolveModel: () => model,
     })
@@ -224,6 +226,171 @@ describe('V2 Request semantics', () => {
       evidenceId: completion?.evidenceId, outputPointer: completion?.outputPointer,
       purpose: 'completion', schemaIdentity: completion?.schemaIdentity,
     }])
+  })
+
+  it('compiles two exact contracts into a deterministic dependency when registered semantics and schemas match', () => {
+    const lookup = compositionLookupModel()
+    const shipping = compositionShippingModel(lookup)
+    const lookupRequest = requiredInput(lookup, 'request')
+    const compile = (models: [typeof lookup, typeof shipping]) => compileCustomerRequest({
+      requestId: 'request:composed', expectedRevision: 4,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find an option and get its shipping quote.', networkId: 'ae:public',
+      proposal: {
+        kind: 'capability_candidates',
+        selections: models.map((model) => ({
+          selectionKey: model.selectionKey, contractRef: model.contractRef,
+          facts: model === lookup ? [{
+            contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+            inputKey: lookupRequest.key, inputPointer: lookupRequest.inputPointer,
+            schemaIdentity: lookupRequest.schemaIdentity, value: 'routing book',
+            source: { kind: 'agent_inference' as const, inferenceRef: 'inference:request' },
+          }] : [],
+        })),
+      },
+      interpreterId: 'interpreter:test',
+      bindings: models.map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      models, now: 10_000,
+    })
+
+    const first = compile([lookup, shipping])
+    const permuted = compile([shipping, lookup])
+    expect(first).toMatchObject({
+      kind: 'compiled', aggregate: {
+        outcome: 'plan_ready',
+        plan: {
+          requestRevision: 5,
+          authority: 'proposal_only',
+          routes: [{
+            maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
+            expiresAt: 20_000,
+            steps: [
+              {
+                contractRef: lookup.contractRef, publicationRevision: 1,
+                price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+                dataUse: [{ purposes: ['return_requested_result'] }],
+                effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
+                evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
+                recovery: { idempotency: 'required', recovery: 'retry_safe' },
+              },
+              {
+                contractRef: shipping.contractRef, publicationRevision: 1,
+                price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+              },
+            ],
+            edges: [{ authority: 'registered_contract_semantics' }],
+            fallbacks: [],
+            comparison: { fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply' },
+          }],
+          actions: [
+            { contractRef: lookup.contractRef, dependsOn: [], inputMappings: [] },
+            {
+              contractRef: shipping.contractRef,
+              dependsOn: [expect.stringMatching(/^action:/)],
+              inputMappings: [{
+                semanticIdentity: 'ae.option_id:v1',
+                source: { actionId: expect.stringMatching(/^action:/), annotationId: 'option_id', outputPointer: '/optionId' },
+                target: { annotationId: 'option_id', inputPointer: '/optionId' },
+                schemaIdentity: lookup.evidence.find((item) => item.annotationId === 'option_id')?.schemaIdentity,
+                authority: 'registered_contract_semantics',
+              }],
+            },
+          ],
+        },
+      },
+    })
+    expect(permuted).toEqual(first)
+  })
+
+  it('asks for the downstream fact instead of guessing between ambiguous registered producers', () => {
+    const firstLookup = compositionLookupModel('catalog.lookup.one')
+    const secondLookup = compositionLookupModel('catalog.lookup.two')
+    const shipping = compositionShippingModel(firstLookup)
+    const requestInput = requiredInput(firstLookup, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:ambiguous', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find options and quote shipping.', networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates', selections: [firstLookup, secondLookup, shipping].map((model) => ({
+        selectionKey: model.selectionKey, contractRef: model.contractRef,
+        facts: model === firstLookup || model === secondLookup ? [{
+          contractRef: model.contractRef, selectionKey: model.selectionKey,
+          inputKey: requiredInput(model, 'request').key, inputPointer: requiredInput(model, 'request').inputPointer,
+          schemaIdentity: requestInput.schemaIdentity, value: 'routing book',
+          source: { kind: 'agent_inference' as const, inferenceRef: `inference:${model.contractRef.capabilityId}` },
+        }] : [],
+      })) },
+      interpreterId: 'interpreter:test',
+      bindings: [firstLookup, secondLookup, shipping].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      models: [firstLookup, secondLookup, shipping], now: 10_000,
+    })
+    expect(result).toMatchObject({ kind: 'compiled', aggregate: {
+      outcome: 'needs_information',
+      evaluation: { nextRequirement: { kind: 'contract_fact', customerLabel: 'Option identifier' } },
+    } })
+    if (result.kind !== 'compiled') throw new Error('expected compilation')
+    const shippingAction = result.aggregate.plan.actions.find((action) => action.contractRef.capabilityId === 'shipping.quote')
+    expect(shippingAction).toMatchObject({ dependsOn: [], inputMappings: [] })
+  })
+
+  it('fails closed on unsafe aggregate money and marks on-request cost as uncertain preparation', () => {
+    const lookup = compositionLookupModel()
+    const shipping = compositionShippingModel(lookup)
+    const request = requiredInput(lookup, 'request')
+    const compileWithPrices = (prices: readonly [RegisteredSupplyPrice, RegisteredSupplyPrice]) => (
+      compileCustomerRequest({
+        requestId: 'request:money-safety', expectedRevision: 0,
+        principalId: 'principal:test', delegatedAgentId: 'agent:test',
+        intent: 'Find an option and quote shipping.', networkId: 'ae:public',
+        proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
+          selectionKey: model.selectionKey, contractRef: model.contractRef,
+          facts: model === lookup ? [{
+            contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+            inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+            value: 'routing book', source: { kind: 'agent_inference' as const, inferenceRef: 'inference:money-safety' },
+          }] : [],
+        })) },
+        interpreterId: 'interpreter:test', models: [lookup, shipping], now: 10_000,
+        bindings: [lookup, shipping].map((model, index) => ({
+          ...supply(`binding:money:${index}`, model), price: prices[index],
+        })),
+      })
+    )
+
+    expect(compileWithPrices([
+      { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+      { kind: 'fixed', currency: 'USD', amountMinor: 100 },
+    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
+    expect(compileWithPrices([
+      { kind: 'fixed', currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },
+      { kind: 'fixed', currency: 'AUD', amountMinor: 1 },
+    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
+    expect(compileWithPrices([
+      { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+      { kind: 'on_request' },
+    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'plan_ready', plan: { routes: [{
+      maximumTotalCost: { kind: 'requires_preparation' }, uncertainty: ['cost_requires_preparation'],
+    }] } } })
+  })
+
+  it('fails closed for cyclic contract semantics and duplicate model selections', () => {
+    const first = cyclicModel('cycle.first', 'from_second', 'from_first')
+    const second = cyclicModel('cycle.second', 'from_first', 'from_second')
+    const command = {
+      requestId: 'request:cycle', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test', intent: 'Run the cycle', networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates' as const, selections: [first, second].map((model) => ({
+        selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [],
+      })) },
+      interpreterId: 'interpreter:test', bindings: [first, second].map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      models: [first, second], now: 10_000,
+    }
+    expect(compileCustomerRequest(command)).toEqual({ kind: 'refused', reason: 'capability_graph_invalid' })
+    expect(compileCustomerRequest({
+      ...command,
+      proposal: { kind: 'capability_candidates', selections: [command.proposal.selections[0]!, command.proposal.selections[0]!] },
+      bindings: [supply('binding:duplicate', first)], models: [first],
+    })).toEqual({ kind: 'refused', reason: 'unsafe_interpretation' })
   })
 
   it('refuses an aggregate that would exceed the durable Convex document boundary', () => {
@@ -373,6 +540,59 @@ function decisionModelWithCommitment() {
   })))
 }
 
+function compositionLookupModel(capabilityId = 'catalog.lookup') {
+  return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+    capabilityId, version: 2,
+    inputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { request: { type: 'string' } }, required: ['request'], additionalProperties: false },
+    outputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { optionId: { type: 'string' }, result: { type: 'string' } }, required: ['optionId', 'result'], additionalProperties: false },
+    customerAnnotations: [
+      { annotationId: 'request', document: 'input', pointer: '/request', label: 'What to find', role: 'request' },
+      { annotationId: 'option_id', semanticIdentity: 'ae.option_id:v1', document: 'output', pointer: '/optionId', label: 'Option identifier', role: 'comparison' },
+      { annotationId: 'result', document: 'output', pointer: '/result', label: 'Lookup result', role: 'completion_evidence' },
+    ],
+    dataUse: [dataUse('request_release', '/request')], effects: [dataEffect('request_release')],
+    evidence: [
+      { evidenceId: 'selected_option', outputPointer: '/optionId', purpose: 'comparison' },
+      { evidenceId: 'lookup_complete', outputPointer: '/result', purpose: 'completion' },
+    ],
+  })))
+}
+
+function compositionShippingModel(lookup: ReturnType<typeof compositionLookupModel>) {
+  if (!lookup.evidence.some((item) => item.annotationId === 'option_id')) throw new Error('lookup option semantic missing')
+  return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+    capabilityId: 'shipping.quote', version: 1,
+    inputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { optionId: { type: 'string' } }, required: ['optionId'], additionalProperties: false },
+    outputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
+    customerAnnotations: [
+      { annotationId: 'option_id', semanticIdentity: 'ae.option_id:v1', document: 'input', pointer: '/optionId', label: 'Option identifier', role: 'request' },
+      { annotationId: 'result', document: 'output', pointer: '/result', label: 'Shipping quote', role: 'completion_evidence' },
+    ],
+    dataUse: [dataUse('option_release', '/optionId')], effects: [dataEffect('option_release')],
+    evidence: [{ evidenceId: 'shipping_quote', outputPointer: '/result', purpose: 'completion' }],
+  })))
+}
+
+function cyclicModel(capabilityId: string, inputAnnotationId: string, outputAnnotationId: string) {
+  return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+    capabilityId,
+    inputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+      properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false,
+    },
+    outputSchema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+      properties: { value: { type: 'string' } }, required: ['value'], additionalProperties: false,
+    },
+    customerAnnotations: [
+      { annotationId: inputAnnotationId, semanticIdentity: `ae.${inputAnnotationId}:v1`, document: 'input', pointer: '/value', label: 'Input value', role: 'request' },
+      { annotationId: outputAnnotationId, semanticIdentity: `ae.${outputAnnotationId}:v1`, document: 'output', pointer: '/value', label: 'Output value', role: 'completion_evidence' },
+    ],
+    dataUse: [dataUse('value_release', '/value')], effects: [dataEffect('value_release')],
+    evidence: [{ evidenceId: `${outputAnnotationId}_evidence`, outputPointer: '/value', purpose: 'completion' }],
+  })))
+}
+
 function structuredInputSchema() {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
@@ -443,5 +663,7 @@ function supply(bindingId: string, model: ReturnType<typeof decisionModelWithCom
     businessId: `business:${bindingId}`, offeringId: `offering:${bindingId}`, bindingId,
     contractRef: model.contractRef, offeringRegistrationHash: `sha256:offering:${bindingId}`,
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
+    publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
+    price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
   }
 }

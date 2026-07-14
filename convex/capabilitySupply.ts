@@ -187,6 +187,9 @@ const eligibleSupplyValue = v.object({
     cancellation: cancellationValue, adapterId: v.string(), configJson: v.string(), configDigest: v.string(),
     admission: v.literal('admitted'), conformance: v.literal('conformant'), registrationHash: v.string(),
   }),
+  publication: v.optional(v.object({
+    publicationRef: v.string(), revision: v.number(), readinessValidUntil: v.number(),
+  })),
 })
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
@@ -1552,6 +1555,7 @@ export async function listEligibleCapabilitySupply(
   const supplies: Array<{
     offering: ReturnType<typeof eligibleOfferingProjection>
     binding: ReturnType<typeof eligibleBindingProjection>
+    publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
   }> = []
   for (const binding of bindings) {
     if (!bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
@@ -1575,7 +1579,22 @@ export async function listEligibleCapabilitySupply(
       }
       continue
     }
-    supplies.push({ offering: eligibleOfferingProjection(offering), binding: eligibleBindingProjection(binding) })
+    const publication = await db.query('capabilityPublications')
+      .withIndex('by_bindingId_and_disposition', (query) => (
+        query.eq('bindingId', binding.bindingId).eq('disposition', 'current')
+      )).unique()
+    const activePublication = publication !== null
+      && publication.readinessValidUntil !== undefined
+      && publicationLifecycle(publication, offering, binding, Date.now()).state === 'active'
+      ? {
+          publicationRef: publication.publicationRef, revision: publication.revision,
+          readinessValidUntil: publication.readinessValidUntil,
+        }
+      : undefined
+    supplies.push({
+      offering: eligibleOfferingProjection(offering), binding: eligibleBindingProjection(binding),
+      ...(activePublication === undefined ? {} : { publication: activePublication }),
+    })
   }
   return { kind: 'available' as const, supplies }
 }

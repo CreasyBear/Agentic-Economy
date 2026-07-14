@@ -9,6 +9,12 @@ import {
   type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+
+export type RegisteredSupplyPrice =
+  | Readonly<{ kind: 'fixed'; currency: string; amountMinor: number }>
+  | Readonly<{ kind: 'range'; currency: string; minimumAmountMinor: number; maximumAmountMinor: number }>
+  | Readonly<{ kind: 'on_request' }>
 
 export type RequestFactSource = Readonly<
   | { kind: 'customer'; assertionRef: string }
@@ -32,6 +38,10 @@ export type RequestEvaluationCandidateInput = Readonly<{
   model: CapabilityDecisionModel
   offeringRegistrationHash: string
   bindingRegistrationHash: string
+  publicationRef?: string
+  publicationRevision?: number
+  readinessValidUntil?: number
+  price?: RegisteredSupplyPrice
 }>
 
 export type RegisteredEvaluationBinding = Readonly<{
@@ -41,6 +51,10 @@ export type RegisteredEvaluationBinding = Readonly<{
   contractRef: CapabilityContractRef
   offeringRegistrationHash: string
   bindingRegistrationHash: string
+  publicationRef?: string
+  publicationRevision?: number
+  readinessValidUntil?: number
+  price?: RegisteredSupplyPrice
 }>
 
 export type RequestEvaluationCandidate = Readonly<{
@@ -53,6 +67,10 @@ export type RequestEvaluationCandidate = Readonly<{
   semanticDigest: string
   offeringRegistrationHash: string
   bindingRegistrationHash: string
+  publicationRef?: string
+  publicationRevision?: number
+  readinessValidUntil?: number
+  price?: RegisteredSupplyPrice
   viability:
     | Readonly<{ kind: 'viable' }>
     | Readonly<{ kind: 'blocked_on_information'; inputs: readonly MissingInputDescriptor[] }>
@@ -115,6 +133,16 @@ export type ProposedRequestAction = Readonly<{
   semanticDigest: string
   dependsOn: readonly string[]
   inputs: readonly RequestFact[]
+  inputMappings: readonly RequestActionInputMapping[]
+}>
+
+export type RequestActionInputMapping = Readonly<{
+  mappingId: string
+  semanticIdentity: string
+  source: Readonly<{ actionId: string; annotationId: string; evidenceId: string; outputPointer: string }>
+  target: Readonly<{ annotationId: string; inputKey: CapabilityInputKey; inputPointer: string }>
+  schemaIdentity: PointedSchemaIdentity
+  authority: 'registered_contract_semantics'
 }>
 
 export type RequestCompletionRequirement = Readonly<{
@@ -171,6 +199,14 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
       bindingId: candidate.bindingId,
       contractRef: candidate.model.contractRef,
     })}`
+    const proposedAction = input.proposedActions?.find((action) => (
+      sameCapabilityContractRef(action.contractRef, candidate.model.contractRef)
+      && action.selectionKey === candidate.model.selectionKey
+    ))
+    const mappedInputKeys = new Set(proposedAction?.inputMappings.map((mapping) => mapping.target.inputKey) ?? [])
+    const unmappedMissing = assessment.kind === 'needs_information'
+      ? assessment.missing.filter((semantic) => !mappedInputKeys.has(semantic.key))
+      : []
     return Object.freeze({
       candidateRef,
       businessId: candidate.businessId,
@@ -181,12 +217,16 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
       semanticDigest: candidate.model.semanticDigest,
       offeringRegistrationHash: candidate.offeringRegistrationHash,
       bindingRegistrationHash: candidate.bindingRegistrationHash,
+      ...(candidate.publicationRef === undefined ? {} : { publicationRef: candidate.publicationRef }),
+      ...(candidate.publicationRevision === undefined ? {} : { publicationRevision: candidate.publicationRevision }),
+      ...(candidate.readinessValidUntil === undefined ? {} : { readinessValidUntil: candidate.readinessValidUntil }),
+      ...(candidate.price === undefined ? {} : { price: candidate.price }),
       viability: assessment.kind === 'viable'
         ? Object.freeze({ kind: 'viable' as const })
-        : assessment.kind === 'needs_information'
+        : assessment.kind === 'needs_information' && unmappedMissing.length > 0
           ? Object.freeze({
               kind: 'blocked_on_information' as const,
-              inputs: Object.freeze(assessment.missing.map((semantic) => Object.freeze({
+              inputs: Object.freeze(unmappedMissing.map((semantic) => Object.freeze({
                 contractRef: candidate.model.contractRef,
                 selectionKey: candidate.model.selectionKey,
                 inputKey: semantic.key,
@@ -195,10 +235,10 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
                 customerLabel: semantic.label,
               }))),
             })
-          : Object.freeze({
+          : assessment.kind === 'incompatible' ? Object.freeze({
               kind: 'incompatible' as const,
               issueKeywords: Object.freeze(assessment.issues.map(({ keyword }) => keyword)),
-            }),
+            }) : Object.freeze({ kind: 'viable' as const }),
     })
   })
   const nextRequirement = chooseNextRequirement(candidates)
@@ -240,7 +280,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     completionRequirements,
     ...(nextRequirement === undefined ? {} : { nextRequirement }),
     posture,
-    evaluationDigest: canonicalDigest(digestMaterial),
+    evaluationDigest: canonicalDigest(digestMaterial as StableHashValue),
   })
 }
 
@@ -290,7 +330,7 @@ export function evaluateIntentDirectionRequestSnapshot(input: Readonly<{
     completionRequirements: Object.freeze([]),
     nextRequirement,
     posture: 'needs_information' as const,
-    evaluationDigest: canonicalDigest(digestMaterial),
+    evaluationDigest: canonicalDigest(digestMaterial as StableHashValue),
   })
 }
 
@@ -318,6 +358,10 @@ export function discoverRequestEvaluationCandidates(input: Readonly<{
       model,
       offeringRegistrationHash: binding.offeringRegistrationHash,
       bindingRegistrationHash: binding.bindingRegistrationHash,
+      ...(binding.publicationRef === undefined ? {} : { publicationRef: binding.publicationRef }),
+      ...(binding.publicationRevision === undefined ? {} : { publicationRevision: binding.publicationRevision }),
+      ...(binding.readinessValidUntil === undefined ? {} : { readinessValidUntil: binding.readinessValidUntil }),
+      ...(binding.price === undefined ? {} : { price: binding.price }),
     })]
   }).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
 }
@@ -330,6 +374,7 @@ export function requestRegistrySnapshotDigest(bindings: readonly RegisteredEvalu
     contractRef: binding.contractRef,
     offeringRegistrationHash: binding.offeringRegistrationHash,
     bindingRegistrationHash: binding.bindingRegistrationHash,
+    ...(binding.price === undefined ? {} : { price: binding.price }),
   })).sort((left, right) => left.bindingId.localeCompare(right.bindingId)))
 }
 

@@ -54,7 +54,8 @@ export const capabilitySupplyTables = {
   })
     .index('by_publicationRef_and_revision', ['publicationRef', 'revision'])
     .index('by_networkId_and_disposition', ['networkId', 'disposition'])
-    .index('by_businessId_and_disposition', ['businessId', 'disposition']),
+    .index('by_businessId_and_disposition', ['businessId', 'disposition'])
+    .index('by_bindingId_and_disposition', ['bindingId', 'disposition']),
 
   capabilityOfferings: defineTable({
     offeringId: v.string(),
