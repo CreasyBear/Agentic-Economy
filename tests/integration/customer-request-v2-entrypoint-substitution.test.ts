@@ -273,14 +273,26 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
     value: 'Return a labelled sandbox comparison reference.',
   })
   if (answered.kind !== 'request') throw new Error(`request answer failed: ${answered.kind}`)
-  const review = await customer.action(api.customerRequestApplication.compare, {
+  const decision = await customer.action(api.customerRequestApplication.compare, {
     requestRef: answered.requestRef,
     revision: answered.revision,
     idempotencyKey: `compare:${requestId}`,
   })
-  if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation review missing')
+  if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error('route decision missing')
   const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, { requestId })
   if (aggregate.kind !== 'current' || aggregate.aggregate.plan.actions[0] === undefined) throw new Error('request aggregate missing')
+  const historical = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
+    commandKey: `historical-preparation:${requestId}`,
+    commandDigest: canonicalDigest({ requestId, mode: 'historical_preparation_proof' }),
+    principalId,
+    requestId,
+    expectedRevision: decision.revision,
+    actionId: aggregate.aggregate.plan.actions[0].actionId,
+    now: Date.now(),
+  })
+  if ((historical.kind !== 'stored' && historical.kind !== 'replayed')
+    || historical.preparation.kind !== 'needs_authority') throw new Error('historical preparation proof missing')
+  const review = { ...decision, preparationRef: historical.preparation.preparationRef }
   const authorized = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
     commandKey: `authorize:${requestId}`,
     commandDigest: canonicalDigest({ requestId, preparationRef: review.preparationRef }),

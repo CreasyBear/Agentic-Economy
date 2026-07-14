@@ -12,6 +12,7 @@ export type CustomerRequestState =
   | 'ready_to_compare'
   | 'routes_ready'
   | 'route_confirmed'
+  | 'in_progress'
   | 'preparing_options'
   | 'options_ready'
   | 'no_options'
@@ -21,6 +22,7 @@ export type CustomerRequestState =
   | 'outcome_unknown'
   | 'completed'
   | 'failed'
+  | 'cancelled'
 
 export type CustomerRequestNextAction =
   | 'provide_information'
@@ -253,6 +255,49 @@ export function projectRouteConfirmed(input: Readonly<{
   })
 }
 
+export function projectRouteProgress(input: Readonly<{
+  requestRef: string
+  revision: number
+  generationRef: string
+  completed: number
+  total: number
+  current: Readonly<{
+    step: number
+    state: 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention'
+  }>
+  criteria?: readonly CustomerCriterion[]
+}>): CustomerRequestView {
+  return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    routeGenerationRef: input.generationRef,
+    state: 'in_progress',
+    summary: input.current.state === 'queued'
+      ? 'Your request is queued to begin.'
+      : 'Your request is in progress.',
+    nextAction: 'wait',
+    progress: {
+      completed: input.completed,
+      total: input.total,
+      current: { ...input.current },
+    },
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+  })
+}
+
+export function projectRouteCancelled(input: Readonly<{
+  requestRef: string
+  revision: number
+  criteria?: readonly CustomerCriterion[]
+}>): CustomerRequestView {
+  return requestView({
+    ...input,
+    state: 'cancelled',
+    summary: 'This request was stopped before the next business step began.',
+    nextAction: 'revise_request',
+  })
+}
+
 export function projectCustomerActionStatus(input: Readonly<{
   requestRef: string
   revision: number
@@ -292,7 +337,7 @@ export function projectCustomerActionStatus(input: Readonly<{
   })
   return requestView({
     requestRef: input.requestRef, revision: input.revision,
-    state: 'failed', nextAction: 'none',
+    state: 'failed', nextAction: 'revise_request',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
     summary: 'The business confirmed that it could not complete this action. AE did not try it again.',
     action: {
@@ -318,6 +363,7 @@ function requestView(input: Readonly<{
   optionSet?: CustomerOptionSet
   preparedAction?: CustomerPreparedAction
   action?: CustomerRequestView['action']
+  progress?: CustomerRequestView['progress']
   decision?: CustomerRoutePlanDecision
   confirmation?: CustomerRouteConfirmation
 }>): CustomerRequestView {
@@ -342,6 +388,10 @@ function requestView(input: Readonly<{
     ...(input.action === undefined ? {} : { action: Object.freeze({
       ...input.action,
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),
+    }) }),
+    ...(input.progress === undefined ? {} : { progress: Object.freeze({
+      ...input.progress,
+      current: Object.freeze({ ...input.progress.current }),
     }) }),
     ...(input.decision === undefined ? {} : { decision: input.decision }),
     ...(input.confirmation === undefined ? {} : { confirmation: input.confirmation }),

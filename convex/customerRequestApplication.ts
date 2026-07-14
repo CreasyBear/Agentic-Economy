@@ -38,9 +38,12 @@ import {
   routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
+  projectCustomerActionStatus,
   projectNeedsAttention,
   projectRequestEvaluation,
   projectRouteConfirmed,
+  projectRouteCancelled,
+  projectRouteProgress,
   projectRoutePlansReady,
   type CustomerRequestView,
 } from '@/modules/customer-request/customer-projection'
@@ -313,10 +316,10 @@ const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
   routeGenerationRef: v.optional(v.string()),
   state: v.union(
-    v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('routes_ready'), v.literal('route_confirmed'), v.literal('preparing_options'),
+    v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('routes_ready'), v.literal('route_confirmed'), v.literal('in_progress'), v.literal('preparing_options'),
     v.literal('options_ready'), v.literal('no_options'), v.literal('needs_authorization'),
     v.literal('unsupported'), v.literal('needs_attention'),
-    v.literal('outcome_unknown'), v.literal('completed'), v.literal('failed'),
+    v.literal('outcome_unknown'), v.literal('completed'), v.literal('failed'), v.literal('cancelled'),
   ),
   summary: v.string(),
   nextAction: v.union(
@@ -351,6 +354,16 @@ const customerView = v.object({
       v.literal('awaiting_evidence'), v.literal('provider_result'), v.literal('reconciled'),
     ),
     automaticRetry: v.literal(false), result: v.optional(v.any()), observedAt: v.number(), // runtime-validated JsonValue boundary
+  })),
+  progress: v.optional(v.object({
+    completed: v.number(), total: v.number(),
+    current: v.object({
+      step: v.number(),
+      state: v.union(
+        v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'),
+        v.literal('validating_result'), v.literal('needs_attention'),
+      ),
+    }),
   })),
   decision: v.optional(customerRouteDecision),
   confirmation: v.optional(customerRouteConfirmation),
@@ -546,6 +559,10 @@ export const resume = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
+    const currentRun = await ctx.runQuery(internal.customerRequestRouteExecution.getCurrent, {
+      requestId: args.requestRef,
+    })
+    if (currentRun.kind === 'found') return projectStoredRouteRun(current.aggregate, currentRun.run)
     const currentMandate = await ctx.runQuery(internal.customerRequestRouteMandate.getCurrentForPrincipal, {
       requestId: args.requestRef, principalId: caller.principalId,
     })
@@ -721,6 +738,70 @@ export const confirmRoute = action({
         ? 'Sign in again before confirming this choice.'
         : 'This choice can no longer be confirmed. Review the current options.',
     }))
+  },
+})
+
+export const runRoute = action({
+  args: {
+    requestRef: v.string(), idempotencyKey: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
+  },
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey }
+    const caller = await resolveRequestCaller(ctx, 'run', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    const result = await ctx.runMutation(internal.customerRequestRouteExecution.startOrResume, {
+      requestId: args.requestRef,
+      idempotencyKey: args.idempotencyKey,
+    })
+    if (result.kind === 'conflict') return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
+    }
+    if (result.kind === 'refused') return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: current.aggregate.snapshot.revision,
+      summary: result.reason === 'confirmation_expired'
+        ? 'This choice expired before it could start. Review the current options.'
+        : 'This choice cannot start yet. Review the current request.',
+      criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    }))
+    return projectStoredRouteRun(current.aggregate, result.run)
+  },
+})
+
+export const cancelRoute = action({
+  args: {
+    requestRef: v.string(), idempotencyKey: v.string(),
+    serviceAuth: v.optional(serviceAssertion),
+  },
+  returns: actionResult,
+  handler: async (ctx, args): Promise<ActionResult> => {
+    const command = { requestRef: args.requestRef, idempotencyKey: args.idempotencyKey }
+    const caller = await resolveRequestCaller(ctx, 'cancel', command, args.serviceAuth)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    const result = await ctx.runMutation(internal.customerRequestRouteExecution.cancelCurrent, {
+      requestId: args.requestRef,
+      principalId: caller.principalId,
+      idempotencyKey: args.idempotencyKey,
+    })
+    if (result.kind === 'conflict') return {
+      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
+    }
+    if (result.kind === 'refused') return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: current.aggregate.snapshot.revision,
+      summary: 'There is no active request to stop.',
+    }))
+    return projectStoredRouteRun(current.aggregate, result.run)
   },
 })
 
@@ -1250,9 +1331,6 @@ async function prepareCurrentAction(
       revision: args.revision,
       summary: 'AE could not verify the current options. Try this request again.',
     }))
-    const generationRepresentsStoredPlan = storedGenerationRepresentsAggregate(
-      routeReadback.routeGeneration, current.aggregate,
-    )
     const routes = routeReadback.routeGeneration.routes
     const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
     const routesAreCurrent = graph.kind === 'available'
@@ -1294,11 +1372,7 @@ async function prepareCurrentAction(
         ctx, args, caller, current, graph, routeReadback.routeGeneration,
       )
     }
-    if (!generationRepresentsStoredPlan
-      || current.aggregate.plan.actions.length !== 1
-      || current.aggregate.plan.actions[0] === undefined) {
-      return await projectCurrentRoutePlans(ctx, current.aggregate)
-    }
+    return await projectCurrentRoutePlans(ctx, current.aggregate)
   } else if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
     return writableView(projectNeedsAttention({
       requestRef: args.requestRef,
@@ -1935,8 +2009,74 @@ function projectConfirmedRoute(
   }))
 }
 
+function projectStoredRouteRun(
+  aggregate: StoredAggregate | CustomerRequestV2Aggregate,
+  run: Readonly<{
+    requestId: string
+    requestRevision: number
+    generationRef: string
+    state: 'queued' | 'running' | 'outcome_unknown' | 'completed' | 'failed' | 'cancelled'
+    totalSteps: number
+    completedSteps: number
+    currentPosition: number
+    currentState: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled'
+    resultJson?: string
+    updatedAt: number
+  }>,
+): ActionResult {
+  const criteria = aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const result = run.resultJson === undefined ? undefined : parseCustomerRouteResult(run.resultJson)
+  if (run.state === 'completed' && result !== undefined) {
+    return writableView(projectCustomerActionStatus({
+      requestRef: run.requestId,
+      revision: run.requestRevision,
+      criteria,
+      status: {
+        kind: 'completed', resolution: 'provider_result', result,
+        resolvedAt: run.updatedAt, automaticRetry: false,
+      },
+    }))
+  }
+  if (run.state === 'outcome_unknown') return writableView(projectCustomerActionStatus({
+    requestRef: run.requestId,
+    revision: run.requestRevision,
+    criteria,
+    status: {
+      kind: 'unknown', reason: 'provider_outcome_unconfirmed',
+      observedAt: run.updatedAt, automaticRetry: false,
+    },
+  }))
+  if (run.state === 'cancelled') return writableView(projectRouteCancelled({
+    requestRef: run.requestId,
+    revision: run.requestRevision,
+    criteria,
+  }))
+  if (run.state === 'failed' && result !== undefined) return writableView(projectCustomerActionStatus({
+    requestRef: run.requestId,
+    revision: run.requestRevision,
+    criteria,
+    status: {
+      kind: 'failed', resolution: 'reconciled', result,
+      resolvedAt: run.updatedAt, automaticRetry: false,
+    },
+  }))
+  if (run.state === 'failed') return writableView(projectNeedsAttention({
+    requestRef: run.requestId, revision: run.requestRevision, criteria,
+    summary: 'This request needs attention before it can continue.',
+  }))
+  return writableView(projectRouteProgress({
+    requestRef: run.requestId,
+    revision: run.requestRevision,
+    generationRef: run.generationRef,
+    completed: run.completedSteps,
+    total: run.totalSteps,
+    current: { step: run.currentPosition, state: customerProgressState(run.currentState) },
+    criteria,
+  }))
+}
+
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, clarification, preparedAction, action, decision, confirmation } = view
+  const { disclosureReview, optionSet, clarification, preparedAction, action, progress, decision, confirmation } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
     ...(view.routeGenerationRef === undefined ? {} : { routeGenerationRef: view.routeGenerationRef }),
@@ -1970,6 +2110,9 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       state: action.state, resolution: action.resolution, automaticRetry: action.automaticRetry,
       observedAt: action.observedAt,
       ...(action.result === undefined ? {} : { result: structuredClone(action.result) }),
+    } }),
+    ...(progress === undefined ? {} : { progress: {
+      ...progress, current: { ...progress.current },
     } }),
     ...(decision === undefined ? {} : {
       decision: writableClone(decision),
@@ -2026,7 +2169,7 @@ type RequestCaller = Readonly<{
 
 async function resolveRequestCaller(
   ctx: ActionCtx,
-  operation: 'submit' | 'compare' | 'confirm' | 'authorize' | 'resume' | 'facts' | 'refine',
+  operation: 'submit' | 'compare' | 'confirm' | 'run' | 'cancel' | 'authorize' | 'resume' | 'facts' | 'refine',
   command: Record<string, unknown>,
   assertion: ServiceAssertion | undefined,
   delegatedAgentId?: string,
@@ -2069,6 +2212,25 @@ async function resolveRequestCaller(
   return {
     principalId: assertion.principalId,
     delegatedAgentId: assertion.principalId,
+  }
+}
+
+function customerProgressState(
+  state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
+): 'queued' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention' {
+  if (state === 'queued') return 'queued'
+  if (state === 'leased' || state === 'dispatched') return 'contacting'
+  if (state === 'accepted') return 'awaiting_result'
+  if (state === 'succeeded') return 'validating_result'
+  return 'needs_attention'
+}
+
+function parseCustomerRouteResult(resultJson: string): JsonValue | undefined {
+  try {
+    const parsed: unknown = JSON.parse(resultJson)
+    return isBoundedJsonValue(parsed) ? parsed : undefined
+  } catch {
+    return undefined
   }
 }
 

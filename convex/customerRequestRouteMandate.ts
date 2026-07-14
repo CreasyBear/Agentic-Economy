@@ -467,7 +467,7 @@ export async function readCurrentRouteMandateState(
   return await readCurrentRouteMandateStateForPrincipal(ctx, requestId, authenticated.principalId, now, options)
 }
 
-async function readCurrentRouteMandateStateForPrincipal(
+export async function readCurrentRouteMandateStateForPrincipal(
   ctx: MutationCtx | QueryCtx,
   requestId: string,
   principalId: string,

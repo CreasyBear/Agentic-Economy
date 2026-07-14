@@ -90,19 +90,21 @@ describe('current V2 Customer Request application path', () => {
     })
     if (answered.kind !== 'request') throw new Error('answered request missing')
 
-    const review = await customer.action(api.customerRequestApplication.compare, {
+    const decision = await customer.action(api.customerRequestApplication.compare, {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
     })
-    expect(review).toMatchObject({
+    expect(decision).toMatchObject({
       kind: 'request', requestRef: 'request:v2:application', revision: 2,
-      state: 'needs_authorization', nextAction: 'review_disclosure',
-      preparationRef: expect.stringMatching(/^action-preparation:/),
-      disclosureReview: { purpose: 'Return sandbox result', maximumRecipients: 2 },
+      state: 'routes_ready', nextAction: 'inspect_routes',
     })
     await expect(customer.action(api.customerRequestApplication.compare, {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
-    })).resolves.toEqual(review)
-    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation review missing')
+    })).resolves.toEqual(decision)
+    if (decision.kind !== 'request') throw new Error('route decision missing')
+    const historicalPreparation = await beginHistoricalPreparationProof(backend, {
+      requestRef: decision.requestRef, revision: decision.revision, principalId, suffix: 'v2:1',
+    })
+    const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
     const authorized = await customer.action(api.customerRequestApplication.authorizePreparation, {
       requestRef: review.requestRef, revision: review.revision,
       preparationRef: review.preparationRef, idempotencyKey: 'authorize:v2:1',
@@ -117,7 +119,7 @@ describe('current V2 Customer Request application path', () => {
     })).resolves.toEqual(authorized)
     await expect(customer.action(api.customerRequestApplication.compare, {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
-    })).resolves.toEqual(review)
+    })).resolves.toEqual(decision)
 
     const modelRequest = JSON.stringify(generate.mock.calls[0])
     expect(modelRequest).not.toContain(model.contractRef.capabilityId)
@@ -388,11 +390,16 @@ describe('current V2 Customer Request application path', () => {
       },
       issuedAt: Date.now(),
     })
-    const review = await backend.action(api.customerRequestApplication.compare, {
+    const decision = await backend.action(api.customerRequestApplication.compare, {
       ...prepareCommand, serviceAuth: { ...prepareAuth, scopes: [...prepareAuth.scopes] },
     })
-    expect(review).toMatchObject({ kind: 'request', state: 'needs_authorization' })
-    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('external review missing')
+    expect(decision).toMatchObject({ kind: 'request', state: 'routes_ready' })
+    if (decision.kind !== 'request') throw new Error('external decision missing')
+    const historicalPreparation = await beginHistoricalPreparationProof(backend, {
+      requestRef: decision.requestRef, revision: decision.revision,
+      principalId: 'principal:external', suffix: 'external:1',
+    })
+    const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
     const secondPrepareCommand = {
       requestRef: review.requestRef, revision: review.revision, idempotencyKey: 'prepare:external:2',
     }
@@ -406,7 +413,7 @@ describe('current V2 Customer Request application path', () => {
     })
     await expect(backend.action(api.customerRequestApplication.compare, {
       ...secondPrepareCommand, serviceAuth: { ...secondPrepareAuth, scopes: [...secondPrepareAuth.scopes] },
-    })).resolves.toMatchObject({ kind: 'request', state: 'needs_authorization' })
+    })).resolves.toMatchObject({ kind: 'request', state: 'routes_ready' })
     const authorityRows = await backend.run(async (ctx) => ({
       approvals: await ctx.db.query('customerRequestV2PreparationApprovalEvidence').collect(),
       reservations: await ctx.db.query('customerRequestV2PreparationAuthorityReservations').collect(),
@@ -463,10 +470,14 @@ describe('current V2 Customer Request application path', () => {
       value: 'Return a labelled sandbox comparison reference.',
     })
     if (answered.kind !== 'request') throw new Error('answered request missing')
-    const review = await customer.action(api.customerRequestApplication.compare, {
+    const decision = await customer.action(api.customerRequestApplication.compare, {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:drift',
     })
-    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('review missing')
+    if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error('route decision missing')
+    const historicalPreparation = await beginHistoricalPreparationProof(backend, {
+      requestRef: decision.requestRef, revision: decision.revision, principalId, suffix: 'v2:drift',
+    })
+    const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
 
     await backend.run(async (ctx) => {
       const binding = (await ctx.db.query('capabilityTransportBindings').collect())[0]
@@ -537,10 +548,14 @@ describe('current V2 Customer Request application path', () => {
       value: 'Return a labelled sandbox comparison reference.',
     })
     if (answered.kind !== 'request') throw new Error('answered request missing')
-    const review = await customer.action(api.customerRequestApplication.compare, {
+    const decision = await customer.action(api.customerRequestApplication.compare, {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:egress-state',
     })
-    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('review missing')
+    if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error('route decision missing')
+    const historicalPreparation = await beginHistoricalPreparationProof(backend, {
+      requestRef: decision.requestRef, revision: decision.revision, principalId, suffix: 'v2:egress-state',
+    })
+    const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
 
     await expect(backend.mutation(internal.customerRequestV2PreparationEgressState.allocate, {
       commandKey: 'egress:before-authority', commandDigest: 'sha256:' + '1'.repeat(64), principalId,
@@ -754,11 +769,15 @@ describe('current V2 Customer Request application path', () => {
       value: 'Return a labelled sandbox comparison reference.',
     })
     if (answered.kind !== 'request') throw new Error('answered request missing')
-    const review = await customer.action(api.customerRequestApplication.compare, {
+    const decision = await customer.action(api.customerRequestApplication.compare, {
       requestRef: answered.requestRef, revision: answered.revision,
       idempotencyKey: 'prepare:v2:prepared-action',
     })
-    if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation missing')
+    if (decision.kind !== 'request' || decision.state !== 'routes_ready') throw new Error('route decision missing')
+    const historicalPreparation = await beginHistoricalPreparationProof(backend, {
+      requestRef: decision.requestRef, revision: decision.revision, principalId, suffix: 'v2:prepared-action',
+    })
+    const review = { ...decision, preparationRef: historicalPreparation.preparationRef }
     const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
       requestId: review.requestRef,
     })
@@ -883,6 +902,33 @@ describe('current V2 Customer Request application path', () => {
     expect(refined.criteria).toContainEqual(expect.objectContaining({ value: 'Compare sandbox options' }))
   })
 })
+
+async function beginHistoricalPreparationProof(
+  backend: ReturnType<typeof convexTest>,
+  input: Readonly<{
+    requestRef: string; revision: number; principalId: string; suffix: string
+  }>,
+) {
+  const aggregate = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
+    requestId: input.requestRef,
+  })
+  const action = aggregate.kind === 'current' ? aggregate.aggregate.plan.actions[0] : undefined
+  if (action === undefined) throw new Error('historical preparation action missing')
+  const result = await backend.mutation(internal.customerRequestV2Preparation.prepare, {
+    commandKey: `historical-preparation:${input.suffix}`,
+    commandDigest: canonicalDigest(input),
+    principalId: input.principalId,
+    requestId: input.requestRef,
+    expectedRevision: input.revision,
+    actionId: action.actionId,
+    now: Date.now(),
+  })
+  if ((result.kind !== 'stored' && result.kind !== 'replayed')
+    || result.preparation.kind !== 'needs_authority') {
+    throw new Error(`historical preparation proof unavailable: ${result.kind}`)
+  }
+  return result.preparation
+}
 
 async function registerDisclosureSupply(
   backend: ReturnType<typeof convexTest>,

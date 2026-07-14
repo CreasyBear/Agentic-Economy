@@ -429,6 +429,366 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('starts the confirmed choice through one customer command and replays one durable run', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const current = await committedTwoStepAdmissionRoute(backend, admin)
+    const compared = await admin.action(api.customerRequestApplication.compare, {
+      requestRef: current.aggregate.snapshot.requestId,
+      revision: current.aggregate.snapshot.revision,
+      idempotencyKey: 'compare:two-step-run',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error(`customer route missing: ${JSON.stringify(compared)}`)
+    }
+    const confirmed = await admin.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: compared.decision.routes[0].routeRef,
+      idempotencyKey: 'confirm:two-step-run',
+    })
+    if (confirmed.kind !== 'request' || confirmed.state !== 'route_confirmed') {
+      throw new Error(`route confirmation missing: ${JSON.stringify(confirmed)}`)
+    }
+
+    const first = await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:two-step-customer',
+    })
+
+    expect(first).toMatchObject({
+      kind: 'request', requestRef: confirmed.requestRef, revision: confirmed.revision,
+      state: 'in_progress', nextAction: 'wait',
+      progress: {
+        completed: 0, total: 2,
+        current: { step: 1, state: 'queued' },
+      },
+    })
+    expect(JSON.stringify(first)).not.toMatch(/mandate|capabilityId|bindingId|offeringId|publicationRef|transport|graph/u)
+    await expect(admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:two-step-customer',
+    })).resolves.toEqual(first)
+  })
+
+  it('chains only validated evidence into the next step and completes the same durable run', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'validated-chain')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:validated-chain',
+    })
+
+    const firstLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:one', leaseDurationMs: 10_000,
+    })
+    expect(firstLease).toMatchObject({
+      kind: 'leased',
+      dispatch: { position: 1 },
+    })
+    if (firstLease.kind !== 'leased') throw new Error('first route step was not leased')
+    expect(JSON.parse(firstLease.dispatch.inputJson)).toEqual({
+      request: 'Resolve a service reference and prepare its quote',
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:two', leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: firstLease.dispatch.dispatchRef,
+      attemptRef: firstLease.dispatch.attemptRef,
+      workerId: 'worker:one',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
+      attemptRef: firstLease.dispatch.attemptRef,
+      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
+    })
+    const advanced = await backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: firstLease.dispatch.attemptRef,
+      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
+      outcome: { kind: 'succeeded', outputJson: JSON.stringify({ serviceReference: 'service:123' }) },
+    })
+    expect(advanced).toMatchObject({
+      kind: 'advanced', run: { completedSteps: 1, currentPosition: 2, currentState: 'queued' },
+    })
+
+    const secondLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:two', leaseDurationMs: 10_000,
+    })
+    expect(secondLease).toMatchObject({ kind: 'leased', dispatch: { position: 2 } })
+    if (secondLease.kind !== 'leased') throw new Error('second route step was not leased')
+    expect(JSON.parse(secondLease.dispatch.inputJson)).toEqual({ serviceReference: 'service:123' })
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: secondLease.dispatch.dispatchRef,
+      attemptRef: secondLease.dispatch.attemptRef,
+      workerId: 'worker:two',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
+      attemptRef: secondLease.dispatch.attemptRef,
+      operationKeyDigest: secondLease.dispatch.operationKeyDigest,
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: secondLease.dispatch.attemptRef,
+      operationKeyDigest: secondLease.dispatch.operationKeyDigest,
+      outcome: { kind: 'succeeded', outputJson: JSON.stringify({ quoteReference: 'quote:123' }) },
+    })).resolves.toMatchObject({ kind: 'completed' })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'completed', nextAction: 'none',
+      action: { state: 'completed', result: { quoteReference: 'quote:123' } },
+    })
+    await backend.run(async (ctx) => {
+      const reservations = await ctx.db.query('customerRequestRouteStepReservations').collect()
+      const disclosures = await ctx.db.query('customerRequestRouteDataReservations').collect()
+      expect(reservations.reduce((total, row) => total + row.reservedSpend.amountMinor, 0)).toBe(1_000)
+      expect(disclosures).toHaveLength(2)
+      expect(new Set(disclosures.map(({ allocationRef }) => allocationRef)).size).toBe(2)
+    })
+  })
+
+  it('never advances or retries when a released step has an invalid or unknown outcome', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'unknown-outcome')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:unknown-outcome',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:unknown', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('unknown-outcome route step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:unknown',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+      outcome: { kind: 'succeeded', outputJson: JSON.stringify({ inventedSuccess: true }) },
+    })).resolves.toMatchObject({
+      kind: 'outcome_unknown',
+      run: { completedSteps: 0, currentPosition: 1, currentState: 'outcome_unknown' },
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:retry', leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'outcome_unknown', nextAction: 'wait',
+      action: { state: 'unknown', automaticRetry: false },
+    })
+  })
+
+  it('keeps a business-reported failure distinct from an unknown outcome', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'known-failure')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:known-failure',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:known-failure', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('known-failure route step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:known-failure',
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+      outcome: { kind: 'failed' },
+    })).resolves.toMatchObject({
+      kind: 'failed', run: { state: 'failed', currentState: 'failed', completedSteps: 0 },
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'failed', nextAction: 'revise_request',
+      action: { state: 'failed', automaticRetry: false },
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:after-known-failure', leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+  })
+
+  it('requeues a lease crash before release and marks a post-release crash unknown', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(10_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'lease-recovery')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:lease-recovery',
+    })
+    const first = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:crashed-before-release', leaseDurationMs: 1_000,
+    })
+    if (first.kind !== 'leased') throw new Error('recovery route step was not leased')
+    vi.spyOn(Date, 'now').mockReturnValue(11_001)
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recoverExpiredDispatch, {
+      dispatchRef: first.dispatch.dispatchRef,
+    })).resolves.toEqual({ kind: 'requeued' })
+    const second = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:replacement', leaseDurationMs: 1_000,
+    })
+    expect(second).toMatchObject({
+      kind: 'leased', dispatch: {
+        attemptRef: first.dispatch.attemptRef,
+        operationKeyDigest: first.dispatch.operationKeyDigest,
+      },
+    })
+    if (second.kind !== 'leased') throw new Error('requeued route step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: second.dispatch.dispatchRef,
+      attemptRef: second.dispatch.attemptRef,
+      workerId: 'worker:replacement',
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(12_002)
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recoverExpiredDispatch, {
+      dispatchRef: second.dispatch.dispatchRef,
+    })).resolves.toEqual({ kind: 'outcome_unknown' })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:blind-retry', leaseDurationMs: 1_000,
+    })).resolves.toEqual({ kind: 'none' })
+  })
+
+  it('stops a queued run idempotently before any business step is released', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-before-release')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-before-release',
+    })
+    const cancelled = await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:before-release',
+    })
+    expect(cancelled).toMatchObject({
+      kind: 'request', state: 'cancelled', nextAction: 'revise_request',
+    })
+    await expect(admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:before-release',
+    })).resolves.toEqual(cancelled)
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:after-cancel', leaseDurationMs: 1_000,
+    })).resolves.toEqual({ kind: 'none' })
+  })
+
+  it('refuses to report cancellation after a business step was released', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-too-late')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-too-late',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:cancel-too-late', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('cancel-too-late route step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:cancel-too-late',
+    })
+    const result = await admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:too-late',
+    })
+    expect(result).toMatchObject({
+      kind: 'request', state: 'in_progress', nextAction: 'wait',
+      progress: { current: { state: 'contacting' } },
+    })
+    expect(result).not.toMatchObject({ state: 'cancelled' })
+  })
+
+  it('uses the same run, lease, validation, and completion machinery for one step', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const current = await committedOneStepAdmissionRoute(backend, admin)
+    const compared = await admin.action(api.customerRequestApplication.compare, {
+      requestRef: current.aggregate.snapshot.requestId,
+      revision: current.aggregate.snapshot.revision,
+      idempotencyKey: 'compare:one-step-run',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error('one-step customer route missing')
+    }
+    await admin.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef,
+      revision: compared.revision,
+      routeRef: compared.decision.routes[0].routeRef,
+      idempotencyKey: 'confirm:one-step-run',
+    })
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: compared.requestRef,
+      idempotencyKey: 'run:one-step-run',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:one-step', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('one-step route was not leased')
+    expect(lease.dispatch.position).toBe(1)
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:one-step',
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: lease.dispatch.attemptRef,
+      operationKeyDigest: lease.dispatch.operationKeyDigest,
+      outcome: { kind: 'succeeded', outputJson: JSON.stringify({ serviceReference: 'service:one-step' }) },
+    })).resolves.toMatchObject({
+      kind: 'completed', run: { totalSteps: 1, completedSteps: 1, currentPosition: 1 },
+    })
+  })
+
+  it('keeps prior runs as history and resumes only the newly confirmed replacement', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'replacement-run')
+    if (confirmed.confirmation === undefined) throw new Error('replacement confirmation missing')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:replacement:one',
+    })
+    const currentMandate = await admin.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: confirmed.requestRef,
+    })
+    if (currentMandate.kind !== 'active') throw new Error('replacement current mandate missing')
+    await admin.mutation(internal.customerRequestRouteMandate.revoke, {
+      requestId: confirmed.requestRef,
+      mandateRef: currentMandate.mandate.mandateRef,
+      idempotencyKey: 'revoke:replacement:one',
+    })
+    const replacement = await admin.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: confirmed.requestRef,
+      revision: confirmed.revision,
+      routeRef: confirmed.confirmation.route.routeRef,
+      idempotencyKey: 'confirm:replacement:two',
+    })
+    expect(replacement).toMatchObject({ kind: 'request', state: 'route_confirmed' })
+    const restarted = await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:replacement:two',
+    })
+    expect(restarted).toMatchObject({
+      kind: 'request', state: 'in_progress', progress: { current: { step: 1, state: 'queued' } },
+    })
+    await backend.run(async (ctx) => {
+      const runs = await ctx.db.query('customerRequestRouteRuns').collect()
+      const head = await ctx.db.query('customerRequestRouteRunHeads').unique()
+      const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox').collect()
+      expect(runs).toHaveLength(2)
+      expect(runs.map(({ state }) => state).sort()).toEqual(['cancelled', 'queued'])
+      expect(head?.currentRunRef).toBe(runs.find(({ state }) => state === 'queued')?.runRef)
+      expect(outbox.map(({ state }) => state).sort()).toEqual(['cancelled', 'pending'])
+    })
+  })
+
   it('lets an external agent confirm and resume the same displayed option with command-bound authority', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
@@ -1142,6 +1502,32 @@ async function refreshAndActivate(
   }
 }
 
+async function confirmedTwoStepRoute(
+  backend: ReturnType<typeof convexTest>,
+  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+  suffix: string,
+) {
+  const current = await committedTwoStepAdmissionRoute(backend, admin)
+  const compared = await admin.action(api.customerRequestApplication.compare, {
+    requestRef: current.aggregate.snapshot.requestId,
+    revision: current.aggregate.snapshot.revision,
+    idempotencyKey: `compare:${suffix}`,
+  })
+  if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+    throw new Error(`customer route missing: ${JSON.stringify(compared)}`)
+  }
+  const confirmed = await admin.action(api.customerRequestApplication.confirmRoute, {
+    requestRef: compared.requestRef,
+    revision: compared.revision,
+    routeRef: compared.decision.routes[0].routeRef,
+    idempotencyKey: `confirm:${suffix}`,
+  })
+  if (confirmed.kind !== 'request' || confirmed.state !== 'route_confirmed') {
+    throw new Error(`route confirmation missing: ${JSON.stringify(confirmed)}`)
+  }
+  return confirmed
+}
+
 async function committedTwoStepAdmissionRoute(
   backend: ReturnType<typeof convexTest>,
   admin: Awaited<ReturnType<typeof ownerAdmin>>,
@@ -1221,6 +1607,83 @@ async function committedTwoStepAdmissionRoute(
     routeGeneration,
   })
   if (committed.kind !== 'stored') throw new Error(`two-step commit failed: ${committed.kind}`)
+  return { aggregate, routeGeneration }
+}
+
+async function committedOneStepAdmissionRoute(
+  backend: ReturnType<typeof convexTest>,
+  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+) {
+  await publishAndActivate(backend, admin, 'one-step-resolver', upstreamDocument, 300)
+  const supply = await backend.query(internal.capabilitySupply.listEligible, {
+    networkId: 'ae:public', limit: 16,
+  })
+  if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
+  const model = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
+  const requestInput = model.inputs.find((input) => input.inputPointer === '/request')
+  if (requestInput === undefined) throw new Error('one-step request input missing')
+  const requestId = 'request:one-step-admission'
+  const compiled = compileCustomerRequest({
+    requestId,
+    expectedRevision: 0,
+    expectedRouteGeneration: 0,
+    principalId: 'token_route_admin',
+    delegatedAgentId: 'agent:one-step-admission',
+    intent: 'Resolve one service reference',
+    networkId: 'ae:public',
+    proposal: {
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: model.selectionKey,
+        contractRef: model.contractRef,
+        facts: [{
+          contractRef: model.contractRef,
+          selectionKey: model.selectionKey,
+          inputKey: requestInput.key,
+          inputPointer: requestInput.inputPointer,
+          schemaIdentity: requestInput.schemaIdentity,
+          value: 'Resolve one service reference',
+          source: { kind: 'customer', assertionRef: 'customer:one-step-admission' },
+        }],
+      }],
+    },
+    interpreterId: 'interpreter:one-step-admission',
+    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => (
+      publication === undefined ? [] : [{
+        businessId: String(offering.businessId),
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: {
+          capabilityId: binding.capabilityId,
+          version: binding.version,
+          contractDigest: binding.contractDigest,
+        },
+        offeringRegistrationHash: offering.registrationHash,
+        bindingRegistrationHash: binding.registrationHash,
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        readinessValidUntil: publication.readinessValidUntil,
+        price: offering.presentation.price,
+        cancellation: binding.cancellation,
+      }]
+    )),
+    models: [model],
+    now: Date.now(),
+  })
+  if (compiled.kind !== 'compiled' || compiled.routeGeneration === undefined) {
+    throw new Error(`one-step compile failed: ${compiled.kind === 'compiled' ? 'generation_missing' : compiled.reason}`)
+  }
+  const aggregate = writableCustomerRequestV2Aggregate(compiled.aggregate)
+  const routeGeneration = writableCustomerRequestRoutePlanGeneration(compiled.routeGeneration)
+  const committed = await backend.mutation(internal.customerRequestV2.commitAggregate, {
+    commandKey: 'command:one-step-admission',
+    commandDigest: canonicalDigest({ requestId }),
+    expectedRevision: 0,
+    expectedRouteGeneration: 0,
+    aggregate,
+    routeGeneration,
+  })
+  if (committed.kind !== 'stored') throw new Error(`one-step commit failed: ${committed.kind}`)
   return { aggregate, routeGeneration }
 }
 

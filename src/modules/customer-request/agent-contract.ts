@@ -327,8 +327,8 @@ export const customerRequestViewSchema = z.object({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   routeGenerationRef: z.string().optional(),
   state: z.enum([
-    'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'preparing_options', 'options_ready', 'no_options',
-    'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
+    'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'in_progress', 'preparing_options', 'options_ready', 'no_options',
+    'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed', 'cancelled',
   ]),
   summary: z.string(),
   nextAction: z.enum([
@@ -363,6 +363,14 @@ export const customerRequestViewSchema = z.object({
     resolution: z.enum(['awaiting_evidence', 'provider_result', 'reconciled']),
     automaticRetry: z.literal(false), result: customerRequestJsonValueSchema.optional(), observedAt: safeNonnegativeInteger,
   }).strict().optional(),
+  progress: z.object({
+    completed: safeNonnegativeInteger,
+    total: safePositiveInteger,
+    current: z.object({
+      step: safePositiveInteger,
+      state: z.enum(['queued', 'contacting', 'awaiting_result', 'validating_result', 'needs_attention']),
+    }).strict(),
+  }).strict().optional(),
   decision: customerRoutePlanDecisionSchema.optional(),
   confirmation: customerRouteConfirmationSchema.optional(),
 }).strict().superRefine((view, context) => {
@@ -382,6 +390,9 @@ export const customerRequestViewSchema = z.object({
   }
   if (view.state === 'route_confirmed' && view.confirmation === undefined) {
     context.addIssue({ code: 'custom', path: ['confirmation'], message: 'route_confirmation_required' })
+  }
+  if (view.state === 'in_progress' && view.progress === undefined) {
+    context.addIssue({ code: 'custom', path: ['progress'], message: 'route_progress_required' })
   }
   if (view.confirmation !== undefined && (view.state !== 'route_confirmed'
     || view.routeGenerationRef !== view.confirmation.generationRef

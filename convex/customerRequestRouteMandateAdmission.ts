@@ -1,4 +1,4 @@
-import { v } from 'convex/values'
+import { v, type Infer } from 'convex/values'
 
 import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-digest'
 import {
@@ -14,7 +14,10 @@ import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 import type { Doc } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
 import { getEligibleExactCapabilitySupply } from './capabilitySupply'
-import { readCurrentRouteMandateState } from './customerRequestRouteMandate'
+import {
+  readCurrentRouteMandateState,
+  readCurrentRouteMandateStateForPrincipal,
+} from './customerRequestRouteMandate'
 
 const command = {
   requestId: v.string(),
@@ -30,6 +33,8 @@ const command = {
   expectedCapabilityContractDigest: v.string(),
   idempotencyKey: v.string(),
 }
+const commandValue = v.object(command)
+export type RouteStepAdmissionCommand = Infer<typeof commandValue>
 
 const result = v.union(
   v.object({ kind: v.literal('admitted'), grant: routeStepGrantValue }),
@@ -49,14 +54,22 @@ const result = v.union(
 export const admitStep = internalMutation({
   args: command,
   returns: result,
-  handler: async (ctx, args) => {
+  handler: admitRouteStep,
+})
+
+export async function admitRouteStep(
+  ctx: MutationCtx,
+  args: RouteStepAdmissionCommand,
+  verifiedPrincipalId?: string,
+): Promise<Infer<typeof result>> {
     const now = Date.now()
-    const current = await readCurrentRouteMandateState(
-      ctx,
-      args.requestId,
-      now,
-      { requireCurrentGraph: false },
-    )
+    const current = verifiedPrincipalId === undefined
+      ? await readCurrentRouteMandateState(
+          ctx, args.requestId, now, { requireCurrentGraph: false },
+        )
+      : await readCurrentRouteMandateStateForPrincipal(
+          ctx, args.requestId, verifiedPrincipalId, now, { requireCurrentGraph: false },
+        )
     if (current.kind !== 'active') {
       return { kind: 'refused' as const, reason: 'mandate_not_current' as const }
     }
@@ -266,8 +279,7 @@ export const admitStep = internalMutation({
       committedAt: recordedAt,
     })
     return { kind: 'admitted' as const, grant }
-  },
-})
+}
 
 function validGrant(grant: RouteStepGrant): boolean {
   return grant.grantRef === `route-step-grant:v1:${grant.grantDigest}`
