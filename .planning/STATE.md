@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: routeplan-frontier
 status: active
-stopped_at: "Closed RoutePlan customer and agent projection #170 at deployed revision 0c409082; next unclaimed frontier is exact authenticated mandate binding #119"
+stopped_at: "Recharted oversized exact mandate ticket #119 before coding; next unclaimed frontier is exact RouteMandate contract #172"
 last_updated: "2026-07-14"
 progress:
   total_phases: 6
@@ -34,6 +34,8 @@ RoutePlan supersession frontier (2026-07-14): [Supersede RoutePlan generations o
 
 RoutePlan projection frontier (2026-07-14): [Project exact RoutePlan generation changes to customers and agents](https://github.com/CreasyBear/Agentic-Economy/issues/170) is closed at exact deployed revision `0c4090825c2deac9b2c9157c34f66b2d0ab09d0a`. GitHub run `29327024791` passed the clean source contract, exact Vercel and Convex deployment, authenticated deployment readback, labelled sandbox registration, and the cold external-agent Request journey. Human and machine Request callers now receive one customer-semantic projection of the exact current generation and route-associated material deltas before confirmation; no authority is created. This remains sandbox contract and hosted-path proof only, not real supply, execution, customer value, booking, payment, or autonomous fulfillment.
 
+RouteMandate frontier (2026-07-14): [Bind authenticated mandate to the exact RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/119) was closed as recharted before coding. Current source binds approval to one PreparedAction while the canonical product model is an immutable multi-step RoutePlan generation. GitHub now owns the executable split as [exact RouteMandate contract](https://github.com/CreasyBear/Agentic-Economy/issues/172) -> [current-head issuance and supersession](https://github.com/CreasyBear/Agentic-Economy/issues/173) -> [pre-release cumulative enforcement](https://github.com/CreasyBear/Agentic-Economy/issues/174), plus [shared human/agent confirmation](https://github.com/CreasyBear/Agentic-Economy/issues/175) and separately bounded [standing low-risk authority](https://github.com/CreasyBear/Agentic-Economy/issues/176). No RouteMandate implementation is claimed.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Current product slice
@@ -61,7 +63,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The next unclaimed frontier is [Bind authenticated mandate to the exact RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/119). Begin only in a new logical ticket session: claim it, bind independently authenticated authority to the exact customer-comprehensible generation and material limits, and prove every stale, widened, substituted, replayed or expired variant fails closed before data release or invocation. No next ticket is claimed yet.
+The next unclaimed frontier is [Define the exact RouteMandate contract for one selected RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/172). Begin only in a new logical ticket session: claim it, define the canonical route-level authority material and digest in production TypeScript, and prove omitted, widened, substituted, stale and tampered material fails closed. Do not persist, display, release or execute authority in that ticket. No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
