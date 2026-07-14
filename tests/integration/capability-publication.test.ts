@@ -244,6 +244,10 @@ describe('capability publication', () => {
           resourceJson: JSON.stringify({
             resourceUrl: 'https://x402-one.example.test/lookup', inputSchema, outputSchema,
             price: { currency: 'AUD', amountMinor: 1_200 },
+            scheme: 'exact', network: 'eip155:84532',
+            asset: '0x0000000000000000000000000000000000000001',
+            payTo: '0x0000000000000000000000000000000000000002',
+            routeAmountExponent: 2, assetAmountExponent: 6,
           }),
           contract,
           commercial: {

@@ -235,7 +235,7 @@ export function routeStepAuthorityDigest(authority: RouteStepAuthority): string 
   return canonicalDigest(material as StableHashValue)
 }
 
-export function routeStepGrantDigest(grant: RouteStepGrant): string {
+export function routeStepGrantDigest<T extends Readonly<{ grantRef: string; grantDigest: string }>>(grant: T): string {
   const { grantRef: _grantRef, grantDigest: _grantDigest, ...material } = grant
   return canonicalDigest(material as StableHashValue)
 }

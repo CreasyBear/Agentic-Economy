@@ -87,4 +87,22 @@ describe('capability supply transport adapter registry', () => {
       cancellation: { kind: 'adapter_managed', evidenceRefs: ['evidence:cancellation'] },
     })).toEqual({ kind: 'refused', reason: 'adapter_config_invalid' })
   })
+
+  it('admits x402 as a bounded payment transport without changing the capability contract', () => {
+    expect(admitRegisteredTransport({
+      adapterId: 'x402-fetch:v2',
+      endpointUrl: 'https://example.test/paid-capability',
+      credentialRef: 'env:AE_X402_EVM_PRIVATE_KEY',
+      continuation: { kind: 'single_response', evidenceRefs: ['evidence:response'] },
+      cancellation: { kind: 'unsupported', evidenceRefs: ['evidence:cancellation'] },
+      config: {
+        method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+        currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+      },
+    })).toMatchObject({
+      kind: 'admitted', transport: { adapterId: 'x402-fetch:v2' },
+    })
+  })
 })

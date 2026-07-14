@@ -413,6 +413,8 @@ export const customerRequestRouteMandateTables = {
     inputDigest: v.string(),
     outputJson: v.optional(v.string()),
     outputDigest: v.optional(v.string()),
+    transportObservationJson: v.optional(v.string()),
+    transportObservationDigest: v.optional(v.string()),
     evidence: v.optional(v.array(v.object({
       evidenceId: v.string(),
       outputPointer: v.string(),
@@ -446,6 +448,7 @@ export const customerRequestRouteMandateTables = {
       v.literal('pending'),
       v.literal('leased'),
       v.literal('delivered'),
+      v.literal('failed'),
       v.literal('outcome_unknown'),
       v.literal('cancelled'),
     ),

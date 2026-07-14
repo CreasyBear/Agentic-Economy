@@ -1,0 +1,215 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import {
+  invokeRegisteredRouteTransport,
+  type RouteTransportFetch,
+  type RouteTransportInvocation,
+} from '@/modules/capability-supply/route-transport-runtime'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
+
+const authority = {
+  attemptRef: 'route-step-attempt:v1:attempt',
+  operationKeyDigest: 'sha256:operation',
+  mandateDigest: 'sha256:mandate',
+  grantDigest: 'sha256:grant',
+  capabilityContractDigest: 'sha256:contract',
+  maximumSpend: { currency: 'USD', amountMinor: 125 },
+  expiresAt: 2_000_000_000_000,
+  callIdentity: {
+    keyId: 'route-calls:2026-07',
+    signature: 'hmac-sha256:signed-call',
+  },
+} as const
+
+function invocation(overrides: Partial<RouteTransportInvocation> = {}): RouteTransportInvocation {
+  const config = { method: 'POST' as const, requestTimeoutMs: 5_000 }
+  return {
+    binding: {
+      adapterId: 'http-json:v1',
+      endpointUrl: 'https://provider.example/run',
+      credentialRef: 'env:PROVIDER_KEY',
+      configJson: JSON.stringify(config),
+      configDigest: canonicalDigest(config),
+    },
+    authority,
+    inputJson: JSON.stringify({ destination: 'PER' }),
+    ...overrides,
+  }
+}
+
+function registeredBinding(
+  adapterId: string,
+  endpointUrl: string,
+  credentialRef: string,
+  config: Readonly<Record<string, unknown>>,
+) {
+  return {
+    adapterId, endpointUrl, credentialRef,
+    configJson: JSON.stringify(config), configDigest: canonicalDigest(config as StableHashValue),
+  }
+}
+
+describe('registered route transport runtime', () => {
+  it('carries one signed and idempotent call through a generic HTTP binding', async () => {
+    const fetch: RouteTransportFetch = vi.fn(async (_url, init) => {
+      expect(init?.redirect).toBe('manual')
+      expect(init?.headers).toMatchObject({
+        Authorization: 'Bearer provider-secret',
+        'Idempotency-Key': authority.operationKeyDigest,
+        'AE-Call-Key-Id': authority.callIdentity.keyId,
+        'AE-Call-Signature': authority.callIdentity.signature,
+        'AE-Mandate-Digest': authority.mandateDigest,
+        'AE-Grant-Digest': authority.grantDigest,
+        'AE-Capability-Digest': authority.capabilityContractDigest,
+      })
+      return Response.json({ serviceReference: 'service:123' }, {
+        headers: { 'Provider-Receipt': 'receipt:http:123' },
+      })
+    })
+
+    const observed = await invokeRegisteredRouteTransport(invocation(), {
+      send: fetch,
+      resolveCredential: () => 'provider-secret',
+      createX402PaymentSignature: async () => undefined,
+    })
+
+    expect(observed).toMatchObject({
+      transport: 'http', disposition: 'succeeded', releaseStarted: true,
+      outputJson: JSON.stringify({ serviceReference: 'service:123' }),
+      providerReceipt: 'receipt:http:123',
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('initializes a Streamable HTTP MCP session and normalizes a tool result', async () => {
+    const fetch = vi.fn<RouteTransportFetch>()
+      .mockResolvedValueOnce(new Response([
+        'event: message',
+        'data: {"jsonrpc":"2.0","method":"notifications/progress","params":{}}',
+        '',
+        'event: message',
+        'data: {"jsonrpc":"2.0","id":"initialize:sha256:operation","result":{"protocolVersion":"2025-11-25","capabilities":{},"serverInfo":{"name":"provider","version":"1"}}}',
+        '',
+      ].join('\n'), { headers: { 'Content-Type': 'text/event-stream', 'Mcp-Session-Id': 'session:123' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(Response.json({
+        jsonrpc: '2.0', id: authority.operationKeyDigest,
+        result: { structuredContent: { serviceReference: 'service:mcp' } },
+      }))
+
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'mcp-jsonrpc:v1', 'https://provider.example/mcp', 'env:MCP_KEY', {
+          protocolVersion: '2025-11-25', toolName: 'resolve_service', requestTimeoutMs: 5_000,
+        },
+      ),
+    }), {
+      send: fetch,
+      resolveCredential: () => 'mcp-secret',
+      createX402PaymentSignature: async () => undefined,
+    })
+
+    expect(observed).toMatchObject({
+      transport: 'mcp', disposition: 'succeeded', releaseStarted: true,
+      outputJson: JSON.stringify({ serviceReference: 'service:mcp' }),
+    })
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(fetch.mock.calls[2]?.[1]?.headers).toMatchObject({
+      'Mcp-Session-Id': 'session:123',
+      'MCP-Protocol-Version': '2025-11-25',
+      'Idempotency-Key': authority.operationKeyDigest,
+    })
+  })
+
+  it('pays an admitted x402 challenge only within the exact step ceiling', async () => {
+    const requirement = {
+      x402Version: 2,
+      resource: { url: 'https://provider.example/paid', description: 'Resolve service', mimeType: 'application/json' },
+      accepts: [{
+        scheme: 'exact', network: 'eip155:84532', amount: '1250000',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002', maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    const challenge = Buffer.from(JSON.stringify(requirement)).toString('base64')
+    const fetch = vi.fn<RouteTransportFetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 402, headers: { 'Payment-Required': challenge } }))
+      .mockImplementationOnce(async (_url, init) => {
+        expect(init?.headers).toMatchObject({ 'Payment-Signature': 'signed-payment-payload' })
+        return Response.json({ serviceReference: 'service:paid' }, {
+          headers: { 'Payment-Response': 'settlement-proof', 'Provider-Receipt': 'receipt:x402:1' },
+        })
+      })
+    const createPayment = vi.fn(async () => 'signed-payment-payload')
+
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'x402-fetch:v2', 'https://provider.example/paid', 'env:EVM_PRIVATE_KEY', {
+          method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+          currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+          asset: '0x0000000000000000000000000000000000000001',
+          payTo: '0x0000000000000000000000000000000000000002',
+        },
+      ),
+    }), {
+      send: fetch,
+      resolveCredential: () => '0xprivate-key',
+      createX402PaymentSignature: createPayment,
+    })
+
+    expect(createPayment).toHaveBeenCalledWith(expect.objectContaining({
+      challenge: requirement,
+      credential: '0xprivate-key',
+      paymentIdentifier: authority.operationKeyDigest,
+    }))
+    expect(observed).toMatchObject({
+      transport: 'x402', disposition: 'succeeded', releaseStarted: true,
+      outputJson: JSON.stringify({ serviceReference: 'service:paid' }),
+      paymentChallengeDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      paymentProof: 'settlement-proof', providerReceipt: 'receipt:x402:1',
+    })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not sign or retry an x402 challenge above the admitted ceiling', async () => {
+    const requirement = {
+      x402Version: 2,
+      resource: { url: 'https://provider.example/paid', description: 'Resolve service', mimeType: 'application/json' },
+      accepts: [{
+        scheme: 'exact', network: 'eip155:84532', amount: '1250001',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002', maxTimeoutSeconds: 60,
+        extra: {},
+      }],
+    }
+    const fetch = vi.fn<RouteTransportFetch>().mockResolvedValue(new Response(null, {
+      status: 402,
+      headers: { 'Payment-Required': Buffer.from(JSON.stringify(requirement)).toString('base64') },
+    }))
+    const createPayment = vi.fn(async () => 'must-not-be-created')
+
+    const observed = await invokeRegisteredRouteTransport(invocation({
+      binding: registeredBinding(
+        'x402-fetch:v2', 'https://provider.example/paid', 'env:EVM_PRIVATE_KEY', {
+          method: 'POST', requestTimeoutMs: 5_000, scheme: 'exact', network: 'eip155:84532',
+          currency: 'USD', routeAmountExponent: 2, assetAmountExponent: 6,
+          asset: '0x0000000000000000000000000000000000000001',
+          payTo: '0x0000000000000000000000000000000000000002',
+        },
+      ),
+    }), {
+      send: fetch,
+      resolveCredential: () => '0xprivate-key', createX402PaymentSignature: createPayment,
+    })
+
+    expect(observed).toMatchObject({
+      transport: 'x402', disposition: 'refused', releaseStarted: false,
+      paymentChallengeDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      failureCode: 'payment_exceeds_step_ceiling',
+    })
+    expect(createPayment).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+})

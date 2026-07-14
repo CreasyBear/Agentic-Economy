@@ -70,10 +70,10 @@ export function scanBackupImports(targets: readonly ScanTarget[]): readonly Scan
     },
     {
       rule: 'forbidden-handshake-import',
-      message: 'Handshake kernel imports are quarantined to the root package and /adapter-sdk only.',
+      message: 'Money and protocol SDK imports are quarantined to reviewed transport adapters.',
       pattern: forbiddenHandshakeImportPattern,
     },
-  ])
+  ]).filter((violation) => !isReviewedTransportSdkImport(violation))
 }
 
 export function scanPrivateImports(targets: readonly ScanTarget[]): readonly ScanViolation[] {
@@ -834,4 +834,10 @@ function isAllowedModulePublicSeam(violation: ScanViolation): boolean {
   }
 
   return match[1] !== undefined && /from\s+['"]\.\/internal\//.test(violation.excerpt)
+}
+
+function isReviewedTransportSdkImport(violation: ScanViolation): boolean {
+  return violation.rule === 'forbidden-handshake-import'
+    && violation.file === 'src/modules/capability-supply/internal/x402-payment-signer.ts'
+    && /from\s+['"](?:@x402\/(?:core|evm|extensions)\/[^'"]+|viem\/accounts)['"]/.test(violation.excerpt)
 }

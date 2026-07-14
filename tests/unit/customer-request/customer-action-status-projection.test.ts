@@ -31,7 +31,7 @@ describe('customer action status projection', () => {
       },
     })
     expect(failed).toMatchObject({
-      state: 'failed', nextAction: 'none',
+      state: 'failed', nextAction: 'revise_request',
       action: { state: 'failed', resolution: 'reconciled', result: { recoveryCode: 'not_available' } },
     })
     expect(JSON.stringify(failed)).not.toMatch(/observationRef|envelopeRef|lineageDigest|protocol/)

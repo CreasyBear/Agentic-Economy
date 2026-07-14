@@ -20,6 +20,17 @@ const mcpJsonRpcConfiguration = z.strictObject({
   toolName: z.string().trim().min(1).max(200),
   requestTimeoutMs: z.number().int().min(100).max(120_000),
 })
+const x402FetchConfiguration = z.strictObject({
+  method: z.literal('POST'),
+  requestTimeoutMs: z.number().int().min(100).max(120_000),
+  scheme: z.literal('exact'),
+  network: z.string().trim().min(1).max(100),
+  currency: z.string().trim().regex(/^[A-Z]{3}$/),
+  routeAmountExponent: z.number().int().min(0).max(18),
+  assetAmountExponent: z.number().int().min(0).max(18),
+  asset: z.string().trim().min(1).max(200),
+  payTo: z.string().trim().min(1).max(200),
+}).refine((value) => value.assetAmountExponent >= value.routeAmountExponent)
 
 export type TransportAdmissionInput = Readonly<{
   adapterId: string
@@ -52,6 +63,7 @@ type TransportAdapterDefinition = Readonly<{
 const adapters = new Map<string, TransportAdapterDefinition>([
   ['http-json:v1', { adapterId: 'http-json:v1', admit: admitHttpJsonTransport }],
   ['mcp-jsonrpc:v1', { adapterId: 'mcp-jsonrpc:v1', admit: admitMcpJsonRpcTransport }],
+  ['x402-fetch:v2', { adapterId: 'x402-fetch:v2', admit: admitX402FetchTransport }],
 ])
 
 export function admitRegisteredTransport(input: TransportAdmissionInput): TransportAdmissionResult {
@@ -98,6 +110,35 @@ function admitMcpJsonRpcTransport(input: TransportAdmissionInput): TransportAdmi
   }
   const endpoint = validPublicHttpsEndpoint(input.endpointUrl)
   const configuration = mcpJsonRpcConfiguration.safeParse(input.config)
+  if (
+    endpoint === undefined
+    || !/^env:[A-Z][A-Z0-9_]{1,199}$/.test(input.credentialRef)
+    || input.continuation.kind !== 'single_response'
+    || input.cancellation.kind !== 'unsupported'
+    || !configuration.success
+  ) {
+    return { kind: 'refused', reason: 'adapter_config_invalid' }
+  }
+  const config = configuration.data as JsonValue
+  const configJson = stableStringify(config as StableHashValue)
+  return {
+    kind: 'admitted',
+    transport: {
+      adapterId: input.adapterId,
+      configJson,
+      configDigest: canonicalDigest(config as StableHashValue),
+    },
+  }
+}
+
+function admitX402FetchTransport(input: TransportAdmissionInput): TransportAdmissionResult {
+  const rawConfigJson = stringifyForSize(input.config)
+  if (rawConfigJson === undefined) return { kind: 'refused', reason: 'adapter_config_invalid' }
+  if (encoder.encode(rawConfigJson).byteLength > MAX_ADAPTER_CONFIG_BYTES) {
+    return { kind: 'refused', reason: 'adapter_config_too_large' }
+  }
+  const endpoint = validPublicHttpsEndpoint(input.endpointUrl)
+  const configuration = x402FetchConfiguration.safeParse(input.config)
   if (
     endpoint === undefined
     || !/^env:[A-Z][A-Z0-9_]{1,199}$/.test(input.credentialRef)

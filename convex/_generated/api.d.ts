@@ -24,6 +24,7 @@ import type * as customerRequestRouteMandate from "../customerRequestRouteMandat
 import type * as customerRequestRouteMandateAdmission from "../customerRequestRouteMandateAdmission.js";
 import type * as customerRequestRouteMandateIntegrity from "../customerRequestRouteMandateIntegrity.js";
 import type * as customerRequestRouteMandateLifecycle from "../customerRequestRouteMandateLifecycle.js";
+import type * as customerRequestRouteTransportWorker from "../customerRequestRouteTransportWorker.js";
 import type * as customerRequestV2 from "../customerRequestV2.js";
 import type * as customerRequestV2Preparation from "../customerRequestV2Preparation.js";
 import type * as customerRequestV2PreparationEgress from "../customerRequestV2PreparationEgress.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestRouteMandateAdmission: typeof customerRequestRouteMandateAdmission;
   customerRequestRouteMandateIntegrity: typeof customerRequestRouteMandateIntegrity;
   customerRequestRouteMandateLifecycle: typeof customerRequestRouteMandateLifecycle;
+  customerRequestRouteTransportWorker: typeof customerRequestRouteTransportWorker;
   customerRequestV2: typeof customerRequestV2;
   customerRequestV2Preparation: typeof customerRequestV2Preparation;
   customerRequestV2PreparationEgress: typeof customerRequestV2PreparationEgress;

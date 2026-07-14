@@ -239,6 +239,20 @@ export function importX402Capability(
     || offeredPrice.amountMinor !== input.resource.price.amountMinor) {
     return { kind: 'refused', reason: 'commercial_metadata_inconsistent' }
   }
+  if (input.resource.scheme !== 'exact'
+    || typeof input.resource.network !== 'string'
+    || !/^[A-Za-z0-9-]+:[A-Za-z0-9._-]+$/.test(input.resource.network)
+    || typeof input.resource.asset !== 'string' || input.resource.asset.trim().length === 0
+    || typeof input.resource.payTo !== 'string' || input.resource.payTo.trim().length === 0
+    || typeof input.resource.routeAmountExponent !== 'number'
+    || !Number.isSafeInteger(input.resource.routeAmountExponent)
+    || typeof input.resource.assetAmountExponent !== 'number'
+    || !Number.isSafeInteger(input.resource.assetAmountExponent)
+    || input.resource.routeAmountExponent < 0
+    || input.resource.assetAmountExponent > 18
+    || input.resource.assetAmountExponent < input.resource.routeAmountExponent) {
+    return { kind: 'refused', reason: 'transport_unsupported' }
+  }
   return normalizedFromSchemas({
     source: {
       kind: 'x402', descriptorDigest: bounded.digest,
@@ -246,7 +260,18 @@ export function importX402Capability(
     },
     contract: input.contract, inputSchema: input.resource.inputSchema, outputSchema: input.resource.outputSchema,
     commercial: input.commercial, endpointUrl: endpoint,
-    adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs } },
+    adapter: {
+      adapterId: 'x402-fetch:v2',
+      config: {
+        method: 'POST', requestTimeoutMs: input.commercial.requestTimeoutMs,
+        scheme: input.resource.scheme, network: input.resource.network,
+        currency: input.resource.price.currency,
+        routeAmountExponent: input.resource.routeAmountExponent,
+        assetAmountExponent: input.resource.assetAmountExponent,
+        asset: input.resource.asset,
+        payTo: input.resource.payTo,
+      },
+    },
   })
 }
 

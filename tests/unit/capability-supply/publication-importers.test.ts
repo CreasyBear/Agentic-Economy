@@ -75,7 +75,7 @@ describe('capability publication importers', () => {
     }
   })
 
-  it('normalizes x402 metadata as price evidence without payment execution authority', () => {
+  it('normalizes x402 metadata into its registered bounded transport', () => {
     const result = importX402Capability({
       kind: 'x402',
       resource: {
@@ -83,6 +83,10 @@ describe('capability publication importers', () => {
         inputSchema: inputSchema(),
         outputSchema: outputSchema(),
         price: { currency: 'AUD', amountMinor: 1_200 },
+        scheme: 'exact', network: 'eip155:84532',
+        asset: '0x0000000000000000000000000000000000000001',
+        payTo: '0x0000000000000000000000000000000000000002',
+        routeAmountExponent: 2, assetAmountExponent: 6,
       },
       contract: contractMetadata('independent.x402-lookup'),
       commercial: commercialInput({ price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } }),
@@ -94,12 +98,14 @@ describe('capability publication importers', () => {
       draft: {
         source: { kind: 'x402', selector: { resourceUrl: 'https://api.example.test/lookup' } },
         offering: { presentation: { price: { kind: 'fixed', currency: 'AUD', amountMinor: 1_200 } } },
-        binding: { adapter: { adapterId: 'http-json:v1' } },
+        binding: { adapter: { adapterId: 'x402-fetch:v2' } },
       },
     })
     if (result.kind === 'normalized') {
       expect(result.draft.documentJson).not.toMatch(/payment|settlement|wallet/i)
-      expect(JSON.stringify(result.draft.binding.adapter.config)).not.toMatch(/payment|settlement|wallet/i)
+      expect(result.draft.binding.adapter.config).toMatchObject({
+        scheme: 'exact', network: 'eip155:84532', currency: 'AUD',
+      })
     }
   })
 

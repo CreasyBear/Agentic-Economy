@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: routeplan-frontier
 status: active
-stopped_at: "Durable RoutePlan dispatch and recovery source is complete; next unclaimed frontier is generic transport invocation #144"
+stopped_at: "Generic HTTP, MCP and x402 RoutePlan transport source is complete; next unclaimed frontier is the external action and recovery contract #133"
 last_updated: "2026-07-15"
 progress:
   total_phases: 6
@@ -46,6 +46,8 @@ RoutePlan confirmation frontier (2026-07-14): [Publish one authenticated RoutePl
 
 Route execution frontier (2026-07-15): [Dispatch and recover RoutePlan steps without duplicate effects](https://github.com/CreasyBear/Agentic-Economy/issues/120) is source-complete. One-step and composite Routes now share one durable run, step-attempt and dispatch-outbox lifecycle behind the Customer Request application boundary. Exact mandate admission, cumulative spend and recipient-purpose reservations, exclusive leases, atomic pre-release recovery, post-release unknown outcomes, schema-and-evidence-gated dependency chaining, cancellation, replacement-run history and customer-semantic resume are executable. Invalid output never advances the graph; a possibly released step is never blindly replayed. This is source/local orchestration proof only: generic transport drivers, the shared HTTP/agent action surface, hosted readback, real supply and external fulfilment remain unproven.
 
+Generic transport frontier (2026-07-15): [Invoke RoutePlan steps through generic HTTP, MCP and x402 transports](https://github.com/CreasyBear/Agentic-Economy/issues/144) is source-complete. The durable Request route worker now reopens the exact current grant and registered binding, signs one idempotent call identity, invokes HTTP JSON, MCP Streamable HTTP or x402 exact EVM through configuration-only drivers, and persists normalized receipts, payment challenge/proof, continuation, refusal, partial and unknown outcomes before schema-valid output may advance the route. Public-target validation, DNS-pinned dispatch, exact binding recheck, worker restart, timeout ambiguity and unsafe replay refusal are executable. All 1,271 unit tests, 230 integration tests, TypeScript, lint, Convex codegen, import/type/copy/SEO/UI gates, production build and a production-dependency audit with zero vulnerabilities passed. This is source/local sandbox contract proof only: the customer-facing external run/recovery surface, hosted readback, real supply, booking, payment fulfilment and customer value remain unproven.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Current product slice
@@ -73,7 +75,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The next unclaimed frontier is [Invoke registered capabilities through generic transport drivers](https://github.com/CreasyBear/Agentic-Economy/issues/144). Begin only in a new logical ticket session: claim it, consume the durable dispatch envelope from #120, and keep HTTP/OpenAPI, MCP, x402 and hosted execution beneath one registered binding contract. Follow with the shared external action/recovery surface (#133). No next ticket is claimed yet.
+The next unclaimed frontier is [Publish the external RoutePlan action and recovery contract](https://github.com/CreasyBear/Agentic-Economy/issues/133). Begin only in a new logical ticket session: claim it, project the durable run and recovery lifecycle through the canonical Request action surface, and keep dispatch, transport and kernel choreography backstage. HTTP/JSON parity comes before MCP packaging. No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 

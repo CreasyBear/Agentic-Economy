@@ -1,11 +1,19 @@
 import { convexTest } from 'convex-test'
+import { Response as UndiciResponse } from 'undici'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const routeProviderFetch = vi.hoisted(() => vi.fn<typeof import('undici').fetch>())
+vi.mock('undici', async (importOriginal) => ({
+  ...await importOriginal<typeof import('undici')>(),
+  fetch: routeProviderFetch,
+}))
 
 import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import schema from '../../convex/schema'
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import { defaultDnsResolver } from '@/modules/network-guard/public'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
@@ -96,6 +104,7 @@ type RouteCapabilityDocument =
 
 describe('Customer Request V2 multi-capability RoutePlan production path', () => {
   afterEach(() => {
+    routeProviderFetch.mockReset()
     vi.restoreAllMocks()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
@@ -547,6 +556,103 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('runs a two-step Request through registered transports and resumes the customer result', async () => {
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
+    vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
+    vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-worker')
+    routeProviderFetch.mockReset()
+    routeProviderFetch.mockImplementationOnce(async (_input, init) => {
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer resolver-secret',
+          'AE-Call-Key-Id': 'route-calls:test',
+          'AE-Call-Signature': expect.stringMatching(/^hmac-sha256:[0-9a-f]{64}$/),
+          'Idempotency-Key': expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        })
+        return new UndiciResponse(JSON.stringify({ serviceReference: 'service:worker' }), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'provider:first' },
+        })
+      })
+      .mockImplementationOnce(async (_input, init) => {
+        expect(init?.headers).toMatchObject({ Authorization: 'Bearer quoter-secret' })
+        expect(JSON.parse(String(init?.body))).toEqual({ serviceReference: 'service:worker' })
+        return new UndiciResponse(JSON.stringify({ quoteReference: 'quote:worker' }), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'provider:second' },
+        })
+      })
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-worker',
+    })
+
+    await finishScheduledRouteWorkers(backend, 2)
+
+    const routeState = await backend.run(async (ctx) => ({
+      runs: await ctx.db.query('customerRequestRouteRuns').collect(),
+      attempts: await ctx.db.query('customerRequestRouteStepAttempts').collect(),
+      outbox: await ctx.db.query('customerRequestRouteDispatchOutbox').collect(),
+    }))
+    expect({
+      calls: routeProviderFetch.mock.calls.length,
+      runStates: routeState.runs.map(({ state }) => state),
+      attemptStates: routeState.attempts.map(({ state, transportObservationJson }) => ({ state, transportObservationJson })),
+      outboxStates: routeState.outbox.map(({ state }) => state),
+    }).toMatchObject({
+      calls: 2,
+      runStates: ['completed'],
+      attemptStates: [{ state: 'succeeded' }, { state: 'succeeded' }],
+      outboxStates: ['delivered', 'delivered'],
+    })
+
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'completed', nextAction: 'none',
+      action: { state: 'completed', result: { quoteReference: 'quote:worker' } },
+    })
+    const observations = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestRouteStepAttempts').collect()
+    ))
+    expect(observations.map(({ transportObservationJson }) => (
+      transportObservationJson === undefined ? undefined : JSON.parse(transportObservationJson)
+    ))).toMatchObject([
+      { transport: 'http', disposition: 'succeeded', providerReceipt: 'provider:first' },
+      { transport: 'http', disposition: 'succeeded', providerReceipt: 'provider:second' },
+    ])
+    expect(routeProviderFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('records an interrupted released call as unknown and refuses unsafe replay', async () => {
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
+    vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
+    vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-interrupted')
+    routeProviderFetch.mockReset()
+    routeProviderFetch.mockRejectedValueOnce(new DOMException('Timed out', 'TimeoutError'))
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-interrupted',
+    })
+
+    await finishScheduledRouteWorkers(backend, 1)
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'outcome_unknown', nextAction: 'wait',
+      action: { state: 'unknown', automaticRetry: false },
+    })
+    await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
+      workerId: 'worker:transport:unsafe-retry',
+    })).resolves.toEqual({ kind: 'none' })
+    expect(routeProviderFetch).toHaveBeenCalledTimes(1)
+  })
+
   it('never advances or retries when a released step has an invalid or unknown outcome', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
@@ -658,6 +764,50 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
       workerId: 'worker:blind-retry', leaseDurationMs: 1_000,
     })).resolves.toEqual({ kind: 'none' })
+  })
+
+  it('rechecks the exact registered binding at the release boundary', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'release-binding-recheck')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:release-binding-recheck',
+    })
+    const lease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:binding-recheck', leaseDurationMs: 10_000,
+    })
+    if (lease.kind !== 'leased') throw new Error('binding recheck step was not leased')
+    const supply = await backend.run(async (ctx) => {
+      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
+        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', lease.dispatch.attemptRef)).unique()
+      if (attempt === null) throw new Error('binding recheck attempt missing')
+      const offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', attempt.grant.step.offeringId)).unique()
+      const binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', attempt.grant.step.bindingId)).unique()
+      if (offering === null || binding === null) throw new Error('binding recheck supply missing')
+      return { attempt, offering, binding }
+    })
+    await expect(admin.mutation(api.capabilitySupply.setEligibility, {
+      offeringId: supply.offering.offeringId,
+      bindingId: supply.binding.bindingId,
+      contractRef: supply.attempt.grant.step.contractRef,
+      decision: 'revoke',
+      expectedOfferingRegistrationHash: supply.offering.registrationHash,
+      expectedBindingRegistrationHash: supply.binding.registrationHash,
+      admissionEvidenceRefs: ['test:release-recheck-revoked'],
+      conformanceEvidenceRefs: ['test:release-recheck-revoked'],
+      ...operationContext('release-binding-recheck-revoke'),
+    })).resolves.toMatchObject({ kind: 'ineligible' })
+
+    await expect(backend.query(internal.customerRequestRouteExecution.openLeasedDispatch, {
+      dispatchRef: lease.dispatch.dispatchRef, workerId: 'worker:binding-recheck',
+    })).resolves.toEqual({ kind: 'unavailable' })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: lease.dispatch.dispatchRef,
+      attemptRef: lease.dispatch.attemptRef,
+      workerId: 'worker:binding-recheck',
+    })).resolves.toEqual({ kind: 'refused', reason: 'lease_not_current' })
   })
 
   it('stops a queued run idempotently before any business step is released', async () => {
@@ -1694,6 +1844,13 @@ function operationContext(suffix: string) {
 async function finishImmediateReadinessProbe(backend: ReturnType<typeof convexTest>) {
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   await backend.finishInProgressScheduledFunctions()
+}
+
+async function finishScheduledRouteWorkers(backend: ReturnType<typeof convexTest>, passes: number) {
+  for (let pass = 0; pass < passes; pass += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    await backend.finishInProgressScheduledFunctions()
+  }
 }
 
 async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
