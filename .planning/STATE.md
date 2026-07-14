@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: routeplan-frontier
+current_phase: customer-product-frontier
 status: active
-stopped_at: "Generic HTTP, MCP and x402 RoutePlan transport source is complete; next unclaimed frontier is the external action and recovery contract #133"
+stopped_at: "External RoutePlan action and recovery is source-complete and hosted-read-back; next frontier is the anonymous Request journey #140"
 last_updated: "2026-07-15"
 progress:
   total_phases: 6
@@ -17,7 +17,7 @@ progress:
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current execution state:** RoutePlan frontier active on wayfinder map #112; 14-day bootstrap gate superseded
+**Current execution state:** Customer-product frontier active on wayfinder map #112; kernel choreography stays backstage
 **Last source/local phase closed:** Phase 6 source/local proof only  
 **Status:** active gate with open deployed/provider/demo blockers
 ## Active decision
@@ -48,15 +48,28 @@ Route execution frontier (2026-07-15): [Dispatch and recover RoutePlan steps wit
 
 Generic transport frontier (2026-07-15): [Invoke RoutePlan steps through generic HTTP, MCP and x402 transports](https://github.com/CreasyBear/Agentic-Economy/issues/144) is source-complete. The durable Request route worker now reopens the exact current grant and registered binding, signs one idempotent call identity, invokes HTTP JSON, MCP Streamable HTTP or x402 exact EVM through configuration-only drivers, and persists normalized receipts, payment challenge/proof, continuation, refusal, partial and unknown outcomes before schema-valid output may advance the route. Public-target validation, DNS-pinned dispatch, exact binding recheck, worker restart, timeout ambiguity and unsafe replay refusal are executable. All 1,271 unit tests, 230 integration tests, TypeScript, lint, Convex codegen, import/type/copy/SEO/UI gates, production build and a production-dependency audit with zero vulnerabilities passed. This is source/local sandbox contract proof only: the customer-facing external run/recovery surface, hosted readback, real supply, booking, payment fulfilment and customer value remain unproven.
 
+External action and recovery frontier (2026-07-15): [Publish the external RoutePlan action and recovery contract](https://github.com/CreasyBear/Agentic-Economy/issues/133) is source-complete and hosted-read-back at exact revision `8dae1fa38f9733c101fb9ff1af6234c901a62522`. Human and external-agent callers use the same Request-owned start/resume, activity, evidence, problem-reporting and cancellation semantics; the verified external principal now survives through internal mandate reads and step admission. The canonical cold-agent release journey reaches `needs_information -> ready_to_compare -> routes_ready -> route_confirmed -> in_progress`, then reads queued evidence, reports a problem, cancels and resumes the same opaque Request without constructing kernel objects. TypeScript, lint, 1,277 unit tests, 232 integration tests, source/import/copy/SEO/UI/type standards, Convex codegen, production build, changed-scope React Doctor and hosted discovery readback passed. Protected preview deployment `dpl_8HaGzfmVqqBVCcAwzyfRBKqzkdAc` exercised one temporary scoped Clerk API key against labelled sandbox supply. This proves the contract and hosted path only; it does not prove real supply, fulfilment, booking, payment or customer value.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
-## Current product slice
+## Customer product sequence
 
 ```text
-claim -> publish -> public business service catalog page -> registry/search/API -> AE-hosted discovery -> operator health/repair
+ask -> clarify -> compare -> confirm -> track -> recover
 ```
 
-No chat, protected actions, wallet, payment, request market, skills, hosted agents, voice, or expert surfaces in Phase 1.
+This is the public product. `Request` is the one durable customer object. Business and capability pages support discovery and trust. RoutePlan, RouteMandate, graph nodes, bindings, transports, schemas and payment choreography remain backstage unless a customer deliberately inspects decision-relevant detail. Human and machine surfaces project the same choices, authority stops, progress, evidence and recovery.
+
+The remaining Wayfinder work is ordered by customer comprehension and evidence, not kernel object construction:
+
+1. [Build the anonymous Request journey: front door to honest RoutePlans](https://github.com/CreasyBear/Agentic-Economy/issues/140).
+2. [Define comparable RoutePlan recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124), then [prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125).
+3. [Build the RoutePlan activity, support and recovery experience](https://github.com/CreasyBear/Agentic-Economy/issues/122) and finish the deeper problem record in [report and track a problem](https://github.com/CreasyBear/Agentic-Economy/issues/130).
+4. [Consolidate legacy public surfaces behind Request and capability discovery](https://github.com/CreasyBear/Agentic-Economy/issues/137).
+5. [Prove one real hosted multi-capability route through CustomerRequest](https://github.com/CreasyBear/Agentic-Economy/issues/121).
+6. [Rebuild AE public brand and information architecture from proven route value](https://github.com/CreasyBear/Agentic-Economy/issues/132), then apply the [launch authorization gate](https://github.com/CreasyBear/Agentic-Economy/issues/139) and [neutral-route closeout premortem](https://github.com/CreasyBear/Agentic-Economy/issues/115).
+
+[Standing low-risk authority](https://github.com/CreasyBear/Agentic-Economy/issues/176) and [route-level guarantees](https://github.com/CreasyBear/Agentic-Economy/issues/138) stay downstream. They are not prerequisites for making the core Request journey understandable and usable. [Publish the external Request start and RoutePlan decision contract](https://github.com/CreasyBear/Agentic-Economy/issues/126) is functionally superseded by the hosted Request lifecycle already proven through issues 165, 170, 175 and 133; close it with exact evidence rather than opening another implementation seam.
 
 ## Open risks
 
@@ -75,7 +88,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The next unclaimed frontier is [Publish the external RoutePlan action and recovery contract](https://github.com/CreasyBear/Agentic-Economy/issues/133). Begin only in a new logical ticket session: claim it, project the durable run and recovery lifecycle through the canonical Request action surface, and keep dispatch, transport and kernel choreography backstage. HTTP/JSON parity comes before MCP packaging. No next ticket is claimed yet.
+The next unclaimed frontier is [Build the anonymous Request journey: front door to honest RoutePlans](https://github.com/CreasyBear/Agentic-Economy/issues/140). Claim it only in a new logical ticket session. Start from the current `/engine` and canonical Customer Request application source, not the legacy Answer Thread. The acceptance test is a first-time customer who can state an incomplete job, understand what AE inferred, answer one decision-changing question, compare honest sandbox-labelled possibilities and stop before authority without seeing or constructing AE's kernel schema.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
