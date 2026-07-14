@@ -129,19 +129,24 @@ const customerRoutePlanSchema = z.object({
   ]),
   dataUse: z.object({
     recipientCount: safeNonnegativeInteger,
-    recipients: z.array(z.object({ businessRef: z.string(), purposes: z.array(z.string()) }).strict()),
+    recipients: z.array(z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('business'), businessRef: z.string(), purposes: z.array(z.string()) }).strict(),
+      z.object({ kind: z.literal('named'), recipientRef: z.string(), purposes: z.array(z.string()) }).strict(),
+    ])),
     purposes: z.array(z.string()),
   }).strict(),
   effects: z.object({ totalCount: safeNonnegativeInteger, irreversibleCount: safeNonnegativeInteger }).strict(),
   evidence: z.object({ requirementCount: safeNonnegativeInteger }).strict(),
-  recovery: z.object({
-    retrySafeSteps: safeNonnegativeInteger,
-    reconcileRequiredSteps: safeNonnegativeInteger,
-  }).strict(),
+  recovery: z.object({ steps: z.array(z.object({
+    businessRef: z.string(), posture: z.enum(['retry_safe', 'reconcile_required']),
+  }).strict()) }).strict(),
   validUntil: safePositiveInteger,
-  fallbacks: z.array(z.object({
-    alternativeRouteRef: z.string(), when: z.literal('route_unavailable_before_approval'),
-  }).strict()),
+  fallbacks: z.object({
+    ordering: z.literal('unranked'),
+    alternatives: z.array(z.object({
+      alternativeRouteRef: z.string(), when: z.literal('route_unavailable_before_approval'),
+    }).strict()),
+  }).strict(),
   uncertainty: z.array(z.literal('cost_requires_preparation')),
   comparison: z.object({
     fit: z.literal('all_steps_viable'), completeness: z.literal('complete'),

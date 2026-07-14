@@ -320,7 +320,7 @@ describe('V2 Request semantics', () => {
               },
             ],
             edges: [{ authority: 'registered_contract_semantics' }],
-            fallbacks: [],
+            fallbacks: { ordering: 'unranked', alternatives: [] },
             comparison: {
               fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
               ordering: { kind: 'unranked' },
@@ -426,6 +426,11 @@ describe('V2 Request semantics', () => {
     const request = requiredInput(lookup, 'request')
     const bindings = [
       supply('binding:lookup:cheap', lookup),
+      {
+        ...supply('binding:lookup:same-business', lookup),
+        businessId: 'business:binding:lookup:cheap',
+        price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 150 },
+      },
       { ...supply('binding:lookup:expensive', lookup), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 200 } },
       { ...supply('binding:shipping:expensive', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 300 } },
       { ...supply('binding:shipping:cheap', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 } },
@@ -445,24 +450,32 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test', bindings, models: [lookup, shipping], now: 10_000,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
-    expect(result.aggregate.plan.routes).toHaveLength(4)
+    expect(result.aggregate.plan.routes).toHaveLength(6)
     expect(result.aggregate.plan.routes.map((route) => route.maximumTotalCost)).toEqual([
       { kind: 'known', currency: 'AUD', amountMinor: 200 },
+      { kind: 'known', currency: 'AUD', amountMinor: 250 },
       { kind: 'known', currency: 'AUD', amountMinor: 300 },
       { kind: 'known', currency: 'AUD', amountMinor: 400 },
+      { kind: 'known', currency: 'AUD', amountMinor: 450 },
       { kind: 'known', currency: 'AUD', amountMinor: 500 },
     ])
     for (const [index, route] of result.aggregate.plan.routes.entries()) {
       expect(route.comparison.ordering).toEqual({
         kind: 'ranked', objective: 'lowest_maximum_price', position: index + 1,
       })
-      expect(route.fallbacks).toHaveLength(1)
-      const alternative = result.aggregate.plan.routes.find((candidate) => (
-        candidate.routePlanId === route.fallbacks[0]?.alternativeRouteRef
-      ))
-      if (alternative === undefined) throw new Error('declared fallback missing')
+      expect(route.fallbacks.ordering).toBe('unranked')
+      expect(route.fallbacks.alternatives.length).toBeGreaterThan(0)
       const bindingsInRoute = new Set(route.steps.map((step) => step.bindingId))
-      expect(alternative.steps.every((step) => !bindingsInRoute.has(step.bindingId))).toBe(true)
+      const businessesInRoute = new Set(route.steps.map((step) => step.businessId))
+      for (const fallback of route.fallbacks.alternatives) {
+        const alternative = result.aggregate.plan.routes.find((candidate) => (
+          candidate.routePlanId === fallback.alternativeRouteRef
+        ))
+        if (alternative === undefined) throw new Error('declared fallback missing')
+        expect(alternative.steps.every((step) => (
+          !bindingsInRoute.has(step.bindingId) && !businessesInRoute.has(step.businessId)
+        ))).toBe(true)
+      }
     }
   })
 

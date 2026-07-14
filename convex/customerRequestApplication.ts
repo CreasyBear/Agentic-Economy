@@ -192,15 +192,23 @@ const customerView = v.object({
     ),
     dataUse: v.object({
       recipientCount: v.number(),
-      recipients: v.array(v.object({ businessRef: v.string(), purposes: v.array(v.string()) })),
+      recipients: v.array(v.union(
+        v.object({ kind: v.literal('business'), businessRef: v.string(), purposes: v.array(v.string()) }),
+        v.object({ kind: v.literal('named'), recipientRef: v.string(), purposes: v.array(v.string()) }),
+      )),
       purposes: v.array(v.string()),
     }),
     effects: v.object({ totalCount: v.number(), irreversibleCount: v.number() }),
     evidence: v.object({ requirementCount: v.number() }), validUntil: v.number(),
-    recovery: v.object({ retrySafeSteps: v.number(), reconcileRequiredSteps: v.number() }),
-    fallbacks: v.array(v.object({
-      alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
-    })),
+    recovery: v.object({ steps: v.array(v.object({
+      businessRef: v.string(), posture: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    })) }),
+    fallbacks: v.object({
+      ordering: v.literal('unranked'),
+      alternatives: v.array(v.object({
+        alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
+      })),
+    }),
     uncertainty: v.array(v.literal('cost_requires_preparation')),
     comparison: v.object({
       fit: v.literal('all_steps_viable'), completeness: v.literal('complete'), trust: v.literal('registered_live_supply'),
@@ -1076,6 +1084,19 @@ async function prepareCurrentAction(
     const routesAreCurrent = graph.kind === 'available'
       && graph.registrySnapshotDigest === current.aggregate.evaluation.registrySnapshotDigest
       && current.aggregate.plan.routes.every((route) => route.expiresAt > Date.now())
+      && current.aggregate.plan.routes.every((route) => route.steps.every((step) => graph.bindings.some((binding) => (
+        binding.businessId === step.businessId
+        && binding.offeringId === step.offeringId
+        && binding.bindingId === step.bindingId
+        && sameCapabilityContractRef(binding.contractRef, step.contractRef)
+        && binding.offeringRegistrationHash === step.offeringRegistrationHash
+        && binding.bindingRegistrationHash === step.bindingRegistrationHash
+        && binding.publicationRef === step.publicationRef
+        && binding.publicationRevision === step.publicationRevision
+        && binding.readinessValidUntil !== undefined
+        && binding.readinessValidUntil >= route.expiresAt
+        && canonicalDigest(binding.price) === canonicalDigest(step.price)
+      ))))
     if (!routesAreCurrent) return writableView(projectNeedsAttention({
       requestRef: args.requestRef,
       revision: args.revision,
@@ -1564,8 +1585,11 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         purposes: [...route.dataUse.purposes],
       },
       effects: { ...route.effects }, evidence: { ...route.evidence },
-      recovery: { ...route.recovery },
-      fallbacks: route.fallbacks.map((fallback) => ({ ...fallback })),
+      recovery: { steps: route.recovery.steps.map((step) => ({ ...step })) },
+      fallbacks: {
+        ordering: route.fallbacks.ordering,
+        alternatives: route.fallbacks.alternatives.map((fallback) => ({ ...fallback })),
+      },
       uncertainty: [...route.uncertainty],
       comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
     })) }),

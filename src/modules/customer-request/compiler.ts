@@ -95,10 +95,13 @@ export type CustomerRequestRoutePlan = Readonly<{
     | Readonly<{ kind: 'requires_preparation' }>
   expiresAt: number
   uncertainty: readonly ('cost_requires_preparation')[]
-  fallbacks: readonly Readonly<{
-    alternativeRouteRef: string
-    when: 'route_unavailable_before_approval'
-  }>[]
+  fallbacks: Readonly<{
+    ordering: 'unranked'
+    alternatives: readonly Readonly<{
+      alternativeRouteRef: string
+      when: 'route_unavailable_before_approval'
+    }>[]
+  }>
   comparison: Readonly<{
     fit: 'all_steps_viable'
     completeness: 'complete'
@@ -400,7 +403,10 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
         edges: route.edges.map((edge) => ({ ...edge, source: { ...edge.source }, target: { ...edge.target } })),
         maximumTotalCost: { ...route.maximumTotalCost },
         uncertainty: [...route.uncertainty],
-        fallbacks: route.fallbacks.map((fallback) => ({ ...fallback })),
+        fallbacks: {
+          ordering: route.fallbacks.ordering,
+          alternatives: route.fallbacks.alternatives.map((fallback) => ({ ...fallback })),
+        },
         comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
       })),
     },
@@ -475,11 +481,14 @@ export function compileRoutePlans(input: Readonly<{
   const rankedObjective = canRankByLowestMaximumPrice(drafts) ? input.objective : undefined
   const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, rankedObjective))
   return Object.freeze(ordered.map((draft, index): CustomerRequestRoutePlan => {
-    const fallbacks = ordered.filter((alternative) => alternative.routePlanId !== draft.routePlanId
-      && routesUseDisjointBindings(draft, alternative)).map((alternative) => Object.freeze({
-      alternativeRouteRef: alternative.routePlanId,
-      when: 'route_unavailable_before_approval' as const,
-    }))
+    const fallbacks = Object.freeze({
+      ordering: 'unranked' as const,
+      alternatives: Object.freeze(ordered.filter((alternative) => alternative.routePlanId !== draft.routePlanId
+        && routesUseDisjointProviders(draft, alternative)).map((alternative) => Object.freeze({
+        alternativeRouteRef: alternative.routePlanId,
+        when: 'route_unavailable_before_approval' as const,
+      }))),
+    })
     const ordering = rankedObjective === 'lowest_maximum_price'
       ? Object.freeze({ kind: 'ranked' as const, objective: rankedObjective, position: index + 1 })
       : Object.freeze({ kind: 'unranked' as const })
@@ -526,12 +535,13 @@ function canRankByLowestMaximumPrice(
     : '')).size === 1
 }
 
-function routesUseDisjointBindings(
+function routesUseDisjointProviders(
   left: Pick<CustomerRequestRoutePlan, 'steps'>,
   right: Pick<CustomerRequestRoutePlan, 'steps'>,
 ): boolean {
   const leftBindings = new Set(left.steps.map((step) => step.bindingId))
-  return right.steps.every((step) => !leftBindings.has(step.bindingId))
+  const leftBusinesses = new Set(left.steps.map((step) => step.businessId))
+  return right.steps.every((step) => !leftBindings.has(step.bindingId) && !leftBusinesses.has(step.businessId))
 }
 
 function compareRoutePlans(

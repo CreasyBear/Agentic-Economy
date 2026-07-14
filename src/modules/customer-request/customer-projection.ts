@@ -48,7 +48,12 @@ type RoutePlanProjectionInput = Readonly<{
   routePlanId: string
   steps: readonly Readonly<{
     businessId: string
-    dataUse: readonly Readonly<{ purposes: readonly string[] }>[]
+    dataUse: readonly Readonly<{
+      recipient:
+        | Readonly<{ kind: 'candidate_binding' | 'selected_binding' }>
+        | Readonly<{ kind: 'named_recipient'; recipientId: string }>
+      purposes: readonly string[]
+    }>[]
     effects: readonly Readonly<{ reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible' }>[]
     recovery: Readonly<{ recovery: 'retry_safe' | 'reconcile_required' }>
   }>[]
@@ -239,16 +244,24 @@ export function projectRoutePlansReady(input: Readonly<{
 
 function projectRoutePlan(route: RoutePlanProjectionInput): CustomerRoutePlan {
   const purposes = [...new Set(route.steps.flatMap((step) => step.dataUse.flatMap((item) => item.purposes)))].sort()
-  const recipientPurposes = new Map<string, Set<string>>()
+  const recipientPurposes = new Map<string, Readonly<{
+    recipient: CustomerRoutePlan['dataUse']['recipients'][number]
+    purposes: Set<string>
+  }>>()
   for (const step of route.steps) {
-    if (step.dataUse.length === 0) continue
-    const businessPurposes = recipientPurposes.get(step.businessId) ?? new Set<string>()
-    for (const purpose of step.dataUse.flatMap((item) => item.purposes)) businessPurposes.add(purpose)
-    recipientPurposes.set(step.businessId, businessPurposes)
+    for (const declaration of step.dataUse) {
+      const recipient = declaration.recipient.kind === 'named_recipient'
+        ? { kind: 'named' as const, recipientRef: declaration.recipient.recipientId, purposes: [] }
+        : { kind: 'business' as const, businessRef: step.businessId, purposes: [] }
+      const key = recipient.kind === 'named' ? `named:${recipient.recipientRef}` : `business:${recipient.businessRef}`
+      const existing = recipientPurposes.get(key) ?? { recipient, purposes: new Set<string>() }
+      for (const purpose of declaration.purposes) existing.purposes.add(purpose)
+      recipientPurposes.set(key, existing)
+    }
   }
   const recipients = [...recipientPurposes.entries()].sort(([left], [right]) => left.localeCompare(right))
-    .map(([businessRef, businessPurposes]) => Object.freeze({
-      businessRef, purposes: Object.freeze([...businessPurposes].sort()),
+    .map(([, { recipient, purposes: recipientPurposeSet }]) => Object.freeze({
+      ...recipient, purposes: Object.freeze([...recipientPurposeSet].sort()),
     }))
   return Object.freeze({
     routeRef: route.routePlanId,
@@ -266,12 +279,14 @@ function projectRoutePlan(route: RoutePlanProjectionInput): CustomerRoutePlan {
       irreversibleCount: route.comparison.irreversibleEffectCount,
     }),
     evidence: Object.freeze({ requirementCount: route.comparison.evidenceRequirementCount }),
-    recovery: Object.freeze({
-      retrySafeSteps: route.steps.filter((step) => step.recovery.recovery === 'retry_safe').length,
-      reconcileRequiredSteps: route.steps.filter((step) => step.recovery.recovery === 'reconcile_required').length,
-    }),
+    recovery: Object.freeze({ steps: Object.freeze(route.steps.map((step) => Object.freeze({
+      businessRef: step.businessId, posture: step.recovery.recovery,
+    }))) }),
     validUntil: route.expiresAt,
-    fallbacks: Object.freeze(route.fallbacks.map((fallback) => Object.freeze({ ...fallback }))),
+    fallbacks: Object.freeze({
+      ordering: route.fallbacks.ordering,
+      alternatives: Object.freeze(route.fallbacks.alternatives.map((fallback) => Object.freeze({ ...fallback }))),
+    }),
     uncertainty: Object.freeze([...route.uncertainty]),
     comparison: Object.freeze({
       fit: route.comparison.fit, completeness: route.comparison.completeness, trust: route.comparison.trust,
@@ -376,8 +391,13 @@ function requestView(input: Readonly<{
         purposes: Object.freeze([...route.dataUse.purposes]),
       }),
       effects: Object.freeze({ ...route.effects }), evidence: Object.freeze({ ...route.evidence }),
-      recovery: Object.freeze({ ...route.recovery }),
-      fallbacks: Object.freeze(route.fallbacks.map((fallback) => Object.freeze({ ...fallback }))),
+      recovery: Object.freeze({
+        steps: Object.freeze(route.recovery.steps.map((step) => Object.freeze({ ...step }))),
+      }),
+      fallbacks: Object.freeze({
+        ordering: route.fallbacks.ordering,
+        alternatives: Object.freeze(route.fallbacks.alternatives.map((fallback) => Object.freeze({ ...fallback }))),
+      }),
       uncertainty: Object.freeze([...route.uncertainty]),
       comparison: Object.freeze({ ...route.comparison, ordering: Object.freeze({ ...route.comparison.ordering }) }),
     }))) }),

@@ -570,9 +570,12 @@ const routePlanV2Value = v.object({
     v.object({ kind: v.literal('requires_preparation') }),
   ),
   expiresAt: v.number(), uncertainty: v.array(v.literal('cost_requires_preparation')),
-  fallbacks: v.array(v.object({
-    alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
-  })), authority: v.literal('proposal_only'), routeDigest: v.string(),
+  fallbacks: v.object({
+    ordering: v.literal('unranked'),
+    alternatives: v.array(v.object({
+      alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
+    })),
+  }), authority: v.literal('proposal_only'), routeDigest: v.string(),
   comparison: v.object({
     fit: v.literal('all_steps_viable'), completeness: v.literal('complete'),
     dataExposureCount: v.number(), irreversibleEffectCount: v.number(), evidenceRequirementCount: v.number(),

@@ -42,7 +42,7 @@ const downstreamDocument = {
     { annotationId: 'service_reference_input', semanticIdentity: 'ae.service-reference:v1', document: 'input' as const, pointer: '/serviceReference', label: 'Service reference', role: 'constraint' as const, inference: 'customer_required' as const },
     { annotationId: 'quote_reference', document: 'output' as const, pointer: '/quoteReference', label: 'Quote reference', role: 'completion_evidence' as const },
   ],
-  dataUse: [{ effectId: 'service_reference_release', inputPointer: '/serviceReference', classification: 'public' as const, phase: 'preparation' as const, recipient: { kind: 'selected_binding' as const }, purposes: ['prepare_service_quote'] }],
+  dataUse: [{ effectId: 'service_reference_release', inputPointer: '/serviceReference', classification: 'public' as const, phase: 'preparation' as const, recipient: { kind: 'named_recipient' as const, recipientId: 'carrier-network' }, purposes: ['prepare_service_quote'] }],
   effects: [{ effectId: 'service_reference_release', class: 'data_release' as const, authority: 'explicit' as const, reversibility: 'irreversible' as const }],
   evidence: [{ evidenceId: 'quote_reference', outputPointer: '/quoteReference', purpose: 'completion' as const }],
   lifecycle: { idempotency: 'required' as const, recovery: 'reconcile_required' as const },
@@ -104,7 +104,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestRevision: 1, authority: 'proposal_only',
       maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
       comparison: { fit: 'all_steps_viable', completeness: 'complete', dataExposureCount: 2, irreversibleEffectCount: 2, evidenceRequirementCount: 2, trust: 'registered_live_supply' },
-      uncertainty: [], fallbacks: [],
+      uncertainty: [], fallbacks: { ordering: 'unranked', alternatives: [] },
     })
     expect(route?.steps).toHaveLength(2)
     expect(route?.steps.map((step) => ({
@@ -122,7 +122,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })])
     expect(route?.steps.flatMap((step) => step.dataUse.map((item) => ({ recipient: item.recipient.kind, purposes: item.purposes })))).toEqual([
       { recipient: 'candidate_binding', purposes: ['resolve_service_reference'] },
-      { recipient: 'selected_binding', purposes: ['prepare_service_quote'] },
+      { recipient: 'named_recipient', purposes: ['prepare_service_quote'] },
     ])
     expect(JSON.stringify(route)).not.toContain('grant')
     expect(JSON.stringify(route)).not.toContain('execute')
@@ -204,15 +204,19 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       routes: [{
         authority: 'proposal_only', stepCount: 2,
         dataUse: { recipientCount: 2 },
-        recovery: { retrySafeSteps: 1, reconcileRequiredSteps: 1 },
+        recovery: { steps: expect.arrayContaining([
+          { businessRef: expect.any(String), posture: 'retry_safe' },
+          { businessRef: expect.any(String), posture: 'reconcile_required' },
+        ]) },
       }],
     })
     if (compared.kind !== 'request' || compared.routes?.[0] === undefined) {
       throw new Error('projected route missing')
     }
-    expect(compared.routes[0].dataUse.recipients.map((recipient) => recipient.purposes).sort()).toEqual([
-      ['prepare_service_quote'], ['resolve_service_reference'],
-    ])
+    expect(compared.routes[0].dataUse.recipients).toEqual(expect.arrayContaining([
+      { kind: 'business', businessRef: expect.any(String), purposes: ['resolve_service_reference'] },
+      { kind: 'named', recipientRef: 'carrier-network', purposes: ['prepare_service_quote'] },
+    ]))
 
     const expiredClock = vi.spyOn(Date, 'now').mockReturnValue(route.expiresAt + 1)
     const expiredComparison = await customer.action(api.customerRequestApplication.compare, {
@@ -224,6 +228,25 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'request', state: 'needs_attention', nextAction: 'retry',
     })
     expiredClock.mockRestore()
+
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: first.publicationRef, expectedRevision: first.revision,
+      credentialState: 'unavailable', healthState: 'unhealthy', validUntil: Date.now() + 300_000,
+      ...operationContext('readiness-degraded'),
+    })
+    const degradedComparison = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      idempotencyKey: 'compare:multi-capability:degraded',
+    })
+    expect(degradedComparison).toMatchObject({
+      kind: 'request', state: 'needs_attention', nextAction: 'retry',
+    })
+    await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: first.publicationRef, expectedRevision: first.revision,
+      credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,
+      ...operationContext('readiness-restored'),
+    })
 
     const refined = await customer.action(api.customerRequestApplication.refine, {
       requestRef: submitted.requestRef,
