@@ -269,7 +269,7 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   const fact = {
     contractRef: model.contractRef, selectionKey: model.selectionKey,
     inputKey: input.key, inputPointer: input.inputPointer, schemaIdentity: input.schemaIdentity,
-    value: 'Find a match', source: { kind: 'agent_inference' as const, inferenceRef: 'inference:test' },
+    value: 'Find a match', source: { kind: 'customer' as const, assertionRef: 'assertion:test' },
   }
   const result = compileCustomerRequest({
     requestId: 'request:v2:persist', expectedRevision: 0,

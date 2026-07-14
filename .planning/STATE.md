@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 14day-bootstrap-gate
-status: active_gate_with_open_blockers
-stopped_at: "Wayfinder map remains open: #5 deployed evidence suite, #33 receipt demo loop, #36 agent-experience deployed gate"
-last_updated: "2026-07-04"
+current_phase: routeplan-frontier
+status: active
+stopped_at: "Closed cold external-agent hosted Request journey #165 at 6c982d0f; next frontier #143 must be split before coding"
+last_updated: "2026-07-14"
 progress:
   total_phases: 6
   completed_phases: 4
@@ -17,14 +17,18 @@ progress:
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current execution state:** 14-day bootstrap gate active; production-build wayfinder map still open  
+**Current execution state:** RoutePlan frontier active on wayfinder map #112; 14-day bootstrap gate superseded
 **Last source/local phase closed:** Phase 6 source/local proof only  
 **Status:** active gate with open deployed/provider/demo blockers
 ## Active decision
 
 `Agentic-Economy-Backup` is frozen as a source mine. The fresh `agentic-economy` repo is the working product repo.
 
-Active go/no-go gate (2026-07-04): `.planning/scopes/scope-14day-bootstrap-gate/` blocks public shipment of later platform rungs beyond the storefront prototype and qualified-inquiry path until a 14-day evidence artifact records 30–50 source-backed profiles, 10 recruited providers, 100 attributable sessions, ≥10 qualified inquiries, ≥5 voluntary provider corrections/listing requests, and zero boundary overclaim.
+SUPERSEDED (2026-07-13): the 14-day bootstrap gate in `.planning/scopes/scope-14day-bootstrap-gate/` is formally superseded by the wayfinder map #112 proof ladder — its metrics measured legacy surfaces now slated for retirement (#137). Source exercise only; no clock ever started.
+
+Active frontier (2026-07-13): contradictory #152 was recharted before coding. Action Preparation and authority reservation (#154) now precede concrete disclosure allocation/egress recovery (#155), real Prepared Action persistence (#156), exact approval/run/recovery authority (#153), and V1 quarantine (#149). The tracker enforces the native chain.
+
+Hosted proof frontier (2026-07-14): the cold external-agent Request journey (#165) is closed at `6c982d0f976bfd37b53394ef6a2770f4ee0b8a27`. GitHub run `29304508882` passed the clean source contract, deployed that exact Git revision to Vercel and Convex, registered exactly two labelled sandbox businesses through production registration, authenticated-read-back deployment `dpl_8ygRkWVAHMehKyVTGrEZNbAsbtqs`, and completed the cold agent journey through typed clarification and both customer-authority stops to `options_ready`. This is sandbox contract and hosted-journey proof only, not real supply, booking, purchase, autonomous execution, or customer value.
 
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
@@ -53,7 +57,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The active next action is pre-clock 14-day gate readiness in `.planning/scopes/scope-14day-bootstrap-gate/`: fill the source-backed profile corpus and provider recruitment ledgers, then resolve or explicitly accept the instrumentation blockers recorded in `EVIDENCE-14DAY-GATE.md` before the clock starts. Current blockers are source-owned targeted-session counting, supplier-maintenance evidence, optional profile/source click instrumentation, and deployed outside-in assistant audit evidence.
+Inspect and split [Compile one natural-language Request into a multi-capability RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/143) before coding. The current ticket crosses graph composition, structural and semantic edge compatibility, clarification, route declarations, comparison, invalidation, determinism and two-capability proof; each resulting ticket must preserve the difference between a real composed RoutePlan and a renamed one-call option. No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
