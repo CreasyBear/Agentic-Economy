@@ -50,18 +50,6 @@ export const customerRequestAuthorizationInputSchema = z.object({
   revision: safePositiveInteger, preparationRef: boundedText(300), idempotencyKey: boundedText(200),
 }).strict()
 
-export const customerRequestApprovalInputSchema = z.object({
-  revision: safePositiveInteger, preparedActionRef: boundedText(300),
-  maximumSpendMinor: safeNonnegativeInteger, expiresAt: safePositiveInteger,
-  idempotencyKey: boundedText(200),
-}).strict()
-
-export const customerRequestActionAttemptInputSchema = z.object({
-  revision: safePositiveInteger,
-  approvalGrantRef: boundedText(500).startsWith('approval-grant:v2:'),
-  idempotencyKey: boundedText(200),
-}).strict()
-
 const moneySchema = z.object({ currency: z.string(), amountMinor: safeNonnegativeInteger }).strict()
 const customerOptionSchema = z.object({
   optionRef: z.string(), business: z.object({ name: z.string() }).strict(),
@@ -302,13 +290,6 @@ export const customerPreparedActionSchema = z.object({
     }).strict(),
     validUntil: safePositiveInteger,
   }).strict()),
-  approval: z.union([
-    z.object({ state: z.literal('required') }).strict(),
-    z.object({
-      state: z.literal('recorded'), currency: z.string(), maximumSpendMinor: safeNonnegativeInteger,
-      expiresAt: safePositiveInteger, recordedAt: safeNonnegativeInteger,
-    }).strict(),
-  ]),
 }).strict()
 
 export const customerRequestViewSchema = z.object({
@@ -392,23 +373,6 @@ export const customerRequestInspectResultSchema = z.union([
   }).strict(),
 ])
 
-export const customerRequestApprovalResultSchema = z.union([
-  z.object({
-    kind: z.literal('approved'), requestRef: z.string(), revision: safePositiveInteger,
-    approvalRef: z.string(), preparedActionRef: z.string(),
-    spend: z.object({ currency: z.string(), maximumAmountMinor: safeNonnegativeInteger }).strict(),
-    expiresAt: safePositiveInteger,
-    recovery: z.object({ unknownOutcome: z.literal('reconcile_only'), automaticRetry: z.literal(false) }).strict(),
-  }).strict(),
-  z.object({
-    kind: z.literal('conflict'), requestRef: z.string(),
-    reason: z.enum(['revision_changed', 'idempotency_key_reused', 'approval_changed']),
-  }).strict(),
-  z.object({
-    kind: z.literal('refused'), reason: z.enum(['authentication_required', 'request_not_found', 'approval_invalid']),
-  }).strict(),
-])
-
 type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
   ? Value
   : Value extends readonly (infer Item)[]
@@ -423,4 +387,3 @@ export type CustomerRoutePlan = DeepReadonly<z.infer<typeof customerRoutePlanSch
 export type CustomerRoutePlanDecision = DeepReadonly<z.infer<typeof customerRoutePlanDecisionSchema>>
 export type CustomerPreparedAction = DeepReadonly<z.infer<typeof customerPreparedActionSchema>>
 export type CustomerRequestView = DeepReadonly<z.infer<typeof customerRequestViewSchema>>
-export type CustomerRequestApprovalResult = DeepReadonly<z.infer<typeof customerRequestApprovalResultSchema>>
