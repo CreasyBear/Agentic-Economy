@@ -61,6 +61,7 @@ const jsonSchema = z.record(z.string(), jsonValueSchema).superRefine((schema, co
 const schemaMetaValidator = createSchemaMetaValidator()
 const customerAnnotation = z.object({
   annotationId: identifier,
+  semanticIdentity: identifier.optional(),
   document: z.enum(['input', 'output']),
   pointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
   label: z.string().trim().min(1).max(160),
@@ -130,6 +131,7 @@ export type CapabilityInputStage = 'option_selection' | 'commitment'
 export type CapabilityInputSemantic = Readonly<{
   key: CapabilityInputKey
   annotationId: string
+  semanticIdentity?: string
   inputPointer: string
   label: string
   role: 'request' | 'constraint' | 'comparison' | 'commitment'
@@ -144,6 +146,7 @@ export type CapabilityEvidenceSemantic = Readonly<{
   outputPointer: string
   purpose: 'comparison' | 'completion' | 'recovery'
   annotationId: string
+  semanticIdentity?: string
   label: string
   role: 'comparison' | 'completion_evidence' | 'recovery'
   guaranteed: boolean
@@ -212,6 +215,9 @@ export type CapabilityDecisionModel = Readonly<{
   semanticDigest: string
   inputs: readonly CapabilityInputSemantic[]
   evidence: readonly CapabilityEvidenceSemantic[]
+  dataUse: CapabilityContractDocument['dataUse']
+  effects: CapabilityContractDocument['effects']
+  lifecycle: CapabilityContractDocument['lifecycle']
   assessInput: (draft: Readonly<{
     contractRef: CapabilityContractRef
     selectionKey: CapabilitySelectionKey
@@ -369,6 +375,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     return {
       key: `ae_input:${canonicalDigest({ ref: exactContract.ref, inputPointer: annotation.pointer } as StableHashValue)}` as CapabilityInputKey,
       annotationId: annotation.annotationId,
+      ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
       inputPointer: annotation.pointer,
       label: annotation.label,
       role: annotation.role as CapabilityInputSemantic['role'],
@@ -390,6 +397,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       outputPointer: requirement.outputPointer,
       purpose: requirement.purpose,
       annotationId: annotation.annotationId,
+      ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
       label: annotation.label,
       role: annotation.role as CapabilityEvidenceSemantic['role'],
       guaranteed: instancePointerStatus(exactContract.outputSchema, requirement.outputPointer).guaranteed,
@@ -447,6 +455,9 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     semanticDigest,
     inputs,
     evidence,
+    dataUse: exactContract.dataUse,
+    effects: exactContract.effects,
+    lifecycle: exactContract.lifecycle,
     assessInput: (draft) => assessCapabilityInput({
       contractRef: exactContract.ref,
       selectionKey,

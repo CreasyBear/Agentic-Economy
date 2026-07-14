@@ -12,6 +12,10 @@ const quoteResponse = z.object({
   dataFields: z.array(z.string()).max(128),
   disclosures: z.array(z.string()).max(64),
 }).passthrough()
+const mcpToolsResponse = z.object({
+  jsonrpc: z.literal('2.0'), id: z.literal('ae-readiness-probe'),
+  result: z.object({ tools: z.array(z.object({ name: z.string().min(1) }).passthrough()) }).passthrough(),
+}).passthrough()
 
 export type CapabilityProbeTarget = Readonly<{
   publicationRef: string
@@ -21,6 +25,7 @@ export type CapabilityProbeTarget = Readonly<{
   endpointUrl: string
   credentialRef: string
   adapterId: string
+  probeKind?: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'
 }>
 
 export type CapabilityProbeObservation = Readonly<{
@@ -51,11 +56,17 @@ export async function runCapabilityReadinessProbe(
   if (credential === undefined || credential.trim() === '') {
     return unhealthy(now, 'unavailable', 'credential_unavailable', ['probe:credential_unavailable'])
   }
-  const endpoint = new URL(target.endpointUrl)
+  let endpoint: URL
+  let request: Request
+  try {
+    endpoint = new URL(target.endpointUrl)
+    request = probeRequest(target, endpoint, credential)
+  } catch {
+    return unhealthy(now, 'ready', 'target_not_public', ['probe:credential_resolved', 'probe:target_not_public'])
+  }
   if (!await dependencies.validateTarget(endpoint)) {
     return unhealthy(now, 'ready', 'target_not_public', ['probe:credential_resolved', 'probe:target_not_public'])
   }
-  const request = probeRequest(target, endpoint, credential)
   let response: Response
   try {
     response = await dependencies.send(request)
@@ -65,8 +76,14 @@ export async function runCapabilityReadinessProbe(
     ])
   }
   const baseEvidence = ['probe:credential_resolved', 'probe:target_public']
+  if (response.headers.get('X-AE-Probe-Outcome') === 'response_too_large') {
+    return unhealthy(now, 'ready', 'response_too_large', [...baseEvidence, 'probe:response_too_large'])
+  }
   if (response.status === 401 || response.status === 403) {
     return unhealthy(now, 'unavailable', 'credential_rejected', [...baseEvidence, 'probe:credential_rejected'])
+  }
+  if (target.probeKind === 'x402' && response.status === 402) {
+    return healthy(now, baseEvidence, 'probe:x402_payment_required')
   }
   if (response.status >= 300 && response.status < 400) {
     return unhealthy(now, 'ready', 'http_redirect', [...baseEvidence, 'probe:http_redirect'])
@@ -75,6 +92,7 @@ export async function runCapabilityReadinessProbe(
     const outcome = response.status >= 500 ? 'http_5xx' as const : 'http_4xx' as const
     return unhealthy(now, 'ready', outcome, [...baseEvidence, `probe:${outcome}`])
   }
+  if (target.probeKind === 'openapi_http') return healthy(now, baseEvidence, 'probe:http_2xx')
   if (!(response.headers.get('Content-Type') ?? '').toLowerCase().includes('application/json')) {
     return unhealthy(now, 'ready', 'response_content_type_invalid', [...baseEvidence, 'probe:response_content_type_invalid'])
   }
@@ -89,24 +107,31 @@ export async function runCapabilityReadinessProbe(
   if (target.adapterId === 'http-json:v1' && !quoteResponse.safeParse(parsed).success) {
     return unhealthy(now, 'ready', 'response_invalid', [...baseEvidence, 'probe:response_invalid'])
   }
-  return {
-    outcome: 'healthy', credentialState: 'ready', healthState: 'healthy', validUntil: now + HEALTHY_TTL_MS,
-    evidenceRefs: [...baseEvidence, 'probe:http_2xx'],
+  if ((target.probeKind === 'mcp' || target.adapterId === 'mcp-jsonrpc:v1') && !mcpToolsResponse.safeParse(parsed).success) {
+    return unhealthy(now, 'ready', 'response_invalid', [...baseEvidence, 'probe:response_invalid'])
   }
+  return healthy(now, baseEvidence, 'probe:http_2xx')
 }
 
 function probeRequest(target: CapabilityProbeTarget, endpoint: URL, credential: string): Request {
-  const body = target.adapterId === 'mcp-jsonrpc:v1'
+  const probeKind = target.probeKind ?? (target.adapterId === 'mcp-jsonrpc:v1' ? 'mcp' : 'ae_quote')
+  const body = probeKind === 'mcp'
     ? { jsonrpc: '2.0', id: 'ae-readiness-probe', method: 'tools/list', params: {} }
     : {
         protocolVersion: 'ae-capability:v1', operation: 'quote',
         bindingId: target.bindingId, capabilityContractId: target.capabilityId,
       }
   return new Request(endpoint, {
-    method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10_000),
+    method: probeKind === 'openapi_http' || probeKind === 'x402' ? 'HEAD' : 'POST',
+    redirect: 'manual', signal: AbortSignal.timeout(10_000),
     headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
+    ...(probeKind === 'openapi_http' || probeKind === 'x402' ? {} : { body: JSON.stringify(body) }),
   })
+}
+
+function healthy(now: number, evidence: readonly string[], resultEvidence: string): CapabilityProbeObservation {
+  return { outcome: 'healthy', credentialState: 'ready', healthState: 'healthy',
+    validUntil: now + HEALTHY_TTL_MS, evidenceRefs: [...evidence, resultEvidence] }
 }
 
 function unhealthy(

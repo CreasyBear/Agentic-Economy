@@ -1,260 +1,343 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-07-13
-**Mapped Commit:** `9a6a70c7`
+**Analysis Date:** 2026-07-14
+**Mapped Commit:** `59dbf7f6`
+**Scope:** Current live source plus the current dirty shared tree. Findings labelled **verified defect** are directly established by source or an executable check. Findings labelled **risk** need runtime evidence before being called a defect.
 
-## Tech Debt
+## Product-Critical Diagnosis
 
-**Capability supply is an uncommitted cross-cutting addition:**
-- Issue: The working tree introduces capability offering and transport-binding registration across schema composition, Convex commands, sandbox seeds, provider adapters, audit events, security authority, generated API types, and import/integration tests.
-- Files: `convex/capabilitySupply.ts`, `src/modules/capability-supply/`, `src/modules/provider-integrations/`, `convex/schema.ts`, `convex/devSeed.ts`, `src/modules/sandbox-supply/public.ts`, `src/modules/security/internal/admin-authority.ts`, `tests/imports/capability-supply-boundaries.test.ts`, `tests/integration/capability-supply-registration.test.ts`
-- Why: Supply identity, exact capability contracts, transport configuration, eligibility, and administrative authority must agree at one durable boundary.
-- Impact: A partial commit can leave generated types, schema, authority scopes, seed data, and runtime functions out of sync. Parallel work can also overwrite the same source-owned seams.
-- Fix approach: Preserve the current tree, review and commit by coherent domain boundary, run codegen and boundary tests with the complete change set, and do not restore broad paths to make the diff smaller.
+**The customer is using two different products, and the neutral engine is not the primary one:**
+- Status: **Verified disconnect.**
+- Evidence: `/` renders `AeHomeComposer` in `src/routes/index.tsx`. It submits to `/api/answer/turn` through `src/components/ae/chat/AeHomeComposer.tsx` and `src/components/ae/chat/answer-stream.ts`. The Answer Thread agent exposes only `registry.search` and `registry.detail` through `src/modules/answer-thread/answer-thread.schema.ts`, `src/modules/answer-thread/internal/intent-router.ts`, and `src/modules/answer-thread/internal/answer-tool-registry.ts`.
+- Separate path: The neutral Request application is mounted only at `/engine` by `src/routes/engine.tsx`, uses `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, and calls `/api/requests`.
+- Customer impact: Work on capability contracts, candidate composition, RoutePlans, mandates, and execution cannot change the homepage query experience. The homepage remains an LLM-assisted registry search even when the neutral engine becomes substantially more capable.
+- Required correction: Choose one customer Request lifecycle. The homepage composer must submit into the canonical Request application, or the Answer Thread must become a presentation adapter over that application. Do not maintain two intent interpreters, two persistence models, two recovery models, and two customer histories.
 
-**Large runtime modules combine multiple responsibilities:**
-- Issue: Several production files exceed 1,000 lines and mix validation, authorization, persistence, projection, reconstruction, and orchestration.
-- Files: `convex/inquiries.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/routing-kernel/internal/kernel.ts`, `src/modules/inquiries/internal/commands.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/notificationOutbox.ts`, `convex/routingKernelStore.ts`, `convex/routingKernelIncidentControl.ts`, `convex/customerRequestApplication.ts`
-- Why: Domain contracts accumulated in central source-facing and durable adapters as the system expanded.
-- Impact: Small changes have wide regression surfaces, ownership is harder to review, and concurrent modifications are conflict-prone.
-- Fix approach: Extract domain-owned operations behind existing public seams, keep Convex entrypoints thin, and retain behavior-first tests before moving code.
+**The public `/engine` promise is open, but the first real action is authentication-gated:**
+- Status: **Verified defect.**
+- Evidence: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` presents “Start with whatever you know” and calls `/api/requests` before showing any sign-in requirement. `src/lib/server/customer-request-api.ts` calls authenticated Convex transport, and `src/lib/server/convex-source.ts` rejects a missing Clerk token.
+- Hosted reproduction on 2026-07-14: `GET https://agentic-economy-phi.vercel.app/engine` returned `200`; an anonymous valid `POST /api/requests` returned `401 {"error":"missing_auth"}`.
+- Customer impact: “Explore” is a dead end for a signed-out customer. The user gives AE their request before learning that sign-in is mandatory.
+- Required correction: Implement the anonymous Request boundary tracked by the product roadmap, or move sign-in before submission with explicit value and return-to-request continuity. The entered request and opaque identity must survive authentication.
 
-**Pure-domain and Convex implementations can drift:**
-- Issue: Routing, inquiries, customer requests, notification state, and capability supply have both owned `src/modules/**` contracts and Convex-facing persistence/orchestration code.
-- Files: `src/modules/routing-kernel/`, `convex/routingKernel.ts`, `convex/routingKernelStore.ts`, `src/modules/inquiries/`, `convex/inquiries.ts`, `src/modules/customer-request/`, `convex/customerRequests.ts`, `src/modules/capability-supply/`, `convex/capabilitySupply.ts`
-- Why: Pure contracts support deterministic tests while Convex owns durable execution and indexes.
-- Impact: Unit tests can pass while hosted serialization, indexing, idempotency, or authorization behavior differs.
-- Fix approach: Keep canonical types, hashes, and invariants in owned modules; minimize duplicated algorithms; require Convex runtime parity tests for durable adapter changes.
+**RoutePlans are durable internal objects but are absent from the customer wire contract:**
+- Status: **Verified disconnect in committed source.**
+- Evidence: `src/modules/customer-request/compiler.ts` now builds `CustomerRequestRoutePlan[]`, and `src/modules/customer-request/internal/convex-v2-schema.ts` plus `convex/customerRequestV2.ts` persist and validate them. `src/modules/customer-request/customer-projection.ts` projects only snapshot/evaluation fields. `src/modules/customer-request/agent-contract.ts` has no RoutePlan field. `convex/customerRequestApplication.ts` serializes no RoutePlan in `customerView`. `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` cannot render one.
+- Customer impact: A major engine capability can pass compilation and persistence tests while producing exactly the same customer experience as before.
+- Required correction: Add a customer-semantic route decision projection with outcome, steps, total cost, data use, effects, evidence, uncertainty, expiry, alternatives, and recovery. Keep internal identifiers backstage, but do not discard the decision object itself.
 
-**Project authority documents describe overlapping eras:**
-- Issue: `.planning/PROJECT.md` still frames the fresh-repo Phase 1 catalog wedge, while `.planning/REQUIREMENTS.md`, current source, and `AGENTS.md` describe later inquiry, routing, customer-request, and capability-supply behavior.
-- Files: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, `.planning/STATE.md`, `AGENTS.md`, `src/modules/actions/index.ts`, `src/modules/routing-kernel/`, `src/modules/customer-request/`
-- Why: Product and architecture scope evolved faster than all planning authorities were consolidated.
-- Impact: Contributors can follow a valid but stale rule set, incorrectly exclude live behavior, or overstate booking, payment, dispatch, or autonomous fulfillment that AE does not provide.
-- Fix approach: Establish one current product/runtime authority, mark historical milestone documents as historical, and keep the safe assistant contract explicit: read, compare, summarize, route, and send only a qualified inquiry where published.
+**The Request application still rejects multi-capability preparation:**
+- Status: **Verified defect relative to the RoutePlan objective.**
+- Evidence: `convex/customerRequestApplication.ts` gates preparation with `current.aggregate.plan.actions.length !== 1` and returns “This request needs an action choice before AE can prepare it.” Resume, provider-status readback, and preparation readback also run only when `actions.length === 1`.
+- Customer impact: A two-step RoutePlan can be compiled and stored but cannot be prepared through the production Request application. No customer action exists to make the missing “action choice.”
+- Required correction: Preparation must select an exact RoutePlan, not a single action. Composite authority, per-step execution, cumulative controls, and recovery must all bind to that selected route.
 
-**Deployment depends on a pinned nightly Nitro build:**
-- Issue: `nitro` resolves through an npm alias to a dated `nitro-nightly` release.
-- Files: `package.json`, `package-lock.json`, `vite.config.ts`
-- Why: TanStack Start deployment currently depends on Nitro behavior not represented by a stable package line.
-- Impact: Security support and upgrade compatibility are less predictable; SSR, raw requests, or deployment output can change unexpectedly.
-- Fix approach: Track the stable upstream path, pin runtime-critical versions, preserve raw-request and build contract tests, and migrate only after deployed readback proof.
+**The hosted `options_ready` result is not usable in the human UI:**
+- Status: **Verified defect.**
+- Evidence: `projectPreparedAction` in `convex/customerRequestApplication.ts` returns `state: 'options_ready'`, `options: []`, and a populated `preparedAction`. `RequestResult` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` sends every `options_ready` projection to `OptionsCard`. `OptionsCard` reads only `projection.options` and `optionSet`; it never reads `preparedAction`.
+- Symptom: The production prepared-action shape renders as “0 registered options found” with no business card, terms, data use, effects, alternatives, or approval control.
+- Required correction: Render the prepared decision explicitly and connect its exact approval action. Add a production-shape UI test, not another hand-authored option-set response.
+
+**The human UI has no prepared-action approval or run path:**
+- Status: **Verified missing integration.**
+- Evidence: HTTP handlers exist at `src/routes/api.requests.$requestRef.approval.ts` and `src/routes/api.requests.$requestRef.attempts.ts`. The workspace calls submit, messages, facts, options, preparation authorization, and resume only. It never calls approval or attempts.
+- Customer impact: The agent documentation says the customer must approve in AE, but the customer-facing Request surface supplies no way to do so. The release smoke bypasses this gap by invoking approval directly with a customer session token in `src/modules/customer-request/hosted-agent-journey.ts`.
+- Required correction: Add exact-route review, approval, run, and recovery UI states before claiming a complete customer journey.
+
+**Editing an existing Request cannot work against the real application:**
+- Status: **Verified defect.**
+- Evidence: `edit()` in `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx` resubmits `/api/requests` with `expectedRevision` set to the current nonzero revision. `submit` in `convex/customerRequestApplication.ts` immediately returns `revision_changed` whenever `expectedRevision !== undefined && expectedRevision !== 0`.
+- Test blind spot: `tests/unit/customer-request/customer-request-workspace.test.tsx` mocks revision 2 success and therefore proves only the component’s desired behavior, not application compatibility.
+- Required correction: Add a real revise operation or make submit support revisioned replacement under the same principal and Request identity; prove it through handler-to-Convex integration.
+
+**A registered business listing is not executable supply:**
+- Status: **Verified architectural boundary; current product coverage is unproven.**
+- Evidence: Homepage search reads public catalog actions in `src/modules/registry/registry.actions.ts`. The Request graph reads only eligible, current capability publications from `convex/capabilitySupply.ts` through `loadRequestGraph` in `convex/customerRequestApplication.ts`. No bridge treats a catalog service as a capability binding.
+- Impact: “We have registered businesses” does not mean the engine can answer a query about them. A business needs an active exact contract, offering, transport binding, eligibility decision, current publication, credential readiness, and health readiness.
+- Current source evidence: The only production seed path found for the Request graph is the two labelled sandbox businesses in `convex/sandboxAcceptanceSupply.ts`, `convex/devSeed.ts`, and `src/modules/sandbox-supply/public.ts`. This does not prove the hosted graph contains no other supply, but no source-controlled evidence establishes useful real supply.
+- Required correction: Measure and expose supply coverage by customer job. Do not call catalog rows “connected businesses” unless their published capability bindings are currently eligible and reachable.
 
 ## Known Bugs
 
-**No reproducible user-visible bug was established by this static refresh:**
-- Symptoms: None asserted without an executable reproduction.
-- Trigger: Not applicable.
-- Workaround: Not applicable.
-- Root cause: Static inspection reveals risk and missing proof, not confirmed runtime failure.
-- Blocked by: The mapper did not run the complete release, browser, hosted, or provider smoke suites against the changing working tree.
+**The homepage query accepts work, then hides a persistence failure behind a spinner:**
+- Status: **Verified hosted defect on 2026-07-14.**
+- Trigger: Open `/`, submit `I need an electrician in Fremantle tomorrow to fix a circuit that keeps tripping`.
+- Result: `POST /api/answer/turn` returns HTTP 200 and emits a `thread` event, then emits `answer_turn_persist_failed`. The emitted thread returns `404 thread_not_found`. `AeHomeComposer` discards all frames, treats the completed transport as success, and polls the missing thread up to 40 times before showing a generic error.
+- Customer impact: The primary public ask surface appears frozen at “Starting your thread”; the real failure is neither immediate nor explained.
+- Test gap: `tests/unit/chat/home-landing-submit.test.tsx` proves only that one fetch starts and accepts an empty successful stream. It does not assert a thread event, persistence readback, streamed error, navigation, or recovery.
+- Required correction: Make persistence failure observable and fail immediately on streamed error, then prove the actual hosted persistence path. This still does not make Answer Thread the neutral Request engine.
 
-## Security Considerations
+**Anonymous `/engine` query submission fails after accepting the query:**
+- Status: **Verified defect.**
+- Trigger: Open `/engine` signed out, enter any non-empty request, choose “Explore.”
+- Result: Hosted API returns `401 missing_auth`; UI replaces the experience with “Sign in to continue.”
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `src/lib/server/customer-request-api.ts`, `src/lib/server/convex-source.ts`.
+- Fix: Preserve the request through an explicit auth transition or allow bounded anonymous exploration before durable/private continuation.
 
-**Provider quote adapters are an external egress and secret-custody boundary:**
-- Risk: Compromised configuration or provider behavior could exfiltrate API keys, redirect requests, return oversized bodies, misrepresent environment, or stall server work.
-- Files: `src/modules/provider-integrations/shipping/server.ts`, `src/modules/provider-integrations/shipping/public.ts`, `src/modules/capability-supply/internal/transport-adapters.ts`, `convex/capabilitySupply.ts`
-- Current mitigation: Provider calls use fixed provider base URLs, manual redirect handling, a 10-second abort signal, bounded identifier/secret validation, typed provider failure states, and adapter-specific configuration validation.
-- Recommendations: Keep provider origins owned rather than registration-supplied, cap response bytes before full JSON parsing, redact credential material from audit/error paths, test redirect and malformed-body cases, and add rotation/runbook coverage.
+**Request revision from the UI always conflicts:**
+- Status: **Verified defect.**
+- Trigger: Reach any Request projection, choose “Edit this Request,” change the text, and resubmit.
+- Root cause: The UI uses submit with a nonzero `expectedRevision`; the Convex action accepts only revision zero.
+- Files: `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`, `convex/customerRequestApplication.ts`.
+- Fix: Implement and call a dedicated revision command with the same durable identity and idempotency guarantees.
 
-**General routing transport remains an SSRF boundary:**
-- Risk: A malicious registered endpoint or signature directory could target private infrastructure, exploit DNS changes, or return excessive data.
-- Files: `convex/routingKernelTransport.ts`, `src/modules/network-guard/public.ts`, `src/modules/routing-kernel/http-capability-binding.ts`, `src/modules/security/provider-api-base-url.ts`
-- Current mitigation: HTTPS-only validation, public-target DNS checks, redirect refusal, server-only credential lookup, and 64 KiB response limits exist at the egress layer.
-- Recommendations: Preserve checks at every network effect point, test DNS rebinding and IPv4/IPv6 edge cases, and re-run SSRF and provider-secret drift tests for transport changes.
+**Prepared decision renders as zero options:**
+- Status: **Verified defect by production-shape code path.**
+- Trigger: Reach the `projectPreparedAction` result after provider preparation.
+- Root cause: `preparedAction` exists in the wire schema but is ignored by `OptionsCard`.
+- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx`.
+- Fix: Add a prepared-decision component and exact approval affordance; assert the actual projection shape.
 
-**Capability-supply administrative commands are high-authority mutations:**
-- Risk: An incorrectly authorized operator could register a business offering, bind credentials/endpoints, or mark supply eligible, changing what routing considers executable.
-- Files: `convex/capabilitySupply.ts`, `src/modules/security/internal/admin-authority.ts`, `src/modules/security/public.ts`, `src/modules/capability-supply/public.ts`
-- Current mitigation: Commands use explicit actor envelopes, admin authority scopes, operation keys, exact contract references, canonical hashes, audit records, and fail-closed integrity checks.
-- Recommendations: Verify authority from server-derived identity rather than client actor fields, test cross-admin replay and revocation, make eligibility changes separately auditable, and treat schema/hash changes as security migrations.
+**Current dirty tree failed the TypeScript gate during the mapping run:**
+- Status: **Verified transient integration blocker as of this mapping run.**
+- Command: `npm run typecheck`.
+- Failures: unsafe union access in `src/modules/inquiries/inquiry.functions.ts`; missing `CustomerRequest` exports and exact-optional violations in `src/modules/provider-integrations/shipping/`; Convex index typing and result narrowing errors in `tests/integration/customer-request-v2-multi-capability-route.test.ts`; governed-send fixture drift in inquiry tests; and one Playwright callback signature error.
+- Impact: The current combined working tree is not source-releasable. These failures may belong to concurrent work and must not be attributed to the last clean deployed revision.
+- Fix: Owners of each dirty slice should close their type contract before integration; do not hide the combined failure by running only focused tests.
 
-**Canonical hashes and idempotency records are authorization-adjacent:**
-- Risk: Serialization drift, ambiguous retries, or replay-state corruption can cause a command to be accepted under different material or make legitimate recovery impossible.
-- Files: `convex/capabilitySupply.ts`, `src/modules/common/canonical-digest.ts`, `src/modules/routing-kernel/internal/authority-digest.ts`, `convex/routingKernelStore.ts`, `convex/customerRequests.ts`
-- Current mitigation: Exact request/result digests, operation keys, immutable identity checks, bounded evidence references, and integrity failures are encoded.
-- Recommendations: Version canonical material, preserve cross-version fixtures, exercise concurrent duplicate commands at the durable boundary, and quarantine unverifiable legacy records rather than granting authority.
+**Public agent instructions contain duplicate step numbers:**
+- Status: **Verified defect.**
+- Evidence: `src/modules/discovery/internal/agent-skill.ts` has two step 8 entries; `src/modules/discovery/internal/discovery-files.ts` has two step 6 entries.
+- Impact: External agents receive an ambiguous lifecycle recipe at the canonical discovery surface.
+- Fix: Generate numbering from one structured sequence and add an ordered-sequence assertion.
 
-**Local E2E authentication bypass is client-visible configuration:**
-- Risk: Enabling the bypass in a deployed build could weaken Clerk protection.
-- Files: `src/lib/server/local-e2e-bypass.ts`, `src/routes/__root.tsx`, `.env.example`, `tests/unit/server/local-e2e-bypass.test.ts`
-- Current mitigation: Server and UI paths throw in production and require an explicit environment flag.
-- Recommendations: Keep production fail-closed checks at both boundaries, exclude the flag from deployment configuration, and retain build/runtime regression coverage.
+## Tech Debt
 
-**Inquiry and observability payloads contain sensitive human data:**
-- Risk: Inquiry bodies, contact details, owner replies, provider payloads, or agent authority material could leak through public projections, logs, Sentry, PostHog, or notification errors.
-- Files: `convex/inquiries.ts`, `src/modules/inquiries/`, `src/lib/observability/`, `src/modules/observability/`, `src/lib/server/notification-provider.ts`, `tests/unit/observability/audit-redaction.test.ts`
-- Current mitigation: Public DTO allowlists, redacted audit contracts, private owner actions, and notification error normalization exist.
-- Recommendations: Keep telemetry allowlisted, add secret-canary tests for new events, review replay/session capture around forms, and never expose private inquiry content through registry or assistant read surfaces.
+**Two customer-intent stacks own overlapping semantics:**
+- Issue: Answer Thread owns conversational search, follow-ups, frozen evidence, registry tools, and public thread history; Customer Request owns semantic interpretation, clarification, capability selection, preparation, authority, and action recovery.
+- Files: `src/modules/answer-thread/`, `src/modules/answer/`, `convex/answerThreads.ts`, `src/modules/customer-request/`, `convex/customerRequestApplication.ts`, `convex/customerRequestV2.ts`.
+- Impact: A customer can ask the same words at `/` and `/engine` and enter unrelated state machines with different capabilities, privacy, identities, and recovery.
+- Fix approach: Make one Request aggregate canonical. Conversation should be a view and input adapter, not a competing domain.
+
+**Customer contract, Convex return validators, persistence validators, and UI shapes are manually duplicated:**
+- Issue: Request state and option shapes are repeated in `src/modules/customer-request/agent-contract.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, and component-local response unions.
+- Impact: Internal RoutePlans can be added to persistence without reaching the agent contract or UI. A compile-time green in one layer does not prove end-to-end parity.
+- Fix approach: Derive adapters from one owned domain contract where possible; otherwise add exact round-trip contract tests from compiled aggregate to HTTP JSON to rendered state.
+
+**“Source completeness” currently proves presence more strongly than connectivity:**
+- Issue: `tests/imports/customer-request-source-completeness.test.ts` verifies canonical files exist, checks for strings/import boundaries, and inspects workflow text. It does not prove the homepage uses Customer Request, a human can approve, or a multi-step RoutePlan reaches the wire/UI.
+- Impact: The gate can pass while the product remains visibly unchanged or unusable.
+- Fix approach: Retain ownership scans, but rename their claim narrowly and add executable vertical gates for the customer lifecycle.
+
+**Large central modules increase integration risk:**
+- Issue: `convex/inquiries.ts` is about 2,979 lines, `convex/capabilitySupply.ts` 2,402, `src/modules/answer-thread/internal/turn-orchestrator.ts` 1,819, `src/modules/routing-kernel/internal/kernel.ts` 1,766, and `convex/customerRequestApplication.ts` 1,596 in the current tree.
+- Impact: Authority, validation, persistence, projection, and orchestration changes collide in the same files. The current dirty tree already contains concurrent modifications across several of these seams.
+- Fix approach: Split by durable command/query and domain responsibility while preserving public entrypoints and behavioral tests.
+
+**Product authority documents describe incompatible maturity levels:**
+- Issue: `AGENTS.md` says AE’s first owned conversion is a qualified inquiry and explicitly forbids booking, charging, dispatch, or auto-fulfilment. Current Request source includes prepared-action approval, attempt admission, provider execution, and reconciliation. `.planning/STATE.md` also retains a stale “current product slice” and historical Phase 1 constraints beneath the RoutePlan frontier.
+- Impact: Contributors can correctly follow one authority and contradict another. Public copy can either understate real source or overclaim unproven effects.
+- Fix approach: Separate current public product truth, internal source capability, and target architecture in explicit dated sections. Claims must follow hosted customer evidence, not class names.
+
+**Release/support commands still depend on `.mjs` proof utilities:**
+- Issue: `package.json` invokes `.mjs` files for provider readiness, retirement, edge and historical proof helpers even though current runtime ownership is TypeScript.
+- Impact: Supporting evidence can be mistaken for product completion, and the repository’s stated “no .mjs/.mts ownership” rule is easy to blur.
+- Fix approach: Keep product semantics in TypeScript and classify every remaining `.mjs` command as support-only or migrate it. No support command may be the only proof of runtime behavior.
+
+## Security and Privacy Considerations
+
+**Customer requests are sent to OpenRouter before any visible data-use review:**
+- Status: **Verified disclosure gap; legal impact requires review.**
+- Risk: `src/modules/customer-request/openrouter-transport.ts` sends the complete `customerJob` and all public capability descriptors to `https://openrouter.ai/api/v1/chat/completions`. The first customer-visible disclosure review in `AeCustomerRequestWorkspace` is framed only as sharing with businesses.
+- Public mismatch: `src/routes/privacy.tsx` says asking AE uses a browser session marker but does not disclose the external model processor or explain request-content handling.
+- Current mitigation: Payload and response sizes are bounded, temperature is zero, descriptors are treated as untrusted data, and a timeout is enforced.
+- Recommendation: Add truthful processor disclosure and data-minimization policy before collection; define retention/provider-routing controls; redact or classify sensitive intent before third-party interpretation where required.
+
+**Public Answer Threads are bearer-link records with no automatic expiry:**
+- Risk: `AeHomeComposer` tells customers that anyone with the thread link can open it and that it has no automatic expiry. Customer queries can contain sensitive needs or locations.
+- Files: `src/components/ae/chat/AeHomeComposer.tsx`, `src/routes/t.$threadId.tsx`, `src/modules/answer-thread/internal/public-projection.ts`.
+- Current mitigation: The disclosure is visible and recent-thread removal is local.
+- Recommendation: Add data minimization, deletion/expiry controls, non-enumerable identifiers, and tests that private inquiry/contact material never enters public projections.
+
+**Capability publication and readiness control what the engine may contact:**
+- Risk: A compromised owner/admin path can publish endpoints, bind credentials, or influence eligibility/readiness.
+- Files: `convex/capabilitySupply.ts`, `convex/capabilitySupplyReadiness.ts`, `src/modules/capability-supply/`, `src/modules/capability-contract/`.
+- Current mitigation: Exact contract refs, registration hashes, eligibility hashes, owner/admin authority, readiness probes, audit records, HTTPS/public-target checks, and fail-closed integrity validation exist.
+- Recommendation: Preserve server-derived identity, credential indirection, SSRF defenses, revision-bound probes, auditability, and quarantine. Exercise cross-owner and changed-target attacks in durable integration tests.
+
+**External agent authority is strong but operationally brittle:**
+- Risk: `/api/v1/requests` requires Clerk API-key auth, the `customer_requests:create` scope, and an HMAC service assertion using `AE_CONVEX_SERVER_FUNCTION_TOKEN`.
+- Files: `src/lib/server/customer-request-agent-auth.ts`, `src/lib/server/customer-request-agent-api.ts`, `src/modules/customer-request/service-auth-envelope.ts`, `convex/customerRequestApplication.ts`.
+- Current mitigation: Principal, owner, credential, scope, operation, command, timestamp, and signature are bound; agent principals are recorded before use.
+- Recommendation: Add key rotation, replay-window observability, revocation tests, and explicit error telemetry without leaking secret or assertion material.
+
+**No Request-specific cost/abuse limiter was found:**
+- Status: **Risk.**
+- Risk: Each authenticated submit/refine can make a paid external model call and load up to 64 capabilities. No Request-path rate or spend limiter appears in `src/lib/server/customer-request-*`, `convex/customerRequestApplication.ts`, or `src/modules/customer-request/`.
+- Recommendation: Add durable per-principal and per-credential quotas, concurrency limits, model-cost telemetry, and retry-after semantics before broad access.
 
 ## Performance Bottlenecks
 
-**Numerous Convex reads materialize complete result sets:**
-- Problem: Catalog, registry, discovery, inquiries, source-state, observability, notification, and some routing paths use `.collect()`, including whole-table compatibility helpers.
-- Files: `convex/catalog.ts`, `convex/registry.ts`, `convex/discovery.ts`, `convex/inquiries.ts`, `convex/source_state.ts`, `convex/notificationOutbox.ts`, `convex/observability.ts`, `convex/routingKernelIncidentControl.ts`
-- Measurement: No committed production cardinality or p95 scan metric was found; this is inferred from query shape.
-- Cause: Reconstruction, migration compatibility, projection repair, and support readback favor complete snapshots.
-- Improvement path: Replace broad compatibility scans with indexed lookups, cursor pagination, bounded retention, and explicit maximum-cardinality refusal; instrument scanned row counts before setting thresholds.
+**Every interpretation rebuilds and retransmits the capability descriptor set:**
+- Problem: `loadRequestGraph` in `convex/customerRequestApplication.ts` reads eligible supply, then performs a serial internal query for every unique exact contract, projects schemas, and sends the descriptor payload to OpenRouter.
+- Bounds: Eligible supply is limited to 64; projected descriptors are capped at 512,000 bytes; OpenRouter timeout is 20 seconds; request body cap is 1,000,000 bytes.
+- Measurement: No hosted p50/p95 stage timing or cache-hit metric was found.
+- Improvement path: Cache immutable exact-contract descriptors by digest, parallelize bounded independent reads where Convex permits, retrieve candidates before LLM interpretation, and instrument graph-load/model/compile stages separately.
 
-**Answer-turn orchestration has serial external and durable latency:**
-- Problem: One request can coordinate session state, search, model streaming, tool calls, evidence collection, finalization, and follow-up generation.
-- Files: `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/answer/internal/answer-tool-use-agent.ts`, `src/modules/answer-thread/internal/answer-turn-finalization.ts`, `src/routes/api.answer.turn.ts`
-- Measurement: No committed end-to-end latency SLO or hosted p95 threshold was found.
-- Cause: Evidence and finalization requirements place durable gates around external model and provider work.
-- Improvement path: Instrument per-stage timing, define dependency-specific cancellation budgets, parallelize independent reads only, and retain explicit mutation order.
+**RoutePlan enumeration is Cartesian:**
+- Problem: `compileRoutePlans` in `src/modules/customer-request/compiler.ts` multiplies candidate choices across actions and refuses once combinations exceed 256.
+- Impact: A modest graph such as five actions with four candidates each produces 1,024 combinations and becomes `capability_graph_invalid` rather than yielding bounded best routes.
+- Improvement path: Use incremental constrained search with deterministic top-k pruning based on fit, cost, data exposure, consequence, trust, liveness, and evidence. Preserve completeness/uncertainty truth when pruning.
 
-**Shipping quote aggregation can multiply provider latency:**
-- Problem: Each configured shipping adapter performs a remote request with a 10-second timeout; sequential orchestration or multiple candidate providers can consume a large preparation budget.
-- Files: `src/modules/provider-integrations/shipping/server.ts`, `src/modules/customer-request/preparation.ts`, `src/modules/routing-kernel/internal/kernel.ts`
-- Measurement: Adapter timeouts are explicit, but no aggregate quote-preparation budget or hosted p95 is committed.
-- Cause: Fresh quotes require remote provider state and conservative failure classification.
-- Improvement path: Define an overall deadline, cancel outstanding work when it expires, bound provider fan-out, record provider-stage timings, and preserve `unknown` rather than inferring a failed or successful outcome after timeout.
+**Homepage thread creation can issue 40 readback polls:**
+- Problem: `promoteReadableThread` in `src/components/ae/chat/AeHomeComposer.tsx` polls every 250 ms for up to 40 attempts after the stream yields a thread.
+- Impact: Up to ten seconds and forty HTTP reads per submission when projection lag or failure occurs.
+- Improvement path: Make the stream’s committed-thread event authoritative, use backoff, or subscribe to durable availability.
 
-**Large client modules lack enforced bundle and interaction budgets:**
-- Problem: Several chat, answer, claim, and UI contract files remain large and converge many states.
-- Files: `src/components/ae/chat/AeChat.tsx`, `src/components/ae/artifacts/AeGenerativeAnswer.tsx`, `src/routes/claim.tsx`, `src/lib/ui/contract-scans.ts`, `src/lib/ui/status-presentation.ts`
-- Measurement: The build gate runs, but no bundle-size or interaction-latency threshold is enforced in CI.
-- Cause: Streaming, evidence, status, validation, and responsive variants accumulate on central surfaces.
-- Improvement path: Measure before optimizing, extract state machines and stable presentation sections, lazy-load noncritical artifacts, and add budgets when representative baselines exist.
+**Broad Convex collection remains common:**
+- Risk: Static inspection found about 50 `.collect()` calls in `convex/`, including registry, discovery, inquiry, notification, observability, and compatibility paths.
+- Measurement: No production cardinality or scan budget was found.
+- Improvement path: Audit public/request-critical paths for indexed pagination and bounded retention; record scanned-row counts before choosing thresholds.
 
 ## Fragile Areas
 
-**Capability offering/binding registration and eligibility:**
-- Why fragile: Exact contract identity, business publication, adapter configuration, registration hash, eligibility hash, audit history, and admin authority must all agree.
-- Common failures: A binding references the wrong offering or network, configuration cannot be reconstructed from stored canonical JSON, an inactive contract is treated as eligible, or replay produces a different result.
-- Files: `src/modules/capability-supply/public.ts`, `src/modules/capability-supply/internal/transport-adapters.ts`, `src/modules/capability-supply/internal/convex-schema.ts`, `convex/capabilitySupply.ts`
-- Safe modification: Change schema, validators, canonical material, Convex functions, generated types, seed data, and parity tests together; refuse integrity drift without fallback.
-- Test coverage: Unit, import-boundary, and integration tests are being added under `tests/unit/capability-supply/`, `tests/imports/capability-supply-boundaries.test.ts`, `tests/integration/capability-supply-registration.test.ts`, and `tests/integration/capability-supply-sandbox-registration.test.ts`.
+**RoutePlan schema evolution across four layers:**
+- Why fragile: Compiler types, writable conversion, Convex table validators, Convex action return validators, agent Zod schemas, and UI projections must change together.
+- Files: `src/modules/customer-request/compiler.ts`, `src/modules/customer-request/internal/convex-v2-schema.ts`, `convex/customerRequestV2.ts`, `convex/customerRequestApplication.ts`, `src/modules/customer-request/agent-contract.ts`, `src/modules/customer-request/customer-projection.ts`.
+- Current failure mode: The dirty tree persists routes but drops them from public projections.
+- Safe modification: Add a versioned customer route projection and a round-trip contract test before extending preparation or UI.
 
-**Shipping provider normalization:**
-- Why fragile: Shippo and EasyPost have different request/response shapes, money formats, environment fields, carrier selection, delivery estimates, and error semantics.
-- Common failures: Wrong rate selection, decimal-to-minor-unit errors, stale quotes presented as fresh, test rates presented as production, or network ambiguity collapsed into provider refusal.
-- Files: `src/modules/provider-integrations/shipping/server.ts`, `src/modules/provider-integrations/shipping/public.ts`, `tests/integration/shipping-provider-quote-input.test.ts`, `tests/unit/customer-request/shipping-quote-input.test.ts`
-- Safe modification: Preserve provider-specific adapters behind one owned normalized contract, use deterministic fixtures, enforce freshness/environment fields, and never reinterpret a quote as booking, payment, dispatch, or fulfillment.
-- Test coverage: Adapter contract and input integration tests exist in the working tree; real provider readback is not established by fixture-backed tests.
+**Client-only Request identity and recovery:**
+- Why fragile: `requestRef`, `agentRef`, current revision, turns, and pending answer live only in React state in `AeCustomerRequestWorkspace`.
+- Common failures: Reload, sign-in navigation, new tab, crash, or copied URL loses the Request reference even though a durable GET resume endpoint exists.
+- Safe modification: Put an opaque Request reference in a private route/URL or authenticated request index and restore from durable state. Never place private facts in the URL.
 
-**Routing-kernel canonical authority and schema evolution:**
-- Why fragile: Authorization, grants, budgets, execution records, and incident reconstruction depend on stable serialization and matching durable fields.
-- Common failures: Historical rows fail validation, signatures stop verifying, migrated grants gain authority, or incident projections disagree with immutable facts.
-- Files: `src/modules/routing-kernel/internal/authority-digest.ts`, `src/modules/routing-kernel/internal/convex-schema.ts`, `convex/routingKernelStore.ts`, `convex/routingKernelIncidentControl.ts`, `convex/authzMigration.ts`
-- Safe modification: Version contracts explicitly, retain compatibility validators, quarantine unverifiable authority, and migrate with bounded cursors.
-- Test coverage: Extensive unit and Convex runtime tests exist under `tests/unit/routing-kernel/` and `tests/unit/convex/`; hosted readback remains a separate proof class.
+**Capability supply freshness can invalidate requests globally:**
+- Why fragile: Registry snapshot digests include publication revision, readiness expiry, offering hash, binding hash, and price. `convex/customerRequestV2.ts` revalidates the entire aggregate against current supply.
+- Common failures: A readiness refresh or price/publication revision can make a durable Request stale before the customer acts.
+- Safe modification: Define which changes invalidate discovery, preparation, approval, and execution separately. Preserve the prior plan as expired evidence rather than collapsing to a generic retry.
 
-**Generated Convex API and TanStack route tree:**
-- Why fragile: Runtime types and routing depend on generated `convex/_generated/api.d.ts` and `src/routeTree.gen.ts` outputs matching filesystem source.
-- Common failures: A new Convex function is absent from generated types, a renamed route is not regenerated, or a helper becomes routable accidentally.
-- Files: `convex/_generated/api.d.ts`, `src/routeTree.gen.ts`, `src/routes/`, `tests/imports/route-boundary.test.ts`
-- Safe modification: Run the normal Convex and Vite/TanStack generation paths, never hand-author route tree output, and review generated diffs with their source changes.
-- Test coverage: `npm run check:convex-codegen`, route-boundary tests, typecheck, and build cover local consistency.
+**Provider preparation and one-action assumptions are distributed:**
+- Why fragile: Checks for exactly one action occur in resume, status, authorization, comparison, preparation, prepared-action construction, approval, and attempts across `convex/customerRequestApplication.ts` and `convex/customerRequestV2*`.
+- Common failure: Removing one guard creates partial multi-step behavior without composite authority or recovery.
+- Safe modification: Introduce an exact RoutePlan aggregate boundary first, then migrate each lifecycle stage with executable invariants.
 
-**Notification outbox state transitions:**
-- Why fragile: Dispatch, webhook reconciliation, retries, holds, and idempotency update one durable lifecycle.
-- Common failures: Duplicate delivery, retry after terminal success, stale webhook regression, or provider error details reaching public readback.
-- Files: `src/modules/notification-outbox/internal/commands.ts`, `convex/notificationOutbox.ts`, `src/routes/api.notification.resend-dispatch.ts`, `src/routes/api.notification.novu-dispatch.ts`
-- Safe modification: Preserve monotonic transitions and operation keys, test out-of-order webhooks and exhaustion, and keep provider adapters outside domain transitions.
-- Test coverage: Unit and Convex runtime tests exist; live provider behavior is opt-in smoke proof.
+**The current shared tree contains several concurrent product slices:**
+- Why fragile: Dirty changes span capability supply, multi-capability compilation, governed inquiry sends, shipping adapters, routes, tests, and planning authority.
+- Impact: A broad commit or cleanup can merge incomplete contracts or overwrite another agent’s work.
+- Safe modification: Preserve all unrelated state, stage by claimed ticket, and verify the combined tree before integration. Never infer release readiness from a focused green test.
 
 ## Scaling Limits
 
-**Explicit routing and supply cardinality caps:**
-- Current capacity: Eligible routing bindings and agent grants cap at 256; capability contracts cap at 256; structured preparation caps candidate and field sets at 64; root tracing caps leaves at 16; incident reconstruction caps freeze facts at 100.
-- Files: `convex/routingKernelBindings.ts`, `convex/routingKernelAgentGrants.ts`, `convex/customerRequestCapabilityContracts.ts`, `convex/routingKernelStructuredPreparation.ts`, `convex/routingKernelTracer.ts`, `convex/routingKernelIncidentControl.ts`
-- Limit: Larger networks, complex preparation sets, or long incident histories reach deterministic refusal paths.
-- Symptoms at limit: `eligible_binding_limit_exceeded`, `agent_grant_limit_exceeded`, `capability_contract_limit_exceeded`, `root_leaf_limit_exceeded`, or `incident_reconstruction_fact_limit_exceeded`.
-- Scaling path: Measure real cardinalities, paginate enumeration, compact projections without deleting source facts, and retain deterministic refusal while expanding capacity.
+**Request graph enumeration:**
+- Current capacity: At most 64 eligible supplies in `loadRequestGraph`; descriptor payload at most 512 KiB.
+- Limit behavior: Excess supply or descriptor size returns `capabilities_unavailable`, surfaced to the human UI as a generic failure.
+- Scaling path: Paginated/retrieval-led candidate selection plus explicit coverage evidence.
 
-**Capability supply listing is deliberately bounded:**
-- Current capacity: `listEligibleCapabilitySupply` accepts at most the module's `MAX_ELIGIBLE_SUPPLY` and refuses when the requested or returned set exceeds the bound.
-- Files: `convex/capabilitySupply.ts`
-- Limit: A network with more eligible bindings than one bounded response cannot currently be traversed through this query.
-- Symptoms at limit: `limit_invalid` or `eligible_supply_limit_exceeded` rather than a partial result.
-- Scaling path: Add stable cursor pagination tied to deterministic ordering and preserve integrity validation for every returned offering/binding.
+**Route alternatives:**
+- Current capacity: 256 full Cartesian RoutePlans.
+- Limit behavior: Exceeding the cap returns an invalid graph rather than a bounded ranked subset.
+- Scaling path: Deterministic top-k graph search with declared pruning and uncertainty.
 
-**Answer rate limiting is process-local where used:**
-- Current capacity: Counters are bounded by one server process's memory and lifetime rather than a documented global rate.
-- Files: `src/modules/answer-thread/internal/turn-guard.ts`, `src/routes/api.answer.turn.ts`
-- Limit: Horizontal instances do not share counters and cold starts reset state.
-- Symptoms at limit: Inconsistent enforcement across instances or bursts passing during scale-out.
-- Scaling path: Move abuse counters to an atomic durable store with TTL and identity-aware keys while preserving `Retry-After` behavior.
+**Durable aggregate size:**
+- Current capacity: Customer Request aggregate is capped at 700,000 serialized bytes in `src/modules/customer-request/compiler.ts` and `convex/customerRequestV2.ts`.
+- Limit behavior: Compilation or integrity validation refuses the aggregate.
+- Scaling path: Store immutable graph/contract references separately from request-specific state and keep the Request aggregate compact.
+
+**No global Request throughput budget:**
+- Current capacity: Undefined; external-model calls are gated by authentication but not by a source-owned per-principal quota.
+- Symptoms at limit: OpenRouter cost spikes, 20-second request stalls, provider rate limits, and Convex action pressure.
+- Scaling path: Durable quotas, admission control, stage-level timeouts, and cost/latency SLOs.
 
 ## Dependencies at Risk
 
-**Fast-moving framework and deployment stack:**
-- Risk: React 19, TypeScript 6, Vite 8, TanStack Start/Router/AI, Convex, and Nitro are version-sensitive; Start and Router use different patch lines and Nitro is nightly.
-- Files: `package.json`, `package-lock.json`, `vite.config.ts`
-- Impact: SSR, streaming, generated routes, server functions, deployment output, or type inference can regress on upgrades.
-- Migration plan: Upgrade one subsystem at a time, pin runtime-critical dependencies, run source gates first, then browser and hosted readback gates.
+**OpenRouter is a hard availability dependency for every new or refined Request:**
+- Risk: Missing `OPENROUTER_API_KEY`, provider errors, invalid JSON, or a 20-second timeout returns `interpreter_unavailable`.
+- Files: `convex/customerRequestApplication.ts`, `src/modules/customer-request/openrouter-transport.ts`, `src/modules/customer-request/semantic-interpreter.ts`.
+- Impact: Deterministic contracts, registered supply, and the compiler remain unusable when one model broker is unavailable.
+- Mitigation path: Add an owned interpreter port with provider failover and a bounded deterministic path for exact structured requests. Do not fall back to keyword logic that can create authority or capabilities.
 
-**Early-version authentication and design packages:**
-- Risk: `web-bot-auth` is `0.1.3` and Astryx packages are `0.1.x`, so public APIs may change materially.
-- Files: `package.json`, `src/modules/routing-kernel/caller-identity.ts`, `src/components/ae/`, `src/styles/globals.css`
-- Impact: Assistant caller authentication or broad UI rendering can regress.
-- Migration plan: Keep third-party APIs behind owned boundaries, pin release versions, and preserve conformance and UI-contract tests during upgrades.
+**Clerk, Convex, Vercel, and deployment revision must all agree:**
+- Risk: Human Request calls require Clerk-to-Convex JWT; external agents require Clerk API keys plus the service HMAC; hosted proof requires exact Vercel and Convex revision readback.
+- Impact: Configuration drift presents as generic request unavailability.
+- Mitigation path: Keep exact-revision readback, add customer-readable dependency status, and distinguish auth, graph, interpreter, and provider failures in operator telemetry.
 
-**Multiple provider contracts are owned without provider SDKs:**
-- Risk: Handwritten Shippo and EasyPost HTTP mappings can drift from provider API versions and error contracts.
-- Files: `src/modules/provider-integrations/shipping/server.ts`, `tests/integration/shipping-provider-quote-input.test.ts`
-- Impact: Quotes can become unavailable or normalize incorrectly even when local fixtures pass.
-- Migration plan: Version provider adapters, monitor upstream changelogs, keep captured redacted contract fixtures, and require a configured provider smoke before hosted readiness claims.
+**Pinned nightly Nitro and fast-moving UI/runtime packages:**
+- Risk: `package.json` aliases `nitro` to a dated nightly and uses fast-moving TanStack Start/Router/AI, React 19, Convex, and Astryx packages.
+- Impact: SSR, streaming, route generation, headers, authentication propagation, or presentation can regress.
+- Mitigation path: Pin exact runtime dependencies, upgrade one subsystem at a time, and run authenticated browser plus hosted Request gates.
 
 ## Missing Critical Features
 
-**Capability-supply provider proof is not yet hosted proof:**
-- Problem: Current code and tests establish registration and fixture-backed adapter contracts, but not current live provider credentials, network behavior, or deployed durable readback.
-- Current workaround: Deterministic Shippo/EasyPost response fixtures and sandbox registrations prove local normalization and persistence seams.
-- Blocks: Claims that production provider supply is currently reachable or reliable.
-- Implementation complexity: Medium to high; requires secret custody, provider sandbox/production separation, deployed smoke data, redacted evidence, failure drills, and operational runbooks.
+**One canonical customer front door:**
+- Missing: The homepage query and `/engine` Request lifecycle are not connected.
+- Blocks: The neutral engine changing the product customers actually use.
+- Required proof: Submit on `/`, resume the same Request, and observe the same state through human and external-agent surfaces.
 
-**Global abuse controls for assistant and inquiry entrypoints:**
-- Problem: Process-local controls cannot provide consistent distributed enforcement under horizontal scale.
-- Current workaround: Local bounded rate limiting, validation, Clerk/Convex auth, and admission gates constrain individual paths.
-- Blocks: Defensible global abuse posture at production traffic levels.
-- Implementation complexity: Medium; requires atomic durable counters, TTL, trusted identity keys, retry semantics, observability, and privacy review.
+**Customer-semantic RoutePlan projection and selection:**
+- Missing: RoutePlans do not cross the HTTP/UI boundary.
+- Blocks: Legible comparison, exact mandate, multi-step preparation, and route recovery.
+- Required proof: A two-step plan displayed without protocol choreography, with declared cost, data use, effects, evidence, expiry, alternatives, and uncertainty.
 
-**Release evidence does not prove all external outcomes:**
-- Problem: The hosted CI job verifies Convex codegen and a revision-bound kernel proof manifest after push, while provider notification, browser accessibility, inquiry support, and shipping provider checks remain separate commands or are not represented as mandatory provider smokes.
-- Current workaround: Dedicated Playwright deploy-smoke scripts and local source gates exist.
-- Blocks: One-command proof of the complete deployed operating posture.
-- Implementation complexity: Medium; external credentials and stable seeded state are required. This must not be reframed as proof of booking, payment, dispatch, or fulfillment.
+**Composite preparation, mandate, dispatch, and recovery:**
+- Missing: Production application behavior remains single-action despite composite compilation in the dirty tree.
+- Blocks: A real RoutePlan outcome rather than a renamed option or persisted DAG.
+- Required proof: Exact selected route, cumulative spend/data authority, step idempotency, output-to-input validation, unknown-outcome reconciliation, and no duplicate effects.
+
+**Useful registered capability supply:**
+- Missing evidence: Source-controlled hosted proof registers two labelled sandbox businesses for `sandbox.reference.lookup`; it does not prove a customer-relevant business category is reachable.
+- Blocks: Honest “real business options” claims for arbitrary customer queries.
+- Required proof: At least two dissimilar useful capabilities and businesses registered through the normal publication path, with hosted readiness and query coverage. Sandbox remains clearly labelled.
+
+**Human approval and recovery journey:**
+- Missing: Prepared-action approval and attempt controls are absent from the workspace, and durable Request identity is not recoverable after navigation.
+- Blocks: The documented stop-and-return contract for external agents and customers.
+- Required proof: Browser-based review, exact approval, resume, run, unknown outcome, and resolution against production-shaped projections.
+
+**Generic transport execution for composite steps:**
+- Missing: Capability publication/readiness recognizes AE envelope, OpenAPI HTTP, MCP, and x402, but the current customer Request preparation/execution path is not proven across composite generic adapters.
+- Blocks: Neutrality beyond registration and compilation.
+- Required proof: Substitute dissimilar businesses and transports with registration/config-only changes and no kernel, caller prompt, Request API, or UI changes.
 
 ## Test Coverage Gaps
 
-**Browser and accessibility suites are not part of pull-request source CI:**
-- What's not tested: `.github/workflows/kernel-release-gate.yml` invokes `npm run test:release:source`, which does not include `test:e2e` or `test:a11y`.
-- Files: `.github/workflows/kernel-release-gate.yml`, `package.json`, `playwright.config.ts`, `tests/e2e/`, `tests/e2e/a11y/`
-- Risk: Navigation, hydration, auth redirects, keyboard behavior, and accessible-name regressions can merge despite a green source job.
-- Priority: High for user-facing changes.
-- Difficulty to test: Browser provisioning and authenticated state add CI time and setup, but commands already exist.
+**Browser tests do not submit a real Request:**
+- What's tested: `tests/e2e/a11y/engine-product-a11y.spec.ts` loads `/engine`, fills the textarea, checks the absence of a budget field, and focuses “Explore.”
+- What's missing: Clicking Explore, authentication transition, clarification, disclosure, options, prepared action, approval, run, recovery, and reload/resume.
+- Priority: Critical.
 
-**Pull requests do not run hosted proof:**
-- What's not tested: The `hosted-proof` job is explicitly skipped for pull requests and requires production environment secrets after push.
-- Files: `.github/workflows/kernel-release-gate.yml`, `tools/release/verify-kernel-proof-manifest.mjs`, `package.json`
-- Risk: Source proof can pass while deployment credentials, current Convex state, or revision-bound evidence are unavailable.
-- Priority: High before deployment/readiness claims; appropriate to classify separately from local correctness.
-- Difficulty to test: Requires protected secrets and a deployed environment tied to a source revision.
+**Workspace tests mock desired responses instead of traversing production handlers:**
+- What's tested: `tests/unit/customer-request/customer-request-workspace.test.tsx` supplies hand-authored `fetch` responses.
+- Blind spots: It mocks revision editing as successful despite the real Convex conflict and mocks `options_ready` with option arrays rather than the real `preparedAction` shape.
+- Priority: Critical.
 
-**Provider integrations rely primarily on deterministic fixtures:**
-- What's not tested: Live Shippo/EasyPost API compatibility, credential validity, rate-limit behavior, response-size behavior, and real provider latency are not proven by the checked-in adapter tests.
-- Files: `src/modules/provider-integrations/shipping/server.ts`, `tests/integration/shipping-provider-quote-input.test.ts`
-- Risk: Provider API drift or configuration failure appears only after deployment.
-- Priority: High before claiming provider availability.
-- Difficulty to test: Needs safe provider accounts, secrets, stable test shipments, redaction, and cost/rate-limit controls.
+**Hosted cold-agent proof is intentionally narrow:**
+- What's tested: `.github/workflows/kernel-release-gate.yml` seeds exactly two labelled sandbox businesses and asks “Find the cheapest labelled sandbox option,” with a scripted fallback fact. `src/modules/customer-request/hosted-agent-journey.ts` drives the API directly.
+- What's missing: Arbitrary customer query coverage, real supply, homepage parity, browser interaction, route display, and composite execution.
+- Priority: Critical before customer-value claims; the existing proof remains valid as sandbox contract proof.
 
-**Performance and concurrency lack executable budgets:**
-- What's not tested: Convex scan cardinality, answer-turn latency, provider fan-out latency, bundle size, and concurrent idempotency behavior lack committed pass/fail SLOs.
-- Files: `convex/catalog.ts`, `convex/discovery.ts`, `src/modules/answer-thread/internal/turn-orchestrator.ts`, `src/modules/provider-integrations/shipping/server.ts`, `vite.config.ts`
-- Risk: Regressions emerge only under realistic data or traffic.
-- Priority: Medium now; high before load-sensitive launch.
-- Difficulty to test: Requires representative data, hosted telemetry, controlled concurrency, and agreed service objectives.
+**Multi-capability integration does not cross the product boundary:**
+- What's tested: `tests/integration/customer-request-v2-multi-capability-route.test.ts` directly constructs two contracts, compiles, commits, and reads back a RoutePlan.
+- What's missing: Natural-language interpreter, public API, customer projection, UI, exact route approval, generic transport invocation, and recovery.
+- Current state: The focused compiler and application proof passed for commit `59dbf7f6`; that proof still stops below HTTP projection and UI.
+- Priority: Critical for the RoutePlan frontier.
 
-**The current capability-supply tree has not been proven by this mapping task:**
-- What's not tested: Whether all new schema, generated API, authority, seeds, provider adapters, and tests compose under the complete release gate.
-- Files: `convex/capabilitySupply.ts`, `src/modules/capability-supply/`, `src/modules/provider-integrations/`, `convex/_generated/api.d.ts`, `package.json`, `tests/unit/capability-supply/`, `tests/integration/capability-supply-registration.test.ts`
-- Risk: Missing exports, stale generated files, authority mismatch, or test/source disagreement can remain hidden in a static map.
-- Priority: High before integrating the working tree.
-- Difficulty to test: Start with focused capability-supply unit/integration/import tests, then codegen, typecheck, and the source release contract; hosted/provider proof remains separate.
+**Release source gate omits browser behavior:**
+- Evidence: `test:release:source` in `package.json` runs lint, typecheck, unit/integration/type/import/copy/SEO/UI-contract tests and build, but not `test:e2e` or `test:a11y`.
+- Risk: A green source release can ship a visually present but nonfunctional customer journey.
+- Priority: High; add a small authenticated and anonymous Request browser contract to release qualification.
+
+**No performance or cost budgets cover Request interpretation:**
+- Missing: Graph load time, descriptor count/bytes, OpenRouter latency/cost, compile time, route count, durable action latency, and concurrent idempotency SLOs.
+- Risk: The engine can become expensive or time out before functional tests fail.
+- Priority: High before broad agent access.
+
+**Privacy disclosure parity is untested:**
+- Missing: A test that all external processors and recipients used by Ask/Request flows appear in current public privacy copy and authority reviews.
+- Risk: Source adds a new external model or provider while human disclosure remains stale.
+- Priority: High.
+
+## Overclaim Guardrails
+
+- A clean compiler or persistence test does not prove a customer can see, choose, approve, or run a RoutePlan.
+- Exact-revision hosted sandbox proof does not prove useful real supply or customer value.
+- A catalog listing is not an eligible capability publication.
+- `options_ready` is not product completion while the real prepared-action projection renders as zero options.
+- “External agent journey” describes direct API traversal; it does not prove human UI parity.
+- “Source complete” must not mean files and validators exist; the vertical customer journey must be executable.
+- Do not claim the engine supports a query merely because OpenRouter can interpret it. The graph must contain useful eligible supply and return a legible customer decision.
 
 ---
 
-*Concerns audit: 2026-07-13*
-*Update as issues are fixed or new ones are discovered.*
+*Concerns audit: 2026-07-14*
+*Update as verified defects are fixed, dirty-tree blockers are integrated, or hosted evidence changes.*

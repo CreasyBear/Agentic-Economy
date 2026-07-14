@@ -187,6 +187,9 @@ const eligibleSupplyValue = v.object({
     cancellation: cancellationValue, adapterId: v.string(), configJson: v.string(), configDigest: v.string(),
     admission: v.literal('admitted'), conformance: v.literal('conformant'), registrationHash: v.string(),
   }),
+  publication: v.optional(v.object({
+    publicationRef: v.string(), revision: v.number(), readinessValidUntil: v.number(),
+  })),
 })
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
@@ -247,9 +250,42 @@ const capabilityGraphNodeValue = v.object({
   semantic: v.object({
     capabilityId: v.string(), name: v.string(), description: v.string(),
     inputSchemaDigest: v.string(), outputSchemaDigest: v.string(),
-    customerAnnotations: v.any(), searchTerms: v.array(v.string()), // runtime-validated JsonValue boundary
+    customerAnnotations: v.array(v.object({
+      annotationId: v.string(), semanticIdentity: v.optional(v.string()),
+      document: v.union(v.literal('input'), v.literal('output')),
+      pointer: v.string(), label: v.string(),
+      role: v.union(
+        v.literal('request'), v.literal('constraint'), v.literal('comparison'), v.literal('commitment'),
+        v.literal('result'), v.literal('completion_evidence'), v.literal('recovery'),
+      ),
+      inference: v.optional(v.union(v.literal('allowed'), v.literal('customer_required'))),
+    })), searchTerms: v.array(v.string()),
   }),
-  policy: v.object({ effects: v.any(), dataUse: v.any(), lifecycle: v.any() }), // runtime-validated JsonValue boundary
+  policy: v.object({
+    effects: v.array(v.object({
+      effectId: v.string(),
+      class: v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')),
+      authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+      reversibility: v.union(
+        v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible'),
+      ),
+    })),
+    dataUse: v.array(v.object({
+      effectId: v.string(), inputPointer: v.string(),
+      classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+      phase: v.union(v.literal('preparation'), v.literal('execution')),
+      recipient: v.union(
+        v.object({ kind: v.literal('candidate_binding') }),
+        v.object({ kind: v.literal('selected_binding') }),
+        v.object({ kind: v.literal('named_recipient'), recipientId: v.string() }),
+      ),
+      purposes: v.array(v.string()),
+    })),
+    lifecycle: v.object({
+      idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
+      recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    }),
+  }),
   cost: v.object({ price: priceValue, commercialRelationship: commercialRelationshipValue }),
   trust: v.object({ tier: v.string(), publicStatus: v.string() }),
   liveness: v.object({
@@ -332,7 +368,7 @@ const INITIAL_PUBLICATION_LIFECYCLE: PublicationLifecycle = {
 export const publishCapability = mutation({
   args: {
     businessId: v.id('businesses'),
-    source: v.any(), // runtime-validated JsonValue boundary
+    source: v.any(), // runtime-validated capability publication boundary
     offering: v.optional(capabilityPublicationOfferingValue),
     binding: v.optional(capabilityPublicationBindingValue),
     ...contextFields,
@@ -605,18 +641,38 @@ const probeOutcomeValue = v.union(
   v.literal('response_too_large'), v.literal('response_invalid'),
 )
 
-function probeTargetDigest(publication: Doc<'capabilityPublications'>, binding: Doc<'capabilityTransportBindings'>) {
+function probeTargetDigest(
+  publication: Doc<'capabilityPublications'>,
+  offering: Doc<'capabilityOfferings'>,
+  binding: Doc<'capabilityTransportBindings'>,
+) {
   return canonicalDigest({
     publicationRef: publication.publicationRef, revision: publication.revision,
     bindingId: binding.bindingId, capabilityId: publication.capabilityId,
     endpointUrl: binding.endpointUrl, credentialRef: binding.credentialRef,
     adapterId: binding.adapterId, configDigest: binding.configDigest,
-    bindingRegistrationHash: binding.registrationHash,
+    offeringRegistrationHash: offering.registrationHash, offeringEligibilityHash: offering.eligibilityHash,
+    offeringStatus: offering.status, bindingRegistrationHash: binding.registrationHash,
+    bindingEligibilityHash: binding.eligibilityHash, bindingAdmission: binding.admission,
+    bindingConformance: binding.conformance, businessId: publication.businessId,
+    contractDigest: publication.contractDigest,
   })
 }
 
 export const readCapabilityProbeTarget = internalQuery({
   args: { publicationRef: v.string(), expectedRevision: v.number() },
+  returns: v.union(
+    v.object({ kind: v.literal('unavailable') }),
+    v.object({
+      kind: v.literal('available'),
+      target: v.object({
+        publicationRef: v.string(), revision: v.number(), bindingId: v.string(), capabilityId: v.string(),
+        endpointUrl: v.string(), credentialRef: v.string(), adapterId: v.string(),
+        probeKind: v.union(v.literal('ae_quote'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
+        targetDigest: v.string(),
+      }),
+    }),
+  ),
   handler: async (ctx, args) => {
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
@@ -635,19 +691,38 @@ export const readCapabilityProbeTarget = internalQuery({
       publicationRef: publication.publicationRef, revision: publication.revision,
       bindingId: binding.bindingId, capabilityId: publication.capabilityId,
       endpointUrl: binding.endpointUrl, credentialRef: binding.credentialRef,
-      adapterId: binding.adapterId, targetDigest: probeTargetDigest(publication, binding),
+      adapterId: binding.adapterId,
+      probeKind: publication.sourceKind === 'mcp' ? 'mcp' as const
+        : publication.sourceKind === 'openapi_http' ? 'openapi_http' as const
+        : publication.sourceKind === 'x402' ? 'x402' as const : 'ae_quote' as const,
+      targetDigest: probeTargetDigest(publication, offering, binding),
     } }
   },
 })
 
 export const recordCapabilityProbeResult = internalMutation({
   args: { publicationRef: v.string(), expectedRevision: v.number(), targetDigest: v.string(), outcome: probeOutcomeValue },
+  returns: v.union(
+    v.object({ kind: v.literal('observed'), publicationRef: v.string(), revision: v.number(), lifecycle: publicationLifecycleValue }),
+    v.object({
+      kind: v.literal('refused'),
+      reason: v.union(v.literal('revision_changed'), v.literal('target_changed')),
+    }),
+  ),
   handler: async (ctx, args) => {
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
     if (publication === null || publication.disposition !== 'current') return { kind: 'refused' as const, reason: 'revision_changed' as const }
     const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique()
-    if (binding === null || probeTargetDigest(publication, binding) !== args.targetDigest) return { kind: 'refused' as const, reason: 'target_changed' as const }
+    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique()
+    const business = await publishedBusiness(ctx.db, publication.businessId)
+    const contract = await getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication))
+    if (binding === null || offering === null || business === null || contract.kind !== 'found'
+      || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
+      || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
+      || probeTargetDigest(publication, offering, binding) !== args.targetDigest) {
+      return { kind: 'refused' as const, reason: 'target_changed' as const }
+    }
     const now = Date.now()
     const healthy = args.outcome === 'healthy'
     const credentialState = args.outcome === 'credential_unavailable' || args.outcome === 'credential_rejected' ? 'unavailable' as const : 'ready' as const
@@ -657,8 +732,6 @@ export const recordCapabilityProbeResult = internalMutation({
       credentialState, healthState, readinessObservedAt: now, readinessValidUntil: validUntil,
       readinessEvidenceRefs: [`probe:${args.outcome}`], updatedAt: now,
     })
-    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique()
-    if (offering === null) throw new Error('capability_publication_supply_integrity_failure')
     return { kind: 'observed' as const, publicationRef: publication.publicationRef, revision: publication.revision,
       lifecycle: publicationLifecycle({ ...publication, credentialState, healthState, readinessObservedAt: now, readinessValidUntil: validUntil }, offering, binding, now) }
   },
@@ -715,7 +788,7 @@ export const refreshCapability = mutation({
   args: {
     publicationRef: v.string(),
     expectedRevision: v.number(),
-    source: v.any(), // runtime-validated JsonValue boundary
+    source: v.any(), // runtime-validated capability publication boundary
     offering: v.optional(capabilityPublicationOfferingValue),
     binding: v.optional(capabilityPublicationBindingValue),
     ...contextFields,
@@ -919,7 +992,15 @@ export const queryCapabilityGraph = query({
           description: contract.contract.description,
           inputSchemaDigest: canonicalDigest(contract.contract.inputSchema as StableHashValue),
           outputSchemaDigest: canonicalDigest(contract.contract.outputSchema as StableHashValue),
-          customerAnnotations: contract.contract.customerAnnotations,
+          customerAnnotations: contract.contract.customerAnnotations.map((annotation) => ({
+            annotationId: annotation.annotationId,
+            document: annotation.document,
+            pointer: annotation.pointer,
+            label: annotation.label,
+            role: annotation.role,
+            ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
+            ...(annotation.inference === undefined ? {} : { inference: annotation.inference }),
+          })),
           searchTerms: offering.searchTerms,
         },
         policy: {
@@ -1532,6 +1613,7 @@ export async function listEligibleCapabilitySupply(
   const supplies: Array<{
     offering: ReturnType<typeof eligibleOfferingProjection>
     binding: ReturnType<typeof eligibleBindingProjection>
+    publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
   }> = []
   for (const binding of bindings) {
     if (!bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
@@ -1555,7 +1637,22 @@ export async function listEligibleCapabilitySupply(
       }
       continue
     }
-    supplies.push({ offering: eligibleOfferingProjection(offering), binding: eligibleBindingProjection(binding) })
+    const publication = await db.query('capabilityPublications')
+      .withIndex('by_bindingId_and_disposition', (query) => (
+        query.eq('bindingId', binding.bindingId).eq('disposition', 'current')
+      )).unique()
+    const activePublication = publication !== null
+      && publication.readinessValidUntil !== undefined
+      && publicationLifecycle(publication, offering, binding, Date.now()).state === 'active'
+      ? {
+          publicationRef: publication.publicationRef, revision: publication.revision,
+          readinessValidUntil: publication.readinessValidUntil,
+        }
+      : undefined
+    supplies.push({
+      offering: eligibleOfferingProjection(offering), binding: eligibleBindingProjection(binding),
+      ...(activePublication === undefined ? {} : { publication: activePublication }),
+    })
   }
   return { kind: 'available' as const, supplies }
 }

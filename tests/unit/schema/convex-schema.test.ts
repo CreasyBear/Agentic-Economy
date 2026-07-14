@@ -331,6 +331,12 @@ const requiredIndexes = {
   customerRequestCapabilityContracts: ['by_capabilityContractId', 'by_status_and_capabilityContractId'],
   capabilityLaunchSupportRecords: ['by_supportRecordId'],
   capabilityContractDocuments: ['by_capabilityId_and_version', 'by_status_and_capabilityId_and_version'],
+  capabilityPublications: [
+    'by_publicationRef_and_revision',
+    'by_networkId_and_disposition',
+    'by_businessId_and_disposition',
+    'by_bindingId_and_disposition',
+  ],
   capabilityOfferings: [
     'by_offeringId',
     'by_businessId_and_status',

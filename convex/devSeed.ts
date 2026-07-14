@@ -1,4 +1,5 @@
 import { internalMutation } from './_generated/server'
+import { internal } from './_generated/api'
 import { v } from 'convex/values'
 
 import {
@@ -35,6 +36,7 @@ export const seedDevCatalog = internalMutation({
     supportRecordId: v.string(),
     businessIdsBySlug: v.record(v.string(), v.string()),
     sandboxV2Bindings: v.array(v.string()),
+    sandboxCapabilityPublicationRef: v.string(),
   }),
   handler: async (ctx) => {
     const seedStartedAt = Date.now()
@@ -46,18 +48,134 @@ export const seedDevCatalog = internalMutation({
     const sandboxBusinesses = await registerSandboxBusinesses(db, sandboxFixtures, seedStartedAt)
     const sandboxRegistrations = await registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000)
     const sandboxV2Bindings = await admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500)
+    const sandboxCapabilityPublicationRefs = []
+    for (const [index, registration] of sandboxRegistrations.entries()) {
+      const publicationRef = await seedSandboxCapabilityPublication(
+        ctx.db, registration, seedStartedAt + 2_750 + index,
+      )
+      sandboxCapabilityPublicationRefs.push(publicationRef)
+      await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+        publicationRef, expectedRevision: 1,
+      })
+    }
+    const sandboxCapabilityPublicationRef = sandboxCapabilityPublicationRefs[0]
+    if (sandboxCapabilityPublicationRef === undefined) {
+      throw new Error('sandbox_capability_publication_registration_missing')
+    }
     await retireLegacySandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
     return {
       ...result,
       seededSlugs: [...result.seededSlugs, ...sandboxBusinesses.seededSlugs],
       businessIdsBySlug: { ...result.businessIdsBySlug, ...sandboxBusinesses.businessIdsBySlug },
       sandboxV2Bindings,
+      sandboxCapabilityPublicationRef,
     }
+  },
+})
+
+export const seedTestCapabilityPublication = internalMutation({
+  args: {},
+  returns: v.object({ publicationRef: v.string(), credentialRef: v.string() }),
+  handler: async (ctx) => {
+    const profile = SANDBOX_PROVIDER_PROFILES.one
+    const business = await ctx.db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug))
+      .unique()
+    let offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+      .unique()
+    let binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
+      .unique()
+    if (business !== null && (offering === null || binding === null)) {
+      const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, Date.now())
+      await admitSandboxV2Supply(ctx.db, registrations, Date.now() + 500)
+      offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+        .unique()
+      binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
+        .unique()
+    }
+    if (business === null || offering === null || binding === null || offering.businessId !== business._id) {
+      throw new Error('sandbox_capability_publication_supply_missing')
+    }
+    const publicationRef = await seedSandboxCapabilityPublication(ctx.db, {
+      slug: profile.slug,
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: {
+        capabilityId: offering.capabilityId,
+        version: offering.version,
+        contractDigest: offering.contractDigest,
+      },
+      offeringRegistrationHash: offering.registrationHash,
+      bindingRegistrationHash: binding.registrationHash,
+    }, Date.now())
+    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      publicationRef, expectedRevision: 1,
+    })
+    return { publicationRef, credentialRef: binding.credentialRef }
   },
 })
 
 function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+}
+
+async function seedSandboxCapabilityPublication(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registration: SandboxV2SupplyRegistration | undefined,
+  observedAt: number,
+): Promise<string> {
+  if (registration === undefined) throw new Error('sandbox_capability_publication_registration_missing')
+  const business = await db.query('businesses')
+    .withIndex('by_slug', (query) => query.eq('slug', registration.slug))
+    .unique()
+  if (business === null) throw new Error('sandbox_capability_publication_business_missing')
+  const existing = await db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => (
+      query.eq('publicationRef', registration.offeringId).eq('revision', 1)
+    ))
+    .unique()
+  const sourceDigest = canonicalDigest({
+    kind: 'seeded_sandbox_capability',
+    offeringId: registration.offeringId,
+    bindingId: registration.bindingId,
+  })
+  if (existing !== null) {
+    if (
+      existing.businessId !== business._id
+      || existing.sourceDigest !== sourceDigest
+      || existing.offeringId !== registration.offeringId
+      || existing.bindingId !== registration.bindingId
+      || existing.contractDigest !== registration.contractRef.contractDigest
+    ) throw new Error('sandbox_capability_publication_identity_mismatch')
+    await db.patch(existing._id, {
+      credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      readinessObservedAt: undefined, readinessValidUntil: undefined, updatedAt: observedAt,
+    })
+    return existing.publicationRef
+  }
+  await db.insert('capabilityPublications', {
+    publicationRef: registration.offeringId,
+    revision: 1,
+    businessId: business._id,
+    networkId: 'ae:public',
+    sourceKind: 'ae_envelope',
+    sourceDigest,
+    ...registration.contractRef,
+    offeringId: registration.offeringId,
+    bindingId: registration.bindingId,
+    disposition: 'current',
+    credentialState: 'unobserved',
+    healthState: 'unobserved',
+    readinessEvidenceRefs: [],
+    registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
+    createdAt: observedAt,
+    updatedAt: observedAt,
+  })
+  return registration.offeringId
 }
 
 export async function registerSandboxBusinesses(

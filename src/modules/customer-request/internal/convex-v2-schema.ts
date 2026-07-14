@@ -490,10 +490,17 @@ const disclosureV2Value = v.object({
     classification: v.union(v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
   })),
 })
+const registeredPriceV2Value = v.union(
+  v.object({ kind: v.literal('fixed'), currency: v.string(), amountMinor: v.number() }),
+  v.object({ kind: v.literal('range'), currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
+  v.object({ kind: v.literal('on_request') }),
+)
 export const requestEvaluationCandidateV2Value = v.object({
   candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
   contractRef: capabilityContractRefV2Value, selectionKey: v.string(), semanticDigest: v.string(),
   offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
+  publicationRef: v.optional(v.string()), publicationRevision: v.optional(v.number()), readinessValidUntil: v.optional(v.number()),
+  price: v.optional(registeredPriceV2Value),
   viability: v.union(
     v.object({ kind: v.literal('viable') }),
     v.object({ kind: v.literal('blocked_on_information'), inputs: v.array(v.object({
@@ -510,6 +517,74 @@ const proposedActionV2Value = v.object({
   actionId: v.string(), contractRef: capabilityContractRefV2Value,
   selectionKey: v.string(), semanticDigest: v.string(), dependsOn: v.array(v.string()),
   inputs: v.array(requestFactV2Value),
+  inputMappings: v.array(v.object({
+    mappingId: v.string(),
+    semanticIdentity: v.string(),
+    source: v.object({ actionId: v.string(), annotationId: v.string(), evidenceId: v.string(), outputPointer: v.string() }),
+    target: v.object({ annotationId: v.string(), inputKey: v.string(), inputPointer: v.string() }),
+    schemaIdentity: v.string(), authority: v.literal('registered_contract_semantics'),
+  })),
+})
+const routePlanV2Value = v.object({
+  routePlanId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
+  steps: v.array(v.object({
+    actionId: v.string(), candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
+    contractRef: capabilityContractRefV2Value, offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
+    publicationRef: v.string(), publicationRevision: v.number(), price: registeredPriceV2Value,
+    dataUse: v.array(v.object({
+      effectId: v.string(), inputPointer: v.string(),
+      classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+      phase: v.union(v.literal('preparation'), v.literal('execution')),
+      recipient: v.union(
+        v.object({ kind: v.literal('candidate_binding') }),
+        v.object({ kind: v.literal('selected_binding') }),
+        v.object({ kind: v.literal('named_recipient'), recipientId: v.string() }),
+      ),
+      purposes: v.array(v.string()),
+    })),
+    effects: v.array(v.object({
+      effectId: v.string(), class: v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')),
+      authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+      reversibility: v.union(v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible')),
+    })),
+    evidence: v.array(v.object({
+      evidenceId: v.string(), outputPointer: v.string(), purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
+      annotationId: v.string(), label: v.string(), role: v.union(v.literal('comparison'), v.literal('completion_evidence'), v.literal('recovery')),
+      semanticIdentity: v.optional(v.string()), guaranteed: v.boolean(), schemaIdentity: v.string(),
+    })),
+    recovery: v.object({
+      idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
+      recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    }),
+  })),
+  edges: v.array(v.object({
+    mappingId: v.string(),
+    semanticIdentity: v.string(),
+    source: v.object({ actionId: v.string(), annotationId: v.string(), evidenceId: v.string(), outputPointer: v.string() }),
+    target: v.object({ annotationId: v.string(), inputKey: v.string(), inputPointer: v.string() }),
+    schemaIdentity: v.string(), authority: v.literal('registered_contract_semantics'),
+    fromStep: v.string(), toStep: v.string(),
+  })),
+  maximumTotalCost: v.union(
+    v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
+    v.object({ kind: v.literal('requires_preparation') }),
+  ),
+  expiresAt: v.number(), uncertainty: v.array(v.literal('cost_requires_preparation')),
+  fallbacks: v.object({
+    ordering: v.literal('unranked'),
+    alternatives: v.array(v.object({
+      alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
+    })),
+  }), authority: v.literal('proposal_only'), routeDigest: v.string(),
+  comparison: v.object({
+    fit: v.literal('all_steps_viable'), completeness: v.literal('complete'),
+    dataExposureCount: v.number(), irreversibleEffectCount: v.number(), evidenceRequirementCount: v.number(),
+    trust: v.literal('registered_live_supply'),
+    ordering: v.union(
+      v.object({ kind: v.literal('unranked') }),
+      v.object({ kind: v.literal('ranked'), objective: v.literal('lowest_maximum_price'), position: v.number() }),
+    ),
+  }),
 })
 export const customerRequestV2AggregateValue = v.object({
   aggregateVersion: v.literal(2),
@@ -533,8 +608,18 @@ export const customerRequestV2AggregateValue = v.object({
   }),
   plan: v.object({
     planRevisionId: v.string(), requestId: v.string(), requestRevision: v.number(), proposedByAgentId: v.string(),
-    interpreterId: v.string(), proposalDigest: v.string(), registrySnapshotDigest: v.string(),
+    interpreterId: v.string(),
+    interpretationEvidence: v.union(
+      v.object({
+        kind: v.literal('model_output'), systemInstructionVersion: v.string(),
+        inputDigest: v.string(), outputDigest: v.string(),
+      }),
+      v.object({ kind: v.literal('deterministic_input') }),
+    ),
+    proposalDigest: v.string(), registrySnapshotDigest: v.string(),
     actions: v.array(proposedActionV2Value), completionRequirements: v.array(completionRequirementV2Value),
+    compilerVersion: v.literal('customer-request-route-compiler:v1'), authority: v.literal('proposal_only'),
+    routes: v.array(routePlanV2Value),
     planDigest: v.string(), createdAt: v.number(),
   }),
   outcome: v.union(v.literal('plan_ready'), v.literal('needs_information'), v.literal('unsupported')),

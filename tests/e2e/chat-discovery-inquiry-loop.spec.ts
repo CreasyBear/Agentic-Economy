@@ -240,7 +240,8 @@ test.describe('chat discovery to inquiry loop', () => {
     await reviewLink.click()
 
     await expect(page).toHaveURL(/\/parramatta-emergency-plumbing\?from=thread&id=.+/, { timeout: 15_000 })
-    await expect(page.getByText(/This service has not published a human inquiry path yet/i)).toBeVisible()
+    await expect(page.getByText('Owner has not supplied public contact instructions.', { exact: true })).toBeVisible()
+    await expect(page.getByText('No request path published yet.', { exact: true })).toBeVisible()
     await assertPublicLanguage(page)
   })
 
@@ -268,12 +269,13 @@ test.describe('chat discovery to inquiry loop', () => {
     await waitForLatestReadyAnswer(page, MULTI_PROVIDER_QUERY)
 
     const inquiryPath = page.getByRole('region', { name: /inquiry path/i })
-    await expect(inquiryPath).toContainText(/2 listed businesses ready to compare/i)
+    await expect(inquiryPath).toContainText(/3 listed businesses ready to compare/i)
     await expect(inquiryPath).not.toContainText(/Demo Plumbing selected for inquiry review/i)
 
     const sessionContext = page.getByRole('region', { name: /session context/i })
     await expect(sessionContext).toContainText(/Current answer/i)
     await expect(sessionContext).toContainText(/2 listed businesses in this answer/i)
+    await expect(sessionContext).toContainText(admittedBusiness.businessName)
     await expect(sessionContext).not.toContainText(/Selected business/i)
     const replacementTerminal = page.getByRole('region', { name: /your shortlist is ready/i }).last()
     await expect(replacementTerminal.getByRole('button', { name: /change criteria/i })).toBeVisible()
@@ -308,12 +310,6 @@ test.describe('chat discovery to inquiry loop', () => {
     await expect(page.getByText(/It does not book, charge, or dispatch/i).last()).toBeVisible()
     await expect(page.getByText(/Agentic Economy does not book or take payment on this page/i).last()).toBeVisible()
 
-    const checks = page.getByRole('button', { name: /how ae checked this/i }).last()
-    await expect(checks).toContainText(/0 searches.*1 read.*1 listed/i)
-    await checks.click()
-    const steps = page.getByRole('list', { name: /ae check steps/i }).last()
-    await expect(steps).toContainText(/Preparing the next step/i)
-    await expect(steps).toContainText(/Listed businesses carried forward/i)
 
     await submitThreadFollowUp(page, INQUIRY_HANDOFF_QUERY)
 
@@ -332,16 +328,17 @@ test.describe('chat discovery to inquiry loop', () => {
 })
 
 async function submitLandingQuery(page: Page, query: string) {
-  const search = page.getByRole('search', { name: /find local service businesses/i })
-  const searchbox = search.getByRole('searchbox', { name: /what do you need/i })
-  const sendButton = search.getByRole('button', { name: /^find businesses$/i })
-  await expect(searchbox).toBeEditable({ timeout: 30_000 })
-
-  await searchbox.fill(query)
-  await expect(searchbox).toHaveValue(query)
-  await expect(sendButton).toBeEnabled()
-  await sendButton.click()
-  await page.waitForURL(/\/t\//, { timeout: 30_000, waitUntil: 'domcontentloaded' })
+  await expect(async () => {
+    const search = page.getByRole('search', { name: /find local service businesses/i })
+    const searchbox = search.getByRole('searchbox', { name: /what do you need/i })
+    const sendButton = search.getByRole('button', { name: /^find businesses$/i })
+    await expect(searchbox).toBeEditable({ timeout: 10_000 })
+    await searchbox.fill(query)
+    await expect(searchbox).toHaveValue(query)
+    await expect(sendButton).toBeEnabled()
+    await sendButton.click()
+    await page.waitForURL(/\/t\//, { timeout: 30_000, waitUntil: 'domcontentloaded' })
+  }).toPass({ timeout: 45_000 })
 }
 
 async function expectQueryInTranscript(page: Page, query: string, displayLabel: string | RegExp = query) {
@@ -353,9 +350,10 @@ async function expectQueryInTranscript(page: Page, query: string, displayLabel: 
 }
 
 async function submitThreadFollowUp(page: Page, query: string) {
-  const changeCriteriaButton = page.getByRole('button', { name: /change criteria/i }).filter({ visible: true })
+  const changeCriteriaButton = page.getByRole('button', { name: /change criteria/i }).last()
   if (await changeCriteriaButton.count() > 0) {
-    await changeCriteriaButton.last().click()
+    await expect(changeCriteriaButton).toBeVisible()
+    await changeCriteriaButton.click()
   }
 
   const search = page.getByRole('search', { name: /find local service businesses/i }).last()

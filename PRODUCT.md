@@ -1,5 +1,18 @@
 # Agentic Economy product authority
 
+This document defines both the destination and the evidence required to claim
+progress toward it. Read the two states separately:
+
+- **Current evidenced state** describes behavior present in production source
+  and confirmed through the relevant local or hosted journey.
+- **Target product contract** describes what AE is being engineered to become.
+  It is an architectural requirement, not a public feature claim.
+
+Source and readback decide current truth. Closing an issue, persisting a new
+object, or passing a narrow sandbox proof does not move a capability into the
+current product unless a customer or external agent can reach and use it through
+the intended surface.
+
 ## Customer promise
 
 **Your agent knows who to call.**
@@ -9,7 +22,7 @@ provider infrastructure. They tell their agent what they need. Agentic Economy
 helps that agent find the right real businesses, compare the available ways
 forward, and carry the work into action.
 
-The customer experience is:
+The target customer experience is:
 
 1. **Ask** — say what you need in your own words.
 2. **Clarify** — answer only the questions that materially improve the choice.
@@ -18,7 +31,47 @@ The customer experience is:
 4. **Confirm** — approve the exact spend, information sharing, and next action.
 5. **Follow** — see progress, respond when needed, and keep the resulting record.
 
-## Product architecture
+## Current evidenced state — 2026-07-14
+
+### Customer-reachable now
+
+- published business-supplied pages that people and assistants can read and
+  compare;
+- public business search and detail operations;
+- a qualified-inquiry handoff when a published listing supports it;
+- an authenticated external-agent Customer Request API that has completed a
+  narrow hosted sandbox journey through request creation, clarification,
+  preparation, authority stops, and resume.
+
+`/engine` exposes an authenticated Customer Request workspace, but a complete
+human journey through its real production dependencies has not been proven.
+The sandbox agent journey does not prove useful real supply or human parity.
+
+### Committed substrate, not yet customer product
+
+- neutral business, contract, offering, binding, publication, eligibility, and
+  readiness records;
+- natural-language interpretation constrained by registered capability
+  contracts;
+- multi-capability RoutePlan compilation and durable internal persistence.
+
+Today AE does **not** provide a customer-reachable multi-step RoutePlan decision,
+composite approval, composite execution, booking, payment, dispatch, or
+real-world fulfilment. A compiled or persisted RoutePlan is not a customer
+capability until the same customer-semantic object crosses the HTTP and UI
+boundary and can be resumed, chosen, authorized, run, and inspected.
+
+The current public surfaces are not yet one product:
+
+- `/` starts the older Answer Thread and registered-business search journey;
+- `/engine` starts the authenticated Customer Request workspace;
+- `/api/v1/requests` exposes the authenticated external-agent Request journey;
+- `/registry` exposes published business discovery and qualified inquiry.
+
+This split is migration state, not the intended architecture. No new product
+semantics should be added to Answer Thread that belong to Customer Request.
+
+## Target product contract
 
 Agentic Economy is powered by a neutral routing engine for agents.
 
@@ -26,12 +79,14 @@ An agent gives AE a natural-language request and constraints. AE finds registere
 capability bindings, composes viable route graphs, and returns a signed route
 quote: an inspectable plan with providers, steps, cost, data disclosures, and
 failure paths declared before execution. The caller approves that exact quote.
-AE then executes it once and records the outcome as a Root Run.
+AE then executes it once and records the outcome as a Root Run. These sentences
+define the target contract; they are not permission to describe those operations
+as currently available.
 
 The marketplace is a projection of the engine's routeable supply. It is not the
 engine and it is not the primary product.
 
-## Core lifecycle
+## Target lifecycle
 
 1. **Request** — an agent submits an intent, network, and constraints.
 2. **Quote** — AE returns ranked route graphs with declared cost, data use,
@@ -57,7 +112,7 @@ The engine is neutral about entity type and domain. Businesses are the first
 source of supply; household, business, procurement, and industry labels do not
 belong in kernel contracts.
 
-## Users and surfaces
+## Target users and surfaces
 
 - **Calling agents** use signed HTTP or MCP operations: route, authorize,
   execute, inspect, reconcile, and cancel.
@@ -68,13 +123,15 @@ belong in kernel contracts.
 - **People** use the product UI to understand the network, inspect plans and runs,
   and manage authority. The UI is a projection of the same contracts agents use.
 
-## Surface architecture
+## Target surface architecture
 
-- `/` explains the customer promise and starts with a need, not an engine.
-- `/engine` is the ask workspace. The route request is a secondary technical
-  disclosure for agents and builders.
+- `/` becomes the canonical Request surface: it starts with a need, not an
+  engine or a schema.
+- `/engine` is migration-only and redirects to `/` after the canonical Request
+  journey reaches cutover evidence.
 - `/registry` is the marketplace projection of registered entities and published
-  supply.
+  supply. It supports the Request journey; it does not own customer intent,
+  recommendation, authority, or execution.
 - `/developers/discovery` and machine-readable discovery files expose the agent
   integration contract.
 - `/admin/runs` is the protected Root Run and evidence surface.
@@ -108,6 +165,12 @@ current capability.
    admitted, conformant capability binding.
 8. Public copy leads with the customer's need. Protocol vocabulary belongs in a
    disclosure, builder surface, machine contract, or diagnostic view.
+9. Current product, committed substrate, and target contract are separate
+   maturity states. Never promote a capability between them without executable
+   evidence at the intended customer or agent surface.
+10. Conversation is an input and presentation adapter over Customer Request. It
+    must not become a second intent, persistence, recommendation, or recovery
+    domain.
 
 ## Banned framing
 

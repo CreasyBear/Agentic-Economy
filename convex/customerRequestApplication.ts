@@ -16,7 +16,9 @@ import {
   writableCustomerRequestV2Aggregate,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
-import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
+import {
+  requestRegistrySnapshotDigest, type RegisteredEvaluationBinding, type RegisteredSupplyPrice, type RequestFact,
+} from '@/modules/customer-request/evaluation'
 import {
   actionAttemptV2Value,
   approvalGrantV2Value,
@@ -29,6 +31,7 @@ import {
   projectCustomerActionStatus,
   projectNeedsAttention,
   projectRequestEvaluation,
+  projectRoutePlansReady,
   type CustomerRequestView,
 } from '@/modules/customer-request/customer-projection'
 import {
@@ -151,14 +154,14 @@ const customerPreparedAction = v.object({
 const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
   state: v.union(
-    v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('preparing_options'),
+    v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('routes_ready'), v.literal('preparing_options'),
     v.literal('options_ready'), v.literal('no_options'), v.literal('needs_authorization'),
     v.literal('unsupported'), v.literal('needs_attention'),
     v.literal('outcome_unknown'), v.literal('completed'), v.literal('failed'),
   ),
   summary: v.string(),
   nextAction: v.union(
-    v.literal('provide_information'), v.literal('prepare_options'), v.literal('wait'),
+    v.literal('provide_information'), v.literal('prepare_options'), v.literal('inspect_routes'), v.literal('wait'),
     v.literal('inspect_options'), v.literal('revise_request'), v.literal('review_disclosure'), v.literal('retry'),
     v.literal('none'),
   ),
@@ -181,6 +184,42 @@ const customerView = v.object({
     v.object({ kind: v.literal('contract_fact'), requirementKey: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
   )),
   options: v.array(customerOption),
+  routes: v.optional(v.array(v.object({
+    routeRef: v.string(), stepCount: v.number(), providers: v.array(v.object({ businessRef: v.string() })),
+    maximumTotalCost: v.union(
+      v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
+      v.object({ kind: v.literal('requires_preparation') }),
+    ),
+    dataUse: v.object({
+      recipientCount: v.number(),
+      recipients: v.array(v.union(
+        v.object({ kind: v.literal('business'), businessRef: v.string(), purposes: v.array(v.string()) }),
+        v.object({ kind: v.literal('named'), recipientRef: v.string(), purposes: v.array(v.string()) }),
+      )),
+      purposes: v.array(v.string()),
+    }),
+    effects: v.object({ totalCount: v.number(), irreversibleCount: v.number() }),
+    evidence: v.object({ requirementCount: v.number() }), validUntil: v.number(),
+    recovery: v.object({ steps: v.array(v.object({
+      stepRef: v.string(), businessRef: v.string(),
+      posture: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    })) }),
+    fallbacks: v.object({
+      ordering: v.literal('unranked'),
+      alternatives: v.array(v.object({
+        alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
+      })),
+    }),
+    uncertainty: v.array(v.literal('cost_requires_preparation')),
+    comparison: v.object({
+      fit: v.literal('all_steps_viable'), completeness: v.literal('complete'), trust: v.literal('registered_live_supply'),
+      ordering: v.union(
+        v.object({ kind: v.literal('unranked') }),
+        v.object({ kind: v.literal('ranked'), objective: v.literal('lowest_maximum_price'), position: v.number() }),
+      ),
+    }),
+    authority: v.literal('proposal_only'),
+  }))),
   optionSet: v.optional(customerOptionSet),
   preparedAction: v.optional(customerPreparedAction),
   action: v.optional(v.object({
@@ -854,8 +893,12 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
 type EligibleSupply = Readonly<{
   offering: Readonly<{
     offeringId: string; businessId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
-    presentation: Readonly<{ label: string; summary: string }>; registrationHash: string
+    presentation: Readonly<{
+      label: string; summary: string
+      price: RegisteredSupplyPrice
+    }>; registrationHash: string
   }>
+  publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
   binding: Readonly<{
     bindingId: string; offeringId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
     registrationHash: string
@@ -869,10 +912,7 @@ type RequestGraph = Readonly<{
   kind: 'available'
   models: readonly CapabilityDecisionModel[]
   descriptors: ReturnType<typeof bindCustomerCapabilityDescriptor>[]
-  bindings: readonly Readonly<{
-    businessId: string; offeringId: string; bindingId: string; contractRef: CapabilityContractRef
-    offeringRegistrationHash: string; bindingRegistrationHash: string
-  }>[]
+  bindings: readonly RegisteredEvaluationBinding[]
   registrySnapshotDigest: string
 }>
 
@@ -929,6 +969,12 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
       contractRef: model.contractRef,
       offeringRegistrationHash: item.offering.registrationHash,
       bindingRegistrationHash: item.binding.registrationHash,
+      price: item.offering.presentation.price,
+      ...(item.publication === undefined ? {} : {
+        publicationRef: item.publication.publicationRef,
+        publicationRevision: item.publication.revision,
+        readinessValidUntil: item.publication.readinessValidUntil,
+      }),
     })
   }
   const registrySnapshotDigest = requestRegistrySnapshotDigest(bindings)
@@ -1035,9 +1081,35 @@ async function prepareCurrentAction(
     kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
   }
   if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
-    return writableView(projectNeedsAttention({
-      requestRef: args.requestRef, revision: args.revision,
-      summary: 'This request needs an action choice before AE can prepare it.',
+    const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
+    const routesAreCurrent = graph.kind === 'available'
+      && graph.registrySnapshotDigest === current.aggregate.evaluation.registrySnapshotDigest
+      && current.aggregate.plan.routes.every((route) => route.expiresAt > Date.now())
+      && current.aggregate.plan.routes.every((route) => route.steps.every((step) => graph.bindings.some((binding) => (
+        binding.businessId === step.businessId
+        && binding.offeringId === step.offeringId
+        && binding.bindingId === step.bindingId
+        && sameCapabilityContractRef(binding.contractRef, step.contractRef)
+        && binding.offeringRegistrationHash === step.offeringRegistrationHash
+        && binding.bindingRegistrationHash === step.bindingRegistrationHash
+        && binding.publicationRef === step.publicationRef
+        && binding.publicationRevision === step.publicationRevision
+        && binding.readinessValidUntil !== undefined
+        && binding.readinessValidUntil >= route.expiresAt
+        && binding.price !== undefined
+        && canonicalDigest(binding.price) === canonicalDigest(step.price)
+      ))))
+    if (!routesAreCurrent) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      summary: 'The available businesses changed. Review the request again to refresh the options.',
+    }))
+    return writableView(projectRoutePlansReady({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      summary: current.aggregate.snapshot.intent,
+      criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+      routes: current.aggregate.plan.routes,
     }))
   }
   const action = current.aggregate.plan.actions[0]
@@ -1473,7 +1545,7 @@ function projectStoredAggregate(aggregate: StoredAggregate | CustomerRequestV2Ag
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, clarification, preparedAction, action } = view
+  const { disclosureReview, optionSet, clarification, preparedAction, action, routes } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
     state: view.state, summary: view.summary, nextAction: view.nextAction,
@@ -1503,6 +1575,26 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         ...alternative, price: { ...alternative.price },
       })),
     } }),
+    ...(routes === undefined ? {} : { routes: routes.map((route) => ({
+      ...route,
+      providers: route.providers.map((provider) => ({ ...provider })),
+      maximumTotalCost: { ...route.maximumTotalCost },
+      dataUse: {
+        ...route.dataUse,
+        recipients: route.dataUse.recipients.map((recipient) => ({
+          ...recipient, purposes: [...recipient.purposes],
+        })),
+        purposes: [...route.dataUse.purposes],
+      },
+      effects: { ...route.effects }, evidence: { ...route.evidence },
+      recovery: { steps: route.recovery.steps.map((step) => ({ ...step })) },
+      fallbacks: {
+        ordering: route.fallbacks.ordering,
+        alternatives: route.fallbacks.alternatives.map((fallback) => ({ ...fallback })),
+      },
+      uncertainty: [...route.uncertainty],
+      comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
+    })) }),
     ...(action === undefined ? {} : { action: {
       state: action.state, resolution: action.resolution, automaticRetry: action.automaticRetry,
       observedAt: action.observedAt,

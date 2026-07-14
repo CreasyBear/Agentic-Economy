@@ -119,6 +119,48 @@ const customerOptionSetSchema = z.object({
   options: z.array(customerOptionSchema),
 }).strict()
 
+const customerRoutePlanSchema = z.object({
+  routeRef: z.string(),
+  stepCount: safePositiveInteger,
+  providers: z.array(z.object({ businessRef: z.string() }).strict()).min(1),
+  maximumTotalCost: z.union([
+    z.object({ kind: z.literal('known'), currency: z.string(), amountMinor: safeNonnegativeInteger }).strict(),
+    z.object({ kind: z.literal('requires_preparation') }).strict(),
+  ]),
+  dataUse: z.object({
+    recipientCount: safeNonnegativeInteger,
+    recipients: z.array(z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('business'), businessRef: z.string(), purposes: z.array(z.string()) }).strict(),
+      z.object({ kind: z.literal('named'), recipientRef: z.string(), purposes: z.array(z.string()) }).strict(),
+    ])),
+    purposes: z.array(z.string()),
+  }).strict(),
+  effects: z.object({ totalCount: safeNonnegativeInteger, irreversibleCount: safeNonnegativeInteger }).strict(),
+  evidence: z.object({ requirementCount: safeNonnegativeInteger }).strict(),
+  recovery: z.object({ steps: z.array(z.object({
+    stepRef: z.string(), businessRef: z.string(), posture: z.enum(['retry_safe', 'reconcile_required']),
+  }).strict()) }).strict(),
+  validUntil: safePositiveInteger,
+  fallbacks: z.object({
+    ordering: z.literal('unranked'),
+    alternatives: z.array(z.object({
+      alternativeRouteRef: z.string(), when: z.literal('route_unavailable_before_approval'),
+    }).strict()),
+  }).strict(),
+  uncertainty: z.array(z.literal('cost_requires_preparation')),
+  comparison: z.object({
+    fit: z.literal('all_steps_viable'), completeness: z.literal('complete'),
+    trust: z.literal('registered_live_supply'),
+    ordering: z.union([
+      z.object({ kind: z.literal('unranked') }).strict(),
+      z.object({
+        kind: z.literal('ranked'), objective: z.literal('lowest_maximum_price'), position: safePositiveInteger,
+      }).strict(),
+    ]),
+  }).strict(),
+  authority: z.literal('proposal_only'),
+}).strict()
+
 export const customerPreparedActionSchema = z.object({
   actionRef: z.string(), businessName: z.string(), offeringLabel: z.string(), summary: z.string(),
   price: z.object({
@@ -161,12 +203,12 @@ export const customerPreparedActionSchema = z.object({
 export const customerRequestViewSchema = z.object({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   state: z.enum([
-    'needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options',
+    'needs_information', 'ready_to_compare', 'routes_ready', 'preparing_options', 'options_ready', 'no_options',
     'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
   ]),
   summary: z.string(),
   nextAction: z.enum([
-    'provide_information', 'prepare_options', 'wait', 'inspect_options', 'revise_request',
+    'provide_information', 'prepare_options', 'inspect_routes', 'wait', 'inspect_options', 'revise_request',
     'review_disclosure', 'retry', 'none',
   ]),
   missingFields: z.array(z.object({ field: z.string(), label: z.string(), explanation: z.string() }).strict()),
@@ -191,6 +233,7 @@ export const customerRequestViewSchema = z.object({
     }).strict(),
   ]).optional(),
   options: z.array(customerOptionSchema), optionSet: customerOptionSetSchema.optional(),
+  routes: z.array(customerRoutePlanSchema).optional(),
   preparedAction: customerPreparedActionSchema.optional(),
   action: z.object({
     state: z.enum(['unknown', 'completed', 'failed']),
@@ -249,6 +292,7 @@ type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
 
 export type CustomerOption = DeepReadonly<z.infer<typeof customerOptionSchema>>
 export type CustomerOptionSet = DeepReadonly<z.infer<typeof customerOptionSetSchema>>
+export type CustomerRoutePlan = DeepReadonly<z.infer<typeof customerRoutePlanSchema>>
 export type CustomerPreparedAction = DeepReadonly<z.infer<typeof customerPreparedActionSchema>>
 export type CustomerRequestView = DeepReadonly<z.infer<typeof customerRequestViewSchema>>
 export type CustomerRequestApprovalResult = DeepReadonly<z.infer<typeof customerRequestApprovalResultSchema>>

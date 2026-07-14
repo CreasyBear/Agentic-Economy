@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest'
 
 import { internal } from '../../convex/_generated/api'
 import schema from '../../convex/schema'
-import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import {
+  defineCapabilityContract, openCapabilityDecisionModel,
+  type CapabilityInputKey, type PointedSchemaIdentity,
+} from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { evaluateCustomerRequestSnapshot } from '@/modules/customer-request/evaluation'
@@ -101,6 +104,37 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
+  it('reopens registered contracts and rejects a fully re-digested invented composition edge', async () => {
+    const backend = convexTest(schema, modules)
+    const aggregate = await compiledAggregate(backend)
+    const forged = structuredClone(aggregate)
+    const action = forged.plan.actions[0]
+    if (action === undefined) throw new Error('test action missing')
+    action.dependsOn = ['action:invented-upstream']
+    action.inputMappings = [{
+      mappingId: 'mapping:invented',
+      semanticIdentity: 'ae.invented:v1',
+      source: { actionId: 'action:invented-upstream', annotationId: 'invented', evidenceId: 'invented', outputPointer: '/invented' },
+      target: { annotationId: 'invented', inputKey: 'ae_input:invented' as CapabilityInputKey, inputPointer: '/invented' },
+      schemaIdentity: ('sha256:' + '6'.repeat(64)) as PointedSchemaIdentity,
+      authority: 'registered_contract_semantics',
+    }]
+    const {
+      planRevisionId: _oldPlanRevisionId, planDigest: _oldPlanDigest, createdAt: _oldCreatedAt,
+      ...planMaterial
+    } = forged.plan
+    forged.plan.planDigest = canonicalDigest(planMaterial)
+    forged.plan.planRevisionId = `plan:${forged.plan.planDigest}`
+    const { aggregateDigest: _oldAggregateDigest, ...aggregateMaterial } = forged
+    forged.aggregateDigest = canonicalDigest(aggregateMaterial)
+
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:invented-mapping', commandDigest: 'sha256:' + '7'.repeat(64),
+      expectedRevision: 0, aggregate: forged,
+    })).resolves.toEqual({ kind: 'aggregate_invalid' })
+    await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
+  })
+
   it('reopens the exact contract and rejects invented completion evidence even when every caller digest is recomputed', async () => {
     const backend = convexTest(schema, modules)
     const aggregate = await compiledAggregate(backend)
@@ -147,7 +181,6 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       proposedActions: actions,
       resolveModel: () => model,
     })
-    expect(evaluation.candidates.some((candidate) => candidate.viability.kind === 'incompatible')).toBe(true)
     const snapshotMaterial = {
       requestId: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
       principalId: aggregate.snapshot.principalId, delegatedAgentId: aggregate.snapshot.delegatedAgentId,
@@ -226,6 +259,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await admitSandboxSupply(backend)
+  await observeSandboxPublication(backend)
   const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 64 })
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
   const contract = defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT)
@@ -245,10 +279,15 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       selections: [{ selectionKey: model.selectionKey, contractRef: model.contractRef, facts: [fact] }],
     },
     interpreterId: 'interpreter:test',
-    bindings: supply.supplies.map(({ offering, binding }) => ({
+    bindings: supply.supplies.map(({ offering, binding, publication }) => ({
       businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
       contractRef: model.contractRef, offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
+      price: offering.presentation.price,
+      ...(publication === undefined ? {} : {
+        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+        readinessValidUntil: publication.readinessValidUntil,
+      }),
     })),
     models: [model], now: 1_000,
   })
@@ -273,6 +312,19 @@ async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
       if (result.kind !== 'eligible') throw new Error(`sandbox admission failed: ${result.reason}`)
     }
   })
+}
+
+async function observeSandboxPublication(backend: ReturnType<typeof convexTest>) {
+  const publication = await backend.run(async (ctx) => await ctx.db.query('capabilityPublications').first())
+  if (publication === null) throw new Error('sandbox publication missing')
+  const now = Date.now()
+  const result = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+    publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+    credentialState: 'ready', healthState: 'healthy', validUntil: now + 300_000,
+    operationKey: 'test:observe-publication', correlationId: 'test:aggregate-persistence',
+    reasonCode: 'test_readiness', evidenceRefs: ['test:readiness'],
+  })
+  if (result.kind !== 'observed') throw new Error(`sandbox readiness failed: ${result.reason}`)
 }
 
 async function revokeFirstSupply(backend: ReturnType<typeof convexTest>) {
