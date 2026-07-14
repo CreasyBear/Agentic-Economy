@@ -30,7 +30,7 @@ type ProbeRecordResult =
   | { kind: 'refused'; reason: 'revision_changed' | 'target_changed' }
 type ProbeResult = ProbeRecordResult | { kind: 'unavailable' }
 type ProbeArgs = { publicationRef: string; expectedRevision: number }
-type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; probeKind: 'ae_quote' | 'openapi_http' | 'mcp' | 'x402'; targetDigest: string }
+type Target = { publicationRef: string; revision: number; bindingId: string; capabilityId: string; endpointUrl: string; credentialRef: string; adapterId: string; targetDigest: string }
 
 const publicationLifecycleValue = v.object({
   state: v.union(v.literal('inactive'), v.literal('active'), v.literal('withdrawn'), v.literal('incompatible')),
