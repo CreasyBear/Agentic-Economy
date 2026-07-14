@@ -27,6 +27,7 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly AE_CUSTOMER_REQUEST_MODEL: string | undefined;
   readonly AE_SITE_URL: string | undefined;
+  readonly CLERK_JWT_ISSUER_DOMAIN: string | undefined;
   readonly OPENROUTER_API_KEY: string | undefined;
 };
 

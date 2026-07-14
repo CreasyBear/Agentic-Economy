@@ -24,7 +24,7 @@
     "smoke:customer-request:production:preflight": "tsx tools/release/customer-request-production-smoke.ts --preflight",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
-    "test:integration": "vitest run tests/integration --no-file-parallelism",
+    "test:integration": "vitest run tests/integration convex/customerRequestRouteMandate.test.ts --no-file-parallelism",
     "test:eval": "npm run test:eval:coverage && npm run test:eval:report && PROMPTFOO_CONFIG_DIR=.promptfoo-home PROMPTFOO_DISABLE_WAL_MODE=true promptfoo eval -c eval/answer/promptfooconfig.yaml --no-cache && vitest run tests/eval",
     "test:eval:coverage": "node --import tsx eval/answer/scripts/audit-coverage.ts",
     "test:eval:report": "node --import tsx eval/answer/scripts/run-suite.ts --output output/eval/answer-suite-report.json",

@@ -44,3 +44,7 @@ export {
   requestFactV2Value,
   routePlanGenerationV2Value,
 } from './internal/convex-v2-schema'
+export {
+  routeMandateIssueEvidenceValue,
+  routeMandateValue,
+} from './internal/route-mandate-convex-schema'

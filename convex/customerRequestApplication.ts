@@ -2153,8 +2153,11 @@ async function resolveRequestCaller(
     || !assertion.scopes.includes('customer_requests:create')) return undefined
   const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })
   if (!verified) return undefined
+  const clerkIssuer = env.CLERK_JWT_ISSUER_DOMAIN?.trim()
+  if (clerkIssuer === undefined || clerkIssuer.length === 0) return undefined
   const recorded = await ctx.runMutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
     principalId: assertion.principalId, ownerId: assertion.ownerId, credentialId: assertion.credentialId,
+    ownerTokenIdentifier: `${clerkIssuer}|${assertion.ownerId}`,
     scopes: [...assertion.scopes], seenAt: Date.now(),
   })
   if (recorded.kind !== 'recorded') return undefined
