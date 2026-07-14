@@ -501,6 +501,12 @@ export const requestEvaluationCandidateV2Value = v.object({
   offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
   publicationRef: v.optional(v.string()), publicationRevision: v.optional(v.number()), readinessValidUntil: v.optional(v.number()),
   price: v.optional(registeredPriceV2Value),
+  // Optional only for immutable Request revisions written before RoutePlan cancellation was bound.
+  // Current production compilation always supplies it and mandate creation rejects its absence.
+  cancellation: v.optional(v.object({
+    kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
+    evidenceRefs: v.array(v.string()),
+  })),
   viability: v.union(
     v.object({ kind: v.literal('viable') }),
     v.object({ kind: v.literal('blocked_on_information'), inputs: v.array(v.object({
@@ -513,24 +519,27 @@ const completionRequirementV2Value = v.object({
   actionId: v.string(), contractRef: capabilityContractRefV2Value,
   evidenceId: v.string(), outputPointer: v.string(), purpose: v.literal('completion'), schemaIdentity: v.string(),
 })
+const actionInputMappingV2Value = v.object({
+  mappingId: v.string(),
+  semanticIdentity: v.string(),
+  source: v.object({ actionId: v.string(), annotationId: v.string(), evidenceId: v.string(), outputPointer: v.string() }),
+  target: v.object({ annotationId: v.string(), inputKey: v.string(), inputPointer: v.string() }),
+  schemaIdentity: v.string(), authority: v.literal('registered_contract_semantics'),
+})
 const proposedActionV2Value = v.object({
   actionId: v.string(), contractRef: capabilityContractRefV2Value,
   selectionKey: v.string(), semanticDigest: v.string(), dependsOn: v.array(v.string()),
   inputs: v.array(requestFactV2Value),
-  inputMappings: v.array(v.object({
-    mappingId: v.string(),
-    semanticIdentity: v.string(),
-    source: v.object({ actionId: v.string(), annotationId: v.string(), evidenceId: v.string(), outputPointer: v.string() }),
-    target: v.object({ annotationId: v.string(), inputKey: v.string(), inputPointer: v.string() }),
-    schemaIdentity: v.string(), authority: v.literal('registered_contract_semantics'),
-  })),
+  inputMappings: v.array(actionInputMappingV2Value),
 })
 const routePlanV2Value = v.object({
   routePlanId: v.string(), requestId: v.string(), requestRevision: v.number(), registrySnapshotDigest: v.string(),
   steps: v.array(v.object({
     actionId: v.string(), candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
     contractRef: capabilityContractRefV2Value, offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
-    publicationRef: v.string(), publicationRevision: v.number(), price: registeredPriceV2Value,
+    publicationRef: v.string(), publicationRevision: v.number(),
+    resolvedInputs: v.array(requestFactV2Value), deferredInputs: v.array(actionInputMappingV2Value),
+    price: registeredPriceV2Value,
     dataUse: v.array(v.object({
       effectId: v.string(), inputPointer: v.string(),
       classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
@@ -551,6 +560,11 @@ const routePlanV2Value = v.object({
       evidenceId: v.string(), outputPointer: v.string(), purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
       annotationId: v.string(), label: v.string(), role: v.union(v.literal('comparison'), v.literal('completion_evidence'), v.literal('recovery')),
       semanticIdentity: v.optional(v.string()), guaranteed: v.boolean(), schemaIdentity: v.string(),
+    })),
+    // Optional only for immutable RoutePlan generations written before #172.
+    cancellation: v.optional(v.object({
+      kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
+      evidenceRefs: v.array(v.string()),
     })),
     recovery: v.object({
       idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
@@ -586,6 +600,33 @@ const routePlanV2Value = v.object({
     ),
   }),
 })
+export const routePlanGenerationV2Value = v.object({
+  format: v.literal('ae.route-plan-generation:v1'),
+  generationRef: v.string(), generation: v.number(), generationDigest: v.string(),
+  requestId: v.string(), requestRevision: v.number(),
+  compiler: v.object({
+    compilerVersion: v.literal('customer-request-route-compiler:v1'), interpreterId: v.string(),
+    interpretationEvidence: v.union(
+      v.object({
+        kind: v.literal('model_output'), systemInstructionVersion: v.string(),
+        inputDigest: v.string(), outputDigest: v.string(),
+      }),
+      v.object({ kind: v.literal('deterministic_input') }),
+    ),
+    proposalDigest: v.string(),
+  }),
+  registrySnapshotDigest: v.string(),
+  // Optional only so immutable generations written before #169 remain readable.
+  // Every new commit path requires this snapshot before accepting a generation.
+  decisionSnapshot: v.optional(v.object({
+    requestSnapshotDigest: v.string(), factsDigest: v.string(),
+    criteria: v.array(criterionV2Value),
+    completionRequirements: v.array(completionRequirementV2Value),
+    evaluationDigest: v.string(), planRevisionId: v.string(), planDigest: v.string(),
+  })),
+  routes: v.array(routePlanV2Value),
+  authority: v.literal('proposal_only'), createdAt: v.number(),
+})
 export const customerRequestV2AggregateValue = v.object({
   aggregateVersion: v.literal(2),
   snapshot: v.object({
@@ -619,16 +660,40 @@ export const customerRequestV2AggregateValue = v.object({
     proposalDigest: v.string(), registrySnapshotDigest: v.string(),
     actions: v.array(proposedActionV2Value), completionRequirements: v.array(completionRequirementV2Value),
     compilerVersion: v.literal('customer-request-route-compiler:v1'), authority: v.literal('proposal_only'),
-    routes: v.array(routePlanV2Value),
     planDigest: v.string(), createdAt: v.number(),
   }),
   outcome: v.union(v.literal('plan_ready'), v.literal('needs_information'), v.literal('unsupported')),
   aggregateDigest: v.string(),
 })
 
+const {
+  resolvedInputs: _legacyResolvedInputs,
+  deferredInputs: _legacyDeferredInputs,
+  ...legacyRouteStepV2Fields
+} = routePlanV2Value.fields.steps.element.fields
+const legacyRoutePlanV2Value = v.object({
+  ...routePlanV2Value.fields,
+  steps: v.array(v.object(legacyRouteStepV2Fields)),
+})
+const legacyCustomerRequestV2AggregateValue = v.object({
+  ...customerRequestV2AggregateValue.fields,
+  plan: v.object({
+    ...customerRequestV2AggregateValue.fields.plan.fields,
+    routes: v.array(legacyRoutePlanV2Value),
+  }),
+})
+
+// Retained historical format: new commands cannot write it, but existing signed
+// ancestry remains readable and is returned to the Request flow as resubmit-only.
+export const customerRequestV2StoredAggregateValue = v.union(
+  customerRequestV2AggregateValue,
+  legacyCustomerRequestV2AggregateValue,
+)
+
 export const customerRequestV2Tables = {
   customerRequestAgentPrincipals: defineTable({
-    principalId: v.string(), ownerId: v.string(), credentialId: v.string(), scopes: v.array(v.string()),
+    principalId: v.string(), ownerId: v.string(), ownerTokenIdentifier: v.optional(v.string()),
+    credentialId: v.string(), scopes: v.array(v.string()),
     recordedAt: v.number(), lastSeenAt: v.number(),
   })
     .index('by_principalId', ['principalId'])
@@ -640,15 +705,52 @@ export const customerRequestV2Tables = {
   }).index('by_requestId', ['requestId']),
 
   customerRequestV2Revisions: defineTable({
-    requestId: v.string(), requestRevision: v.number(), aggregate: customerRequestV2AggregateValue,
+    requestId: v.string(), requestRevision: v.number(), aggregate: customerRequestV2StoredAggregateValue,
   }).index('by_requestId_and_requestRevision', ['requestId', 'requestRevision']),
+
+  customerRequestV2RoutePlanHeads: defineTable({
+    requestId: v.string(), currentGeneration: v.number(), currentRequestRevision: v.number(),
+    currentGenerationRef: v.optional(v.string()), currentGenerationDigest: v.optional(v.string()),
+    currentDecisionCommandKey: v.optional(v.string()), currentDecisionCommandDigest: v.optional(v.string()),
+    createdAt: v.number(), updatedAt: v.number(),
+  }).index('by_requestId', ['requestId']),
+
+  customerRequestV2RoutePlanGenerations: defineTable({
+    requestId: v.string(), generation: v.number(), generationRef: v.string(), generationDigest: v.string(),
+    requestRevision: v.number(), routeGeneration: routePlanGenerationV2Value, recordedAt: v.number(),
+  })
+    .index('by_requestId_and_generation', ['requestId', 'generation'])
+    .index('by_requestId_and_generationRef', ['requestId', 'generationRef'])
+    .index('by_generationRef', ['generationRef']),
 
   customerRequestV2Commands: defineTable({
     commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
-    expectedRevision: v.number(), resultingRevision: v.number(), aggregateDigest: v.string(), committedAt: v.number(),
+    expectedRevision: v.number(), resultingRevision: v.number(), aggregateDigest: v.string(),
+    expectedRouteGeneration: v.optional(v.number()), resultingRouteGenerationRef: v.optional(v.string()), committedAt: v.number(),
   })
     .index('by_commandKey', ['commandKey'])
     .index('by_requestId_and_resultingRevision', ['requestId', 'resultingRevision']),
+
+  customerRequestV2RoutePlanGenerationCommands: defineTable({
+    commandKey: v.string(), commandDigest: v.string(), principalId: v.string(), requestId: v.string(),
+    expectedRequestRevision: v.number(), expectedGeneration: v.number(), expectedGenerationRef: v.string(),
+    expectedDecisionCommandKey: v.optional(v.string()),
+    resultKind: v.union(
+      v.literal('unchanged'), v.literal('superseded'),
+      v.literal('needs_information'), v.literal('unsupported'), v.literal('retryable'),
+    ),
+    retryReason: v.optional(v.union(
+      v.literal('current_supply_unavailable'),
+      v.literal('interpreter_unavailable'),
+      v.literal('interpretation_unusable'),
+      v.literal('context_changed'),
+    )),
+    resultAggregate: v.optional(customerRequestV2AggregateValue),
+    resultingGeneration: v.optional(v.number()), resultingGenerationRef: v.optional(v.string()),
+    resultingGenerationDigest: v.optional(v.string()), committedAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_requestId_and_resultingGeneration', ['requestId', 'resultingGeneration']),
 
   customerRequestV2ActionPreparations: defineTable({
     preparationRef: v.string(), preparationDigest: v.string(), requestId: v.string(), requestRevision: v.number(),

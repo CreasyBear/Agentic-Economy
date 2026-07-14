@@ -2,6 +2,7 @@ import { defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 import { customerRequestV2Tables } from './convex-v2-schema'
+import { customerRequestRouteMandateTables } from './route-mandate-convex-schema'
 
 const money = v.object({ currency: v.string(), amountMinor: v.number() })
 const business = v.object({ nodeId: v.string(), bindingId: v.string(), name: v.string() })
@@ -237,6 +238,7 @@ export const preparationRefusalReason = v.union(
 
 export const customerRequestTables = {
   ...customerRequestV2Tables,
+  ...customerRequestRouteMandateTables,
   customerRequestCapabilityContracts: defineTable({
     ...capabilityContractValue.fields,
     contractDigest: v.string(), status: v.union(v.literal('active'), v.literal('retired')),

@@ -143,6 +143,101 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('renders the shared RoutePlan decision as an outcome, not routing machinery', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-route' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:route', revision: 2,
+      routeGenerationRef: 'generation:two', state: 'routes_ready',
+      summary: 'Prepare a result using registered businesses.', nextAction: 'inspect_routes',
+      missingFields: [], criteria: [], options: [],
+      decision: {
+        generationRef: 'generation:two', requestRevision: 2,
+        outcome: { kind: 'routes_available', routeCount: 1, summary: 'One way forward is available.' },
+        routes: [{
+          routeRef: 'route:opaque',
+          result: {
+            resultRef: 'route:opaque', summary: 'Prepare a governed result.', deliverables: ['Result reference'],
+          },
+          availability: 'current', stepCount: 2,
+          businesses: [
+            { businessRef: 'business:one', name: 'North Star Services' },
+            { businessRef: 'business:two', name: 'City Ledger' },
+          ],
+          maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
+          dataUse: {
+            recipientCount: 2,
+            recipients: [
+              { recipientRef: 'recipient:one', name: 'North Star Services', purposes: ['Find the service'] },
+              { recipientRef: 'recipient:two', name: 'City Ledger', purposes: ['Prepare the result'] },
+            ],
+            purposes: ['Find the service', 'Prepare the result'],
+          },
+          effects: [{ kind: 'information_shared', reversibility: 'irreversible' }],
+          evidence: [{ label: 'Result reference', purpose: 'completion' }],
+          recovery: [
+            { step: 1, businessName: 'North Star Services', posture: 'retry_safe' },
+            { step: 2, businessName: 'City Ledger', posture: 'reconcile_required' },
+          ],
+          validUntil: Date.now() + 60_000,
+          fallback: { available: false, alternatives: [] }, uncertainty: [],
+          steps: [
+            { step: 1, business: { businessRef: 'business:one', name: 'North Star Services' }, after: [] },
+            { step: 2, business: { businessRef: 'business:two', name: 'City Ledger' }, after: [1] },
+          ],
+        }],
+        changes: {
+          kind: 'changed', previousGenerationRef: 'generation:one',
+          items: [
+            {
+              kind: 'maximum_cost',
+              before: [{
+                resultRef: 'route:opaque',
+                cost: { kind: 'known', currency: 'AUD', amountMinor: 1_600 },
+              }],
+              after: [{
+                resultRef: 'route:opaque',
+                cost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
+              }],
+            },
+            {
+              kind: 'businesses',
+              before: [{
+                resultRef: 'route:opaque',
+                businesses: [{ businessRef: 'business:one', name: 'North Star Services' }],
+              }],
+              after: [{
+                resultRef: 'route:opaque',
+                businesses: [
+                  { businessRef: 'business:one', name: 'North Star Services' },
+                  { businessRef: 'business:two', name: 'City Ledger' },
+                ],
+              }],
+            },
+          ],
+        },
+        nextBoundary: { kind: 'confirmation', authorityCreated: false },
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Prepare a result using registered businesses' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByRole('heading', { name: 'One way forward is available.' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Prepare a governed result.' })).toBeTruthy()
+    expect(screen.getByText('Through North Star Services and City Ledger')).toBeTruthy()
+    expect(screen.getByText('Maximum $14.00')).toBeTruthy()
+    expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
+    expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
+    expect(screen.getByText(/Information would be shared/)).toBeTruthy()
+    expect(screen.getByText('No uncertainty is declared for this way forward.')).toBeTruthy()
+    expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
+    expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
+    expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
+  })
+
   it('distinguishes revising the same Request from starting a new one', async () => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
@@ -229,7 +324,10 @@ describe('customer Request workspace', () => {
     expect(await screen.findByText('Checking connected businesses')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
 
-    expect(await screen.findByRole('heading', { name: 'Nothing eligible returned an option.' })).toBeTruthy()
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+      expect(screen.getByRole('heading', { name: 'Nothing eligible returned an option.' })).toBeTruthy()
+    }, { timeout: 5_000 })
     expect(screen.getByText(/AE will not invent availability/)).toBeTruthy()
     expect(screen.getByText('Request revision 1')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Edit this Request' })).toBeTruthy()
@@ -245,4 +343,78 @@ describe('customer Request workspace', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'Sign in to continue' })).toBeTruthy())
     expect(screen.queryByText('missing_auth')).toBeNull()
   })
+
+  it('does not present an expired route as a current choice in a mixed generation', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-mixed-expiry' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:mixed', revision: 2,
+      routeGenerationRef: 'generation:mixed', state: 'routes_ready',
+      summary: 'One current way forward and one expired.', nextAction: 'inspect_routes',
+      missingFields: [], criteria: [], options: [],
+      decision: {
+        generationRef: 'generation:mixed', requestRevision: 2,
+        outcome: {
+          kind: 'routes_available', routeCount: 2, summary: 'One current way forward and one expired.',
+        },
+        routes: [routeChoice('route:current', 'current'), routeChoice('route:expired', 'expired')],
+        changes: { kind: 'initial' },
+        nextBoundary: { kind: 'confirmation', authorityCreated: false },
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a current way forward' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByText('Current way forward 1')).toBeTruthy()
+    expect(screen.getByText('Expired way forward')).toBeTruthy()
+  })
+
+  it('turns a decision conflict into an explicit resume action', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'uuid-conflict' })
+    const requestView = {
+      kind: 'request', requestRef: 'request:conflict', revision: 1, state: 'ready_to_compare',
+      summary: 'Find a current option', nextAction: 'prepare_options', missingFields: [], options: [],
+    } as const
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(requestView))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'conflict', requestRef: requestView.requestRef, reason: 'options_changed',
+      }, { status: 409 }))
+      .mockResolvedValueOnce(Response.json({ ...requestView, revision: 2 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a current option' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
+
+    expect(await screen.findByRole('heading', { name: 'This Request changed.' })).toBeTruthy()
+    expect(screen.getByText(/No action was authorized/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Load the current Request' }))
+    expect(await screen.findByRole('button', { name: 'Show available options' })).toBeTruthy()
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/requests/request%3Aconflict')
+  })
 })
+
+function routeChoice(routeRef: string, availability: 'current' | 'expired') {
+  return {
+    routeRef,
+    result: { resultRef: routeRef, summary: `Result from ${routeRef}`, deliverables: ['Result reference'] },
+    availability,
+    stepCount: 1,
+    businesses: [{ businessRef: `business:${routeRef}`, name: `Business ${routeRef}` }],
+    maximumTotalCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
+    dataUse: { recipientCount: 0, recipients: [], purposes: [] },
+    effects: [], evidence: [{ label: 'Result reference', purpose: 'completion' as const }],
+    recovery: [{ step: 1, businessName: `Business ${routeRef}`, posture: 'retry_safe' as const }],
+    validUntil: availability === 'current' ? Date.now() + 60_000 : Date.now() - 60_000,
+    fallback: { available: false, alternatives: [] }, uncertainty: [],
+    steps: [{
+      step: 1, business: { businessRef: `business:${routeRef}`, name: `Business ${routeRef}` }, after: [],
+    }],
+  }
+}

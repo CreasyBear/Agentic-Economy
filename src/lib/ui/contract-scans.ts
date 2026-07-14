@@ -182,14 +182,6 @@ function isDocumentedJsonBoundary(violation: ScanViolation): boolean {
     violation.file === 'src/modules/customer-request/internal/convex-v2-schema.ts'
       && violation.excerpt.includes('v.any()')
       && violation.excerpt.includes('runtime-validated JsonValue boundary')
-  ) || (
-    violation.file === 'convex/customerRequestV2ProviderExecution.ts'
-      && violation.excerpt.includes('v.any()')
-      && violation.excerpt.includes('runtime-validated JsonValue boundary')
-  ) || (
-    violation.file === 'convex/customerRequestV2ProviderReconciliation.ts'
-      && violation.excerpt.includes('v.any()')
-      && violation.excerpt.includes('runtime-validated JsonValue boundary')
   )
 }
 

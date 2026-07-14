@@ -14,21 +14,28 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
+  type CompileCustomerRequestResult,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
+import {
+  writableCustomerRequestRoutePlanGeneration,
+  type CustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
+import {
+  capabilitySemanticsKey,
+  projectCustomerRoutePlanDecision,
+} from '@/modules/customer-request/route-plan-customer-projection'
 import {
   requestRegistrySnapshotDigest, type RegisteredEvaluationBinding, type RegisteredSupplyPrice, type RequestFact,
 } from '@/modules/customer-request/evaluation'
 import {
-  actionAttemptV2Value,
-  approvalGrantV2Value,
   customerRequestV2AggregateValue,
   durableActionPreparationV2Value,
   preparedActionRecoveryReasonV2Value,
   preparedActionV2Value,
+  routePlanGenerationV2Value,
 } from '@/modules/customer-request/runtime'
 import {
-  projectCustomerActionStatus,
   projectNeedsAttention,
   projectRequestEvaluation,
   projectRoutePlansReady,
@@ -43,8 +50,7 @@ import { createOpenRouterCustomerRequestSemanticTransport } from '@/modules/cust
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 import { internal } from './_generated/api'
-import { action, type ActionCtx } from './_generated/server'
-import type { CustomerActionStatusV2 } from './customerRequestV2ProviderReconciliation'
+import { action, env, type ActionCtx } from './_generated/server'
 
 const MAX_INTERPRETER_DESCRIPTOR_BYTES = 512_000
 const MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES = 256_000
@@ -143,16 +149,137 @@ const customerPreparedAction = v.object({
     price: v.object({ currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
     validUntil: v.number(),
   })),
-  approval: v.union(
-    v.object({ state: v.literal('required') }),
+})
+const customerBusiness = v.object({ businessRef: v.string(), name: v.string() })
+const customerRouteMaximumCost = v.union(
+  v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
+  v.object({ kind: v.literal('requires_preparation') }),
+)
+const customerRouteRecipient = v.object({
+  recipientRef: v.string(), name: v.string(), purposes: v.array(v.string()),
+})
+const customerRouteEffect = v.object({
+  kind: v.union(
+    v.literal('information_shared'), v.literal('financial_commitment'), v.literal('external_change'),
+  ),
+  reversibility: v.union(
+    v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible'),
+  ),
+})
+const customerRouteEvidence = v.object({
+  label: v.string(), purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
+})
+const customerRouteRecovery = v.object({
+  step: v.number(), businessName: v.string(),
+  posture: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+})
+const customerRouteResult = v.object({
+  resultRef: v.string(), summary: v.string(), deliverables: v.array(v.string()),
+})
+const customerRouteResultChange = v.object({
+  resultRef: v.string(), summary: v.string(), deliverables: v.array(v.string()),
+  position: v.optional(v.number()),
+})
+const customerRoute = v.object({
+  routeRef: v.string(), result: customerRouteResult,
+  availability: v.union(v.literal('current'), v.literal('expired')),
+  stepCount: v.number(), businesses: v.array(customerBusiness),
+  maximumTotalCost: customerRouteMaximumCost,
+  dataUse: v.object({
+    recipientCount: v.number(), recipients: v.array(customerRouteRecipient), purposes: v.array(v.string()),
+  }),
+  effects: v.array(customerRouteEffect), evidence: v.array(customerRouteEvidence),
+  recovery: v.array(customerRouteRecovery), validUntil: v.number(),
+  fallback: v.object({
+    available: v.boolean(), alternatives: v.array(v.object({
+      routeRef: v.string(), when: v.literal('route_unavailable_before_confirmation'),
+    })),
+  }),
+  uncertainty: v.array(v.literal('price_needs_confirmation')),
+  steps: v.optional(v.array(v.object({
+    step: v.number(), business: customerBusiness, after: v.array(v.number()),
+  }))),
+})
+const customerRouteDecisionChange = v.union(
+  v.object({
+    kind: v.literal('route_result'),
+    before: v.object({ routeCount: v.number(), results: v.array(customerRouteResultChange) }),
+    after: v.object({ routeCount: v.number(), results: v.array(customerRouteResultChange) }),
+  }),
+  v.object({
+    kind: v.literal('businesses'),
+    before: v.array(v.object({ resultRef: v.string(), businesses: v.array(customerBusiness) })),
+    after: v.array(v.object({ resultRef: v.string(), businesses: v.array(customerBusiness) })),
+  }),
+  v.object({
+    kind: v.literal('step_shape'),
+    before: v.array(v.object({ resultRef: v.string(), steps: v.number(), dependencies: v.number() })),
+    after: v.array(v.object({ resultRef: v.string(), steps: v.number(), dependencies: v.number() })),
+  }),
+  v.object({
+    kind: v.literal('maximum_cost'),
+    before: v.array(v.object({ resultRef: v.string(), cost: customerRouteMaximumCost })),
+    after: v.array(v.object({ resultRef: v.string(), cost: customerRouteMaximumCost })),
+  }),
+  v.object({
+    kind: v.literal('data_use'),
+    before: v.array(v.object({ resultRef: v.string(), recipients: v.array(customerRouteRecipient) })),
+    after: v.array(v.object({ resultRef: v.string(), recipients: v.array(customerRouteRecipient) })),
+  }),
+  v.object({
+    kind: v.literal('effects'),
+    before: v.array(v.object({ resultRef: v.string(), effects: v.array(customerRouteEffect) })),
+    after: v.array(v.object({ resultRef: v.string(), effects: v.array(customerRouteEffect) })),
+  }),
+  v.object({
+    kind: v.literal('evidence'),
+    before: v.array(v.object({ resultRef: v.string(), evidence: v.array(customerRouteEvidence) })),
+    after: v.array(v.object({ resultRef: v.string(), evidence: v.array(customerRouteEvidence) })),
+  }),
+  v.object({
+    kind: v.literal('uncertainty'),
+    before: v.array(v.object({
+      resultRef: v.string(), uncertainty: v.array(v.literal('price_needs_confirmation')),
+    })),
+    after: v.array(v.object({
+      resultRef: v.string(), uncertainty: v.array(v.literal('price_needs_confirmation')),
+    })),
+  }),
+  v.object({
+    kind: v.literal('expiry'),
+    before: v.array(v.object({ resultRef: v.string(), validUntil: v.number() })),
+    after: v.array(v.object({ resultRef: v.string(), validUntil: v.number() })),
+  }),
+  v.object({
+    kind: v.literal('fallback'),
+    before: v.array(v.object({ resultRef: v.string(), alternatives: v.array(customerRouteResult) })),
+    after: v.array(v.object({ resultRef: v.string(), alternatives: v.array(customerRouteResult) })),
+  }),
+  v.object({
+    kind: v.literal('recovery'),
+    before: v.array(v.object({ resultRef: v.string(), steps: v.array(customerRouteRecovery) })),
+    after: v.array(v.object({ resultRef: v.string(), steps: v.array(customerRouteRecovery) })),
+  }),
+)
+const customerRouteDecision = v.object({
+  generationRef: v.string(), requestRevision: v.number(),
+  outcome: v.object({
+    kind: v.union(v.literal('routes_available'), v.literal('routes_expired')),
+    routeCount: v.number(), summary: v.string(),
+  }),
+  routes: v.array(customerRoute),
+  changes: v.union(
+    v.object({ kind: v.literal('initial') }),
+    v.object({ kind: v.literal('unchanged'), previousGenerationRef: v.string() }),
     v.object({
-      state: v.literal('recorded'), currency: v.string(), maximumSpendMinor: v.number(),
-      expiresAt: v.number(), recordedAt: v.number(),
+      kind: v.literal('changed'), previousGenerationRef: v.string(), items: v.array(customerRouteDecisionChange),
     }),
   ),
+  nextBoundary: v.object({ kind: v.literal('confirmation'), authorityCreated: v.literal(false) }),
 })
 const customerView = v.object({
   kind: v.literal('request'), requestRef: v.string(), revision: v.number(),
+  routeGenerationRef: v.optional(v.string()),
   state: v.union(
     v.literal('needs_information'), v.literal('ready_to_compare'), v.literal('routes_ready'), v.literal('preparing_options'),
     v.literal('options_ready'), v.literal('no_options'), v.literal('needs_authorization'),
@@ -184,42 +311,6 @@ const customerView = v.object({
     v.object({ kind: v.literal('contract_fact'), requirementKey: v.string(), prompt: v.string(), answerKind: v.literal('typed_value') }),
   )),
   options: v.array(customerOption),
-  routes: v.optional(v.array(v.object({
-    routeRef: v.string(), stepCount: v.number(), providers: v.array(v.object({ businessRef: v.string() })),
-    maximumTotalCost: v.union(
-      v.object({ kind: v.literal('known'), currency: v.string(), amountMinor: v.number() }),
-      v.object({ kind: v.literal('requires_preparation') }),
-    ),
-    dataUse: v.object({
-      recipientCount: v.number(),
-      recipients: v.array(v.union(
-        v.object({ kind: v.literal('business'), businessRef: v.string(), purposes: v.array(v.string()) }),
-        v.object({ kind: v.literal('named'), recipientRef: v.string(), purposes: v.array(v.string()) }),
-      )),
-      purposes: v.array(v.string()),
-    }),
-    effects: v.object({ totalCount: v.number(), irreversibleCount: v.number() }),
-    evidence: v.object({ requirementCount: v.number() }), validUntil: v.number(),
-    recovery: v.object({ steps: v.array(v.object({
-      stepRef: v.string(), businessRef: v.string(),
-      posture: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
-    })) }),
-    fallbacks: v.object({
-      ordering: v.literal('unranked'),
-      alternatives: v.array(v.object({
-        alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
-      })),
-    }),
-    uncertainty: v.array(v.literal('cost_requires_preparation')),
-    comparison: v.object({
-      fit: v.literal('all_steps_viable'), completeness: v.literal('complete'), trust: v.literal('registered_live_supply'),
-      ordering: v.union(
-        v.object({ kind: v.literal('unranked') }),
-        v.object({ kind: v.literal('ranked'), objective: v.literal('lowest_maximum_price'), position: v.number() }),
-      ),
-    }),
-    authority: v.literal('proposal_only'),
-  }))),
   optionSet: v.optional(customerOptionSet),
   preparedAction: v.optional(customerPreparedAction),
   action: v.optional(v.object({
@@ -229,10 +320,14 @@ const customerView = v.object({
     ),
     automaticRetry: v.literal(false), result: v.optional(v.any()), observedAt: v.number(), // runtime-validated JsonValue boundary
   })),
+  decision: v.optional(customerRouteDecision),
 })
 const conflict = v.object({
   kind: v.literal('conflict'), requestRef: v.string(),
-  reason: v.union(v.literal('revision_changed'), v.literal('identity_changed'), v.literal('idempotency_key_reused')),
+  reason: v.union(
+    v.literal('revision_changed'), v.literal('options_changed'),
+    v.literal('identity_changed'), v.literal('idempotency_key_reused'),
+  ),
 })
 const refusedReason = v.union(
   v.literal('authentication_required'), v.literal('request_not_found'),
@@ -240,45 +335,6 @@ const refusedReason = v.union(
 )
 const actionResult = v.union(customerView, conflict, v.object({ kind: v.literal('refused'), reason: refusedReason }))
 type ActionResult = Infer<typeof actionResult>
-const approvalActionResult = v.union(
-  v.object({
-    kind: v.literal('approved'), requestRef: v.string(), revision: v.number(),
-    approvalRef: v.string(), preparedActionRef: v.string(),
-    spend: v.object({ currency: v.string(), maximumAmountMinor: v.number() }),
-    expiresAt: v.number(),
-    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
-  }),
-  v.object({
-    kind: v.literal('conflict'), requestRef: v.string(),
-    reason: v.union(
-      v.literal('revision_changed'), v.literal('idempotency_key_reused'), v.literal('approval_changed'),
-    ),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    reason: v.union(
-      v.literal('authentication_required'), v.literal('request_not_found'), v.literal('approval_invalid'),
-    ),
-  }),
-)
-type ApprovalActionResult = Infer<typeof approvalActionResult>
-const actionAttemptAdmissionResult = v.union(
-  v.object({
-    kind: v.literal('accepted'), requestRef: v.string(), revision: v.number(),
-    actionAttemptRef: v.string(), state: v.literal('admitted'), expiresAt: v.number(),
-    recovery: v.object({ unknownOutcome: v.literal('reconcile_only'), automaticRetry: v.literal(false) }),
-  }),
-  v.object({
-    kind: v.literal('conflict'), requestRef: v.string(),
-    reason: v.union(v.literal('revision_changed'), v.literal('idempotency_key_reused'), v.literal('approval_used')),
-  }),
-  v.object({
-    kind: v.literal('refused'),
-    reason: v.union(v.literal('authentication_required'), v.literal('request_not_found'), v.literal('admission_invalid')),
-  }),
-)
-type ActionAttemptAdmissionResult = Infer<typeof actionAttemptAdmissionResult>
-
 export const submit = action({
   args: {
     compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()),
@@ -309,6 +365,7 @@ export const submit = action({
       commandDigest: canonicalDigest(command),
       requestId: args.requestId,
       expectedRevision: args.expectedRevision ?? 0,
+      expectedRouteGeneration: 0,
       principalId: caller.principalId,
       delegatedAgentId: caller.delegatedAgentId,
       intent: args.customerJob,
@@ -340,6 +397,11 @@ export const refine = action({
       kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
     }
     const intent = `${current.aggregate.snapshot.intent.trim()}\n${args.message.trim()}`
+    const expectedRouteGeneration = await loadCurrentRouteGenerationNumber(ctx, current)
+    if (expectedRouteGeneration === undefined) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: args.expectedRevision,
+      summary: 'AE could not verify the current options. Try this request again.',
+    }))
     return await interpretCompileCommit(ctx, {
       commandKey: namespacedKey(caller.principalId, 'refine', args.requestRef, args.idempotencyKey),
       commandDigest: canonicalDigest({
@@ -348,6 +410,7 @@ export const refine = action({
       }),
       requestId: args.requestRef,
       expectedRevision: args.expectedRevision,
+      expectedRouteGeneration,
       principalId: caller.principalId,
       delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
       intent,
@@ -410,6 +473,11 @@ export const provideFacts = action({
       }]
     })
     const proposal: CustomerRequestSemanticProposal = { kind: 'capability_candidates', selections }
+    const expectedRouteGeneration = await loadCurrentRouteGenerationNumber(ctx, current)
+    if (expectedRouteGeneration === undefined) return writableView(projectNeedsAttention({
+      requestRef: args.requestRef, revision: args.expectedRevision,
+      summary: 'AE could not verify the current options. Try this request again.',
+    }))
     return await compileCommit(ctx, {
       commandKey: namespacedKey(caller.principalId, 'facts', args.requestRef, args.idempotencyKey),
       commandDigest: canonicalDigest({
@@ -418,6 +486,7 @@ export const provideFacts = action({
       }),
       requestId: args.requestRef,
       expectedRevision: args.expectedRevision,
+      expectedRouteGeneration,
       principalId: caller.principalId,
       delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
       intent: current.aggregate.snapshot.intent,
@@ -444,30 +513,24 @@ export const resume = action({
     if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
       return { kind: 'refused', reason: 'request_not_found' }
     }
-    if (current.aggregate.plan.actions.length === 1) {
-      const action = current.aggregate.plan.actions[0]
-      if (action !== undefined) {
-        const status: CustomerActionStatusV2 = await ctx.runQuery(
-          internal.customerRequestV2ProviderReconciliation.getActionStatus,
-          {
-            requestId: current.aggregate.snapshot.requestId,
-            requestRevision: current.aggregate.snapshot.revision,
-            actionId: action.actionId,
-            principalId: caller.principalId,
-          },
-        )
-        if (status.kind === 'integrity_failure') return writableView(projectNeedsAttention({
-          requestRef: current.aggregate.snapshot.requestId,
-          revision: current.aggregate.snapshot.revision,
-          summary: 'AE could not verify the business result. The action will not be sent again.',
-        }))
-        if (status.kind !== 'none') return writableView(projectCustomerActionStatus({
-          requestRef: current.aggregate.snapshot.requestId,
-          revision: current.aggregate.snapshot.revision,
-          criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
-          status,
-        }))
-      }
+    if (current.aggregate.outcome !== 'plan_ready') {
+      return projectStoredAggregate(current.aggregate, undefined)
+    }
+    if (current.routeGenerationRef !== undefined) {
+      const routeReadback: Readonly<
+        | { kind: 'found'; routeGeneration: StoredRouteGeneration }
+        | { kind: 'not_found' }
+      > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+        requestId: current.aggregate.snapshot.requestId,
+      })
+      if (routeReadback.kind !== 'found') return writableView(projectNeedsAttention({
+        requestRef: args.requestRef, revision: current.aggregate.snapshot.revision,
+        summary: 'AE could not verify the current options. Try this request again.',
+      }))
+      const generationRepresentsStoredPlan = storedGenerationRepresentsAggregate(
+        routeReadback.routeGeneration, current.aggregate,
+      )
+      if (!generationRepresentsStoredPlan) return await projectCurrentRoutePlans(ctx, current.aggregate)
     }
     const recoveryBlock = await recoverUnresolvedEgress(ctx, current.aggregate)
     if (recoveryBlock !== undefined) return recoveryBlock
@@ -520,7 +583,9 @@ export const resume = action({
         }))
       }
     }
-    return projectStoredAggregate(current.aggregate)
+    return current.routeGenerationRef === undefined
+      ? projectStoredAggregate(current.aggregate, undefined)
+      : await projectCurrentRoutePlans(ctx, current.aggregate)
   },
 })
 
@@ -601,158 +666,12 @@ export const authorizePreparation = action({
   },
 })
 
-export const approvePreparedAction = action({
-  args: {
-    requestRef: v.string(), revision: v.number(), preparedActionRef: v.string(),
-    maximumSpendMinor: v.number(), expiresAt: v.number(), idempotencyKey: v.string(),
-  },
-  returns: approvalActionResult,
-  handler: async (ctx, args): Promise<ApprovalActionResult> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    if (args.requestRef.trim().length === 0 || args.requestRef.length > 200
-      || !Number.isSafeInteger(args.revision) || args.revision < 1
-      || args.preparedActionRef.trim().length === 0 || args.preparedActionRef.length > 300
-      || !Number.isSafeInteger(args.maximumSpendMinor) || args.maximumSpendMinor < 0
-      || !Number.isSafeInteger(args.expiresAt) || args.expiresAt < 1
-      || args.idempotencyKey.trim().length === 0 || args.idempotencyKey.length > 200) {
-      return { kind: 'refused', reason: 'approval_invalid' }
-    }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
-    const requestPrincipalId = current.aggregate.snapshot.principalId
-    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
-    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(
-      internal.customerRequestPrincipals.getAgentPrincipal,
-      { principalId: requestPrincipalId },
-    )
-    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.revision !== args.revision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    const command = {
-      requestRef: args.requestRef,
-      revision: args.revision,
-      preparedActionRef: args.preparedActionRef,
-      maximumSpendMinor: args.maximumSpendMinor,
-      expiresAt: args.expiresAt,
-      idempotencyKey: args.idempotencyKey,
-    }
-    const now = Date.now()
-    const result: ApprovalGrantMutationResult = await ctx.runMutation(
-      internal.customerRequestV2ApprovalGrant.issue,
-      {
-        commandKey: namespacedKey(requestPrincipalId, 'approve', args.requestRef, args.idempotencyKey),
-        commandDigest: canonicalDigest(command),
-        principalId: requestPrincipalId,
-        expectedRequestId: args.requestRef,
-        expectedRequestRevision: args.revision,
-        preparedActionRef: args.preparedActionRef,
-        maximumSpendMinor: args.maximumSpendMinor,
-        expiresAt: args.expiresAt,
-        actor: {
-          kind: 'clerk_owner', requestPrincipalId, ownerId: identity.subject,
-          credentialId: identity.tokenIdentifier,
-          authenticationEvidenceRef: `clerk-identity:${canonicalDigest({
-            issuer: identity.issuer, subject: identity.subject, tokenIdentifier: identity.tokenIdentifier,
-          })}`,
-        },
-        now,
-      },
-    )
-    if (result.kind === 'conflict') return {
-      kind: 'conflict', requestRef: args.requestRef,
-      reason: result.reason === 'idempotency_key_reused' ? 'idempotency_key_reused' : 'approval_changed',
-    }
-    if (result.kind === 'refused') return {
-      kind: 'refused',
-      reason: result.reason === 'prepared_action_not_found' ? 'request_not_found' : 'approval_invalid',
-    }
-    return {
-      kind: 'approved',
-      requestRef: result.approvalGrant.lineage.requestId,
-      revision: result.approvalGrant.lineage.requestRevision,
-      approvalRef: result.approvalGrant.approvalGrantRef,
-      preparedActionRef: result.approvalGrant.preparedAction.preparedActionRef,
-      spend: result.approvalGrant.spend,
-      expiresAt: result.approvalGrant.expiresAt,
-      recovery: {
-        unknownOutcome: result.approvalGrant.recovery.unknownOutcome,
-        automaticRetry: result.approvalGrant.recovery.automaticRetry,
-      },
-    }
-  },
-})
-
-export const admitApprovedAction = action({
-  args: {
-    requestRef: v.string(), revision: v.number(), approvalGrantRef: v.string(), idempotencyKey: v.string(),
-  },
-  returns: actionAttemptAdmissionResult,
-  handler: async (ctx, args): Promise<ActionAttemptAdmissionResult> => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
-    if (args.requestRef.trim().length === 0 || args.requestRef.length > 200
-      || !Number.isSafeInteger(args.revision) || args.revision < 1
-      || !args.approvalGrantRef.startsWith('approval-grant:v2:') || args.approvalGrantRef.length > 500
-      || args.idempotencyKey.trim().length === 0 || args.idempotencyKey.length > 200) {
-      return { kind: 'refused', reason: 'admission_invalid' }
-    }
-    const current = await loadCurrent(ctx, args.requestRef)
-    if (current.kind !== 'current') return { kind: 'refused', reason: 'request_not_found' }
-    const requestPrincipalId = current.aggregate.snapshot.principalId
-    const ownsDirectRequest = requestPrincipalId === identity.tokenIdentifier
-    const agentPrincipal = ownsDirectRequest ? null : await ctx.runQuery(
-      internal.customerRequestPrincipals.getAgentPrincipal,
-      { principalId: requestPrincipalId },
-    )
-    if (!ownsDirectRequest && agentPrincipal?.ownerId !== identity.subject) {
-      return { kind: 'refused', reason: 'request_not_found' }
-    }
-    if (current.aggregate.snapshot.revision !== args.revision) return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
-    }
-    const command = {
-      requestRef: args.requestRef, revision: args.revision,
-      approvalGrantRef: args.approvalGrantRef, idempotencyKey: args.idempotencyKey,
-    }
-    const result: ActionAttemptMutationResult = await ctx.runMutation(
-      internal.customerRequestV2ActionAttempt.admit,
-      {
-        commandKey: namespacedKey(requestPrincipalId, 'admit', args.requestRef, args.idempotencyKey),
-        commandDigest: canonicalDigest(command), principalId: requestPrincipalId,
-        expectedRequestId: args.requestRef, expectedRequestRevision: args.revision,
-        approvalGrantRef: args.approvalGrantRef, now: Date.now(),
-      },
-    )
-    if (result.kind === 'conflict') return {
-      kind: 'conflict', requestRef: args.requestRef, reason: 'idempotency_key_reused',
-    }
-    if (result.kind === 'refused') return result.reason === 'approval_grant_consumed'
-      ? { kind: 'conflict', requestRef: args.requestRef, reason: 'approval_used' }
-      : {
-          kind: 'refused',
-          reason: result.reason === 'approval_grant_not_found' ? 'request_not_found' : 'admission_invalid',
-        }
-    return {
-      kind: 'accepted',
-      requestRef: result.actionAttempt.lineage.requestId,
-      revision: result.actionAttempt.lineage.requestRevision,
-      actionAttemptRef: result.actionAttempt.actionAttemptRef,
-      state: result.actionAttempt.state,
-      expiresAt: result.actionAttempt.expiresAt,
-      recovery: result.actionAttempt.recovery,
-    }
-  },
-})
-
 async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   commandKey: string
   commandDigest: string
   requestId: string
   expectedRevision: number
+  expectedRouteGeneration: number
   principalId: string
   delegatedAgentId: string
   intent: string
@@ -763,19 +682,8 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   if (replay !== undefined) return replay
   const graph = await loadRequestGraph(ctx, input.networkId)
   if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
-  if (apiKey === undefined || apiKey.length === 0) return { kind: 'refused', reason: 'interpreter_unavailable' }
-  const modelName = process.env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'
-  const interpreter = createJsonCustomerRequestSemanticInterpreter({
-    interpreterId: `openrouter:${modelName}`,
-    transport: createOpenRouterCustomerRequestSemanticTransport({
-      apiKey, model: modelName,
-      ...(process.env.AE_SITE_URL?.trim() ? { siteUrl: process.env.AE_SITE_URL.trim() } : {}),
-    }),
-    timeoutMs: 20_000,
-    maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
-    maximumResponseBytes: 64_000,
-  })
+  const interpreter = createConfiguredRequestInterpreter()
+  if (interpreter === undefined) return { kind: 'refused', reason: 'interpreter_unavailable' }
   const priorFacts = rebindStoredFacts(input.priorFacts, graph.models)
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let proposal: CustomerRequestSemanticProposal
@@ -789,7 +697,7 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
     }
     const preview = compileProposal(compilationInput)
     if (preview.kind === 'compiled') {
-      return await compileCommit(ctx, { ...compilationInput, compiledAggregate: preview.aggregate })
+      return await compileCommit(ctx, { ...compilationInput, compiledResult: preview })
     }
     if (preview.reason === 'capability_graph_invalid') break
   }
@@ -804,6 +712,7 @@ type CompileCommitInput = Readonly<{
   commandDigest: string
   requestId: string
   expectedRevision: number
+  expectedRouteGeneration: number
   principalId: string
   delegatedAgentId: string
   intent: string
@@ -812,13 +721,14 @@ type CompileCommitInput = Readonly<{
   proposal: CustomerRequestSemanticProposal
   interpreterId: string
   graph: RequestGraph
-  compiledAggregate?: CustomerRequestV2Aggregate
+  compiledResult?: Extract<CompileCustomerRequestResult, { kind: 'compiled' }>
 }>
 
 function compileProposal(input: CompileCommitInput) {
   return compileCustomerRequest({
     requestId: input.requestId,
     expectedRevision: input.expectedRevision,
+    expectedRouteGeneration: input.expectedRouteGeneration,
     principalId: input.principalId,
     delegatedAgentId: input.delegatedAgentId,
     intent: input.intent,
@@ -835,9 +745,9 @@ function compileProposal(input: CompileCommitInput) {
 async function compileCommit(ctx: ActionCtx, input: CompileCommitInput): Promise<ActionResult> {
   const replay = await replayCommittedCommand(ctx, input)
   if (replay !== undefined) return replay
-  const compiled = input.compiledAggregate === undefined
+  const compiled = input.compiledResult === undefined
     ? compileProposal(input)
-    : { kind: 'compiled' as const, aggregate: input.compiledAggregate }
+    : input.compiledResult
   if (compiled.kind === 'refused') return writableView(projectNeedsAttention({
     requestRef: input.requestId,
     revision: input.expectedRevision,
@@ -849,9 +759,13 @@ async function compileCommit(ctx: ActionCtx, input: CompileCommitInput): Promise
     commandKey: input.commandKey,
     commandDigest: input.commandDigest,
     expectedRevision: input.expectedRevision,
+    expectedRouteGeneration: input.expectedRouteGeneration,
     aggregate: writableCustomerRequestV2Aggregate(compiled.aggregate),
+    ...(compiled.routeGeneration === undefined
+      ? {}
+      : { routeGeneration: writableCustomerRequestRoutePlanGeneration(compiled.routeGeneration) }),
   })
-  if (result.kind === 'revision_conflict') return {
+  if (result.kind === 'revision_conflict' || result.kind === 'route_generation_conflict') return {
     kind: 'conflict', requestRef: input.requestId, reason: 'revision_changed',
   }
   if (result.kind === 'identity_conflict') return {
@@ -868,7 +782,7 @@ async function compileCommit(ctx: ActionCtx, input: CompileCommitInput): Promise
     requestRef: input.requestId, revision: input.expectedRevision,
     summary: 'The registered options changed. Try this request again.',
   }))
-  return projectStoredAggregate(compiled.aggregate)
+  return projectStoredAggregate(compiled.aggregate, compiled.routeGeneration?.generationRef)
 }
 
 async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
@@ -887,7 +801,12 @@ async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
   if (replay.kind === 'conflict') return {
     kind: 'conflict', requestRef: input.requestId, reason: 'idempotency_key_reused',
   }
-  return projectStoredAggregate(replay.aggregate)
+  if (replay.kind === 'needs_attention') return writableView(projectNeedsAttention({
+    requestRef: input.requestId,
+    revision: 0,
+    summary: 'This earlier request used a retired format. Start a new request to continue.',
+  }))
+  return projectStoredAggregate(replay.aggregate, replay.routeGenerationRef)
 }
 
 type EligibleSupply = Readonly<{
@@ -902,6 +821,10 @@ type EligibleSupply = Readonly<{
   binding: Readonly<{
     bindingId: string; offeringId: string; networkId: string; capabilityId: string; version: number; contractDigest: string
     registrationHash: string
+    cancellation: Readonly<{
+      kind: 'unsupported' | 'adapter_managed'
+      evidenceRefs: readonly string[]
+    }>
   }>
 }>
 type EligibleSupplyResult = Readonly<
@@ -970,6 +893,10 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
       offeringRegistrationHash: item.offering.registrationHash,
       bindingRegistrationHash: item.binding.registrationHash,
       price: item.offering.presentation.price,
+      cancellation: {
+        ...item.binding.cancellation,
+        evidenceRefs: [...item.binding.cancellation.evidenceRefs],
+      },
       ...(item.publication === undefined ? {} : {
         publicationRef: item.publication.publicationRef,
         publicationRevision: item.publication.revision,
@@ -993,19 +920,55 @@ type ExactContractResult = Readonly<
 >
 type CommitResult = Readonly<
   | { kind: 'stored' | 'replayed'; requestId: string; revision: number }
-  | { kind: 'revision_conflict' | 'identity_conflict' | 'command_conflict' | 'aggregate_invalid' | 'context_stale' }
+  | {
+      kind: 'revision_conflict' | 'route_generation_conflict' | 'identity_conflict'
+        | 'command_conflict' | 'aggregate_invalid' | 'context_stale'
+    }
 >
 type CommandReplayResult = Readonly<
   | { kind: 'not_found' }
   | { kind: 'conflict' }
-  | { kind: 'replayed'; aggregate: StoredAggregate }
+  | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
+  | { kind: 'replayed'; aggregate: StoredAggregate; routeGenerationRef?: string }
 >
+type GenerationRefreshResult = Readonly<
+  | { kind: 'unchanged'; routeGeneration: StoredRouteGeneration }
+  | { kind: 'superseded'; routeGeneration: StoredRouteGeneration }
+  | { kind: 'needs_information'; aggregate: StoredAggregate }
+  | { kind: 'unsupported'; aggregate: StoredAggregate }
+  | {
+      kind: 'retryable'
+      reason: 'current_supply_unavailable' | 'interpreter_unavailable' | 'interpretation_unusable' | 'context_changed'
+    }
+  | {
+      kind: 'request_conflict' | 'route_generation_conflict' | 'identity_conflict'
+        | 'command_conflict' | 'candidate_invalid' | 'context_stale'
+    }
+>
+type GenerationRefreshReplayResult = GenerationRefreshResult | Readonly<{ kind: 'not_found' }>
 type StoredAggregateResult = Readonly<
-  | { kind: 'current'; aggregate: StoredAggregate }
+  | {
+      kind: 'current'; aggregate: StoredAggregate
+      routeGenerationNumber: number; routeGenerationRef?: string; currentDecisionCommandKey?: string
+    }
   | { kind: 'needs_attention'; requestId: string; reason: 'historical_request_resubmit_required'; resumable: false }
   | { kind: 'not_found' }
 >
 type StoredAggregate = Infer<typeof customerRequestV2AggregateValue>
+type StoredRouteGeneration = Infer<typeof routePlanGenerationV2Value>
+type RoutePlanProjectionMaterial = Readonly<
+  | {
+      kind: 'found'
+      current: StoredRouteGeneration
+      previous?: StoredRouteGeneration
+      businesses: readonly Readonly<{ businessId: string; name: string }>[]
+      capabilities: readonly Readonly<{
+        capabilityId: string; version: number; contractDigest: string
+        name: string; description: string; resultLabels: readonly string[]
+      }>[]
+    }
+  | { kind: 'not_found' }
+>
 type StoredPreparation = Infer<typeof durableActionPreparationV2Value>
 type PreparationMutationResult = Readonly<
   | { kind: 'stored' | 'replayed'; preparation: StoredPreparation }
@@ -1022,35 +985,104 @@ type PreparedActionMutationResult = Readonly<
   | { kind: 'not_prepared'; reason: Infer<typeof preparedActionRecoveryReasonV2Value>; recoveryRef: string }
   | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'prepared_action_material_changed' }
 >
-type ApprovalGrantMutationResult = Readonly<
-  | { kind: 'issued' | 'replayed'; approvalGrant: Infer<typeof approvalGrantV2Value> }
-  | { kind: 'conflict'; reason: 'idempotency_key_reused' | 'approval_material_changed' }
-  | {
-      kind: 'refused'
-      reason: 'prepared_action_not_found' | 'prepared_action_expired' | 'spend_scope_invalid'
-        | 'expiry_scope_invalid' | 'approval_material_invalid' | 'capability_authority_changed'
-    }
->
-type ActionAttemptMutationResult = Readonly<
-  | { kind: 'admitted' | 'replayed'; actionAttempt: Infer<typeof actionAttemptV2Value> }
-  | { kind: 'conflict'; reason: 'idempotency_key_reused' }
-  | {
-      kind: 'refused'
-      reason: 'approval_grant_not_found' | 'approval_grant_expired' | 'approval_authority_changed'
-        | 'approval_grant_consumed' | 'cumulative_authority_changed'
-        | 'cumulative_authority_exhausted' | 'admission_material_invalid'
-    }
->
-type CustomerApprovalStatus = Readonly<
-  | { kind: 'not_approved' }
-  | {
-      kind: 'approved'; currency: string; maximumSpendMinor: number
-      expiresAt: number; recordedAt: number
-    }
->
+function storedGenerationRepresentsAggregate(
+  generation: StoredRouteGeneration,
+  aggregate: StoredAggregate,
+): boolean {
+  if (generation.decisionSnapshot !== undefined) {
+    return generation.decisionSnapshot.requestSnapshotDigest === aggregate.snapshot.snapshotDigest
+      && generation.decisionSnapshot.factsDigest === aggregate.evaluation.factsDigest
+      && generation.decisionSnapshot.evaluationDigest === aggregate.evaluation.evaluationDigest
+      && generation.decisionSnapshot.planRevisionId === aggregate.plan.planRevisionId
+      && generation.decisionSnapshot.planDigest === aggregate.plan.planDigest
+  }
+  // Historical generations predate decision snapshots. They were atomically
+  // validated against this immutable plan at commit, so exact compiler lineage
+  // and creation time identify the only aggregate they can safely prepare.
+  return generation.createdAt === aggregate.plan.createdAt
+    && generation.registrySnapshotDigest === aggregate.plan.registrySnapshotDigest
+    && generation.compiler.compilerVersion === aggregate.plan.compilerVersion
+    && generation.compiler.interpreterId === aggregate.plan.interpreterId
+    && generation.compiler.proposalDigest === aggregate.plan.proposalDigest
+}
+
+async function projectCurrentRoutePlans(
+  ctx: ActionCtx,
+  aggregate: StoredAggregate,
+): Promise<ActionResult> {
+  let material: RoutePlanProjectionMaterial
+  try {
+    material = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanProjectionMaterial, {
+      requestId: aggregate.snapshot.requestId,
+    })
+  } catch (error) {
+    console.error('customer_request_route_plan_projection_failed', error)
+    return writableView(projectNeedsAttention({
+      requestRef: aggregate.snapshot.requestId,
+      revision: aggregate.snapshot.revision,
+      summary: 'AE could not verify the current ways forward. Try this request again.',
+    }))
+  }
+  if (material.kind !== 'found'
+    || material.current.requestId !== aggregate.snapshot.requestId
+    || material.current.requestRevision !== aggregate.snapshot.revision) {
+    return writableView(projectNeedsAttention({
+      requestRef: aggregate.snapshot.requestId,
+      revision: aggregate.snapshot.revision,
+      summary: 'AE could not verify the current ways forward. Try this request again.',
+    }))
+  }
+  let decision: ReturnType<typeof projectCustomerRoutePlanDecision>
+  try {
+    decision = projectCustomerRoutePlanDecision({
+      current: material.current,
+      ...(material.previous === undefined ? {} : { previous: material.previous }),
+      businessNames: Object.fromEntries(material.businesses.map(({ businessId, name }) => [businessId, name])),
+      capabilitySemantics: Object.fromEntries(material.capabilities.map((capability) => [
+        capabilitySemanticsKey(capability),
+        {
+          name: capability.name,
+          description: capability.description,
+          resultLabels: capability.resultLabels,
+        },
+      ])),
+      now: Date.now(),
+    })
+  } catch (error) {
+    console.error('customer_request_route_plan_projection_invalid', error)
+    return writableView(projectNeedsAttention({
+      requestRef: aggregate.snapshot.requestId,
+      revision: aggregate.snapshot.revision,
+      summary: 'AE could not verify the current ways forward. Try this request again.',
+    }))
+  }
+  return writableView(projectRoutePlansReady({
+    requestRef: aggregate.snapshot.requestId,
+    revision: aggregate.snapshot.revision,
+    summary: aggregate.snapshot.intent,
+    decision,
+    criteria: (material.current.decisionSnapshot?.criteria ?? aggregate.evaluation.criteria)
+      .map(({ label, value, basis }) => ({ label, value, basis })),
+  }))
+}
 
 async function loadCurrent(ctx: ActionCtx, requestId: string): Promise<StoredAggregateResult> {
   return await ctx.runQuery(internal.customerRequestV2.getCurrentAggregate, { requestId })
+}
+
+async function loadCurrentRouteGenerationNumber(
+  ctx: ActionCtx,
+  current: Extract<StoredAggregateResult, { kind: 'current' }>,
+): Promise<number | undefined> {
+  if (current.routeGenerationRef === undefined) return current.routeGenerationNumber
+  const result: Readonly<
+    | { kind: 'found'; routeGeneration: StoredRouteGeneration }
+    | { kind: 'not_found' }
+  > = await ctx.runQuery(internal.customerRequestV2.getRoutePlanGeneration, {
+    requestId: current.aggregate.snapshot.requestId,
+    generationRef: current.routeGenerationRef,
+  })
+  return result.kind === 'found' ? result.routeGeneration.generation : undefined
 }
 
 async function prepareCurrentAction(
@@ -1080,12 +1112,27 @@ async function prepareCurrentAction(
   if (current.aggregate.snapshot.revision !== args.revision) return {
     kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
   }
-  if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
+  if (current.routeGenerationRef !== undefined) {
+    const routeReadback: Readonly<
+      | { kind: 'found'; routeGeneration: StoredRouteGeneration }
+      | { kind: 'not_found' }
+    > = await ctx.runQuery(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+      requestId: current.aggregate.snapshot.requestId,
+    })
+    if (routeReadback.kind !== 'found') return writableView(projectNeedsAttention({
+      requestRef: args.requestRef,
+      revision: args.revision,
+      summary: 'AE could not verify the current options. Try this request again.',
+    }))
+    const generationRepresentsStoredPlan = storedGenerationRepresentsAggregate(
+      routeReadback.routeGeneration, current.aggregate,
+    )
+    const routes = routeReadback.routeGeneration.routes
     const graph = await loadRequestGraph(ctx, current.aggregate.snapshot.networkId)
     const routesAreCurrent = graph.kind === 'available'
-      && graph.registrySnapshotDigest === current.aggregate.evaluation.registrySnapshotDigest
-      && current.aggregate.plan.routes.every((route) => route.expiresAt > Date.now())
-      && current.aggregate.plan.routes.every((route) => route.steps.every((step) => graph.bindings.some((binding) => (
+      && graph.registrySnapshotDigest === routeReadback.routeGeneration.registrySnapshotDigest
+      && routes.every((route) => route.expiresAt > Date.now())
+      && routes.every((route) => route.steps.every((step) => graph.bindings.some((binding) => (
         binding.businessId === step.businessId
         && binding.offeringId === step.offeringId
         && binding.bindingId === step.bindingId
@@ -1099,17 +1146,38 @@ async function prepareCurrentAction(
         && binding.price !== undefined
         && canonicalDigest(binding.price) === canonicalDigest(step.price)
       ))))
-    if (!routesAreCurrent) return writableView(projectNeedsAttention({
+    if (!routesAreCurrent) {
+      if (graph.kind !== 'available') return await persistRetryableRouteRefresh(
+        ctx, args, caller, current, routeReadback.routeGeneration, 'current_supply_unavailable',
+      )
+      const transientBindingUnavailable = routes.some((route) => route.steps.some((step) => (
+        graph.bindings.some((binding) => (
+          binding.businessId === step.businessId
+          && binding.offeringId === step.offeringId
+          && binding.bindingId === step.bindingId
+          && sameCapabilityContractRef(binding.contractRef, step.contractRef)
+          && (binding.publicationRef === undefined
+            || binding.readinessValidUntil === undefined
+            || binding.readinessValidUntil <= Date.now())
+        ))
+      )))
+      if (transientBindingUnavailable) return await persistRetryableRouteRefresh(
+        ctx, args, caller, current, routeReadback.routeGeneration, 'current_supply_unavailable',
+      )
+      return await refreshCurrentRouteGeneration(
+        ctx, args, caller, current, graph, routeReadback.routeGeneration,
+      )
+    }
+    if (!generationRepresentsStoredPlan
+      || current.aggregate.plan.actions.length !== 1
+      || current.aggregate.plan.actions[0] === undefined) {
+      return await projectCurrentRoutePlans(ctx, current.aggregate)
+    }
+  } else if (current.aggregate.plan.actions.length !== 1 || current.aggregate.plan.actions[0] === undefined) {
+    return writableView(projectNeedsAttention({
       requestRef: args.requestRef,
       revision: args.revision,
-      summary: 'The available businesses changed. Review the request again to refresh the options.',
-    }))
-    return writableView(projectRoutePlansReady({
-      requestRef: args.requestRef,
-      revision: args.revision,
-      summary: current.aggregate.snapshot.intent,
-      criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
-      routes: current.aggregate.plan.routes,
+      summary: 'AE could not verify the current options. Try this request again.',
     }))
   }
   const action = current.aggregate.plan.actions[0]
@@ -1133,6 +1201,188 @@ async function prepareCurrentAction(
     })
   }
   return preparationResultView(current.aggregate, result, args.requestRef, args.revision)
+}
+
+async function refreshCurrentRouteGeneration(
+  ctx: ActionCtx,
+  args: Readonly<{ requestRef: string; revision: number; idempotencyKey: string }>,
+  caller: Readonly<{ principalId: string }>,
+  current: Extract<StoredAggregateResult, { kind: 'current' }>,
+  graph: RequestGraph,
+  currentGeneration: StoredRouteGeneration,
+): Promise<ActionResult> {
+  const { commandKey, commandDigest } = routeRefreshCommand(args, caller.principalId)
+  const replay: GenerationRefreshReplayResult = await ctx.runQuery(
+    internal.customerRequestV2.getRoutePlanGenerationRefreshReplay,
+    { commandKey, commandDigest, principalId: caller.principalId, requestId: args.requestRef },
+  )
+  if (replay.kind !== 'not_found') return await generationRefreshResultView(ctx, current.aggregate, replay)
+
+  const interpreter = createConfiguredRequestInterpreter()
+  if (interpreter === undefined) return await persistRetryableRouteRefresh(
+    ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
+  )
+  const priorFacts = rebindStoredFacts(current.aggregate.snapshot.facts, graph.models)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let proposal: CustomerRequestSemanticProposal
+    try {
+      proposal = await interpreter.propose({
+        customerJob: current.aggregate.snapshot.intent,
+        capabilities: graph.descriptors,
+      })
+    } catch {
+      return await persistRetryableRouteRefresh(
+        ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
+      )
+    }
+    const compiled = compileCustomerRequest({
+      requestId: args.requestRef,
+      expectedRevision: args.revision - 1,
+      expectedRouteGeneration: currentGeneration.generation,
+      principalId: caller.principalId,
+      delegatedAgentId: current.aggregate.snapshot.delegatedAgentId,
+      intent: current.aggregate.snapshot.intent,
+      networkId: current.aggregate.snapshot.networkId,
+      priorFacts,
+      proposal,
+      interpreterId: interpreter.interpreterId,
+      bindings: graph.bindings,
+      models: graph.models,
+      now: Date.now(),
+    })
+    if (compiled.kind === 'refused') {
+      if (compiled.reason === 'capability_graph_invalid') continue
+      return await persistRetryableRouteRefresh(
+        ctx, args, caller, current, currentGeneration, 'interpretation_unusable',
+      )
+    }
+    const result: GenerationRefreshResult = await ctx.runMutation(
+      internal.customerRequestV2.refreshRoutePlanGeneration,
+      {
+        commandKey, commandDigest, principalId: caller.principalId, requestId: args.requestRef,
+        expectedRequestRevision: args.revision,
+        expectedGeneration: currentGeneration.generation,
+        expectedGenerationRef: currentGeneration.generationRef,
+        ...(current.currentDecisionCommandKey === undefined
+          ? {}
+          : { expectedDecisionCommandKey: current.currentDecisionCommandKey }),
+        candidateAggregate: writableCustomerRequestV2Aggregate(compiled.aggregate),
+        ...(compiled.routeGeneration === undefined ? {} : {
+          candidateRouteGeneration: writableCustomerRequestRoutePlanGeneration(compiled.routeGeneration),
+        }),
+      },
+    )
+    return result.kind === 'context_stale'
+      ? await persistRetryableRouteRefresh(
+          ctx, args, caller, current, currentGeneration, 'context_changed',
+        )
+      : await generationRefreshResultView(ctx, current.aggregate, result)
+  }
+  return await persistRetryableRouteRefresh(
+    ctx, args, caller, current, currentGeneration, 'context_changed',
+  )
+}
+
+function createConfiguredRequestInterpreter() {
+  const apiKey = env.OPENROUTER_API_KEY?.trim()
+  if (apiKey === undefined || apiKey.length === 0) return undefined
+  const modelName = env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'
+  return createJsonCustomerRequestSemanticInterpreter({
+    interpreterId: `openrouter:${modelName}`,
+    transport: createOpenRouterCustomerRequestSemanticTransport({
+      apiKey, model: modelName,
+      ...(env.AE_SITE_URL?.trim() ? { siteUrl: env.AE_SITE_URL.trim() } : {}),
+    }),
+    timeoutMs: 20_000,
+    maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
+    maximumResponseBytes: 64_000,
+  })
+}
+
+type RouteRefreshRetryReason = Extract<GenerationRefreshResult, { kind: 'retryable' }>['reason']
+
+function routeRefreshCommand(
+  args: Readonly<{ requestRef: string; revision: number; idempotencyKey: string }>,
+  principalId: string,
+) {
+  return {
+    commandKey: namespacedKey(principalId, 'route-refresh', args.requestRef, args.idempotencyKey),
+    commandDigest: canonicalDigest({
+      requestRef: args.requestRef, revision: args.revision, idempotencyKey: args.idempotencyKey,
+    }),
+  }
+}
+
+async function persistRetryableRouteRefresh(
+  ctx: ActionCtx,
+  args: Readonly<{ requestRef: string; revision: number; idempotencyKey: string }>,
+  caller: Readonly<{ principalId: string }>,
+  current: Extract<StoredAggregateResult, { kind: 'current' }>,
+  currentGeneration: StoredRouteGeneration,
+  reason: RouteRefreshRetryReason,
+): Promise<ActionResult> {
+  const result: GenerationRefreshResult = await ctx.runMutation(
+    internal.customerRequestV2.recordRoutePlanGenerationRetry,
+    {
+      ...routeRefreshCommand(args, caller.principalId),
+      principalId: caller.principalId, requestId: args.requestRef,
+      expectedRequestRevision: args.revision,
+      expectedGeneration: currentGeneration.generation,
+      expectedGenerationRef: currentGeneration.generationRef,
+      ...(current.currentDecisionCommandKey === undefined
+        ? {}
+        : { expectedDecisionCommandKey: current.currentDecisionCommandKey }),
+      reason, recordedAt: Date.now(),
+    },
+  )
+  return await generationRefreshResultView(ctx, current.aggregate, result)
+}
+
+async function generationRefreshResultView(
+  ctx: ActionCtx,
+  current: StoredAggregate,
+  result: Exclude<GenerationRefreshReplayResult, { kind: 'not_found' }>,
+): Promise<ActionResult> {
+  if (result.kind === 'command_conflict') return {
+    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'idempotency_key_reused',
+  }
+  if (result.kind === 'request_conflict') return {
+    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'revision_changed',
+  }
+  if (result.kind === 'route_generation_conflict') return {
+    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'options_changed',
+  }
+  if (result.kind === 'identity_conflict') return {
+    kind: 'conflict', requestRef: current.snapshot.requestId, reason: 'identity_changed',
+  }
+  if (result.kind === 'candidate_invalid' || result.kind === 'context_stale') {
+    return writableView(projectNeedsAttention({
+      requestRef: current.snapshot.requestId, revision: current.snapshot.revision,
+      summary: 'AE could not refresh the available options. Try again.',
+    }))
+  }
+  if (result.kind === 'retryable') return writableView(projectNeedsAttention({
+    requestRef: current.snapshot.requestId, revision: current.snapshot.revision,
+    summary: 'AE could not refresh the available options. Try again.',
+  }))
+  if (result.kind === 'needs_information' || result.kind === 'unsupported') {
+    if (result.kind === 'needs_information') return projectStoredAggregate(result.aggregate, undefined)
+    return writableView({
+      kind: 'request', requestRef: result.aggregate.snapshot.requestId,
+      revision: result.aggregate.snapshot.revision, state: 'unsupported',
+      summary: 'No registered business capability currently matches this request.',
+      nextAction: 'revise_request', missingFields: [],
+      criteria: result.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+      options: [],
+    })
+  }
+  if (result.kind !== 'unchanged' && result.kind !== 'superseded') {
+    return writableView(projectNeedsAttention({
+      requestRef: current.snapshot.requestId, revision: current.snapshot.revision,
+      summary: 'AE could not refresh the available options. Try again.',
+    }))
+  }
+  return await projectCurrentRoutePlans(ctx, current)
 }
 
 async function runPreparationEgress(
@@ -1198,14 +1448,7 @@ async function resolvePreparedAction(
     },
   )
   if (result.kind === 'prepared') {
-    const approval: CustomerApprovalStatus = await ctx.runQuery(
-      internal.customerRequestV2ApprovalGrant.getCustomerApprovalStatus,
-      {
-        preparedActionRef: result.preparedAction.preparedActionRef,
-        principalId: aggregate.snapshot.principalId,
-      },
-    )
-    return projectPreparedAction(aggregate, preparation, result.preparedAction, approval)
+    return projectPreparedAction(aggregate, preparation, result.preparedAction)
   }
   const base = {
     kind: 'request' as const,
@@ -1278,7 +1521,6 @@ function projectPreparedAction(
   aggregate: StoredAggregate,
   preparation: Extract<StoredPreparation, { kind: 'ready_for_routing' }>,
   action: Infer<typeof preparedActionV2Value>,
-  approval: CustomerApprovalStatus,
 ): ActionResult {
   return {
     kind: 'request',
@@ -1328,13 +1570,6 @@ function projectPreparedAction(
         },
         validUntil: alternative.expiresAt,
       })),
-      approval: approval.kind === 'approved'
-        ? {
-            state: 'recorded', currency: approval.currency,
-            maximumSpendMinor: approval.maximumSpendMinor,
-            expiresAt: approval.expiresAt, recordedAt: approval.recordedAt,
-          }
-        : { state: 'required' },
     },
   }
 }
@@ -1537,17 +1772,22 @@ function rebindStoredFacts(
   })
 }
 
-function projectStoredAggregate(aggregate: StoredAggregate | CustomerRequestV2Aggregate): ActionResult {
+function projectStoredAggregate(
+  aggregate: StoredAggregate | CustomerRequestV2Aggregate,
+  routeGenerationRef?: string,
+): ActionResult {
   return writableView(projectRequestEvaluation({
     snapshot: aggregate.snapshot,
     evaluation: aggregate.evaluation,
+    ...(routeGenerationRef === undefined ? {} : { routeGenerationRef }),
   }))
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
-  const { disclosureReview, optionSet, clarification, preparedAction, action, routes } = view
+  const { disclosureReview, optionSet, clarification, preparedAction, action, decision } = view
   return {
     kind: view.kind, requestRef: view.requestRef, revision: view.revision,
+    ...(view.routeGenerationRef === undefined ? {} : { routeGenerationRef: view.routeGenerationRef }),
     state: view.state, summary: view.summary, nextAction: view.nextAction,
     missingFields: view.missingFields.map((field) => ({ ...field })),
     criteria: (view.criteria ?? []).map((criterion) => ({ ...criterion })),
@@ -1570,36 +1810,18 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
         purposes: [...preparedAction.dataUse.purposes],
       },
       effects: preparedAction.effects.map((effect) => ({ ...effect })),
-      approval: { ...preparedAction.approval },
       alternatives: preparedAction.alternatives.map((alternative) => ({
         ...alternative, price: { ...alternative.price },
       })),
     } }),
-    ...(routes === undefined ? {} : { routes: routes.map((route) => ({
-      ...route,
-      providers: route.providers.map((provider) => ({ ...provider })),
-      maximumTotalCost: { ...route.maximumTotalCost },
-      dataUse: {
-        ...route.dataUse,
-        recipients: route.dataUse.recipients.map((recipient) => ({
-          ...recipient, purposes: [...recipient.purposes],
-        })),
-        purposes: [...route.dataUse.purposes],
-      },
-      effects: { ...route.effects }, evidence: { ...route.evidence },
-      recovery: { steps: route.recovery.steps.map((step) => ({ ...step })) },
-      fallbacks: {
-        ordering: route.fallbacks.ordering,
-        alternatives: route.fallbacks.alternatives.map((fallback) => ({ ...fallback })),
-      },
-      uncertainty: [...route.uncertainty],
-      comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
-    })) }),
     ...(action === undefined ? {} : { action: {
       state: action.state, resolution: action.resolution, automaticRetry: action.automaticRetry,
       observedAt: action.observedAt,
       ...(action.result === undefined ? {} : { result: structuredClone(action.result) }),
     } }),
+    ...(decision === undefined ? {} : {
+      decision: writableClone(decision),
+    }),
     options: view.options.map(writableOption),
     ...(optionSet === undefined ? {} : { optionSet: {
       ...optionSet,
@@ -1613,6 +1835,18 @@ function writableView(view: CustomerRequestView): Infer<typeof customerView> {
       options: optionSet.options.map(writableOption),
     } }),
   }
+}
+
+type DeepWritable<Value> = Value extends string | number | boolean | bigint | null | undefined
+  ? Value
+  : Value extends readonly (infer Item)[]
+    ? DeepWritable<Item>[]
+    : Value extends object
+      ? { -readonly [Key in keyof Value]: DeepWritable<Exclude<Value[Key], undefined>> }
+      : Value
+
+function writableClone<Value>(value: Value): DeepWritable<Value> {
+  return structuredClone(value) as DeepWritable<Value>
 }
 
 function writableOption(option: CustomerRequestView['options'][number]) {
@@ -1654,8 +1888,11 @@ async function resolveRequestCaller(
     || !assertion.scopes.includes('customer_requests:create')) return undefined
   const verified = await verifyCustomerRequestServiceAssertion({ key, operation, command: command as never, assertion })
   if (!verified) return undefined
+  const clerkIssuer = env.CLERK_JWT_ISSUER_DOMAIN?.trim()
+  if (clerkIssuer === undefined || clerkIssuer.length === 0) return undefined
   const recorded = await ctx.runMutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
     principalId: assertion.principalId, ownerId: assertion.ownerId, credentialId: assertion.credentialId,
+    ownerTokenIdentifier: `${clerkIssuer}|${assertion.ownerId}`,
     scopes: [...assertion.scopes], seenAt: Date.now(),
   })
   if (recorded.kind !== 'recorded') return undefined

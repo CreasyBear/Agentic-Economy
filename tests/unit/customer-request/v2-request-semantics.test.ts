@@ -14,6 +14,12 @@ import {
 } from '@/modules/customer-request/evaluation'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
 import {
+  routePlanGenerationIsInternallyConsistent,
+  routePlanGenerationMaterialDigest,
+  routePlanGenerationOwnsCancellationPosture,
+  writableCustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
+import {
   bindCustomerCapabilityDescriptor,
   createJsonCustomerRequestSemanticInterpreter,
   deriveCustomerDecisionPreference,
@@ -140,6 +146,7 @@ describe('V2 Request semantics', () => {
       candidates: [{
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
         offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       }],
     })
 
@@ -209,6 +216,7 @@ describe('V2 Request semantics', () => {
       candidates: [{
         businessId: 'business:one', offeringId: 'offering:one', bindingId: 'binding:one', model,
         offeringRegistrationHash: 'sha256:offering', bindingRegistrationHash: 'sha256:binding',
+        cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
       }],
     })
 
@@ -273,8 +281,12 @@ describe('V2 Request semantics', () => {
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
     const lookupRequest = requiredInput(lookup, 'request')
-    const compile = (models: [typeof lookup, typeof shipping]) => compileCustomerRequest({
-      requestId: 'request:composed', expectedRevision: 4,
+    const compile = (
+      models: [typeof lookup, typeof shipping],
+      expectedRouteGeneration = 0,
+      downstreamPriceMinor = 100,
+    ) => compileCustomerRequest({
+      requestId: 'request:composed', expectedRevision: 4, expectedRouteGeneration,
       principalId: 'principal:test', delegatedAgentId: 'agent:test',
       intent: 'Find an option and get its shipping quote.', networkId: 'ae:public',
       proposal: {
@@ -290,42 +302,26 @@ describe('V2 Request semantics', () => {
         })),
       },
       interpreterId: 'interpreter:test',
-      bindings: models.map((model) => supply(`binding:${model.contractRef.capabilityId}`, model)),
+      bindings: models.map((model) => ({
+        ...supply(`binding:${model.contractRef.capabilityId}`, model),
+        price: {
+          kind: 'fixed' as const, currency: 'AUD',
+          amountMinor: model === shipping ? downstreamPriceMinor : 100,
+        },
+      })),
       models, now: 10_000,
     })
 
     const first = compile([lookup, shipping])
     const permuted = compile([shipping, lookup])
+    const nextOrdinal = compile([lookup, shipping], 1)
+    const changedPrice = compile([lookup, shipping], 0, 101)
     expect(first).toMatchObject({
       kind: 'compiled', aggregate: {
         outcome: 'plan_ready',
         plan: {
           requestRevision: 5,
           authority: 'proposal_only',
-          routes: [{
-            maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
-            expiresAt: 20_000,
-            steps: [
-              {
-                contractRef: lookup.contractRef, publicationRevision: 1,
-                price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
-                dataUse: [{ purposes: ['return_requested_result'] }],
-                effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
-                evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
-                recovery: { idempotency: 'required', recovery: 'retry_safe' },
-              },
-              {
-                contractRef: shipping.contractRef, publicationRevision: 1,
-                price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
-              },
-            ],
-            edges: [{ authority: 'registered_contract_semantics' }],
-            fallbacks: { ordering: 'unranked', alternatives: [] },
-            comparison: {
-              fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
-              ordering: { kind: 'unranked' },
-            },
-          }],
           actions: [
             { contractRef: lookup.contractRef, dependsOn: [], inputMappings: [] },
             {
@@ -342,8 +338,125 @@ describe('V2 Request semantics', () => {
           ],
         },
       },
+      routeGeneration: { routes: [{
+        maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
+        expiresAt: 20_000,
+        steps: [
+          {
+            contractRef: lookup.contractRef, publicationRevision: 1,
+            resolvedInputs: [expect.objectContaining({ inputPointer: '/request' })], deferredInputs: [],
+            price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+            dataUse: [{ purposes: ['return_requested_result'] }],
+            effects: [{ class: 'data_release', authority: 'mandate_or_explicit' }],
+            evidence: [{ evidenceId: 'selected_option' }, { evidenceId: 'lookup_complete' }],
+            cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:catalog.lookup'] },
+            recovery: { idempotency: 'required', recovery: 'retry_safe' },
+          },
+          {
+            contractRef: shipping.contractRef, publicationRevision: 1,
+            resolvedInputs: [], deferredInputs: [expect.objectContaining({ semanticIdentity: 'ae.option_id:v1' })],
+            price: { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
+          },
+        ],
+        edges: [{ authority: 'registered_contract_semantics' }],
+        fallbacks: { ordering: 'unranked', alternatives: [] },
+        comparison: {
+          fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
+          ordering: { kind: 'unranked' },
+        },
+      }] },
     })
     expect(permuted).toEqual(first)
+    if (first.kind !== 'compiled' || first.routeGeneration === undefined
+      || nextOrdinal.kind !== 'compiled' || nextOrdinal.routeGeneration === undefined
+      || changedPrice.kind !== 'compiled' || changedPrice.routeGeneration === undefined) {
+      throw new Error('route generation digest setup failed')
+    }
+    expect(nextOrdinal.routeGeneration.generation).toBe(2)
+    expect(nextOrdinal.routeGeneration.generationDigest).toBe(first.routeGeneration.generationDigest)
+    expect(nextOrdinal.routeGeneration.generationRef).not.toBe(first.routeGeneration.generationRef)
+    expect(changedPrice.routeGeneration.generationDigest).not.toBe(first.routeGeneration.generationDigest)
+    expect(routePlanGenerationMaterialDigest(nextOrdinal.routeGeneration))
+      .toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    expect(routePlanGenerationMaterialDigest(changedPrice.routeGeneration))
+      .not.toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    expect(routePlanGenerationOwnsCancellationPosture(first.routeGeneration)).toBe(true)
+    const cancellationOmitted = writableCustomerRequestRoutePlanGeneration(first.routeGeneration)
+    Reflect.deleteProperty(cancellationOmitted.routes[0]!.steps[0]!, 'cancellation')
+    expect(routePlanGenerationOwnsCancellationPosture(cancellationOmitted)).toBe(false)
+    const materialVariants = [
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const criterion = changed.decisionSnapshot?.criteria[0]
+        if (criterion === undefined) throw new Error('decision criterion variant missing')
+        criterion.value = 'materially changed customer criterion'
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const step = changed.routes[0]?.steps[0]
+        if (step === undefined) throw new Error('contract variant step missing')
+        step.contractRef.contractDigest = ('sha256:' + '1'.repeat(64)) as typeof step.contractRef.contractDigest
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const input = changed.routes[0]?.steps[0]?.resolvedInputs[0]
+        if (input === undefined) throw new Error('schema variant input missing')
+        input.schemaIdentity = ('sha256:' + '2'.repeat(64)) as typeof input.schemaIdentity
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const dataUse = changed.routes[0]?.steps[0]?.dataUse[0]
+        if (dataUse === undefined) throw new Error('data-use variant missing')
+        dataUse.purposes = ['changed_purpose']
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const effect = changed.routes[0]?.steps[0]?.effects[0]
+        if (effect === undefined) throw new Error('effect variant missing')
+        effect.reversibility = 'reversible'
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const evidence = changed.routes[0]?.steps[0]?.evidence[0]
+        if (evidence === undefined) throw new Error('evidence variant missing')
+        evidence.guaranteed = !evidence.guaranteed
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const route = changed.routes[0]
+        if (route === undefined) throw new Error('expiry variant route missing')
+        route.expiresAt += 1
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const recovery = changed.routes[0]?.steps[0]?.recovery
+        if (recovery === undefined) throw new Error('recovery variant missing')
+        recovery.recovery = recovery.recovery === 'retry_safe' ? 'reconcile_required' : 'retry_safe'
+        return changed
+      },
+      (generation: typeof first.routeGeneration) => {
+        const changed = writableCustomerRequestRoutePlanGeneration(generation)
+        const route = changed.routes[0]
+        if (route === undefined) throw new Error('shape variant route missing')
+        route.steps = route.steps.slice(0, 1)
+        return changed
+      },
+    ]
+    for (const variant of materialVariants) {
+      expect(routePlanGenerationMaterialDigest(variant(first.routeGeneration)))
+        .not.toBe(routePlanGenerationMaterialDigest(first.routeGeneration))
+    }
+    expect(routePlanGenerationIsInternallyConsistent({
+      ...first.routeGeneration,
+      createdAt: first.routeGeneration.createdAt + 1,
+    }, 0)).toBe(false)
   })
 
   it('asks for the downstream fact instead of guessing between ambiguous registered producers', () => {
@@ -377,7 +490,7 @@ describe('V2 Request semantics', () => {
     expect(shippingAction).toMatchObject({ dependsOn: [], inputMappings: [] })
   })
 
-  it('fails closed on unsafe aggregate money and marks on-request cost as uncertain preparation', () => {
+  it('fails closed unless every route has a known safe maximum cost', () => {
     const lookup = compositionLookupModel()
     const shipping = compositionShippingModel(lookup)
     const request = requiredInput(lookup, 'request')
@@ -403,21 +516,24 @@ describe('V2 Request semantics', () => {
       })
     )
 
-    expect(compileWithPrices([
+    const mixedCurrency = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
       { kind: 'fixed', currency: 'USD', amountMinor: 100 },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
-    expect(compileWithPrices([
+    ])
+    expect(mixedCurrency).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(mixedCurrency).not.toHaveProperty('routeGeneration')
+    const unsafeSum = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },
       { kind: 'fixed', currency: 'AUD', amountMinor: 1 },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
-    expect(compileWithPrices([
+    ])
+    expect(unsafeSum).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(unsafeSum).not.toHaveProperty('routeGeneration')
+    const onRequest = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
       { kind: 'on_request' },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'plan_ready', plan: { routes: [{
-      maximumTotalCost: { kind: 'requires_preparation' }, uncertainty: ['cost_requires_preparation'],
-      comparison: { ordering: { kind: 'unranked' } },
-    }] } } })
+    ])
+    expect(onRequest).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(onRequest).not.toHaveProperty('routeGeneration')
   })
 
   it('declares only provider-disjoint fallbacks and ranks same-currency routes on an explicit price objective', () => {
@@ -450,8 +566,9 @@ describe('V2 Request semantics', () => {
       interpreterId: 'interpreter:test', bindings, models: [lookup, shipping], now: 10_000,
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
-    expect(result.aggregate.plan.routes).toHaveLength(6)
-    expect(result.aggregate.plan.routes.map((route) => route.maximumTotalCost)).toEqual([
+    if (result.routeGeneration === undefined) throw new Error('route generation missing')
+    expect(result.routeGeneration.routes).toHaveLength(6)
+    expect(result.routeGeneration.routes.map((route) => route.maximumTotalCost)).toEqual([
       { kind: 'known', currency: 'AUD', amountMinor: 200 },
       { kind: 'known', currency: 'AUD', amountMinor: 250 },
       { kind: 'known', currency: 'AUD', amountMinor: 300 },
@@ -459,7 +576,7 @@ describe('V2 Request semantics', () => {
       { kind: 'known', currency: 'AUD', amountMinor: 450 },
       { kind: 'known', currency: 'AUD', amountMinor: 500 },
     ])
-    for (const [index, route] of result.aggregate.plan.routes.entries()) {
+    for (const [index, route] of result.routeGeneration.routes.entries()) {
       expect(route.comparison.ordering).toEqual({
         kind: 'ranked', objective: 'lowest_maximum_price', position: index + 1,
       })
@@ -468,7 +585,7 @@ describe('V2 Request semantics', () => {
       const bindingsInRoute = new Set(route.steps.map((step) => step.bindingId))
       const businessesInRoute = new Set(route.steps.map((step) => step.businessId))
       for (const fallback of route.fallbacks.alternatives) {
-        const alternative = result.aggregate.plan.routes.find((candidate) => (
+        const alternative = result.routeGeneration.routes.find((candidate) => (
           candidate.routePlanId === fallback.alternativeRouteRef
         ))
         if (alternative === undefined) throw new Error('declared fallback missing')
@@ -501,7 +618,8 @@ describe('V2 Request semantics', () => {
       ],
     })
     if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
-    expect(result.aggregate.plan.routes.map((route) => route.comparison.ordering)).toEqual([
+    if (result.routeGeneration === undefined) throw new Error('route generation missing')
+    expect(result.routeGeneration.routes.map((route) => route.comparison.ordering)).toEqual([
       { kind: 'unranked' }, { kind: 'unranked' },
     ])
   })
@@ -798,5 +916,6 @@ function supply(bindingId: string, model: ReturnType<typeof decisionModelWithCom
     bindingRegistrationHash: `sha256:binding:${bindingId}`,
     publicationRef: `publication:${bindingId}`, publicationRevision: 1, readinessValidUntil: 20_000,
     price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 },
+    cancellation: { kind: 'unsupported' as const, evidenceRefs: [`cancellation:${bindingId}`] },
   }
 }

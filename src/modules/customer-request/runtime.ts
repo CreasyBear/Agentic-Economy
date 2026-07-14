@@ -11,28 +11,6 @@ export {
   requestSnapshotValue,
 } from './internal/convex-schema'
 export {
-  actionAttemptDataReservationV2Value,
-  actionAuthorityBudgetV2Value,
-  actionAttemptIdempotencyClaimV2Value,
-  actionAttemptSpendReservationV2Value,
-  actionAttemptV2Value,
-  actionAttemptResolutionV2Value,
-  actionDisclosureGrantV2Value,
-  actionAttemptReleaseV2Value,
-  approvalGrantConsumptionV2Value,
-  approvalGrantV2Value,
-  providerReleaseGrantV2Value,
-  providerExecutionLineageV2Value,
-  providerInvocationEnvelopeV2Value,
-  providerLeafRunV2Value,
-  providerOutcomeV2Value,
-  providerProtocolEvidenceV2Value,
-  providerReconciliationEvidenceV2Value,
-  providerReconciliationObservationV2Value,
-  providerReconciliationUnknownReasonV2Value,
-  providerResultEchoV2Value,
-  providerResultV2Value,
-  providerRootRunV2Value,
   actionPreparationApprovalEvidenceV2Value,
   actionPreparationLineageV2Value,
   capabilityContractRefV2Value,
@@ -42,4 +20,9 @@ export {
   preparedActionV2Value,
   requestEvaluationCandidateV2Value,
   requestFactV2Value,
+  routePlanGenerationV2Value,
 } from './internal/convex-v2-schema'
+export {
+  routeMandateIssueEvidenceValue,
+  routeMandateValue,
+} from './internal/route-mandate-convex-schema'

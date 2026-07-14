@@ -22,10 +22,6 @@ import {
   type PublicInquirySubmitServerResult,
 } from '@/modules/inquiries/inquiry.functions'
 import {
-  GOVERNED_SEND_CANONICAL_FIELDS,
-  buildGovernedSendIntent,
-} from '@/modules/inquiries/internal/governed-send'
-import {
   readPublicInquiryRouteReadback,
   selectPublicInquiryTarget,
   validatePublicInquiryFormInput,
@@ -33,7 +29,11 @@ import {
   type PublicInquiryRouteReadback,
   type PublicInquiryValidationError,
 } from '@/modules/inquiries/route-readbacks'
-import type { InquiryOriginRef } from '@/modules/inquiries/public'
+import {
+  GOVERNED_SEND_CANONICAL_FIELDS,
+  buildGovernedSendIntent,
+  type InquiryOriginRef,
+} from '@/modules/inquiries/public'
 
 const emptyInquiryFormInput = {
   body: '',

@@ -857,8 +857,11 @@ export const refreshCapability = mutation({
     } catch {
       return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
     }
+    const repeatsExactContract = encoded.contract.ref.version === publication.version
+      && encoded.contract.ref.contractDigest === publication.contractDigest
     if (encoded.contract.ref.capabilityId !== publication.capabilityId
-      || encoded.contract.ref.version <= publication.version) {
+      || encoded.contract.ref.version < publication.version
+      || (encoded.contract.ref.version === publication.version && !repeatsExactContract)) {
       return { kind: 'refused' as const, reason: 'refresh_invalid' as const }
     }
     const previousContract = await getExactRegisteredCapabilityContract(ctx.db, contractRefFromRow(publication))

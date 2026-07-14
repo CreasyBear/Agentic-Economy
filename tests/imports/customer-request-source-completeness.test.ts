@@ -13,14 +13,6 @@ const productionAuthority = {
   preparationPersistence: 'convex/customerRequestV2Preparation.ts',
   preparationEgressState: 'convex/customerRequestV2PreparationEgressState.ts',
   preparationEgress: 'convex/customerRequestV2PreparationEgress.ts',
-  approvalDomain: 'src/modules/customer-request/approval-grant-v2.ts',
-  approvalPersistence: 'convex/customerRequestV2ApprovalGrant.ts',
-  attemptDomain: 'src/modules/customer-request/action-attempt-v2.ts',
-  attemptPersistence: 'convex/customerRequestV2ActionAttempt.ts',
-  providerExecutionDomain: 'src/modules/customer-request/provider-execution-v2.ts',
-  providerExecutionPersistence: 'convex/customerRequestV2ProviderExecution.ts',
-  providerReconciliationDomain: 'src/modules/customer-request/provider-reconciliation-v2.ts',
-  providerReconciliationPersistence: 'convex/customerRequestV2ProviderReconciliation.ts',
   routing: 'src/modules/customer-request/kernel-router.ts',
   projection: 'src/modules/customer-request/customer-projection.ts',
   application: 'convex/customerRequestApplication.ts',
@@ -33,8 +25,6 @@ const productionAuthority = {
   releaseReadback: 'src/modules/customer-request/release-readback.ts',
   releaseHttp: 'src/lib/server/customer-request-release-readback-api.ts',
   optionsHttp: 'src/lib/server/customer-options-api.ts',
-  approvalHttp: 'src/lib/server/customer-request-approval-api.ts',
-  attemptHttp: 'src/lib/server/customer-request-action-attempt-api.ts',
   humanUi: 'src/components/ae/customer-request/AeCustomerRequestWorkspace.tsx',
 } as const
 
@@ -50,9 +40,6 @@ describe('CustomerRequest source completeness', () => {
     expect(application).toContain('customerRequestV2.commitAggregate')
     expect(application).toContain('customerRequestV2Preparation.prepare')
     expect(application).toContain('customerRequestV2PreparationEgress.run')
-    expect(application).toContain('customerRequestV2ApprovalGrant.issue')
-    expect(application).toContain('customerRequestV2ActionAttempt.admit')
-    expect(application).toContain('customerRequestV2ProviderReconciliation.getActionStatus')
     expect(application).toContain('bindCustomerCapabilityDescriptor')
   })
 
@@ -67,14 +54,6 @@ describe('CustomerRequest source completeness', () => {
       'convex/customerRequestV2Preparation.ts',
       'convex/customerRequestV2PreparationEgressState.ts',
       'convex/customerRequestV2PreparationEgress.ts',
-      'src/modules/customer-request/approval-grant-v2.ts',
-      'convex/customerRequestV2ApprovalGrant.ts',
-      'src/modules/customer-request/action-attempt-v2.ts',
-      'convex/customerRequestV2ActionAttempt.ts',
-      'src/modules/customer-request/provider-execution-v2.ts',
-      'convex/customerRequestV2ProviderExecution.ts',
-      'src/modules/customer-request/provider-reconciliation-v2.ts',
-      'convex/customerRequestV2ProviderReconciliation.ts',
       'convex/customerRequestApplication.ts',
     ]
     const forbidden = /capabilityContractId|providerAffinity|provider_offer_ref|acceptedValues|customerRequestCapabilityContracts|customerRequestCapabilityContractRegistryAdapter|routingKernelBindings/
@@ -83,20 +62,6 @@ describe('CustomerRequest source completeness', () => {
     const application = readFileSync('convex/customerRequestApplication.ts', 'utf8')
     expect(application).not.toMatch(/legacy-compiler-v1|customerRequestCompilationStoreAdapter|commitRequestSnapshot|putRequestEvaluation/)
     expect(application).not.toMatch(/customerRequestPreparationAuthority|customerRequests\.prepare|prepareCustomerRequestAction/)
-    expect(readFileSync('convex/customerRequestV2ApprovalGrant.ts', 'utf8'))
-      .not.toMatch(/routingKernelAuthorizations|customerRequestPreparedActions|\bfetch\s*\(/)
-    expect(readFileSync('convex/customerRequestV2ActionAttempt.ts', 'utf8'))
-      .not.toMatch(/routingKernelExecutionClaims|routingKernelRootRuns|routingKernelLeafRuns|routingKernelStepReleases|routingKernelDisclosureAttempts|\bfetch\s*\(/)
-    expect(source('providerExecutionPersistence'))
-      .not.toMatch(/routingKernelExecutionClaims|routingKernelRootRuns|routingKernelLeafRuns|routingKernelStepReleases|routingKernelDisclosureAttempts|\bfetch\s*\(/)
-    expect(source('providerExecutionDomain')).not.toMatch(/provider-integrations|shipping|freight|booking/)
-    expect(source('providerReconciliationDomain'))
-      .not.toMatch(/provider-integrations|shipping|freight|booking|\bfetch\s*\(/)
-    expect(source('providerReconciliationPersistence'))
-      .not.toMatch(/routingKernelRootRuns|routingKernelLeafRuns|routingKernelProtocolRecords|\bfetch\s*\(/)
-    const approvalPersistence = source('approvalPersistence')
-    expect(approvalPersistence).not.toContain('listEligibleCapabilitySupply')
-    expect(approvalPersistence).toContain('getEligibleExactCapabilitySupply')
     expect(readFileSync('src/lib/server/customer-request-agent-api.ts', 'utf8'))
       .not.toMatch(/approvePreparedAction|admitApprovedAction/)
     const persistence = readFileSync('convex/customerRequestV2.ts', 'utf8')
@@ -134,14 +99,91 @@ describe('CustomerRequest source completeness', () => {
     expect(devSeed).toMatch(/registerSandboxV2Supply|sandboxV2Bindings/)
   })
 
+  it('keeps retired V2 approval and execution authority out of production while preserving history', () => {
+    const retiredProductionFiles = [
+      'src/routes/api.requests.$requestRef.approval.ts',
+      'src/routes/api.requests.$requestRef.attempts.ts',
+      'src/lib/server/customer-request-approval-api.ts',
+      'src/lib/server/customer-request-action-attempt-api.ts',
+      'convex/customerRequestV2ApprovalGrant.ts',
+      'convex/customerRequestV2ActionAttempt.ts',
+      'convex/customerRequestV2ProviderExecution.ts',
+      'convex/customerRequestV2ProviderReconciliation.ts',
+      'src/modules/customer-request/approval-grant-v2.ts',
+      'src/modules/customer-request/action-attempt-v2.ts',
+      'src/modules/customer-request/provider-execution-v2.ts',
+      'src/modules/customer-request/provider-reconciliation-v2.ts',
+    ]
+    for (const file of retiredProductionFiles) {
+      expect(existsSync(file), `${file} remains production-reachable`).toBe(false)
+    }
+
+    const generatedApi = readFileSync('convex/_generated/api.d.ts', 'utf8')
+    for (const moduleName of [
+      'customerRequestV2ApprovalGrant',
+      'customerRequestV2ActionAttempt',
+      'customerRequestV2ProviderExecution',
+      'customerRequestV2ProviderReconciliation',
+    ]) expect(generatedApi, `${moduleName} remains in the deployed Convex API`).not.toContain(moduleName)
+
+    const retiredIdentifiers = /approvePreparedAction|admitApprovedAction|handleCustomerRequestApprovalPost|handleCustomerRequestActionAttemptPost|issueApprovalGrantV2|admitActionAttemptV2|releaseProviderInvocationV2|recordProviderOutcomeV2|reconcileProviderOutcomeV2|ApprovalGrantV2|ActionAttemptV2|ProviderInvocationEnvelopeV2|ProviderOutcomeV2|ActionAttemptResolutionV2/
+    expect(readFileSync('convex/customerRequestApplication.ts', 'utf8')).not.toMatch(retiredIdentifiers)
+    expect(readFileSync('src/modules/customer-request/agent-contract.ts', 'utf8')).not.toMatch(retiredIdentifiers)
+    expect(readFileSync('src/modules/customer-request/public.ts', 'utf8')).not.toMatch(retiredIdentifiers)
+    expect(readFileSync('src/modules/customer-request/runtime.ts', 'utf8')).not.toMatch(retiredIdentifiers)
+    expect(readFileSync('src/routeTree.gen.ts', 'utf8')).not.toMatch(
+      /api\/requests\/\$requestRef\/(?:approval|attempts)/,
+    )
+
+    const runtimeFiles = findFiles([
+      { root: 'src', includeExtensions: ['.ts', '.tsx'] },
+      { root: 'convex', includeExtensions: ['.ts'], exclude: ['convex/_generated'] },
+    ]).filter((file) => file !== 'src/modules/customer-request/internal/convex-v2-schema.ts'
+      && !file.endsWith('.test.ts'))
+    expect(runtimeFiles.filter((file) => retiredIdentifiers.test(readFileSync(file, 'utf8')))).toEqual([])
+
+    const historicalAuthorityTables = [
+      'customerRequestV2ApprovalGrants',
+      'customerRequestV2ApprovalGrantCommands',
+      'customerRequestV2ActionAttempts',
+      'customerRequestV2ActionAuthorityBudgets',
+      'customerRequestV2ApprovalGrantConsumptions',
+      'customerRequestV2ActionAttemptIdempotencyClaims',
+      'customerRequestV2ActionAttemptSpendReservations',
+      'customerRequestV2ActionAttemptDataReservations',
+      'customerRequestV2ProviderReleaseGrants',
+      'customerRequestV2ActionDisclosureGrants',
+      'customerRequestV2ActionAttemptReleases',
+      'customerRequestV2ProviderOutcomes',
+      'customerRequestV2ProviderRootRuns',
+      'customerRequestV2ProviderLeafRuns',
+      'customerRequestV2ProviderProtocolEvidence',
+      'customerRequestV2ProviderReconciliationObservations',
+      'customerRequestV2ActionAttemptResolutions',
+      'customerRequestV2ProviderReconciliationCommands',
+      'customerRequestV2ActionAttemptAdmissionCommands',
+    ] as const
+    for (const file of runtimeFiles) {
+      const runtimeSource = readFileSync(file, 'utf8')
+      for (const table of historicalAuthorityTables) {
+        expect(runtimeSource, `${file} reaches retired authority table ${table}`).not.toContain(table)
+      }
+    }
+
+    const historicalSchema = readFileSync('src/modules/customer-request/internal/convex-v2-schema.ts', 'utf8')
+    for (const table of historicalAuthorityTables) {
+      expect(historicalSchema, `${table} history was removed`).toContain(`${table}: defineTable`)
+    }
+  })
+
   it('keeps routes and UI on the shared projection instead of rebuilding product state', () => {
     expect(readFileSync('src/routes/api.requests.ts', 'utf8')).toMatch(/handleCustomerRequestPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleCustomerOptionsPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleCustomerRequestGet/)
     expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleCustomerRequestFactsPost/)
     expect(readFileSync('src/routes/api.requests.$requestRef.messages.ts', 'utf8')).toMatch(/handleCustomerRequestMessagePost/)
-    expect(readFileSync('src/routes/api.requests.$requestRef.approval.ts', 'utf8')).toMatch(/handleCustomerRequestApprovalPost/)
-    expect(readFileSync('src/routes/api.requests.$requestRef.attempts.ts', 'utf8')).toMatch(/handleCustomerRequestActionAttemptPost/)
+    expect(existsSync('src/routes/api.requests.$requestRef.approval.ts')).toBe(false)
+    expect(existsSync('src/routes/api.requests.$requestRef.attempts.ts')).toBe(false)
     expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toMatch(/handleAgentCustomerRequestPost/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.ts', 'utf8')).toMatch(/handleAgentCustomerRequestGet/)
     expect(readFileSync('src/routes/api.v1.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleAgentCustomerRequestFactsPost/)
@@ -151,19 +193,12 @@ describe('CustomerRequest source completeness', () => {
     expect(existsSync('src/routes/api.v1.requests.$requestRef.approval.ts')).toBe(false)
     const agentHttp = source('agentHttp')
     expect(agentHttp).not.toMatch(/authorizePreparation|approvePreparedAction|admitApprovedAction|operation:\s*['"]approve/)
-    const approvalApplication = source('application').slice(source('application').indexOf('export const approvePreparedAction'))
-    expect(approvalApplication.slice(0, approvalApplication.indexOf('export const admitApprovedAction')))
-      .toMatch(/ctx\.auth\.getUserIdentity\(\)/)
-    expect(approvalApplication.slice(0, approvalApplication.indexOf('export const admitApprovedAction')))
-      .not.toMatch(/serviceAuth|verifyServiceCaller/)
     const ui = source('humanUi')
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
     expect(ui).toContain("fetch('/api/requests'")
     expect(ui).toContain('/options`')
     for (const route of [
       'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.messages.ts', 'src/routes/api.requests.$requestRef.options.ts',
-      'src/routes/api.requests.$requestRef.approval.ts',
-      'src/routes/api.requests.$requestRef.attempts.ts',
       'src/routes/api.v1.requests.ts', 'src/routes/api.v1.requests.$requestRef.ts', 'src/routes/api.v1.requests.$requestRef.facts.ts', 'src/routes/api.v1.requests.$requestRef.messages.ts', 'src/routes/api.v1.requests.$requestRef.options.ts',
     ]) {
       expect(readFileSync(route, 'utf8')).not.toMatch(/compileCustomerRequest|prepareCustomerRequestAction|createNeutralRoutingKernel/)
@@ -204,6 +239,8 @@ describe('CustomerRequest source completeness', () => {
     expect(workflow).toContain('CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}')
     expect(workflow).toContain('npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"')
     expect(workflow).toContain("npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod")
+    expect(workflow).toContain('npx convex run capabilitySupply:queryCapabilityGraph')
+    expect(workflow).toContain('Labelled sandbox capability publications did not become route-ready.')
     expect(workflow).toContain('needs: source-proof')
     expect(workflow).toContain('cancel-in-progress: false')
     expect(workflow).toContain('npm exec -- tsx tools/release/deploy-customer-request-git-source.ts')
@@ -236,7 +273,7 @@ describe('CustomerRequest source completeness', () => {
     for (const schema of [
       'customerRequestSubmitInputSchema', 'customerRequestMessageInputSchema',
       'customerRequestFactInputSchema', 'customerRequestOptionsInputSchema',
-      'customerRequestAuthorizationInputSchema', 'customerRequestApprovalInputSchema',
+      'customerRequestAuthorizationInputSchema',
       'customerRequestViewSchema',
     ]) expect(contract).toContain(`export const ${schema}`)
 
@@ -244,13 +281,12 @@ describe('CustomerRequest source completeness', () => {
       ['submitHttp', 'customerRequestSubmitInputSchema'],
       ['factsHttp', 'customerRequestFactInputSchema'],
       ['optionsHttp', 'customerRequestOptionsInputSchema'],
-      ['approvalHttp', 'customerRequestApprovalInputSchema'],
     ] as const
     for (const [handler, schema] of handlerContracts) expect(source(handler)).toContain(schema)
     expect(journey).toMatch(/customerRequestFactInputSchema\.parse/)
     expect(journey).toMatch(/customerRequestViewSchema\.parse/)
     expect(journey).toContain("'preparation_disclosure'")
-    expect(journey).toContain("'prepared_action_approval'")
+    expect(journey).not.toMatch(/prepared_action_approval|\/approval/)
     expect(journey).not.toMatch(/providerId|bindingId|offeringId|Convex|customerRequestApplication:/)
 
     const smoke = readFileSync('tools/release/customer-request-production-smoke.ts', 'utf8')

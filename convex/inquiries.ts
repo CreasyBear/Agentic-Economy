@@ -1854,7 +1854,9 @@ async function repairGovernedSendErasureKeys(db: RuntimeDb, threadId: string): P
       db.query('governedSendReceipts').withIndex('by_operationKey', (query) => query.eq('operationKey', lineage.receiptOperationKey)), 2,
     )
     if (receiptRows.length !== 1) throw new Error('governed_send_receipt_conflict')
-    await assertGovernedSendLineageAuthority(db, receiptRows[0]!, lineage)
+    const receipt = receiptRows[0]
+    if (receipt === undefined) throw new Error('governed_send_receipt_conflict')
+    await assertGovernedSendLineageAuthority(db, receipt, lineage)
     if (db.delete === undefined) throw new Error('Runtime database cannot destroy governed-send receipt keys.')
     await db.delete(key._id)
   }
@@ -1870,7 +1872,8 @@ async function assertGovernedSendLineageAuthority(
       query.eq('threadId', lineage.threadId).eq('operationKey', lineage.privacyOperationKey)), 2,
   )
   if (tombstoneRows.length !== 1) throw new Error('governed_send_erasure_lineage_conflict')
-  const tombstone = tombstoneRows[0]!
+  const tombstone = tombstoneRows[0]
+  if (tombstone === undefined) throw new Error('governed_send_erasure_lineage_conflict')
   const destroyedAt = optionalNumberFromUnknown(tombstone.appliedAt)
   const erasureEventIds = stringArrayField(tombstone, 'erasureEventIds')
   if (

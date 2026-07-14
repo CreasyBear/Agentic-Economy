@@ -8,9 +8,16 @@ import {
   type CapabilityInputKey, type PointedSchemaIdentity,
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
+import type { StableHashValue } from '@/modules/common/stable-hash'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { evaluateCustomerRequestSnapshot } from '@/modules/customer-request/evaluation'
+import {
+  createCustomerRequestRoutePlanGeneration,
+  type CustomerRequestRoutePlanGeneration,
+  writableCustomerRequestRoutePlanGeneration,
+} from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
+import type { CustomerRequestSemanticProposal } from '@/modules/customer-request/semantic-interpreter'
 import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
 
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
@@ -19,9 +26,10 @@ const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path,
 describe('atomic V2 Customer Request aggregate persistence', () => {
   it('commits snapshot, evaluation, exact plan authority and idempotency receipt together', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const command = {
-      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64), expectedRevision: 0, aggregate,
+      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     }
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
@@ -54,11 +62,261 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     expect(persisted).toMatchObject({ heads: [{}], revisions: [{}], commands: [{}] })
   })
 
+  it('replays a pre-#172 detached generation while refusing the same cancellation omission as a new write', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const command = {
+      commandKey: 'command:v2:historical-cancellation-replay',
+      commandDigest: canonicalDigest({ command: 'historical-cancellation-replay' }),
+      expectedRevision: 0,
+      expectedRouteGeneration: 0,
+      aggregate,
+      routeGeneration,
+    }
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
+      .resolves.toMatchObject({ kind: 'stored' })
+    const historicalGeneration = preCancellationRouteGeneration(routeGeneration)
+    const historicalWritable = writableCustomerRequestRoutePlanGeneration(historicalGeneration)
+    await backend.run(async (ctx) => {
+      const stored = await ctx.db.query('customerRequestV2RoutePlanGenerations').first()
+      const storedCommand = await ctx.db.query('customerRequestV2Commands').first()
+      const head = await ctx.db.query('customerRequestV2RoutePlanHeads').first()
+      if (stored === null || storedCommand === null || head === null) {
+        throw new Error('historical route generation fixture missing')
+      }
+      await ctx.db.replace(stored._id, {
+        requestId: stored.requestId,
+        generation: historicalGeneration.generation,
+        generationRef: historicalGeneration.generationRef,
+        generationDigest: historicalGeneration.generationDigest,
+        requestRevision: stored.requestRevision,
+        routeGeneration: historicalWritable,
+        recordedAt: stored.recordedAt,
+      })
+      await ctx.db.patch(storedCommand._id, {
+        resultingRouteGenerationRef: historicalGeneration.generationRef,
+      })
+      await ctx.db.patch(head._id, {
+        currentGenerationRef: historicalGeneration.generationRef,
+        currentGenerationDigest: historicalGeneration.generationDigest,
+      })
+    })
+    const historicalCommand = { ...command, routeGeneration: historicalWritable }
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, historicalCommand))
+      .resolves.toEqual({ kind: 'replayed', requestId: aggregate.snapshot.requestId, revision: 1 })
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+      ...historicalCommand,
+      commandKey: 'command:v2:historical-cancellation-new-write',
+      commandDigest: canonicalDigest({ command: 'historical-cancellation-new-write' }),
+    })).resolves.toEqual({ kind: 'aggregate_invalid' })
+  })
+
+  it('converges identical route material and durably replays the refresh command without history churn', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:refresh-base', commandDigest: canonicalDigest({ command: 'refresh-base' }),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    })
+    const candidate = await compileRefreshCandidate(backend, aggregate, 1, {
+      kind: 'capability_candidates', selections: [sandboxSelection(aggregate)],
+    }, Date.now())
+    if (candidate.routeGeneration === undefined) throw new Error('identical candidate generation missing')
+    expect(candidate.routeGeneration.createdAt).not.toBe(routeGeneration.createdAt)
+    const refresh = {
+      commandKey: 'command:v2:refresh-identical',
+      commandDigest: canonicalDigest({ command: 'refresh-identical' }),
+      principalId: aggregate.snapshot.principalId,
+      requestId: aggregate.snapshot.requestId,
+      expectedRequestRevision: aggregate.snapshot.revision,
+      expectedGeneration: routeGeneration.generation,
+      expectedGenerationRef: routeGeneration.generationRef,
+      candidateAggregate: candidate.aggregate,
+      candidateRouteGeneration: candidate.routeGeneration,
+    }
+
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, refresh))
+      .resolves.toMatchObject({ kind: 'unchanged', routeGeneration: { generation: 1 } })
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, refresh))
+      .resolves.toMatchObject({ kind: 'unchanged', routeGeneration: { generation: 1 } })
+    await expect(backend.query(internal.customerRequestV2.getRoutePlanGenerationRefreshReplay, {
+      commandKey: refresh.commandKey, commandDigest: refresh.commandDigest,
+      principalId: refresh.principalId, requestId: refresh.requestId,
+    })).resolves.toMatchObject({ kind: 'unchanged', routeGeneration: { generation: 1 } })
+    await expect(backend.query(internal.customerRequestV2.getRoutePlanGenerationRefreshReplay, {
+      commandKey: refresh.commandKey, commandDigest: canonicalDigest({ command: 'changed' }),
+      principalId: refresh.principalId, requestId: refresh.requestId,
+    })).resolves.toEqual({ kind: 'command_conflict' })
+    const persisted = await backend.run(async (ctx) => ({
+      generations: await ctx.db.query('customerRequestV2RoutePlanGenerations').collect(),
+      generationCommands: await ctx.db.query('customerRequestV2RoutePlanGenerationCommands').collect(),
+      routeHead: await ctx.db.query('customerRequestV2RoutePlanHeads').unique(),
+    }))
+    expect(persisted.generations).toHaveLength(1)
+    expect(persisted.generationCommands).toHaveLength(1)
+    expect(persisted.routeHead).toMatchObject({
+      currentGeneration: 1, currentGenerationRef: routeGeneration.generationRef,
+    })
+  })
+
+  it('atomically supersedes changed liveness material and rejects a concurrent stale head', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:liveness-base', commandDigest: canonicalDigest({ command: 'liveness-base' }),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    })
+    const publication = await backend.run(async (ctx) => await ctx.db.query('capabilityPublications').first())
+    if (publication === null) throw new Error('liveness refresh publication missing')
+    const now = Date.now()
+    const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
+      publicationRef: publication.publicationRef, expectedRevision: publication.revision,
+      credentialState: 'ready', healthState: 'healthy', validUntil: now + 900_000,
+      operationKey: 'test:refresh-liveness', correlationId: 'test:refresh-liveness',
+      reasonCode: 'test_refresh_liveness', evidenceRefs: ['test:refresh-liveness'],
+    })
+    if (observed.kind !== 'observed') throw new Error(`liveness observation failed: ${observed.reason}`)
+    const candidate = await compileRefreshCandidate(backend, aggregate, 1, {
+      kind: 'capability_candidates', selections: [sandboxSelection(aggregate)],
+    }, now)
+    if (candidate.routeGeneration === undefined) throw new Error('liveness candidate generation missing')
+    expect(candidate.routeGeneration.routes[0]?.expiresAt).not.toBe(routeGeneration.routes[0]?.expiresAt)
+    const refresh = {
+      commandKey: 'command:v2:liveness-refresh', commandDigest: canonicalDigest({ command: 'liveness-refresh' }),
+      principalId: aggregate.snapshot.principalId, requestId: aggregate.snapshot.requestId,
+      expectedRequestRevision: 1, expectedGeneration: 1, expectedGenerationRef: routeGeneration.generationRef,
+      candidateAggregate: candidate.aggregate, candidateRouteGeneration: candidate.routeGeneration,
+    }
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, refresh))
+      .resolves.toMatchObject({ kind: 'superseded', routeGeneration: { generation: 2, requestRevision: 1 } })
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, {
+      ...refresh,
+      commandKey: 'command:v2:liveness-concurrent',
+      commandDigest: canonicalDigest({ command: 'liveness-concurrent' }),
+    })).resolves.toEqual({ kind: 'route_generation_conflict' })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toMatchObject({
+      kind: 'current', aggregate: { snapshot: { revision: 1 } },
+      routeGenerationNumber: 2, routeGenerationRef: candidate.routeGeneration.generationRef,
+    })
+    const persisted = await backend.run(async (ctx) => ({
+      revisions: await ctx.db.query('customerRequestV2Revisions').collect(),
+      generations: await ctx.db.query('customerRequestV2RoutePlanGenerations').collect(),
+      generationCommands: await ctx.db.query('customerRequestV2RoutePlanGenerationCommands').collect(),
+    }))
+    expect(persisted.revisions).toHaveLength(1)
+    expect(persisted.generations).toHaveLength(2)
+    expect(persisted.generationCommands).toHaveLength(1)
+  })
+
+  it('makes needs-information and unsupported refresh outcomes the resumable current decision', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:typed-refresh-base', commandDigest: canonicalDigest({ command: 'typed-refresh-base' }),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    })
+    const needsInformation = await compileRefreshCandidate(backend, aggregate, 1, {
+      kind: 'needs_intent_direction', prompt: 'What result should the businesses produce?',
+    }, Date.now())
+    const needsCommand = {
+      commandKey: 'command:v2:refresh-needs-information',
+      commandDigest: canonicalDigest({ command: 'refresh-needs-information' }),
+      principalId: aggregate.snapshot.principalId, requestId: aggregate.snapshot.requestId,
+      expectedRequestRevision: 1, expectedGeneration: 1, expectedGenerationRef: routeGeneration.generationRef,
+      candidateAggregate: needsInformation.aggregate,
+    }
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, needsCommand))
+      .resolves.toMatchObject({ kind: 'needs_information', aggregate: { outcome: 'needs_information' } })
+    await expect(backend.query(internal.customerRequestV2.getRoutePlanGenerationRefreshReplay, {
+      commandKey: needsCommand.commandKey, commandDigest: needsCommand.commandDigest,
+      principalId: needsCommand.principalId, requestId: needsCommand.requestId,
+    })).resolves.toMatchObject({ kind: 'needs_information', aggregate: { outcome: 'needs_information' } })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toMatchObject({
+      kind: 'current', aggregate: { outcome: 'needs_information' },
+      currentDecisionCommandKey: needsCommand.commandKey,
+    })
+
+    const unsupported = await compileRefreshCandidate(backend, aggregate, 1, {
+      kind: 'capability_candidates', selections: [],
+    }, Date.now() + 1)
+    const unsupportedCommand = {
+      commandKey: 'command:v2:refresh-unsupported',
+      commandDigest: canonicalDigest({ command: 'refresh-unsupported' }),
+      principalId: aggregate.snapshot.principalId, requestId: aggregate.snapshot.requestId,
+      expectedRequestRevision: 1, expectedGeneration: 1, expectedGenerationRef: routeGeneration.generationRef,
+      expectedDecisionCommandKey: needsCommand.commandKey,
+      candidateAggregate: unsupported.aggregate,
+    }
+    const { expectedDecisionCommandKey: _currentDecision, ...staleUnsupportedCommand } = unsupportedCommand
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, {
+      ...staleUnsupportedCommand,
+      commandKey: 'command:v2:refresh-unsupported-stale-decision',
+      commandDigest: canonicalDigest({ command: 'refresh-unsupported-stale-decision' }),
+    })).resolves.toEqual({ kind: 'route_generation_conflict' })
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, unsupportedCommand))
+      .resolves.toMatchObject({ kind: 'unsupported', aggregate: { outcome: 'unsupported' } })
+    await expect(backend.query(internal.customerRequestV2.getRoutePlanGenerationRefreshReplay, {
+      commandKey: unsupportedCommand.commandKey, commandDigest: unsupportedCommand.commandDigest,
+      principalId: unsupportedCommand.principalId, requestId: unsupportedCommand.requestId,
+    })).resolves.toMatchObject({ kind: 'unsupported', aggregate: { outcome: 'unsupported' } })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toMatchObject({
+      kind: 'current', aggregate: { outcome: 'unsupported' },
+      currentDecisionCommandKey: unsupportedCommand.commandKey,
+    })
+    const persisted = await backend.run(async (ctx) => ({
+      generations: await ctx.db.query('customerRequestV2RoutePlanGenerations').collect(),
+      generationCommands: await ctx.db.query('customerRequestV2RoutePlanGenerationCommands').collect(),
+      routeHead: await ctx.db.query('customerRequestV2RoutePlanHeads').unique(),
+    }))
+    expect(persisted.generations).toHaveLength(1)
+    expect(persisted.generationCommands).toHaveLength(2)
+    expect(persisted.routeHead).toMatchObject({
+      currentGeneration: 1,
+      currentGenerationRef: routeGeneration.generationRef,
+      currentDecisionCommandKey: unsupportedCommand.commandKey,
+    })
+  })
+
+  it('writes no refresh history when registered supply changes between compilation and commit', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:refresh-stale-base', commandDigest: canonicalDigest({ command: 'refresh-stale-base' }),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    })
+    const candidate = await compileRefreshCandidate(backend, aggregate, 1, {
+      kind: 'capability_candidates', selections: [sandboxSelection(aggregate)],
+    }, Date.now())
+    if (candidate.routeGeneration === undefined) throw new Error('stale candidate generation missing')
+    await revokeFirstSupply(backend)
+    await expect(backend.mutation(internal.customerRequestV2.refreshRoutePlanGeneration, {
+      commandKey: 'command:v2:refresh-stale', commandDigest: canonicalDigest({ command: 'refresh-stale' }),
+      principalId: aggregate.snapshot.principalId, requestId: aggregate.snapshot.requestId,
+      expectedRequestRevision: 1, expectedGeneration: 1, expectedGenerationRef: routeGeneration.generationRef,
+      candidateAggregate: candidate.aggregate, candidateRouteGeneration: candidate.routeGeneration,
+    })).resolves.toEqual({ kind: 'context_stale' })
+    const persisted = await backend.run(async (ctx) => ({
+      generations: await ctx.db.query('customerRequestV2RoutePlanGenerations').collect(),
+      generationCommands: await ctx.db.query('customerRequestV2RoutePlanGenerationCommands').collect(),
+      routeHead: await ctx.db.query('customerRequestV2RoutePlanHeads').unique(),
+    }))
+    expect(persisted.generations).toHaveLength(1)
+    expect(persisted.generationCommands).toHaveLength(0)
+    expect(persisted.routeHead).toMatchObject({ currentGeneration: 1, currentGenerationRef: routeGeneration.generationRef })
+  })
+
   it('writes nothing on revision, identity, or idempotency conflict', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const first = {
-      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64), expectedRevision: 0, aggregate,
+      commandKey: 'command:v2:submit', commandDigest: 'sha256:' + 'a'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     }
     await backend.mutation(internal.customerRequestV2.commitAggregate, first)
 
@@ -77,21 +335,61 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
     expect(persisted.commands).toHaveLength(1)
   })
 
+  it('fails replay when its immutable route generation is missing', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const command = {
+      commandKey: 'command:v2:generation-replay', commandDigest: 'sha256:' + '2'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    }
+    await backend.mutation(internal.customerRequestV2.commitAggregate, command)
+    await backend.run(async (ctx) => {
+      const generation = await ctx.db.query('customerRequestV2RoutePlanGenerations').first()
+      if (generation === null) throw new Error('generation fixture missing')
+      await ctx.db.delete(generation._id)
+    })
+    await expect(backend.mutation(internal.customerRequestV2.commitAggregate, command))
+      .rejects.toThrow('customer_request_v2_command_generation_integrity_failure')
+    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
+      commandKey: command.commandKey,
+      commandDigest: command.commandDigest,
+      principalId: aggregate.snapshot.principalId,
+      requestId: aggregate.snapshot.requestId,
+    })).rejects.toThrow('customer_request_v2_command_generation_integrity_failure')
+  })
+
+  it('fails current readback when a plan-ready aggregate has no generation head', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    await backend.mutation(internal.customerRequestV2.commitAggregate, {
+      commandKey: 'command:v2:missing-route-head', commandDigest: 'sha256:' + '3'.repeat(64),
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
+    })
+    await backend.run(async (ctx) => {
+      const head = await ctx.db.query('customerRequestV2RoutePlanHeads').first()
+      if (head === null) throw new Error('route head fixture missing')
+      await ctx.db.delete(head._id)
+    })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).rejects.toThrow('customer_request_route_plan_head_integrity_failure')
+  })
+
   it('writes nothing when the registered capability graph changes before commit', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     await revokeFirstSupply(backend)
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:stale-graph', commandDigest: 'sha256:' + 'd'.repeat(64),
-      expectedRevision: 0, aggregate,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate, routeGeneration,
     })).resolves.toEqual({ kind: 'context_stale' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
   it('writes nothing when a caller recomputes the digest over forged semantic authority', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     forged.outcome = 'unsupported'
     const { aggregateDigest: _discarded, ...forgedMaterial } = forged
@@ -99,14 +397,37 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:forged', commandDigest: 'sha256:' + 'e'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
+  it('refuses incomplete data, effect, and evidence declarations before generation persistence', async () => {
+    for (const declaration of ['dataUse', 'effects', 'evidence'] as const) {
+      const backend = convexTest(schema, modules)
+      const { aggregate, routeGeneration } = await compiledAggregate(backend)
+      const incomplete = structuredClone(routeGeneration)
+      const step = incomplete.routes[0]?.steps[0]
+      if (step === undefined) throw new Error('route declaration test step missing')
+      step[declaration] = []
+      await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
+        commandKey: `command:v2:incomplete:${declaration}`,
+        commandDigest: canonicalDigest({ declaration }),
+        expectedRevision: 0,
+        expectedRouteGeneration: 0,
+        aggregate,
+        routeGeneration: incomplete,
+      })).resolves.toEqual({ kind: 'aggregate_invalid' })
+      await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
+      await expect(backend.query(internal.customerRequestV2.getCurrentRoutePlanGeneration, {
+        requestId: aggregate.snapshot.requestId,
+      })).resolves.toEqual({ kind: 'not_found' })
+    }
+  })
+
   it('reopens registered contracts and rejects a fully re-digested invented composition edge', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     const action = forged.plan.actions[0]
     if (action === undefined) throw new Error('test action missing')
@@ -130,14 +451,14 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:invented-mapping', commandDigest: 'sha256:' + '7'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
   it('reopens the exact contract and rejects invented completion evidence even when every caller digest is recomputed', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const forged = structuredClone(aggregate)
     for (const requirement of forged.evaluation.completionRequirements) requirement.evidenceId = 'invented_evidence'
     for (const requirement of forged.plan.completionRequirements) requirement.evidenceId = 'invented_evidence'
@@ -156,14 +477,14 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:invented-evidence', commandDigest: 'sha256:' + 'f'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
 
   it('rejects a fully re-digested aggregate whose structured input violates the exact contract schema', async () => {
     const backend = convexTest(schema, modules)
-    const aggregate = await compiledAggregate(backend)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
     const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
     const facts = aggregate.snapshot.facts.map((fact) => ({ ...fact, value: 42 }))
     const actions = aggregate.plan.actions.map((action) => ({ ...action, inputs: facts }))
@@ -177,6 +498,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
         businessId: candidate.businessId, offeringId: candidate.offeringId, bindingId: candidate.bindingId,
         model, offeringRegistrationHash: candidate.offeringRegistrationHash,
         bindingRegistrationHash: candidate.bindingRegistrationHash,
+        cancellation: candidate.cancellation,
       })),
       proposedActions: actions,
       resolveModel: () => model,
@@ -211,7 +533,7 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
 
     await expect(backend.mutation(internal.customerRequestV2.commitAggregate, {
       commandKey: 'command:v2:wrong-type', commandDigest: 'sha256:' + '9'.repeat(64),
-      expectedRevision: 0, aggregate: forged,
+      expectedRevision: 0, expectedRouteGeneration: 0, aggregate: forged, routeGeneration,
     })).resolves.toEqual({ kind: 'aggregate_invalid' })
     await expect(v2Rows(backend)).resolves.toEqual({ heads: [], revisions: [], commands: [] })
   })
@@ -254,11 +576,88 @@ describe('atomic V2 Customer Request aggregate persistence', () => {
       heads: [], revisions: [], commands: [], preparations: [], preparationCommands: [],
     })
   })
+
+  it('retains an exact embedded-route revision as immutable history and requires resubmission', async () => {
+    const backend = convexTest(schema, modules)
+    const { aggregate, routeGeneration } = await compiledAggregate(backend)
+    const { planRevisionId: _planRevisionId, planDigest: _planDigest, createdAt, ...planMaterial } = aggregate.plan
+    const legacyRoutes = routeGeneration.routes.map((route) => ({
+      ...route,
+      steps: route.steps.map(({ resolvedInputs: _resolvedInputs, deferredInputs: _deferredInputs, ...step }) => step),
+    }))
+    const legacyPlanMaterial = { ...planMaterial, routes: legacyRoutes }
+    const planDigest = canonicalDigest(legacyPlanMaterial)
+    const legacyPlan = { planRevisionId: `plan:${planDigest}`, ...legacyPlanMaterial, planDigest, createdAt }
+    const { aggregateDigest: _aggregateDigest, ...aggregateMaterial } = aggregate
+    const legacyAggregateMaterial = { ...aggregateMaterial, plan: legacyPlan }
+    const legacyAggregate = { ...legacyAggregateMaterial, aggregateDigest: canonicalDigest(legacyAggregateMaterial) }
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('customerRequestV2Revisions', {
+        requestId: aggregate.snapshot.requestId,
+        requestRevision: aggregate.snapshot.revision,
+        aggregate: legacyAggregate,
+      })
+      await ctx.db.insert('customerRequestV2Heads', {
+        requestId: aggregate.snapshot.requestId,
+        principalId: aggregate.snapshot.principalId,
+        delegatedAgentId: aggregate.snapshot.delegatedAgentId,
+        currentRevision: aggregate.snapshot.revision,
+        currentAggregateDigest: legacyAggregate.aggregateDigest,
+        createdAt: aggregate.snapshot.recordedAt,
+        updatedAt: aggregate.snapshot.recordedAt,
+      })
+      await ctx.db.insert('customerRequestV2Commands', {
+        commandKey: 'command:v2:legacy-replay',
+        commandDigest: 'sha256:' + '4'.repeat(64),
+        principalId: aggregate.snapshot.principalId,
+        requestId: aggregate.snapshot.requestId,
+        expectedRevision: 0,
+        resultingRevision: aggregate.snapshot.revision,
+        aggregateDigest: legacyAggregate.aggregateDigest,
+        committedAt: aggregate.snapshot.recordedAt,
+      })
+    })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toEqual({
+      kind: 'needs_attention', requestId: aggregate.snapshot.requestId,
+      reason: 'historical_request_resubmit_required', resumable: false,
+    })
+    const persisted = await backend.run(async (ctx) => (
+      await ctx.db.query('customerRequestV2Revisions').first()
+    ))
+    expect(persisted?.aggregate).toEqual(legacyAggregate)
+    expect(persisted?.aggregate.plan).toHaveProperty('routes')
+    await expect(backend.query(internal.customerRequestV2.getCommandReplay, {
+      commandKey: 'command:v2:legacy-replay',
+      commandDigest: 'sha256:' + '4'.repeat(64),
+      principalId: aggregate.snapshot.principalId,
+      requestId: aggregate.snapshot.requestId,
+    })).resolves.toEqual({
+      kind: 'needs_attention', requestId: aggregate.snapshot.requestId,
+      reason: 'historical_request_resubmit_required', resumable: false,
+    })
+    await backend.run(async (ctx) => {
+      const revision = await ctx.db.query('customerRequestV2Revisions').first()
+      if (revision === null || !('routes' in revision.aggregate.plan)) throw new Error('legacy revision missing')
+      await ctx.db.patch(revision._id, {
+        aggregate: {
+          ...revision.aggregate,
+          plan: { ...revision.aggregate.plan, proposalDigest: 'sha256:' + '5'.repeat(64) },
+        },
+      })
+    })
+    await expect(backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: aggregate.snapshot.requestId,
+    })).rejects.toThrow('customer_request_v2_legacy_aggregate_integrity_failure')
+  })
 })
 
 async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   await backend.mutation(internal.devSeed.seedDevCatalog, {})
   await admitSandboxSupply(backend)
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await backend.finishInProgressScheduledFunctions()
   await observeSandboxPublication(backend)
   const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 64 })
   if (supply.kind !== 'available') throw new Error(`eligible supply unavailable: ${supply.reason}`)
@@ -269,7 +668,7 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
   const fact = {
     contractRef: model.contractRef, selectionKey: model.selectionKey,
     inputKey: input.key, inputPointer: input.inputPointer, schemaIdentity: input.schemaIdentity,
-    value: 'Find a match', source: { kind: 'agent_inference' as const, inferenceRef: 'inference:test' },
+    value: 'Find a match', source: { kind: 'customer' as const, assertionRef: 'assertion:test' },
   }
   const result = compileCustomerRequest({
     requestId: 'request:v2:persist', expectedRevision: 0,
@@ -284,6 +683,7 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       contractRef: model.contractRef, offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
+      cancellation: binding.cancellation,
       ...(publication === undefined ? {} : {
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
@@ -292,7 +692,108 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
     models: [model], now: 1_000,
   })
   if (result.kind !== 'compiled') throw new Error(`compile failed: ${result.reason}`)
-  return writableCustomerRequestV2Aggregate(result.aggregate)
+  if (result.routeGeneration === undefined) throw new Error('route generation missing')
+  return {
+    aggregate: writableCustomerRequestV2Aggregate(result.aggregate),
+    routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
+  }
+}
+
+function sandboxSelection(
+  aggregate: Awaited<ReturnType<typeof compiledAggregate>>['aggregate'],
+): Extract<CustomerRequestSemanticProposal, { kind: 'capability_candidates' }>['selections'][number] {
+  const action = aggregate.plan.actions[0]
+  if (action === undefined) throw new Error('sandbox action missing')
+  return { selectionKey: action.selectionKey, contractRef: action.contractRef, facts: [] }
+}
+
+async function compileRefreshCandidate(
+  backend: ReturnType<typeof convexTest>,
+  aggregate: Awaited<ReturnType<typeof compiledAggregate>>['aggregate'],
+  expectedGeneration: number,
+  proposal: CustomerRequestSemanticProposal,
+  now: number,
+) {
+  const supply = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 64 })
+  if (supply.kind !== 'available') throw new Error(`refresh supply unavailable: ${supply.reason}`)
+  const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+  const result = compileCustomerRequest({
+    requestId: aggregate.snapshot.requestId,
+    expectedRevision: aggregate.snapshot.revision - 1,
+    expectedRouteGeneration: expectedGeneration,
+    principalId: aggregate.snapshot.principalId,
+    delegatedAgentId: aggregate.snapshot.delegatedAgentId,
+    intent: aggregate.snapshot.intent,
+    networkId: aggregate.snapshot.networkId,
+    priorFacts: aggregate.snapshot.facts,
+    proposal,
+    interpreterId: 'interpreter:refresh-test',
+    bindings: supply.supplies.map(({ offering, binding, publication }) => ({
+      businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
+      contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
+      offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
+      price: offering.presentation.price,
+      cancellation: binding.cancellation,
+      ...(publication === undefined ? {} : {
+        publicationRef: publication.publicationRef, publicationRevision: publication.revision,
+        readinessValidUntil: publication.readinessValidUntil,
+      }),
+    })),
+    models: [model], now,
+  })
+  if (result.kind !== 'compiled') throw new Error(`refresh compile failed: ${result.reason}`)
+  return {
+    aggregate: writableCustomerRequestV2Aggregate(result.aggregate),
+    ...(result.routeGeneration === undefined ? {} : {
+      routeGeneration: writableCustomerRequestRoutePlanGeneration(result.routeGeneration),
+    }),
+  }
+}
+
+function preCancellationRouteGeneration(
+  generation: CustomerRequestRoutePlanGeneration,
+): CustomerRequestRoutePlanGeneration {
+  const decisionSnapshot = generation.decisionSnapshot
+  if (decisionSnapshot === undefined) throw new Error('decision snapshot fixture missing')
+  const historical = writableCustomerRequestRoutePlanGeneration(generation)
+  for (const route of historical.routes) {
+    for (const step of route.steps) Reflect.deleteProperty(step, 'cancellation')
+  }
+  const routeIdByCurrentId = new Map<string, string>()
+  for (const route of historical.routes) {
+    const { routeDigest: _routeDigest, ...routeMaterial } = route
+    const {
+      routePlanId: currentRoutePlanId,
+      fallbacks: _fallbacks,
+      comparison,
+      ...routeCoreWithoutComparison
+    } = routeMaterial
+    const { ordering: _ordering, ...baseComparison } = comparison
+    routeIdByCurrentId.set(currentRoutePlanId, `route:${canonicalDigest({
+      ...routeCoreWithoutComparison,
+      comparison: baseComparison,
+    } as StableHashValue)}`)
+  }
+  for (const route of historical.routes) {
+    const currentRoutePlanId = route.routePlanId
+    route.routePlanId = routeIdByCurrentId.get(currentRoutePlanId) ?? currentRoutePlanId
+    for (const alternative of route.fallbacks.alternatives) {
+      alternative.alternativeRouteRef = routeIdByCurrentId.get(alternative.alternativeRouteRef)
+        ?? alternative.alternativeRouteRef
+    }
+    const { routeDigest: _routeDigest, ...routeMaterial } = route
+    route.routeDigest = canonicalDigest(routeMaterial as StableHashValue)
+  }
+  return createCustomerRequestRoutePlanGeneration({
+    generation: historical.generation,
+    requestId: historical.requestId,
+    requestRevision: historical.requestRevision,
+    compiler: historical.compiler,
+    registrySnapshotDigest: historical.registrySnapshotDigest,
+    decisionSnapshot,
+    routes: historical.routes,
+    createdAt: historical.createdAt,
+  })
 }
 
 async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {

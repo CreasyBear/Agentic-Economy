@@ -4,6 +4,7 @@ import {
   type CapabilityDecisionModel,
   type CapabilityInputSemantic,
 } from '@/modules/capability-contract/public'
+import type { CapabilityCancellation } from '@/modules/capability-supply/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import type { StableHashValue } from '@/modules/common/stable-hash'
 
@@ -23,6 +24,11 @@ import {
   deriveCustomerDecisionPreference,
   type CustomerRequestSemanticProposal,
 } from './semantic-interpreter'
+import {
+  createCustomerRequestRoutePlanGeneration,
+  routePlanGenerationDecisionSnapshot,
+  type CustomerRequestRoutePlanGeneration,
+} from './route-plan-generation'
 
 const MAX_SELECTIONS = 64
 const MAX_FACTS = 128
@@ -62,7 +68,6 @@ export type CustomerRequestV2PlanRevision = Readonly<{
   completionRequirements: RequestEvaluation['completionRequirements']
   compilerVersion: typeof CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION
   authority: 'proposal_only'
-  routes: readonly CustomerRequestRoutePlan[]
   planDigest: string
   createdAt: number
 }>
@@ -83,10 +88,13 @@ export type CustomerRequestRoutePlan = Readonly<{
     bindingRegistrationHash: string
     publicationRef: string
     publicationRevision: number
+    resolvedInputs: readonly RequestFact[]
+    deferredInputs: readonly RequestActionInputMapping[]
     price: RegisteredSupplyPrice
     dataUse: CapabilityDecisionModel['dataUse']
     effects: CapabilityDecisionModel['effects']
     evidence: CapabilityDecisionModel['evidence']
+    cancellation: CapabilityCancellation
     recovery: CapabilityDecisionModel['lifecycle']
   }>[]
   edges: readonly (RequestActionInputMapping & Readonly<{ fromStep: string; toStep: string }>)[]
@@ -129,6 +137,7 @@ export type CustomerRequestV2Aggregate = Readonly<{
 export type CompileCustomerRequestCommand = Readonly<{
   requestId: string
   expectedRevision: number
+  expectedRouteGeneration?: number
   principalId: string
   delegatedAgentId: string
   intent: string
@@ -142,7 +151,11 @@ export type CompileCustomerRequestCommand = Readonly<{
 }>
 
 export type CompileCustomerRequestResult =
-  | Readonly<{ kind: 'compiled'; aggregate: CustomerRequestV2Aggregate }>
+  | Readonly<{
+      kind: 'compiled'
+      aggregate: CustomerRequestV2Aggregate
+      routeGeneration?: CustomerRequestRoutePlanGeneration
+    }>
   | Readonly<{ kind: 'refused'; reason: 'unsafe_interpretation' | 'capability_graph_invalid' }>
 
 export function compileCustomerRequest(command: CompileCustomerRequestCommand): CompileCustomerRequestResult {
@@ -261,7 +274,6 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     completionRequirements: evaluation.completionRequirements,
     compilerVersion: CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
     authority: 'proposal_only' as const,
-    routes,
   }
   const planDigest = canonicalDigest(planMaterial as StableHashValue)
   const plan: CustomerRequestV2PlanRevision = Object.freeze({
@@ -270,18 +282,37 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     planDigest,
     createdAt: command.now,
   })
+  const routeGeneration = routes.length === 0
+    || routes.some((route) => route.maximumTotalCost.kind !== 'known')
+    ? undefined
+    : createCustomerRequestRoutePlanGeneration({
+        generation: (command.expectedRouteGeneration ?? 0) + 1,
+        requestId: command.requestId,
+        requestRevision,
+        compiler: {
+          compilerVersion: CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
+          interpreterId: command.interpreterId,
+          interpretationEvidence,
+          proposalDigest,
+        },
+        registrySnapshotDigest,
+        decisionSnapshot: routePlanGenerationDecisionSnapshot({ snapshot, evaluation, plan }),
+        routes,
+        createdAt: command.now,
+      })
   const outcome = evaluation.posture === 'unsupported'
     ? 'unsupported' as const
     : evaluation.posture === 'needs_information'
       ? 'needs_information' as const
-      : actions.length > 0 && routes.length === 0 ? 'unsupported' as const : 'plan_ready' as const
+      : actions.length > 0 && routeGeneration === undefined ? 'unsupported' as const : 'plan_ready' as const
   const aggregateMaterial = { aggregateVersion: 2 as const, snapshot, evaluation, plan, outcome }
-  if (new TextEncoder().encode(JSON.stringify(aggregateMaterial)).byteLength > MAX_AGGREGATE_BYTES) {
+  if (new TextEncoder().encode(JSON.stringify({ aggregateMaterial, routeGeneration })).byteLength > MAX_AGGREGATE_BYTES) {
     return { kind: 'refused', reason: 'unsafe_interpretation' }
   }
   return {
     kind: 'compiled',
     aggregate: Object.freeze({ ...aggregateMaterial, aggregateDigest: canonicalDigest(aggregateMaterial as StableHashValue) }),
+    ...(routeGeneration === undefined ? {} : { routeGeneration }),
   }
 }
 
@@ -392,23 +423,6 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
         })),
       })),
       completionRequirements: aggregate.plan.completionRequirements.map(writableCompletion),
-      routes: aggregate.plan.routes.map((route) => ({
-        ...route,
-        steps: route.steps.map((step) => ({
-          ...step, contractRef: { ...step.contractRef }, price: { ...step.price },
-          dataUse: step.dataUse.map((item) => ({ ...item, recipient: { ...item.recipient }, purposes: [...item.purposes] })),
-          effects: step.effects.map((effect) => ({ ...effect })),
-          evidence: step.evidence.map((evidence) => ({ ...evidence })), recovery: { ...step.recovery },
-        })),
-        edges: route.edges.map((edge) => ({ ...edge, source: { ...edge.source }, target: { ...edge.target } })),
-        maximumTotalCost: { ...route.maximumTotalCost },
-        uncertainty: [...route.uncertainty],
-        fallbacks: {
-          ordering: route.fallbacks.ordering,
-          alternatives: route.fallbacks.alternatives.map((fallback) => ({ ...fallback })),
-        },
-        comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
-      })),
     },
     outcome: aggregate.outcome,
     aggregateDigest: aggregate.aggregateDigest,
@@ -451,8 +465,11 @@ export function compileRoutePlans(input: Readonly<{
         contractRef: candidate.contractRef, offeringRegistrationHash: candidate.offeringRegistrationHash,
         bindingRegistrationHash: candidate.bindingRegistrationHash,
         publicationRef: candidate.publicationRef, publicationRevision: candidate.publicationRevision,
+        resolvedInputs: action.inputs,
+        deferredInputs: action.inputMappings,
         price: candidate.price,
         dataUse: model.dataUse, effects: model.effects, evidence: model.evidence,
+        cancellation: candidate.cancellation,
         recovery: model.lifecycle,
       })
     })
@@ -510,12 +527,14 @@ export function compileRoutePlans(input: Readonly<{
 }
 
 type RouteCandidate = RequestEvaluation['candidates'][number] & Required<Pick<
-  RequestEvaluation['candidates'][number], 'publicationRef' | 'publicationRevision' | 'readinessValidUntil' | 'price'
+  RequestEvaluation['candidates'][number],
+  'publicationRef' | 'publicationRevision' | 'readinessValidUntil' | 'price' | 'cancellation'
 >>
 
 function isRouteCandidate(candidate: RequestEvaluation['candidates'][number]): candidate is RouteCandidate {
   return candidate.publicationRef !== undefined && candidate.publicationRevision !== undefined
     && candidate.readinessValidUntil !== undefined && candidate.price !== undefined
+    && candidate.cancellation !== undefined
 }
 
 function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerRequestRoutePlan['maximumTotalCost'] | undefined {

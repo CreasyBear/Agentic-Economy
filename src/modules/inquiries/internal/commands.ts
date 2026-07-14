@@ -1535,14 +1535,16 @@ function governedSendRecordProjection(
         candidate.threadId === threadId,
     )
     if (lineages.length !== 1) return invalidGovernedSendProjection
-    const lineage = lineages[0]!
+    const lineage = lineages[0]
+    if (lineage === undefined) return invalidGovernedSendProjection
     const tombstone = state.privacyTombstones.find(
       (candidate) => candidate.threadId === threadId &&
         candidate.operationKey === lineage.privacyOperationKey &&
         candidate.status === 'applied',
     )
+    if (tombstone === undefined) return invalidGovernedSendProjection
     const keyRef = inquiryReceiptKeyRef(receipt)
-    const expectedMaterial = tombstone?.appliedAt === undefined
+    const expectedMaterial = tombstone.appliedAt === undefined
       ? undefined
       : {
           erasureEventId: `governed-send-erasure:${stableHash({ receiptOperationKey: String(receipt.operationKey), privacyOperationKey: String(tombstone.operationKey), keyRef })}`,
@@ -1558,13 +1560,13 @@ function governedSendRecordProjection(
     const expectedLineage = expectedMaterial === undefined
       ? undefined
       : { ...expectedMaterial, lineageHash: stableHash(expectedMaterial) }
-    const uniqueErasureEventIds = new Set(tombstone?.erasureEventIds ?? [])
+    const uniqueErasureEventIds = new Set(tombstone.erasureEventIds)
     if (
       expectedLineage === undefined ||
       stableStringify(expectedLineage) !== stableStringify(lineage) ||
-      !tombstone!.erasureEventIds.includes(lineage.erasureEventId) ||
-      tombstone!.receiptErasureCount !== tombstone!.erasureEventIds.length ||
-      uniqueErasureEventIds.size !== tombstone!.erasureEventIds.length
+      !tombstone.erasureEventIds.includes(lineage.erasureEventId) ||
+      tombstone.receiptErasureCount !== tombstone.erasureEventIds.length ||
+      uniqueErasureEventIds.size !== tombstone.erasureEventIds.length
     ) return invalidGovernedSendProjection
     return {
       kind: 'verified',

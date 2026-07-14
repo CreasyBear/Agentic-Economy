@@ -145,7 +145,11 @@ export type {
   InquiryReceiptKeyring,
   InquiryWrappedReceiptKey,
 } from './internal/receipt-envelope'
-export { resolveGovernedSendIntegrityKeyring } from './internal/governed-send'
+export {
+  GOVERNED_SEND_CANONICAL_FIELDS,
+  buildGovernedSendIntent,
+  resolveGovernedSendIntegrityKeyring,
+} from './internal/governed-send'
 export type {
   GovernedSendErasureLineageRecord,
   GovernedSendIntegrityCommitmentRecord,

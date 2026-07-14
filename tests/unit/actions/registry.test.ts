@@ -186,7 +186,12 @@ describe('action registry', () => {
       serviceId: 'service:business:plumbing-demo:emergency-plumbing',
       capabilityKind: 'phone_inquiry',
     }
-    const baseInput = { target, body: 'Need help with a leak.', contact: { email: 'person@example.test' } }
+    const baseInput = {
+      target,
+      body: 'Need help with a leak.',
+      contact: { email: 'person@example.test' },
+      expectedDigest: `sha256:${'0'.repeat(64)}`,
+    }
 
     expect(schema.safeParse(baseInput).success).toBe(true)
     expect(schema.safeParse({ ...baseInput, body: 'a'.repeat(2_000) }).success).toBe(true)

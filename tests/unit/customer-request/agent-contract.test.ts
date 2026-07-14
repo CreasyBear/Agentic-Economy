@@ -43,7 +43,6 @@ describe('Customer Request agent contract', () => {
           price: { currency: 'AUD', minimumAmountMinor: 1_200, maximumAmountMinor: 1_200 },
           validUntil: 10_000,
         }],
-        approval: { state: 'required' },
       },
     }
 
@@ -59,5 +58,15 @@ describe('Customer Request agent contract', () => {
         action: { state: actionState, resolution, automaticRetry: false, observedAt: 10_000 },
       }).success).toBe(true)
     }
+  })
+
+  it('rejects an empty routes-ready shell', () => {
+    const shell = {
+      kind: 'request', requestRef: 'request:route', revision: 2,
+      routeGenerationRef: 'generation:two', state: 'routes_ready',
+      summary: 'Ways forward are available.', nextAction: 'inspect_routes',
+      missingFields: [], criteria: [], options: [],
+    }
+    expect(customerRequestViewSchema.safeParse(shell).success).toBe(false)
   })
 })

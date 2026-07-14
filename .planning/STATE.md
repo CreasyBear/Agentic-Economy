@@ -2,29 +2,43 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 14day-bootstrap-gate
-status: active_gate_with_open_blockers
-stopped_at: "Wayfinder map remains open: #5 deployed evidence suite, #33 receipt demo loop, #36 agent-experience deployed gate"
-last_updated: "2026-07-04"
+current_phase: routeplan-frontier
+status: active
+stopped_at: "V2 approval and execution authority retirement #179 source-complete at 7fee5b2; next unclaimed frontier is RouteMandate pre-release budget enforcement #174"
+last_updated: "2026-07-14"
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 31
-  completed_plans: 29
+  completed_plans: 30
   percent: 67
 ---
 
 # State — Agentic Economy Fresh Repo
 
 **Created:** 2026-06-27
-**Current execution state:** 14-day bootstrap gate active; production-build wayfinder map still open  
+**Current execution state:** RoutePlan frontier active on wayfinder map #112; 14-day bootstrap gate superseded
 **Last source/local phase closed:** Phase 6 source/local proof only  
 **Status:** active gate with open deployed/provider/demo blockers
 ## Active decision
 
 `Agentic-Economy-Backup` is frozen as a source mine. The fresh `agentic-economy` repo is the working product repo.
 
-Active go/no-go gate (2026-07-04): `.planning/scopes/scope-14day-bootstrap-gate/` blocks public shipment of later platform rungs beyond the storefront prototype and qualified-inquiry path until a 14-day evidence artifact records 30–50 source-backed profiles, 10 recruited providers, 100 attributable sessions, ≥10 qualified inquiries, ≥5 voluntary provider corrections/listing requests, and zero boundary overclaim.
+SUPERSEDED (2026-07-13): the 14-day bootstrap gate in `.planning/scopes/scope-14day-bootstrap-gate/` is formally superseded by the wayfinder map #112 proof ladder — its metrics measured legacy surfaces now slated for retirement (#137). Source exercise only; no clock ever started.
+
+Active frontier (2026-07-13): contradictory #152 was recharted before coding. Action Preparation and authority reservation (#154) now precede concrete disclosure allocation/egress recovery (#155), real Prepared Action persistence (#156), exact approval/run/recovery authority (#153), and V1 quarantine (#149). The tracker enforces the native chain.
+
+Hosted proof frontier (2026-07-14): the cold external-agent Request journey (#165) is closed at `6c982d0f976bfd37b53394ef6a2770f4ee0b8a27`. GitHub run `29304508882` passed the clean source contract, deployed that exact Git revision to Vercel and Convex, registered exactly two labelled sandbox businesses through production registration, authenticated-read-back deployment `dpl_8ygRkWVAHMehKyVTGrEZNbAsbtqs`, and completed the cold agent journey through typed clarification and both customer-authority stops to `options_ready`. This is sandbox contract and hosted-journey proof only, not real supply, booking, purchase, autonomous execution, or customer value.
+
+RoutePlan supersession frontier (2026-07-14): [Supersede RoutePlan generations on material Request or graph change](https://github.com/CreasyBear/Agentic-Economy/issues/169) is closed at exact deployed revision `9553845e215aa4aa47a08ae72016ed32a28def1d`. GitHub run `29321940577` passed clean source, exact Vercel and Convex deployment, authenticated deployment readback `dpl_3Pmk9Nv4ZRVR2x479cuWMUfYZjZc`, and the sandbox-labelled cold external-agent journey. Immutable generations now converge on identical material, supersede with exact-head CAS on material Request or graph change, preserve terminal Request decisions across resume, and block stale V2 preparation. This remains sandbox contract and hosted-path proof only, not real supply, execution, customer value, booking, payment, or autonomous fulfillment.
+
+RoutePlan projection frontier (2026-07-14): [Project exact RoutePlan generation changes to customers and agents](https://github.com/CreasyBear/Agentic-Economy/issues/170) is closed at exact deployed revision `0c4090825c2deac9b2c9157c34f66b2d0ab09d0a`. GitHub run `29327024791` passed the clean source contract, exact Vercel and Convex deployment, authenticated deployment readback, labelled sandbox registration, and the cold external-agent Request journey. Human and machine Request callers now receive one customer-semantic projection of the exact current generation and route-associated material deltas before confirmation; no authority is created. This remains sandbox contract and hosted-path proof only, not real supply, execution, customer value, booking, payment, or autonomous fulfillment.
+
+RouteMandate contract frontier (2026-07-14): [Define the exact RouteMandate contract for one selected RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/172) is closed at exact deployed revision `fb1e3301d62c75eb5407768bb0f4922a840fe3ac`. GitHub run `29330541662` passed the clean source contract, exact Vercel and Convex deployment, authenticated deployment readback, labelled sandbox registration, and the cold external-agent Request journey. Production TypeScript now compiles, digests, and verifies one function-agnostic authority object bound to an exact immutable RoutePlan generation, selected route, registered steps and material limits; current writes require binding-owned cancellation while historical detached generations remain replayable. This is contract and hosted-path proof only: no RouteMandate persistence, issuance, confirmation UI, release, execution, real supply, booking, payment, autonomous fulfillment, or customer value is claimed. The executable chain remains [current-head issuance and supersession](https://github.com/CreasyBear/Agentic-Economy/issues/173) -> [pre-release cumulative enforcement](https://github.com/CreasyBear/Agentic-Economy/issues/174), with [shared human/agent confirmation](https://github.com/CreasyBear/Agentic-Economy/issues/175) and separately bounded [standing low-risk authority](https://github.com/CreasyBear/Agentic-Economy/issues/176).
+
+RouteMandate lifecycle frontier (2026-07-14): [Issue and supersede RouteMandates against the current generation head](https://github.com/CreasyBear/Agentic-Economy/issues/173) is closed at exact source revision `8e1e4a9df704f3c0df517c13fac7cbc1cd16d280`. The clean-checkout `test:release:source` gate and Convex codegen passed at that revision. Production Convex source now authenticates the current Request principal, reopens the immutable current RoutePlan generation, derives exact mandate material server-side, converges idempotent replay, preserves immutable issue/revocation history, and supersedes stale authority transactionally on material Request or generation change. Delegated ownership requires the canonical Clerk owner-token binding and lifecycle reads fail closed on content-address, graph-head, or history-integrity drift. This is source/local contract proof only: no hosted deployment, provider release, confirmation UI, execution, real supply, booking, payment, autonomous fulfillment, or customer value is claimed. The next unclaimed frontier is [pre-release cumulative budget enforcement](https://github.com/CreasyBear/Agentic-Economy/issues/174).
+
+Authority convergence frontier (2026-07-14): [Retire V2 approval and execution authority before RouteMandate admission](https://github.com/CreasyBear/Agentic-Economy/issues/179) is source-complete at exact revision `7fee5b27db569ff2f8452ca4bcdcb921777e45e4`. Public Request approval and attempt routes, handlers and schemas; Customer Request approval/admission actions; deployed V2 approval, ActionAttempt, provider-release/outcome and reconciliation functions; and reusable production compilers are absent. All 19 historical V2 authority and execution tables remain unchanged in the schema for lineage or migration, and the source guard prevents production code from reaching them. Convex codegen and the complete `test:release:source` gate passed at that revision. This is source/local retirement proof only: no replacement confirmation, RouteMandate admission, provider call, hosted deployment, execution, real supply, booking, payment, autonomous fulfillment, or customer value is claimed. The next unclaimed frontier remains [pre-release cumulative budget enforcement](https://github.com/CreasyBear/Agentic-Economy/issues/174).
 
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
@@ -53,7 +67,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The active next action is pre-clock 14-day gate readiness in `.planning/scopes/scope-14day-bootstrap-gate/`: fill the source-backed profile corpus and provider recruitment ledgers, then resolve or explicitly accept the instrumentation blockers recorded in `EVIDENCE-14DAY-GATE.md` before the clock starts. Current blockers are source-owned targeted-session counting, supplier-maintenance evidence, optional profile/source click instrumentation, and deployed outside-in assistant audit evidence.
+The next unclaimed frontier is [Enforce RouteMandate budgets before route-step release](https://github.com/CreasyBear/Agentic-Economy/issues/174). Begin only in a new logical ticket session: claim it, enforce cumulative spend and exact RouteMandate limits before any registered route step or data release, and preserve fail-closed replay and recovery semantics. No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
