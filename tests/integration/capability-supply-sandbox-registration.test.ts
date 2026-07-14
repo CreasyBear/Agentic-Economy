@@ -133,9 +133,9 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(state.publications).toMatchObject([{
       publicationRef: first.sandboxCapabilityPublicationRef,
       bindingId: 'binding:sandbox-option-one:http-json:v3',
-      credentialState: 'ready',
-      healthState: 'healthy',
-      readinessEvidenceRefs: ['seed:test-only-credential-and-health'],
+      credentialState: 'unobserved',
+      healthState: 'unobserved',
+      readinessEvidenceRefs: [],
     }])
     expect(state.bindings.find((binding) => binding.bindingId === state.publications[0]?.bindingId))
       .toMatchObject({ credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY' })
@@ -143,10 +143,7 @@ describe('labelled sandbox V2 capability supply', () => {
       networkId: 'ae:public', includeInactive: false, limit: 10,
     })).resolves.toMatchObject({
       kind: 'available',
-      nodes: [expect.objectContaining({
-        publicationRef: first.sandboxCapabilityPublicationRef,
-        routability: { eligible: true, reasons: [] },
-      })],
+      nodes: [],
     })
     expect(state.contracts).toHaveLength(1)
     expect(state.contracts[0]).toMatchObject({

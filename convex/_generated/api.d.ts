@@ -14,6 +14,7 @@ import type * as authzMigration from "../authzMigration.js";
 import type * as business from "../business.js";
 import type * as capabilityContractDocuments from "../capabilityContractDocuments.js";
 import type * as capabilitySupply from "../capabilitySupply.js";
+import type * as capabilitySupplyReadiness from "../capabilitySupplyReadiness.js";
 import type * as catalog from "../catalog.js";
 import type * as crons from "../crons.js";
 import type * as customerRequestApplication from "../customerRequestApplication.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   business: typeof business;
   capabilityContractDocuments: typeof capabilityContractDocuments;
   capabilitySupply: typeof capabilitySupply;
+  capabilitySupplyReadiness: typeof capabilitySupplyReadiness;
   catalog: typeof catalog;
   crons: typeof crons;
   customerRequestApplication: typeof customerRequestApplication;

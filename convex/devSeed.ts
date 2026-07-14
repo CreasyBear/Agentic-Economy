@@ -1,4 +1,5 @@
 import { internalMutation } from './_generated/server'
+import { internal } from './_generated/api'
 import { v } from 'convex/values'
 
 import {
@@ -50,6 +51,9 @@ export const seedDevCatalog = internalMutation({
     const sandboxCapabilityPublicationRef = await seedSandboxCapabilityPublication(
       ctx.db, sandboxRegistrations[0], seedStartedAt + 2_750,
     )
+    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      publicationRef: sandboxCapabilityPublicationRef, expectedRevision: 1,
+    })
     await retireLegacySandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
     return {
       ...result,
@@ -100,6 +104,9 @@ export const seedTestCapabilityPublication = internalMutation({
       offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
     }, Date.now())
+    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      publicationRef, expectedRevision: 1,
+    })
     return { publicationRef, credentialRef: binding.credentialRef }
   },
 })
@@ -136,6 +143,10 @@ async function seedSandboxCapabilityPublication(
       || existing.bindingId !== registration.bindingId
       || existing.contractDigest !== registration.contractRef.contractDigest
     ) throw new Error('sandbox_capability_publication_identity_mismatch')
+    await db.patch(existing._id, {
+      credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      readinessObservedAt: undefined, readinessValidUntil: undefined, updatedAt: observedAt,
+    })
     return existing.publicationRef
   }
   await db.insert('capabilityPublications', {
@@ -149,11 +160,9 @@ async function seedSandboxCapabilityPublication(
     offeringId: registration.offeringId,
     bindingId: registration.bindingId,
     disposition: 'current',
-    credentialState: 'ready',
-    healthState: 'healthy',
-    readinessEvidenceRefs: ['seed:test-only-credential-and-health'],
-    readinessObservedAt: observedAt,
-    readinessValidUntil: observedAt + 86_400_000,
+    credentialState: 'unobserved',
+    healthState: 'unobserved',
+    readinessEvidenceRefs: [],
     registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
     createdAt: observedAt,
     updatedAt: observedAt,

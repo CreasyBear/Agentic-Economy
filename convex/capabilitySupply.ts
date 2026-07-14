@@ -20,6 +20,7 @@ import { canonicalDigest, isCanonicalDigest } from '@/modules/common/canonical-d
 import { stableStringify, type StableHashValue } from '@/modules/common/stable-hash'
 
 import type { Doc, Id } from './_generated/dataModel'
+import { internal } from './_generated/api'
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import { resolveAdminAuthority } from './authz'
 import {
@@ -86,7 +87,7 @@ const bindingRegistrationValue = v.object({
   credentialRef: v.string(),
   continuation: continuationValue,
   cancellation: cancellationValue,
-  adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
+  adapter: v.object({ adapterId: v.string(), config: v.any() }),
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const capabilityPublicationOfferingValue = v.object({
@@ -102,7 +103,7 @@ const capabilityPublicationBindingValue = v.object({
   credentialRef: v.string(),
   continuation: continuationValue,
   cancellation: cancellationValue,
-  adapter: v.object({ adapterId: v.string(), config: v.any() }),
+  adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const contextFields = {
@@ -506,6 +507,9 @@ export const publishCapability = mutation({
       createdAt: now,
     })
     await succeedOperation(ctx.db, operation.operationId, expected, [auditId], now)
+    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      publicationRef: draft.offering.offeringId, expectedRevision: 1,
+    })
     return expected
   },
 })
@@ -591,6 +595,92 @@ export const observeCapabilityReadiness = internalMutation({
         readinessValidUntil: args.validUntil,
       }, offering, binding, now),
     }
+  },
+})
+
+const probeOutcomeValue = v.union(
+  v.literal('healthy'), v.literal('credential_unavailable'), v.literal('credential_rejected'),
+  v.literal('target_not_public'), v.literal('transport_unreachable'), v.literal('http_redirect'),
+  v.literal('http_4xx'), v.literal('http_5xx'), v.literal('response_content_type_invalid'),
+  v.literal('response_too_large'), v.literal('response_invalid'),
+)
+
+function probeTargetDigest(
+  publication: Doc<'capabilityPublications'>,
+  offering: Doc<'capabilityOfferings'>,
+  binding: Doc<'capabilityTransportBindings'>,
+) {
+  return canonicalDigest({
+    publicationRef: publication.publicationRef, revision: publication.revision,
+    bindingId: binding.bindingId, capabilityId: publication.capabilityId,
+    endpointUrl: binding.endpointUrl, credentialRef: binding.credentialRef,
+    adapterId: binding.adapterId, configDigest: binding.configDigest,
+    offeringRegistrationHash: offering.registrationHash, offeringEligibilityHash: offering.eligibilityHash,
+    offeringStatus: offering.status, bindingRegistrationHash: binding.registrationHash,
+    bindingEligibilityHash: binding.eligibilityHash, bindingAdmission: binding.admission,
+    bindingConformance: binding.conformance, businessId: publication.businessId,
+    contractDigest: publication.contractDigest,
+  })
+}
+
+export const readCapabilityProbeTarget = internalQuery({
+  args: { publicationRef: v.string(), expectedRevision: v.number() },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
+    if (publication === null || publication.disposition !== 'current') return { kind: 'unavailable' as const }
+    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique()
+    const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique()
+    const business = await publishedBusiness(ctx.db, publication.businessId)
+    const contract = await getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication))
+    if (offering === null || binding === null || business === null || contract.kind !== 'found'
+      || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
+      || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
+      || offering.offeringId !== publication.offeringId || binding.offeringId !== offering.offeringId) {
+      return { kind: 'unavailable' as const }
+    }
+    return { kind: 'available' as const, target: {
+      publicationRef: publication.publicationRef, revision: publication.revision,
+      bindingId: binding.bindingId, capabilityId: publication.capabilityId,
+      endpointUrl: binding.endpointUrl, credentialRef: binding.credentialRef,
+      adapterId: binding.adapterId,
+      probeKind: publication.sourceKind === 'mcp' ? 'mcp' as const
+        : publication.sourceKind === 'openapi_http' ? 'openapi_http' as const
+        : publication.sourceKind === 'x402' ? 'x402' as const : 'ae_quote' as const,
+      targetDigest: probeTargetDigest(publication, offering, binding),
+    } }
+  },
+})
+
+export const recordCapabilityProbeResult = internalMutation({
+  args: { publicationRef: v.string(), expectedRevision: v.number(), targetDigest: v.string(), outcome: probeOutcomeValue },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const publication = await ctx.db.query('capabilityPublications')
+      .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
+    if (publication === null || publication.disposition !== 'current') return { kind: 'refused' as const, reason: 'revision_changed' as const }
+    const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (q) => q.eq('bindingId', publication.bindingId)).unique()
+    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (q) => q.eq('offeringId', publication.offeringId)).unique()
+    const business = await publishedBusiness(ctx.db, publication.businessId)
+    const contract = await getActiveExactCapabilityContract(ctx.db, contractRefFromRow(publication))
+    if (binding === null || offering === null || business === null || contract.kind !== 'found'
+      || offering.status !== 'active' || binding.admission !== 'admitted' || binding.conformance !== 'conformant'
+      || !offeringIntegrityIsValid(offering) || !bindingIntegrityIsValid(binding)
+      || probeTargetDigest(publication, offering, binding) !== args.targetDigest) {
+      return { kind: 'refused' as const, reason: 'target_changed' as const }
+    }
+    const now = Date.now()
+    const healthy = args.outcome === 'healthy'
+    const credentialState = args.outcome === 'credential_unavailable' || args.outcome === 'credential_rejected' ? 'unavailable' as const : 'ready' as const
+    const healthState = healthy ? 'healthy' as const : 'unhealthy' as const
+    const validUntil = now + (healthy ? 5 * 60_000 : 60_000)
+    await ctx.db.patch(publication._id, {
+      credentialState, healthState, readinessObservedAt: now, readinessValidUntil: validUntil,
+      readinessEvidenceRefs: [`probe:${args.outcome}`], updatedAt: now,
+    })
+    return { kind: 'observed' as const, publicationRef: publication.publicationRef, revision: publication.revision,
+      lifecycle: publicationLifecycle({ ...publication, credentialState, healthState, readinessObservedAt: now, readinessValidUntil: validUntil }, offering, binding, now) }
   },
 })
 
@@ -785,6 +875,9 @@ export const refreshCapability = mutation({
       disposition: 'current', supersedesRevision: publication.revision,
       credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       registrationEvidenceRefs: [...args.evidenceRefs], createdAt: now, updatedAt: now,
+    })
+    await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+      publicationRef: publication.publicationRef, expectedRevision: revision,
     })
     return {
       kind: 'refreshed' as const, publicationRef: publication.publicationRef, revision,
