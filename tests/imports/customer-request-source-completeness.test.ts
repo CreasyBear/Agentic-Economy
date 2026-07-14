@@ -211,8 +211,8 @@ describe('CustomerRequest source completeness', () => {
     const requiredMarkers = [
       '/api/v1/requests',
       'customer_requests:create',
-      'needs_information | needs_authorization | ready_to_compare | preparing_options | options_ready',
-      'optionSet.ordering: recommended includes its objective, reasons, tradeoffs and influence status',
+      'needs_information | ready_to_compare | routes_ready | route_confirmed | in_progress',
+      '/confirmation', '/run', '/evidence', '/problems', '/cancellation',
     ]
 
     for (const marker of requiredMarkers) {
@@ -284,8 +284,10 @@ describe('CustomerRequest source completeness', () => {
     ] as const
     for (const [handler, schema] of handlerContracts) expect(source(handler)).toContain(schema)
     expect(journey).toMatch(/customerRequestFactInputSchema\.parse/)
-    expect(journey).toMatch(/customerRequestViewSchema\.parse/)
-    expect(journey).toContain("'preparation_disclosure'")
+    expect(journey).toMatch(/customerRequestAgentResultSchema\.parse/)
+    expect(journey).toMatch(/customerRequestRouteConfirmationInputSchema\.parse/)
+    expect(journey).toMatch(/customerRequestRouteActionInputSchema\.parse/)
+    expect(journey).toContain("'route_confirmation'")
     expect(journey).not.toMatch(/prepared_action_approval|\/approval/)
     expect(journey).not.toMatch(/providerId|bindingId|offeringId|Convex|customerRequestApplication:/)
 

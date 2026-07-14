@@ -1031,8 +1031,21 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       tokenIdentifier: `https://identity.example|${principal.ownerId}`,
     })
     await expect(owner.action(api.customerRequestApplication.resume, resumeCommand)).resolves.toEqual(confirmed)
+    const runCommand = {
+      requestRef: compared.requestRef,
+      idempotencyKey: 'run:two-step-agent',
+    }
+    const runAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'run', command: runCommand, principal, issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.runRoute, {
+      ...runCommand, serviceAuth: { ...runAuth, scopes: [...runAuth.scopes] },
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'in_progress', nextAction: 'wait',
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+    })
     await backend.run(async (ctx) => {
-      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toEqual([])
+      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toHaveLength(1)
     })
   })
 

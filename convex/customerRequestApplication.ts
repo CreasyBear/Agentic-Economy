@@ -774,6 +774,7 @@ export const runRoute = action({
     }
     const result = await ctx.runMutation(internal.customerRequestRouteExecution.startOrResume, {
       requestId: args.requestRef,
+      principalId: caller.principalId,
       idempotencyKey: args.idempotencyKey,
     })
     if (result.kind === 'conflict') return {

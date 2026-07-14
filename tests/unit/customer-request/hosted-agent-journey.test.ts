@@ -9,7 +9,7 @@ describe('hosted Customer Request journey', () => {
   it('refuses any non-production origin before credentials can leave the process', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
     await expect(runHostedCustomerRequestJourney({
-      baseUrl: 'https://attacker.example', agentApiKey: 'ak_agent', customerSessionToken: 'sess_customer',
+      baseUrl: 'https://attacker.example', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       agent: { name: 'cold-external-agent', version: '1.0.0' },
       scenario: { request: 'Sandbox request', facts: {}, messages: [] }, sandbox: true, fetch,
@@ -28,13 +28,13 @@ describe('hosted Customer Request journey', () => {
 
   it('cannot claim the hosted acceptance journey without submitting a requested typed fact', async () => {
     const responses = [
-      requestView('options_ready', 1, { preparedAction: preparedAction() }),
-      requestView('options_ready', 1, { preparedAction: preparedAction() }),
+      routesReadyView(),
+      routesReadyView(),
     ]
     const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(responses.shift()))
 
     await expect(runHostedCustomerRequestJourney({
-      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent', customerSessionToken: 'sess_customer',
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       agent: { name: 'cold-external-agent', version: '1.0.0' },
       scenario: { request: 'Sandbox request', facts: { '*': 'Configured but unused' }, messages: ['Unused'] },
@@ -45,7 +45,7 @@ describe('hosted Customer Request journey', () => {
     })).rejects.toThrow('hosted_journey_typed_fact_not_submitted')
   })
 
-  it('stops at preparation disclosure and returns options without creating legacy approval authority', async () => {
+  it('confirms, starts, inspects, reports, cancels, and resumes through one external-agent identity', async () => {
     const calls: Array<{ url: string; authorization: string | null; body: unknown }> = []
     const responses = [
       requestView('needs_information', 1, {
@@ -60,21 +60,36 @@ describe('hosted Customer Request journey', () => {
           prompt: 'Request details', answerKind: 'typed_value',
         },
       }),
-      requestView('needs_authorization', 2, {
-        disclosureReview: {
-          purpose: 'Return sandbox result', maximumRecipients: 2,
-          categories: [{ label: 'Request details', classification: 'public' }],
+      requestView('ready_to_compare', 2),
+      routesReadyView(),
+      requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+        activity: {
+          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
-      requestView('needs_authorization', 2, {
-        preparationRef: 'action-preparation:opaque',
-        disclosureReview: {
-          purpose: 'Return sandbox result', maximumRecipients: 2,
-          categories: [{ label: 'Request details', classification: 'public' }],
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
+        steps: [{ step: 1, state: 'queued', observedAt: 9_000, evidence: [] }],
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_001 },
+      requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+        activity: {
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
         },
       }),
-      preparedView(),
-      preparedView(),
+      requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+        activity: {
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+        },
+      }),
     ]
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       calls.push({
@@ -87,7 +102,7 @@ describe('hosted Customer Request journey', () => {
     })
 
     const proof = await runHostedCustomerRequestJourney({
-      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent', customerSessionToken: 'sess_customer',
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       agent: { name: 'cold-external-agent', version: '1.0.0' },
       scenario: {
@@ -103,9 +118,11 @@ describe('hosted Customer Request journey', () => {
 
     expect(proof).toMatchObject({
       kind: 'cold_external_agent_journey', sandbox: true,
-      authorityStops: ['preparation_disclosure'],
+      authorityStops: ['route_confirmation'],
       final: {
-        state: 'options_ready', businessName: 'Sandbox Option Two',
+        state: 'cancelled', selectedBusiness: 'Sandbox Option Two',
+        runState: 'in_progress', evidenceState: 'queued',
+        problemState: 'received', resumedState: 'cancelled',
       },
     })
     expect(proof.input.facts).toEqual([expect.objectContaining({
@@ -114,10 +131,13 @@ describe('hosted Customer Request journey', () => {
     expect(calls[2]?.body).toMatchObject({
       requirementKey: 'sandbox.request_context', value: 'Find the cheapest labelled sandbox option',
     })
-    expect(calls.filter((call) => call.authorization === 'Bearer sess_customer')).toHaveLength(1)
-    expect(calls.filter((call) => call.authorization === 'Bearer ak_agent')).toHaveLength(5)
+    expect(calls.filter((call) => call.authorization === 'Bearer ak_agent')).toHaveLength(10)
     expect(calls[3]?.url).toContain('/options')
-    expect(calls[4]?.url).toContain('/authorization')
+    expect(calls[4]?.url).toContain('/confirmation')
+    expect(calls[5]?.url).toContain('/run')
+    expect(calls[6]?.url).toContain('/evidence')
+    expect(calls[7]?.url).toContain('/problems')
+    expect(calls[8]?.url).toContain('/cancellation')
     expect(calls.some((call) => call.url.includes('/approval'))).toBe(false)
   })
 })
@@ -127,32 +147,44 @@ function requestView(state: string, revision: number, extra: Record<string, unkn
     kind: 'request', requestRef: 'request:cold', revision, state,
     summary: 'Find the cheapest labelled sandbox option',
     nextAction: state === 'needs_information' ? 'provide_information'
-      : state === 'needs_authorization' ? 'review_disclosure' : 'inspect_options',
+      : state === 'ready_to_compare' ? 'prepare_options' : 'inspect_routes',
     missingFields: state === 'needs_information'
       ? [{ field: 'sandbox.request_context', label: 'Request details', explanation: 'Required.' }] : [],
     criteria: [], options: [], ...extra,
   }
 }
 
-function preparedView() {
-  return requestView('options_ready', 2, {
-    preparedAction: preparedAction(),
+function routesReadyView() {
+  return requestView('routes_ready', 2, {
+    routeGenerationRef: 'generation:one',
+    decision: {
+      generationRef: 'generation:one', requestRevision: 2,
+      outcome: { kind: 'routes_available', routeCount: 1, summary: 'One option is ready.' },
+      routes: [routePlan()], changes: { kind: 'initial' },
+      nextBoundary: { kind: 'confirmation', authorityCreated: false },
+    },
   })
 }
 
-function preparedAction() {
+function routePlan() {
   return {
-    actionRef: 'prepared-action:v2:opaque', businessName: 'Sandbox Option Two',
-    offeringLabel: 'Sandbox reference lookup', summary: 'Labelled sandbox supply.',
-    price: { currency: 'AUD', minimumAmountMinor: 900, maximumAmountMinor: 900 },
-    materialTerms: [{ label: 'Environment', value: 'Sandbox only; not real supply.' }],
-    cancellation: { kind: 'unsupported' }, validUntil: 20_000,
-    selection: { basis: 'lowest_maximum_price', alternativeCount: 1, unavailableCount: 0, commercialInfluence: 'none' },
-    dataUse: { categories: [{ label: 'Request details', classification: 'public' }], purposes: ['return_sandbox_result'] },
-    effects: [{ class: 'data_release', reversibility: 'irreversible' }],
-    alternatives: [{
-      businessName: 'Sandbox Option One',
-      price: { currency: 'AUD', minimumAmountMinor: 1_200, maximumAmountMinor: 1_200 }, validUntil: 20_000,
-    }],
+    routeRef: 'route:one', quoteDigest: 'sha256:quote',
+    result: { resultRef: 'result:one', summary: 'Return a sandbox reference.', deliverables: ['Sandbox reference'] },
+    availability: 'current', stepCount: 1,
+    businesses: [{ businessRef: 'business:two', name: 'Sandbox Option Two' }],
+    maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
+    dataUse: { recipientCount: 1, recipients: [], purposes: ['return_sandbox_result'] },
+    effects: [{ kind: 'information_shared', reversibility: 'irreversible' }],
+    evidence: [{ label: 'Option', purpose: 'completion' }],
+    recovery: [{ step: 1, businessName: 'Sandbox Option Two', posture: 'retry_safe' }],
+    cancellation: { kind: 'unavailable', summary: 'Cannot stop after release.' },
+    validUntil: 20_000, fallback: { available: false, alternatives: [] }, uncertainty: [],
+  }
+}
+
+function confirmation() {
+  return {
+    confirmationRef: 'confirmation:one', generationRef: 'generation:one', requestRevision: 2,
+    confirmedAt: 8_000, validUntil: 20_000, route: routePlan(),
   }
 }

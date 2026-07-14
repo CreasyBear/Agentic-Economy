@@ -201,6 +201,59 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.legacyPreparations).toEqual([])
   })
 
+  it('starts a customer-confirmed route from the normally seeded registered supply', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await admitSandboxSupply(backend)
+    const model = openCapabilityDecisionModel(defineCapabilityContract(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT))
+    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (requestInput === undefined) throw new Error('sandbox request input missing')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: requestInput.key, value: 'Compare labelled sandbox options' }],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:v2:seeded-run', requestId: 'request:v2:seeded-run',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
+      routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('expected seeded route clarification')
+    }
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:seeded-run', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    })
+    if (answered.kind !== 'request') throw new Error('seeded route facts were not accepted')
+    const compared = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: answered.requestRef, revision: answered.revision,
+      idempotencyKey: 'compare:v2:seeded-run',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error(`seeded customer route missing: ${JSON.stringify(compared)}`)
+    }
+    const route = compared.decision.routes[0]
+    const confirmed = await customer.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef, revision: compared.revision, routeRef: route.routeRef,
+      idempotencyKey: 'confirm:v2:seeded-run',
+    })
+    expect(confirmed).toMatchObject({ kind: 'request', state: 'route_confirmed' })
+    await expect(customer.action(api.customerRequestApplication.runRoute, {
+      requestRef: compared.requestRef, idempotencyKey: 'run:v2:seeded-run',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'in_progress', nextAction: 'wait',
+      progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+    })
+  })
+
   it('replays the exact submit view when registered preparation disclosure requires customer authority', async () => {
     const backend = convexTest(schema, modules)
     const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})

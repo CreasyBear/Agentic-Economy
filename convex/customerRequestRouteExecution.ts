@@ -20,12 +20,12 @@ import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { getEligibleExactCapabilitySupply } from './capabilitySupply'
 import { admitRouteStep } from './customerRequestRouteMandateAdmission'
 import {
-  readCurrentRouteMandateState,
   readCurrentRouteMandateStateForPrincipal,
 } from './customerRequestRouteMandate'
 
 const startCommand = v.object({
   requestId: v.string(),
+  principalId: v.string(),
   idempotencyKey: v.string(),
 })
 
@@ -79,11 +79,13 @@ export const startOrResume = internalMutation({
   args: startCommand.fields,
   returns: startResult,
   handler: async (ctx, args): Promise<Infer<typeof startResult>> => {
-    if (args.idempotencyKey.trim().length === 0) {
+    if (args.principalId.trim().length === 0 || args.idempotencyKey.trim().length === 0) {
       return { kind: 'conflict', reason: 'command_changed' }
     }
     const now = Date.now()
-    const current = await readCurrentRouteMandateState(ctx, args.requestId, now)
+    const current = await readCurrentRouteMandateStateForPrincipal(
+      ctx, args.requestId, args.principalId, now,
+    )
     if (current.kind !== 'active') {
       return {
         kind: 'refused',
@@ -203,7 +205,7 @@ export const startOrResume = internalMutation({
       expectedCapabilityVersion: firstStep.contractRef.version,
       expectedCapabilityContractDigest: firstStep.contractRef.contractDigest,
       idempotencyKey: `run-step:${runRef}:${firstStep.actionId}`,
-    })
+    }, args.principalId)
     if (admission.kind !== 'admitted' && admission.kind !== 'replayed') {
       return {
         kind: 'refused',

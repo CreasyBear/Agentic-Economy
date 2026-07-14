@@ -7,13 +7,16 @@ import type { StableHashValue } from '@/modules/common/stable-hash'
 import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestAgentResultSchema,
-  customerRequestAuthorizationInputSchema,
+  customerRequestEvidenceResultSchema,
   customerRequestFactInputSchema,
   customerRequestJsonValueSchema,
   customerRequestMessageInputSchema,
   customerRequestOptionsInputSchema,
+  customerRequestProblemInputSchema,
+  customerRequestProblemResultSchema,
+  customerRequestRouteActionInputSchema,
+  customerRequestRouteConfirmationInputSchema,
   customerRequestSubmitInputSchema,
-  customerRequestViewSchema,
   type CustomerRequestView,
 } from './agent-contract'
 
@@ -22,7 +25,6 @@ type ReleaseVerification = Readonly<{ kind: 'verified'; revision: string; deploy
 export type HostedCustomerRequestJourneyInput = Readonly<{
   baseUrl: string
   agentApiKey: string
-  customerSessionToken: string
   expectedRevision: string
   expectedDeploymentId: string
   agent: Readonly<{ name: string; version: string }>
@@ -55,12 +57,15 @@ export const hostedCustomerRequestJourneyProofSchema = z.object({
     messages: z.array(z.object({ index: z.number().int().nonnegative(), valueDigest: z.string() }).strict()),
   }).strict(),
   observedStates: z.array(z.enum([
-    'needs_information', 'ready_to_compare', 'preparing_options', 'options_ready', 'no_options',
-    'needs_authorization', 'unsupported', 'needs_attention', 'outcome_unknown', 'completed', 'failed',
+    'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'in_progress',
+    'preparing_options', 'options_ready', 'no_options', 'needs_authorization', 'unsupported',
+    'needs_attention', 'outcome_unknown', 'completed', 'failed', 'cancelled',
   ])),
-  authorityStops: z.array(z.literal('preparation_disclosure')),
+  authorityStops: z.array(z.literal('route_confirmation')),
   final: z.object({
-    requestRef: z.string(), state: z.literal('options_ready'), businessName: z.string(),
+    requestRef: z.string(), state: z.literal('cancelled'), selectedBusiness: z.string(),
+    runState: z.literal('in_progress'), evidenceState: z.literal('queued'),
+    problemState: z.literal('received'), resumedState: z.literal('cancelled'),
   }).strict(),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
@@ -82,7 +87,7 @@ export async function runHostedCustomerRequestJourney(
   const nonce = randomUUID()
   const requestRef = `acceptance:${nonce}`
   const states: CustomerRequestView['state'][] = []
-  const authorityStops: Array<'preparation_disclosure'> = []
+  const authorityStops: Array<'route_confirmation'> = []
   const consumedFacts: Array<{ requirementKey: string; valueDigest: string }> = []
   const consumedMessages: Array<{ index: number; valueDigest: string }> = []
   const submit = customerRequestSubmitInputSchema.parse({
@@ -131,7 +136,7 @@ export async function runHostedCustomerRequestJourney(
       continue
     }
 
-    if (view.state === 'ready_to_compare' || (view.state === 'needs_authorization' && view.preparationRef === undefined)) {
+    if (view.state === 'ready_to_compare') {
       view = await callAgent(input, requestPath(requestRef, 'options'), 'POST', customerRequestOptionsInputSchema.parse({
         revision: view.revision, idempotencyKey: `acceptance:prepare:${nonce}:${view.revision}`,
       }), [200, 202])
@@ -139,20 +144,58 @@ export async function runHostedCustomerRequestJourney(
       continue
     }
 
-    if (view.state === 'needs_authorization') {
-      if (view.preparationRef === undefined) throw new Error('hosted_journey_preparation_ref_missing')
-      authorityStops.push('preparation_disclosure')
-      const authorized = await callCustomerView(
-        input, `/api/requests/${encodeURIComponent(requestRef)}/authorization`,
-        customerRequestAuthorizationInputSchema.parse({
-          revision: view.revision, preparationRef: view.preparationRef,
-          idempotencyKey: `acceptance:authorize:${nonce}:${view.revision}`,
+    if (view.state === 'routes_ready') {
+      if (consumedFacts.length < 1) throw new Error('hosted_journey_typed_fact_not_submitted')
+      const route = view.decision?.routes[0]
+      const selectedBusiness = route?.businesses[0]?.name
+      if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')
+      authorityStops.push('route_confirmation')
+      view = await callAgent(
+        input, requestPath(requestRef, 'confirmation'), 'POST',
+        customerRequestRouteConfirmationInputSchema.parse({
+          revision: view.revision, routeRef: route.routeRef,
+          idempotencyKey: `acceptance:confirm:${nonce}:${view.revision}`,
         }),
       )
-      observe(states, authorized)
-      view = await callAgent(input, requestPath(requestRef), 'GET')
       observe(states, view)
-      continue
+      if (view.state !== 'route_confirmed') throw new Error(`hosted_journey_confirmation_failed:${view.state}`)
+      view = await callAgent(
+        input, requestPath(requestRef, 'run'), 'POST',
+        customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:run:${nonce}` }),
+      )
+      observe(states, view)
+      if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
+      const evidence = await callAgentEvidence(input, requestPath(requestRef, 'evidence'))
+      if (evidence.state !== 'queued') throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
+      const problem = await callAgentProblem(input, requestPath(requestRef, 'problems'), {
+        idempotencyKey: `acceptance:problem:${nonce}`, category: 'other',
+        summary: 'Labelled sandbox recovery verification.',
+      })
+      const cancelled = await callAgent(
+        input, requestPath(requestRef, 'cancellation'), 'POST',
+        customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:cancel:${nonce}` }),
+      )
+      observe(states, cancelled)
+      if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
+      const resumed = await callAgent(input, requestPath(requestRef), 'GET')
+      observe(states, resumed)
+      if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
+      return hostedCustomerRequestJourneyProofSchema.parse({
+        kind: 'cold_external_agent_journey', agent: input.agent,
+        release: {
+          revision: release.revision, deploymentId: release.deploymentId,
+          environment: 'production', baseUrl: normalizedBaseUrl(input.baseUrl),
+        },
+        observedAt: new Date((input.now ?? Date.now)()).toISOString(),
+        input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
+        observedStates: states, authorityStops,
+        final: {
+          requestRef, state: resumed.state, selectedBusiness, runState: 'in_progress',
+          evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
+        },
+        sandbox: true,
+        claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
+      })
     }
 
     if (view.state === 'preparing_options') {
@@ -162,34 +205,10 @@ export async function runHostedCustomerRequestJourney(
       continue
     }
 
-    if (view.state === 'options_ready') {
-      if (consumedFacts.length < 1) throw new Error('hosted_journey_typed_fact_not_submitted')
-      const prepared = view.preparedAction
-      if (prepared === undefined) throw new Error('hosted_journey_prepared_decision_missing')
-      return hostedCustomerRequestJourneyProofSchema.parse({
-        kind: 'cold_external_agent_journey', agent: input.agent,
-        release: {
-          revision: release.revision, deploymentId: release.deploymentId,
-          environment: 'production', baseUrl: normalizedBaseUrl(input.baseUrl),
-        },
-        observedAt: new Date((input.now ?? Date.now)()).toISOString(),
-        input: {
-          request: input.scenario.request,
-          facts: consumedFacts,
-          messages: consumedMessages,
-        },
-        observedStates: states, authorityStops,
-        final: {
-          requestRef: view.requestRef, state: view.state,
-          businessName: prepared.businessName,
-        },
-        sandbox: true,
-        claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
-      })
-    }
-
     if (view.state === 'unsupported' || view.state === 'no_options' || view.state === 'needs_attention'
-      || view.state === 'outcome_unknown' || view.state === 'completed' || view.state === 'failed') {
+      || view.state === 'outcome_unknown' || view.state === 'completed' || view.state === 'failed'
+      || view.state === 'options_ready' || view.state === 'needs_authorization'
+      || view.state === 'route_confirmed' || view.state === 'in_progress' || view.state === 'cancelled') {
       throw new Error(
         `hosted_journey_stopped:${view.state}:revision=${view.revision}:transition=${transitions}`
         + `:states=${states.join('>')}:${view.summary}`,
@@ -207,7 +226,7 @@ export async function verifyHostedCustomerRequestFrontDoor(input: Readonly<{
   assertProductionBaseUrl(input.baseUrl)
   const shared = {
     ...input,
-    agentApiKey: '', customerSessionToken: '', expectedRevision: '', expectedDeploymentId: '',
+    agentApiKey: '', expectedRevision: '', expectedDeploymentId: '',
     agent: { name: '', version: '' }, scenario: { request: '', facts: {}, messages: [] },
     sandbox: true as const,
     verifyRelease: async () => ({ kind: 'verified' as const, revision: '', deploymentId: '' }),
@@ -234,15 +253,31 @@ async function callAgent(
   return result
 }
 
-async function callCustomerView(
-  input: HostedCustomerRequestJourneyInput, path: string, body: unknown,
-): Promise<CustomerRequestView> {
+async function callAgentEvidence(input: HostedCustomerRequestJourneyInput, path: string) {
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
-    method: 'POST', headers: headers(input, input.customerSessionToken), body: JSON.stringify(body),
+    method: 'GET', headers: headers(input, input.agentApiKey),
+  })
+  const value: unknown = await response.json()
+  if (!response.ok) throw responseError('GET', path, response.status, value)
+  const result = customerRequestEvidenceResultSchema.parse(value)
+  if (result.kind !== 'evidence') throw new Error(`hosted_journey_evidence_result:${result.kind}`)
+  return result
+}
+
+async function callAgentProblem(
+  input: HostedCustomerRequestJourneyInput,
+  path: string,
+  body: unknown,
+) {
+  const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
+    method: 'POST', headers: headers(input, input.agentApiKey),
+    body: JSON.stringify(customerRequestProblemInputSchema.parse(body)),
   })
   const value: unknown = await response.json()
   if (!response.ok) throw responseError('POST', path, response.status, value)
-  return customerRequestViewSchema.parse(value)
+  const result = customerRequestProblemResultSchema.parse(value)
+  if (result.kind !== 'problem_reported') throw new Error(`hosted_journey_problem_result:${result.kind}`)
+  return result
 }
 
 async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise<void> {
@@ -254,7 +289,10 @@ async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise
     return await response.text()
   }))
   const discovery = `${llms}\n${skill}`
-  for (const marker of ['/api/v1/requests', '/messages', CUSTOMER_REQUEST_AGENT_SCOPE, 'needs_authorization', 'options_ready']) {
+  for (const marker of [
+    '/api/v1/requests', '/messages', '/confirmation', '/run', '/evidence',
+    '/problems', '/cancellation', CUSTOMER_REQUEST_AGENT_SCOPE, 'routes_ready', 'route_confirmed',
+  ]) {
     if (!discovery.includes(marker)) throw new Error(`hosted_journey_discovery_missing:${marker}`)
   }
 }
@@ -282,7 +320,10 @@ function observe(states: CustomerRequestView['state'][], view: CustomerRequestVi
   if (states.at(-1) !== view.state) states.push(view.state)
 }
 
-function requestPath(requestRef: string, suffix?: 'facts' | 'messages' | 'options'): string {
+function requestPath(
+  requestRef: string,
+  suffix?: 'facts' | 'messages' | 'options' | 'confirmation' | 'run' | 'evidence' | 'problems' | 'cancellation',
+): string {
   const base = `/api/v1/requests/${encodeURIComponent(requestRef)}`
   return suffix === undefined ? base : `${base}/${suffix}`
 }

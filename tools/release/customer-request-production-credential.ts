@@ -180,14 +180,14 @@ function assertAcceptanceUser(user: z.infer<typeof userSchema>, subject: string)
 }
 
 async function main(): Promise<void> {
-  await withTemporaryClerkAcceptanceCredentials({
+  await withTemporaryClerkApiKey({
     clerkSecretKey: process.env.CLERK_SECRET_KEY ?? '',
     expectedInstanceId: process.env.AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID ?? '',
     subject: process.env.AE_CUSTOMER_REQUEST_CLERK_SUBJECT ?? '',
     fetch: globalThis.fetch,
-    run: async ({ agentApiKey, customerSessionToken }) => {
+    run: async (agentApiKey) => {
       await runCustomerRequestProductionSmoke(
-        customerRequestProductionSmokeConfigFromEnvironment(process.env, agentApiKey, customerSessionToken),
+        customerRequestProductionSmokeConfigFromEnvironment(process.env, agentApiKey),
       )
     },
   })

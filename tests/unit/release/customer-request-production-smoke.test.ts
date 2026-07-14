@@ -10,8 +10,8 @@ afterEach(() => vi.restoreAllMocks())
 describe('customer Request production smoke entrypoint', () => {
   it('keeps the script as a credential-free front-door wrapper in preflight mode', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
-      .mockResolvedValueOnce(new Response('/api/v1/requests /messages customer_requests:create needs_authorization options_ready'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages /confirmation /run /evidence /problems /cancellation customer_requests:create routes_ready route_confirmed'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests /messages /confirmation /run /evidence /problems /cancellation customer_requests:create routes_ready route_confirmed'))
       .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
@@ -24,7 +24,7 @@ describe('customer Request production smoke entrypoint', () => {
     expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('front_door_only'))
   })
 
-  it('requires both independently scoped actors and exact deployment identity before the full journey', async () => {
+  it('requires one scoped external-agent identity and exact deployment identity before the full journey', async () => {
     const base = {
       baseUrl: 'https://ae.example', facts: {}, fetch: vi.fn<typeof globalThis.fetch>(),
       messages: [], preflightOnly: false, requestText: 'Find a sandbox option.',
@@ -32,9 +32,6 @@ describe('customer Request production smoke entrypoint', () => {
     await expect(runCustomerRequestProductionSmoke(base)).rejects.toThrow('AE_CUSTOMER_REQUEST_API_KEY is required')
     await expect(runCustomerRequestProductionSmoke({
       ...base, agentApiKey: 'ak_agent',
-    })).rejects.toThrow('AE_CUSTOMER_REQUEST_CUSTOMER_SESSION_TOKEN is required')
-    await expect(runCustomerRequestProductionSmoke({
-      ...base, agentApiKey: 'ak_agent', customerSessionToken: 'sess_customer',
     })).rejects.toThrow('AE_RELEASE_SOURCE_REVISION is required')
   })
 
@@ -42,12 +39,11 @@ describe('customer Request production smoke entrypoint', () => {
     expect(customerRequestProductionSmokeConfigFromEnvironment({
       AE_CUSTOMER_REQUEST_BASE_URL: 'https://ae.example/',
       AE_CUSTOMER_REQUEST_API_KEY: 'ak_agent',
-      AE_CUSTOMER_REQUEST_CUSTOMER_SESSION_TOKEN: 'sess_customer',
       AE_RELEASE_SOURCE_REVISION: 'a'.repeat(40), AE_RELEASE_DEPLOYMENT_ID: 'dpl_exact',
       AE_CUSTOMER_REQUEST_FACTS_JSON: '{"sandbox.request_context":"Find a sandbox option"}',
       AE_CUSTOMER_REQUEST_MESSAGES_JSON: '["A short answer"]',
     })).toMatchObject({
-      baseUrl: 'https://ae.example', agentApiKey: 'ak_agent', customerSessionToken: 'sess_customer',
+      baseUrl: 'https://ae.example', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       facts: { 'sandbox.request_context': 'Find a sandbox option' }, messages: ['A short answer'],
     })
