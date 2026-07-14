@@ -1,9 +1,18 @@
 import { createClientOnlyFn } from '@tanstack/react-start'
 import type { AnyRouter } from '@tanstack/react-router'
+import {
+  isTelemetryAllowedForCurrentRoute,
+  securePrivateRecordLocation,
+} from '@/lib/observability/private-route-safety'
 
 let initialized = false
 
 export const bootClientObservability = createClientOnlyFn((router: AnyRouter) => {
+  securePrivateRecordLocation(window.location, window.history)
+  if (!isTelemetryAllowedForCurrentRoute()) {
+    initialized = true
+    return
+  }
   if (initialized) {
     return
   }

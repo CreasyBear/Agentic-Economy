@@ -22,7 +22,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --port 3020 --strictPort --host 127.0.0.1',
     url: 'http://127.0.0.1:3020',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',

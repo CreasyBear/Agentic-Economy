@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node'
 
 import { readObservabilityServerConfig } from '@/lib/observability/config'
+import { sanitizeTelemetryEvent, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 let initialized = false
 
@@ -20,7 +21,13 @@ export function initSentryServer(): boolean {
     ...(config.release === undefined ? {} : { release: config.release }),
     tracesSampleRate: config.environment === 'production' ? 0.1 : 1,
     beforeSend(event) {
-      return scrubSensitiveEvent(event)
+      return sanitizeTelemetryEvent(event)
+    },
+    beforeSendTransaction(event) {
+      return sanitizeTelemetryEvent(event)
+    },
+    beforeBreadcrumb(breadcrumb) {
+      return sanitizeTelemetryEvent(breadcrumb)
     },
   })
   initialized = true
@@ -35,7 +42,7 @@ export function captureServerException(error: unknown, context?: Record<string, 
   if (context !== undefined) {
     Sentry.withScope((scope) => {
       for (const [key, value] of Object.entries(context)) {
-        scope.setTag(key, value)
+        scope.setTag(key, String(sanitizeTelemetryValue(value, key)))
       }
       Sentry.captureException(error)
     })
@@ -46,14 +53,3 @@ export function captureServerException(error: unknown, context?: Record<string, 
 }
 
 export { Sentry }
-
-function scrubSensitiveEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
-  const queryKeys = ['token', 'secret', 'password', 'email', 'phone']
-  const requestUrl = event.request?.url
-
-  if (requestUrl !== undefined && queryKeys.some((key) => requestUrl.toLowerCase().includes(`${key}=`))) {
-    return null
-  }
-
-  return event
-}

@@ -27,16 +27,15 @@ export function readFunnelAttribution(search: Record<string, unknown> = {}): Fun
   const utmCampaign = readSearchString(search, 'utm_campaign')
   const ref = readSearchString(search, 'ref')
 
+  const safeReferrer = typeof document === 'undefined' ? undefined : sanitizedReferrer(document.referrer)
   const source =
     utmSource ??
     ref ??
-    (typeof document !== 'undefined' && document.referrer.length > 0 ? 'referrer' : 'direct')
+    (safeReferrer === undefined ? 'direct' : 'referrer')
 
   return {
     source,
-    ...(typeof document !== 'undefined' && document.referrer.length > 0
-      ? { referrer: document.referrer.slice(0, 240) }
-      : {}),
+    ...(safeReferrer === undefined ? {} : { referrer: safeReferrer }),
     ...(utmSource === undefined ? {} : { utmSource }),
     ...(utmCampaign === undefined ? {} : { utmCampaign }),
   }
@@ -48,6 +47,16 @@ export function createFunnelCorrelationId(prefix: string): string {
   }
 
   return `${prefix}:${Date.now()}`
+}
+
+function sanitizedReferrer(referrer: string): string | undefined {
+  if (referrer.trim().length === 0) return undefined
+  try {
+    const url = new URL(referrer)
+    return `${url.origin}${url.pathname}`.slice(0, 240)
+  } catch {
+    return undefined
+  }
 }
 
 function readSearchString(search: Record<string, unknown>, key: string): string | undefined {

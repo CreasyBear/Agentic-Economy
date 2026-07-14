@@ -2,23 +2,27 @@ import * as Sentry from '@sentry/react'
 import type { AnyRouter } from '@tanstack/react-router'
 
 import { readObservabilityClientConfig } from '@/lib/observability/config'
+import {
+  isTelemetryAllowedForCurrentRoute,
+  sanitizeTelemetryEvent,
+  securePrivateRecordLocation,
+} from '@/lib/observability/private-route-safety'
 
 let initialized = false
 
 export function initSentryClient(router?: AnyRouter): boolean {
-  if (initialized || typeof window === 'undefined') {
-    return initialized
-  }
+  if (typeof window === 'undefined') return false
+  securePrivateRecordLocation(window.location, window.history)
+  if (!isTelemetryAllowedForCurrentRoute() || initialized) return initialized
 
   const config = readObservabilityClientConfig()
   if (config.sentryDsn === undefined) {
     return false
   }
 
-  const integrations = [
-    ...(router === undefined ? [] : [Sentry.tanstackRouterBrowserTracingIntegration(router)]),
-    Sentry.replayIntegration(),
-  ]
+  const integrations = router === undefined
+    ? []
+    : [Sentry.tanstackRouterBrowserTracingIntegration(router)]
 
   Sentry.init({
     dsn: config.sentryDsn,
@@ -26,10 +30,14 @@ export function initSentryClient(router?: AnyRouter): boolean {
     ...(config.release === undefined ? {} : { release: config.release }),
     integrations,
     tracesSampleRate: import.meta.env.PROD ? 0.1 : 1,
-    replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: import.meta.env.PROD ? 1 : 0,
     beforeSend(event) {
-      return scrubSensitiveEvent(event)
+      return sanitizeTelemetryEvent(event)
+    },
+    beforeSendTransaction(event) {
+      return sanitizeTelemetryEvent(event)
+    },
+    beforeBreadcrumb(breadcrumb) {
+      return sanitizeTelemetryEvent(breadcrumb)
     },
   })
   initialized = true
@@ -37,6 +45,7 @@ export function initSentryClient(router?: AnyRouter): boolean {
 }
 
 export function captureClientException(error: unknown): void {
+  if (!isTelemetryAllowedForCurrentRoute()) return
   if (!initialized) {
     initSentryClient()
   }
@@ -45,14 +54,3 @@ export function captureClientException(error: unknown): void {
 }
 
 export { Sentry }
-
-function scrubSensitiveEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
-  const queryKeys = ['token', 'secret', 'password', 'email', 'phone']
-  const requestUrl = event.request?.url
-
-  if (requestUrl !== undefined && queryKeys.some((key) => requestUrl.toLowerCase().includes(`${key}=`))) {
-    return null
-  }
-
-  return event
-}

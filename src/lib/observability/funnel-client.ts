@@ -7,6 +7,7 @@ import type { FunnelCaptureInput } from '@/lib/observability/funnel-event-props'
 import { captureClientFunnelEventOnClient } from '@/lib/observability/capture-client-events'
 import type { FunnelEventType } from '@/modules/observability/public'
 import { shouldDropPublicFunnelSourceSync } from '@/modules/observability/source-sync-gate'
+import { isTelemetryAllowedForCurrentRoute, sanitizeTelemetryValue } from '@/lib/observability/private-route-safety'
 
 export type EmitFunnelEventInput = {
   eventType: FunnelEventType
@@ -24,6 +25,7 @@ export async function emitFunnelEvent(input: EmitFunnelEventInput): Promise<void
   if (typeof window === 'undefined') {
     return
   }
+  if (!isTelemetryAllowedForCurrentRoute()) return
 
   const onceKey = input.eventType === 'visitor_attributed' ? 'visitor_attributed' : undefined
   if (onceKey !== undefined && emittedOnce.has(onceKey)) {
@@ -47,7 +49,9 @@ export async function emitFunnelEvent(input: EmitFunnelEventInput): Promise<void
     ...(attribution.utmCampaign === undefined ? {} : { utmCampaign: attribution.utmCampaign }),
     ...(input.businessId === undefined ? {} : { businessId: input.businessId }),
     ...(input.claimId === undefined ? {} : { claimId: input.claimId }),
-    ...(input.payload === undefined ? {} : { payload: input.payload }),
+    ...(input.payload === undefined ? {} : {
+      payload: sanitizeTelemetryValue(input.payload) as Record<string, string | number | boolean | null>,
+    }),
   }
 
   captureClientFunnelEventOnClient(captureInput)
@@ -87,5 +91,10 @@ export function emitFunnelEventOnce(input: EmitFunnelEventInput): void {
 
 function readCurrentSearch(): Record<string, unknown> {
   const params = new URLSearchParams(window.location.search)
-  return Object.fromEntries(params.entries())
+  return Object.fromEntries(
+    ['utm_source', 'utm_campaign', 'ref'].flatMap((key) => {
+      const value = params.get(key)
+      return value === null ? [] : [[key, value]]
+    }),
+  )
 }
