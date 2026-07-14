@@ -87,7 +87,7 @@ const bindingRegistrationValue = v.object({
   credentialRef: v.string(),
   continuation: continuationValue,
   cancellation: cancellationValue,
-  adapter: v.object({ adapterId: v.string(), config: v.any() }),
+  adapter: v.object({ adapterId: v.string(), config: v.any() }), // runtime-validated adapter config boundary
   registrationEvidenceRefs: evidenceRefsValue,
 })
 const capabilityPublicationOfferingValue = v.object({
@@ -250,9 +250,42 @@ const capabilityGraphNodeValue = v.object({
   semantic: v.object({
     capabilityId: v.string(), name: v.string(), description: v.string(),
     inputSchemaDigest: v.string(), outputSchemaDigest: v.string(),
-    customerAnnotations: v.any(), searchTerms: v.array(v.string()),
+    customerAnnotations: v.array(v.object({
+      annotationId: v.string(), semanticIdentity: v.optional(v.string()),
+      document: v.union(v.literal('input'), v.literal('output')),
+      pointer: v.string(), label: v.string(),
+      role: v.union(
+        v.literal('request'), v.literal('constraint'), v.literal('comparison'), v.literal('commitment'),
+        v.literal('result'), v.literal('completion_evidence'), v.literal('recovery'),
+      ),
+      inference: v.optional(v.union(v.literal('allowed'), v.literal('customer_required'))),
+    })), searchTerms: v.array(v.string()),
   }),
-  policy: v.object({ effects: v.any(), dataUse: v.any(), lifecycle: v.any() }),
+  policy: v.object({
+    effects: v.array(v.object({
+      effectId: v.string(),
+      class: v.union(v.literal('data_release'), v.literal('financial_exposure'), v.literal('external_state_change')),
+      authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+      reversibility: v.union(
+        v.literal('not_applicable'), v.literal('reversible'), v.literal('conditional'), v.literal('irreversible'),
+      ),
+    })),
+    dataUse: v.array(v.object({
+      effectId: v.string(), inputPointer: v.string(),
+      classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
+      phase: v.union(v.literal('preparation'), v.literal('execution')),
+      recipient: v.union(
+        v.object({ kind: v.literal('candidate_binding') }),
+        v.object({ kind: v.literal('selected_binding') }),
+        v.object({ kind: v.literal('named_recipient'), recipientId: v.string() }),
+      ),
+      purposes: v.array(v.string()),
+    })),
+    lifecycle: v.object({
+      idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
+      recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+    }),
+  }),
   cost: v.object({ price: priceValue, commercialRelationship: commercialRelationshipValue }),
   trust: v.object({ tier: v.string(), publicStatus: v.string() }),
   liveness: v.object({
@@ -335,7 +368,7 @@ const INITIAL_PUBLICATION_LIFECYCLE: PublicationLifecycle = {
 export const publishCapability = mutation({
   args: {
     businessId: v.id('businesses'),
-    source: v.any(),
+    source: v.any(), // runtime-validated capability publication boundary
     offering: v.optional(capabilityPublicationOfferingValue),
     binding: v.optional(capabilityPublicationBindingValue),
     ...contextFields,
@@ -628,7 +661,18 @@ function probeTargetDigest(
 
 export const readCapabilityProbeTarget = internalQuery({
   args: { publicationRef: v.string(), expectedRevision: v.number() },
-  returns: v.any(),
+  returns: v.union(
+    v.object({ kind: v.literal('unavailable') }),
+    v.object({
+      kind: v.literal('available'),
+      target: v.object({
+        publicationRef: v.string(), revision: v.number(), bindingId: v.string(), capabilityId: v.string(),
+        endpointUrl: v.string(), credentialRef: v.string(), adapterId: v.string(),
+        probeKind: v.union(v.literal('ae_quote'), v.literal('openapi_http'), v.literal('mcp'), v.literal('x402')),
+        targetDigest: v.string(),
+      }),
+    }),
+  ),
   handler: async (ctx, args) => {
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
@@ -658,7 +702,13 @@ export const readCapabilityProbeTarget = internalQuery({
 
 export const recordCapabilityProbeResult = internalMutation({
   args: { publicationRef: v.string(), expectedRevision: v.number(), targetDigest: v.string(), outcome: probeOutcomeValue },
-  returns: v.any(),
+  returns: v.union(
+    v.object({ kind: v.literal('observed'), publicationRef: v.string(), revision: v.number(), lifecycle: publicationLifecycleValue }),
+    v.object({
+      kind: v.literal('refused'),
+      reason: v.union(v.literal('revision_changed'), v.literal('target_changed')),
+    }),
+  ),
   handler: async (ctx, args) => {
     const publication = await ctx.db.query('capabilityPublications')
       .withIndex('by_publicationRef_and_revision', (q) => q.eq('publicationRef', args.publicationRef).eq('revision', args.expectedRevision)).unique()
@@ -738,7 +788,7 @@ export const refreshCapability = mutation({
   args: {
     publicationRef: v.string(),
     expectedRevision: v.number(),
-    source: v.any(),
+    source: v.any(), // runtime-validated capability publication boundary
     offering: v.optional(capabilityPublicationOfferingValue),
     binding: v.optional(capabilityPublicationBindingValue),
     ...contextFields,

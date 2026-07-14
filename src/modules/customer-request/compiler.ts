@@ -523,7 +523,9 @@ function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerReq
     amountMinor += maximum
     if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) return undefined
   }
-  return Object.freeze({ kind: 'known' as const, currency: [...currencies][0]!, amountMinor })
+  const [currency] = currencies
+  if (currency === undefined) return undefined
+  return Object.freeze({ kind: 'known' as const, currency, amountMinor })
 }
 
 function canRankByLowestMaximumPrice(
@@ -575,14 +577,16 @@ export function composeRequestActions(
           && evidence.schemaIdentity === target.schemaIdentity).map((evidence) => ({ sourceAction, evidence }))
       })
       if (producers.length !== 1) continue
-      const producer = producers[0]!
+      const producer = producers[0]
+      const semanticIdentity = target.semanticIdentity
+      if (producer === undefined || semanticIdentity === undefined) continue
       const material = {
         sourceActionId: producer.sourceAction.actionId, sourceEvidenceId: producer.evidence.evidenceId,
         targetActionId: action.actionId, targetInputKey: target.key, schemaIdentity: target.schemaIdentity,
       }
       mappings.push(Object.freeze({
         mappingId: `mapping:${canonicalDigest(material)}`,
-        semanticIdentity: target.semanticIdentity!,
+        semanticIdentity,
         source: Object.freeze({
           actionId: producer.sourceAction.actionId, annotationId: producer.evidence.annotationId,
           evidenceId: producer.evidence.evidenceId, outputPointer: producer.evidence.outputPointer,

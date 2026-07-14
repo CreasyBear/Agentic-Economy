@@ -161,9 +161,11 @@ function parseIpv4(hostname: string): readonly [number, number, number, number] 
   const segments = hostname.split('.')
   if (segments.length !== 4 || segments.some((segment) => !/^\d{1,3}$/.test(segment))) return undefined
   const octets = segments.map(Number)
-  return octets.every((octet) => octet >= 0 && octet <= 255)
-    ? octets as unknown as readonly [number, number, number, number]
-    : undefined
+  if (!octets.every((octet) => octet >= 0 && octet <= 255)) return undefined
+  const [first, second, third, fourth] = octets
+  return first === undefined || second === undefined || third === undefined || fourth === undefined
+    ? undefined
+    : [first, second, third, fourth]
 }
 
 function stringifyForSize(value: unknown): string | undefined {
