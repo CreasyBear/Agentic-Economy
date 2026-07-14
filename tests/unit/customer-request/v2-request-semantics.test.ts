@@ -81,6 +81,47 @@ describe('V2 Request semantics', () => {
     })
   })
 
+  it('preserves divergent model outputs even when both normalize to the same empty selection set', async () => {
+    const model = decisionModelWithCommitment()
+    const generateJson = vi.fn()
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          kind: 'capability_candidates',
+          selections: [{ selectionKey: 'unknown:first', facts: [] }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          kind: 'capability_candidates',
+          selections: [{ selectionKey: 'unknown:second', facts: [] }],
+        }),
+      })
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:divergence', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+    const capabilities = [bindCustomerCapabilityDescriptor({
+      contractRef: model.contractRef,
+      selectionKey: model.selectionKey,
+      name: 'Search data',
+      description: 'Returns matching data.',
+      inputs: model.inputs,
+      valueSchemas: inputValueSchemas(model, structuredInputSchema()),
+      evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+    })]
+
+    const first = await interpreter.propose({ customerJob: 'Find market data.', capabilities })
+    const second = await interpreter.propose({ customerJob: 'Find market data.', capabilities })
+
+    expect(first).toMatchObject({ kind: 'capability_candidates', selections: [] })
+    expect(second).toMatchObject({ kind: 'capability_candidates', selections: [] })
+    if (first.interpretationEvidence === undefined || second.interpretationEvidence === undefined) {
+      throw new Error('model interpretation evidence missing')
+    }
+    expect(first.interpretationEvidence.inputDigest).toBe(second.interpretationEvidence.inputDigest)
+    expect(first.interpretationEvidence.outputDigest).not.toBe(second.interpretationEvidence.outputDigest)
+  })
+
   it('derives option viability from the V2 model without requiring commitment-only input', () => {
     const model = decisionModelWithCommitment()
     const requestInput = requiredInput(model, 'request')
@@ -280,7 +321,10 @@ describe('V2 Request semantics', () => {
             ],
             edges: [{ authority: 'registered_contract_semantics' }],
             fallbacks: [],
-            comparison: { fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply' },
+            comparison: {
+              fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
+              ordering: { kind: 'unranked' },
+            },
           }],
           actions: [
             { contractRef: lookup.contractRef, dependsOn: [], inputMappings: [] },
@@ -351,9 +395,11 @@ describe('V2 Request semantics', () => {
           }] : [],
         })) },
         interpreterId: 'interpreter:test', models: [lookup, shipping], now: 10_000,
-        bindings: [lookup, shipping].map((model, index) => ({
-          ...supply(`binding:money:${index}`, model), price: prices[index],
-        })),
+        bindings: [lookup, shipping].map((model, index) => {
+          const price = prices[index]
+          if (price === undefined) throw new Error('test price missing')
+          return { ...supply(`binding:money:${index}`, model), price }
+        }),
       })
     )
 
@@ -368,9 +414,53 @@ describe('V2 Request semantics', () => {
     expect(compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: 100 },
       { kind: 'on_request' },
-    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'plan_ready', plan: { routes: [{
-      maximumTotalCost: { kind: 'requires_preparation' }, uncertainty: ['cost_requires_preparation'],
-    }] } } })
+    ])).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { routes: [] } } })
+  })
+
+  it('declares one deterministic fallback and ranks only when the customer asks for lowest price', () => {
+    const lookup = compositionLookupModel()
+    const shipping = compositionShippingModel(lookup)
+    const request = requiredInput(lookup, 'request')
+    const bindings = [
+      supply('binding:lookup', lookup),
+      { ...supply('binding:shipping:expensive', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 300 } },
+      { ...supply('binding:shipping:cheap', shipping), price: { kind: 'fixed' as const, currency: 'AUD', amountMinor: 100 } },
+    ]
+    const result = compileCustomerRequest({
+      requestId: 'request:ranked-fallback', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find the cheapest option and quote shipping.', networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
+        selectionKey: model.selectionKey, contractRef: model.contractRef,
+        facts: model === lookup ? [{
+          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+          value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+        }] : [],
+      })) },
+      interpreterId: 'interpreter:test', bindings, models: [lookup, shipping], now: 10_000,
+    })
+    if (result.kind !== 'compiled') throw new Error(`compile refused: ${result.reason}`)
+    expect(result.aggregate.plan.routes).toHaveLength(2)
+    expect(result.aggregate.plan.routes.map((route) => ({
+      cost: route.maximumTotalCost,
+      ordering: route.comparison.ordering,
+      fallbacks: route.fallbacks,
+    }))).toEqual([
+      {
+        cost: { kind: 'known', currency: 'AUD', amountMinor: 200 },
+        ordering: { kind: 'ranked', objective: 'lowest_maximum_price', position: 1 },
+        fallbacks: [{
+          alternativeRouteRef: expect.stringMatching(/^route:/),
+          when: 'route_unavailable_before_approval',
+        }],
+      },
+      {
+        cost: { kind: 'known', currency: 'AUD', amountMinor: 400 },
+        ordering: { kind: 'ranked', objective: 'lowest_maximum_price', position: 2 },
+        fallbacks: [],
+      },
+    ])
   })
 
   it('fails closed for cyclic contract semantics and duplicate model selections', () => {

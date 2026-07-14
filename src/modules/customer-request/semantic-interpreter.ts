@@ -54,9 +54,17 @@ export type ResolvedCapabilitySelection = Readonly<{
   facts: readonly RequestFact[]
 }>
 
+export type CustomerRequestInterpretationEvidence = Readonly<{
+  kind: 'model_output'
+  systemInstructionVersion: string
+  inputDigest: string
+  outputDigest: string
+}>
+
 export type CustomerRequestCapabilityProposal = Readonly<{
   kind: 'capability_candidates'
   selections: readonly ResolvedCapabilitySelection[]
+  interpretationEvidence?: CustomerRequestInterpretationEvidence
   decisionPreference?: Readonly<{
     objective: 'lowest_maximum_price'
     basis: 'extracted_from_request'
@@ -67,6 +75,7 @@ export type CustomerRequestCapabilityProposal = Readonly<{
 export type CustomerRequestIntentDirectionProposal = Readonly<{
   kind: 'needs_intent_direction'
   prompt: string
+  interpretationEvidence?: CustomerRequestInterpretationEvidence
 }>
 
 export type CustomerRequestSemanticProposal = CustomerRequestCapabilityProposal | CustomerRequestIntentDirectionProposal
@@ -161,17 +170,22 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         }
         const parsed = proposalSchema.safeParse(unknownValue)
         if (!parsed.success) throw new Error('customer_request_semantic_interpretation_invalid')
-        if (parsed.data.kind === 'needs_intent_direction') {
-          return Object.freeze({ kind: 'needs_intent_direction' as const, prompt: parsed.data.prompt })
-        }
-        const proposalDigest = canonicalDigest({
+        const interpretationEvidence = Object.freeze({
+          kind: 'model_output' as const,
           systemInstructionVersion: SYSTEM_INSTRUCTION_VERSION,
-          registeredCapabilities: publicPayload.capabilities,
-          rawProposal: {
-            kind: parsed.data.kind,
-            selections: parsed.data.selections,
-          },
+          inputDigest: canonicalDigest({
+            systemInstructionVersion: SYSTEM_INSTRUCTION_VERSION,
+            payload: publicPayload,
+          }),
+          outputDigest: canonicalDigest(parsed.data),
         })
+        if (parsed.data.kind === 'needs_intent_direction') {
+          return Object.freeze({
+            kind: 'needs_intent_direction' as const,
+            prompt: parsed.data.prompt,
+            interpretationEvidence,
+          })
+        }
         const descriptors = new Map(payload.capabilities.map((capability) => [capability.selectionKey, capability]))
         const seenSelections = new Set<string>()
         const selections = parsed.data.selections.flatMap((untrusted) => {
@@ -202,7 +216,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
                   selectionKey: descriptor.selectionKey,
                   inputKey: inputDescriptor.inputKey,
                   value: fact.value,
-                  proposalDigest,
+                  interpretationEvidence,
                 })}`,
               },
             }]
@@ -217,6 +231,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         return Object.freeze({
           kind: 'capability_candidates' as const,
           selections: Object.freeze(selections),
+          interpretationEvidence,
           ...(decisionPreference === undefined ? {} : { decisionPreference }),
         })
       } finally {

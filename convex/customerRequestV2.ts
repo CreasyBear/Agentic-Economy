@@ -320,6 +320,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     registrySnapshotDigest: aggregate.evaluation.registrySnapshotDigest,
     actions, candidates: evaluation.candidates, now: aggregate.snapshot.recordedAt,
     models,
+    ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
   })
   return routes !== undefined
     && canonicalDigest(routes as StableHashValue) === canonicalDigest(aggregate.plan.routes as StableHashValue)
@@ -390,6 +391,7 @@ function planAuthorityIsConsistent(aggregate: Aggregate): boolean {
     requestRevision: aggregate.snapshot.revision,
     proposedByAgentId: aggregate.snapshot.delegatedAgentId,
     interpreterId: aggregate.plan.interpreterId,
+    interpretationEvidence: aggregate.plan.interpretationEvidence,
     proposalDigest,
     registrySnapshotDigest: aggregate.evaluation.registrySnapshotDigest,
     actions: aggregate.plan.actions,

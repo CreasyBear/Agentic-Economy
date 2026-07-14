@@ -2,11 +2,14 @@ import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
-import type { CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView } from './agent-contract'
+import type {
+  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRoutePlan,
+} from './agent-contract'
 
 export type CustomerRequestState =
   | 'needs_information'
   | 'ready_to_compare'
+  | 'routes_ready'
   | 'preparing_options'
   | 'options_ready'
   | 'no_options'
@@ -20,6 +23,7 @@ export type CustomerRequestState =
 export type CustomerRequestNextAction =
   | 'provide_information'
   | 'prepare_options'
+  | 'inspect_routes'
   | 'wait'
   | 'inspect_options'
   | 'revise_request'
@@ -27,7 +31,9 @@ export type CustomerRequestNextAction =
   | 'retry'
   | 'none'
 
-export type { CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView } from './agent-contract'
+export type {
+  CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView, CustomerRoutePlan,
+} from './agent-contract'
 export type CustomerCriterion = Readonly<{
   label: string
   value: JsonValue
@@ -37,6 +43,28 @@ export type CustomerCriterion = Readonly<{
 export type CustomerRequestProjection =
   | CustomerRequestView
   | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'identity_changed' | 'idempotency_key_reused' }>
+
+type RoutePlanProjectionInput = Readonly<{
+  routePlanId: string
+  steps: readonly Readonly<{
+    businessId: string
+    dataUse: readonly Readonly<{ purposes: readonly string[] }>[]
+    effects: readonly Readonly<{ reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible' }>[]
+  }>[]
+  maximumTotalCost: CustomerRoutePlan['maximumTotalCost']
+  expiresAt: number
+  fallbacks: CustomerRoutePlan['fallbacks']
+  uncertainty: CustomerRoutePlan['uncertainty']
+  comparison: Readonly<{
+    fit: 'all_steps_viable'
+    completeness: 'complete'
+    dataExposureCount: number
+    irreversibleEffectCount: number
+    evidenceRequirementCount: number
+    trust: 'registered_live_supply'
+    ordering: CustomerRoutePlan['comparison']['ordering']
+  }>
+}>
 
 /** @deprecated Use CustomerRequestView. Kept as a source-compatible migration alias. */
 export type CustomerOptionsProjection =
@@ -190,6 +218,49 @@ export function projectNeedsAttention(input: Readonly<{
   return requestView({ ...input, state: 'needs_attention', nextAction: 'retry' })
 }
 
+export function projectRoutePlansReady(input: Readonly<{
+  requestRef: string
+  revision: number
+  summary: string
+  criteria?: readonly CustomerCriterion[]
+  routes: readonly RoutePlanProjectionInput[]
+}>): CustomerRequestView {
+  return requestView({
+    requestRef: input.requestRef,
+    revision: input.revision,
+    state: 'routes_ready',
+    summary: input.summary,
+    nextAction: 'inspect_routes',
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
+    routes: input.routes.map(projectRoutePlan),
+  })
+}
+
+function projectRoutePlan(route: RoutePlanProjectionInput): CustomerRoutePlan {
+  const purposes = [...new Set(route.steps.flatMap((step) => step.dataUse.flatMap((item) => item.purposes)))].sort()
+  return Object.freeze({
+    routeRef: route.routePlanId,
+    stepCount: route.steps.length,
+    providers: Object.freeze([...new Set(route.steps.map((step) => step.businessId))]
+      .sort().map((businessRef) => Object.freeze({ businessRef }))),
+    maximumTotalCost: { ...route.maximumTotalCost },
+    dataUse: Object.freeze({ recipientCount: route.comparison.dataExposureCount, purposes: Object.freeze(purposes) }),
+    effects: Object.freeze({
+      totalCount: route.steps.reduce((count, step) => count + step.effects.length, 0),
+      irreversibleCount: route.comparison.irreversibleEffectCount,
+    }),
+    evidence: Object.freeze({ requirementCount: route.comparison.evidenceRequirementCount }),
+    validUntil: route.expiresAt,
+    fallbacks: Object.freeze(route.fallbacks.map((fallback) => Object.freeze({ ...fallback }))),
+    uncertainty: Object.freeze([...route.uncertainty]),
+    comparison: Object.freeze({
+      fit: route.comparison.fit, completeness: route.comparison.completeness, trust: route.comparison.trust,
+      ordering: Object.freeze({ ...route.comparison.ordering }),
+    }),
+    authority: 'proposal_only',
+  })
+}
+
 export function projectCustomerActionStatus(input: Readonly<{
   requestRef: string
   revision: number
@@ -253,6 +324,7 @@ function requestView(input: Readonly<{
   options?: readonly CustomerOption[]
   optionSet?: CustomerOptionSet
   preparedAction?: CustomerPreparedAction
+  routes?: readonly CustomerRoutePlan[]
   action?: CustomerRequestView['action']
 }>): CustomerRequestView {
   return Object.freeze({
@@ -272,6 +344,16 @@ function requestView(input: Readonly<{
     ...(input.clarification === undefined ? {} : { clarification: Object.freeze({ ...input.clarification }) }),
     ...(input.optionSet === undefined ? {} : { optionSet: input.optionSet }),
     ...(input.preparedAction === undefined ? {} : { preparedAction: Object.freeze({ ...input.preparedAction }) }),
+    ...(input.routes === undefined ? {} : { routes: Object.freeze(input.routes.map((route) => Object.freeze({
+      ...route,
+      providers: Object.freeze(route.providers.map((provider) => Object.freeze({ ...provider }))),
+      maximumTotalCost: Object.freeze({ ...route.maximumTotalCost }),
+      dataUse: Object.freeze({ ...route.dataUse, purposes: Object.freeze([...route.dataUse.purposes]) }),
+      effects: Object.freeze({ ...route.effects }), evidence: Object.freeze({ ...route.evidence }),
+      fallbacks: Object.freeze(route.fallbacks.map((fallback) => Object.freeze({ ...fallback }))),
+      uncertainty: Object.freeze([...route.uncertainty]),
+      comparison: Object.freeze({ ...route.comparison, ordering: Object.freeze({ ...route.comparison.ordering }) }),
+    }))) }),
     ...(input.action === undefined ? {} : { action: Object.freeze({
       ...input.action,
       ...(input.action.result === undefined ? {} : { result: structuredClone(input.action.result) }),

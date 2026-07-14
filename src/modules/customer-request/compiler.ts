@@ -48,6 +48,14 @@ export type CustomerRequestV2PlanRevision = Readonly<{
   requestRevision: number
   proposedByAgentId: string
   interpreterId: string
+  interpretationEvidence:
+    | Readonly<{
+        kind: 'model_output'
+        systemInstructionVersion: string
+        inputDigest: string
+        outputDigest: string
+      }>
+    | Readonly<{ kind: 'deterministic_input' }>
   proposalDigest: string
   registrySnapshotDigest: string
   actions: readonly ProposedRequestAction[]
@@ -87,7 +95,10 @@ export type CustomerRequestRoutePlan = Readonly<{
     | Readonly<{ kind: 'requires_preparation' }>
   expiresAt: number
   uncertainty: readonly ('cost_requires_preparation')[]
-  fallbacks: readonly never[]
+  fallbacks: readonly Readonly<{
+    alternativeRouteRef: string
+    when: 'route_unavailable_before_approval'
+  }>[]
   comparison: Readonly<{
     fit: 'all_steps_viable'
     completeness: 'complete'
@@ -95,6 +106,9 @@ export type CustomerRequestRoutePlan = Readonly<{
     irreversibleEffectCount: number
     evidenceRequirementCount: number
     trust: 'registered_live_supply'
+    ordering:
+      | Readonly<{ kind: 'unranked' }>
+      | Readonly<{ kind: 'ranked'; objective: 'lowest_maximum_price'; position: number }>
   }>
   authority: 'proposal_only'
   routeDigest: string
@@ -223,10 +237,13 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     selected: selected.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
     facts,
   })
+  const interpretationEvidence = command.proposal.interpretationEvidence
+    ?? Object.freeze({ kind: 'deterministic_input' as const })
   const routes = compileRoutePlans({
     requestId: command.requestId, requestRevision, registrySnapshotDigest,
     actions, candidates: evaluation.candidates, now: command.now,
     models,
+    ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
   })
   if (routes === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const planMaterial = {
@@ -234,6 +251,7 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     requestRevision,
     proposedByAgentId: command.delegatedAgentId,
     interpreterId: command.interpreterId,
+    interpretationEvidence,
     proposalDigest,
     registrySnapshotDigest,
     actions,
@@ -381,7 +399,9 @@ export function writableCustomerRequestV2Aggregate(aggregate: CustomerRequestV2A
         })),
         edges: route.edges.map((edge) => ({ ...edge, source: { ...edge.source }, target: { ...edge.target } })),
         maximumTotalCost: { ...route.maximumTotalCost },
-        uncertainty: [...route.uncertainty], fallbacks: [], comparison: { ...route.comparison },
+        uncertainty: [...route.uncertainty],
+        fallbacks: route.fallbacks.map((fallback) => ({ ...fallback })),
+        comparison: { ...route.comparison, ordering: { ...route.comparison.ordering } },
       })),
     },
     outcome: aggregate.outcome,
@@ -397,6 +417,7 @@ export function compileRoutePlans(input: Readonly<{
   candidates: RequestEvaluation['candidates']
   now: number
   models: ReadonlyMap<string, CapabilityDecisionModel>
+  objective?: 'lowest_maximum_price'
 }>): readonly CustomerRequestRoutePlan[] | undefined {
   if (input.actions.length === 0) return Object.freeze([])
   const choices = input.actions.map((action) => input.candidates.filter(isRouteCandidate).filter((candidate) => (
@@ -411,7 +432,7 @@ export function compileRoutePlans(input: Readonly<{
     combinations = combinations.flatMap((combination) => candidates.map((candidate) => [...combination, candidate]))
     if (combinations.length > MAX_ROUTE_PLANS) return undefined
   }
-  const routes = combinations.map((combination): CustomerRequestRoutePlan | undefined => {
+  const drafts = combinations.map((combination) => {
     const steps = input.actions.map((action, index) => {
       const candidate = combination[index]
       if (candidate === undefined) throw new Error('customer_request_route_candidate_missing')
@@ -442,17 +463,32 @@ export function compileRoutePlans(input: Readonly<{
       evidenceRequirementCount: steps.reduce((count, step) => count + step.evidence.length, 0),
       trust: 'registered_live_supply' as const,
     })
-    const material = {
+    const core = {
       requestId: input.requestId, requestRevision: input.requestRevision,
       registrySnapshotDigest: input.registrySnapshotDigest, steps, edges,
       maximumTotalCost: cost, expiresAt,
-      uncertainty: cost.kind === 'requires_preparation' ? ['cost_requires_preparation' as const] : [],
-      fallbacks: [], comparison, authority: 'proposal_only' as const,
+      uncertainty: [] as const,
+      comparison, authority: 'proposal_only' as const,
     }
-    const routeDigest = canonicalDigest(material as StableHashValue)
-    return Object.freeze({ routePlanId: `route:${routeDigest}`, ...material, routeDigest })
-  }).filter((route): route is CustomerRequestRoutePlan => route !== undefined)
-  return Object.freeze(routes.sort((left, right) => compareRoutePlans(left, right)))
+    return Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })
+  }).filter((route): route is NonNullable<typeof route> => route !== undefined)
+  const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, input.objective))
+  return Object.freeze(ordered.map((draft, index): CustomerRequestRoutePlan => {
+    const alternative = ordered[index + 1]
+    const fallbacks = alternative === undefined ? [] : [Object.freeze({
+      alternativeRouteRef: alternative.routePlanId,
+      when: 'route_unavailable_before_approval' as const,
+    })]
+    const ordering = input.objective === 'lowest_maximum_price'
+      ? Object.freeze({ kind: 'ranked' as const, objective: input.objective, position: index + 1 })
+      : Object.freeze({ kind: 'unranked' as const })
+    const material = {
+      ...draft,
+      fallbacks: Object.freeze(fallbacks),
+      comparison: Object.freeze({ ...draft.comparison, ordering }),
+    }
+    return Object.freeze({ ...material, routeDigest: canonicalDigest(material as StableHashValue) })
+  }))
 }
 
 type RouteCandidate = RequestEvaluation['candidates'][number] & Required<Pick<
@@ -465,7 +501,7 @@ function isRouteCandidate(candidate: RequestEvaluation['candidates'][number]): c
 }
 
 function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerRequestRoutePlan['maximumTotalCost'] | undefined {
-  if (prices.some((price) => price.kind === 'on_request')) return Object.freeze({ kind: 'requires_preparation' as const })
+  if (prices.some((price) => price.kind === 'on_request')) return undefined
   const currencies = new Set(prices.map((price) => price.kind === 'on_request' ? '' : price.currency))
   if (currencies.size !== 1) return undefined
   let amountMinor = 0
@@ -478,7 +514,12 @@ function maximumRouteCost(prices: readonly RegisteredSupplyPrice[]): CustomerReq
   return Object.freeze({ kind: 'known' as const, currency: [...currencies][0]!, amountMinor })
 }
 
-function compareRoutePlans(left: CustomerRequestRoutePlan, right: CustomerRequestRoutePlan): number {
+function compareRoutePlans(
+  left: Pick<CustomerRequestRoutePlan, 'routePlanId' | 'maximumTotalCost'>,
+  right: Pick<CustomerRequestRoutePlan, 'routePlanId' | 'maximumTotalCost'>,
+  objective: 'lowest_maximum_price' | undefined,
+): number {
+  if (objective === undefined) return left.routePlanId.localeCompare(right.routePlanId)
   const leftCost = left.maximumTotalCost.kind === 'known' ? left.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
   const rightCost = right.maximumTotalCost.kind === 'known' ? right.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
   return leftCost - rightCost || left.routePlanId.localeCompare(right.routePlanId)

@@ -144,7 +144,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
     const requestInput = upstreamModel.inputs.find((input) => input.inputPointer === '/request')
     if (requestInput === undefined) throw new Error('upstream request input missing')
-    const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
       choices: [{ message: { content: JSON.stringify({
         kind: 'capability_candidates',
         selections: [
@@ -166,6 +166,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       kind: 'request', requestRef: 'request:multi-capability:public', revision: 1,
       state: 'ready_to_compare', nextAction: 'prepare_options',
     })
+    if (submitted.kind !== 'request') throw new Error(`public submit failed: ${submitted.kind}`)
     expect(generate).toHaveBeenCalledTimes(1)
 
     const persisted = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
@@ -173,8 +174,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
     if (persisted.kind !== 'current') throw new Error(`public submit aggregate missing: ${persisted.kind}`)
     const route = persisted.aggregate.plan.routes[0]
+    if (route === undefined) throw new Error('public submit route missing')
+    expect(persisted.aggregate.plan.interpretationEvidence).toMatchObject({
+      kind: 'model_output',
+      systemInstructionVersion: 'customer-request-semantic:v3',
+    })
     expect(route).toMatchObject({ authority: 'proposal_only', requestRevision: 1 })
-    expect(route?.steps.map((step) => ({
+    expect(route.steps.map((step) => ({
       capabilityId: step.contractRef.capabilityId,
       publicationRef: step.publicationRef,
       publicationRevision: step.publicationRevision,
@@ -182,10 +188,50 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       { capabilityId: upstreamDocument.capabilityId, publicationRef: first.publicationRef, publicationRevision: first.revision },
       { capabilityId: downstreamDocument.capabilityId, publicationRef: second.publicationRef, publicationRevision: second.revision },
     ])
-    expect(route?.edges).toEqual([expect.objectContaining({
+    expect(route.edges).toEqual([expect.objectContaining({
       semanticIdentity: 'ae.service-reference:v1', authority: 'registered_contract_semantics',
       fromStep: route.steps[0]?.actionId, toStep: route.steps[1]?.actionId,
     })])
+
+    const compared = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      idempotencyKey: 'compare:multi-capability:public',
+    })
+    expect(compared).toMatchObject({
+      kind: 'request', requestRef: submitted.requestRef, revision: submitted.revision,
+      state: 'routes_ready', nextAction: 'inspect_routes',
+      routes: [{ authority: 'proposal_only', stepCount: 2 }],
+    })
+
+    const refined = await customer.action(api.customerRequestApplication.refine, {
+      requestRef: submitted.requestRef,
+      expectedRevision: submitted.revision,
+      idempotencyKey: 'refine:multi-capability:public',
+      message: 'Show me the current options again.',
+    })
+    expect(refined).toMatchObject({
+      kind: 'request', requestRef: submitted.requestRef, revision: 2,
+      state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
+    expect(generate).toHaveBeenCalledTimes(2)
+
+    const staleComparison = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef,
+      revision: submitted.revision,
+      idempotencyKey: 'compare:multi-capability:stale',
+    })
+    expect(staleComparison).toEqual({
+      kind: 'conflict', requestRef: submitted.requestRef, reason: 'revision_changed',
+    })
+
+    const revised = await backend.query(internal.customerRequestV2.getCurrentAggregate, {
+      requestId: submitted.requestRef,
+    })
+    if (revised.kind !== 'current') throw new Error(`revised aggregate missing: ${revised.kind}`)
+    expect(revised.aggregate.snapshot.revision).toBe(2)
+    expect(revised.aggregate.plan.routes[0]).toMatchObject({ requestRevision: 2 })
+    expect(revised.aggregate.plan.routes[0]?.routePlanId).not.toBe(route.routePlanId)
   })
 })
 
@@ -218,9 +264,11 @@ async function publishAndActivate(
   })
   if (published.kind !== 'published') throw new Error(`publication refused: ${published.reason}`)
   const hashes = await backend.run(async (ctx) => {
-    const offering = await ctx.db.query('capabilityOfferings').withIndex('by_offeringId', (query) => query.eq('offeringId', published.offeringId)).unique()
-    const binding = await ctx.db.query('capabilityTransportBindings').withIndex('by_bindingId', (query) => query.eq('bindingId', published.bindingId)).unique()
-    if (offering === null || binding === null) throw new Error('published supply missing')
+    const offering = (await ctx.db.query('capabilityOfferings').take(10))
+      .find((row) => row.offeringId === published.offeringId)
+    const binding = (await ctx.db.query('capabilityTransportBindings').take(10))
+      .find((row) => row.bindingId === published.bindingId)
+    if (offering === undefined || binding === undefined) throw new Error('published supply missing')
     return { offering: offering.registrationHash, binding: binding.registrationHash }
   })
   const eligible = await admin.mutation(api.capabilitySupply.setEligibility, {
@@ -229,7 +277,7 @@ async function publishAndActivate(
     admissionEvidenceRefs: ['test:admission-reviewed'], conformanceEvidenceRefs: ['test:adapter-reviewed'],
     ...operationContext(`admit:${suffix}`),
   })
-  if (eligible.kind !== 'eligible') throw new Error(`eligibility refused: ${eligible.reason}`)
+  if (eligible.kind !== 'eligible') throw new Error(`eligibility refused: ${eligible.kind}`)
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: published.publicationRef, expectedRevision: 1,
     credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,

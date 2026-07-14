@@ -570,11 +570,17 @@ const routePlanV2Value = v.object({
     v.object({ kind: v.literal('requires_preparation') }),
   ),
   expiresAt: v.number(), uncertainty: v.array(v.literal('cost_requires_preparation')),
-  fallbacks: v.array(v.any()), authority: v.literal('proposal_only'), routeDigest: v.string(),
+  fallbacks: v.array(v.object({
+    alternativeRouteRef: v.string(), when: v.literal('route_unavailable_before_approval'),
+  })), authority: v.literal('proposal_only'), routeDigest: v.string(),
   comparison: v.object({
     fit: v.literal('all_steps_viable'), completeness: v.literal('complete'),
     dataExposureCount: v.number(), irreversibleEffectCount: v.number(), evidenceRequirementCount: v.number(),
     trust: v.literal('registered_live_supply'),
+    ordering: v.union(
+      v.object({ kind: v.literal('unranked') }),
+      v.object({ kind: v.literal('ranked'), objective: v.literal('lowest_maximum_price'), position: v.number() }),
+    ),
   }),
 })
 export const customerRequestV2AggregateValue = v.object({
@@ -599,7 +605,15 @@ export const customerRequestV2AggregateValue = v.object({
   }),
   plan: v.object({
     planRevisionId: v.string(), requestId: v.string(), requestRevision: v.number(), proposedByAgentId: v.string(),
-    interpreterId: v.string(), proposalDigest: v.string(), registrySnapshotDigest: v.string(),
+    interpreterId: v.string(),
+    interpretationEvidence: v.union(
+      v.object({
+        kind: v.literal('model_output'), systemInstructionVersion: v.string(),
+        inputDigest: v.string(), outputDigest: v.string(),
+      }),
+      v.object({ kind: v.literal('deterministic_input') }),
+    ),
+    proposalDigest: v.string(), registrySnapshotDigest: v.string(),
     actions: v.array(proposedActionV2Value), completionRequirements: v.array(completionRequirementV2Value),
     compilerVersion: v.literal('customer-request-route-compiler:v1'), authority: v.literal('proposal_only'),
     routes: v.array(routePlanV2Value),
