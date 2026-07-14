@@ -71,7 +71,8 @@ describe('current V2 Customer Request application path', () => {
     })
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:v2:application', revision: 1,
-      state: 'ready_to_compare', nextAction: 'prepare_options',
+      state: 'needs_information', nextAction: 'provide_information',
+      clarification: { kind: 'contract_fact' },
     })
     vi.stubEnv('OPENROUTER_API_KEY', '')
     const replayedSubmit = await customer.action(api.customerRequestApplication.submit, {
@@ -86,20 +87,33 @@ describe('current V2 Customer Request application path', () => {
       requestRef: 'request:v2:application',
     })).resolves.toMatchObject({
       kind: 'request', requestRef: 'request:v2:application', revision: 1,
-      state: 'ready_to_compare',
+      state: 'needs_information',
     })
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('expected customer-required sandbox fact')
+    }
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:1', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    })
+    expect(answered).toMatchObject({
+      kind: 'request', requestRef: 'request:v2:application', revision: 2,
+      state: 'ready_to_compare', nextAction: 'prepare_options',
+    })
+    if (answered.kind !== 'request') throw new Error('answered request missing')
 
     const review = await customer.action(api.customerRequestApplication.compare, {
-      requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
+      requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
     })
     expect(review).toMatchObject({
-      kind: 'request', requestRef: 'request:v2:application', revision: 1,
+      kind: 'request', requestRef: 'request:v2:application', revision: 2,
       state: 'needs_authorization', nextAction: 'review_disclosure',
       preparationRef: expect.stringMatching(/^action-preparation:/),
       disclosureReview: { purpose: 'Return sandbox result', maximumRecipients: 2 },
     })
     await expect(customer.action(api.customerRequestApplication.compare, {
-      requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
+      requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
     })).resolves.toEqual(review)
     if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation review missing')
     const authorized = await customer.action(api.customerRequestApplication.authorizePreparation, {
@@ -115,7 +129,7 @@ describe('current V2 Customer Request application path', () => {
       preparationRef: review.preparationRef, idempotencyKey: 'authorize:v2:1',
     })).resolves.toEqual(authorized)
     await expect(customer.action(api.customerRequestApplication.compare, {
-      requestRef: 'request:v2:application', revision: 1, idempotencyKey: 'prepare:v2:1',
+      requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:1',
     })).resolves.toEqual(review)
 
     const modelRequest = JSON.stringify(generate.mock.calls[0])
@@ -138,19 +152,21 @@ describe('current V2 Customer Request application path', () => {
       legacyRequests: await ctx.db.query('customerRequests').collect(),
       legacyPreparations: await ctx.db.query('customerRequestPreparationCommands').collect(),
     }))
+    const activeRevision = persisted.revisions.find((row) => row.aggregate.snapshot.revision === review.revision)
+    if (activeRevision === undefined) throw new Error('active request revision missing')
     expect(persisted.heads).toMatchObject([{ requestId: 'request:v2:application', principalId }])
-    expect(persisted.revisions[0]?.aggregate.plan.actions).toMatchObject([
+    expect(activeRevision.aggregate.plan.actions).toMatchObject([
       { contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest },
     ])
-    expect(persisted.revisions[0]?.aggregate.plan.completionRequirements).toMatchObject([
+    expect(activeRevision.aggregate.plan.completionRequirements).toMatchObject([
       { contractRef: model.contractRef, evidenceId: 'option_summary', outputPointer: '/optionSummary', purpose: 'completion' },
     ])
     expect(persisted.preparations).toHaveLength(1)
     expect(persisted.preparations[0]?.preparation).toMatchObject({
       kind: 'ready_for_routing',
       lineage: {
-        planRevisionId: persisted.revisions[0]?.aggregate.plan.planRevisionId,
-        planDigest: persisted.revisions[0]?.aggregate.plan.planDigest,
+        planRevisionId: activeRevision.aggregate.plan.planRevisionId,
+        planDigest: activeRevision.aggregate.plan.planDigest,
         contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest,
       },
       authorityReservation: {
@@ -186,9 +202,9 @@ describe('current V2 Customer Request application path', () => {
       persisted.preparations[0], persisted.preparationCommands[0],
       persisted.reviews[0], persisted.approvals[0], persisted.reservations[0],
     ]) expect(row).toMatchObject({ lineage: {
-      requestId: 'request:v2:application', requestRevision: 1,
-      planRevisionId: persisted.revisions[0]?.aggregate.plan.planRevisionId,
-      planDigest: persisted.revisions[0]?.aggregate.plan.planDigest,
+      requestId: 'request:v2:application', requestRevision: 2,
+      planRevisionId: activeRevision.aggregate.plan.planRevisionId,
+      planDigest: activeRevision.aggregate.plan.planDigest,
       contractRef: model.contractRef, selectionKey: model.selectionKey, semanticDigest: model.semanticDigest,
     } })
     expect(persisted.legacyHeads).toEqual([])
@@ -234,10 +250,23 @@ describe('current V2 Customer Request application path', () => {
     const submitted = await customer.action(api.customerRequestApplication.submit, command)
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:v2:disclosure', revision: 1,
+      state: 'needs_information', nextAction: 'provide_information',
+      clarification: { kind: 'contract_fact' },
+    })
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('expected disclosure contract fact')
+    }
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:disclosure', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    })
+    expect(answered).toMatchObject({
+      kind: 'request', requestRef: 'request:v2:disclosure', revision: 2,
       state: 'needs_authorization', nextAction: 'review_disclosure',
       disclosureReview: {
         purpose: 'Return sandbox result', maximumRecipients: 1,
-        categories: [{ label: 'Request details', classification: 'personal' }],
+        categories: [{ label: 'Lookup instruction', classification: 'personal' }],
       },
     })
     vi.stubEnv('OPENROUTER_API_KEY', '')
@@ -334,8 +363,29 @@ describe('current V2 Customer Request application path', () => {
       ...command, serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
     })
     expect(submitted).toMatchObject({ kind: 'request', requestRef: 'request:v2:external', revision: 1 })
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('expected external contract fact')
+    }
+    const factsCommand = {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:external:1', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    }
+    const factsAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'facts', command: factsCommand,
+      principal: {
+        principalId: 'principal:external', ownerId: 'owner:external', credentialId: 'credential:external',
+        scopes: ['customer_requests:create'],
+      },
+      issuedAt: Date.now(),
+    })
+    const answered = await backend.action(api.customerRequestApplication.provideFacts, {
+      ...factsCommand, serviceAuth: { ...factsAuth, scopes: [...factsAuth.scopes] },
+    })
+    expect(answered).toMatchObject({ kind: 'request', revision: 2, state: 'ready_to_compare' })
+    if (answered.kind !== 'request') throw new Error('external answered request missing')
     const prepareCommand = {
-      requestRef: 'request:v2:external', revision: 1, idempotencyKey: 'prepare:external:1',
+      requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:external:1',
     }
     const prepareAuth = await createCustomerRequestServiceAssertion({
       key, operation: 'compare', command: prepareCommand,
@@ -411,9 +461,17 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:drift', requestId: 'request:v2:drift',
       delegatedAgentId: 'agent:drift', customerJob: 'Find an option', routing: { networkId: 'ae:public' },
     })
-    if (submitted.kind !== 'request') throw new Error('request missing')
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('request clarification missing')
+    }
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:drift', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    })
+    if (answered.kind !== 'request') throw new Error('answered request missing')
     const review = await customer.action(api.customerRequestApplication.compare, {
-      requestRef: submitted.requestRef, revision: submitted.revision, idempotencyKey: 'prepare:v2:drift',
+      requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:drift',
     })
     if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('review missing')
 
@@ -477,9 +535,17 @@ describe('current V2 Customer Request application path', () => {
       compilationKey: 'submit:v2:egress-state', requestId: 'request:v2:egress-state',
       delegatedAgentId: 'agent:egress-state', customerJob: 'Protected request', routing: { networkId: 'ae:public' },
     })
-    if (submitted.kind !== 'request') throw new Error('request missing')
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('request clarification missing')
+    }
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:egress-state', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    })
+    if (answered.kind !== 'request') throw new Error('answered request missing')
     const review = await customer.action(api.customerRequestApplication.compare, {
-      requestRef: submitted.requestRef, revision: submitted.revision, idempotencyKey: 'prepare:v2:egress-state',
+      requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:v2:egress-state',
     })
     if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('review missing')
 
@@ -686,9 +752,17 @@ describe('current V2 Customer Request application path', () => {
       delegatedAgentId: 'agent:prepared-action', customerJob: 'Find the cheapest sandbox option',
       routing: { networkId: 'ae:public' },
     })
-    if (submitted.kind !== 'request') throw new Error('request missing')
+    if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+      throw new Error('request clarification missing')
+    }
+    const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+      requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+      idempotencyKey: 'facts:v2:prepared-action', requirementKey: submitted.clarification.requirementKey,
+      value: 'Return a labelled sandbox comparison reference.',
+    })
+    if (answered.kind !== 'request') throw new Error('answered request missing')
     const review = await customer.action(api.customerRequestApplication.compare, {
-      requestRef: submitted.requestRef, revision: submitted.revision,
+      requestRef: answered.requestRef, revision: answered.revision,
       idempotencyKey: 'prepare:v2:prepared-action',
     })
     if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation missing')
@@ -758,8 +832,8 @@ describe('current V2 Customer Request application path', () => {
       kind: 'prepared',
       preparedAction: {
         format: 'ae.prepared-action:v2', business: { name: 'Sandbox Option Two' },
-        offering: { offeringId: 'offering:sandbox-option-two:reference-lookup' },
-        binding: { bindingId: 'binding:sandbox-option-two:http-json:v2' },
+        offering: { offeringId: 'offering:sandbox-option-two:reference-lookup:v2' },
+        binding: { bindingId: 'binding:sandbox-option-two:http-json:v3' },
         price: { currency: 'AUD', maximumAmountMinor: 900 },
         comparison: { kind: 'lowest_maximum_price', candidateCount: 2 },
       },
@@ -878,7 +952,7 @@ describe('current V2 Customer Request application path', () => {
       approvalGrantRef: approved.approvalRef, idempotencyKey: 'admit:v2:cross-request',
     })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
     const selectedOperation = operations.find(({ offeringId }) => (
-      offeringId === 'offering:sandbox-option-two:reference-lookup'
+      offeringId === 'offering:sandbox-option-two:reference-lookup:v2'
     ))
     if (selectedOperation === undefined) throw new Error('selected operation missing')
     await expect(backend.mutation(internal.customerRequestV2ActionAttempt.admit, {
@@ -1140,7 +1214,7 @@ describe('current V2 Customer Request application path', () => {
         },
         input: {
           schemaIdentity: canonicalDigest(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.inputSchema),
-          value: { requestContext: 'Find the cheapest sandbox option' },
+          value: { requestContext: 'Return a labelled sandbox comparison reference.' },
         },
         output: {
           schemaIdentity: canonicalDigest(SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.outputSchema),

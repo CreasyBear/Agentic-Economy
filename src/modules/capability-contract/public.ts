@@ -65,6 +65,7 @@ const customerAnnotation = z.object({
   pointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
   label: z.string().trim().min(1).max(160),
   role: z.enum(['request', 'constraint', 'comparison', 'commitment', 'result', 'completion_evidence', 'recovery']),
+  inference: z.enum(['allowed', 'customer_required']).optional(),
 }).strict()
 const dataUse = z.object({
   effectId: identifier,
@@ -132,6 +133,7 @@ export type CapabilityInputSemantic = Readonly<{
   inputPointer: string
   label: string
   role: 'request' | 'constraint' | 'comparison' | 'commitment'
+  inference: 'allowed' | 'customer_required'
   stage: CapabilityInputStage
   required: boolean
   schemaIdentity: PointedSchemaIdentity
@@ -266,6 +268,9 @@ export function defineCapabilityContract(input: unknown): CapabilityContract {
   })) {
     throw new Error('capability_customer_annotation_pointer_invalid')
   }
+  if (document.customerAnnotations.some((annotation) => (
+    annotation.document === 'output' && annotation.inference !== undefined
+  ))) throw new Error('capability_output_inference_policy_invalid')
   assertCustomerAnnotationsAreProjectable(document)
   if (document.customerAnnotations.some((annotation) => (
     annotation.document === 'input'
@@ -367,6 +372,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       inputPointer: annotation.pointer,
       label: annotation.label,
       role: annotation.role as CapabilityInputSemantic['role'],
+      inference: annotation.inference ?? 'allowed',
       stage: annotation.role === 'commitment' ? 'commitment' : 'option_selection',
       required: instancePointerStatus(exactContract.inputSchema, annotation.pointer).guaranteed,
       schemaIdentity: canonicalDigest(pointedSchema as StableHashValue) as PointedSchemaIdentity,
@@ -431,7 +437,10 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
     left.projection.inputPointer.localeCompare(right.projection.inputPointer)
       || left.projection.effectId.localeCompare(right.projection.effectId)
   ))
-  const semanticDigest = canonicalDigest({ contractRef: contract.ref, inputs, evidence } as StableHashValue)
+  const digestInputs = inputs.map(({ inference, ...input }) => (
+    inference === 'allowed' ? input : { ...input, inference }
+  ))
+  const semanticDigest = canonicalDigest({ contractRef: contract.ref, inputs: digestInputs, evidence } as StableHashValue)
   const model: CapabilityDecisionModel = {
     contractRef: exactContract.ref,
     selectionKey,

@@ -410,6 +410,20 @@ describe('capability decision model', () => {
     expect(changed.selectionKey).not.toBe(original.selectionKey)
     expect(changed.semanticDigest).not.toBe(original.semanticDigest)
   })
+
+  it('preserves legacy semantic identity unless a registered input changes inference policy', () => {
+    const legacyDocument = capabilityContractV2()
+    const legacy = openCapabilityDecisionModel(defineCapabilityContract(legacyDocument))
+    const customerRequired = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+      customerAnnotations: legacyDocument.customerAnnotations.map((annotation) => (
+        annotation.document === 'input' ? { ...annotation, inference: 'customer_required' } : annotation
+      )),
+    })))
+
+    expect(legacy.inputs[0]?.inference).toBe('allowed')
+    expect(legacy.semanticDigest).toBe('sha256:4750bf6cbc591afddd5b6937aace5f2c3b83587ca10b1a0f8aea0b53840baa11')
+    expect(customerRequired.semanticDigest).not.toBe(legacy.semanticDigest)
+  })
 })
 
 function modelWithCommitment() {

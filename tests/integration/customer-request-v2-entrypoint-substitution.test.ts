@@ -248,10 +248,18 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
     customerJob: 'Find the cheapest labelled sandbox option',
     routing: { networkId: 'ae:public' },
   })
-  if (submitted.kind !== 'request') throw new Error(`request submit failed: ${submitted.kind}`)
+  if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
+    throw new Error(`request clarification failed: ${submitted.kind}`)
+  }
+  const answered = await customer.action(api.customerRequestApplication.provideFacts, {
+    requestRef: submitted.requestRef, expectedRevision: submitted.revision,
+    idempotencyKey: `facts:${requestId}`, requirementKey: submitted.clarification.requirementKey,
+    value: 'Return a labelled sandbox comparison reference.',
+  })
+  if (answered.kind !== 'request') throw new Error(`request answer failed: ${answered.kind}`)
   const review = await customer.action(api.customerRequestApplication.compare, {
-    requestRef: submitted.requestRef,
-    revision: submitted.revision,
+    requestRef: answered.requestRef,
+    revision: answered.revision,
     idempotencyKey: `compare:${requestId}`,
   })
   if (review.kind !== 'request' || review.preparationRef === undefined) throw new Error('preparation review missing')
@@ -335,13 +343,13 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
 function registeredProviderFor(endpoint: URL) {
   const profile = endpoint.searchParams.get('profile')
   if (profile === 'one') return {
-    offeringId: 'offering:sandbox-option-one:reference-lookup',
-    bindingId: 'binding:sandbox-option-one:http-json:v2',
+    offeringId: 'offering:sandbox-option-one:reference-lookup:v2',
+    bindingId: 'binding:sandbox-option-one:http-json:v3',
     credential: 'sandbox-provider-test-key',
   }
   if (profile === 'two') return {
-    offeringId: 'offering:sandbox-option-two:reference-lookup',
-    bindingId: 'binding:sandbox-option-two:http-json:v2',
+    offeringId: 'offering:sandbox-option-two:reference-lookup:v2',
+    bindingId: 'binding:sandbox-option-two:http-json:v3',
     credential: 'sandbox-provider-test-key',
   }
   if (endpoint.hostname === 'sandbox-three.example.test') return {

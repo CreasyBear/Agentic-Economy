@@ -19,9 +19,11 @@ import {
 } from './capabilitySupply'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 import type { CapabilityContractRef } from '@/modules/capability-contract/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   SANDBOX_PROVIDER_PROFILES,
   SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
+  SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
 } from '@/modules/sandbox-supply/public'
 
 export const seedDevCatalog = internalMutation({
@@ -183,7 +185,7 @@ export async function registerSandboxV2SupplyRegistrations(
         offeringId: profile.offeringId,
         networkId: 'ae:public',
         contractRef: contract.ref,
-        endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v2`, siteUrl).href,
+        endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v3`, siteUrl).href,
         credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
@@ -243,55 +245,87 @@ export async function retireLegacySandboxV2Supply(
 ): Promise<string[]> {
   const retired: string[] = []
   const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
+  const legacyContractRef = encodeCapabilityContractDocument(SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT).contract.ref
   for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
     const corrected = registrations.find((registration) => registration.slug === profile.slug)
     if (corrected === undefined) throw new Error(`sandbox_v2_corrected_registration_missing_${profile.slug}`)
-    const binding = await db.query('capabilityTransportBindings')
-      .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.legacyV2BindingId))
-      .unique()
-    if (binding === null) continue
     const offering = await db.query('capabilityOfferings')
-      .withIndex('by_offeringId', (query) => query.eq('offeringId', corrected.offeringId))
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId))
       .unique()
-    const legacyEndpointUrl = new URL(`/api/sandbox/capability?profile=${profileKey}`, siteUrl).href
-    const legacyCredentialRef = `env:AE_SANDBOX_PROVIDER_${profileKey.toUpperCase()}_KEY`
-    if (
-      offering === null
-      || binding.offeringId !== corrected.offeringId
-      || binding.networkId !== 'ae:public'
-      || binding.capabilityId !== corrected.contractRef.capabilityId
-      || binding.version !== corrected.contractRef.version
-      || binding.contractDigest !== corrected.contractRef.contractDigest
-      || offering.capabilityId !== corrected.contractRef.capabilityId
-      || offering.version !== corrected.contractRef.version
-      || offering.contractDigest !== corrected.contractRef.contractDigest
-      || binding.endpointUrl !== legacyEndpointUrl
-      || binding.credentialRef !== legacyCredentialRef
-      || binding.adapterId !== 'http-json:v1'
-    ) throw new Error(`sandbox_v2_legacy_binding_identity_mismatch_${profile.legacyV2BindingId}`)
-    const result = await setCapabilitySupplyEligibilityCommand(db, {
-      actor: { kind: 'system', ref: 'system:dev-seed' },
-      context: {
-        operationKey: `seed:capability-binding-retire:${profile.legacyV2BindingId}`,
-        correlationId: `seed:capability-supply:${profile.slug}`,
-        reasonCode: 'labelled_sandbox_binding_replaced',
-        evidenceRefs: ['seed:sandbox-shared-provider-credential'],
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug))
+      .unique()
+    const legacyBindings = [
+      {
+        bindingId: profile.legacyV2BindingId,
+        endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}`, siteUrl).href,
+        credentialRef: `env:AE_SANDBOX_PROVIDER_${profileKey.toUpperCase()}_KEY`,
       },
-      eligibility: {
-        offeringId: offering.offeringId,
-        bindingId: binding.bindingId,
-        contractRef: corrected.contractRef,
-        decision: 'revoke',
-        expectedOfferingRegistrationHash: offering.registrationHash,
-        expectedBindingRegistrationHash: binding.registrationHash,
-        admissionEvidenceRefs: ['seed:sandbox-shared-provider-credential'],
-        conformanceEvidenceRefs: ['seed:sandbox-shared-provider-credential'],
+      {
+        bindingId: profile.priorV2BindingId,
+        endpointUrl: new URL(`/api/sandbox/capability?profile=${profileKey}&binding=v2`, siteUrl).href,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
       },
-    }, retiredAt)
-    if (result.kind !== 'ineligible') {
-      throw new Error(`sandbox_v2_legacy_binding_retirement_${result.kind}`)
+    ]
+    for (const expected of legacyBindings) {
+      const binding = await db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', expected.bindingId))
+        .unique()
+      if (binding === null) continue
+      if (
+        offering === null
+        || business === null
+        || offering.businessId !== business._id
+        || binding.offeringId !== profile.priorOfferingId
+        || binding.networkId !== 'ae:public'
+        || binding.capabilityId !== legacyContractRef.capabilityId
+        || binding.version !== legacyContractRef.version
+        || binding.contractDigest !== legacyContractRef.contractDigest
+        || offering.capabilityId !== legacyContractRef.capabilityId
+        || offering.version !== legacyContractRef.version
+        || offering.contractDigest !== legacyContractRef.contractDigest
+        || binding.endpointUrl !== expected.endpointUrl
+        || binding.credentialRef !== expected.credentialRef
+        || binding.adapterId !== 'http-json:v1'
+        || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
+        || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
+        || binding.continuation.kind !== 'single_response'
+        || binding.continuation.evidenceRefs.length !== 1
+        || binding.continuation.evidenceRefs[0] !== 'seed:sandbox-single-response'
+        || binding.cancellation.kind !== 'unsupported'
+        || binding.cancellation.evidenceRefs.length !== 1
+        || binding.cancellation.evidenceRefs[0] !== 'seed:sandbox-no-cancellation'
+        || binding.registrationEvidenceRefs.length !== 1
+        || binding.registrationEvidenceRefs[0] !== 'seed:production-v2-registration-path'
+      ) throw new Error(`sandbox_v2_legacy_binding_identity_mismatch_${expected.bindingId}`)
+      const isOriginalLegacyBinding = expected.bindingId === profile.legacyV2BindingId
+      const retirementEvidenceRef = isOriginalLegacyBinding
+        ? 'seed:sandbox-shared-provider-credential'
+        : 'seed:sandbox-capability-contract-upgraded'
+      const result = await setCapabilitySupplyEligibilityCommand(db, {
+        actor: { kind: 'system', ref: 'system:dev-seed' },
+        context: {
+          operationKey: `seed:capability-binding-retire:${expected.bindingId}`,
+          correlationId: `seed:capability-supply:${profile.slug}`,
+          reasonCode: 'labelled_sandbox_binding_replaced',
+          evidenceRefs: [retirementEvidenceRef],
+        },
+        eligibility: {
+          offeringId: offering.offeringId,
+          bindingId: binding.bindingId,
+          contractRef: legacyContractRef,
+          decision: 'revoke',
+          expectedOfferingRegistrationHash: offering.registrationHash,
+          expectedBindingRegistrationHash: binding.registrationHash,
+          admissionEvidenceRefs: [retirementEvidenceRef],
+          conformanceEvidenceRefs: [retirementEvidenceRef],
+        },
+      }, retiredAt)
+      if (result.kind !== 'ineligible') {
+        throw new Error(`sandbox_v2_legacy_binding_retirement_${result.kind}`)
+      }
+      retired.push(binding.bindingId)
     }
-    retired.push(binding.bindingId)
   }
   return retired
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { pathToFileURL } from 'node:url'
 
 import { z } from 'zod'
 
@@ -192,7 +193,8 @@ async function main(): Promise<void> {
   })
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const entrypoint = process.argv[1]
+if (entrypoint !== undefined && import.meta.url === pathToFileURL(entrypoint).href) {
   void main().catch((error: unknown) => {
     console.error(error instanceof Error ? `FAIL ${error.message}` : 'FAIL unexpected_error')
     process.exitCode = 1

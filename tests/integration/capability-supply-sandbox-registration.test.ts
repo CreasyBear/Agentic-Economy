@@ -9,17 +9,29 @@ import {
 } from '../../convex/devSeed'
 import {
   registerCapabilityBindingCommand,
+  registerCapabilityOfferingCommand,
   setCapabilitySupplyEligibilityCommand,
 } from '../../convex/capabilitySupply'
+import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
 import schema from '../../convex/schema'
 import { runtimeDb } from '../../convex/source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
-import { SANDBOX_PROVIDER_PROFILES } from '@/modules/sandbox-supply/public'
+import {
+  SANDBOX_PROVIDER_PROFILES,
+  SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
+} from '@/modules/sandbox-supply/public'
+import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [path.replace('../../convex/', './'), load]))
 
 describe('labelled sandbox V2 capability supply', () => {
+  it('pins the immutable historical sandbox v1 contract identity', () => {
+    expect(encodeCapabilityContractDocument(
+      SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
+    ).contract.ref.contractDigest).toBe('sha256:755ed0e0a297adf22152d8ddf8d12dcf8cb5197d805e3d77e67288c7b223ed92')
+  })
+
   it('seeds only the two labelled acceptance businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -27,8 +39,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(result).toMatchObject({
       seededSlugs: ['sandbox-option-one', 'sandbox-option-two'],
       sandboxV2Bindings: [
-        'binding:sandbox-option-one:http-json:v2',
-        'binding:sandbox-option-two:http-json:v2',
+        'binding:sandbox-option-one:http-json:v3',
+        'binding:sandbox-option-two:http-json:v3',
       ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
@@ -76,8 +88,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v2',
-      'binding:sandbox-option-two:http-json:v2',
+      'binding:sandbox-option-one:http-json:v3',
+      'binding:sandbox-option-two:http-json:v3',
     ])
   })
 
@@ -92,8 +104,8 @@ describe('labelled sandbox V2 capability supply', () => {
       ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', first.ownerClerkUserId)).unique()
     ))
     expect(first.sandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json:v2',
-      'binding:sandbox-option-two:http-json:v2',
+      'binding:sandbox-option-one:http-json:v3',
+      'binding:sandbox-option-two:http-json:v3',
     ])
     expect(replay.sandboxV2Bindings).toEqual(first.sandboxV2Bindings)
     expect(ownerAfterReplay).toEqual(ownerBeforeReplay)
@@ -117,7 +129,7 @@ describe('labelled sandbox V2 capability supply', () => {
     }))
     expect(state.contracts).toHaveLength(1)
     expect(state.contracts[0]).toMatchObject({
-      capabilityId: 'sandbox.reference.lookup', version: 1, status: 'active',
+      capabilityId: 'sandbox.reference.lookup', version: 2, status: 'active',
       contractDigest: expect.stringMatching(/^sha256:/),
     })
     expect(state.offerings).toHaveLength(2)
@@ -165,8 +177,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [
-        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v2' } },
-        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v2' } },
+        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v3' } },
+        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v3' } },
       ],
     })
   })
@@ -187,8 +199,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v2',
-      'binding:sandbox-option-two:http-json:v2',
+      'binding:sandbox-option-one:http-json:v3',
+      'binding:sandbox-option-two:http-json:v3',
     ])
     const registrations = await backend.run(async (ctx) => ({
       offerings: await ctx.db.query('capabilityOfferings').collect(),
@@ -200,59 +212,37 @@ describe('labelled sandbox V2 capability supply', () => {
 
   it('retires stale sandbox bindings through the eligibility command when corrected bindings are published', async () => {
     const backend = convexTest(schema, modules)
-    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     await backend.run(async (ctx) => {
-      for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
-        const current = await ctx.db.query('capabilityTransportBindings')
-          .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
-          .unique()
-        const offering = await ctx.db.query('capabilityOfferings')
-          .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
-          .unique()
-        if (current === null || offering === null) throw new Error('corrected sandbox supply missing')
-        const contractRef = {
-          capabilityId: current.capabilityId,
-          version: current.version,
-          contractDigest: current.contractDigest,
-        }
-        const registered = await registerCapabilityBindingCommand(ctx.db, {
-          actor: { kind: 'system', ref: 'system:migration-test' },
-          context: {
-            operationKey: `test:legacy-binding:${profile.legacyV2BindingId}`,
-            correlationId: `test:legacy-binding:${profile.slug}`,
-            reasonCode: 'test_legacy_registration', evidenceRefs: ['test:legacy-binding'],
-          },
-          registration: {
-            bindingId: profile.legacyV2BindingId, offeringId: profile.offeringId,
-            networkId: 'ae:public', contractRef,
-            endpointUrl: `https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=${profileKey}`,
-            credentialRef: `env:AE_SANDBOX_PROVIDER_${profileKey.toUpperCase()}_KEY`,
-            continuation: { kind: 'single_response', evidenceRefs: ['test:legacy-single-response'] },
-            cancellation: { kind: 'unsupported', evidenceRefs: ['test:legacy-no-cancellation'] },
-            adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
-            registrationEvidenceRefs: ['test:legacy-binding'],
-          },
-        }, 10_000)
-        if (registered.kind !== 'registered') throw new Error(`legacy registration failed: ${registered.reason}`)
-        const admitted = await setCapabilitySupplyEligibilityCommand(ctx.db, {
-          actor: { kind: 'system', ref: 'system:migration-test' },
-          context: {
-            operationKey: `test:legacy-admission:${profile.legacyV2BindingId}`,
-            correlationId: `test:legacy-binding:${profile.slug}`,
-            reasonCode: 'test_legacy_admission', evidenceRefs: ['test:legacy-binding'],
-          },
-          eligibility: {
-            offeringId: offering.offeringId, bindingId: registered.bindingId, contractRef,
-            decision: 'admit', expectedOfferingRegistrationHash: offering.registrationHash,
-            expectedBindingRegistrationHash: registered.registrationHash,
-            admissionEvidenceRefs: ['test:legacy-binding'], conformanceEvidenceRefs: ['test:legacy-binding'],
-          },
-        }, 10_500)
-        if (admitted.kind !== 'eligible') throw new Error(`legacy admission failed: ${admitted.kind}`)
-      }
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerLegacySandboxSupply(ctx.db)
+      await retireOriginalLegacySandboxBindings(ctx.db)
     })
+    const priorRetirement = await backend.run(async (ctx) => ({
+      operations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
+        operation.key === 'seed:capability-binding-retire:binding:sandbox-option-one:http-json'
+        || operation.key === 'seed:capability-binding-retire:binding:sandbox-option-two:http-json'
+      )),
+      audits: (await ctx.db.query('auditEvents').collect()).filter((audit) => (
+        audit.targetRef === 'binding:sandbox-option-one:http-json'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json'
+      )),
+    }))
 
     const migrated = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    const replayedPriorRetirement = await backend.run(async (ctx) => ({
+      operations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
+        operation.key === 'seed:capability-binding-retire:binding:sandbox-option-one:http-json'
+        || operation.key === 'seed:capability-binding-retire:binding:sandbox-option-two:http-json'
+      )),
+      audits: (await ctx.db.query('auditEvents').collect()).filter((audit) => (
+        audit.targetRef === 'binding:sandbox-option-one:http-json'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json'
+      )),
+    }))
+    expect(replayedPriorRetirement).toEqual(priorRetirement)
 
     const beforeReplay = await backend.run(async (ctx) => ({
       retirementOperations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
@@ -261,6 +251,8 @@ describe('labelled sandbox V2 capability supply', () => {
       retirementAudits: (await ctx.db.query('auditEvents').collect()).filter((audit) => (
         audit.targetRef === 'binding:sandbox-option-one:http-json'
         || audit.targetRef === 'binding:sandbox-option-two:http-json'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v2'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
       )),
     }))
     const replay = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -271,6 +263,8 @@ describe('labelled sandbox V2 capability supply', () => {
       retirementAudits: (await ctx.db.query('auditEvents').collect()).filter((audit) => (
         audit.targetRef === 'binding:sandbox-option-one:http-json'
         || audit.targetRef === 'binding:sandbox-option-two:http-json'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v2'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
       )),
     }))
     expect(replay).toEqual(migrated)
@@ -281,23 +275,31 @@ describe('labelled sandbox V2 capability supply', () => {
       bindingId: binding.bindingId, credentialRef: binding.credentialRef,
       admission: binding.admission, conformance: binding.conformance,
     })
-    expect(bindings.filter((binding) => binding.bindingId.endsWith(':v2')).map(bindingState)).toEqual([
+    expect(bindings.filter((binding) => binding.bindingId.endsWith(':v3')).map(bindingState)).toEqual([
       {
-        bindingId: 'binding:sandbox-option-one:http-json:v2', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-one:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
       {
-        bindingId: 'binding:sandbox-option-two:http-json:v2', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-two:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
     ])
-    expect(bindings.filter((binding) => !binding.bindingId.endsWith(':v2')).map(bindingState)).toEqual([
+    expect(bindings.filter((binding) => !binding.bindingId.endsWith(':v3')).map(bindingState)).toEqual([
       {
         bindingId: 'binding:sandbox-option-one:http-json', credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',
       },
       {
+        bindingId: 'binding:sandbox-option-one:http-json:v2', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
         bindingId: 'binding:sandbox-option-two:http-json', credentialRef: 'env:AE_SANDBOX_PROVIDER_TWO_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-two:http-json:v2', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',
       },
     ])
@@ -305,32 +307,49 @@ describe('labelled sandbox V2 capability supply', () => {
 
   it('refuses to retire a reserved legacy binding whose registered identity is not the sandbox identity', async () => {
     const backend = convexTest(schema, modules)
-    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
     await backend.run(async (ctx) => {
-      const profile = SANDBOX_PROVIDER_PROFILES.one
-      const current = await ctx.db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId)).unique()
-      if (current === null) throw new Error('corrected sandbox binding missing')
-      const registered = await registerCapabilityBindingCommand(ctx.db, {
-        actor: { kind: 'system', ref: 'system:migration-test' },
-        context: {
-          operationKey: 'test:legacy-binding:identity-mismatch', correlationId: 'test:legacy-binding:identity-mismatch',
-          reasonCode: 'test_legacy_registration', evidenceRefs: ['test:legacy-binding'],
-        },
-        registration: {
-          bindingId: profile.legacyV2BindingId, offeringId: profile.offeringId, networkId: 'ae:public',
-          contractRef: {
-            capabilityId: current.capabilityId, version: current.version, contractDigest: current.contractDigest,
-          },
-          endpointUrl: 'https://wrong-provider.example.test/capability',
-          credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
-          continuation: { kind: 'single_response', evidenceRefs: ['test:legacy-single-response'] },
-          cancellation: { kind: 'unsupported', evidenceRefs: ['test:legacy-no-cancellation'] },
-          adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
-          registrationEvidenceRefs: ['test:legacy-binding'],
-        },
-      }, 10_000)
-      if (registered.kind !== 'registered') throw new Error(`legacy registration failed: ${registered.reason}`)
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerLegacySandboxSupply(ctx.db, {
+        firstLegacyEndpointOverride: 'https://wrong-provider.example.test/capability',
+      })
+    })
+
+    await expect(backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {}))
+      .rejects.toThrow('sandbox_v2_legacy_binding_identity_mismatch_binding:sandbox-option-one:http-json')
+  })
+
+  it('refuses to retire a legacy offering registered to a different published business', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      const expected = await ctx.db.query('businesses')
+        .withIndex('by_slug', (query) => query.eq('slug', 'sandbox-option-one')).unique()
+      if (expected === null) throw new Error('sandbox business missing')
+      const { _id, _creationTime, ...business } = expected
+      void _id
+      void _creationTime
+      await ctx.db.insert('businesses', { ...business, slug: 'sandbox-wrong-business', name: 'Sandbox Wrong Business' })
+      await registerLegacySandboxSupply(ctx.db, { firstOfferingBusinessSlug: 'sandbox-wrong-business' })
+    })
+
+    await expect(backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {}))
+      .rejects.toThrow('sandbox_v2_legacy_binding_identity_mismatch_binding:sandbox-option-one:http-json')
+  })
+
+  it('refuses to retire a legacy binding with different adapter configuration', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerLegacySandboxSupply(ctx.db, { firstLegacyRequestTimeoutMs: 4_000 })
     })
 
     await expect(backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {}))
@@ -369,3 +388,131 @@ describe('labelled sandbox V2 capability supply', () => {
       .rejects.toThrow('sandbox_business_claim_claim_operation_conflict')
   })
 })
+
+async function registerLegacySandboxSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  options: Readonly<{
+    firstLegacyEndpointOverride?: string
+    firstLegacyRequestTimeoutMs?: number
+    firstOfferingBusinessSlug?: string
+  }> = {},
+): Promise<void> {
+  const encoded = encodeCapabilityContractDocument(SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT)
+  const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_000)
+  if (contract.kind !== 'registered') throw new Error(`legacy contract registration failed: ${contract.reason}`)
+  for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
+    const businessSlug = profileKey === 'one' && options.firstOfferingBusinessSlug !== undefined
+      ? options.firstOfferingBusinessSlug
+      : profile.slug
+    const business = await db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', businessSlug)).unique()
+    if (business === null) throw new Error('legacy sandbox business missing')
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:legacy-offering:${profile.priorOfferingId}`,
+        correlationId: `test:legacy-supply:${profile.slug}`,
+        reasonCode: 'test_legacy_registration', evidenceRefs: ['test:legacy-supply'],
+      },
+      registration: {
+        offeringId: profile.priorOfferingId, businessId: business._id, networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.label, summary: 'Legacy labelled sandbox supply.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only.' }],
+          commercialRelationship: {
+            kind: 'none', summary: 'No commercial relationship.', influencesEligibility: false,
+            influencesInclusion: false, influencesOrder: false, evidenceRefs: ['test:legacy-supply'],
+          },
+        },
+        searchTerms: [...profile.queryTerms], registrationEvidenceRefs: ['test:legacy-supply'],
+      },
+    }, 2_100)
+    if (offering.kind !== 'registered') throw new Error(`legacy offering registration failed: ${offering.reason}`)
+    const bindings = [
+      {
+        bindingId: profile.legacyV2BindingId,
+        endpointUrl: profileKey === 'one' && options.firstLegacyEndpointOverride !== undefined
+          ? options.firstLegacyEndpointOverride
+          : `https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=${profileKey}`,
+        credentialRef: `env:AE_SANDBOX_PROVIDER_${profileKey.toUpperCase()}_KEY`,
+      },
+      {
+        bindingId: profile.priorV2BindingId,
+        endpointUrl: `https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=${profileKey}&binding=v2`,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+      },
+    ]
+    for (const bindingInput of bindings) {
+      const binding = await registerCapabilityBindingCommand(db, {
+        actor: { kind: 'system', ref: 'system:migration-test' },
+        context: {
+          operationKey: `test:legacy-binding:${bindingInput.bindingId}`,
+          correlationId: `test:legacy-supply:${profile.slug}`,
+          reasonCode: 'test_legacy_registration', evidenceRefs: ['test:legacy-supply'],
+        },
+        registration: {
+          ...bindingInput, offeringId: profile.priorOfferingId, networkId: 'ae:public', contractRef: contract.ref,
+          continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+          cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+          adapter: {
+            adapterId: 'http-json:v1',
+            config: {
+              method: 'POST',
+              requestTimeoutMs: profileKey === 'one' && options.firstLegacyRequestTimeoutMs !== undefined
+                ? options.firstLegacyRequestTimeoutMs
+                : 5_000,
+            },
+          },
+          registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+        },
+      }, 2_200)
+      if (binding.kind !== 'registered') throw new Error(`legacy binding registration failed: ${binding.reason}`)
+      const admitted = await setCapabilitySupplyEligibilityCommand(db, {
+        actor: { kind: 'system', ref: 'system:migration-test' },
+        context: {
+          operationKey: `test:legacy-admission:${bindingInput.bindingId}`,
+          correlationId: `test:legacy-supply:${profile.slug}`,
+          reasonCode: 'test_legacy_admission', evidenceRefs: ['test:legacy-supply'],
+        },
+        eligibility: {
+          offeringId: profile.priorOfferingId, bindingId: binding.bindingId, contractRef: contract.ref,
+          decision: 'admit', expectedOfferingRegistrationHash: offering.registrationHash,
+          expectedBindingRegistrationHash: binding.registrationHash,
+          admissionEvidenceRefs: ['test:legacy-supply'], conformanceEvidenceRefs: ['test:legacy-supply'],
+        },
+      }, 2_300)
+      if (admitted.kind !== 'eligible') throw new Error(`legacy admission failed: ${admitted.kind}`)
+    }
+  }
+}
+
+async function retireOriginalLegacySandboxBindings(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+): Promise<void> {
+  const contractRef = encodeCapabilityContractDocument(SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT).contract.ref
+  for (const profile of Object.values(SANDBOX_PROVIDER_PROFILES)) {
+    const offering = await db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId)).unique()
+    const binding = await db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.legacyV2BindingId)).unique()
+    if (offering === null || binding === null) throw new Error('original legacy supply missing')
+    const retired = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: {
+        operationKey: `seed:capability-binding-retire:${profile.legacyV2BindingId}`,
+        correlationId: `seed:capability-supply:${profile.slug}`,
+        reasonCode: 'labelled_sandbox_binding_replaced',
+        evidenceRefs: ['seed:sandbox-shared-provider-credential'],
+      },
+      eligibility: {
+        offeringId: offering.offeringId, bindingId: binding.bindingId, contractRef, decision: 'revoke',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['seed:sandbox-shared-provider-credential'],
+        conformanceEvidenceRefs: ['seed:sandbox-shared-provider-credential'],
+      },
+    }, 2_400)
+    if (retired.kind !== 'ineligible') throw new Error(`original legacy retirement failed: ${retired.kind}`)
+  }
+}

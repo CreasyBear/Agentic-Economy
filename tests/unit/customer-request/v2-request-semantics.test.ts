@@ -292,6 +292,43 @@ describe('V2 Request semantics', () => {
     })
   })
 
+  it('keeps a schema-valid agent inference missing when the registered input requires customer provenance', () => {
+    const model = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+      inputSchema: structuredInputSchema(),
+      customerAnnotations: structuredAnnotations('customer_required'),
+      dataUse: structuredDataUse(), effects: structuredEffects(),
+    })))
+    const requestInput = requiredInput(model, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:customer-provenance', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find market data about routing.', networkId: 'ae:public',
+      proposal: {
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey, contractRef: model.contractRef,
+          facts: [{
+            contractRef: model.contractRef, selectionKey: model.selectionKey,
+            inputKey: requestInput.key, inputPointer: requestInput.inputPointer,
+            schemaIdentity: requestInput.schemaIdentity, value: { topic: 'routing' },
+            source: { kind: 'agent_inference', inferenceRef: 'inference:schema-valid' },
+          }],
+        }],
+      },
+      interpreterId: 'interpreter:test', bindings: [supply('binding:customer-provenance', model)],
+      models: [model], now: 1,
+    })
+
+    expect(requestInput.inference).toBe('customer_required')
+    expect(result).toMatchObject({
+      kind: 'compiled',
+      aggregate: {
+        outcome: 'needs_information', snapshot: { facts: [] },
+        evaluation: { nextRequirement: { kind: 'contract_fact' } },
+      },
+    })
+  })
+
   it('derives ranking intent from customer text only and rejects model-injected preference', async () => {
     expect(deriveCustomerDecisionPreference('Find the cheapest suitable option')).toMatchObject({
       objective: 'lowest_maximum_price', basis: 'extracted_from_request',
@@ -350,9 +387,12 @@ function structuredInputSchema() {
   }
 }
 
-function structuredAnnotations() {
+function structuredAnnotations(requestInference?: 'allowed' | 'customer_required') {
   return [
-    { annotationId: 'request', document: 'input', pointer: '/request', label: 'What to find', role: 'request' },
+    {
+      annotationId: 'request', document: 'input', pointer: '/request', label: 'What to find', role: 'request',
+      ...(requestInference === undefined ? {} : { inference: requestInference }),
+    },
     { annotationId: 'approval', document: 'input', pointer: '/approval', label: 'Approval', role: 'commitment' },
     { annotationId: 'result', document: 'output', pointer: '/result', label: 'Result', role: 'completion_evidence' },
   ]

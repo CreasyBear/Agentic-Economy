@@ -40,7 +40,7 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   const profile = SANDBOX_PROVIDER_PROFILES[url.searchParams.get('profile') as keyof typeof SANDBOX_PROVIDER_PROFILES]
   if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
   const bindingVersion = url.searchParams.get('binding')
-  if (bindingVersion !== null && bindingVersion !== 'v2') {
+  if (bindingVersion !== null && bindingVersion !== 'v2' && bindingVersion !== 'v3') {
     return json({ kind: 'refused', reason: 'sandbox_binding_unknown' }, 404)
   }
   const scenarioResult = scenarioValue.safeParse(url.searchParams.get('scenario') ?? 'success')
@@ -52,11 +52,16 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
   const preparationEgress = preparationEgressBody.safeParse(parsedJson)
   if (preparationEgress.success) {
-    const bindingId = bindingVersion === 'v2' ? profile.v2BindingId : profile.legacyV2BindingId
-    return providerOption(profile, bindingId, preparationEgress.data)
+    const bindingId = bindingVersion === 'v3'
+      ? profile.v2BindingId
+      : bindingVersion === 'v2' ? profile.priorV2BindingId : profile.legacyV2BindingId
+    const offeringId = bindingVersion === 'v3' ? profile.offeringId : profile.priorOfferingId
+    return providerOption(profile, offeringId, bindingId, preparationEgress.data)
   }
   const parsed = requestBody.safeParse(parsedJson)
-  if (!parsed.success || (parsed.data.bindingId !== profile.bindingId && parsed.data.bindingId !== profile.v2BindingId)) {
+  if (!parsed.success || ![
+    profile.bindingId, profile.legacyV2BindingId, profile.priorV2BindingId, profile.v2BindingId,
+  ].includes(parsed.data.bindingId)) {
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)
   }
   if (scenario === 'refusal' && (parsed.data.operation === 'quote' || parsed.data.operation === 'structured_quote')) {
@@ -103,6 +108,7 @@ function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>,
 
 function providerOption(
   profile: SandboxProfile,
+  offeringId: string,
   bindingId: string,
   body: z.infer<typeof preparationEgressBody>,
 ): Response {
@@ -116,7 +122,7 @@ function providerOption(
     format: 'ae.provider-option:v1',
     operationRef: body.operationRef,
     contractRef: body.contractRef,
-    offeringId: profile.offeringId,
+    offeringId,
     bindingId,
     assertionRef,
     assertedAt,

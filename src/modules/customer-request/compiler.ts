@@ -216,6 +216,7 @@ function normalizeInferredFacts(
     for (const fact of selection.facts) {
       const input = exactInputForFact(fact, model)
       if (input === undefined) return undefined
+      if (fact.source.kind === 'agent_inference' && input.inference === 'customer_required') continue
       if (factBelongsToExactModel(fact, models)) {
         accepted.push(fact)
       } else if (fact.source.kind === 'agent_inference') {

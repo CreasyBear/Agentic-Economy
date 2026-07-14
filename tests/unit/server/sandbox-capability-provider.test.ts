@@ -15,18 +15,18 @@ describe('sandbox capability provider', () => {
   })
 
   it('accepts and exactly echoes the registered V2 binding identity', async () => {
-    const response = await call('one', 'binding:sandbox-option-one:http-json:v2')
+    const response = await call('one', 'binding:sandbox-option-one:http-json:v3')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      issuerBindingId: 'binding:sandbox-option-one:http-json:v2',
+      issuerBindingId: 'binding:sandbox-option-one:http-json:v3',
       expectedCost: { amountMinor: 1_200 },
     })
   })
 
   it('returns the registered V2 provider option envelope for preparation egress', async () => {
     const response = await handleSandboxCapabilityRequest(
-      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v2'),
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v3'),
       { providerKey: 'secret' },
     )
 
@@ -34,9 +34,9 @@ describe('sandbox capability provider', () => {
     await expect(response.json()).resolves.toMatchObject({
       format: 'ae.provider-option:v1',
       operationRef: 'preparation-egress:test-v2',
-      contractRef: { capabilityId: 'sandbox.reference.lookup', version: 1 },
-      offeringId: 'offering:sandbox-option-one:reference-lookup',
-      bindingId: 'binding:sandbox-option-one:http-json:v2',
+      contractRef: { capabilityId: 'sandbox.reference.lookup', version: 2 },
+      offeringId: 'offering:sandbox-option-one:reference-lookup:v2',
+      bindingId: 'binding:sandbox-option-one:http-json:v3',
       assertionRef: expect.stringMatching(/^sandbox-option:/),
       output: { optionSummary: 'Sandbox Option One — sandbox verification only' },
     })
@@ -51,9 +51,14 @@ describe('sandbox capability provider', () => {
       preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v2'),
       { providerKey: 'secret' },
     )
+    const current = await handleSandboxCapabilityRequest(
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v3'),
+      { providerKey: 'secret' },
+    )
 
     await expect(legacy.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json' })
     await expect(corrected.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v2' })
+    await expect(current.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v3' })
   })
 
   it('refuses missing credentials and never commits a real-world effect', async () => {
@@ -158,7 +163,7 @@ function preparationRequest(url: string): Request {
     body: JSON.stringify({
       protocol: 'ae.preparation-egress:v1', operationRef: 'preparation-egress:test-v2',
       contractRef: {
-        capabilityId: 'sandbox.reference.lookup', version: 1,
+        capabilityId: 'sandbox.reference.lookup', version: 2,
         contractDigest: 'sha256:' + 'a'.repeat(64),
       },
       selectionKey: 'ae_selection:test', semanticDigest: 'sha256:' + 'b'.repeat(64),
