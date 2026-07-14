@@ -35,6 +35,7 @@ export const seedDevCatalog = internalMutation({
     supportRecordId: v.string(),
     businessIdsBySlug: v.record(v.string(), v.string()),
     sandboxV2Bindings: v.array(v.string()),
+    sandboxCapabilityPublicationRef: v.string(),
   }),
   handler: async (ctx) => {
     const seedStartedAt = Date.now()
@@ -46,18 +47,118 @@ export const seedDevCatalog = internalMutation({
     const sandboxBusinesses = await registerSandboxBusinesses(db, sandboxFixtures, seedStartedAt)
     const sandboxRegistrations = await registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000)
     const sandboxV2Bindings = await admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500)
+    const sandboxCapabilityPublicationRef = await seedSandboxCapabilityPublication(
+      ctx.db, sandboxRegistrations[0], seedStartedAt + 2_750,
+    )
     await retireLegacySandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 3_000)
     return {
       ...result,
       seededSlugs: [...result.seededSlugs, ...sandboxBusinesses.seededSlugs],
       businessIdsBySlug: { ...result.businessIdsBySlug, ...sandboxBusinesses.businessIdsBySlug },
       sandboxV2Bindings,
+      sandboxCapabilityPublicationRef,
     }
+  },
+})
+
+export const seedTestCapabilityPublication = internalMutation({
+  args: {},
+  returns: v.object({ publicationRef: v.string(), credentialRef: v.string() }),
+  handler: async (ctx) => {
+    const profile = SANDBOX_PROVIDER_PROFILES.one
+    const business = await ctx.db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug))
+      .unique()
+    let offering = await ctx.db.query('capabilityOfferings')
+      .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+      .unique()
+    let binding = await ctx.db.query('capabilityTransportBindings')
+      .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
+      .unique()
+    if (business !== null && (offering === null || binding === null)) {
+      const registrations = await registerSandboxV2SupplyRegistrations(ctx.db, Date.now())
+      await admitSandboxV2Supply(ctx.db, registrations, Date.now() + 500)
+      offering = await ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+        .unique()
+      binding = await ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v2BindingId))
+        .unique()
+    }
+    if (business === null || offering === null || binding === null || offering.businessId !== business._id) {
+      throw new Error('sandbox_capability_publication_supply_missing')
+    }
+    const publicationRef = await seedSandboxCapabilityPublication(ctx.db, {
+      slug: profile.slug,
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: {
+        capabilityId: offering.capabilityId,
+        version: offering.version,
+        contractDigest: offering.contractDigest,
+      },
+      offeringRegistrationHash: offering.registrationHash,
+      bindingRegistrationHash: binding.registrationHash,
+    }, Date.now())
+    return { publicationRef, credentialRef: binding.credentialRef }
   },
 })
 
 function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
   return fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+}
+
+async function seedSandboxCapabilityPublication(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registration: SandboxV2SupplyRegistration | undefined,
+  observedAt: number,
+): Promise<string> {
+  if (registration === undefined) throw new Error('sandbox_capability_publication_registration_missing')
+  const business = await db.query('businesses')
+    .withIndex('by_slug', (query) => query.eq('slug', registration.slug))
+    .unique()
+  if (business === null) throw new Error('sandbox_capability_publication_business_missing')
+  const existing = await db.query('capabilityPublications')
+    .withIndex('by_publicationRef_and_revision', (query) => (
+      query.eq('publicationRef', registration.offeringId).eq('revision', 1)
+    ))
+    .unique()
+  const sourceDigest = canonicalDigest({
+    kind: 'seeded_sandbox_capability',
+    offeringId: registration.offeringId,
+    bindingId: registration.bindingId,
+  })
+  if (existing !== null) {
+    if (
+      existing.businessId !== business._id
+      || existing.sourceDigest !== sourceDigest
+      || existing.offeringId !== registration.offeringId
+      || existing.bindingId !== registration.bindingId
+      || existing.contractDigest !== registration.contractRef.contractDigest
+    ) throw new Error('sandbox_capability_publication_identity_mismatch')
+    return existing.publicationRef
+  }
+  await db.insert('capabilityPublications', {
+    publicationRef: registration.offeringId,
+    revision: 1,
+    businessId: business._id,
+    networkId: 'ae:public',
+    sourceKind: 'ae_envelope',
+    sourceDigest,
+    ...registration.contractRef,
+    offeringId: registration.offeringId,
+    bindingId: registration.bindingId,
+    disposition: 'current',
+    credentialState: 'ready',
+    healthState: 'healthy',
+    readinessEvidenceRefs: ['seed:test-only-credential-and-health'],
+    readinessObservedAt: observedAt,
+    readinessValidUntil: observedAt + 86_400_000,
+    registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
+    createdAt: observedAt,
+    updatedAt: observedAt,
+  })
+  return registration.offeringId
 }
 
 export async function registerSandboxBusinesses(

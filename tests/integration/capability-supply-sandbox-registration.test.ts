@@ -1,7 +1,7 @@
 import { convexTest } from 'convex-test'
 import { describe, expect, it } from 'vitest'
 
-import { internal } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
 import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
@@ -108,12 +108,15 @@ describe('labelled sandbox V2 capability supply', () => {
       'binding:sandbox-option-two:http-json:v3',
     ])
     expect(replay.sandboxV2Bindings).toEqual(first.sandboxV2Bindings)
+    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v2')
+    expect(replay.sandboxCapabilityPublicationRef).toBe(first.sandboxCapabilityPublicationRef)
     expect(ownerAfterReplay).toEqual(ownerBeforeReplay)
 
     const state = await backend.run(async (ctx) => ({
       contracts: await ctx.db.query('capabilityContractDocuments').collect(),
       offerings: await ctx.db.query('capabilityOfferings').collect(),
       bindings: await ctx.db.query('capabilityTransportBindings').collect(),
+      publications: await ctx.db.query('capabilityPublications').collect(),
       supplyOperations: await ctx.db.query('operationKeys').withIndex('by_scope_key', (query) => (
         query.eq('scope', 'capability_supply')
       )).collect(),
@@ -127,6 +130,24 @@ describe('labelled sandbox V2 capability supply', () => {
       )),
       audits: await ctx.db.query('auditEvents').collect(),
     }))
+    expect(state.publications).toMatchObject([{
+      publicationRef: first.sandboxCapabilityPublicationRef,
+      bindingId: 'binding:sandbox-option-one:http-json:v3',
+      credentialState: 'ready',
+      healthState: 'healthy',
+      readinessEvidenceRefs: ['seed:test-only-credential-and-health'],
+    }])
+    expect(state.bindings.find((binding) => binding.bindingId === state.publications[0]?.bindingId))
+      .toMatchObject({ credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY' })
+    await expect(backend.query(api.capabilitySupply.queryCapabilityGraph, {
+      networkId: 'ae:public', includeInactive: false, limit: 10,
+    })).resolves.toMatchObject({
+      kind: 'available',
+      nodes: [expect.objectContaining({
+        publicationRef: first.sandboxCapabilityPublicationRef,
+        routability: { eligible: true, reasons: [] },
+      })],
+    })
     expect(state.contracts).toHaveLength(1)
     expect(state.contracts[0]).toMatchObject({
       capabilityId: 'sandbox.reference.lookup', version: 2, status: 'active',
