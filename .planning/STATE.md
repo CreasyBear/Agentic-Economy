@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: customer-product-frontier
 status: active
-stopped_at: "External RoutePlan action and recovery is source-complete and hosted-read-back; next frontier is the anonymous Request journey #140"
+stopped_at: "Anonymous canonical Request front door is source-complete and hosted-read-back; next frontier is comparison integrity #124"
 last_updated: "2026-07-15"
 progress:
   total_phases: 6
@@ -50,6 +50,8 @@ Generic transport frontier (2026-07-15): [Invoke RoutePlan steps through generic
 
 External action and recovery frontier (2026-07-15): [Publish the external RoutePlan action and recovery contract](https://github.com/CreasyBear/Agentic-Economy/issues/133) is source-complete and hosted-read-back at exact revision `8dae1fa38f9733c101fb9ff1af6234c901a62522`. Human and external-agent callers use the same Request-owned start/resume, activity, evidence, problem-reporting and cancellation semantics; the verified external principal now survives through internal mandate reads and step admission. The canonical cold-agent release journey reaches `needs_information -> ready_to_compare -> routes_ready -> route_confirmed -> in_progress`, then reads queued evidence, reports a problem, cancels and resumes the same opaque Request without constructing kernel objects. TypeScript, lint, 1,277 unit tests, 232 integration tests, source/import/copy/SEO/UI/type standards, Convex codegen, production build, changed-scope React Doctor and hosted discovery readback passed. Protected preview deployment `dpl_8HaGzfmVqqBVCcAwzyfRBKqzkdAc` exercised one temporary scoped Clerk API key against labelled sandbox supply. This proves the contract and hosted path only; it does not prove real supply, fulfilment, booking, payment or customer value.
 
+Anonymous Request frontier (2026-07-15): [Build the anonymous Request journey: front door to honest RoutePlans](https://github.com/CreasyBear/Agentic-Economy/issues/140) is source-complete and hosted-read-back at exact revision `9d745c83e50337836605eec833f14eb1b3ff675c`. The public homepage now enters the canonical Customer Request workspace instead of creating a legacy Answer Thread. An unsigned browser receives one 24-hour HttpOnly, SameSite, HMAC-bound Request session that can submit, clarify, compare and resume through the same production application actions as authenticated callers; it cannot confirm, authorize disclosure, run, cancel or report a problem. Tampered sessions fail closed. Rapid duplicate UI submission is suppressed while durable idempotency remains authoritative. Full gates passed: 1,281 unit tests, 232 integration tests, 43 import/TypeScript standards checks, 112 copy/SEO checks, UI contract, TypeScript, lint, production build and six compact/wide keyboard checks. Protected preview `dpl_9jvLDVKNtfY79t2wUcvQts6EDhmC` rendered the canonical homepage and completed a real anonymous `needs_information -> ready_to_compare` transition on the same session. This is labelled-sandbox customer-path proof only; it does not prove real supply, useful recommendations, booking, payment, fulfilment or customer value.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Customer product sequence
@@ -88,7 +90,7 @@ The remaining Wayfinder work is ordered by customer comprehension and evidence, 
 
 ## Next action
 
-The next unclaimed frontier is [Build the anonymous Request journey: front door to honest RoutePlans](https://github.com/CreasyBear/Agentic-Economy/issues/140). Claim it only in a new logical ticket session. Start from the current `/engine` and canonical Customer Request application source, not the legacy Answer Thread. The acceptance test is a first-time customer who can state an incomplete job, understand what AE inferred, answer one decision-changing question, compare honest sandbox-labelled possibilities and stop before authority without seeing or constructing AE's kernel schema.
+The next unclaimed frontier is [Define comparable RoutePlan recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124). Claim it only in a new logical ticket session. Start from the current customer decision projection and registered route evidence. The acceptance test is that AE can say why one genuinely substitutable way forward is recommended, show the decisive tradeoff and any economic influence, and refuse to rank incomparable or stale routes without exposing graph scoring or inventing certainty.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
