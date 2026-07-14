@@ -974,6 +974,7 @@ export async function currentRoutePlanGenerationGraphStatus(
   db: QueryCtx['db'],
   requestId: string,
   generationRef: string,
+  now = Date.now(),
 ): Promise<'current' | 'stale' | 'invalid'> {
   const head = await db.query('customerRequestV2Heads')
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
@@ -989,12 +990,13 @@ export async function currentRoutePlanGenerationGraphStatus(
   const currentSupply = await listEligibleCapabilitySupply(db, {
     networkId: revision.aggregate.snapshot.networkId,
     limit: 64,
+    now,
   })
   if (currentSupply.kind !== 'available') return 'stale'
   const bindings = registeredEvaluationBindingsFromEligibleSupply(currentSupply)
   if (requestRegistrySnapshotDigest(bindings) !== generation.routeGeneration.registrySnapshotDigest) return 'invalid'
   const routesAreCurrent = generation.routeGeneration.routes.every((route) => (
-    route.expiresAt > Date.now()
+    route.expiresAt > now
     && route.steps.every((step) => bindings.some((binding) => (
       binding.businessId === step.businessId
       && binding.offeringId === step.offeringId

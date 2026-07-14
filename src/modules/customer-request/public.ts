@@ -53,6 +53,13 @@ export {
   type PreparedActionOptionCandidate,
 } from './prepared-action-v2'
 export {
+  reserveRouteStepSpend,
+  ROUTE_STEP_GRANT_FORMAT,
+  routeStepGrantDigest,
+  type RouteStepGrant,
+  type ReserveRouteStepSpendResult,
+} from './route-mandate-admission'
+export {
   compileRouteMandate,
   routeMandateAuthorityScopeDigest,
   routeMandateDigest,

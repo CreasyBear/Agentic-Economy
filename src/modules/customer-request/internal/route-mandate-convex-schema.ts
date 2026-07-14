@@ -25,6 +25,58 @@ const dataRecipient = v.union(
   v.object({ kind: v.literal('named_recipient'), recipientId: v.string() }),
 )
 
+const routeMandateDataScope = v.object({
+  effectId: v.string(),
+  inputPointer: v.string(),
+  classification: v.union(
+    v.literal('public'),
+    v.literal('personal'),
+    v.literal('sensitive'),
+    v.literal('credential'),
+  ),
+  phase: v.union(v.literal('preparation'), v.literal('execution')),
+  recipient: dataRecipient,
+  purposes: v.array(v.string()),
+})
+
+const routeMandateEffect = v.object({
+  effectId: v.string(),
+  class: v.union(
+    v.literal('data_release'),
+    v.literal('financial_exposure'),
+    v.literal('external_state_change'),
+  ),
+  authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
+  reversibility: v.union(
+    v.literal('not_applicable'),
+    v.literal('reversible'),
+    v.literal('conditional'),
+    v.literal('irreversible'),
+  ),
+})
+
+const routeMandateEvidence = v.object({
+  evidenceId: v.string(),
+  outputPointer: v.string(),
+  purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
+  annotationId: v.string(),
+  label: v.string(),
+  role: v.union(v.literal('comparison'), v.literal('completion_evidence'), v.literal('recovery')),
+  semanticIdentity: v.optional(v.string()),
+  guaranteed: v.boolean(),
+  schemaIdentity: v.string(),
+})
+
+const routeMandateCancellation = v.object({
+  kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
+  evidenceRefs: v.array(v.string()),
+})
+
+const routeMandateRecovery = v.object({
+  idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
+  recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+})
+
 const routeMandateStep = v.object({
   position: v.number(),
   actionId: v.string(),
@@ -39,53 +91,11 @@ const routeMandateStep = v.object({
   publicationRevision: v.number(),
   inputScopeDigest: v.string(),
   price: registeredPrice,
-  dataScope: v.array(v.object({
-    effectId: v.string(),
-    inputPointer: v.string(),
-    classification: v.union(
-      v.literal('public'),
-      v.literal('personal'),
-      v.literal('sensitive'),
-      v.literal('credential'),
-    ),
-    phase: v.union(v.literal('preparation'), v.literal('execution')),
-    recipient: dataRecipient,
-    purposes: v.array(v.string()),
-  })),
-  effects: v.array(v.object({
-    effectId: v.string(),
-    class: v.union(
-      v.literal('data_release'),
-      v.literal('financial_exposure'),
-      v.literal('external_state_change'),
-    ),
-    authority: v.union(v.literal('none'), v.literal('explicit'), v.literal('mandate_or_explicit')),
-    reversibility: v.union(
-      v.literal('not_applicable'),
-      v.literal('reversible'),
-      v.literal('conditional'),
-      v.literal('irreversible'),
-    ),
-  })),
-  evidence: v.array(v.object({
-    evidenceId: v.string(),
-    outputPointer: v.string(),
-    purpose: v.union(v.literal('comparison'), v.literal('completion'), v.literal('recovery')),
-    annotationId: v.string(),
-    label: v.string(),
-    role: v.union(v.literal('comparison'), v.literal('completion_evidence'), v.literal('recovery')),
-    semanticIdentity: v.optional(v.string()),
-    guaranteed: v.boolean(),
-    schemaIdentity: v.string(),
-  })),
-  cancellation: v.object({
-    kind: v.union(v.literal('unsupported'), v.literal('adapter_managed')),
-    evidenceRefs: v.array(v.string()),
-  }),
-  recovery: v.object({
-    idempotency: v.union(v.literal('not_applicable'), v.literal('required')),
-    recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
-  }),
+  dataScope: v.array(routeMandateDataScope),
+  effects: v.array(routeMandateEffect),
+  evidence: v.array(routeMandateEvidence),
+  cancellation: routeMandateCancellation,
+  recovery: routeMandateRecovery,
 })
 
 export const routeMandateValue = v.object({
@@ -160,6 +170,48 @@ export const routeMandateIssueEvidenceValue = v.object({
   }),
 })
 
+export const routeStepGrantValue = v.object({
+  format: v.literal('ae.route-step-grant:v1'),
+  grantRef: v.string(),
+  grantDigest: v.string(),
+  authorityDigest: v.string(),
+  mandateRef: v.string(),
+  mandateDigest: v.string(),
+  principalId: v.string(),
+  request: v.object({ requestId: v.string(), requestRevision: v.number() }),
+  route: v.object({
+    generationRef: v.string(),
+    generationDigest: v.string(),
+    routePlanId: v.string(),
+    routeDigest: v.string(),
+  }),
+  step: v.object({
+    position: v.number(),
+    actionId: v.string(),
+    candidateRef: v.string(),
+    businessId: v.string(),
+    offeringId: v.string(),
+    bindingId: v.string(),
+    contractRef: capabilityContractRef,
+    offeringRegistrationHash: v.string(),
+    bindingRegistrationHash: v.string(),
+    publicationRef: v.string(),
+    publicationRevision: v.number(),
+    inputScopeDigest: v.string(),
+    maximumSpend: money,
+    dataScope: v.array(routeMandateDataScope),
+    effects: v.array(routeMandateEffect),
+    evidence: v.array(routeMandateEvidence),
+    cancellation: routeMandateCancellation,
+    recovery: routeMandateRecovery,
+  }),
+  fallbackUse: v.object({ kind: v.literal('primary_route') }),
+  operationKeyDigest: v.string(),
+  admission: v.object({ reservationRef: v.string(), reservationDigest: v.string() }),
+  admittedAt: v.number(),
+  expiresAt: v.number(),
+})
+
 export const customerRequestRouteMandateTables = {
   customerRequestRouteMandateIssues: defineTable({
     mandateRef: v.string(),
@@ -227,6 +279,64 @@ export const customerRequestRouteMandateTables = {
     requestId: v.string(),
     mandateRef: v.string(),
     revocationRef: v.string(),
+    committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
+  customerRequestRouteStepReservations: defineTable({
+    reservationRef: v.string(),
+    reservationDigest: v.string(),
+    mandateRef: v.string(),
+    mandateDigest: v.string(),
+    requestId: v.string(),
+    routePlanId: v.string(),
+    routeDigest: v.string(),
+    generationRef: v.string(),
+    actionId: v.string(),
+    position: v.number(),
+    operationKeyDigest: v.string(),
+    reservedSpend: money,
+    authorityDigest: v.string(),
+    grantRef: v.string(),
+    grantDigest: v.string(),
+    recordedAt: v.number(),
+  })
+    .index('by_reservationRef', ['reservationRef'])
+    .index('by_mandateRef_and_actionId', ['mandateRef', 'actionId'])
+    .index('by_mandateRef_and_recordedAt', ['mandateRef', 'recordedAt']),
+
+  customerRequestRouteDataReservations: defineTable({
+    allocationRef: v.string(),
+    allocationDigest: v.string(),
+    reservationRef: v.string(),
+    mandateRef: v.string(),
+    actionId: v.string(),
+    effectId: v.string(),
+    inputPointer: v.string(),
+    classification: v.union(
+      v.literal('public'),
+      v.literal('personal'),
+      v.literal('sensitive'),
+      v.literal('credential'),
+    ),
+    phase: v.union(v.literal('preparation'), v.literal('execution')),
+    recipient: dataRecipient,
+    purpose: v.string(),
+    recordedAt: v.number(),
+  })
+    .index('by_allocationRef', ['allocationRef'])
+    .index('by_reservationRef', ['reservationRef'])
+    .index('by_mandateRef_and_recordedAt', ['mandateRef', 'recordedAt']),
+
+  customerRequestRouteStepAdmissionCommands: defineTable({
+    commandKey: v.string(),
+    commandDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    mandateRef: v.string(),
+    actionId: v.string(),
+    reservationRef: v.string(),
+    grantRef: v.string(),
+    grantDigest: v.string(),
     committedAt: v.number(),
   }).index('by_commandKey', ['commandKey']),
 }

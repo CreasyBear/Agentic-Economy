@@ -2,7 +2,9 @@ import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
+import { deriveRouteStepAuthority } from '@/modules/customer-request/route-mandate-admission'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
 import { internal } from './_generated/api'
@@ -615,7 +617,436 @@ describe('durable RouteMandate lifecycle', () => {
       routeGeneration: revised.routeGeneration,
     })).rejects.toThrow('customer_request_route_mandate_head_integrity_failure')
   })
+
+  it('atomically admits one exact current route step and replays without reserving twice', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const current = await committedRequest(backend)
+    const route = current.routeGeneration.routes[0]
+    const step = route?.steps[0]
+    if (route === undefined || step === undefined || route.maximumTotalCost.kind !== 'known') {
+      throw new Error('exact route step fixture missing')
+    }
+    const customer = backend.withIdentity(identity)
+    const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, {
+      requestId: current.aggregate.snapshot.requestId,
+      expectedRequestRevision: current.aggregate.snapshot.revision,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      selectedRoutePlanId: route.routePlanId,
+      maximumTotalSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      expiresAt: Math.min(route.expiresAt, 30_000),
+      idempotencyKey: 'confirm:route:admission',
+    })
+    if (issued.kind !== 'issued') throw new Error(`mandate issuance failed: ${JSON.stringify(issued)}`)
+    const mandateStep = issued.mandate.route.steps[0]
+    if (mandateStep === undefined) throw new Error('issued route step missing')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+    const command = {
+      requestId: current.aggregate.snapshot.requestId,
+      mandateRef: issued.mandate.mandateRef,
+      expectedMandateDigest: issued.mandate.mandateDigest,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      expectedRoutePlanId: route.routePlanId,
+      expectedRouteDigest: route.routeDigest,
+      stepPosition: mandateStep.position,
+      expectedActionId: mandateStep.actionId,
+      expectedCapabilityId: mandateStep.contractRef.capabilityId,
+      expectedCapabilityVersion: mandateStep.contractRef.version,
+      expectedCapabilityContractDigest: mandateStep.contractRef.contractDigest,
+      idempotencyKey: 'admit:route-step:one',
+    }
+
+    const admitted = await customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )
+    expect(admitted).toMatchObject({
+      kind: 'admitted',
+      grant: {
+        format: 'ae.route-step-grant:v1',
+        mandateRef: issued.mandate.mandateRef,
+        mandateDigest: issued.mandate.mandateDigest,
+        request: {
+          requestId: current.aggregate.snapshot.requestId,
+          requestRevision: current.aggregate.snapshot.revision,
+        },
+        route: {
+          generationRef: current.routeGeneration.generationRef,
+          routePlanId: route.routePlanId,
+          routeDigest: route.routeDigest,
+        },
+        step: {
+          position: mandateStep.position,
+          actionId: mandateStep.actionId,
+          businessId: mandateStep.businessId,
+          offeringId: mandateStep.offeringId,
+          bindingId: mandateStep.bindingId,
+          contractRef: mandateStep.contractRef,
+          maximumSpend: { currency: 'AUD', amountMinor: 900 },
+          dataScope: [{
+            effectId: 'request_release',
+            inputPointer: '/requestContext',
+            classification: 'public',
+            phase: 'preparation',
+            purposes: ['return_sandbox_result'],
+          }],
+        },
+        fallbackUse: { kind: 'primary_route' },
+        admission: {
+          reservationRef: expect.stringMatching(/^route-step-reservation:v1:sha256:/),
+          reservationDigest: expect.stringMatching(/^sha256:/),
+        },
+        admittedAt: 1_100,
+        expiresAt: issued.mandate.expiresAt,
+      },
+    })
+    await expect(customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).resolves.toEqual({ ...admitted, kind: 'replayed' })
+    await backend.run(async (ctx) => {
+      const reservations = await ctx.db.query('customerRequestRouteStepReservations').collect()
+      expect(reservations).toHaveLength(1)
+      expect(admitted.kind === 'admitted' ? admitted.grant.admission : null).toEqual({
+        reservationRef: reservations[0]?.reservationRef,
+        reservationDigest: reservations[0]?.reservationDigest,
+      })
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(1)
+    })
+  })
+
+  it('fails replay closed when a reserved recipient-purpose disclosure is altered', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'data-integrity')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+    const command = admissionCommand(fixture, 'admit:route-step:data-integrity')
+    const admitted = await fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )
+    if (admitted.kind !== 'admitted') throw new Error(`step admission failed: ${JSON.stringify(admitted)}`)
+    await backend.run(async (ctx) => {
+      const allocation = await ctx.db.query('customerRequestRouteDataReservations').first()
+      if (allocation === null) throw new Error('route data reservation missing')
+      const widened = {
+        reservationRef: allocation.reservationRef,
+        mandateRef: allocation.mandateRef,
+        actionId: allocation.actionId,
+        effectId: allocation.effectId,
+        inputPointer: allocation.inputPointer,
+        classification: allocation.classification,
+        phase: allocation.phase,
+        recipient: allocation.recipient,
+        purpose: 'attacker-widened-purpose',
+        recordedAt: allocation.recordedAt,
+      }
+      const allocationDigest = canonicalDigest(widened)
+      await ctx.db.patch(allocation._id, {
+        ...widened,
+        allocationDigest,
+        allocationRef: `route-data-reservation:v1:${allocationDigest}`,
+      })
+    })
+
+    await expect(fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).rejects.toThrow('customer_request_route_data_reservation_integrity_failure')
+  })
+
+  it('refuses an empty operation identity before reserving authority', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'empty-operation')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+
+    await expect(fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      admissionCommand(fixture, '   '),
+    )).resolves.toEqual({ kind: 'refused', reason: 'mandate_scope_mismatch' })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteDataReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').first()).toBeNull()
+    })
+  })
+
+  it('refuses unauthenticated and different-principal step release without durable writes', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'admission-authorization')
+    const command = admissionCommand(fixture, 'admit:route-step:admission-authorization')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+
+    await expect(backend.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).resolves.toEqual({ kind: 'refused', reason: 'mandate_not_current' })
+    await expect(backend.withIdentity({
+      subject: 'user_route_stranger',
+      issuer: 'https://identity.example',
+      tokenIdentifier: 'token_route_stranger',
+    }).mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).resolves.toEqual({ kind: 'refused', reason: 'mandate_not_current' })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteDataReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').first()).toBeNull()
+    })
+  })
+
+  it('refuses release when the exact selected publication loses readiness', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'selected-supply-readiness')
+    const step = fixture.issued.mandate.route.steps[0]
+    if (step === undefined) throw new Error('issued route step missing')
+    await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', step.publicationRef).eq('revision', step.publicationRevision)
+        )).unique()
+      if (publication === null) throw new Error('selected capability publication missing')
+      await ctx.db.patch(publication._id, { healthState: 'unhealthy', updatedAt: 1_050 })
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+
+    await expect(fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      admissionCommand(fixture, 'admit:route-step:selected-supply-readiness'),
+    )).resolves.toEqual({ kind: 'refused', reason: 'mandate_scope_mismatch' })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteDataReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').first()).toBeNull()
+    })
+  })
+
+  it('refuses an identical replay when the selected publication loses readiness', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'replay-supply-readiness')
+    const command = admissionCommand(fixture, 'admit:route-step:replay-supply-readiness')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+    await expect(fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).resolves.toMatchObject({ kind: 'admitted' })
+    const step = fixture.issued.mandate.route.steps[0]
+    if (step === undefined) throw new Error('issued route step missing')
+    await backend.run(async (ctx) => {
+      const publication = await ctx.db.query('capabilityPublications')
+        .withIndex('by_publicationRef_and_revision', (query) => (
+          query.eq('publicationRef', step.publicationRef).eq('revision', step.publicationRevision)
+        )).unique()
+      if (publication === null) throw new Error('selected capability publication missing')
+      await ctx.db.patch(publication._id, { healthState: 'unhealthy', updatedAt: 1_150 })
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(1_200)
+
+    await expect(fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).resolves.toEqual({ kind: 'refused', reason: 'mandate_scope_mismatch' })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(1)
+    })
+  })
+
+  it('refuses route, fallback, step and capability substitutions without reserving anything', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'substitution')
+    const base = admissionCommand(fixture, 'admit:route-step:substitution')
+    const fallback = fixture.issued.mandate.route.fallback.alternatives[0]
+    if (fallback === undefined) throw new Error('fallback fixture missing')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+
+    for (const changed of [
+      { ...base, expectedGenerationRef: 'route-generation:substituted' },
+      { ...base, expectedRoutePlanId: fallback.routePlanId, expectedRouteDigest: fallback.routeDigest },
+      { ...base, stepPosition: base.stepPosition + 1 },
+      { ...base, expectedActionId: 'action:substituted' },
+      { ...base, expectedCapabilityId: 'capability.substituted' },
+      { ...base, expectedCapabilityVersion: base.expectedCapabilityVersion + 1 },
+      { ...base, expectedCapabilityContractDigest: 'sha256:' + 'f'.repeat(64) },
+    ]) {
+      await expect(fixture.customer.mutation(
+        internal.customerRequestRouteMandateAdmission.admitStep,
+        changed,
+      )).resolves.toEqual({ kind: 'refused', reason: 'mandate_scope_mismatch' })
+    }
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteDataReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').first()).toBeNull()
+    })
+  })
+
+  it('serializes competing step commands to one reservation', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'concurrency')
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+
+    const results = await Promise.all([
+      fixture.customer.mutation(
+        internal.customerRequestRouteMandateAdmission.admitStep,
+        admissionCommand(fixture, 'admit:route-step:concurrent-one'),
+      ),
+      fixture.customer.mutation(
+        internal.customerRequestRouteMandateAdmission.admitStep,
+        admissionCommand(fixture, 'admit:route-step:concurrent-two'),
+      ),
+    ])
+    expect(results.map((entry) => entry.kind).sort()).toEqual(['admitted', 'refused'])
+    expect(results.find((entry) => entry.kind === 'refused')).toEqual({
+      kind: 'refused', reason: 'step_already_reserved',
+    })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(1)
+    })
+  })
+
+  it('rolls back step and command reservations when a late disclosure allocation cannot commit', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const fixture = await issuedAdmissionFixture(backend, 'atomic-rollback')
+    const command = admissionCommand(fixture, 'admit:route-step:atomic-rollback')
+    const operationKeyDigest = canonicalDigest({
+      principalId: fixture.issued.mandate.principal.principalId,
+      requestId: command.requestId,
+      mandateRef: command.mandateRef,
+      idempotencyKey: command.idempotencyKey,
+    })
+    const derived = deriveRouteStepAuthority({
+      mandate: fixture.issued.mandate,
+      expectedMandateDigest: command.expectedMandateDigest,
+      expectedGenerationRef: command.expectedGenerationRef,
+      expectedRoutePlanId: command.expectedRoutePlanId,
+      expectedRouteDigest: command.expectedRouteDigest,
+      stepPosition: command.stepPosition,
+      expectedActionId: command.expectedActionId,
+      expectedCapabilityId: command.expectedCapabilityId,
+      expectedCapabilityVersion: command.expectedCapabilityVersion,
+      expectedCapabilityContractDigest: command.expectedCapabilityContractDigest,
+      operationKeyDigest,
+      now: 1_100,
+    })
+    if (derived.kind !== 'derived') throw new Error(`grant derivation failed: ${derived.reason}`)
+    const authority = derived.authority
+    const reservationMaterial = {
+      mandateRef: authority.mandateRef,
+      mandateDigest: authority.mandateDigest,
+      requestId: authority.request.requestId,
+      routePlanId: authority.route.routePlanId,
+      routeDigest: authority.route.routeDigest,
+      generationRef: authority.route.generationRef,
+      actionId: authority.step.actionId,
+      position: authority.step.position,
+      operationKeyDigest: authority.operationKeyDigest,
+      reservedSpend: authority.step.maximumSpend,
+      authorityDigest: authority.authorityDigest,
+      recordedAt: authority.admittedAt,
+    }
+    const reservationDigest = canonicalDigest(reservationMaterial)
+    const reservationRef = `route-step-reservation:v1:${reservationDigest}`
+    const scope = authority.step.dataScope[0]
+    const purpose = scope?.purposes[0]
+    if (scope === undefined || purpose === undefined) throw new Error('disclosure fixture missing')
+    const allocation = {
+      reservationRef,
+      mandateRef: authority.mandateRef,
+      actionId: authority.step.actionId,
+      effectId: scope.effectId,
+      inputPointer: scope.inputPointer,
+      classification: scope.classification,
+      phase: scope.phase,
+      recipient: scope.recipient,
+      purpose,
+      recordedAt: authority.admittedAt,
+    }
+    const allocationDigest = canonicalDigest(allocation)
+    await backend.run(async (ctx) => {
+      await ctx.db.insert('customerRequestRouteDataReservations', {
+        allocationRef: `route-data-reservation:v1:${allocationDigest}`,
+        allocationDigest,
+        ...allocation,
+        recipient: { ...allocation.recipient },
+      })
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(1_100)
+
+    await expect(fixture.customer.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      command,
+    )).rejects.toThrow('customer_request_route_data_reservation_ref_collision')
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').first()).toBeNull()
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(1)
+    })
+  })
 })
+
+async function issuedAdmissionFixture(
+  backend: ReturnType<typeof convexTest>,
+  suffix: string,
+) {
+  const current = await committedRequest(backend)
+  const route = current.routeGeneration.routes[0]
+  if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+    throw new Error('exact route fixture missing')
+  }
+  const customer = backend.withIdentity(identity)
+  const issued = await customer.mutation(internal.customerRequestRouteMandate.issue, {
+    requestId: current.aggregate.snapshot.requestId,
+    expectedRequestRevision: current.aggregate.snapshot.revision,
+    expectedGenerationRef: current.routeGeneration.generationRef,
+    selectedRoutePlanId: route.routePlanId,
+    maximumTotalSpend: {
+      currency: route.maximumTotalCost.currency,
+      amountMinor: route.maximumTotalCost.amountMinor,
+    },
+    expiresAt: Math.min(route.expiresAt, 30_000),
+    idempotencyKey: `confirm:route:${suffix}`,
+  })
+  if (issued.kind !== 'issued') throw new Error(`mandate issuance failed: ${JSON.stringify(issued)}`)
+  const step = issued.mandate.route.steps[0]
+  if (step === undefined) throw new Error('issued route step missing')
+  return { current, route, customer, issued, step }
+}
+
+function admissionCommand(
+  fixture: Awaited<ReturnType<typeof issuedAdmissionFixture>>,
+  idempotencyKey: string,
+) {
+  return {
+    requestId: fixture.current.aggregate.snapshot.requestId,
+    mandateRef: fixture.issued.mandate.mandateRef,
+    expectedMandateDigest: fixture.issued.mandate.mandateDigest,
+    expectedGenerationRef: fixture.current.routeGeneration.generationRef,
+    expectedRoutePlanId: fixture.route.routePlanId,
+    expectedRouteDigest: fixture.route.routeDigest,
+    stepPosition: fixture.step.position,
+    expectedActionId: fixture.step.actionId,
+    expectedCapabilityId: fixture.step.contractRef.capabilityId,
+    expectedCapabilityVersion: fixture.step.contractRef.version,
+    expectedCapabilityContractDigest: fixture.step.contractRef.contractDigest,
+    idempotencyKey,
+  }
+}
 
 async function committedRequest(
   backend: ReturnType<typeof convexTest>,

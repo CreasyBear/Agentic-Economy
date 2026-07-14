@@ -1612,7 +1612,7 @@ export async function setCapabilitySupplyEligibility(
 }
 
 export async function listEligibleCapabilitySupply(
-  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number }>,
+  db: QueryCtx['db'], input: Readonly<{ networkId: string; limit: number; now?: number }>,
 ) {
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > MAX_ELIGIBLE_SUPPLY) {
     return { kind: 'unavailable' as const, reason: 'limit_invalid' as const }
@@ -1630,6 +1630,7 @@ export async function listEligibleCapabilitySupply(
     binding: ReturnType<typeof eligibleBindingProjection>
     publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
   }> = []
+  const now = input.now ?? Date.now()
   for (const binding of bindings) {
     if (!bindingIntegrityIsValid(binding) || !bindingEligibilityIsValid(binding)) {
       return { kind: 'unavailable' as const, reason: 'supply_integrity_failure' as const }
@@ -1658,7 +1659,7 @@ export async function listEligibleCapabilitySupply(
       )).unique()
     const activePublication = publication !== null
       && publication.readinessValidUntil !== undefined
-      && publicationLifecycle(publication, offering, binding, Date.now()).state === 'active'
+      && publicationLifecycle(publication, offering, binding, now).state === 'active'
       ? {
           publicationRef: publication.publicationRef, revision: publication.revision,
           readinessValidUntil: publication.readinessValidUntil,

@@ -20,6 +20,7 @@ import type * as crons from "../crons.js";
 import type * as customerRequestApplication from "../customerRequestApplication.js";
 import type * as customerRequestPrincipals from "../customerRequestPrincipals.js";
 import type * as customerRequestRouteMandate from "../customerRequestRouteMandate.js";
+import type * as customerRequestRouteMandateAdmission from "../customerRequestRouteMandateAdmission.js";
 import type * as customerRequestRouteMandateIntegrity from "../customerRequestRouteMandateIntegrity.js";
 import type * as customerRequestRouteMandateLifecycle from "../customerRequestRouteMandateLifecycle.js";
 import type * as customerRequestV2 from "../customerRequestV2.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   customerRequestApplication: typeof customerRequestApplication;
   customerRequestPrincipals: typeof customerRequestPrincipals;
   customerRequestRouteMandate: typeof customerRequestRouteMandate;
+  customerRequestRouteMandateAdmission: typeof customerRequestRouteMandateAdmission;
   customerRequestRouteMandateIntegrity: typeof customerRequestRouteMandateIntegrity;
   customerRequestRouteMandateLifecycle: typeof customerRequestRouteMandateLifecycle;
   customerRequestV2: typeof customerRequestV2;

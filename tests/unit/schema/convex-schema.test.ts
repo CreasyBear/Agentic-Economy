@@ -51,6 +51,9 @@ const durableTables = [
   'customerRequestRouteMandateCommands',
   'customerRequestRouteMandateRevocations',
   'customerRequestRouteMandateRevocationCommands',
+  'customerRequestRouteStepReservations',
+  'customerRequestRouteDataReservations',
+  'customerRequestRouteStepAdmissionCommands',
   'customerRequestV2Heads',
   'customerRequestV2Revisions',
   'customerRequestV2RoutePlanGenerations',
@@ -197,6 +200,13 @@ const requiredIndexes = {
     'by_revocationRef', 'by_mandateRef', 'by_requestId_and_recordedAt',
   ],
   customerRequestRouteMandateRevocationCommands: ['by_commandKey'],
+  customerRequestRouteStepReservations: [
+    'by_reservationRef', 'by_mandateRef_and_actionId', 'by_mandateRef_and_recordedAt',
+  ],
+  customerRequestRouteDataReservations: [
+    'by_allocationRef', 'by_reservationRef', 'by_mandateRef_and_recordedAt',
+  ],
+  customerRequestRouteStepAdmissionCommands: ['by_commandKey'],
   customerRequestV2Heads: ['by_requestId'],
   customerRequestV2Revisions: ['by_requestId_and_requestRevision'],
   customerRequestV2RoutePlanGenerations: [

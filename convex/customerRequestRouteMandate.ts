@@ -412,71 +412,93 @@ export const getCurrent = internalQuery({
   args: { requestId: v.string() },
   returns: currentResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwnerForQuery(ctx, args.requestId)
-    if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
-    const head = await ctx.db.query('customerRequestRouteMandateHeads')
-      .withIndex('by_requestId', (query) => query.eq('requestId', args.requestId)).unique()
-    if (head === null) return { kind: 'none' as const }
-    if (head.principalId !== authenticated.principalId) return { kind: 'not_found' as const }
-    const issueRow = await ctx.db.query('customerRequestRouteMandateIssues')
-      .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
-    if (issueRow === null || !routeMandateHeadMatchesIssue(head, issueRow)) {
-      throw new Error('customer_request_route_mandate_head_integrity_failure')
+    const current = await readCurrentRouteMandateState(ctx, args.requestId)
+    return current.kind === 'active'
+      ? { kind: 'active' as const, mandate: writableMandate(current.mandate) }
+      : current
+  },
+})
+
+export type CurrentRouteMandateState =
+  | { kind: 'active'; mandate: RouteMandate; networkId: string }
+  | { kind: 'none' | 'not_found' }
+  | { kind: 'revoked'; mandateRef: string; revocationRef: string }
+  | { kind: 'superseded'; mandateRef: string; revocationRef?: string }
+  | { kind: 'expired'; mandateRef: string }
+
+export async function readCurrentRouteMandateState(
+  ctx: MutationCtx | QueryCtx,
+  requestId: string,
+  now = Date.now(),
+  options: Readonly<{ requireCurrentGraph?: boolean }> = {},
+): Promise<CurrentRouteMandateState> {
+  const authenticated = await authenticateRequestOwner(ctx, requestId)
+  if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
+  const head = await ctx.db.query('customerRequestRouteMandateHeads')
+    .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
+  if (head === null) return { kind: 'none' as const }
+  if (head.principalId !== authenticated.principalId) return { kind: 'not_found' as const }
+  const issueRow = await ctx.db.query('customerRequestRouteMandateIssues')
+    .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
+  if (issueRow === null || !routeMandateHeadMatchesIssue(head, issueRow)) {
+    throw new Error('customer_request_route_mandate_head_integrity_failure')
+  }
+  const revocation = await ctx.db.query('customerRequestRouteMandateRevocations')
+    .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
+  if (revocation !== null) {
+    if (!routeMandateRevocationRecordIsValid(revocation, issueRow)) {
+      throw new Error('customer_request_route_mandate_revocation_integrity_failure')
     }
-    const revocation = await ctx.db.query('customerRequestRouteMandateRevocations')
-      .withIndex('by_mandateRef', (query) => query.eq('mandateRef', head.currentMandateRef)).unique()
-    if (revocation !== null) {
-      if (!routeMandateRevocationRecordIsValid(revocation, issueRow)) {
-        throw new Error('customer_request_route_mandate_revocation_integrity_failure')
-      }
-      return revocation.reason === 'customer_revoked'
-        ? {
-            kind: 'revoked' as const,
-            mandateRef: head.currentMandateRef,
-            revocationRef: revocation.revocationRef,
-          }
-        : {
-            kind: 'superseded' as const,
-            mandateRef: head.currentMandateRef,
-            revocationRef: revocation.revocationRef,
-          }
-    }
-    const current = await openCurrentRouteGeneration(ctx, args.requestId)
-    if (current.kind === 'not_found'
-      || current.requestRevision !== head.currentRequestRevision
-      || current.generation.generationRef !== head.currentGenerationRef) {
-      return { kind: 'superseded' as const, mandateRef: head.currentMandateRef }
-    }
+    return revocation.reason === 'customer_revoked'
+      ? {
+          kind: 'revoked' as const,
+          mandateRef: head.currentMandateRef,
+          revocationRef: revocation.revocationRef,
+        }
+      : {
+          kind: 'superseded' as const,
+          mandateRef: head.currentMandateRef,
+          revocationRef: revocation.revocationRef,
+        }
+  }
+  const current = await openCurrentRouteGeneration(ctx, requestId)
+  if (current.kind === 'not_found'
+    || current.requestRevision !== head.currentRequestRevision
+    || current.generation.generationRef !== head.currentGenerationRef) {
+    return { kind: 'superseded' as const, mandateRef: head.currentMandateRef }
+  }
+  if (options.requireCurrentGraph !== false) {
     const graphStatus = await currentRoutePlanGenerationGraphStatus(
       ctx.db,
-      args.requestId,
+      requestId,
       head.currentGenerationRef,
+      now,
     )
     if (graphStatus !== 'current') {
       return { kind: 'superseded' as const, mandateRef: head.currentMandateRef }
     }
-    const verification = verifyRouteMandate({
-      mandate: domainMandate(issueRow.mandate),
-      generation: current.generation,
-      expectedPrincipal: issueRow.mandate.principal,
-      expectedAuthorization: issueRow.mandate.authorization,
-      now: Date.now(),
-    })
-    if (verification.kind !== 'verified') {
-      if (verification.reason === 'mandate_expired') {
-        return { kind: 'expired' as const, mandateRef: head.currentMandateRef }
-      }
-      throw new Error('customer_request_route_mandate_integrity_failure')
+  }
+  const verification = verifyRouteMandate({
+    mandate: domainMandate(issueRow.mandate),
+    generation: current.generation,
+    expectedPrincipal: issueRow.mandate.principal,
+    expectedAuthorization: issueRow.mandate.authorization,
+    now,
+  })
+  if (verification.kind !== 'verified') {
+    if (verification.reason === 'mandate_expired') {
+      return { kind: 'expired' as const, mandateRef: head.currentMandateRef }
     }
-    return { kind: 'active' as const, mandate: writableMandate(verification.mandate) }
-  },
-})
+    throw new Error('customer_request_route_mandate_integrity_failure')
+  }
+  return { kind: 'active' as const, mandate: verification.mandate, networkId: current.networkId }
+}
 
 export const getHistory = internalQuery({
   args: { requestId: v.string() },
   returns: historyResult,
   handler: async (ctx, args) => {
-    const authenticated = await authenticateRequestOwnerForQuery(ctx, args.requestId)
+    const authenticated = await authenticateRequestOwner(ctx, args.requestId)
     if (authenticated.kind !== 'authenticated') return { kind: 'not_found' as const }
     const issues = await ctx.db.query('customerRequestRouteMandateIssues')
       .withIndex('by_requestId_and_recordedAt', (query) => query.eq('requestId', args.requestId))
@@ -538,8 +560,8 @@ async function authenticateRequestOwnerForMutation(
   return authenticatedRequest(head.principalId, identity)
 }
 
-async function authenticateRequestOwnerForQuery(
-  ctx: QueryCtx,
+async function authenticateRequestOwner(
+  ctx: MutationCtx | QueryCtx,
   requestId: string,
 ): Promise<AuthenticatedRequestResult> {
   const identity = await ctx.auth.getUserIdentity()
@@ -578,7 +600,12 @@ function authenticatedRequest(
 async function openCurrentRouteGeneration(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   requestId: string,
-): Promise<{ kind: 'found'; requestRevision: number; generation: RouteGeneration } | { kind: 'not_found' }> {
+): Promise<{
+  kind: 'found'
+  requestRevision: number
+  networkId: string
+  generation: RouteGeneration
+} | { kind: 'not_found' }> {
   const requestHead = await ctx.db.query('customerRequestV2Heads')
     .withIndex('by_requestId', (query) => query.eq('requestId', requestId)).unique()
   const routeHead = await ctx.db.query('customerRequestV2RoutePlanHeads')
@@ -613,7 +640,12 @@ async function openCurrentRouteGeneration(
     )) {
     throw new Error('customer_request_route_plan_head_integrity_failure')
   }
-  return { kind: 'found', requestRevision: requestHead.currentRevision, generation: domainGeneration(row.routeGeneration) }
+  return {
+    kind: 'found',
+    requestRevision: requestHead.currentRevision,
+    networkId: revision.aggregate.snapshot.networkId,
+    generation: domainGeneration(row.routeGeneration),
+  }
 }
 
 function domainGeneration(value: unknown): RouteGeneration {

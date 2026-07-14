@@ -25,4 +25,5 @@ export {
 export {
   routeMandateIssueEvidenceValue,
   routeMandateValue,
+  routeStepGrantValue,
 } from './internal/route-mandate-convex-schema'

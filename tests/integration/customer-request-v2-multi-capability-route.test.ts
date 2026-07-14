@@ -8,7 +8,10 @@ import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/modules/customer-request/compiler'
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
-import { aggregateIsInternallyConsistent } from '../../convex/customerRequestV2'
+import {
+  aggregateIsInternallyConsistent,
+  currentRoutePlanGenerationGraphStatus,
+} from '../../convex/customerRequestV2'
 
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
 const modules = Object.fromEntries(Object.entries(discoveredModules).map(([path, load]) => [
@@ -92,6 +95,7 @@ type RouteCapabilityDocument =
 
 describe('Customer Request V2 multi-capability RoutePlan production path', () => {
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -273,6 +277,95 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       requestId: 'request:multi-capability:1', generationRef: result.routeGeneration.generationRef,
     })).resolves.toMatchObject({
       kind: 'found', routeGeneration: { generation: 1, requestRevision: 1 },
+    })
+  })
+
+  it('admits both steps against one cumulative mandate ceiling and refuses reuse after revocation', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const current = await committedTwoStepAdmissionRoute(backend, admin)
+    const route = current.routeGeneration.routes[0]
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+      throw new Error('two-step route fixture missing')
+    }
+    const issued = await admin.mutation(internal.customerRequestRouteMandate.issue, {
+      requestId: current.aggregate.snapshot.requestId,
+      expectedRequestRevision: current.aggregate.snapshot.revision,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      selectedRoutePlanId: route.routePlanId,
+      maximumTotalSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      expiresAt: Math.min(route.expiresAt, Date.now() + 60_000),
+      idempotencyKey: 'confirm:two-step-admission',
+    })
+    if (issued.kind !== 'issued') throw new Error(`two-step mandate failed: ${JSON.stringify(issued)}`)
+    expect(issued.mandate.route.steps).toHaveLength(2)
+    const [firstStep, secondStep] = issued.mandate.route.steps
+    if (firstStep === undefined || secondStep === undefined) throw new Error('mandate steps missing')
+    const commandFor = (step: typeof firstStep, idempotencyKey: string) => ({
+      requestId: current.aggregate.snapshot.requestId,
+      mandateRef: issued.mandate.mandateRef,
+      expectedMandateDigest: issued.mandate.mandateDigest,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      expectedRoutePlanId: route.routePlanId,
+      expectedRouteDigest: route.routeDigest,
+      stepPosition: step.position,
+      expectedActionId: step.actionId,
+      expectedCapabilityId: step.contractRef.capabilityId,
+      expectedCapabilityVersion: step.contractRef.version,
+      expectedCapabilityContractDigest: step.contractRef.contractDigest,
+      idempotencyKey,
+    })
+    const firstCommand = commandFor(firstStep, 'admit:two-step:first')
+    const secondCommand = commandFor(secondStep, 'admit:two-step:second')
+    await expect(admin.query(internal.customerRequestRouteMandate.getCurrent, {
+      requestId: current.aggregate.snapshot.requestId,
+    })).resolves.toMatchObject({ kind: 'active' })
+    await expect(backend.run((ctx) => currentRoutePlanGenerationGraphStatus(
+      ctx.db,
+      current.aggregate.snapshot.requestId,
+      current.routeGeneration.generationRef,
+    ))).resolves.toBe('current')
+    const first = await admin.mutation(internal.customerRequestRouteMandateAdmission.admitStep, firstCommand)
+    const second = await admin.mutation(internal.customerRequestRouteMandateAdmission.admitStep, secondCommand)
+    expect([first, second]).toEqual([
+      expect.objectContaining({ kind: 'admitted', grant: expect.objectContaining({
+        step: expect.objectContaining({ maximumSpend: { currency: 'AUD', amountMinor: 300 } }),
+      }) }),
+      expect.objectContaining({ kind: 'admitted', grant: expect.objectContaining({
+        step: expect.objectContaining({ maximumSpend: { currency: 'AUD', amountMinor: 700 } }),
+      }) }),
+    ])
+    await expect(admin.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      firstCommand,
+    )).resolves.toEqual({ ...first, kind: 'replayed' })
+    await expect(admin.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      commandFor(secondStep, 'admit:two-step:second-reuse'),
+    )).resolves.toEqual({ kind: 'refused', reason: 'step_already_reserved' })
+    await backend.run(async (ctx) => {
+      const reservations = await ctx.db.query('customerRequestRouteStepReservations').collect()
+      expect(reservations.map(({ reservedSpend }) => reservedSpend.amountMinor).sort((a, b) => a - b))
+        .toEqual([300, 700])
+      expect(reservations.reduce((total, row) => total + row.reservedSpend.amountMinor, 0)).toBe(1_000)
+      expect(await ctx.db.query('customerRequestRouteDataReservations').collect()).toHaveLength(2)
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(2)
+    })
+    await admin.mutation(internal.customerRequestRouteMandate.revoke, {
+      requestId: current.aggregate.snapshot.requestId,
+      mandateRef: issued.mandate.mandateRef,
+      idempotencyKey: 'revoke:two-step-admission',
+    })
+    await expect(admin.mutation(
+      internal.customerRequestRouteMandateAdmission.admitStep,
+      firstCommand,
+    )).resolves.toEqual({ kind: 'refused', reason: 'mandate_not_current' })
+    await backend.run(async (ctx) => {
+      expect(await ctx.db.query('customerRequestRouteStepReservations').collect()).toHaveLength(2)
+      expect(await ctx.db.query('customerRequestRouteStepAdmissionCommands').collect()).toHaveLength(2)
     })
   })
 
@@ -812,6 +905,7 @@ async function publishAndActivate(
     ...operationContext(`admit:${suffix}`),
   })
   if (eligible.kind !== 'eligible') throw new Error(`eligibility refused: ${eligible.kind}`)
+  await finishImmediateReadinessProbe(backend)
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: published.publicationRef, expectedRevision: 1,
     credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,
@@ -824,6 +918,7 @@ async function publishAndActivate(
 async function observeReady(
   backend: ReturnType<typeof convexTest>, publication: Readonly<{ publicationRef: string; revision: number }>, suffix: string,
 ) {
+  await finishImmediateReadinessProbe(backend)
   const observed = await backend.mutation(internal.capabilitySupply.observeCapabilityReadiness, {
     publicationRef: publication.publicationRef, expectedRevision: publication.revision,
     credentialState: 'ready', healthState: 'healthy', validUntil: Date.now() + 300_000,
@@ -894,8 +989,95 @@ async function refreshAndActivate(
   }
 }
 
+async function committedTwoStepAdmissionRoute(
+  backend: ReturnType<typeof convexTest>,
+  admin: Awaited<ReturnType<typeof ownerAdmin>>,
+) {
+  await publishAndActivate(backend, admin, 'admission-resolver', upstreamDocument, 300)
+  await publishAndActivate(backend, admin, 'admission-quoter', downstreamDocument, 700)
+  const supply = await backend.query(internal.capabilitySupply.listEligible, {
+    networkId: 'ae:public', limit: 16,
+  })
+  if (supply.kind !== 'available') throw new Error(`supply unavailable: ${supply.reason}`)
+  const upstreamModel = openCapabilityDecisionModel(defineCapabilityContract(upstreamDocument))
+  const downstreamModel = openCapabilityDecisionModel(defineCapabilityContract(downstreamDocument))
+  const requestInput = upstreamModel.inputs.find((input) => input.inputPointer === '/request')
+  if (requestInput === undefined) throw new Error('upstream request input missing')
+  const requestId = 'request:two-step-admission'
+  const compiled = compileCustomerRequest({
+    requestId,
+    expectedRevision: 0,
+    expectedRouteGeneration: 0,
+    principalId: 'token_route_admin',
+    delegatedAgentId: 'agent:two-step-admission',
+    intent: 'Resolve a service reference and prepare its quote',
+    networkId: 'ae:public',
+    proposal: {
+      kind: 'capability_candidates',
+      selections: [
+        {
+          selectionKey: upstreamModel.selectionKey,
+          contractRef: upstreamModel.contractRef,
+          facts: [{
+            contractRef: upstreamModel.contractRef,
+            selectionKey: upstreamModel.selectionKey,
+            inputKey: requestInput.key,
+            inputPointer: requestInput.inputPointer,
+            schemaIdentity: requestInput.schemaIdentity,
+            value: 'Resolve a service reference and prepare its quote',
+            source: { kind: 'customer', assertionRef: 'customer:two-step-admission' },
+          }],
+        },
+        { selectionKey: downstreamModel.selectionKey, contractRef: downstreamModel.contractRef, facts: [] },
+      ],
+    },
+    interpreterId: 'interpreter:two-step-admission',
+    bindings: supply.supplies.flatMap(({ offering, binding, publication }) => (
+      publication === undefined ? [] : [{
+        businessId: String(offering.businessId),
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: {
+          capabilityId: binding.capabilityId,
+          version: binding.version,
+          contractDigest: binding.contractDigest,
+        },
+        offeringRegistrationHash: offering.registrationHash,
+        bindingRegistrationHash: binding.registrationHash,
+        publicationRef: publication.publicationRef,
+        publicationRevision: publication.revision,
+        readinessValidUntil: publication.readinessValidUntil,
+        price: offering.presentation.price,
+        cancellation: binding.cancellation,
+      }]
+    )),
+    models: [upstreamModel, downstreamModel],
+    now: Date.now(),
+  })
+  if (compiled.kind !== 'compiled' || compiled.routeGeneration === undefined) {
+    throw new Error(`two-step compile failed: ${compiled.kind === 'compiled' ? 'generation_missing' : compiled.reason}`)
+  }
+  const aggregate = writableCustomerRequestV2Aggregate(compiled.aggregate)
+  const routeGeneration = writableCustomerRequestRoutePlanGeneration(compiled.routeGeneration)
+  const committed = await backend.mutation(internal.customerRequestV2.commitAggregate, {
+    commandKey: 'command:two-step-admission',
+    commandDigest: canonicalDigest({ requestId }),
+    expectedRevision: 0,
+    expectedRouteGeneration: 0,
+    aggregate,
+    routeGeneration,
+  })
+  if (committed.kind !== 'stored') throw new Error(`two-step commit failed: ${committed.kind}`)
+  return { aggregate, routeGeneration }
+}
+
 function operationContext(suffix: string) {
   return { operationKey: `op:route:${suffix}`, correlationId: `corr:route:${suffix}`, reasonCode: 'test_multi_capability_route', evidenceRefs: ['test:issue-143'] }
+}
+
+async function finishImmediateReadinessProbe(backend: ReturnType<typeof convexTest>) {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await backend.finishInProgressScheduledFunctions()
 }
 
 async function ownerAdmin(backend: ReturnType<typeof convexTest>) {
