@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: routeplan-frontier
 status: active
-stopped_at: "Exact RouteMandate contract #172 closed at deployed revision fb1e3301; next unclaimed frontier is current-head issuance and supersession #173"
+stopped_at: "RouteMandate current-head issuance and supersession #173 closed at source revision 8e1e4a9; next unclaimed frontier is pre-release budget enforcement #174"
 last_updated: "2026-07-14"
 progress:
   total_phases: 6
@@ -36,6 +36,8 @@ RoutePlan projection frontier (2026-07-14): [Project exact RoutePlan generation 
 
 RouteMandate contract frontier (2026-07-14): [Define the exact RouteMandate contract for one selected RoutePlan](https://github.com/CreasyBear/Agentic-Economy/issues/172) is closed at exact deployed revision `fb1e3301d62c75eb5407768bb0f4922a840fe3ac`. GitHub run `29330541662` passed the clean source contract, exact Vercel and Convex deployment, authenticated deployment readback, labelled sandbox registration, and the cold external-agent Request journey. Production TypeScript now compiles, digests, and verifies one function-agnostic authority object bound to an exact immutable RoutePlan generation, selected route, registered steps and material limits; current writes require binding-owned cancellation while historical detached generations remain replayable. This is contract and hosted-path proof only: no RouteMandate persistence, issuance, confirmation UI, release, execution, real supply, booking, payment, autonomous fulfillment, or customer value is claimed. The executable chain remains [current-head issuance and supersession](https://github.com/CreasyBear/Agentic-Economy/issues/173) -> [pre-release cumulative enforcement](https://github.com/CreasyBear/Agentic-Economy/issues/174), with [shared human/agent confirmation](https://github.com/CreasyBear/Agentic-Economy/issues/175) and separately bounded [standing low-risk authority](https://github.com/CreasyBear/Agentic-Economy/issues/176).
 
+RouteMandate lifecycle frontier (2026-07-14): [Issue and supersede RouteMandates against the current generation head](https://github.com/CreasyBear/Agentic-Economy/issues/173) is closed at exact source revision `8e1e4a9df704f3c0df517c13fac7cbc1cd16d280`. The clean-checkout `test:release:source` gate and Convex codegen passed at that revision. Production Convex source now authenticates the current Request principal, reopens the immutable current RoutePlan generation, derives exact mandate material server-side, converges idempotent replay, preserves immutable issue/revocation history, and supersedes stale authority transactionally on material Request or generation change. Delegated ownership requires the canonical Clerk owner-token binding and lifecycle reads fail closed on content-address, graph-head, or history-integrity drift. This is source/local contract proof only: no hosted deployment, provider release, confirmation UI, execution, real supply, booking, payment, autonomous fulfillment, or customer value is claimed. The next unclaimed frontier is [pre-release cumulative budget enforcement](https://github.com/CreasyBear/Agentic-Economy/issues/174).
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Current product slice
@@ -63,7 +65,7 @@ No chat, protected actions, wallet, payment, request market, skills, hosted agen
 
 ## Next action
 
-The next unclaimed frontier is [Issue and supersede RouteMandates against the current generation head](https://github.com/CreasyBear/Agentic-Economy/issues/173). Begin only in a new logical ticket session: claim it, authenticate and durably issue the already-defined exact RouteMandate against the current Request and generation heads, make idempotent replay converge, and supersede stale authority without releasing or executing any step. No next ticket is claimed yet.
+The next unclaimed frontier is [Enforce RouteMandate budgets before route-step release](https://github.com/CreasyBear/Agentic-Economy/issues/174). Begin only in a new logical ticket session: claim it, enforce cumulative spend and exact RouteMandate limits before any registered route step or data release, and preserve fail-closed replay and recovery semantics. No next ticket is claimed yet.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
