@@ -1,7 +1,10 @@
 import { convexTest } from 'convex-test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { defineCapabilityContract, openCapabilityDecisionModel } from '@/modules/capability-contract/public'
+import {
+  defineCapabilityContract,
+  openCapabilityDecisionModel,
+} from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   actionAttemptResolutionV2Digest,
@@ -10,7 +13,13 @@ import {
   type ProviderReconciliationObservationV2,
 } from '@/modules/customer-request/public'
 import { SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT } from '@/modules/sandbox-supply/public'
-import { setCapabilitySupplyEligibility } from '../../convex/capabilitySupply'
+import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
+import { registerCapabilityContractDocument } from '../../convex/capabilityContractDocuments'
+import {
+  registerCapabilityBindingCommand,
+  registerCapabilityOfferingCommand,
+  setCapabilitySupplyEligibility,
+} from '../../convex/capabilitySupply'
 import { persistActionAttemptAdmissionBundle } from '../../convex/customerRequestV2ActionAttempt'
 import {
   recordProviderOutcomeTransaction,
@@ -65,11 +74,13 @@ describe('current V2 Customer Request application path', () => {
       state: 'ready_to_compare', nextAction: 'prepare_options',
     })
     vi.stubEnv('OPENROUTER_API_KEY', '')
-    await expect(customer.action(api.customerRequestApplication.submit, {
+    const replayedSubmit = await customer.action(api.customerRequestApplication.submit, {
       compilationKey: 'submit:v2:1', requestId: 'request:v2:application',
       delegatedAgentId: 'agent:external:v2', customerJob: 'Compare labelled sandbox options',
       routing: { networkId: 'ae:public' },
-    })).resolves.toEqual(submitted)
+    })
+    expect(replayedSubmit).toEqual(submitted)
+    expect(JSON.stringify(replayedSubmit)).toBe(JSON.stringify(submitted))
     expect(generate).toHaveBeenCalledTimes(1)
     await expect(customer.action(api.customerRequestApplication.resume, {
       requestRef: 'request:v2:application',
@@ -183,6 +194,57 @@ describe('current V2 Customer Request application path', () => {
     expect(persisted.legacyHeads).toEqual([])
     expect(persisted.legacyRequests).toEqual([])
     expect(persisted.legacyPreparations).toEqual([])
+  })
+
+  it('replays the exact submit view when registered preparation disclosure requires customer authority', async () => {
+    const backend = convexTest(schema, modules)
+    const seeded = await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    const businessId = seeded.businessIdsBySlug['sandbox-option-one']
+    if (businessId === undefined) throw new Error('disclosure business missing')
+    const disclosureContract = {
+      ...SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
+      capabilityId: 'sandbox.disclosure.lookup',
+      dataUse: [{
+        ...SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.dataUse[0],
+        classification: 'personal' as const,
+      }],
+    }
+    const model = openCapabilityDecisionModel(defineCapabilityContract(disclosureContract))
+    await registerDisclosureSupply(backend, disclosureContract, businessId)
+    const requestInput = model.inputs.find((candidate) => candidate.annotationId === 'request_context')
+    if (requestInput === undefined) throw new Error('disclosure request input missing')
+    const generate = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: requestInput.key, value: 'Compare a private request safely' }],
+        }],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity(identity)
+    const command = {
+      compilationKey: 'submit:v2:disclosure', requestId: 'request:v2:disclosure',
+      delegatedAgentId: 'agent:external:v2', customerJob: 'Compare a private request safely',
+      routing: { networkId: 'ae:public' },
+    }
+
+    const submitted = await customer.action(api.customerRequestApplication.submit, command)
+    expect(submitted).toMatchObject({
+      kind: 'request', requestRef: 'request:v2:disclosure', revision: 1,
+      state: 'needs_authorization', nextAction: 'review_disclosure',
+      disclosureReview: {
+        purpose: 'Return sandbox result', maximumRecipients: 1,
+        categories: [{ label: 'Request details', classification: 'personal' }],
+      },
+    })
+    vi.stubEnv('OPENROUTER_API_KEY', '')
+    const replayed = await customer.action(api.customerRequestApplication.submit, command)
+    expect(replayed).toEqual(submitted)
+    expect(JSON.stringify(replayed)).toBe(JSON.stringify(submitted))
+    expect(generate).toHaveBeenCalledTimes(1)
   })
 
   it('lets an external agent prepare but never promotes its API signature into customer authority', async () => {
@@ -1672,6 +1734,73 @@ describe('current V2 Customer Request application path', () => {
     expect(refined.criteria).toContainEqual(expect.objectContaining({ value: 'Compare sandbox options' }))
   })
 })
+
+async function registerDisclosureSupply(
+  backend: ReturnType<typeof convexTest>,
+  document: unknown,
+  businessId: string,
+) {
+  await backend.run(async (ctx) => {
+    const encoded = encodeCapabilityContractDocument(document)
+    const contract = await registerCapabilityContractDocument(ctx.db, encoded.documentJson, 3_000)
+    if (contract.kind !== 'registered') throw new Error(`disclosure contract registration failed: ${contract.reason}`)
+    const actor = { kind: 'system' as const, ref: 'system:test' }
+    const offering = await registerCapabilityOfferingCommand(ctx.db, {
+      actor,
+      context: {
+        correlationId: 'test:disclosure-replay', operationKey: 'test:disclosure-offering',
+        reasonCode: 'test_disclosure_replay', evidenceRefs: ['test:disclosure-contract'],
+      },
+      registration: {
+        offeringId: 'offering:sandbox-disclosure:lookup', businessId,
+        networkId: 'ae:public', contractRef: contract.ref,
+        presentation: {
+          label: 'Sandbox Disclosure Option',
+          summary: 'Labelled sandbox supply for disclosure replay verification only.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: 500 },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only.' }],
+          commercialRelationship: {
+            kind: 'none', summary: 'No commercial relationship.',
+            influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+            evidenceRefs: ['test:commercial-neutrality'],
+          },
+        },
+        searchTerms: ['private request comparison'],
+        registrationEvidenceRefs: ['test:disclosure-contract'],
+      },
+    }, 3_001)
+    if (offering.kind !== 'registered') throw new Error(`disclosure offering registration failed: ${offering.reason}`)
+    const binding = await registerCapabilityBindingCommand(ctx.db, {
+      actor,
+      context: {
+        correlationId: 'test:disclosure-replay', operationKey: 'test:disclosure-binding',
+        reasonCode: 'test_disclosure_replay', evidenceRefs: ['test:disclosure-binding'],
+      },
+      registration: {
+        bindingId: 'binding:sandbox-disclosure:http-json', offeringId: 'offering:sandbox-disclosure:lookup',
+        networkId: 'ae:public', contractRef: contract.ref,
+        endpointUrl: 'https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=one',
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['test:single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['test:no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['test:disclosure-binding'],
+      },
+    }, 3_002)
+    if (binding.kind !== 'registered') throw new Error(`disclosure binding registration failed: ${binding.reason}`)
+    const eligibility = await setCapabilitySupplyEligibility(ctx.db, {
+      offeringId: offering.offeringId,
+      bindingId: binding.bindingId,
+      contractRef: contract.ref,
+      decision: 'admit',
+      expectedOfferingRegistrationHash: offering.registrationHash,
+      expectedBindingRegistrationHash: binding.registrationHash,
+      admissionEvidenceRefs: ['test:disclosure-business-reviewed'],
+      conformanceEvidenceRefs: ['test:disclosure-binding-reviewed'],
+    }, 3_003)
+    if (eligibility.kind !== 'eligible') throw new Error(`disclosure eligibility failed: ${eligibility.reason}`)
+  })
+}
 
 async function admitSandboxSupply(backend: ReturnType<typeof convexTest>) {
   await backend.run(async (ctx) => {

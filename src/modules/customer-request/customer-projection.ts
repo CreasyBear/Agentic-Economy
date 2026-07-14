@@ -1,6 +1,5 @@
 import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
-import type { RequestEvaluation } from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
 import type { CustomerOption, CustomerOptionSet, CustomerPreparedAction, CustomerRequestView } from './agent-contract'
@@ -45,6 +44,27 @@ export type CustomerOptionsProjection =
   | Readonly<{ kind: 'conflict'; requestRef: string; reason: 'revision_changed' | 'request_not_ready' }>
   | Readonly<{ kind: 'refused'; reason: 'authentication_required' }>
 
+type RequestEvaluationProjectionInput = Readonly<{
+  criteria: readonly Readonly<{
+    label: string
+    value: JsonValue
+    basis: 'customer_provided' | 'extracted_from_request'
+  }>[]
+  posture: 'needs_information' | 'progress_available' | 'unsupported'
+  nextRequirement?: Readonly<
+    | { kind: 'intent_direction'; prompt: string }
+    | { kind: 'contract_fact'; requirementKey: string; customerLabel: string }
+  >
+  preparationDisclosure?: Readonly<{
+    maximumRecipients: number
+    purposes: readonly string[]
+    categories: readonly Readonly<{
+      label: string
+      classification: 'personal' | 'sensitive' | 'credential'
+    }>[]
+  }>
+}>
+
 export function projectCustomerRequest(result: CompileCustomerRequestResult): CustomerRequestProjection {
   if (result.kind === 'refused') return requestView({
     requestRef: 'request:uncommitted', revision: 0, state: 'needs_attention',
@@ -58,7 +78,7 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
 
 export function projectRequestEvaluation(input: Readonly<{
   snapshot: Readonly<{ requestId: string; revision: number; intent: string }>
-  evaluation: RequestEvaluation
+  evaluation: RequestEvaluationProjectionInput
 }>): CustomerRequestView {
   const criteria = input.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
   if (input.evaluation.posture === 'unsupported') return requestView({

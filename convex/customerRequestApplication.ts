@@ -13,6 +13,7 @@ import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   compileCustomerRequest,
   writableCustomerRequestV2Aggregate,
+  type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
 import { requestRegistrySnapshotDigest, type RequestFact } from '@/modules/customer-request/evaluation'
 import {
@@ -806,10 +807,7 @@ async function compileCommit(ctx: ActionCtx, input: Readonly<{
     requestRef: input.requestId, revision: input.expectedRevision,
     summary: 'The registered options changed. Try this request again.',
   }))
-  return writableView(projectRequestEvaluation({
-    snapshot: compiled.aggregate.snapshot,
-    evaluation: compiled.aggregate.evaluation,
-  }))
+  return projectStoredAggregate(compiled.aggregate)
 }
 
 async function replayCommittedCommand(ctx: ActionCtx, input: Readonly<{
@@ -1398,32 +1396,11 @@ function rebindStoredFacts(
   })
 }
 
-function projectStoredAggregate(aggregate: StoredAggregate): ActionResult {
-  const criteria = aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
-  const requirement = aggregate.evaluation.nextRequirement
-  if (aggregate.evaluation.posture === 'unsupported') return writableView({
-    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    state: 'unsupported', summary: 'No registered business capability currently matches this request.',
-    nextAction: 'revise_request', missingFields: [], criteria, options: [],
-  })
-  if (requirement !== undefined) return writableView({
-    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    state: 'needs_information', summary: aggregate.snapshot.intent, nextAction: 'provide_information',
-    missingFields: requirement.kind === 'contract_fact' ? [{
-      field: requirement.requirementKey, label: requirement.customerLabel,
-      explanation: 'This answer changes which registered options can be prepared now.',
-    }] : [],
-    criteria,
-    clarification: requirement.kind === 'intent_direction'
-      ? { kind: 'intent_direction', prompt: requirement.prompt, answerKind: 'natural_language' }
-      : { kind: 'contract_fact', requirementKey: requirement.requirementKey, prompt: requirement.customerLabel, answerKind: 'typed_value' },
-    options: [],
-  })
-  return writableView({
-    kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    state: 'ready_to_compare', summary: aggregate.snapshot.intent, nextAction: 'prepare_options',
-    missingFields: [], criteria, options: [],
-  })
+function projectStoredAggregate(aggregate: StoredAggregate | CustomerRequestV2Aggregate): ActionResult {
+  return writableView(projectRequestEvaluation({
+    snapshot: aggregate.snapshot,
+    evaluation: aggregate.evaluation,
+  }))
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {
