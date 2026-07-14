@@ -7,6 +7,18 @@ import { SANDBOX_PROVIDER_PROFILES } from '@/modules/sandbox-supply/public'
 const MAX_BODY_BYTES = 64 * 1024
 const SANDBOX_OFFER_EXPIRES_AT = Date.UTC(2035, 0, 1)
 const scenarioValue = z.enum(['success', 'refusal', 'timeout', 'expired', 'duplicate'])
+const preparationEgressBody = z.object({
+  protocol: z.literal('ae.preparation-egress:v1'),
+  operationRef: z.string().min(1).max(500),
+  contractRef: z.object({
+    capabilityId: z.string().min(1).max(500),
+    version: z.number().int().positive(),
+    contractDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+  }).strict(),
+  selectionKey: z.string().min(1).max(500),
+  semanticDigest: z.string().min(1).max(500),
+  facts: z.array(z.record(z.string(), z.unknown())).max(128),
+}).strict()
 const requestBody = z.object({
   protocolVersion: z.literal('ae-capability:v1'),
   operation: z.enum(['quote', 'structured_quote', 'structured_quote_reconcile', 'execute', 'reconcile', 'cancel']),
@@ -34,6 +46,8 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
   let parsedJson: unknown
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
+  const preparationEgress = preparationEgressBody.safeParse(parsedJson)
+  if (preparationEgress.success) return providerOption(profile, preparationEgress.data)
   const parsed = requestBody.safeParse(parsedJson)
   if (!parsed.success || (parsed.data.bindingId !== profile.bindingId && parsed.data.bindingId !== profile.v2BindingId)) {
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)
@@ -77,6 +91,26 @@ function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>,
     priceComponents: [{ label: 'Sandbox quoted amount', amountMinor: profile.amountMinor }],
     materialTerms: [{ key: 'sandbox', label: 'Supply status', value: 'Verification only; no real service or fulfilment.' }],
     cancellation: { kind: 'unsupported', summary: 'No cancellation is needed because this sandbox cannot create an effect.' },
+  })
+}
+
+function providerOption(profile: SandboxProfile, body: z.infer<typeof preparationEgressBody>): Response {
+  const assertedAt = Date.UTC(2026, 0, 1)
+  const assertionRef = `sandbox-option:${canonicalDigest({
+    operationRef: body.operationRef,
+    contractRef: body.contractRef,
+    bindingId: profile.v2BindingId,
+  }).slice(7, 31)}`
+  return json({
+    format: 'ae.provider-option:v1',
+    operationRef: body.operationRef,
+    contractRef: body.contractRef,
+    offeringId: profile.offeringId,
+    bindingId: profile.v2BindingId,
+    assertionRef,
+    assertedAt,
+    validUntil: SANDBOX_OFFER_EXPIRES_AT,
+    output: { optionSummary: `${profile.label} — sandbox verification only` },
   })
 }
 

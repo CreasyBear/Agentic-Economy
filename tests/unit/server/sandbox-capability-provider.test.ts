@@ -24,6 +24,36 @@ describe('sandbox capability provider', () => {
     })
   })
 
+  it('returns the registered V2 provider option envelope for preparation egress', async () => {
+    const response = await handleSandboxCapabilityRequest(new Request(
+      'https://ae.test/api/sandbox/capability?profile=one',
+      {
+        method: 'POST', headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'ae.preparation-egress:v1',
+          operationRef: 'preparation-egress:test-v2',
+          contractRef: {
+            capabilityId: 'sandbox.reference.lookup', version: 1,
+            contractDigest: 'sha256:' + 'a'.repeat(64),
+          },
+          selectionKey: 'ae_selection:test', semanticDigest: 'sha256:' + 'b'.repeat(64),
+          facts: [{ inputPointer: '/requestContext', value: 'Compare sandbox options' }],
+        }),
+      },
+    ), { providerKey: 'secret' })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      format: 'ae.provider-option:v1',
+      operationRef: 'preparation-egress:test-v2',
+      contractRef: { capabilityId: 'sandbox.reference.lookup', version: 1 },
+      offeringId: 'offering:sandbox-option-one:reference-lookup',
+      bindingId: 'binding:sandbox-option-one:http-json',
+      assertionRef: expect.stringMatching(/^sandbox-option:/),
+      output: { optionSummary: 'Sandbox Option One — sandbox verification only' },
+    })
+  })
+
   it('refuses missing credentials and never commits a real-world effect', async () => {
     const unauthorized = await handleSandboxCapabilityRequest(new Request('https://ae.test/api/sandbox/capability?profile=one', {
       method: 'POST', body: JSON.stringify({}),

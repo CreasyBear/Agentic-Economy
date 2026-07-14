@@ -213,7 +213,10 @@ export async function runHostedCustomerRequestJourney(
 
     if (view.state === 'unsupported' || view.state === 'no_options' || view.state === 'needs_attention'
       || view.state === 'outcome_unknown' || view.state === 'completed' || view.state === 'failed') {
-      throw new Error(`hosted_journey_stopped:${view.state}:${view.summary}`)
+      throw new Error(
+        `hosted_journey_stopped:${view.state}:revision=${view.revision}:transition=${transitions}`
+        + `:states=${states.join('>')}:${view.summary}`,
+      )
     }
   }
   throw new Error('hosted_journey_transition_limit_exceeded')
