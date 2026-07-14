@@ -4,7 +4,7 @@ import { Agent, fetch as guardedFetch } from 'undici'
 import { v } from 'convex/values'
 import { makeFunctionReference } from 'convex/server'
 
-import { runCapabilityReadinessProbe, type CapabilityProbeOutcome } from '@/modules/capability-supply/internal/readiness-probe'
+import { runCapabilityReadinessProbe, type CapabilityProbeOutcome } from '@/modules/capability-supply/public'
 import { createGuardedLookup, defaultDnsResolver, isPublicHttpTarget } from '@/modules/network-guard/public'
 
 import { internalAction } from './_generated/server'
