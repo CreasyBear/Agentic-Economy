@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { handleCustomerRequestMessagePost } from '@/lib/server/customer-request-messages-api'
+import { handleBrowserCustomerRequestMessagePost } from '@/lib/server/customer-request-browser-api'
 
 export const Route = createFileRoute('/api/requests/$requestRef/messages')({
-  server: { handlers: { POST: ({ request, params }) => handleCustomerRequestMessagePost(request, params.requestRef) } },
+  server: { handlers: { POST: ({ request, params }) => handleBrowserCustomerRequestMessagePost(request, params.requestRef) } },
 })

@@ -13,6 +13,14 @@ describe('customer Request workspace', () => {
   })))
   afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
+  it('starts the canonical Request journey from a prefilled public ask', () => {
+    render(<AeCustomerRequestWorkspace initialNeed="A quiet place for dinner" />)
+
+    expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value)
+      .toBe('A quiet place for dinner')
+    expect((screen.getByRole('button', { name: 'Explore' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
   it('uses the same Request and options projections as the machine API', async () => {
     let sequence = 0
     vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })

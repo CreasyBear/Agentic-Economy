@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { handleCustomerRequestGet } from '@/lib/server/customer-request-inspect-api'
+import { handleBrowserCustomerRequestGet } from '@/lib/server/customer-request-browser-api'
 
 export const Route = createFileRoute('/api/requests/$requestRef')({
-  server: { handlers: { GET: ({ params }) => handleCustomerRequestGet(params.requestRef) } },
+  server: { handlers: { GET: ({ request, params }) => handleBrowserCustomerRequestGet(request, params.requestRef) } },
 })

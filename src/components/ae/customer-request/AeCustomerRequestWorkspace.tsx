@@ -24,17 +24,23 @@ type ConversationTurn = Readonly<{ speaker: 'customer' | 'ae'; text: string }>
 
 const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' })
 
-export function AeCustomerRequestWorkspace() {
-  const [need, setNeed] = useState('')
+export type AeCustomerRequestWorkspaceProps = Readonly<{
+  initialNeed?: string
+}>
+
+export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerRequestWorkspaceProps) {
+  const [need, setNeed] = useState(initialNeed)
   const [answer, setAnswer] = useState('')
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([])
   const [editingRevision, setEditingRevision] = useState<number | undefined>()
   const requestIdentityRef = useRef<Readonly<{ requestRef: string; agentRef: string }> | undefined>(undefined)
+  const submittingRef = useRef(false)
 
   async function submit() {
-    if (need.trim().length === 0 || state.kind === 'submitting'
+    if (need.trim().length === 0 || submittingRef.current || state.kind === 'submitting'
       || state.kind === 'comparing' || state.kind === 'confirming' || state.kind === 'refreshing') return
+    submittingRef.current = true
     const identity = requestIdentityRef.current ?? { requestRef: `request:${crypto.randomUUID()}`, agentRef: `web:${crypto.randomUUID()}` }
     requestIdentityRef.current = identity
     setState({ kind: 'submitting' })
@@ -60,6 +66,8 @@ export function AeCustomerRequestWorkspace() {
       setState({ kind: 'request', projection: result })
     } catch {
       setState({ kind: 'error', message: 'AE could not be reached. Your request was not submitted.', authenticationRequired: false })
+    } finally {
+      submittingRef.current = false
     }
   }
 
@@ -240,7 +248,7 @@ export function AeCustomerRequestWorkspace() {
           <textarea id="customer-need" value={need} onChange={(event) => setNeed(event.target.value)} rows={2} maxLength={2_000} required placeholder="Try a place, business type, or need" className="min-h-16 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-lg text-primary outline-none focus:ring-2 focus:ring-accent" />
           <button type="submit" disabled={need.trim().length === 0} className="min-h-11 self-end rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Explore</button>
         </form>
-        <Text type="supporting" color="secondary" className="text-center">No budget or full specification required to start.</Text>
+        <Text type="supporting" color="secondary" className="text-center">No budget or full specification required. Keep contact, payment, and account details until AE asks for them.</Text>
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
         {state.kind === 'error' ? <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
       </section> : <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}

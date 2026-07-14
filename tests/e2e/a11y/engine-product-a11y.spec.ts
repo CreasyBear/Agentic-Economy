@@ -8,8 +8,8 @@ test.describe('engine product accessibility', () => {
     await expect(skip).toBeFocused()
     await skip.press('Enter')
     await expect(page.locator('#astryx-app-shell-main')).toBeFocused()
-    await expect(page.getByRole('heading', { level: 1, name: 'Your agent knows who to call.' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Tell us what you need' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Start with whatever you know.' })).toBeVisible()
+    await expect(page.getByLabel('What are you looking for?')).toBeVisible()
   })
 
   test('request entry is open, labelled, and keyboard reachable without an upfront budget', async ({ page }) => {
@@ -29,6 +29,6 @@ test.describe('engine product accessibility', () => {
     const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth)
     expect(documentWidth).toBeLessThanOrEqual(viewportWidth)
     await expect(page.getByLabel('What are you looking for?')).toBeVisible()
-    await expect(page.getByText('No budget or full specification required to start.')).toBeVisible()
+    await expect(page.getByText(/No budget or full specification required/)).toBeVisible()
   })
 })

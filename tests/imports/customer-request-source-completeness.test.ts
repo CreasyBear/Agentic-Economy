@@ -177,11 +177,19 @@ describe('CustomerRequest source completeness', () => {
   })
 
   it('keeps routes and UI on the shared projection instead of rebuilding product state', () => {
-    expect(readFileSync('src/routes/api.requests.ts', 'utf8')).toMatch(/handleCustomerRequestPost/)
-    expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleCustomerOptionsPost/)
-    expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleCustomerRequestGet/)
-    expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleCustomerRequestFactsPost/)
-    expect(readFileSync('src/routes/api.requests.$requestRef.messages.ts', 'utf8')).toMatch(/handleCustomerRequestMessagePost/)
+    expect(readFileSync('src/routes/api.requests.ts', 'utf8')).toMatch(/handleBrowserCustomerRequestPost/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.options.ts', 'utf8')).toMatch(/handleBrowserCustomerOptionsPost/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.ts', 'utf8')).toMatch(/handleBrowserCustomerRequestGet/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.facts.ts', 'utf8')).toMatch(/handleBrowserCustomerRequestFactsPost/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.messages.ts', 'utf8')).toMatch(/handleBrowserCustomerRequestMessagePost/)
+    const browserHttp = readFileSync('src/lib/server/customer-request-browser-api.ts', 'utf8')
+    for (const handler of [
+      'handleCustomerRequestPost', 'handleCustomerOptionsPost', 'handleCustomerRequestGet',
+      'handleCustomerRequestFactsPost', 'handleCustomerRequestMessagePost',
+    ]) expect(browserHttp).toContain(handler)
+    expect(browserHttp).not.toMatch(/confirmRoute|runRoute|cancelRoute|reportRouteProblem/)
+    expect(readFileSync('src/routes/api.requests.$requestRef.confirmation.ts', 'utf8'))
+      .toMatch(/handleCustomerRequestConfirmationPost/)
     expect(existsSync('src/routes/api.requests.$requestRef.approval.ts')).toBe(false)
     expect(existsSync('src/routes/api.requests.$requestRef.attempts.ts')).toBe(false)
     expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toMatch(/handleAgentCustomerRequestPost/)
@@ -197,6 +205,9 @@ describe('CustomerRequest source completeness', () => {
     expect(ui).toContain("from '@/modules/customer-request/customer-projection'")
     expect(ui).toContain("fetch('/api/requests'")
     expect(ui).toContain('/options`')
+    const publicHome = readFileSync('src/routes/index.tsx', 'utf8')
+    expect(publicHome).toContain('AeCustomerRequestWorkspace')
+    expect(publicHome).not.toContain('AeHomeComposer')
     for (const route of [
       'src/routes/api.requests.ts', 'src/routes/api.requests.$requestRef.ts', 'src/routes/api.requests.$requestRef.facts.ts', 'src/routes/api.requests.$requestRef.messages.ts', 'src/routes/api.requests.$requestRef.options.ts',
       'src/routes/api.v1.requests.ts', 'src/routes/api.v1.requests.$requestRef.ts', 'src/routes/api.v1.requests.$requestRef.facts.ts', 'src/routes/api.v1.requests.$requestRef.messages.ts', 'src/routes/api.v1.requests.$requestRef.options.ts',

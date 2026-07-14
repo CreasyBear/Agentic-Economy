@@ -3,7 +3,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeState = vi.hoisted(() => {
   const state = {
@@ -35,7 +35,12 @@ vi.mock('@/components/ae/layout/AePublicShell', () => ({
 
 import '@/routes/index'
 
-describe('composer-first home', () => {
+describe('Request-first home', () => {
+  beforeEach(() => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `home-${++sequence}` })
+  })
+
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
@@ -43,25 +48,23 @@ describe('composer-first home', () => {
     routeState.navigate.mockClear()
   })
 
-  it('shows the thread access disclosure before the home composer submits', () => {
+  it('sets the anonymous exploration boundary before submission', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     renderHomeRoute()
 
-    expect(screen.getByRole('note').textContent).toBe(
-      'Your question becomes a thread with no automatic expiry. Anyone with its link can open it; this browser can delete it from Recent questions.',
-    )
+    expect(screen.getByText(/Keep contact, payment, and account details until AE asks/)).toBeTruthy()
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('adopts a valid q as an editable draft without starting an answer turn', () => {
+  it('adopts a valid q as an editable Request draft without submitting it', () => {
     const fetchMock = vi.fn<typeof fetch>()
     vi.stubGlobal('fetch', fetchMock)
 
     renderHomeRoute('Find a printer for 200 cards by Friday')
 
-    const composer = screen.getByRole('searchbox') as HTMLTextAreaElement
+    const composer = screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement
     expect(composer.value).toBe('Find a printer for 200 cards by Friday')
 
     fireEvent.change(composer, { target: { value: 'Find a local printer for Monday' } })
@@ -72,13 +75,13 @@ describe('composer-first home', () => {
     expect(screen.queryByRole('checkbox', { name: /consent|agree|permission/i })).toBeNull()
   })
 
-  it('starts exactly one answer turn when the submit action is rapidly activated twice', async () => {
+  it('starts exactly one canonical Request when submit is rapidly activated twice', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockReturnValue(new Promise<Response>(() => undefined))
     vi.stubGlobal('fetch', fetchMock)
     renderHomeRoute()
     enterQuery('Emergency plumber in Brunswick')
 
-    const submit = screen.getByRole('button', { name: 'Find businesses' })
+    const submit = screen.getByRole('button', { name: 'Explore' })
     const form = submit.closest('form')
     if (form === null) throw new Error('The home composer submit action must belong to a form.')
 
@@ -88,26 +91,30 @@ describe('composer-first home', () => {
     })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/answer/turn')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/requests')
   })
 
-  it('sends the selected timing as structured answer-turn input', async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(answerStreamResponse())
+  it('submits the customer ask without forcing timing or budget fields upfront', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:home-1', revision: 1, state: 'needs_information',
+      summary: 'Replace a leaking kitchen tap', nextAction: 'provide_information', missingFields: [], options: [],
+      clarification: { kind: 'intent_direction', prompt: 'Where should AE look?', answerKind: 'natural_language' },
+    }))
     vi.stubGlobal('fetch', fetchMock)
     renderHomeRoute()
     enterQuery('Replace a leaking kitchen tap')
 
-    selectTiming('This week', 'this_week')
-    fireEvent.click(screen.getByRole('button', { name: 'Find businesses' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     const request = fetchMock.mock.calls[0]
-    expect(request?.[0]).toBe('/api/answer/turn')
+    expect(request?.[0]).toBe('/api/requests')
     expect(request?.[1]?.method).toBe('POST')
     expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
-      query: 'Replace a leaking kitchen tap',
-      searchContext: { timing: 'this_week' },
+      request: 'Replace a leaking kitchen tap',
+      routing: { network: 'ae:public' },
     })
+    expect(JSON.parse(String(request?.[1]?.body))).not.toHaveProperty('maximumSpendMinor')
   })
 })
 
@@ -119,23 +126,7 @@ function renderHomeRoute(q = '') {
 }
 
 function enterQuery(query: string) {
-  fireEvent.change(screen.getByRole('searchbox'), {
+  fireEvent.change(screen.getByLabelText('What are you looking for?'), {
     target: { value: query },
-  })
-}
-
-function selectTiming(label: string, value: string) {
-  const select = screen.queryByRole('combobox', { name: 'When do you need this?' })
-  if (select !== null) {
-    fireEvent.change(select, { target: { value } })
-    return
-  }
-  fireEvent.click(screen.getByRole('radio', { name: label }))
-}
-
-function answerStreamResponse() {
-  return new Response('', {
-    status: 200,
-    headers: { 'Content-Type': 'text/event-stream' },
   })
 }
