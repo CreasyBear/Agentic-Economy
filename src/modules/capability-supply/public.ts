@@ -23,6 +23,8 @@ export type {
   CapabilityPublicationOfferingDraft,
   CapabilityPublicationSource,
 } from './internal/publication-importers'
+export { runCapabilityReadinessProbe } from './internal/readiness-probe'
+export type { CapabilityProbeOutcome } from './internal/readiness-probe'
 
 const identifier = z.string().trim().min(1).max(200)
 const MAX_OPAQUE_CONFIG_BYTES = 65_536
