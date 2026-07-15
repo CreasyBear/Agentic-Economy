@@ -8,6 +8,7 @@ import {
   registerSandboxRouteSupplyRegistrations,
   registerSandboxV2SupplyRegistrations,
   retireSandboxV2AcceptanceSupply,
+  retireSupersededSandboxRouteSupply,
   retireSupersededSandboxV2Supply,
   seedSandboxCapabilityPublication,
 } from './devSeed'
@@ -88,6 +89,7 @@ export const seedLabelledSandboxSupply = internalMutation({
       })),
     ])
     await retireSupersededSandboxV2Supply(ctx.db, registrations, registeredAt + 3_000)
+    await retireSupersededSandboxRouteSupply(ctx.db, routeRegistrations, registeredAt + 3_050)
     const retiredSandboxV2Bindings = args.includeComparisonOptions === false
       ? await retireSandboxV2AcceptanceSupply(ctx.db, registrations, registeredAt + 3_100)
       : []

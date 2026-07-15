@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { handleSandboxCapabilityRequest } from '@/lib/server/sandbox-capability-provider'
+import {
+  handleSandboxCapabilityRequest,
+  handleSandboxRouteProviderRequest,
+  readSandboxRouteProviderDiscovery,
+} from '@/lib/server/sandbox-capability-provider'
 import { createHttpCapabilityBinding } from '@/modules/routing-kernel/http-capability-binding'
 
 describe('sandbox capability provider', () => {
@@ -87,6 +91,49 @@ describe('sandbox capability provider', () => {
     expect(quoted.status).toBe(200)
     await expect(quoted.json()).resolves.toMatchObject({ quoteReference: expect.stringMatching(/^sandbox-quote:/) })
     expect(quoted.headers.get('Provider-Receipt')).toMatch(/^sandbox-quoter:/)
+  })
+
+  it('publishes distinct cold-agent discovery and invocation surfaces for each route business', async () => {
+    const resolverUrl = 'https://ae.test/api/sandbox/providers/route-resolver'
+    const quoterUrl = 'https://ae.test/api/sandbox/providers/route-quoter'
+    const resolverDiscovery = await readSandboxRouteProviderDiscovery('resolver', new Request(resolverUrl))
+    const quoterDiscovery = await readSandboxRouteProviderDiscovery('quoter', new Request(quoterUrl))
+
+    expect(resolverDiscovery.status).toBe(200)
+    expect(quoterDiscovery.status).toBe(200)
+    await expect(resolverDiscovery.json()).resolves.toMatchObject({
+      format: 'ae.sandbox-capability-provider:v1', supplyClass: 'labelled_sandbox',
+      business: { name: 'Sandbox Route Resolver' },
+      operation: {
+        method: 'POST', endpoint: resolverUrl, maximumCost: { currency: 'AUD', amountMinor: 300 },
+        inputSchema: { required: ['request'] }, outputSchema: { required: ['serviceReference'] },
+      },
+    })
+    await expect(quoterDiscovery.json()).resolves.toMatchObject({
+      format: 'ae.sandbox-capability-provider:v1', supplyClass: 'labelled_sandbox',
+      business: { name: 'Sandbox Route Quoter' },
+      operation: {
+        method: 'POST', endpoint: quoterUrl, maximumCost: { currency: 'AUD', amountMinor: 700 },
+        inputSchema: { required: ['serviceReference'] }, outputSchema: { required: ['quoteReference'] },
+      },
+    })
+
+    const resolved = await handleSandboxRouteProviderRequest('resolver', new Request(resolverUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ request: 'Resolve this labelled sandbox service' }),
+    }), { providerKey: 'secret' })
+    const resolvedBody = await resolved.json() as { serviceReference: string }
+    const quoted = await handleSandboxRouteProviderRequest('quoter', new Request(quoterUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+    }), { providerKey: 'secret' })
+    await expect(quoted.json()).resolves.toMatchObject({ quoteReference: expect.stringMatching(/^sandbox-quote:/) })
+
+    const wrongProvider = await handleSandboxRouteProviderRequest('resolver', new Request(resolverUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+    }), { providerKey: 'secret' })
+    expect(wrongProvider.status).toBe(400)
   })
 
   it('refuses missing credentials and never commits a real-world effect', async () => {

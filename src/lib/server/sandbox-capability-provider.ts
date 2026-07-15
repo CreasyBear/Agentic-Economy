@@ -36,10 +36,51 @@ type HandlerOptions = Readonly<{
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>
 }>
 
+export async function readSandboxRouteProviderDiscovery(
+  routeKey: SandboxRouteProviderProfileKey,
+  request: Request,
+): Promise<Response> {
+  const profile = SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey]
+  const endpoint = new URL(request.url)
+  endpoint.search = ''
+  endpoint.hash = ''
+  return json({
+    format: 'ae.sandbox-capability-provider:v1',
+    supplyClass: 'labelled_sandbox',
+    sandbox: true,
+    business: { slug: profile.slug, name: profile.label },
+    operation: {
+      method: 'POST',
+      endpoint: endpoint.href,
+      authentication: { scheme: 'bearer' },
+      maximumCost: money(profile.amountMinor),
+      inputSchema: profile.contract.inputSchema,
+      outputSchema: profile.contract.outputSchema,
+    },
+    boundaries: [
+      'This endpoint returns deterministic sandbox evidence only.',
+      'It does not prove real supply, booking, payment, dispatch, or fulfilment.',
+    ],
+  })
+}
+
+export async function handleSandboxRouteProviderRequest(
+  routeKey: SandboxRouteProviderProfileKey,
+  request: Request,
+  options: HandlerOptions = {},
+): Promise<Response> {
+  const authenticationFailure = authenticateSandboxProvider(request, options)
+  if (authenticationFailure !== undefined) return authenticationFailure
+  const body = await readBoundedRequestText(request, MAX_BODY_BYTES)
+  if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
+  let parsedJson: unknown
+  try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
+  return routeProviderResponse(routeKey, SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey], parsedJson)
+}
+
 export async function handleSandboxCapabilityRequest(request: Request, options: HandlerOptions = {}): Promise<Response> {
-  const expectedKey = options.providerKey ?? process.env.AE_SANDBOX_PROVIDER_KEY?.trim()
-  if (expectedKey === undefined || expectedKey.length === 0) return json({ kind: 'refused', reason: 'sandbox_provider_unconfigured' }, 503)
-  if (request.headers.get('Authorization') !== `Bearer ${expectedKey}`) return json({ kind: 'refused', reason: 'authentication_required' }, 401)
+  const authenticationFailure = authenticateSandboxProvider(request, options)
+  if (authenticationFailure !== undefined) return authenticationFailure
   const url = new URL(request.url)
   const routeKey = url.searchParams.get('route') as SandboxRouteProviderProfileKey | null
   const routeProfile = routeKey === null ? undefined : SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey]
@@ -97,6 +138,17 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   })
   if (parsed.data.operation === 'reconcile') return json({ kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects' })
   return json({ kind: 'cancellation_rejected', reason: 'sandbox_provider_has_no_real_world_effect' })
+}
+
+function authenticateSandboxProvider(request: Request, options: HandlerOptions): Response | undefined {
+  const expectedKey = options.providerKey ?? process.env.AE_SANDBOX_PROVIDER_KEY?.trim()
+  if (expectedKey === undefined || expectedKey.length === 0) {
+    return json({ kind: 'refused', reason: 'sandbox_provider_unconfigured' }, 503)
+  }
+  if (request.headers.get('Authorization') !== `Bearer ${expectedKey}`) {
+    return json({ kind: 'refused', reason: 'authentication_required' }, 401)
+  }
+  return undefined
 }
 
 function routeProviderResponse(

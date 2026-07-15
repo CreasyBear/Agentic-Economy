@@ -101,8 +101,8 @@ jobs:
           for attempt in $(seq 1 30); do
             graph="$(npx convex run capabilitySupply:queryCapabilityGraph '{"networkId":"ae:public","includeInactive":false,"limit":10}' --prod)"
             ready="$(printf '%s' "${graph}" | jq '[.nodes[]? | select(
-              .publicationRef == "offering:sandbox-route-resolver:reference-resolve:v1"
-              or .publicationRef == "offering:sandbox-route-quoter:service-quote:v1"
+              .publicationRef == "offering:sandbox-route-resolver:reference-resolve:v2"
+              or .publicationRef == "offering:sandbox-route-quoter:service-quote:v2"
             )] | length')"
             if [ "${ready}" -eq 2 ]; then
               exit 0

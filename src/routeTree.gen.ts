@@ -63,6 +63,8 @@ import { Route as OperatorAdminIndexHealthRouteImport } from './routes/_operator
 import { Route as OperatorAdminClaimsRouteImport } from './routes/_operator/admin.claims'
 import { Route as OperatorAdminAuditEventsRouteImport } from './routes/_operator/admin.audit-events'
 import { Route as ApiV1RequestsRequestRefRouteImport } from './routes/api.v1.requests.$requestRef'
+import { Route as ApiSandboxProvidersRouteResolverRouteImport } from './routes/api.sandbox.providers.route-resolver'
+import { Route as ApiSandboxProvidersRouteQuoterRouteImport } from './routes/api.sandbox.providers.route-quoter'
 import { Route as ApiRequestsRequestRefRunRouteImport } from './routes/api.requests.$requestRef.run'
 import { Route as ApiRequestsRequestRefProblemsRouteImport } from './routes/api.requests.$requestRef.problems'
 import { Route as ApiRequestsRequestRefOptionsRouteImport } from './routes/api.requests.$requestRef.options'
@@ -361,6 +363,18 @@ const ApiV1RequestsRequestRefRoute = ApiV1RequestsRequestRefRouteImport.update({
   path: '/$requestRef',
   getParentRoute: () => ApiV1RequestsRoute,
 } as any)
+const ApiSandboxProvidersRouteResolverRoute =
+  ApiSandboxProvidersRouteResolverRouteImport.update({
+    id: '/api/sandbox/providers/route-resolver',
+    path: '/api/sandbox/providers/route-resolver',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiSandboxProvidersRouteQuoterRoute =
+  ApiSandboxProvidersRouteQuoterRouteImport.update({
+    id: '/api/sandbox/providers/route-quoter',
+    path: '/api/sandbox/providers/route-quoter',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiRequestsRequestRefRunRoute =
   ApiRequestsRequestRefRunRouteImport.update({
     id: '/run',
@@ -546,6 +560,8 @@ export interface FileRoutesByFullPath {
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRoute
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
+  '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
+  '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -621,6 +637,8 @@ export interface FileRoutesByTo {
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRoute
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
+  '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
+  '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -698,6 +716,8 @@ export interface FileRoutesById {
   '/api/requests/$requestRef/options': typeof ApiRequestsRequestRefOptionsRoute
   '/api/requests/$requestRef/problems': typeof ApiRequestsRequestRefProblemsRoute
   '/api/requests/$requestRef/run': typeof ApiRequestsRequestRefRunRoute
+  '/api/sandbox/providers/route-quoter': typeof ApiSandboxProvidersRouteQuoterRoute
+  '/api/sandbox/providers/route-resolver': typeof ApiSandboxProvidersRouteResolverRoute
   '/api/v1/requests/$requestRef': typeof ApiV1RequestsRequestRefRouteWithChildren
   '/api/v1/requests/$requestRef/cancellation': typeof ApiV1RequestsRequestRefCancellationRoute
   '/api/v1/requests/$requestRef/confirmation': typeof ApiV1RequestsRequestRefConfirmationRoute
@@ -775,6 +795,8 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/options'
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/run'
+    | '/api/sandbox/providers/route-quoter'
+    | '/api/sandbox/providers/route-resolver'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -850,6 +872,8 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/options'
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/run'
+    | '/api/sandbox/providers/route-quoter'
+    | '/api/sandbox/providers/route-resolver'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -926,6 +950,8 @@ export interface FileRouteTypes {
     | '/api/requests/$requestRef/options'
     | '/api/requests/$requestRef/problems'
     | '/api/requests/$requestRef/run'
+    | '/api/sandbox/providers/route-quoter'
+    | '/api/sandbox/providers/route-resolver'
     | '/api/v1/requests/$requestRef'
     | '/api/v1/requests/$requestRef/cancellation'
     | '/api/v1/requests/$requestRef/confirmation'
@@ -975,6 +1001,8 @@ export interface RootRouteChildren {
   ApiStorefrontImportDraftRoute: typeof ApiStorefrontImportDraftRoute
   ApiV1ReleaseRoute: typeof ApiV1ReleaseRoute
   ApiV1RequestsRoute: typeof ApiV1RequestsRouteWithChildren
+  ApiSandboxProvidersRouteQuoterRoute: typeof ApiSandboxProvidersRouteQuoterRoute
+  ApiSandboxProvidersRouteResolverRoute: typeof ApiSandboxProvidersRouteResolverRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1357,6 +1385,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1RequestsRequestRefRouteImport
       parentRoute: typeof ApiV1RequestsRoute
     }
+    '/api/sandbox/providers/route-resolver': {
+      id: '/api/sandbox/providers/route-resolver'
+      path: '/api/sandbox/providers/route-resolver'
+      fullPath: '/api/sandbox/providers/route-resolver'
+      preLoaderRoute: typeof ApiSandboxProvidersRouteResolverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sandbox/providers/route-quoter': {
+      id: '/api/sandbox/providers/route-quoter'
+      path: '/api/sandbox/providers/route-quoter'
+      fullPath: '/api/sandbox/providers/route-quoter'
+      preLoaderRoute: typeof ApiSandboxProvidersRouteQuoterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/requests/$requestRef/run': {
       id: '/api/requests/$requestRef/run'
       path: '/run'
@@ -1736,6 +1778,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiStorefrontImportDraftRoute: ApiStorefrontImportDraftRoute,
   ApiV1ReleaseRoute: ApiV1ReleaseRoute,
   ApiV1RequestsRoute: ApiV1RequestsRouteWithChildren,
+  ApiSandboxProvidersRouteQuoterRoute: ApiSandboxProvidersRouteQuoterRoute,
+  ApiSandboxProvidersRouteResolverRoute: ApiSandboxProvidersRouteResolverRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
