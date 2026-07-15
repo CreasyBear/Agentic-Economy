@@ -310,8 +310,8 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
       {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-3 text-center">
         <Text className="text-sm font-semibold text-accent">Ask AE</Text>
-        <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">Start with whatever you know.</Heading>
-        <Text type="large" color="secondary">A place, a business type, or the situation itself. AE helps you work out the next decision.</Text>
+        <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">What can we help you find?</Heading>
+        <Text type="large" color="secondary">Enter a place, a type of business, or describe the situation. We’ll ask what matters and help you compare your options.</Text>
       </header> : null}
 
       {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-3" aria-label="Start a request">
@@ -1033,7 +1033,8 @@ function DisclosureReview({ projection, turns, authorize, edit, restart }: { pro
 function WorkingUnderstanding({ projection, correct }: { projection: CustomerRequestView; correct: () => void }) { const criteria = projection.criteria ?? []; if (criteria.length === 0) return null; return <Card padding={4}><div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><Text className="text-sm font-semibold text-accent">AE’s working understanding</Text></div><button type="button" onClick={correct} className="min-h-11 text-sm font-semibold underline underline-offset-4">Correct</button></div><div className="grid gap-2">{criteria.map((criterion) => <div key={`${criterion.label}:${String(criterion.value)}`} className="rounded-md border border-border bg-surface px-3 py-2 text-sm"><div><strong>{workingCriterionLabel(criterion.label, criterion.value, projection.summary)}:</strong> {String(criterion.value)}</div><Text type="supporting" color="secondary">{criterion.basis === 'customer_provided' ? 'You said this.' : 'Understood from your request.'} Used to decide which options fit and how they compare.</Text></div>)}</div></div></Card> }
 
 function workingCriterionLabel(label: string, value: unknown, requestSummary: string): string {
-  return label.trim().endsWith('?') && value === requestSummary ? 'Request' : label
+  if (!label.trim().endsWith('?')) return label
+  return value === requestSummary ? 'Request' : 'Request detail'
 }
 function RecoveryActions({ edit, restart }: { edit: () => void; restart: () => void }) { return <div className="flex flex-wrap gap-3 border-t border-border pt-4"><Button label="Edit this Request" variant="secondary" clickAction={edit} /><Button label="Start a new Request" variant="ghost" clickAction={restart} /></div> }
 

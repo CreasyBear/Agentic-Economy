@@ -16,6 +16,17 @@ describe('customer Request workspace', () => {
   })
   afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals() })
 
+  it('opens with a customer question instead of explaining the request mechanism', () => {
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(screen.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeTruthy()
+    expect(screen.getByText('Enter a place, a type of business, or describe the situation. We’ll ask what matters and help you compare your options.')).toBeTruthy()
+    expect(screen.queryByText('Start with whatever you know.')).toBeNull()
+    expect(screen.queryByText(/work out the next decision/i)).toBeNull()
+    expect(screen.queryByText('Lookup instruction')).toBeNull()
+    expect(screen.queryByText('Your answer')).toBeNull()
+  })
+
   it('starts the canonical Request journey from a prefilled public ask', () => {
     render(<AeCustomerRequestWorkspace initialNeed="A quiet place for dinner" />)
 
@@ -472,7 +483,11 @@ describe('customer Request workspace', () => {
       .mockResolvedValueOnce(Response.json({
         kind: 'request', requestRef: 'request:confirm', revision: 2,
         routeGenerationRef: 'generation:confirm', state: 'in_progress',
-        summary: 'Your request is in progress.', nextAction: 'wait', missingFields: [], criteria: [], options: [],
+        summary: 'Your request is in progress.', nextAction: 'wait', missingFields: [], options: [],
+        criteria: [{
+          label: 'What should the first business resolve?', value: 'Prepare a result',
+          basis: 'extracted_from_request',
+        }],
         progress: {
           completed: 0, total: 1,
           current: { step: 1, state: 'contacting' },
@@ -504,6 +519,8 @@ describe('customer Request workspace', () => {
     expect(await screen.findByRole('heading', { name: 'Your request is in progress.' })).toBeTruthy()
     expect(screen.getByText('Step 1 of 1')).toBeTruthy()
     expect(screen.getByText('Contacting the business')).toBeTruthy()
+    expect(screen.getByText(/Request detail:/)).toBeTruthy()
+    expect(screen.queryByText(/What should the first business resolve\?/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Check progress' })).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|mandate|graph node/i)).toBeNull()
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aconfirm/confirmation', expect.objectContaining({

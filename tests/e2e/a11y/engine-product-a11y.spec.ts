@@ -9,13 +9,13 @@ test.describe('engine product accessibility', () => {
     await expect(skip).toBeFocused()
     await skip.press('Enter')
     await expect(page.locator('#astryx-app-shell-main')).toBeFocused()
-    await expect(page.getByRole('heading', { level: 1, name: 'Start with whatever you know.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeVisible()
     await expect(page.getByLabel('What are you looking for?')).toBeVisible()
   })
 
   test('request entry is open, labelled, and keyboard reachable without an upfront budget', async ({ page }) => {
     await page.goto('/engine')
-    await expect(page.getByRole('heading', { level: 1, name: 'Start with whatever you know.' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeVisible()
     await page.waitForLoadState('networkidle')
     await page.getByLabel('What are you looking for?').fill('Fremantle')
     await expect(page.getByLabel('What are you looking for?')).toHaveValue('Fremantle')
