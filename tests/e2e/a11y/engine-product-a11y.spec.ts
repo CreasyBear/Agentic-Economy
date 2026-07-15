@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 test.describe('engine product accessibility', () => {
   test('home skip link and primary engine path are keyboard reachable', async ({ page }) => {
     await page.goto('/')
+    await page.waitForLoadState('networkidle')
     await page.keyboard.press('Tab')
     const skip = page.getByRole('link', { name: 'Skip to content' })
     await expect(skip).toBeFocused()
