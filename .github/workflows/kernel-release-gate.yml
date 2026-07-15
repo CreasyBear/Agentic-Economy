@@ -112,13 +112,7 @@ jobs:
           echo 'Labelled sandbox capability publications did not become route-ready.' >&2
           exit 1
 
-      - name: Verify authenticated deployment readback
-        env:
-          AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
-          AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
-        run: npm run test:release:hosted
-
-      - name: Run cold external-agent Request journey against the exact deployment
+      - name: Verify exact deployed human and agent Request lifecycle
         env:
           AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
           AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
@@ -127,4 +121,5 @@ jobs:
           AE_CUSTOMER_REQUEST_FINISH: complete
           AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '2'
           AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Sandbox Route Resolver","Sandbox Route Quoter"]'
-        run: npm run smoke:customer-request:production:temporary-key
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npm run test:release:hosted
