@@ -293,7 +293,10 @@ describe('current V2 Customer Request application path', () => {
     expect(submitted).toMatchObject({
       kind: 'request', requestRef: 'request:v2:disclosure', revision: 1,
       state: 'needs_information', nextAction: 'provide_information',
-      clarification: { kind: 'contract_fact' },
+      clarification: {
+        kind: 'contract_fact',
+        prompt: 'What should the business look up?',
+      },
     })
     if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
       throw new Error('expected disclosure contract fact')
@@ -308,7 +311,7 @@ describe('current V2 Customer Request application path', () => {
       state: 'needs_authorization', nextAction: 'review_disclosure',
       disclosureReview: {
         purpose: 'Return sandbox result', maximumRecipients: 1,
-        categories: [{ label: 'Lookup instruction', classification: 'personal' }],
+        categories: [{ label: 'What should the business look up?', classification: 'personal' }],
       },
     })
     vi.stubEnv('OPENROUTER_API_KEY', '')

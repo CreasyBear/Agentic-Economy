@@ -44,7 +44,7 @@ export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
   customerAnnotations: Object.freeze([
     Object.freeze({
       annotationId: 'request_context', document: 'input' as const, pointer: '/requestContext',
-      label: 'Lookup instruction', role: 'request' as const, inference: 'customer_required' as const,
+      label: 'What should the business look up?', role: 'request' as const, inference: 'customer_required' as const,
     }),
     Object.freeze({
       annotationId: 'option_summary', document: 'output' as const, pointer: '/optionSummary',
