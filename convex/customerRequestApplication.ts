@@ -1692,7 +1692,7 @@ async function refreshCurrentRouteGeneration(
 function createConfiguredRequestInterpreter() {
   const apiKey = env.OPENROUTER_API_KEY?.trim()
   if (apiKey === undefined || apiKey.length === 0) return undefined
-  const modelName = env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-4.1-mini'
+  const modelName = env.AE_CUSTOMER_REQUEST_MODEL?.trim() || 'openai/gpt-5-mini'
   return createJsonCustomerRequestSemanticInterpreter({
     interpreterId: `openrouter:${modelName}`,
     transport: createOpenRouterCustomerRequestSemanticTransport({
