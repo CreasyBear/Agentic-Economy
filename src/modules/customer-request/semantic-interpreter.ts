@@ -307,13 +307,19 @@ function inputPointerForDescriptor(
 
 export function deriveCustomerDecisionPreference(customerJob: string): CustomerRequestCapabilityProposal['decisionPreference'] {
   const normalized = customerJob.normalize('NFKC').toLocaleLowerCase('en')
-  const match = /\b(?:cheapest|lowest(?:[\s-]+maximum)?[\s-]+price)\b/u.exec(normalized)
-  if (match === null) return undefined
-  const before = normalized.slice(Math.max(0, match.index - 48), match.index)
-  const after = normalized.slice(match.index + match[0].length, match.index + match[0].length + 48)
-  const negatesBefore = /\b(?:do\s+not|don't|not|never|without|instead\s+of|rather\s+than)\b[^.!?]{0,32}$/u.test(before)
-  const negatesAfter = /^[^.!?]{0,24}\b(?:is\s+not|isn't|does\s+not|doesn't|should\s+not|shouldn't)\b/u.test(after)
-  if (negatesBefore || negatesAfter) return undefined
+  let latest: Readonly<{ index: number; priority: boolean }> | undefined
+  for (const match of normalized.matchAll(/\b(?:cheapest|lowest(?:[\s-]+maximum)?[\s-]+price)\b/gu)) {
+    const index = match.index
+    const before = normalized.slice(Math.max(0, index - 48), index)
+    const after = normalized.slice(index + match[0].length, index + match[0].length + 48)
+    const negatesBefore = /\b(?:do\s+not|don't|not|never|without|instead\s+of|rather\s+than)\b[^.!?\n]{0,32}$/u.test(before)
+    const negatesAfter = /^[^.!?\n]{0,24}\b(?:is\s+not|isn't|does\s+not|doesn't|should\s+not|shouldn't)\b/u.test(after)
+    latest = { index, priority: !(negatesBefore || negatesAfter) }
+  }
+  for (const match of normalized.matchAll(/\b(?:even\s+if\s+(?:it\s+)?costs?\s+more|regardless\s+of\s+(?:the\s+)?(?:price|cost)|(?:price|cost)\s+(?:is\s+|should\s+be\s+)?(?:not|no\s+longer)\s+(?:the\s+)?(?:priority|deciding\s+factor)|(?:do\s+not|don't|stop)\s+prioriti[sz](?:e|ing)\s+(?:the\s+)?(?:lowest\s+)?(?:price|cost))\b/gu)) {
+    if (latest === undefined || match.index > latest.index) latest = { index: match.index, priority: false }
+  }
+  if (latest?.priority !== true) return undefined
   const objective = 'lowest_maximum_price' as const
   return Object.freeze({
     objective,

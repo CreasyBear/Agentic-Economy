@@ -773,6 +773,17 @@ describe('V2 Request semantics', () => {
     })).rejects.toThrow('customer_request_semantic_interpretation_invalid')
   })
 
+  it('uses the latest explicit customer price priority instead of a stale earlier request', () => {
+    expect(deriveCustomerDecisionPreference([
+      'Find the cheapest labelled sandbox option.',
+      'Change my priority: prefer Sandbox Option One even if it costs more.',
+    ].join('\n'))).toBeUndefined()
+    expect(deriveCustomerDecisionPreference([
+      'Prefer Sandbox Option One even if it costs more.',
+      'Change my priority: find the cheapest option after all.',
+    ].join('\n'))).toMatchObject({ objective: 'lowest_maximum_price', basis: 'extracted_from_request' })
+  })
+
   it('accepts only bounded plain JSON values at recursive Convex boundaries', () => {
     expect(isBoundedJsonValue({ nested: ['value', 1, true, null] })).toBe(true)
     expect(isBoundedJsonValue(new ArrayBuffer(8))).toBe(false)
