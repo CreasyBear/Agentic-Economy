@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: customer-product-frontier
 status: active
-stopped_at: "Anonymous canonical Request front door is source-complete and hosted-read-back; next frontier is comparison integrity #124"
+stopped_at: "Comparable customer choices are source-complete at eca1890d; next frontier is the end-to-end decision experience #125"
 last_updated: "2026-07-15"
 progress:
   total_phases: 6
@@ -52,6 +52,8 @@ External action and recovery frontier (2026-07-15): [Publish the external RouteP
 
 Anonymous Request frontier (2026-07-15): [Build the anonymous Request journey: front door to honest RoutePlans](https://github.com/CreasyBear/Agentic-Economy/issues/140) is source-complete and hosted-read-back at exact revision `9d745c83e50337836605eec833f14eb1b3ff675c`. The public homepage now enters the canonical Customer Request workspace instead of creating a legacy Answer Thread. An unsigned browser receives one 24-hour HttpOnly, SameSite, HMAC-bound Request session that can submit, clarify, compare and resume through the same production application actions as authenticated callers; it cannot confirm, authorize disclosure, run, cancel or report a problem. Tampered sessions fail closed. Rapid duplicate UI submission is suppressed while durable idempotency remains authoritative. Full gates passed: 1,281 unit tests, 232 integration tests, 43 import/TypeScript standards checks, 112 copy/SEO checks, UI contract, TypeScript, lint, production build and six compact/wide keyboard checks. Protected preview `dpl_9jvLDVKNtfY79t2wUcvQts6EDhmC` rendered the canonical homepage and completed a real anonymous `needs_information -> ready_to_compare` transition on the same session. This is labelled-sandbox customer-path proof only; it does not prove real supply, useful recommendations, booking, payment, fulfilment or customer value.
 
+Comparable choice frontier (2026-07-15): [Define comparable RoutePlan recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124) is source-complete at exact revision `eca1890d`. Human and external-agent projections now distinguish one way forward, an evidence-backed recommendation, an intentionally unranked set, and incomparable promised outcomes. A recommendation requires substitutable current routes, complete registered comparison evidence, one explicit customer priority, and a unique lead; stale evidence, missing evidence, ties, different outcomes, or decision-affecting commercial influence fail closed. Commercial relationships are registered supply material and invalidate prepared choices when they change. Full unit and integration suites, TypeScript, lint, Convex codegen, import/type/copy/SEO/UI standards, the production build, and six compact/wide keyboard checks passed. This is source/local labelled-sandbox contract proof only; hosted decision readback, useful real recommendations, real supply, booking, payment, fulfilment, and customer value remain unproven.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Customer product sequence
@@ -65,7 +67,7 @@ This is the public product. `Request` is the one durable customer object. Busine
 The remaining Wayfinder work is ordered by customer comprehension and evidence, not kernel object construction:
 
 1. [Build the anonymous Request journey: front door to honest RoutePlans](https://github.com/CreasyBear/Agentic-Economy/issues/140).
-2. [Define comparable RoutePlan recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124), then [prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125).
+2. [Prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125), using the source-complete comparison integrity from [issue #124](https://github.com/CreasyBear/Agentic-Economy/issues/124).
 3. [Build the RoutePlan activity, support and recovery experience](https://github.com/CreasyBear/Agentic-Economy/issues/122) and finish the deeper problem record in [report and track a problem](https://github.com/CreasyBear/Agentic-Economy/issues/130).
 4. [Consolidate legacy public surfaces behind Request and capability discovery](https://github.com/CreasyBear/Agentic-Economy/issues/137).
 5. [Prove one real hosted multi-capability route through CustomerRequest](https://github.com/CreasyBear/Agentic-Economy/issues/121).
@@ -90,7 +92,7 @@ The remaining Wayfinder work is ordered by customer comprehension and evidence, 
 
 ## Next action
 
-The next unclaimed frontier is [Define comparable RoutePlan recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124). Claim it only in a new logical ticket session. Start from the current customer decision projection and registered route evidence. The acceptance test is that AE can say why one genuinely substitutable way forward is recommended, show the decisive tradeoff and any economic influence, and refuse to rank incomparable or stale routes without exposing graph scoring or inventing certainty.
+The next unclaimed frontier is [prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125). Claim it only in a new logical ticket session. Start from the source-complete comparison contract at `eca1890d` and test the full customer decision, not another schema seam: can a person or external AI move from an ordinary Request to a legible choice, understand why it is or is not recommended, inspect the material cost/data/effect/recovery tradeoffs, revise the Request, and reach confirmation without seeing kernel choreography or accidentally creating authority?
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 
