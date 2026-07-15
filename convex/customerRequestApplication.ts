@@ -39,6 +39,7 @@ import {
 } from '@/modules/customer-request/runtime'
 import {
   projectCustomerActionStatus,
+  projectCustomerCriteria,
   projectNeedsAttention,
   projectRequestEvaluation,
   projectRouteConfirmed,
@@ -382,6 +383,7 @@ const customerView = v.object({
   criteria: v.array(v.object({
     label: v.string(), value: v.any(), // runtime-validated JsonValue boundary
     basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+    impact: v.literal('eligibility_and_comparison'),
   })),
   disclosureReview: v.optional(v.object({
     purpose: v.string(), maximumRecipients: v.number(),
@@ -837,7 +839,7 @@ export const runRoute = action({
       summary: result.reason === 'confirmation_expired'
         ? 'This choice expired before it could start. Review the current options.'
         : 'This choice cannot start yet. Review the current request.',
-      criteria: current.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+      criteria: projectCustomerCriteria(current.aggregate.evaluation.criteria),
     }))
     return projectStoredRouteRun(current.aggregate, result.run)
   },
@@ -1457,8 +1459,7 @@ async function projectCurrentRoutePlans(
     revision: aggregate.snapshot.revision,
     summary: aggregate.snapshot.intent,
     decision,
-    criteria: (material.current.decisionSnapshot?.criteria ?? aggregate.evaluation.criteria)
-      .map(({ label, value, basis }) => ({ label, value, basis })),
+    criteria: projectCustomerCriteria(material.current.decisionSnapshot?.criteria ?? aggregate.evaluation.criteria),
   }))
 }
 
@@ -1759,9 +1760,9 @@ async function generationRefreshResultView(
     return writableView({
       kind: 'request', requestRef: result.aggregate.snapshot.requestId,
       revision: result.aggregate.snapshot.revision, state: 'unsupported',
-      summary: 'No registered business capability currently matches this request.',
+      summary: 'No business on AE can support this request right now.',
       nextAction: 'revise_request', missingFields: [],
-      criteria: result.aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+      criteria: projectCustomerCriteria(result.aggregate.evaluation.criteria),
       options: [],
     })
   }
@@ -1844,7 +1845,7 @@ async function resolvePreparedAction(
     requestRef: aggregate.snapshot.requestId,
     revision: aggregate.snapshot.revision,
     missingFields: [],
-    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    criteria: [...projectCustomerCriteria(aggregate.evaluation.criteria)],
     preparationRef: preparation.preparationRef,
     options: [],
   }
@@ -1919,7 +1920,7 @@ function projectPreparedAction(
     summary: `${action.business.name} can provide ${action.offering.label}.`,
     nextAction: 'inspect_options',
     missingFields: [],
-    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    criteria: [...projectCustomerCriteria(aggregate.evaluation.criteria)],
     preparationRef: preparation.preparationRef,
     options: [],
     preparedAction: {
@@ -1981,7 +1982,7 @@ async function recoverUnresolvedEgress(
   const base = {
     kind: 'request' as const, requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
     state: 'needs_attention' as const, missingFields: [],
-    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    criteria: projectCustomerCriteria(aggregate.evaluation.criteria),
     options: [],
   }
   if (recovered.kind === 'needs_attention') return writableView({
@@ -2007,7 +2008,7 @@ function projectEgressCustomerState(
 ): ActionResult {
   const base = {
     kind: 'request', requestRef: aggregate.snapshot.requestId, revision: aggregate.snapshot.revision,
-    missingFields: [], criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    missingFields: [], criteria: projectCustomerCriteria(aggregate.evaluation.criteria),
     preparationRef: preparation.preparationRef, options: [],
   } as const
   if (states.some(({ state }) => state === 'uncertain')) return writableView({
@@ -2041,7 +2042,7 @@ function preparationResultView(
     summary: result.reason === 'historical_request_resubmit_required'
       ? 'This earlier request used a retired contract format. Start a new request to continue.'
       : result.reason === 'preparation_recipient_unsupported'
-        ? 'This registered capability cannot share information with businesses before you choose one.'
+        ? 'AE cannot safely compare these options before you choose which business may receive your information.'
       : 'The registered options changed. Review this request again.',
   }))
   if (result.kind === 'refused') {
@@ -2058,7 +2059,7 @@ function preparationResultView(
 }
 
 function projectStoredPreparation(aggregate: StoredAggregate, preparation: StoredPreparation): ActionResult {
-  const criteria = aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const criteria = projectCustomerCriteria(aggregate.evaluation.criteria)
   const base = {
     kind: 'request' as const,
     requestRef: aggregate.snapshot.requestId,
@@ -2075,7 +2076,7 @@ function projectStoredPreparation(aggregate: StoredAggregate, preparation: Store
     missingFields: preparation.missing.map((item) => ({
       field: item.inputKey,
       label: item.label,
-      explanation: 'This answer is required before AE can prepare registered business options.',
+      explanation: 'This answer is needed before AE can prepare matching options.',
     })),
   })
   const disclosureReview = {
@@ -2186,7 +2187,7 @@ function projectConfirmedRoute(
   return writableView(projectRouteConfirmed({
     requestRef: aggregate.snapshot.requestId,
     revision: aggregate.snapshot.revision,
-    criteria: aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis })),
+    criteria: projectCustomerCriteria(aggregate.evaluation.criteria),
     confirmation: {
       confirmationRef: `confirmation:${canonicalDigest({ authorityRef: mandate.mandateRef })}`,
       generationRef: mandate.route.generationRef,
@@ -2213,7 +2214,7 @@ function projectStoredRouteRun(
     updatedAt: number
   }>,
 ): ActionResult {
-  const criteria = aggregate.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const criteria = projectCustomerCriteria(aggregate.evaluation.criteria)
   const result = run.resultJson === undefined ? undefined : parseCustomerRouteResult(run.resultJson)
   if (run.state === 'completed' && result !== undefined) {
     return writableView(projectCustomerActionStatus({

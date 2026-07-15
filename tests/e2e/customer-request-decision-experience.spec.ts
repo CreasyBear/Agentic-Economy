@@ -41,6 +41,62 @@ test('choice review is legible and authority-free until explicit confirmation', 
   expect(confirmations).toBe(1)
 })
 
+test('exact clarification stays conversational and explains its decision impact', async ({ page }) => {
+  let refinementBody: unknown
+  await page.route('**/api/requests', async (route) => await route.fulfill({ json: clarificationView() }))
+  await page.route('**/api/requests/*/facts', async (route) => {
+    refinementBody = route.request().postDataJSON()
+    await route.fulfill({ json: clarifiedView() })
+  })
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Find a nearby business')
+  await page.getByRole('button', { name: 'Explore' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Which area should the business cover?' })).toBeVisible()
+  await expect(page.getByPlaceholder('Answer in your own words')).toBeVisible()
+  await page.getByLabel('Your answer').fill('Fremantle and nearby suburbs would work.')
+  await page.getByRole('button', { name: 'Continue' }).click()
+
+  await expect(page.getByRole('button', { name: 'Show available options' })).toBeVisible()
+  await expect(page.getByText(/Area:/)).toBeVisible()
+  await expect(page.getByText(/You said this.*Used to decide which options fit and how they compare/)).toBeVisible()
+  expect(refinementBody).toMatchObject({
+    expectedRevision: 1,
+    requirementKey: 'requirement:area',
+    value: 'Fremantle and nearby suburbs would work.',
+  })
+})
+
+function clarificationView(): CustomerRequestView {
+  return {
+    kind: 'request', requestRef: 'request:clarification', revision: 1,
+    state: 'needs_information', summary: 'Find a nearby business', nextAction: 'provide_information',
+    missingFields: [{
+      field: 'requirement:area', label: 'Which area should the business cover?',
+      explanation: 'This answer changes which registered options can be prepared now.',
+    }],
+    clarification: {
+      kind: 'contract_fact', requirementKey: 'requirement:area',
+      prompt: 'Which area should the business cover?', answerKind: 'typed_value',
+    },
+    options: [],
+  }
+}
+
+function clarifiedView(): CustomerRequestView {
+  return {
+    kind: 'request', requestRef: 'request:clarification', revision: 2,
+    state: 'ready_to_compare', summary: 'Find a nearby business around Fremantle',
+    nextAction: 'prepare_options', missingFields: [], options: [],
+    criteria: [{
+      label: 'Area', value: 'Fremantle and nearby suburbs', basis: 'customer_provided',
+      impact: 'eligibility_and_comparison',
+    }],
+  }
+}
+
 function decisionView(): CustomerRequestView {
   const validUntil = Date.now() + 300_000
   return {

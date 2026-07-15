@@ -160,6 +160,38 @@ describe('V2 Request semantics', () => {
     expect(evaluation.nextRequirement).toBeUndefined()
   })
 
+  it('asks the missing question that makes the most registered options decidable first', () => {
+    const first = decisionModelWithCommitment()
+    const second = openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
+      version: 2,
+      inputSchema: structuredInputSchema(),
+      customerAnnotations: structuredAnnotations(),
+      dataUse: structuredDataUse(),
+      effects: structuredEffects(),
+    })))
+    const shipping = compositionShippingModel(compositionLookupModel())
+
+    const evaluation = evaluateCustomerRequestSnapshot({
+      requestId: 'request:best-question', requestRevision: 1,
+      intent: 'Find a useful option', facts: [], registrySnapshotDigest: 'sha256:graph',
+      candidates: [
+        { ...supply('binding:first-question', first), model: first },
+        { ...supply('binding:second-question', second), model: second },
+        { ...supply('binding:shipping-question', shipping), model: shipping },
+      ],
+    })
+
+    expect(evaluation.nextRequirement).toMatchObject({
+      kind: 'contract_fact', customerLabel: 'What to find',
+      impact: { affectedCandidates: expect.any(Array), probesEnabled: expect.any(Array) },
+    })
+    if (evaluation.nextRequirement?.kind !== 'contract_fact') throw new Error('expected an exact question')
+    expect(evaluation.nextRequirement.impact.affectedCandidates).toHaveLength(2)
+    expect(evaluation.nextRequirement.impact.probesEnabled)
+      .toEqual(evaluation.nextRequirement.impact.affectedCandidates)
+    expect(evaluation.nextRequirement).not.toMatchObject({ customerLabel: 'Option identifier' })
+  })
+
   it('refuses an expanded descriptor payload before calling the model transport', async () => {
     const model = decisionModelWithCommitment()
     const generateJson = vi.fn()

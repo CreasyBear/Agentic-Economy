@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  handleBrowserCustomerRequestFactsPost,
   handleBrowserCustomerRequestMessagePost,
   handleBrowserCustomerRequestPost,
 } from '@/lib/server/customer-request-browser-api'
@@ -97,6 +98,46 @@ describe('browser Customer Request API', () => {
       command: refinementCommand as never,
       assertion: refinementAuth as never,
       now: 10_001,
+    })).resolves.toBe(true)
+
+    let factAnswer: Record<string, unknown> | undefined
+    const exactFollowUp = await handleBrowserCustomerRequestFactsPost(new Request(
+      'https://ae.example/api/requests/request%3Aguest%3A1/facts',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie ?? '' },
+        body: JSON.stringify({
+          idempotencyKey: 'fact:guest:1', expectedRevision: 2,
+          requirementKey: 'requirement:area', value: 'Fremantle and nearby suburbs',
+        }),
+      },
+    ), 'request:guest:1', {
+      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey },
+      now: () => 10_002,
+      callAction: async (name, args) => {
+        expect(name).toBe('customerRequestApplication:provideFacts')
+        factAnswer = args
+        return {
+          kind: 'request', requestRef: 'request:guest:1', revision: 3,
+          state: 'ready_to_compare', summary: 'A quiet place near Fremantle',
+          nextAction: 'prepare_options', missingFields: [], options: [],
+        }
+      },
+    })
+
+    expect(exactFollowUp.status).toBe(200)
+    const { serviceAuth: factAuth, ...factCommand } = factAnswer ?? {}
+    expect((factAuth as { principalId: string }).principalId)
+      .toBe((serviceAuth as { principalId: string }).principalId)
+    expect(factCommand).toMatchObject({
+      requirementKey: 'requirement:area', value: 'Fremantle and nearby suburbs',
+    })
+    await expect(verifyCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'facts',
+      command: factCommand as never,
+      assertion: factAuth as never,
+      now: 10_002,
     })).resolves.toBe(true)
   })
 

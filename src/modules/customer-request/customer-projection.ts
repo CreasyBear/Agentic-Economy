@@ -43,7 +43,23 @@ export type CustomerCriterion = Readonly<{
   label: string
   value: JsonValue
   basis: 'customer_provided' | 'extracted_from_request'
+  impact: 'eligibility_and_comparison'
 }>
+
+export function projectCustomerCriteria(
+  criteria: readonly Readonly<{
+    label: string
+    value: JsonValue
+    basis: 'customer_provided' | 'extracted_from_request'
+  }>[],
+): readonly CustomerCriterion[] {
+  return Object.freeze(criteria.map(({ label, value, basis }) => Object.freeze({
+    label,
+    value: structuredClone(value),
+    basis,
+    impact: 'eligibility_and_comparison' as const,
+  })))
+}
 
 export type CustomerRequestProjection =
   | CustomerRequestView
@@ -101,7 +117,7 @@ export function projectRequestEvaluation(input: Readonly<{
   evaluation: RequestEvaluationProjectionInput
   routeGenerationRef?: string
 }>): CustomerRequestView {
-  const criteria = input.evaluation.criteria.map(({ label, value, basis }) => ({ label, value, basis }))
+  const criteria = projectCustomerCriteria(input.evaluation.criteria)
   const routeGeneration = input.routeGenerationRef === undefined
     ? {}
     : { routeGenerationRef: input.routeGenerationRef }
@@ -110,7 +126,7 @@ export function projectRequestEvaluation(input: Readonly<{
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
-    summary: 'No supported way forward is available from registered businesses for this Request.',
+    summary: 'No business on AE can support this request right now.',
     nextAction: 'revise_request',
     criteria,
   })
@@ -124,7 +140,7 @@ export function projectRequestEvaluation(input: Readonly<{
     missingFields: input.evaluation.nextRequirement.kind === 'contract_fact' ? [{
       field: input.evaluation.nextRequirement.requirementKey,
       label: input.evaluation.nextRequirement.customerLabel,
-      explanation: 'This answer changes which registered options can be prepared now.',
+      explanation: 'This answer changes which options can be considered now.',
     }] : [],
     clarification: input.evaluation.nextRequirement.kind === 'intent_direction'
       ? { kind: 'intent_direction', prompt: input.evaluation.nextRequirement.prompt, answerKind: 'natural_language' }

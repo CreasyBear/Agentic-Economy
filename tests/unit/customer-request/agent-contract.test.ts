@@ -4,6 +4,7 @@ import {
   customerRequestFactInputSchema,
   customerRequestViewSchema,
 } from '@/modules/customer-request/agent-contract'
+import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 
 describe('Customer Request agent contract', () => {
   it('owns the exact typed-fact wire shape used by the handler and external agent', () => {
@@ -16,6 +17,22 @@ describe('Customer Request agent contract', () => {
       idempotencyKey: 'fact:one', expectedRevision: 1,
       facts: { requestContext: 'Compare sandbox options' },
     }).success).toBe(false)
+  })
+
+  it('tells human and agent callers how every understood fact affects the choice', () => {
+    const view = projectRequestEvaluation({
+      snapshot: { requestId: 'request:understanding', revision: 1, intent: 'Find a nearby option' },
+      evaluation: {
+        posture: 'progress_available',
+        criteria: [{ label: 'Area', value: 'Fremantle', basis: 'extracted_from_request' }],
+      },
+    })
+
+    expect(view.criteria).toEqual([{
+      label: 'Area', value: 'Fremantle', basis: 'extracted_from_request',
+      impact: 'eligibility_and_comparison',
+    }])
+    expect(customerRequestViewSchema.parse(view).criteria).toEqual(view.criteria)
   })
 
   it('validates the customer-semantic prepared decision and every terminal recovery state', () => {

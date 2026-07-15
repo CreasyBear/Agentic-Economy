@@ -1473,7 +1473,9 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     }
     expect(routeShapeRefresh.criteria).toEqual(
       shapeGeneration.routeGeneration.decisionSnapshot.criteria
-        .map(({ label, value, basis }) => ({ label, value, basis })),
+        .map(({ label, value, basis }) => ({
+          label, value, basis, impact: 'eligibility_and_comparison',
+        })),
     )
     expect(shapeGeneration.routeGeneration.routes[0]).toMatchObject({
       maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 950 },

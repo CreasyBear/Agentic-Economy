@@ -151,6 +151,60 @@ describe('customer Request workspace', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('lets a customer answer an exact business question in their own words', async () => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `uuid-${++sequence}` })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:uuid-1', revision: 1, state: 'needs_information',
+        summary: 'Find a suitable option', nextAction: 'provide_information', options: [],
+        missingFields: [{
+          field: 'requirement:area', label: 'Which area should the business cover?',
+          explanation: 'This answer changes which registered options can be prepared now.',
+        }],
+        clarification: {
+          kind: 'contract_fact', requirementKey: 'requirement:area',
+          prompt: 'Which area should the business cover?', answerKind: 'typed_value',
+        },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:uuid-1', revision: 2, state: 'ready_to_compare',
+        summary: 'Find a suitable option near Fremantle', nextAction: 'prepare_options', options: [],
+        missingFields: [], criteria: [{
+          label: 'Area', value: 'Fremantle and nearby suburbs', basis: 'customer_provided',
+          impact: 'eligibility_and_comparison',
+        }],
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a suitable option' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    await screen.findByRole('heading', { name: 'Which area should the business cover?' })
+    expect(screen.getByPlaceholderText('Answer in your own words')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Your answer'), {
+      target: { value: 'Fremantle and nearby suburbs would work.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    await screen.findByRole('button', { name: 'Show available options' })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/requests/request%3Auuid-1/facts',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))).toMatchObject({
+      expectedRevision: 1,
+      requirementKey: 'requirement:area',
+      value: 'Fremantle and nearby suburbs would work.',
+    })
+    expect(screen.getByText(/Area:/)).toBeTruthy()
+    expect(screen.getByText(/You said this.*Used to decide which options fit and how they compare/)).toBeTruthy()
+  })
+
   it('renders the shared RoutePlan decision as an outcome, not routing machinery', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-route' })
     const fetchMock = vi.fn().mockResolvedValue(Response.json({
@@ -427,7 +481,7 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
 
     await screen.findByRole('heading', { name: 'Review what would be shared' })
-    expect(screen.getByText(/up to 2 eligible registered businesses/)).toBeTruthy()
+    expect(screen.getByText(/up to 2 matching businesses/)).toBeTruthy()
     expect(screen.getByText(/Nothing has been shared/)).toBeTruthy()
     expect(screen.queryByText('origin_postcode')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Allow this comparison' }))
@@ -459,7 +513,7 @@ describe('customer Request workspace', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(3)
-      expect(screen.getByRole('heading', { name: 'Nothing eligible returned an option.' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'Nothing available matched your request.' })).toBeTruthy()
     }, { timeout: 5_000 })
     expect(screen.getByText(/AE will not invent availability/)).toBeTruthy()
     expect(screen.getByText('Request revision 1')).toBeTruthy()
