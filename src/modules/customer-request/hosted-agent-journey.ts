@@ -82,7 +82,7 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
     requestRef: z.string(), state: z.enum(['cancelled', 'completed']), selectedBusiness: z.string(),
     selectedBusinesses: z.array(z.string()).min(1), stepCount: z.number().int().positive(),
     runState: z.enum(['in_progress', 'completed']),
-    evidenceState: z.enum(['queued', 'completed']),
+    evidenceState: z.enum(['queued', 'running', 'completed']),
     problemState: z.enum(['received', 'not_reported']),
     resumedState: z.enum(['cancelled', 'completed']),
     resultDigest: z.string().optional(),
@@ -218,7 +218,9 @@ export async function runHostedCustomerRequestJourney(
         })
       }
       const evidence = await callAgentEvidence(runtimeInput, evidencePath)
-      if (evidence.state !== 'queued') throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
+      if (evidence.state !== 'queued' && evidence.state !== 'running') {
+        throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
+      }
       const problemAction = observedNavigationAction(input, view, 'report_problem')
       if (problemAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:report_problem')
       const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {

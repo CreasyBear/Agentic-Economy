@@ -72,8 +72,8 @@ describe('hosted Customer Request journey', () => {
         },
       }),
       {
-        kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
-        steps: [{ step: 1, state: 'queued', observedAt: 9_000, evidence: [] }],
+        kind: 'evidence', requestRef: 'request:cold', state: 'running', generatedAt: 9_000,
+        steps: [{ step: 1, state: 'awaiting_result', observedAt: 9_000, evidence: [] }],
       },
       { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_001 },
       requestView('cancelled', 2, {
@@ -108,6 +108,7 @@ describe('hosted Customer Request journey', () => {
       verifyAnonymousRefusal: async () => undefined,
     })
     expect(proof.input).toMatchObject({ request: 'Complete sandbox request', facts: [], messages: [] })
+    expect(proof.final.evidenceState).toBe('running')
   })
 
   it('requires the declared composite route and resumes it to completed evidence', async () => {
