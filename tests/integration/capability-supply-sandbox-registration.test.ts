@@ -19,6 +19,7 @@ import { DEV_SEED_BUSINESS_FIXTURES } from '@/modules/dev/public'
 import {
   SANDBOX_PROVIDER_PROFILES,
   SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
+  SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
 } from '@/modules/sandbox-supply/public'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 
@@ -32,6 +33,12 @@ describe('labelled sandbox V2 capability supply', () => {
     ).contract.ref.contractDigest).toBe('sha256:755ed0e0a297adf22152d8ddf8d12dcf8cb5197d805e3d77e67288c7b223ed92')
   })
 
+  it('pins the immutable historical sandbox v2 contract identity', () => {
+    expect(encodeCapabilityContractDocument(
+      SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
+    ).contract.ref.contractDigest).toBe('sha256:b59586aab54e68b3993c2e27d8781a40b815c3e0e3a938febeff8386be8dde93')
+  })
+
   it('seeds only the two labelled acceptance businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -39,12 +46,12 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(result).toMatchObject({
       seededSlugs: ['sandbox-option-one', 'sandbox-option-two'],
       sandboxV2Bindings: [
-        'binding:sandbox-option-one:http-json:v3',
-        'binding:sandbox-option-two:http-json:v3',
+        'binding:sandbox-option-one:http-json:v4',
+        'binding:sandbox-option-two:http-json:v4',
       ],
       sandboxCapabilityPublicationRefs: [
-        'offering:sandbox-option-one:reference-lookup:v2',
-        'offering:sandbox-option-two:reference-lookup:v2',
+        'offering:sandbox-option-one:reference-lookup:v3',
+        'offering:sandbox-option-two:reference-lookup:v3',
       ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
@@ -60,13 +67,13 @@ describe('labelled sandbox V2 capability supply', () => {
     const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
     expect(publications).toMatchObject([
       {
-        publicationRef: 'offering:sandbox-option-one:reference-lookup:v2',
-        bindingId: 'binding:sandbox-option-one:http-json:v3',
+        publicationRef: 'offering:sandbox-option-one:reference-lookup:v3',
+        bindingId: 'binding:sandbox-option-one:http-json:v4',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
       {
-        publicationRef: 'offering:sandbox-option-two:reference-lookup:v2',
-        bindingId: 'binding:sandbox-option-two:http-json:v3',
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
+        bindingId: 'binding:sandbox-option-two:http-json:v4',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
     ])
@@ -105,8 +112,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v3',
-      'binding:sandbox-option-two:http-json:v3',
+      'binding:sandbox-option-one:http-json:v4',
+      'binding:sandbox-option-two:http-json:v4',
     ])
   })
 
@@ -121,11 +128,11 @@ describe('labelled sandbox V2 capability supply', () => {
       ctx.db.query('owners').withIndex('by_clerkUserId', (query) => query.eq('clerkUserId', first.ownerClerkUserId)).unique()
     ))
     expect(first.sandboxV2Bindings).toEqual([
-      'binding:sandbox-option-one:http-json:v3',
-      'binding:sandbox-option-two:http-json:v3',
+      'binding:sandbox-option-one:http-json:v4',
+      'binding:sandbox-option-two:http-json:v4',
     ])
     expect(replay.sandboxV2Bindings).toEqual(first.sandboxV2Bindings)
-    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v2')
+    expect(first.sandboxCapabilityPublicationRef).toBe('offering:sandbox-option-one:reference-lookup:v3')
     expect(replay.sandboxCapabilityPublicationRef).toBe(first.sandboxCapabilityPublicationRef)
     expect(ownerAfterReplay).toEqual(ownerBeforeReplay)
 
@@ -150,12 +157,12 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(state.publications).toMatchObject([
       {
         publicationRef: first.sandboxCapabilityPublicationRef,
-        bindingId: 'binding:sandbox-option-one:http-json:v3',
+        bindingId: 'binding:sandbox-option-one:http-json:v4',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
       {
-        publicationRef: 'offering:sandbox-option-two:reference-lookup:v2',
-        bindingId: 'binding:sandbox-option-two:http-json:v3',
+        publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
+        bindingId: 'binding:sandbox-option-two:http-json:v4',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
     ])
@@ -169,7 +176,7 @@ describe('labelled sandbox V2 capability supply', () => {
     })
     expect(state.contracts).toHaveLength(1)
     expect(state.contracts[0]).toMatchObject({
-      capabilityId: 'sandbox.reference.lookup', version: 2, status: 'active',
+      capabilityId: 'sandbox.reference.lookup', version: 3, status: 'active',
       contractDigest: expect.stringMatching(/^sha256:/),
     })
     expect(state.offerings).toHaveLength(2)
@@ -217,8 +224,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible).toMatchObject({
       kind: 'available',
       supplies: [
-        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v3' } },
-        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v3' } },
+        { binding: { bindingId: 'binding:sandbox-option-one:http-json:v4' } },
+        { binding: { bindingId: 'binding:sandbox-option-two:http-json:v4' } },
       ],
     })
   })
@@ -239,8 +246,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.kind).toBe('available')
     if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
-      'binding:sandbox-option-one:http-json:v3',
-      'binding:sandbox-option-two:http-json:v3',
+      'binding:sandbox-option-one:http-json:v4',
+      'binding:sandbox-option-two:http-json:v4',
     ])
     const registrations = await backend.run(async (ctx) => ({
       offerings: await ctx.db.query('capabilityOfferings').collect(),
@@ -258,6 +265,7 @@ describe('labelled sandbox V2 capability supply', () => {
       ))
       await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
       await registerLegacySandboxSupply(ctx.db)
+      await registerPriorV2SandboxSupply(ctx.db)
       await retireOriginalLegacySandboxBindings(ctx.db)
     })
     const priorRetirement = await backend.run(async (ctx) => ({
@@ -293,6 +301,8 @@ describe('labelled sandbox V2 capability supply', () => {
         || audit.targetRef === 'binding:sandbox-option-two:http-json'
         || audit.targetRef === 'binding:sandbox-option-one:http-json:v2'
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v3'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v3'
       )),
     }))
     const replay = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
@@ -305,6 +315,8 @@ describe('labelled sandbox V2 capability supply', () => {
         || audit.targetRef === 'binding:sandbox-option-two:http-json'
         || audit.targetRef === 'binding:sandbox-option-one:http-json:v2'
         || audit.targetRef === 'binding:sandbox-option-two:http-json:v2'
+        || audit.targetRef === 'binding:sandbox-option-one:http-json:v3'
+        || audit.targetRef === 'binding:sandbox-option-two:http-json:v3'
       )),
     }))
     expect(replay).toEqual(migrated)
@@ -315,17 +327,17 @@ describe('labelled sandbox V2 capability supply', () => {
       bindingId: binding.bindingId, credentialRef: binding.credentialRef,
       admission: binding.admission, conformance: binding.conformance,
     })
-    expect(bindings.filter((binding) => binding.bindingId.endsWith(':v3')).map(bindingState)).toEqual([
+    expect(bindings.filter((binding) => binding.bindingId.endsWith(':v4')).map(bindingState)).toEqual([
       {
-        bindingId: 'binding:sandbox-option-one:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-one:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
       {
-        bindingId: 'binding:sandbox-option-two:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        bindingId: 'binding:sandbox-option-two:http-json:v4', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'admitted', conformance: 'conformant',
       },
     ])
-    expect(bindings.filter((binding) => !binding.bindingId.endsWith(':v3')).map(bindingState)).toEqual([
+    expect(bindings.filter((binding) => !binding.bindingId.endsWith(':v4')).map(bindingState)).toEqual([
       {
         bindingId: 'binding:sandbox-option-one:http-json', credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',
@@ -340,6 +352,14 @@ describe('labelled sandbox V2 capability supply', () => {
       },
       {
         bindingId: 'binding:sandbox-option-two:http-json:v2', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-one:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        admission: 'not_admitted', conformance: 'not_conformant',
+      },
+      {
+        bindingId: 'binding:sandbox-option-two:http-json:v3', credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',
       },
     ])
@@ -524,6 +544,78 @@ async function registerLegacySandboxSupply(
       }, 2_300)
       if (admitted.kind !== 'eligible') throw new Error(`legacy admission failed: ${admitted.kind}`)
     }
+  }
+}
+
+async function registerPriorV2SandboxSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+): Promise<void> {
+  const encoded = encodeCapabilityContractDocument(SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT)
+  const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_500)
+  if (contract.kind !== 'registered') throw new Error(`prior V2 contract registration failed: ${contract.reason}`)
+  for (const [profileKey, profile] of Object.entries(SANDBOX_PROVIDER_PROFILES)) {
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
+    if (business === null) throw new Error(`prior V2 business missing: ${profile.slug}`)
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:prior-v2-offering:${profile.priorV2OfferingId}`,
+        correlationId: `test:prior-v2-supply:${profile.slug}`,
+        reasonCode: 'test_prior_v2_registration', evidenceRefs: ['test:prior-v2-supply'],
+      },
+      registration: {
+        offeringId: profile.priorV2OfferingId, businessId: business._id, networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.label, summary: 'Prior V2 labelled sandbox supply.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only.' }],
+          commercialRelationship: {
+            kind: 'none', summary: 'No commercial relationship.', influencesEligibility: false,
+            influencesInclusion: false, influencesOrder: false, evidenceRefs: ['test:prior-v2-supply'],
+          },
+        },
+        searchTerms: [...profile.queryTerms], registrationEvidenceRefs: ['test:prior-v2-supply'],
+      },
+    }, 2_600)
+    if (offering.kind !== 'registered') throw new Error(`prior V2 offering registration failed: ${offering.reason}`)
+    const binding = await registerCapabilityBindingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:prior-v2-binding:${profile.v2BindingId}`,
+        correlationId: `test:prior-v2-supply:${profile.slug}`,
+        reasonCode: 'test_prior_v2_registration', evidenceRefs: ['test:prior-v2-supply'],
+      },
+      registration: {
+        bindingId: profile.v2BindingId, offeringId: profile.priorV2OfferingId,
+        networkId: 'ae:public', contractRef: contract.ref,
+        endpointUrl: `https://agentic-economy-phi.vercel.app/api/sandbox/capability?profile=${profileKey}&binding=v3`,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+      },
+    }, 2_700)
+    if (binding.kind !== 'registered') throw new Error(`prior V2 binding registration failed: ${binding.reason}`)
+    const admitted = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:prior-v2-admission:${profile.v2BindingId}`,
+        correlationId: `test:prior-v2-supply:${profile.slug}`,
+        reasonCode: 'test_prior_v2_admission', evidenceRefs: ['test:prior-v2-supply'],
+      },
+      eligibility: {
+        offeringId: profile.priorV2OfferingId, bindingId: profile.v2BindingId,
+        contractRef: contract.ref, decision: 'admit',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['test:prior-v2-supply'],
+        conformanceEvidenceRefs: ['test:prior-v2-supply'],
+      },
+    }, 2_800)
+    if (admitted.kind !== 'eligible') throw new Error(`prior V2 admission failed: ${admitted.kind}`)
   }
 }
 

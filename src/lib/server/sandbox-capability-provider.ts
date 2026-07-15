@@ -40,7 +40,7 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   const profile = SANDBOX_PROVIDER_PROFILES[url.searchParams.get('profile') as keyof typeof SANDBOX_PROVIDER_PROFILES]
   if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
   const bindingVersion = url.searchParams.get('binding')
-  if (bindingVersion !== null && bindingVersion !== 'v2' && bindingVersion !== 'v3') {
+  if (bindingVersion !== null && bindingVersion !== 'v2' && bindingVersion !== 'v3' && bindingVersion !== 'v4') {
     return json({ kind: 'refused', reason: 'sandbox_binding_unknown' }, 404)
   }
   const scenarioResult = scenarioValue.safeParse(url.searchParams.get('scenario') ?? 'success')
@@ -52,15 +52,18 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
   const preparationEgress = preparationEgressBody.safeParse(parsedJson)
   if (preparationEgress.success) {
-    const bindingId = bindingVersion === 'v3'
-      ? profile.v2BindingId
+    const bindingId = bindingVersion === 'v4'
+      ? profile.v3BindingId
+      : bindingVersion === 'v3' ? profile.v2BindingId
       : bindingVersion === 'v2' ? profile.priorV2BindingId : profile.legacyV2BindingId
-    const offeringId = bindingVersion === 'v3' ? profile.offeringId : profile.priorOfferingId
+    const offeringId = bindingVersion === 'v4'
+      ? profile.offeringId
+      : bindingVersion === 'v3' ? profile.priorV2OfferingId : profile.priorOfferingId
     return providerOption(profile, offeringId, bindingId, preparationEgress.data)
   }
   const parsed = requestBody.safeParse(parsedJson)
   const registeredBindingIds: readonly string[] = [
-    profile.bindingId, profile.legacyV2BindingId, profile.priorV2BindingId, profile.v2BindingId,
+    profile.bindingId, profile.legacyV2BindingId, profile.priorV2BindingId, profile.v2BindingId, profile.v3BindingId,
   ]
   if (!parsed.success || !registeredBindingIds.includes(parsed.data.bindingId)) {
     return json({ kind: 'refused', reason: 'request_invalid' }, 400)

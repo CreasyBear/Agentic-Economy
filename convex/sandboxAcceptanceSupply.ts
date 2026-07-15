@@ -6,7 +6,7 @@ import {
   admitSandboxV2Supply,
   registerSandboxBusinesses,
   registerSandboxV2SupplyRegistrations,
-  retireLegacySandboxV2Supply,
+  retireSupersededSandboxV2Supply,
   seedSandboxCapabilityPublication,
 } from './devSeed'
 import { runtimeDb } from './source_state'
@@ -63,7 +63,7 @@ export const seedLabelledSandboxSupply = internalMutation({
         publicationRef, expectedRevision: 1,
       })
     }
-    await retireLegacySandboxV2Supply(ctx.db, registrations, registeredAt + 3_000)
+    await retireSupersededSandboxV2Supply(ctx.db, registrations, registeredAt + 3_000)
     return { ...businesses, sandboxV2Bindings, sandboxCapabilityPublicationRefs }
   },
 })

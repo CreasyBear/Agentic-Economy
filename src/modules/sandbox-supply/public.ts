@@ -24,7 +24,7 @@ export const SANDBOX_OPTION_CAPABILITY_CONTRACT = Object.freeze({
 export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
   contractFormat: 'ae.capability-contract:v2' as const,
   capabilityId: 'sandbox.reference.lookup',
-  version: 2,
+  version: 3,
   name: 'Sandbox reference lookup',
   description: 'Return one labelled sandbox result for a structured request.',
   inputSchema: Object.freeze({
@@ -64,6 +64,18 @@ export const SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
     evidenceId: 'option_summary', outputPointer: '/optionSummary', purpose: 'completion' as const,
   })]),
   lifecycle: Object.freeze({ idempotency: 'required' as const, recovery: 'retry_safe' as const }),
+})
+
+export const SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
+  ...SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
+  version: 2,
+  customerAnnotations: Object.freeze([
+    Object.freeze({
+      annotationId: 'request_context', document: 'input' as const, pointer: '/requestContext',
+      label: 'Lookup instruction', role: 'request' as const, inference: 'customer_required' as const,
+    }),
+    SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.customerAnnotations[1],
+  ]),
 })
 
 export const SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
@@ -115,20 +127,24 @@ export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
   one: Object.freeze({
     slug: 'sandbox-option-one', bindingId: 'sandbox.option.one:v1', nodeId: 'sandbox:option-one',
     priorOfferingId: 'offering:sandbox-option-one:reference-lookup',
-    offeringId: 'offering:sandbox-option-one:reference-lookup:v2',
+    priorV2OfferingId: 'offering:sandbox-option-one:reference-lookup:v2',
+    offeringId: 'offering:sandbox-option-one:reference-lookup:v3',
     legacyV2BindingId: 'binding:sandbox-option-one:http-json',
     priorV2BindingId: 'binding:sandbox-option-one:http-json:v2',
     v2BindingId: 'binding:sandbox-option-one:http-json:v3',
+    v3BindingId: 'binding:sandbox-option-one:http-json:v4',
     label: 'Sandbox Option One', amountMinor: 1_200, latencyMs: 120,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),
   two: Object.freeze({
     slug: 'sandbox-option-two', bindingId: 'sandbox.option.two:v1', nodeId: 'sandbox:option-two',
     priorOfferingId: 'offering:sandbox-option-two:reference-lookup',
-    offeringId: 'offering:sandbox-option-two:reference-lookup:v2',
+    priorV2OfferingId: 'offering:sandbox-option-two:reference-lookup:v2',
+    offeringId: 'offering:sandbox-option-two:reference-lookup:v3',
     legacyV2BindingId: 'binding:sandbox-option-two:http-json',
     priorV2BindingId: 'binding:sandbox-option-two:http-json:v2',
     v2BindingId: 'binding:sandbox-option-two:http-json:v3',
+    v3BindingId: 'binding:sandbox-option-two:http-json:v4',
     label: 'Sandbox Option Two', amountMinor: 900, latencyMs: 180,
     queryTerms: Object.freeze(['sandbox option', 'reference comparison']),
   }),

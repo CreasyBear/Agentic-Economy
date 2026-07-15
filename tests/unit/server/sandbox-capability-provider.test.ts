@@ -14,29 +14,29 @@ describe('sandbox capability provider', () => {
     await expect(two.json()).resolves.toMatchObject({ issuerBindingId: 'sandbox.option.two:v1', expectedCost: { amountMinor: 900 } })
   })
 
-  it('accepts and exactly echoes the registered V2 binding identity', async () => {
-    const response = await call('one', 'binding:sandbox-option-one:http-json:v3')
+  it('accepts and exactly echoes the registered current binding identity', async () => {
+    const response = await call('one', 'binding:sandbox-option-one:http-json:v4')
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
-      issuerBindingId: 'binding:sandbox-option-one:http-json:v3',
+      issuerBindingId: 'binding:sandbox-option-one:http-json:v4',
       expectedCost: { amountMinor: 1_200 },
     })
   })
 
-  it('returns the registered V2 provider option envelope for preparation egress', async () => {
+  it('returns the registered current provider option envelope for preparation egress', async () => {
     const response = await handleSandboxCapabilityRequest(
-      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v3'),
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v4'),
       { providerKey: 'secret' },
     )
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({
       format: 'ae.provider-option:v1',
-      operationRef: 'preparation-egress:test-v2',
-      contractRef: { capabilityId: 'sandbox.reference.lookup', version: 2 },
-      offeringId: 'offering:sandbox-option-one:reference-lookup:v2',
-      bindingId: 'binding:sandbox-option-one:http-json:v3',
+      operationRef: 'preparation-egress:test-v3',
+      contractRef: { capabilityId: 'sandbox.reference.lookup', version: 3 },
+      offeringId: 'offering:sandbox-option-one:reference-lookup:v3',
+      bindingId: 'binding:sandbox-option-one:http-json:v4',
       assertionRef: expect.stringMatching(/^sandbox-option:/),
       output: { optionSummary: 'Sandbox Option One — sandbox verification only' },
     })
@@ -51,14 +51,19 @@ describe('sandbox capability provider', () => {
       preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v2'),
       { providerKey: 'secret' },
     )
-    const current = await handleSandboxCapabilityRequest(
+    const prior = await handleSandboxCapabilityRequest(
       preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v3'),
+      { providerKey: 'secret' },
+    )
+    const current = await handleSandboxCapabilityRequest(
+      preparationRequest('https://ae.test/api/sandbox/capability?profile=one&binding=v4'),
       { providerKey: 'secret' },
     )
 
     await expect(legacy.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json' })
     await expect(corrected.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v2' })
-    await expect(current.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v3' })
+    await expect(prior.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v3' })
+    await expect(current.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v4' })
   })
 
   it('refuses missing credentials and never commits a real-world effect', async () => {
@@ -161,9 +166,9 @@ function preparationRequest(url: string): Request {
   return new Request(url, {
     method: 'POST', headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      protocol: 'ae.preparation-egress:v1', operationRef: 'preparation-egress:test-v2',
+      protocol: 'ae.preparation-egress:v1', operationRef: 'preparation-egress:test-v3',
       contractRef: {
-        capabilityId: 'sandbox.reference.lookup', version: 2,
+        capabilityId: 'sandbox.reference.lookup', version: 3,
         contractDigest: 'sha256:' + 'a'.repeat(64),
       },
       selectionKey: 'ae_selection:test', semanticDigest: 'sha256:' + 'b'.repeat(64),
