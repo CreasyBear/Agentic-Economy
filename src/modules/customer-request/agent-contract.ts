@@ -419,6 +419,22 @@ export const customerPreparedActionSchema = z.object({
   }).strict()),
 }).strict()
 
+const customerRequestAgentNavigationInputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
+
+export const customerRequestAgentNavigationSchema = z.strictObject({
+  current: z.string(),
+  actions: z.array(z.strictObject({
+    relation: z.enum([
+      'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
+      'inspect_progress', 'inspect_evidence', 'cancel', 'report_problem',
+    ]),
+    method: z.enum(['GET', 'POST']),
+    href: z.string(),
+    summary: z.string(),
+    input: z.record(z.string(), customerRequestAgentNavigationInputValueSchema).optional(),
+  })),
+})
+
 export const customerRequestViewSchema = z.strictObject({
   kind: z.literal('request'), requestRef: z.string(), revision: safeNonnegativeInteger,
   routeGenerationRef: z.string().optional(),
@@ -477,6 +493,7 @@ export const customerRequestViewSchema = z.strictObject({
     cancellation: z.enum(['available_before_next_step', 'too_late_or_unsupported', 'complete']),
     safeNextAction: z.enum(['check_progress', 'wait_for_evidence', 'review_result', 'revise_request', 'none']),
   }).optional(),
+  navigation: customerRequestAgentNavigationSchema.optional(),
   decision: customerRoutePlanDecisionSchema.optional(),
   confirmation: customerRouteConfirmationSchema.optional(),
 }).superRefine((view, context) => {
@@ -560,5 +577,6 @@ export type CustomerRequestEvidenceExport = DeepReadonly<z.infer<typeof customer
 export type CustomerRequestProblemResult = DeepReadonly<z.infer<typeof customerRequestProblemResultSchema>>
 export type CustomerRequestEvidenceResult = DeepReadonly<z.infer<typeof customerRequestEvidenceResultSchema>>
 export type CustomerRequestAgentResult = DeepReadonly<z.infer<typeof customerRequestAgentResultSchema>>
+export type CustomerRequestAgentNavigation = DeepReadonly<z.infer<typeof customerRequestAgentNavigationSchema>>
 export type CustomerPreparedAction = DeepReadonly<z.infer<typeof customerPreparedActionSchema>>
 export type CustomerRequestView = DeepReadonly<z.infer<typeof customerRequestViewSchema>>

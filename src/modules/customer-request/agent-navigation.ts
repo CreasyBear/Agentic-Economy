@@ -1,27 +1,9 @@
-import { z } from 'zod'
-
 import {
+  customerRequestAgentNavigationSchema,
   customerRequestViewSchema,
+  type CustomerRequestAgentNavigation,
   type CustomerRequestView,
 } from '@/modules/customer-request/agent-contract'
-
-const navigationInputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
-
-export const customerRequestAgentNavigationSchema = z.strictObject({
-  current: z.string(),
-  actions: z.array(z.strictObject({
-    relation: z.enum([
-      'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
-      'inspect_progress', 'inspect_evidence', 'cancel', 'report_problem',
-    ]),
-    method: z.enum(['GET', 'POST']),
-    href: z.string(),
-    summary: z.string(),
-    input: z.record(z.string(), navigationInputValueSchema).optional(),
-  })),
-})
-
-export type CustomerRequestAgentNavigation = Readonly<z.infer<typeof customerRequestAgentNavigationSchema>>
 
 /**
  * Adds state-appropriate links to the external-agent projection. The canonical
@@ -44,7 +26,7 @@ export async function withCustomerRequestAgentNavigation(response: Response): Pr
 export function projectCustomerRequestAgentNavigation(view: CustomerRequestView): CustomerRequestAgentNavigation {
   const current = `/api/v1/requests/${encodeURIComponent(view.requestRef)}`
   const idempotencyKey = '<unique string>'
-  const actions: Array<z.infer<typeof customerRequestAgentNavigationSchema>['actions'][number]> = []
+  const actions: Array<CustomerRequestAgentNavigation['actions'][number]> = []
 
   if (view.state === 'needs_information' && view.clarification?.kind === 'contract_fact') {
     actions.push({

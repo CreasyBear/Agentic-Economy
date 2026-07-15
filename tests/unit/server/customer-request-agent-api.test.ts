@@ -7,6 +7,7 @@ import {
   handleAgentCustomerRequestMessagePost,
   handleAgentCustomerRequestPost,
 } from '@/lib/server/customer-request-agent-api'
+import { customerRequestAgentResultSchema } from '@/modules/customer-request/agent-contract'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 const key = 'agent-source-gateway-key-with-at-least-32-bytes'
@@ -143,7 +144,8 @@ describe('agent-native customer Request API', () => {
     }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
+    const body = await response.json()
+    expect(customerRequestAgentResultSchema.parse(body)).toMatchObject({
       requestRef: 'request:agent:cold',
       navigation: {
         current: `/api/v1/requests/${encodeURIComponent('request:agent:cold')}`,
