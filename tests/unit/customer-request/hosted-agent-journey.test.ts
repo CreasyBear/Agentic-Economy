@@ -129,6 +129,14 @@ describe('hosted Customer Request journey', () => {
       stepCount: 2, runState: 'completed', evidenceState: 'completed',
       problemState: 'not_reported', resumedState: 'completed', resultDigest: expect.stringMatching(/^sha256:/),
     })
+    expect(proof.measurements).toEqual({
+      integrationBurden: { requestCalls: 6, clarifications: 0 },
+      turns: { total: 6 }, elapsedMs: 0,
+      hardConstraintAccuracy: { state: 'satisfied' },
+      totalCostAccuracy: { state: 'exact', total: { currency: 'AUD', amountMinor: 900 } },
+      recovery: { state: 'durable', resumed: true, postures: ['retry_safe'] },
+      resultUsability: { state: 'usable' },
+    })
   })
 
   it('retries a transient interpreter outage with the same submitted Request', async () => {

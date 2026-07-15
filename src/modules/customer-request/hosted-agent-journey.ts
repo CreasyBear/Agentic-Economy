@@ -45,7 +45,17 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
   verifyAnonymousRefusal?: () => Promise<void>
 }>
 
-export const hostedCustomerRequestJourneyProofSchema = z.object({
+type JourneyMetrics = {
+  startedAt: number
+  requestCalls: number
+  clarifications: number
+}
+
+type HostedCustomerRequestJourneyRuntimeInput = HostedCustomerRequestJourneyInput & Readonly<{
+  metrics: JourneyMetrics
+}>
+
+export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   kind: z.literal('cold_external_agent_journey'),
   agent: z.object({ name: z.string(), version: z.string() }).strict(),
   release: z.object({
@@ -73,9 +83,26 @@ export const hostedCustomerRequestJourneyProofSchema = z.object({
     resumedState: z.enum(['cancelled', 'completed']),
     resultDigest: z.string().optional(),
   }).strict(),
+  measurements: z.strictObject({
+    integrationBurden: z.strictObject({
+      requestCalls: z.number().int().nonnegative(), clarifications: z.number().int().nonnegative(),
+    }),
+    turns: z.strictObject({ total: z.number().int().nonnegative() }),
+    elapsedMs: z.number().int().nonnegative(),
+    hardConstraintAccuracy: z.strictObject({ state: z.literal('satisfied') }),
+    totalCostAccuracy: z.union([
+      z.strictObject({ state: z.literal('exact'), total: z.strictObject({ currency: z.string(), amountMinor: z.number().int().nonnegative() }) }),
+      z.strictObject({ state: z.literal('unavailable') }),
+    ]),
+    recovery: z.strictObject({
+      state: z.literal('durable'), resumed: z.boolean(),
+      postures: z.array(z.enum(['retry_safe', 'reconcile_required'])),
+    }),
+    resultUsability: z.strictObject({ state: z.enum(['usable', 'unusable']) }),
+  }),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
-}).strict()
+})
 
 export type HostedCustomerRequestJourneyProof = Readonly<z.infer<typeof hostedCustomerRequestJourneyProofSchema>>
 
@@ -83,12 +110,18 @@ export async function runHostedCustomerRequestJourney(
   input: HostedCustomerRequestJourneyInput,
 ): Promise<HostedCustomerRequestJourneyProof> {
   assertProductionBaseUrl(input.baseUrl)
+  const metrics: JourneyMetrics = {
+    startedAt: (input.now ?? Date.now)(), requestCalls: 0, clarifications: 0,
+  }
+  const runtimeInput: HostedCustomerRequestJourneyRuntimeInput = { ...input, metrics }
   const release = await input.verifyRelease()
   if (release.revision !== input.expectedRevision || release.deploymentId !== input.expectedDeploymentId) {
     throw new Error('hosted_journey_release_mismatch')
   }
-  await (input.verifyDiscovery ?? (() => proveDiscovery(input)))()
-  await (input.verifyAnonymousRefusal ?? (() => proveAnonymousRefusal(input)))()
+  await Promise.all([
+    (input.verifyDiscovery ?? (() => proveDiscovery(input)))(),
+    (input.verifyAnonymousRefusal ?? (() => proveAnonymousRefusal(input)))(),
+  ])
 
   const nonce = randomUUID()
   const requestRef = `acceptance:${nonce}`
@@ -100,8 +133,8 @@ export async function runHostedCustomerRequestJourney(
     idempotencyKey: `acceptance:submit:${nonce}`, requestRef,
     agentRef: `${input.agent.name}:${input.agent.version}`, request: input.scenario.request,
   })
-  let view = await submitWithInterpreterRecovery(input, submit)
-  const replay = await callAgent(input, '/api/v1/requests', 'POST', submit)
+  let view = await submitWithInterpreterRecovery(runtimeInput, submit)
+  const replay = await callAgent(runtimeInput, '/api/v1/requests', 'POST', submit)
   if (JSON.stringify(view) !== JSON.stringify(replay)) throw new Error('hosted_journey_submit_replay_changed')
   observe(states, view)
 
@@ -110,12 +143,13 @@ export async function runHostedCustomerRequestJourney(
   while (transitions < 24) {
     transitions += 1
     if (view.state === 'needs_information') {
+      metrics.clarifications += 1
       const clarification = view.clarification
       if (clarification === undefined) throw new Error('hosted_journey_clarification_missing')
       if (clarification.kind === 'intent_direction') {
         const message = input.scenario.messages[messageIndex]
         if (message === undefined) throw new Error(`hosted_journey_message_missing:${clarification.prompt}`)
-        view = await callAgent(input, requestPath(requestRef, 'messages'), 'POST', customerRequestMessageInputSchema.parse({
+        view = await callAgent(runtimeInput, requestPath(requestRef, 'messages'), 'POST', customerRequestMessageInputSchema.parse({
           idempotencyKey: `acceptance:message:${nonce}:${messageIndex}`,
           expectedRevision: view.revision, message,
         }))
@@ -128,7 +162,7 @@ export async function runHostedCustomerRequestJourney(
         if (fact === undefined) {
           throw new Error(`hosted_journey_fact_missing:${clarification.requirementKey}`)
         }
-        view = await callAgent(input, requestPath(requestRef, 'facts'), 'POST', customerRequestFactInputSchema.parse({
+        view = await callAgent(runtimeInput, requestPath(requestRef, 'facts'), 'POST', customerRequestFactInputSchema.parse({
           idempotencyKey: `acceptance:fact:${nonce}:${clarification.requirementKey}`,
           expectedRevision: view.revision, requirementKey: clarification.requirementKey,
           value: fact,
@@ -143,7 +177,7 @@ export async function runHostedCustomerRequestJourney(
     }
 
     if (view.state === 'ready_to_compare') {
-      view = await callAgent(input, requestPath(requestRef, 'options'), 'POST', customerRequestOptionsInputSchema.parse({
+      view = await callAgent(runtimeInput, requestPath(requestRef, 'options'), 'POST', customerRequestOptionsInputSchema.parse({
         revision: view.revision, idempotencyKey: `acceptance:prepare:${nonce}:${view.revision}`,
       }), [200, 202])
       observe(states, view)
@@ -158,7 +192,7 @@ export async function runHostedCustomerRequestJourney(
       assertExpectedRoute(input.scenario.expectedRoute, route.stepCount, selectedBusinesses)
       authorityStops.push('route_confirmation')
       view = await callAgent(
-        input, requestPath(requestRef, 'confirmation'), 'POST',
+        runtimeInput, requestPath(requestRef, 'confirmation'), 'POST',
         customerRequestRouteConfirmationInputSchema.parse({
           revision: view.revision, routeRef: route.routeRef,
           idempotencyKey: `acceptance:confirm:${nonce}:${view.revision}`,
@@ -167,30 +201,30 @@ export async function runHostedCustomerRequestJourney(
       observe(states, view)
       if (view.state !== 'route_confirmed') throw new Error(`hosted_journey_confirmation_failed:${view.state}`)
       view = await callAgent(
-        input, requestPath(requestRef, 'run'), 'POST',
+        runtimeInput, requestPath(requestRef, 'run'), 'POST',
         customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:run:${nonce}` }),
       )
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
       if (input.scenario.finish === 'complete') {
         return await completeHostedJourney({
-          input, release, requestRef, routeStepCount: route.stepCount, selectedBusiness, selectedBusinesses,
+          input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
           states, authorityStops, consumedFacts, consumedMessages,
         })
       }
-      const evidence = await callAgentEvidence(input, requestPath(requestRef, 'evidence'))
+      const evidence = await callAgentEvidence(runtimeInput, requestPath(requestRef, 'evidence'))
       if (evidence.state !== 'queued') throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
-      const problem = await callAgentProblem(input, requestPath(requestRef, 'problems'), {
+      const problem = await callAgentProblem(runtimeInput, requestPath(requestRef, 'problems'), {
         idempotencyKey: `acceptance:problem:${nonce}`, category: 'other',
         summary: 'Labelled sandbox recovery verification.',
       })
       const cancelled = await callAgent(
-        input, requestPath(requestRef, 'cancellation'), 'POST',
+        runtimeInput, requestPath(requestRef, 'cancellation'), 'POST',
         customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:cancel:${nonce}` }),
       )
       observe(states, cancelled)
       if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
-      const resumed = await callAgent(input, requestPath(requestRef), 'GET')
+      const resumed = await callAgent(runtimeInput, requestPath(requestRef), 'GET')
       observe(states, resumed)
       if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
       return hostedCustomerRequestJourneyProofSchema.parse({
@@ -207,6 +241,7 @@ export async function runHostedCustomerRequestJourney(
           stepCount: route.stepCount, runState: 'in_progress',
           evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
         },
+        measurements: journeyMeasurements(runtimeInput, route, false, true),
         sandbox: true,
         claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
       })
@@ -214,7 +249,7 @@ export async function runHostedCustomerRequestJourney(
 
     if (view.state === 'preparing_options') {
       await (input.sleep ?? defaultSleep)(1_000)
-      view = await callAgent(input, requestPath(requestRef), 'GET', undefined, [200, 202])
+      view = await callAgent(runtimeInput, requestPath(requestRef), 'GET', undefined, [200, 202])
       observe(states, view)
       continue
     }
@@ -233,10 +268,10 @@ export async function runHostedCustomerRequestJourney(
 }
 
 async function completeHostedJourney(input: Readonly<{
-  input: HostedCustomerRequestJourneyInput
+  input: HostedCustomerRequestJourneyRuntimeInput
   release: ReleaseVerification
   requestRef: string
-  routeStepCount: number
+  route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number]
   selectedBusiness: string
   selectedBusinesses: readonly string[]
   states: CustomerRequestView['state'][]
@@ -258,7 +293,7 @@ async function completeHostedJourney(input: Readonly<{
     || resumed.action.result === undefined) throw new Error('hosted_journey_completion_timeout')
   const evidence = await callAgentEvidence(input.input, requestPath(input.requestRef, 'evidence'))
   if (evidence.state !== 'completed' || evidence.result === undefined
-    || evidence.steps.length !== input.routeStepCount
+    || evidence.steps.length !== input.route.stepCount
     || evidence.steps.some((step) => step.state !== 'completed')) {
     throw new Error('hosted_journey_completed_evidence_missing')
   }
@@ -277,11 +312,12 @@ async function completeHostedJourney(input: Readonly<{
     observedStates: input.states, authorityStops: input.authorityStops,
     final: {
       requestRef: input.requestRef, state: resumed.state, selectedBusiness: input.selectedBusiness,
-      selectedBusinesses: input.selectedBusinesses, stepCount: input.routeStepCount,
+      selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
       runState: 'completed', evidenceState: evidence.state,
       problemState: 'not_reported', resumedState: resumed.state,
       resultDigest: digestInput(evidence.result),
     },
+    measurements: journeyMeasurements(input.input, input.route, true, true),
     sandbox: true,
     claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
   })
@@ -317,12 +353,13 @@ export async function verifyHostedCustomerRequestFrontDoor(input: Readonly<{
 }
 
 async function callAgent(
-  input: HostedCustomerRequestJourneyInput,
+  input: HostedCustomerRequestJourneyRuntimeInput,
   path: string,
   method: 'GET' | 'POST',
   body?: unknown,
   acceptedStatuses: readonly number[] = [200],
 ): Promise<CustomerRequestView> {
+  input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
     method, headers: headers(input, input.agentApiKey),
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -334,7 +371,8 @@ async function callAgent(
   return result
 }
 
-async function callAgentEvidence(input: HostedCustomerRequestJourneyInput, path: string) {
+async function callAgentEvidence(input: HostedCustomerRequestJourneyRuntimeInput, path: string) {
+  input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
     method: 'GET', headers: headers(input, input.agentApiKey),
   })
@@ -346,10 +384,11 @@ async function callAgentEvidence(input: HostedCustomerRequestJourneyInput, path:
 }
 
 async function callAgentProblem(
-  input: HostedCustomerRequestJourneyInput,
+  input: HostedCustomerRequestJourneyRuntimeInput,
   path: string,
   body: unknown,
 ) {
+  input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
     method: 'POST', headers: headers(input, input.agentApiKey),
     body: JSON.stringify(customerRequestProblemInputSchema.parse(body)),
@@ -450,7 +489,7 @@ class HostedJourneyResponseError extends Error {
 }
 
 async function submitWithInterpreterRecovery(
-  input: HostedCustomerRequestJourneyInput,
+  input: HostedCustomerRequestJourneyRuntimeInput,
   submit: z.infer<typeof customerRequestSubmitInputSchema>,
 ): Promise<CustomerRequestView> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -467,6 +506,35 @@ async function submitWithInterpreterRecovery(
     }
   }
   throw new Error('hosted_journey_interpreter_recovery_exhausted')
+}
+
+function journeyMeasurements(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number],
+  resultUsable: boolean,
+  resumed: boolean,
+) {
+  const totalCostAccuracy = route.maximumTotalCost.kind === 'known'
+    ? {
+        state: 'exact' as const,
+        total: { currency: route.maximumTotalCost.currency, amountMinor: route.maximumTotalCost.amountMinor },
+      }
+    : { state: 'unavailable' as const }
+  return {
+    integrationBurden: {
+      requestCalls: input.metrics.requestCalls,
+      clarifications: input.metrics.clarifications,
+    },
+    turns: { total: input.metrics.requestCalls },
+    elapsedMs: Math.max(0, (input.now ?? Date.now)() - input.metrics.startedAt),
+    hardConstraintAccuracy: { state: route.comparison.hardConstraints },
+    totalCostAccuracy,
+    recovery: {
+      state: 'durable' as const, resumed,
+      postures: [...new Set(route.recovery.map(({ posture }) => posture))],
+    },
+    resultUsability: { state: resultUsable ? 'usable' as const : 'unusable' as const },
+  }
 }
 
 function digestInput(value: unknown): string {
