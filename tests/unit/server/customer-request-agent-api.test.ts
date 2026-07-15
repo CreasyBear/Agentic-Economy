@@ -17,6 +17,22 @@ const authenticate = async () => ({
 })
 
 describe('agent-native customer Request API', () => {
+  it('returns the shared sensitive-input refusal without calling the application', async () => {
+    const callAction = vi.fn()
+    const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
+      idempotencyKey: 'submit:sensitive', requestRef: 'request:agent:sensitive', agentRef: 'agent:test',
+      request: 'Find the cheapest option. Card: 4242 4242 4242 4242; password is synthetic-password.',
+    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+
+    expect(response.status).toBe(422)
+    expect(callAction).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      kind: 'refused', reason: 'sensitive_information_not_accepted',
+      summary: 'Remove payment card and account-secret details before submitting this request.',
+      nextAction: 'revise_request',
+    })
+  })
+
   it('turns a scoped Clerk API key into a signed stable Convex principal without forwarding the bearer', async () => {
     const calls: Array<{ name: string; args: Record<string, unknown> }> = []
     const callAction = vi.fn(async (name: string, args: Record<string, unknown>) => {

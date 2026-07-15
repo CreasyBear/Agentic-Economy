@@ -28,6 +28,23 @@ describe('customer Request HTTP API', () => {
     expect(submit).not.toHaveBeenCalled()
   })
 
+  it('refuses payment-card and account-secret oversharing before model release or Request persistence', async () => {
+    const submit = vi.fn()
+    const response = await handleCustomerRequestPost(request({
+      idempotencyKey: 'command:sensitive', requestRef: 'request:sensitive', agentRef: 'agent:claude',
+      request: 'Find the cheapest option. My card is 4242 4242 4242 4242 and password is synthetic-password.',
+    }), { submit })
+
+    expect(response.status).toBe(422)
+    expect(submit).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toEqual({
+      kind: 'refused',
+      reason: 'sensitive_information_not_accepted',
+      summary: 'Remove payment card and account-secret details before submitting this request.',
+      nextAction: 'revise_request',
+    })
+  })
+
   it('replays one uncommitted creation response instead of exposing a revision-zero Request', async () => {
     const submit = vi.fn()
       .mockResolvedValueOnce({

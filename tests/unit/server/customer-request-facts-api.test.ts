@@ -29,6 +29,20 @@ describe('customer Request answer HTTP API', () => {
     expect(response.status).toBe(400)
     expect(provideFacts).not.toHaveBeenCalled()
   })
+
+  it('refuses a sensitive answer before calling the application', async () => {
+    const provideFacts = vi.fn()
+    const response = await handleCustomerRequestFactsPost(request({
+      idempotencyKey: 'facts:sensitive', expectedRevision: 1,
+      requirementKey: 'requirement:opaque', value: { password: 'synthetic-password' },
+    }), 'request:1', { provideFacts })
+
+    expect(response.status).toBe(422)
+    expect(provideFacts).not.toHaveBeenCalled()
+    await expect(response.json()).resolves.toMatchObject({
+      reason: 'sensitive_information_not_accepted', nextAction: 'revise_request',
+    })
+  })
 })
 
 function request(body: unknown): Request {

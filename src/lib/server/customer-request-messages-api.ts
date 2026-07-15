@@ -2,6 +2,7 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 import { customerRequestAgentResultSchema, customerRequestMessageInputSchema } from '@/modules/customer-request/agent-contract'
+import { sensitiveCustomerRequestRefusal } from '@/modules/customer-request/sensitive-input-admission'
 
 const bodySchema = customerRequestMessageInputSchema
 
@@ -25,6 +26,8 @@ export async function handleCustomerRequestMessagePost(
   try { body = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) return response({ error: 'invalid_request' }, 400)
+  const sensitiveRefusal = sensitiveCustomerRequestRefusal(parsed.data.message)
+  if (sensitiveRefusal !== undefined) return response(sensitiveRefusal, 422)
   try {
     const result = customerRequestAgentResultSchema.parse(
       await (options.refine ?? (async (args) => await callSourceAction(refineAction, args)))({

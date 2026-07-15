@@ -2,6 +2,9 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { callSourceAction, ConvexSourceError, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerRequestProjection } from '@/modules/customer-request/customer-projection'
 import { customerRequestAgentResultSchema, customerRequestSubmitInputSchema } from '@/modules/customer-request/agent-contract'
+import {
+  sensitiveCustomerRequestRefusal,
+} from '@/modules/customer-request/sensitive-input-admission'
 
 const bodySchema = customerRequestSubmitInputSchema
 
@@ -16,6 +19,8 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
   try { unknownBody = JSON.parse(bounded.text) } catch { return response({ error: 'invalid_json' }, 400) }
   const parsed = bodySchema.safeParse(unknownBody)
   if (!parsed.success) return response({ error: 'invalid_request', fields: parsed.error.issues.map((issue) => issue.path.join('.')) }, 400)
+  const sensitiveRefusal = sensitiveCustomerRequestRefusal(parsed.data.request)
+  if (sensitiveRefusal !== undefined) return response(sensitiveRefusal, 422)
   try {
     const args = {
       compilationKey: parsed.data.idempotencyKey, requestId: parsed.data.requestRef,

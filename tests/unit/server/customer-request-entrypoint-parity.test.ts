@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleAgentCustomerOptionsPost,
@@ -186,6 +186,46 @@ const cases: readonly ParityCase[] = [
 ]
 
 describe('human and external-agent Request entrypoint parity', () => {
+  it('refuses the same sensitive submission before either entrypoint reaches the application', async () => {
+    const body = {
+      idempotencyKey: 'submit:sensitive', requestRef: 'request:parity:sensitive', agentRef: 'agent:test',
+      request: 'Find an option. Card: 4242 4242 4242 4242; password is synthetic-password.',
+    }
+    const humanSubmit = vi.fn()
+    const agentCall = vi.fn()
+    const humanResponse = await handleCustomerRequestPost(post('/api/requests', body), { submit: humanSubmit })
+    const agentResponse = await handleAgentCustomerRequestPost(
+      post('/api/v1/requests', body), agentOptions(agentCall),
+    )
+
+    expect(humanResponse.status).toBe(422)
+    expect(agentResponse.status).toBe(humanResponse.status)
+    expect(await agentResponse.json()).toEqual(await humanResponse.json())
+    expect(humanSubmit).not.toHaveBeenCalled()
+    expect(agentCall).not.toHaveBeenCalled()
+  })
+
+  it('refuses the same sensitive refinement before either entrypoint reaches the application', async () => {
+    const body = {
+      idempotencyKey: 'message:sensitive', expectedRevision: 1,
+      message: 'Use this password: synthetic-password.',
+    }
+    const humanRefine = vi.fn()
+    const agentCall = vi.fn()
+    const humanResponse = await handleCustomerRequestMessagePost(
+      post('/api/requests/request/messages', body), requestRef, { refine: humanRefine },
+    )
+    const agentResponse = await handleAgentCustomerRequestMessagePost(
+      post('/api/v1/requests/request/messages', body), requestRef, agentOptions(agentCall),
+    )
+
+    expect(humanResponse.status).toBe(422)
+    expect(agentResponse.status).toBe(humanResponse.status)
+    expect(await agentResponse.json()).toEqual(await humanResponse.json())
+    expect(humanRefine).not.toHaveBeenCalled()
+    expect(agentCall).not.toHaveBeenCalled()
+  })
+
   it.each(cases)('$operation uses the same application command and customer response', async (entrypoint) => {
     let humanCommand: Record<string, unknown> | undefined
     let agentCommand: Record<string, unknown> | undefined
