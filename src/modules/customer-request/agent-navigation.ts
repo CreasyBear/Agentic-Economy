@@ -85,6 +85,12 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       }
     }
   } else if (view.state === 'needs_attention' || view.state === 'outcome_unknown' || view.state === 'failed') {
+    if (view.state !== 'failed') {
+      actions.push({
+        relation: 'inspect_progress', method: 'GET', href: current,
+        summary: 'Resume this Request, then follow the latest safe action.',
+      })
+    }
     actions.push(
       {
         relation: 'inspect_evidence', method: 'GET', href: `${current}/evidence`,

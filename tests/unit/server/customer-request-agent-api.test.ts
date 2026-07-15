@@ -163,6 +163,27 @@ describe('agent-native customer Request API', () => {
     })
   })
 
+  it('gives a cold agent a safe resume action after a transient write conflict', async () => {
+    const callAction = vi.fn(async () => ({
+      kind: 'request' as const, requestRef: 'request:agent:retry', revision: 2,
+      state: 'needs_attention' as const,
+      summary: 'The request changed before it could be recorded. Try again.',
+      nextAction: 'retry' as const, missingFields: [], criteria: [], options: [],
+    }))
+    const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
+      idempotencyKey: 'submit:retry', requestRef: 'request:agent:retry', agentRef: 'cold-agent',
+      request: 'Find a labelled sandbox option.',
+    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { navigation: { actions: unknown[] } }
+    expect(body.navigation.actions[0]).toMatchObject({
+      relation: 'inspect_progress', method: 'GET',
+      href: `/api/v1/requests/${encodeURIComponent('request:agent:retry')}`,
+      summary: 'Resume this Request, then follow the latest safe action.',
+    })
+  })
+
   it('returns 401 for missing keys and 403 for unscoped keys before Convex', async () => {
     const callAction = vi.fn()
     const missing = await handleAgentCustomerRequestGet('request:1', {
