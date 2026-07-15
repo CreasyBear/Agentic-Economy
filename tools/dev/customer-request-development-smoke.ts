@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { loadEnv } from 'vite'
 
@@ -117,9 +118,12 @@ function required(value: string | undefined, name: string): string {
 
 async function main(): Promise<void> {
   const fileEnv = loadEnv('development', process.cwd(), '')
-  await runCustomerRequestDevelopmentSmoke(customerRequestDevelopmentSmokeConfig({ ...process.env, ...fileEnv }))
+  await runCustomerRequestDevelopmentSmoke(customerRequestDevelopmentSmokeConfig({ ...fileEnv, ...process.env }))
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main()
+if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  await main().catch((error: unknown) => {
+    console.error(error instanceof Error ? `FAIL ${error.message}` : 'FAIL unexpected_error')
+    process.exitCode = 1
+  })
 }
