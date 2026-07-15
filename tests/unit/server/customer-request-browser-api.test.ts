@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   handleBrowserCustomerRequestFactsPost,
+  handleBrowserCustomerRequestGet,
   handleBrowserCustomerRequestMessagePost,
   handleBrowserCustomerRequestPost,
 } from '@/lib/server/customer-request-browser-api'
@@ -184,6 +185,9 @@ describe('browser Customer Request API', () => {
     const cookie = submitted.headers.get('set-cookie')?.split(';')[0] ?? ''
     const requestRef = 'request:guest:lifecycle'
 
+    await handleBrowserCustomerRequestGet(new Request(
+      `https://ae.example/api/requests/${requestRef}`, { headers: { Cookie: cookie } },
+    ), requestRef, options)
     await handleBrowserCustomerRequestConfirmationPost(post(
       `/api/requests/${requestRef}/confirmation`,
       { revision: 1, routeRef: 'route:guest:1', idempotencyKey: 'confirm:guest:1' },
@@ -206,6 +210,7 @@ describe('browser Customer Request API', () => {
 
     const expected = [
       ['customerRequestApplication:submit', 'submit'],
+      ['customerRequestApplication:resume', 'resume'],
       ['customerRequestApplication:confirmRoute', 'confirm'],
       ['customerRequestApplication:runRoute', 'run'],
       ['customerRequestApplication:cancelRoute', 'cancel'],

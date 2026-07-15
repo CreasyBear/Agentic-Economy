@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@astryxdesign/core/Button'
 import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
@@ -9,6 +9,7 @@ import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/c
 type SubmitResponse = CustomerRequestProjection | Readonly<{ kind: 'refused'; reason: string }> | Readonly<{ error: string }>
 type WorkspaceState =
   | Readonly<{ kind: 'idle' }>
+  | Readonly<{ kind: 'resuming' }>
   | Readonly<{ kind: 'submitting' }>
   | Readonly<{ kind: 'request'; projection: CustomerRequestView }>
   | Readonly<{ kind: 'comparing'; projection: CustomerRequestView }>
@@ -23,8 +24,11 @@ type WorkspaceState =
   | Readonly<{ kind: 'error'; message: string; authenticationRequired: boolean }>
 type ConversationTurn = Readonly<{ speaker: 'customer' | 'ae'; text: string }>
 type CustomerRoute = NonNullable<CustomerRequestView['decision']>['routes'][number]
+type BrowserRequestIdentity = Readonly<{ requestRef: string; agentRef: string }>
+type CustomerClarification = NonNullable<CustomerRequestView['clarification']>
 
 const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' })
+const ACTIVE_REQUEST_STORAGE_KEY = 'ae.customer-request.active:v1'
 
 export type AeCustomerRequestWorkspaceProps = Readonly<{
   initialNeed?: string
@@ -36,24 +40,65 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
   const [state, setState] = useState<WorkspaceState>({ kind: 'idle' })
   const [turns, setTurns] = useState<readonly ConversationTurn[]>([])
   const [editingRevision, setEditingRevision] = useState<number | undefined>()
-  const requestIdentityRef = useRef<Readonly<{ requestRef: string; agentRef: string }> | undefined>(undefined)
+  const requestIdentityRef = useRef<BrowserRequestIdentity | undefined>(undefined)
   const submittingRef = useRef(false)
+
+  useEffect(() => {
+    if (initialNeed.trim().length > 0) return
+    const identity = readStoredRequestIdentity()
+    if (identity === undefined) return
+    requestIdentityRef.current = identity
+    setState({ kind: 'resuming' })
+    let active = true
+    void fetch(`/api/requests/${encodeURIComponent(identity.requestRef)}`, {
+      method: 'GET', headers: { Accept: 'application/json' },
+    }).then(async (response) => {
+      const result: SubmitResponse = await response.json()
+      if (!active) return
+      if (!response.ok || !('kind' in result) || result.kind !== 'request') {
+        if (response.status === 404) {
+          requestIdentityRef.current = undefined
+          forgetStoredRequestIdentity()
+        }
+        setState(errorState(response.status, 'AE could not reopen this Request. You can start a new one below.'))
+        return
+      }
+      setNeed(result.summary)
+      setTurns(result.clarification === undefined
+        ? []
+        : [{ speaker: 'ae', text: customerClarificationPrompt(result.clarification) }])
+      setState({ kind: 'request', projection: result })
+    }).catch(() => {
+      if (active) setState({
+        kind: 'error', message: 'AE could not be reached. Your Request is still saved in this browser.',
+        authenticationRequired: false,
+      })
+    })
+    return () => { active = false }
+  }, [initialNeed])
 
   async function submit() {
     if (need.trim().length === 0 || submittingRef.current || state.kind === 'submitting'
-      || state.kind === 'comparing' || state.kind === 'confirming' || state.kind === 'refreshing') return
+      || state.kind === 'resuming' || state.kind === 'comparing' || state.kind === 'confirming' || state.kind === 'refreshing') return
     submittingRef.current = true
     const identity = requestIdentityRef.current ?? { requestRef: `request:${crypto.randomUUID()}`, agentRef: `web:${crypto.randomUUID()}` }
     requestIdentityRef.current = identity
     setState({ kind: 'submitting' })
     try {
-      const response = await fetch('/api/requests', {
+      const replacing = editingRevision !== undefined
+      const response = await fetch(replacing
+        ? `/api/requests/${encodeURIComponent(identity.requestRef)}/messages`
+        : '/api/requests', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idempotencyKey: `submit:${identity.requestRef}:${editingRevision ?? 0}`, requestRef: identity.requestRef, agentRef: identity.agentRef,
-          ...(editingRevision === undefined ? {} : { expectedRevision: editingRevision }),
-          request: need.trim(), routing: { network: 'ae:public' },
-        }),
+        body: JSON.stringify(replacing
+          ? {
+              idempotencyKey: `replace:${identity.requestRef}:${editingRevision}`,
+              expectedRevision: editingRevision, message: need.trim(), mode: 'replace',
+            }
+          : {
+              idempotencyKey: `submit:${identity.requestRef}:0`, requestRef: identity.requestRef,
+              agentRef: identity.agentRef, request: need.trim(), routing: { network: 'ae:public' },
+            }),
       })
       const result: SubmitResponse = await response.json()
       if (!response.ok || !('kind' in result) || result.kind !== 'request') {
@@ -62,8 +107,11 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
       }
       setTurns([
         { speaker: 'customer', text: need.trim() },
-        ...(result.clarification?.prompt ? [{ speaker: 'ae' as const, text: result.clarification.prompt }] : []),
+        ...(result.clarification === undefined ? [] : [{
+          speaker: 'ae' as const, text: customerClarificationPrompt(result.clarification),
+        }]),
       ])
+      rememberRequestIdentity(result.requestRef)
       setEditingRevision(undefined)
       setState({ kind: 'request', projection: result })
     } catch {
@@ -84,6 +132,7 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     setTurns([])
     setEditingRevision(undefined)
     requestIdentityRef.current = undefined
+    forgetStoredRequestIdentity()
     setState({ kind: 'idle' })
   }
 
@@ -127,7 +176,10 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
         setState(errorState(response.status, 'AE could not add that answer to this request.'))
         return
       }
-      if (result.clarification?.prompt) setTurns((current) => [...current, { speaker: 'ae', text: result.clarification?.prompt ?? '' }])
+      const nextClarification = result.clarification
+      if (nextClarification !== undefined) setTurns((current) => [
+        ...current, { speaker: 'ae', text: customerClarificationPrompt(nextClarification) },
+      ])
       setState({ kind: 'request', projection: result })
     } catch {
       setState({ kind: 'error', message: 'AE could not be reached. Your existing request is unchanged.', authenticationRequired: false })
@@ -251,13 +303,16 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     }
   }
 
+  const showStartHeader = (state.kind === 'idle' || state.kind === 'error')
+    && requestIdentityRef.current === undefined
+
   return (
     <main className="mx-auto grid min-w-0 w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:py-14">
-      <header className="mx-auto grid max-w-3xl gap-3 text-center">
+      {showStartHeader ? <header className="mx-auto grid max-w-3xl gap-3 text-center">
         <Text className="text-sm font-semibold text-accent">Ask AE</Text>
         <Heading level={1} className="text-4xl font-semibold tracking-tight sm:text-5xl">Start with whatever you know.</Heading>
         <Text type="large" color="secondary">A place, a business type, or the situation itself. AE helps you work out the next decision.</Text>
-      </header>
+      </header> : null}
 
       {state.kind === 'idle' || state.kind === 'error' ? <section className="mx-auto grid w-full max-w-3xl gap-3" aria-label="Start a request">
         <form onSubmit={(event) => { event.preventDefault(); void submit() }} className="flex min-w-0 flex-col gap-3 rounded-md border border-border bg-card p-3 shadow-low sm:flex-row">
@@ -301,9 +356,9 @@ function RequestResult({ state, compare, reviewRoute, leaveRouteReview, confirmR
     || state.projection.state === 'completed' || state.projection.state === 'failed')) {
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
-  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a useful choice for this request yet.</Text>}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
+  if (state.kind === 'request') return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={state.projection} correct={() => edit(state.projection)} />{state.projection.clarification ? <Clarification prompt={customerClarificationPrompt(state.projection.clarification)} answer={answer} setAnswer={setAnswer} submit={() => void continueRequest(state.projection)} /> : <Card padding={5}><div className="grid gap-4"><Text className="text-sm font-medium text-accent">{statusLabel(state.projection.state)}</Text><Heading level={2}>{state.projection.summary}</Heading>{state.projection.nextAction === 'prepare_options' ? <Button label="Show available options" variant="primary" clickAction={() => void compare(state.projection)} /> : state.projection.state === 'preparing_options' ? <Button label="Check again" variant="secondary" clickAction={() => void compare(state.projection)} /> : <Text color="secondary">AE cannot prepare a useful choice for this request yet.</Text>}<RecoveryActions edit={() => edit(state.projection)} restart={restart} /></div></Card>}</section>
   if (state.kind === 'confirming') return <ConfirmationLoadingCard />
-  if (state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
+  if (state.kind === 'resuming' || state.kind === 'submitting' || state.kind === 'comparing' || state.kind === 'refreshing') return <Card padding={5} className="min-w-0" aria-live="polite" aria-busy="true"><Heading level={2}>{state.kind === 'resuming' ? 'Reopening your Request…' : state.kind === 'submitting' ? 'Understanding your request…' : state.kind === 'comparing' ? 'Comparing available options…' : 'Checking with the latest evidence…'}</Heading><Text color="secondary" className="mt-2">No purchase, booking, or business step occurs during this moment.</Text></Card>
   return <Card padding={5} className="min-w-0 bg-surface"><Heading level={2}>Your result will appear here</Heading><Text color="secondary" className="mt-2">AE will show missing information, unsupported requests, or comparable business options.</Text></Card>
 }
 
@@ -980,8 +1035,17 @@ function RecoveryActions({ edit, restart }: { edit: () => void; restart: () => v
 
 function StartExamples() { return <div className="grid gap-2 border-t border-border pt-6 sm:grid-cols-4"><Example label="Place" value="Fremantle" /><Example label="Business type" value="Electrician" /><Example label="Situation" value="A quiet dinner with my parents" /><Example label="Detailed" value="Dog-friendly stay near the beach" /></div> }
 function Example({ label, value }: { label: string; value: string }) { return <div className="grid gap-1 rounded-md bg-surface p-4"><Text type="supporting" weight="semibold">{label}</Text><Text color="secondary">{value}</Text></div> }
-function Conversation({ turns }: { turns: readonly ConversationTurn[] }) { return <div className="grid gap-3" aria-label="Request conversation">{turns.map((turn, index) => turn.speaker === 'customer' ? <div key={`${index}:${turn.text}`} className="ml-auto max-w-[85%] rounded-md bg-accent px-4 py-3 text-on-accent">{turn.text}</div> : <div key={`${index}:${turn.text}`} className="max-w-[90%] border-l-2 border-accent py-1 pl-4"><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1">{turn.text}</Heading></div>)}</div> }
-function Clarification({ answer, setAnswer, submit }: { answer: string; setAnswer: (answer: string) => void; submit: () => void }) { return <form className="grid gap-3 border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); submit() }}><label htmlFor="clarification-answer" className="text-sm font-semibold">Your answer</label><div className="flex flex-col gap-2 sm:flex-row"><input id="clarification-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Answer in your own words" className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 outline-none focus:ring-2 focus:ring-accent" /><button type="submit" disabled={!answer.trim()} className="min-h-11 rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Continue</button></div></form> }
+function Conversation({ turns }: { turns: readonly ConversationTurn[] }) { return <div className="grid gap-3" aria-label="Request conversation">{turns.map((turn, index) => turn.speaker === 'customer' ? <div key={`${index}:${turn.text}`} className="ml-auto max-w-[85%] rounded-md bg-accent px-4 py-3 text-on-accent">{turn.text}</div> : <div key={`${index}:${turn.text}`} className="max-w-[90%] border-l-2 border-accent py-1 pl-4"><Text className="text-sm font-semibold text-accent">AE</Text><Heading level={2} className="mt-1">{customerFacingAeTurn(turn.text)}</Heading></div>)}</div> }
+function Clarification({ prompt, answer, setAnswer, submit }: { prompt: string; answer: string; setAnswer: (answer: string) => void; submit: () => void }) { return <form className="border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); submit() }}><label htmlFor="clarification-answer" className="sr-only">{prompt}</label><div className="flex flex-col gap-2 sm:flex-row"><input id="clarification-answer" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Add a detail…" className="min-h-11 min-w-0 flex-1 rounded-md border border-border bg-card px-3 outline-none focus:ring-2 focus:ring-accent" /><button type="submit" disabled={!answer.trim()} className="min-h-11 rounded-md bg-accent px-5 font-semibold text-on-accent disabled:opacity-50">Continue</button></div></form> }
+
+function customerClarificationPrompt(clarification: CustomerClarification): string {
+  return customerFacingAeTurn(clarification.prompt)
+}
+
+function customerFacingAeTurn(text: string): string {
+  const prompt = text.trim()
+  return prompt.endsWith('?') ? prompt : 'What else should AE know to find the right options?'
+}
 function statusLabel(state: CustomerRequestView['state']): string {
   if (state === 'ready_to_compare') return 'Ready to compare'
   if (state === 'needs_information') return 'More information needed'
@@ -1006,3 +1070,32 @@ function readableResult(value: unknown): string {
 function formatMoney(currency: string, amountMinor: number): string { return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(amountMinor / 100) }
 function formatOptionTime(timestamp: number): string { return optionTimeFormatter.format(timestamp) }
 function errorState(status: number, message: string): WorkspaceState { return { kind: 'error', message: status === 401 ? 'Sign in so AE can keep this request private and resumable.' : message, authenticationRequired: status === 401 } }
+
+function readStoredRequestIdentity(): BrowserRequestIdentity | undefined {
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_REQUEST_STORAGE_KEY)
+    if (raw === null) return undefined
+    const value: unknown = JSON.parse(raw)
+    if (!isRecord(value) || !boundedIdentityPart(value.requestRef)) {
+      forgetStoredRequestIdentity()
+      return undefined
+    }
+    return { requestRef: value.requestRef, agentRef: `web:${crypto.randomUUID()}` }
+  } catch { return undefined }
+}
+
+function rememberRequestIdentity(requestRef: string): void {
+  try { window.localStorage.setItem(ACTIVE_REQUEST_STORAGE_KEY, JSON.stringify({ requestRef })) } catch { /* optional browser pointer */ }
+}
+
+function forgetStoredRequestIdentity(): void {
+  try { window.localStorage.removeItem(ACTIVE_REQUEST_STORAGE_KEY) } catch { /* optional browser pointer */ }
+}
+
+function boundedIdentityPart(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 200
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}

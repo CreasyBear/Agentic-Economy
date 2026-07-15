@@ -886,6 +886,20 @@ describe('current V2 Customer Request application path', () => {
     expect(refined.criteria).toContainEqual(expect.objectContaining({
       value: 'Find an option\nPrefer the clearest result.',
     }))
+    const replaced = await customer.action(api.customerRequestApplication.refine, {
+      requestRef: submitted.requestRef, expectedRevision: 2, idempotencyKey: 'replace:v2:2',
+      message: 'Find lunch in Fremantle.', mode: 'replace',
+    })
+    if (replaced.kind !== 'request' || replaced.state !== 'ready_to_compare') {
+      throw new Error(`replaced request missing: ${JSON.stringify(replaced)}`)
+    }
+    expect(replaced).toMatchObject({ kind: 'request', revision: 3, state: 'ready_to_compare' })
+    expect(replaced.criteria).toContainEqual(expect.objectContaining({
+      value: 'Find lunch in Fremantle.',
+    }))
+    expect(replaced.criteria).not.toContainEqual(expect.objectContaining({
+      value: expect.stringContaining('Find an option'),
+    }))
   })
 })
 

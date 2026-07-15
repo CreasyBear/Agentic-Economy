@@ -59,8 +59,9 @@ test('exact clarification stays conversational and explains its decision impact'
   await page.getByRole('button', { name: 'Explore' }).click()
 
   await expect(page.getByRole('heading', { name: 'Which area should the business cover?' })).toBeVisible()
-  await expect(page.getByPlaceholder('Answer in your own words')).toBeVisible()
-  await page.getByLabel('Your answer').fill('Fremantle and nearby suburbs would work.')
+  await expect(page.getByPlaceholder('Add a detail…')).toBeVisible()
+  await page.getByRole('textbox', { name: 'Which area should the business cover?' })
+    .fill('Fremantle and nearby suburbs would work.')
   await page.getByRole('button', { name: 'Continue' }).click()
 
   await expect(page.getByRole('button', { name: 'Show available options' })).toBeVisible()

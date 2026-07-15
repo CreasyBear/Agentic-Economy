@@ -119,10 +119,10 @@ const cases: readonly ParityCase[] = [
     operation: 'refine',
     actionName: 'customerRequestApplication:refine',
     human: async (refine) => await handleCustomerRequestMessagePost(post('/messages', {
-      idempotencyKey: 'message:parity', expectedRevision: 1, message: 'Make it relaxed.',
+      idempotencyKey: 'message:parity', expectedRevision: 1, message: 'Make it relaxed.', mode: 'replace',
     }), requestRef, { refine }),
     agent: async (callAction) => await handleAgentCustomerRequestMessagePost(post('/api/v1/messages', {
-      idempotencyKey: 'message:parity', expectedRevision: 1, message: 'Make it relaxed.',
+      idempotencyKey: 'message:parity', expectedRevision: 1, message: 'Make it relaxed.', mode: 'replace',
     }), requestRef, agentOptions(callAction)),
   },
   {

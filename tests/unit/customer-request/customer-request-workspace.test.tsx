@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AeCustomerRequestWorkspace } from '@/components/ae/customer-request/AeCustomerRequestWorkspace'
 
 describe('customer Request workspace', () => {
-  beforeEach(() => vi.stubGlobal('matchMedia', () => ({
-    matches: false, media: '', onchange: null, addListener: () => undefined, removeListener: () => undefined,
-    addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
-  })))
-  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+  beforeEach(() => {
+    localStorage.clear()
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false, media: '', onchange: null, addListener: () => undefined, removeListener: () => undefined,
+      addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+    }))
+  })
+  afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals() })
 
   it('starts the canonical Request journey from a prefilled public ask', () => {
     render(<AeCustomerRequestWorkspace initialNeed="A quiet place for dinner" />)
@@ -19,6 +22,38 @@ describe('customer Request workspace', () => {
     expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value)
       .toBe('A quiet place for dinner')
     expect((screen.getByRole('button', { name: 'Explore' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('resumes the active browser Request after reload and forgets only its local pointer on restart', async () => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `resume-${++sequence}` })
+    const projection = {
+      kind: 'request', requestRef: 'request:resume-1', revision: 3, state: 'ready_to_compare',
+      summary: 'Find lunch in Fremantle', nextAction: 'prepare_options', missingFields: [], options: [],
+    } as const
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json(projection))
+      .mockResolvedValueOnce(Response.json(projection))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const firstView = render(<AeCustomerRequestWorkspace />)
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find lunch in Fremantle' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    expect(await screen.findByRole('button', { name: 'Show available options' })).toBeTruthy()
+    expect(JSON.parse(localStorage.getItem('ae.customer-request.active:v1') ?? '{}')).toEqual({
+      requestRef: 'request:resume-1',
+    })
+    firstView.unmount()
+
+    render(<AeCustomerRequestWorkspace />)
+    expect(await screen.findByRole('button', { name: 'Show available options' })).toBeTruthy()
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Aresume-1', expect.objectContaining({
+      method: 'GET',
+    }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new Request' }))
+    expect(localStorage.getItem('ae.customer-request.active:v1')).toBeNull()
   })
 
   it('uses the same Request and options projections as the machine API', async () => {
@@ -140,7 +175,11 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Fremantle' } })
     fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
     await screen.findByRole('heading', { name: 'What are you looking for there?' })
-    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Somewhere relaxed for lunch.' } })
+    expect(screen.queryByRole('heading', { name: 'Start with whatever you know.' })).toBeNull()
+    expect(screen.queryByText('Your answer')).toBeNull()
+    fireEvent.change(screen.getByRole('textbox', { name: 'What are you looking for there?' }), {
+      target: { value: 'Somewhere relaxed for lunch.' },
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     await screen.findByRole('button', { name: 'Show available options' })
@@ -184,8 +223,8 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
 
     await screen.findByRole('heading', { name: 'Which area should the business cover?' })
-    expect(screen.getByPlaceholderText('Answer in your own words')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Your answer'), {
+    expect(screen.getByPlaceholderText('Add a detail…')).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Which area should the business cover?' }), {
       target: { value: 'Fremantle and nearby suburbs would work.' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
@@ -203,6 +242,33 @@ describe('customer Request workspace', () => {
     })
     expect(screen.getByText(/Area:/)).toBeTruthy()
     expect(screen.getByText(/You said this.*Used to decide which options fit and how they compare/)).toBeTruthy()
+  })
+
+  it('keeps a retired contract label out of the customer conversation', async () => {
+    let sequence = 0
+    vi.stubGlobal('crypto', { randomUUID: () => `legacy-${++sequence}` })
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({ requestRef: 'request:legacy-label' }))
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:legacy-label', revision: 1, state: 'needs_information',
+      summary: 'Fremantle', nextAction: 'provide_information', options: [],
+      missingFields: [{
+        field: 'lookup_instruction', label: 'Lookup instruction',
+        explanation: 'This answer changes which options can be considered now.',
+      }],
+      clarification: {
+        kind: 'contract_fact', requirementKey: 'lookup_instruction',
+        prompt: 'Lookup instruction', answerKind: 'typed_value',
+      },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByRole('heading', { name: 'What else should AE know to find the right options?' })).toBeTruthy()
+    expect(screen.queryByText('Lookup instruction')).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'What else should AE know to find the right options?' })).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledWith('/api/requests/request%3Alegacy-label', expect.objectContaining({
+      method: 'GET',
+    }))
   })
 
   it('renders the shared RoutePlan decision as an outcome, not routing machinery', async () => {
@@ -451,7 +517,13 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
     await screen.findByRole('button', { name: 'Show available options' })
     const secondBody = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))
-    expect(secondBody).toMatchObject({ requestRef: 'request:uuid-1', expectedRevision: 1, request: 'Lunch in Fremantle' })
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({
+      method: 'POST',
+    }))
+    expect(secondBody).toEqual({
+      idempotencyKey: 'replace:request:uuid-1:1', expectedRevision: 1,
+      message: 'Lunch in Fremantle', mode: 'replace',
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Start a new Request' }))
     await waitFor(() => expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value).toBe(''))

@@ -507,6 +507,7 @@ export const submit = action({
 export const refine = action({
   args: {
     requestRef: v.string(), expectedRevision: v.number(), idempotencyKey: v.string(), message: v.string(),
+    mode: v.optional(v.union(v.literal('append'), v.literal('replace'))),
     serviceAuth: v.optional(serviceAssertion),
   },
   returns: actionResult,
@@ -514,6 +515,7 @@ export const refine = action({
     const caller = await resolveRequestCaller(ctx, 'refine', {
       requestRef: args.requestRef, expectedRevision: args.expectedRevision,
       idempotencyKey: args.idempotencyKey, message: args.message,
+      ...(args.mode === undefined ? {} : { mode: args.mode }),
     }, args.serviceAuth)
     if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
     const current = await loadCurrent(ctx, args.requestRef)
@@ -525,7 +527,10 @@ export const refine = action({
     if (current.aggregate.snapshot.revision !== args.expectedRevision) return {
       kind: 'conflict', requestRef: args.requestRef, reason: 'revision_changed',
     }
-    const intent = `${current.aggregate.snapshot.intent.trim()}\n${args.message.trim()}`
+    const mode = args.mode ?? 'append'
+    const intent = mode === 'replace'
+      ? args.message.trim()
+      : `${current.aggregate.snapshot.intent.trim()}\n${args.message.trim()}`
     const expectedRouteGeneration = await loadCurrentRouteGenerationNumber(ctx, current)
     if (expectedRouteGeneration === undefined) return writableView(projectNeedsAttention({
       requestRef: args.requestRef, revision: args.expectedRevision,
@@ -536,6 +541,7 @@ export const refine = action({
       commandDigest: canonicalDigest({
         requestRef: args.requestRef, expectedRevision: args.expectedRevision,
         idempotencyKey: args.idempotencyKey, message: args.message,
+        ...(args.mode === undefined ? {} : { mode }),
       }),
       requestId: args.requestRef,
       expectedRevision: args.expectedRevision,

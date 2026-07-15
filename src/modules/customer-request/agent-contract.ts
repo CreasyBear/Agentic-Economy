@@ -34,7 +34,7 @@ export const customerRequestSubmitInputSchema = z.object({
 
 export const customerRequestMessageInputSchema = z.object({
   idempotencyKey: boundedText(200), expectedRevision: safePositiveInteger,
-  message: boundedText(2_000),
+  message: boundedText(2_000), mode: z.enum(['append', 'replace']).default('append'),
 }).strict()
 
 export const customerRequestFactInputSchema = z.object({
