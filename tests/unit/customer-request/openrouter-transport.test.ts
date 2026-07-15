@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createOpenRouterCustomerRequestTransport } from '@/modules/customer-request/openrouter-transport'
+import {
+  createOpenRouterCustomerRequestSemanticTransport,
+  createOpenRouterCustomerRequestTransport,
+} from '@/modules/customer-request/openrouter-transport'
 
 describe('OpenRouter customer request transport', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -23,6 +26,25 @@ describe('OpenRouter customer request transport', () => {
     expect(JSON.parse(String(request?.body))).toMatchObject({
       model: 'model:test', response_format: { type: 'json_object' }, temperature: 0,
     })
+  })
+
+  it('sends the strict response schema supplied by the semantic interpreter', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"kind":"needs_intent_direction","prompt":"What next?","selections":[]}' } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const transport = createOpenRouterCustomerRequestSemanticTransport({ apiKey: 'secret', model: 'model:test' })
+    const responseSchema = { name: 'semantic', strict: true, schema: { type: 'object' } }
+
+    await transport.generateJson({
+      systemInstruction: 'system', payload: { customerJob: 'Fremantle', capabilities: [] },
+      signal: new AbortController().signal, responseSchema,
+    })
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      response_format: { type: 'json_schema', json_schema: responseSchema },
+    })
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty('provider')
   })
 
   it('fails closed on provider errors and malformed responses', async () => {

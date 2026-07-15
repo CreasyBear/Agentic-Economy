@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { handleCustomerRequestProblemPost } from '@/lib/server/customer-request-recovery-api'
+import { handleBrowserCustomerRequestProblemPost } from '@/lib/server/customer-request-browser-lifecycle-api'
 export const Route = createFileRoute('/api/requests/$requestRef/problems')({
-  server: { handlers: { POST: ({ request, params }) => handleCustomerRequestProblemPost(request, params.requestRef) } },
+  server: { handlers: { POST: ({ request, params }) => handleBrowserCustomerRequestProblemPost(request, params.requestRef) } },
 })

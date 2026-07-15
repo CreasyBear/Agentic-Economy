@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { handleCustomerRequestEvidenceGet } from '@/lib/server/customer-request-recovery-api'
+import { handleBrowserCustomerRequestEvidenceGet } from '@/lib/server/customer-request-browser-lifecycle-api'
 export const Route = createFileRoute('/api/requests/$requestRef/evidence')({
-  server: { handlers: { GET: ({ request, params }) => handleCustomerRequestEvidenceGet(request, params.requestRef) } },
+  server: { handlers: { GET: ({ request, params }) => handleBrowserCustomerRequestEvidenceGet(request, params.requestRef) } },
 })

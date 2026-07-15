@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { handleCustomerRequestRunPost } from '@/lib/server/customer-request-route-action-api'
+import { handleBrowserCustomerRequestRunPost } from '@/lib/server/customer-request-browser-lifecycle-api'
 
 export const Route = createFileRoute('/api/requests/$requestRef/run')({
-  server: { handlers: { POST: ({ request, params }) => handleCustomerRequestRunPost(request, params.requestRef) } },
+  server: { handlers: { POST: ({ request, params }) => handleBrowserCustomerRequestRunPost(request, params.requestRef) } },
 })

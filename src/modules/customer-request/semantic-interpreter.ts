@@ -88,6 +88,7 @@ export type CustomerRequestSemanticInterpretationTransport = Readonly<{
     systemInstruction: string
     payload: CustomerRequestSemanticInterpreterPayload
     signal: AbortSignal
+    responseSchema?: Readonly<Record<string, unknown>>
   }>) => Promise<Readonly<{ content: string }>>
 }>
 
@@ -127,13 +128,47 @@ const SYSTEM_INSTRUCTION = [
   'Values may be structured JSON. Never coerce or invent missing values, budgets, identities, providers, prices, permissions, commitments, outcomes, identifiers, pointers, or evidence.',
   'Commitment-stage inputs are not required for exploring options.',
   'Do not construct routes, calls, approvals, action identifiers, completion evidence, or provider choices.',
-  'When the request supplies a meaningful context but no wanted service or result, return one needs_intent_direction question.',
-  'Otherwise return {"kind":"capability_candidates","selections":[{"selectionKey":"opaque","facts":[{"inputKey":"opaque","value":"customer-stated value"}]}]}.',
+  'An intent-direction question must use customer language. Never mention capability names, labels, keys, schemas, routing, sandbox supply, or implementation vocabulary.',
+  'When the request supplies a meaningful context but no wanted service or result, return one concise needs_intent_direction question of at most 160 characters with selections=[].',
+  'Otherwise return kind=capability_candidates, prompt="", and selections=[{"selectionKey":"opaque","facts":[{"inputKey":"opaque","valueJson":"JSON.stringify(customer-stated value)"}]}].',
   'Before returning, verify that at least one selected capability directly returns the result the customer requested; never prefer a merely fillable prerequisite over the requested result.',
   'Return one JSON object only.',
 ].join(' ')
-const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v5'
+const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v7'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
+const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
+  name: 'customer_request_semantic_proposal',
+  strict: true,
+  schema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      kind: { type: 'string', enum: ['needs_intent_direction', 'capability_candidates'] },
+      prompt: { type: 'string', maxLength: 240 },
+      selections: {
+        type: 'array', maxItems: 64,
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            selectionKey: { type: 'string', minLength: 1, maxLength: 300 },
+            facts: {
+              type: 'array', maxItems: 128,
+              items: {
+                type: 'object', additionalProperties: false,
+                properties: {
+                  inputKey: { type: 'string', minLength: 1, maxLength: 300 },
+                  valueJson: { type: 'string', maxLength: 8_000 },
+                },
+                required: ['inputKey', 'valueJson'],
+              },
+            },
+          },
+          required: ['selectionKey', 'facts'],
+        },
+      },
+    },
+    required: ['kind', 'prompt', 'selections'],
+  },
+})
 
 export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
   interpreterId: string
@@ -160,7 +195,10 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         if (new TextEncoder().encode(JSON.stringify(publicPayload)).byteLength > input.maximumPayloadBytes) {
           throw new Error('customer_request_semantic_interpretation_payload_too_large')
         }
-        const generated = input.transport.generateJson({ systemInstruction: SYSTEM_INSTRUCTION, payload: publicPayload, signal: controller.signal })
+        const generated = input.transport.generateJson({
+          systemInstruction: SYSTEM_INSTRUCTION, payload: publicPayload,
+          signal: controller.signal, responseSchema: SEMANTIC_RESPONSE_SCHEMA,
+        })
         const deadline = new Promise<never>((_resolve, reject) => {
           timeout = setTimeout(() => {
             controller.abort()
@@ -175,8 +213,9 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         try { unknownValue = JSON.parse(response.content) } catch {
           throw new Error('customer_request_semantic_interpretation_invalid_json')
         }
-        const parsed = proposalSchema.safeParse(unknownValue)
-        if (!parsed.success) throw new Error('customer_request_semantic_interpretation_invalid')
+        const normalizedValue = normalizeSemanticProposal(unknownValue)
+        const parsed = proposalSchema.safeParse(normalizedValue)
+        if (!parsed.success) throw new Error(semanticProposalFailureCode(normalizedValue))
         const interpretationEvidence = Object.freeze({
           kind: 'model_output' as const,
           systemInstructionVersion: SYSTEM_INSTRUCTION_VERSION,
@@ -189,7 +228,7 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
         if (parsed.data.kind === 'needs_intent_direction') {
           return Object.freeze({
             kind: 'needs_intent_direction' as const,
-            prompt: parsed.data.prompt,
+            prompt: customerIntentDirectionPrompt(payload.customerJob),
             interpretationEvidence,
           })
         }
@@ -250,6 +289,58 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
       }
     },
   })
+}
+
+function customerIntentDirectionPrompt(customerJob: string): string {
+  const context = customerJob.trim().replace(/\s+/gu, ' ')
+  return context.length > 0 && context.length <= 120
+    ? `You mentioned “${context}”. What would you like to find or decide?`
+    : 'What would you like to find or decide?'
+}
+
+function normalizeSemanticProposal(value: unknown): unknown {
+  if (!isPlainObject(value)) return value
+  const proposal = value
+  if (proposal.kind === 'capability_candidates' && Array.isArray(proposal.selections)) {
+    return {
+      kind: proposal.kind,
+      selections: proposal.selections.map(normalizeSemanticSelection),
+    }
+  }
+  return proposal.kind === 'needs_intent_direction' && typeof proposal.prompt === 'string'
+    ? { kind: proposal.kind, prompt: proposal.prompt }
+    : value
+}
+
+function normalizeSemanticSelection(value: unknown): unknown {
+  if (!isPlainObject(value) || !Array.isArray(value.facts)) return value
+  return {
+    selectionKey: value.selectionKey,
+    facts: value.facts.map((fact) => {
+      if (!isPlainObject(fact) || typeof fact.valueJson !== 'string') return fact
+      try {
+        const parsed: unknown = JSON.parse(fact.valueJson)
+        return jsonValueSchema.safeParse(parsed).success
+          ? { inputKey: fact.inputKey, value: parsed }
+          : fact
+      } catch {
+        return fact
+      }
+    }),
+  }
+}
+
+function semanticProposalFailureCode(value: unknown): string {
+  if (!isPlainObject(value)) {
+    return 'customer_request_semantic_interpretation_invalid_type'
+  }
+  return value.kind === 'needs_intent_direction' || value.kind === 'capability_candidates'
+    ? 'customer_request_semantic_interpretation_invalid_shape'
+    : 'customer_request_semantic_interpretation_invalid_kind'
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export type ServerCapabilityDescriptor = CustomerCapabilityDescriptor & Readonly<{
@@ -417,12 +508,31 @@ function groundRegisteredRequestInputs(
   }>,
 ): ResolvedCapabilitySelection {
   const supplied = new Set(selection.facts.map((fact) => fact.inputKey))
-  const inferred = descriptor.inputs.flatMap((candidate): RequestFact[] => {
+  const grounded = descriptor.inputs.flatMap((candidate): RequestFact[] => {
     if (supplied.has(candidate.inputKey) || !candidate.required || candidate.semanticIdentity !== undefined
       || candidate.role !== 'request'
-      || candidate.inference !== 'allowed' || !plainStringSchemaAccepts(candidate.valueSchema, context.customerJob)) return []
+      || !plainStringSchemaAccepts(candidate.valueSchema, context.customerJob)) return []
     const binding = descriptor.inputBindings.find(({ inputKey }) => inputKey === candidate.inputKey)
     if (binding === undefined) throw new Error('customer_request_descriptor_authority_missing')
+    const source = candidate.inference === 'customer_required'
+      ? {
+          kind: 'customer' as const,
+          assertionRef: `assertion:customer-request-literal:${canonicalDigest({
+            kind: 'customer_request_literal', customerJob: context.customerJob,
+            selectionKey: descriptor.selectionKey, inputKey: candidate.inputKey,
+          })}`,
+        }
+      : {
+          kind: 'agent_inference' as const,
+          inferenceRef: `inference:${canonicalDigest({
+            kind: 'registered_request_input',
+            interpreterId: context.interpreterId,
+            customerJob: context.customerJob,
+            selectionKey: descriptor.selectionKey,
+            inputKey: candidate.inputKey,
+            interpretationEvidence: context.interpretationEvidence,
+          })}`,
+        }
     return [{
       contractRef: descriptor.contractRef,
       selectionKey: descriptor.selectionKey,
@@ -430,21 +540,11 @@ function groundRegisteredRequestInputs(
       inputPointer: binding.inputPointer,
       schemaIdentity: candidate.schemaIdentity,
       value: context.customerJob,
-      source: {
-        kind: 'agent_inference',
-        inferenceRef: `inference:${canonicalDigest({
-          kind: 'registered_request_input',
-          interpreterId: context.interpreterId,
-          customerJob: context.customerJob,
-          selectionKey: descriptor.selectionKey,
-          inputKey: candidate.inputKey,
-          interpretationEvidence: context.interpretationEvidence,
-        })}`,
-      },
+      source,
     }]
   })
-  if (inferred.length === 0) return selection
-  return Object.freeze({ ...selection, facts: Object.freeze([...selection.facts, ...inferred]) })
+  if (grounded.length === 0) return selection
+  return Object.freeze({ ...selection, facts: Object.freeze([...selection.facts, ...grounded]) })
 }
 
 function plainStringSchemaAccepts(schema: Readonly<Record<string, JsonValue>>, value: string): boolean {

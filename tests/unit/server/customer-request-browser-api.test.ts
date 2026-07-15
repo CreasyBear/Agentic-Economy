@@ -5,6 +5,13 @@ import {
   handleBrowserCustomerRequestMessagePost,
   handleBrowserCustomerRequestPost,
 } from '@/lib/server/customer-request-browser-api'
+import {
+  handleBrowserCustomerRequestCancelPost,
+  handleBrowserCustomerRequestConfirmationPost,
+  handleBrowserCustomerRequestEvidenceGet,
+  handleBrowserCustomerRequestProblemPost,
+  handleBrowserCustomerRequestRunPost,
+} from '@/lib/server/customer-request-browser-lifecycle-api'
 import { verifyCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 const serviceKey = 'browser-session-service-key-for-unit-tests'
@@ -153,6 +160,75 @@ describe('browser Customer Request API', () => {
     expect(response.headers.get('set-cookie')).toBeNull()
   })
 
+  it('keeps one guest Request principal through confirmation, action, recovery, and evidence', async () => {
+    const calls: Array<Readonly<{ name: string; args: Record<string, unknown> }>> = []
+    const options = {
+      env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: serviceKey },
+      now: () => 20_000,
+      randomUUID: () => '018f3f24-8f17-7b72-8b5a-a3d6d6bf35d8',
+      tryAuthenticatedSubmit: vi.fn(async () => Response.json({ error: 'missing_auth' }, { status: 401 })),
+      callAction: async (name: string, args: Record<string, unknown>) => {
+        calls.push({ name, args })
+        if (name === 'customerRequestApplication:submit') return {
+          kind: 'request' as const, requestRef: 'request:guest:lifecycle', revision: 1,
+          state: 'ready_to_compare' as const, summary: 'Find a suitable service',
+          nextAction: 'prepare_options' as const, missingFields: [], options: [],
+        }
+        return { kind: 'refused' as const, reason: 'request_not_found' as const }
+      },
+    }
+    const submitted = await handleBrowserCustomerRequestPost(post('/api/requests', {
+      idempotencyKey: 'submit:guest:lifecycle', requestRef: 'request:guest:lifecycle',
+      agentRef: 'web:guest:lifecycle', request: 'Find a suitable service', routing: { network: 'ae:public' },
+    }), options)
+    const cookie = submitted.headers.get('set-cookie')?.split(';')[0] ?? ''
+    const requestRef = 'request:guest:lifecycle'
+
+    await handleBrowserCustomerRequestConfirmationPost(post(
+      `/api/requests/${requestRef}/confirmation`,
+      { revision: 1, routeRef: 'route:guest:1', idempotencyKey: 'confirm:guest:1' },
+      cookie,
+    ), requestRef, options)
+    await handleBrowserCustomerRequestRunPost(post(
+      `/api/requests/${requestRef}/run`, { idempotencyKey: 'run:guest:1' }, cookie,
+    ), requestRef, options)
+    await handleBrowserCustomerRequestCancelPost(post(
+      `/api/requests/${requestRef}/cancellation`, { idempotencyKey: 'cancel:guest:1' }, cookie,
+    ), requestRef, options)
+    await handleBrowserCustomerRequestProblemPost(post(
+      `/api/requests/${requestRef}/problems`, {
+        idempotencyKey: 'report:guest:1', category: 'incorrect_result', summary: 'This result is incorrect.',
+      }, cookie,
+    ), requestRef, options)
+    await handleBrowserCustomerRequestEvidenceGet(new Request(
+      `https://ae.example/api/requests/${requestRef}/evidence`, { headers: { Cookie: cookie } },
+    ), requestRef, options)
+
+    const expected = [
+      ['customerRequestApplication:submit', 'submit'],
+      ['customerRequestApplication:confirmRoute', 'confirm'],
+      ['customerRequestApplication:runRoute', 'run'],
+      ['customerRequestApplication:cancelRoute', 'cancel'],
+      ['customerRequestApplication:reportRouteProblem', 'report'],
+      ['customerRequestApplication:exportRouteEvidence', 'evidence'],
+    ] as const
+    expect(calls.map(({ name }) => name)).toEqual(expected.map(([name]) => name))
+    const principals = new Set(calls.map(({ args }) => (
+      args.serviceAuth as { principalId: string }
+    ).principalId))
+    expect([...principals]).toEqual(['browser_guest:018f3f24-8f17-7b72-8b5a-a3d6d6bf35d8'])
+    await Promise.all(calls.map(async ({ args }, index) => {
+      const { serviceAuth, ...command } = args
+      await expect(verifyCustomerRequestServiceAssertion({
+        key: serviceKey,
+        operation: expected[index]?.[1] ?? 'submit',
+        command: command as never,
+        assertion: serviceAuth as never,
+        now: 20_000,
+      })).resolves.toBe(true)
+    }))
+  })
+
   it('fails a tampered browser session closed without reaching the Request action', async () => {
     const callAction = vi.fn()
     const authenticatedFallback = vi.fn(async () => Response.json({ error: 'missing_auth' }, { status: 401 }))
@@ -173,3 +249,11 @@ describe('browser Customer Request API', () => {
     expect(authenticatedFallback).toHaveBeenCalledOnce()
   })
 })
+
+function post(path: string, body: unknown, cookie?: string): Request {
+  return new Request(`https://ae.example${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(cookie === undefined ? {} : { Cookie: cookie }) },
+    body: JSON.stringify(body),
+  })
+}

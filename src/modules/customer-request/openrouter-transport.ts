@@ -18,18 +18,25 @@ export function createOpenRouterCustomerRequestSemanticTransport(config: OpenRou
 }
 
 function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration): Readonly<{
-  generateJson: (input: Readonly<{ systemInstruction: string; payload: TPayload; signal: AbortSignal }>) => Promise<Readonly<{ content: string }>>
+  generateJson: (input: Readonly<{
+    systemInstruction: string
+    payload: TPayload
+    signal: AbortSignal
+    responseSchema?: Readonly<Record<string, unknown>>
+  }>) => Promise<Readonly<{ content: string }>>
 }> {
   if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
   return Object.freeze({
-    generateJson: async ({ systemInstruction, payload, signal }) => {
+    generateJson: async ({ systemInstruction, payload, signal, responseSchema }) => {
       const requestBody = JSON.stringify({
         model: config.model,
         messages: [
           { role: 'system', content: systemInstruction },
           { role: 'user', content: JSON.stringify(payload) },
         ],
-        response_format: { type: 'json_object' },
+        response_format: responseSchema === undefined
+          ? { type: 'json_object' }
+          : { type: 'json_schema', json_schema: responseSchema },
         temperature: 0,
       })
       if (new TextEncoder().encode(requestBody).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {

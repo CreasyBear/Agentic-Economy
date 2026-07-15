@@ -189,7 +189,13 @@ describe('CustomerRequest source completeness', () => {
     ]) expect(browserHttp).toContain(handler)
     expect(browserHttp).not.toMatch(/confirmRoute|runRoute|cancelRoute|reportRouteProblem/)
     expect(readFileSync('src/routes/api.requests.$requestRef.confirmation.ts', 'utf8'))
-      .toMatch(/handleCustomerRequestConfirmationPost/)
+      .toMatch(/handleBrowserCustomerRequestConfirmationPost/)
+    const browserLifecycle = readFileSync('src/lib/server/customer-request-browser-lifecycle-api.ts', 'utf8')
+    for (const handler of [
+      'handleCustomerRequestConfirmationPost', 'handleCustomerRequestRunPost',
+      'handleCustomerRequestCancelPost', 'handleCustomerRequestProblemPost',
+      'handleCustomerRequestEvidenceGet',
+    ]) expect(browserLifecycle).toContain(handler)
     expect(existsSync('src/routes/api.requests.$requestRef.approval.ts')).toBe(false)
     expect(existsSync('src/routes/api.requests.$requestRef.attempts.ts')).toBe(false)
     expect(readFileSync('src/routes/api.v1.requests.ts', 'utf8')).toMatch(/handleAgentCustomerRequestPost/)

@@ -2,9 +2,15 @@ import { handleCustomerOptionsPost } from '@/lib/server/customer-options-api'
 import { handleCustomerRequestFactsPost, type FactsResult } from '@/lib/server/customer-request-facts-api'
 import { handleCustomerRequestGet, type InspectResult } from '@/lib/server/customer-request-inspect-api'
 import { handleCustomerRequestMessagePost, type MessageResult } from '@/lib/server/customer-request-messages-api'
+import type { ConfirmationResult } from '@/lib/server/customer-request-confirmation-api'
 import { handleCustomerRequestPost, type SubmitResult } from '@/lib/server/customer-request-api'
 import { callPublicSourceAction, sourceAction } from '@/lib/server/convex-source'
 import type { CustomerOptionsProjection } from '@/modules/customer-request/customer-projection'
+import type {
+  CustomerRequestAgentResult,
+  CustomerRequestEvidenceResult,
+  CustomerRequestProblemResult,
+} from '@/modules/customer-request/agent-contract'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 
 const COOKIE_NAME = 'ae_request_session'
@@ -14,8 +20,9 @@ const SESSION_LIFETIME_MS = SESSION_LIFETIME_SECONDS * 1_000
 const SESSION_SCOPE = 'customer_requests:create'
 
 type BrowserActionResult = SubmitResult | FactsResult | MessageResult | CustomerOptionsProjection | InspectResult
+  | ConfirmationResult | CustomerRequestAgentResult | CustomerRequestProblemResult | CustomerRequestEvidenceResult
 
-type BrowserApiOptions = Readonly<{
+export type BrowserApiOptions = Readonly<{
   env?: Record<string, string | undefined>
   now?: () => number
   randomUUID?: () => string
@@ -104,6 +111,24 @@ export async function handleBrowserCustomerRequestGet(
   })
 }
 
+export async function callBrowserGuestAction<Result extends BrowserActionResult>(
+  request: Request,
+  name: string,
+  operation: 'confirm' | 'run' | 'cancel' | 'report' | 'evidence',
+  command: Record<string, unknown>,
+  options: BrowserApiOptions = {},
+): Promise<Result | undefined> {
+  const session = await readGuestSession(request, options)
+  return session === undefined ? undefined : await callAsGuest<Result>(name, operation, command, session, options)
+}
+
+export async function hasBrowserGuestSession(
+  request: Request,
+  options: BrowserApiOptions = {},
+): Promise<boolean> {
+  return await readGuestSession(request, options) !== undefined
+}
+
 async function handleGuestSubmit(request: Request, session: GuestSession, options: BrowserApiOptions): Promise<Response> {
   return handleCustomerRequestPost(request, {
     submit: async (args) => await callAsGuest<SubmitResult>('customerRequestApplication:submit', 'submit', {
@@ -115,7 +140,7 @@ async function handleGuestSubmit(request: Request, session: GuestSession, option
 
 async function callAsGuest<Result extends BrowserActionResult>(
   name: string,
-  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume',
+  operation: 'submit' | 'facts' | 'refine' | 'compare' | 'resume' | 'confirm' | 'run' | 'cancel' | 'report' | 'evidence',
   command: Record<string, unknown>,
   session: GuestSession,
   options: BrowserApiOptions,

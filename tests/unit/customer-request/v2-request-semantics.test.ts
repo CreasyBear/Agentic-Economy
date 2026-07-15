@@ -27,6 +27,46 @@ import {
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('V2 Request semantics', () => {
+  it('keeps intent-direction copy in customer language instead of exposing model or capability vocabulary', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:intent-direction',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'needs_intent_direction', prompt: 'Choose a sandbox lookup capability.', selections: [],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({ customerJob: 'Fremantle', capabilities: [] })).resolves.toMatchObject({
+      kind: 'needs_intent_direction', prompt: 'You mentioned “Fremantle”. What would you like to find or decide?',
+    })
+  })
+
+  it('decodes bounded neutral JSON fact values from the strict model envelope', async () => {
+    const model = decisionModelWithCommitment()
+    const requestInput = requiredInput(model, 'request')
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:value-json',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'capability_candidates', prompt: '', selections: [{
+          selectionKey: model.selectionKey,
+          facts: [{ inputKey: requestInput.key, valueJson: JSON.stringify({ topic: 'Fremantle' }) }],
+        }],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    await expect(interpreter.propose({
+      customerJob: 'Fremantle', capabilities: [bindCustomerCapabilityDescriptor({
+        contractRef: model.contractRef, selectionKey: model.selectionKey,
+        name: 'Search data', description: 'Returns matching data.', inputs: model.inputs,
+        valueSchemas: inputValueSchemas(model, structuredInputSchema()),
+        evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+      })],
+    })).resolves.toMatchObject({
+      kind: 'capability_candidates', selections: [{ facts: [{ value: { topic: 'Fremantle' } }] }],
+    })
+  })
+
   it('gives the interpreter only opaque keys and customer descriptors, then binds structured values server-side', async () => {
     const model = decisionModelWithCommitment()
     const requestInput = requiredInput(model, 'request')
@@ -135,6 +175,43 @@ describe('V2 Request semantics', () => {
           })],
         }),
       ]),
+    })
+  })
+
+  it('uses the literal customer request for a plain request input without asking them to restate it', async () => {
+    const lookup = compositionLookupModel('catalog.customer-grounded', 'customer_required')
+    const generateJson = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        kind: 'capability_candidates', selections: [{ selectionKey: lookup.selectionKey, facts: [] }],
+      }),
+    })
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:customer-grounded', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+    const customerJob = 'Fremantle'
+    const proposal = await interpreter.propose({
+      customerJob,
+      capabilities: [bindCustomerCapabilityDescriptor({
+        contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+        name: 'Find a place', description: 'Returns matching places.', inputs: lookup.inputs,
+        valueSchemas: lookup.inputs.map((input) => ({
+          inputKey: input.key,
+          valueSchema: projectCapabilityInputValueSchema({
+            $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+            properties: { request: { type: 'string' } }, required: ['request'], additionalProperties: false,
+          }, input),
+        })),
+        evidence: lookup.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+      })],
+    })
+
+    expect(proposal).toMatchObject({
+      kind: 'capability_candidates',
+      selections: [{
+        selectionKey: lookup.selectionKey,
+        facts: [{ value: customerJob, source: { kind: 'customer', assertionRef: expect.stringMatching(/^assertion:/u) } }],
+      }],
     })
   })
 
@@ -873,7 +950,7 @@ describe('V2 Request semantics', () => {
     })
   })
 
-  it('derives ranking intent from customer text only and rejects model-injected preference', async () => {
+  it('derives ranking intent from customer text only and discards model-injected preference', async () => {
     expect(deriveCustomerDecisionPreference('Find the cheapest suitable option')).toMatchObject({
       objective: 'lowest_maximum_price', basis: 'extracted_from_request',
     })
@@ -898,7 +975,7 @@ describe('V2 Request semantics', () => {
         valueSchemas: inputValueSchemas(model, structuredInputSchema()),
         evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
       })],
-    })).rejects.toThrow('customer_request_semantic_interpretation_invalid')
+    })).resolves.toMatchObject({ kind: 'capability_candidates', selections: [] })
   })
 
   it('uses the latest explicit customer price priority instead of a stale earlier request', () => {
@@ -931,13 +1008,16 @@ function decisionModelWithCommitment() {
   })))
 }
 
-function compositionLookupModel(capabilityId = 'catalog.lookup') {
+function compositionLookupModel(
+  capabilityId = 'catalog.lookup',
+  inference: 'allowed' | 'customer_required' = 'allowed',
+) {
   return openCapabilityDecisionModel(defineCapabilityContract(capabilityContractV2({
     capabilityId, version: 2,
     inputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { request: { type: 'string' } }, required: ['request'], additionalProperties: false },
     outputSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { optionId: { type: 'string' }, result: { type: 'string' } }, required: ['optionId', 'result'], additionalProperties: false },
     customerAnnotations: [
-      { annotationId: 'request', document: 'input', pointer: '/request', label: 'What to find', role: 'request' },
+      { annotationId: 'request', document: 'input', pointer: '/request', label: 'What to find', role: 'request', inference },
       { annotationId: 'option_id', semanticIdentity: 'ae.option_id:v1', document: 'output', pointer: '/optionId', label: 'Option identifier', role: 'comparison' },
       { annotationId: 'result', document: 'output', pointer: '/result', label: 'Lookup result', role: 'completion_evidence' },
     ],

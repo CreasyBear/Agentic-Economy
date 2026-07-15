@@ -268,15 +268,8 @@ async function prepareCustomerChoice(backend: Backend, requestId: string) {
     customerJob: 'Find the cheapest labelled sandbox option',
     routing: { networkId: 'ae:public' },
   })
-  if (submitted.kind !== 'request' || submitted.clarification?.kind !== 'contract_fact') {
-    throw new Error(`request clarification failed: ${submitted.kind}`)
-  }
-  const answered = await customer.action(api.customerRequestApplication.provideFacts, {
-    requestRef: submitted.requestRef, expectedRevision: submitted.revision,
-    idempotencyKey: `facts:${requestId}`, requirementKey: submitted.clarification.requirementKey,
-    value: 'Return a labelled sandbox comparison reference.',
-  })
-  if (answered.kind !== 'request') throw new Error(`request answer failed: ${answered.kind}`)
+  if (submitted.kind !== 'request') throw new Error(`request submission failed: ${submitted.kind}`)
+  const answered = submitted
   const decision = await customer.action(api.customerRequestApplication.compare, {
     requestRef: answered.requestRef,
     revision: answered.revision,

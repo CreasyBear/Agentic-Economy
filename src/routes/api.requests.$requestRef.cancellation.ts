@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { handleCustomerRequestCancelPost } from '@/lib/server/customer-request-route-action-api'
+import { handleBrowserCustomerRequestCancelPost } from '@/lib/server/customer-request-browser-lifecycle-api'
 
 export const Route = createFileRoute('/api/requests/$requestRef/cancellation')({
-  server: { handlers: { POST: ({ request, params }) => handleCustomerRequestCancelPost(request, params.requestRef) } },
+  server: { handlers: { POST: ({ request, params }) => handleBrowserCustomerRequestCancelPost(request, params.requestRef) } },
 })

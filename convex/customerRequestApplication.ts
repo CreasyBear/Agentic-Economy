@@ -545,6 +545,7 @@ export const refine = action({
       intent,
       networkId: current.aggregate.snapshot.networkId,
       priorFacts: current.aggregate.snapshot.facts,
+      replaceCustomerRequestLiteral: true,
     })
   },
 })
@@ -1076,6 +1077,7 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   intent: string
   networkId: string
   priorFacts: StoredAggregate['snapshot']['facts']
+  replaceCustomerRequestLiteral?: boolean
 }>): Promise<ActionResult> {
   const replay = await replayCommittedCommand(ctx, input)
   if (replay !== undefined) return replay
@@ -1083,12 +1085,17 @@ async function interpretCompileCommit(ctx: ActionCtx, input: Readonly<{
   if (graph.kind !== 'available') return { kind: 'refused', reason: 'capabilities_unavailable' }
   const interpreter = createConfiguredRequestInterpreter()
   if (interpreter === undefined) return { kind: 'refused', reason: 'interpreter_unavailable' }
-  const priorFacts = rebindStoredFacts(input.priorFacts, graph.models)
+  const priorFacts = rebindStoredFacts(input.priorFacts, graph.models).filter((fact) => (
+    input.replaceCustomerRequestLiteral !== true
+    || fact.source.kind !== 'customer'
+    || !fact.source.assertionRef.startsWith('assertion:customer-request-literal:')
+  ))
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let proposal: CustomerRequestSemanticProposal
     try {
       proposal = await interpreter.propose({ customerJob: input.intent, capabilities: graph.descriptors })
-    } catch {
+    } catch (error) {
+      console.error('customer_request_semantic_interpretation_failed', interpreterFailureCode(error))
       return { kind: 'refused', reason: 'interpreter_unavailable' }
     }
     const compilationInput: CompileCommitInput = {
@@ -1636,7 +1643,8 @@ async function refreshCurrentRouteGeneration(
         customerJob: current.aggregate.snapshot.intent,
         capabilities: graph.descriptors,
       })
-    } catch {
+    } catch (error) {
+      console.error('customer_request_route_refresh_interpretation_failed', interpreterFailureCode(error))
       return await persistRetryableRouteRefresh(
         ctx, args, caller, current, currentGeneration, 'interpreter_unavailable',
       )
@@ -1703,6 +1711,12 @@ function createConfiguredRequestInterpreter() {
     maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
     maximumResponseBytes: 64_000,
   })
+}
+
+function interpreterFailureCode(error: unknown): string {
+  if (!(error instanceof Error)) return 'unknown'
+  if (error.name === 'AbortError') return 'aborted'
+  return error.message.startsWith('customer_request_') ? error.message : 'unknown'
 }
 
 type RouteRefreshRetryReason = Extract<GenerationRefreshResult, { kind: 'retryable' }>['reason']
