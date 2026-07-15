@@ -24,6 +24,7 @@ import {
   bindCustomerCapabilityDescriptor,
   createJsonCustomerRequestSemanticInterpreter,
   deriveCustomerDecisionPreference,
+  deriveCustomerMaximumTotalCostCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
@@ -879,6 +880,41 @@ describe('V2 Request semantics', () => {
         ))).toBe(true)
       }
     }
+  })
+
+  it('derives and enforces an explicit maximum total cost from customer language', () => {
+    expect(deriveCustomerMaximumTotalCostCriterion('Use both providers but keep the total below AUD 5.')).toMatchObject({
+      label: 'Maximum total cost', value: { currency: 'AUD', amountMinor: 500 }, basis: 'extracted_from_request',
+    })
+    const lookup = compositionLookupModel()
+    const shipping = compositionShippingModel(lookup)
+    const request = requiredInput(lookup, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:hard-spend', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Use both providers but keep the total below AUD 5.', networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates', selections: [lookup, shipping].map((model) => ({
+        selectionKey: model.selectionKey, contractRef: model.contractRef,
+        facts: model === lookup ? [{
+          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+          value: 'routing book', source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+        }] : [],
+      })) },
+      interpreterId: 'interpreter:test',
+      bindings: [
+        { ...supply('binding:lookup:hard-spend', lookup), price: { kind: 'fixed', currency: 'AUD', amountMinor: 300 } },
+        { ...supply('binding:shipping:hard-spend', shipping), price: { kind: 'fixed', currency: 'AUD', amountMinor: 700 } },
+      ],
+      models: [lookup, shipping], now: 10_000,
+    })
+
+    expect(result).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
+    expect(result).not.toHaveProperty('routeGeneration')
+    expect(projectCustomerRequest(result)).toMatchObject({
+      state: 'unsupported', summary: 'No current option stays within your AUD 5.00 maximum.',
+      nextAction: 'revise_request',
+    })
   })
 
   it('does not price-rank otherwise viable routes across currencies', () => {

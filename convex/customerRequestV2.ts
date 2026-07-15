@@ -24,7 +24,10 @@ import {
   compileRoutePlans, composeRequestActions, CUSTOMER_REQUEST_ROUTE_COMPILER_VERSION,
   type CustomerRequestV2Aggregate,
 } from '@/modules/customer-request/compiler'
-import { deriveCustomerDecisionPreference } from '@/modules/customer-request/semantic-interpreter'
+import {
+  deriveCustomerDecisionPreference,
+  deriveCustomerMaximumTotalCostCriterion,
+} from '@/modules/customer-request/semantic-interpreter'
 import {
   routePlanGenerationIsInternallyConsistent,
   routePlanGenerationMatchesRequest,
@@ -1142,6 +1145,10 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
           const preference = deriveCustomerDecisionPreference(aggregate.snapshot.intent)
           return preference === undefined ? {} : { decisionPreference: preference }
         })(),
+        ...(() => {
+          const criterion = deriveCustomerMaximumTotalCostCriterion(aggregate.snapshot.intent)
+          return criterion === undefined ? {} : { derivedCriteria: [criterion] }
+        })(),
         candidates: discoverRequestEvaluationCandidates({
           selectedCapabilities: actions.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
           bindings,
@@ -1161,6 +1168,12 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     ...(evaluation.decisionPreference === undefined ? {} : {
       objectiveEvidenceRef: evaluation.decisionPreference.evidenceRef,
     }),
+    ...(() => {
+      const criterion = deriveCustomerMaximumTotalCostCriterion(aggregate.snapshot.intent)
+      return criterion === undefined ? {} : {
+        maximumTotalCost: criterion.value,
+      }
+    })(),
   })
   const unknownCostFailsClosed = routeGeneration === undefined
     && aggregate.outcome === 'unsupported'

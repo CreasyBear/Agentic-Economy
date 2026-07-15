@@ -200,6 +200,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   proposedActions?: readonly ProposedRequestAction[]
   resolveModel?: (ref: CapabilityContractRef) => CapabilityDecisionModel | undefined
   decisionPreference?: RequestEvaluation['decisionPreference']
+  derivedCriteria?: readonly UnderstoodCriterion[]
 }>): RequestEvaluation {
   const candidates = input.candidates.map((candidate): RequestEvaluationCandidate => {
     const facts = factsForModel(input.facts, candidate.model)
@@ -269,7 +270,10 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
     })
   })
   const nextRequirement = chooseNextRequirement(candidates)
-  const criteria = projectUnderstoodCriteria(input.facts, input.candidates)
+  const criteria = Object.freeze([
+    ...projectUnderstoodCriteria(input.facts, input.candidates),
+    ...(input.derivedCriteria ?? []),
+  ].sort((left, right) => left.criterionDigest.localeCompare(right.criterionDigest)))
   const preparationDisclosure = projectPreparationDisclosure(input.facts, input.candidates)
   const completionRequirements = deriveCompletionRequirements(
     input.proposedActions ?? [], input.resolveModel,

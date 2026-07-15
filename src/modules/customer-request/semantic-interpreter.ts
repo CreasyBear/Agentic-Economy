@@ -11,7 +11,7 @@ import {
 } from '@/modules/capability-contract/public'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
-import type { RequestFact } from './evaluation'
+import type { RequestFact, UnderstoodCriterion } from './evaluation'
 
 export type CustomerInputDescriptor = Readonly<{
   inputKey: CapabilityInputKey
@@ -150,6 +150,7 @@ const SYSTEM_INSTRUCTION = [
 ].join(' ')
 const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v8'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
+const EXPLICIT_MAXIMUM_TOTAL_COST_VERSION = 'customer-request-maximum-total-cost:v1'
 const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   name: 'customer_request_semantic_proposal',
   strict: true,
@@ -457,6 +458,38 @@ export function deriveCustomerDecisionPreference(customerJob: string): CustomerR
       objective,
       explicitPricePriorityVersion: EXPLICIT_PRICE_PRIORITY_VERSION,
     })}`,
+  })
+}
+
+export type CustomerMaximumTotalCostCriterion = UnderstoodCriterion & Readonly<{
+  value: Readonly<{ currency: string; amountMinor: number }>
+}>
+
+export function deriveCustomerMaximumTotalCostCriterion(customerJob: string): CustomerMaximumTotalCostCriterion | undefined {
+  const normalized = customerJob.normalize('NFKC')
+  let latest: Readonly<{ currency: string; amountMinor: number }> | undefined
+  for (const match of normalized.matchAll(/\b(AUD|USD|CAD|NZD|EUR|GBP)\s*\$?\s*(\d+(?:\.\d{1,2})?)\b/giu)) {
+    const amount = match[2]
+    if (amount === undefined) continue
+    const before = normalized.slice(Math.max(0, match.index - 80), match.index).toLocaleLowerCase('en')
+    if (!/\b(?:under|below|less\s+than|at\s+most|no\s+more\s+than|not\s+exceed|maximum|max|cap|budget)\b[^.!?\n]{0,56}$/u.test(before)) continue
+    const [wholeText, fractionalText = ''] = amount.split('.')
+    const amountMinor = Number(wholeText) * 100 + Number(fractionalText.padEnd(2, '0'))
+    if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) continue
+    latest = { currency: match[1]!.toLocaleUpperCase('en'), amountMinor }
+  }
+  if (latest === undefined) return undefined
+  const inputKey = 'customer:maximum-total-cost' as CapabilityInputKey
+  const inputPointer = '/customerConstraints/maximumTotalCost'
+  const label = 'Maximum total cost'
+  const value = Object.freeze({ currency: latest.currency, amountMinor: latest.amountMinor })
+  const basis = 'extracted_from_request' as const
+  return Object.freeze({
+    inputKey, inputPointer, label, value, basis,
+    criterionDigest: canonicalDigest({
+      customerJob, inputKey, inputPointer, label, value, basis,
+      version: EXPLICIT_MAXIMUM_TOTAL_COST_VERSION,
+    }),
   })
 }
 

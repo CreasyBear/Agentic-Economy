@@ -23,6 +23,7 @@ import {
 } from './evaluation'
 import {
   deriveCustomerDecisionPreference,
+  deriveCustomerMaximumTotalCostCriterion,
   type CustomerRequestSemanticProposal,
 } from './semantic-interpreter'
 import {
@@ -193,6 +194,7 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
   const facts = mergeFacts(command.priorFacts ?? [], proposalFacts)
   if (facts === undefined) return { kind: 'refused', reason: 'unsafe_interpretation' }
   const decisionPreference = deriveCustomerDecisionPreference(command.intent)
+  const maximumTotalCostCriterion = deriveCustomerMaximumTotalCostCriterion(command.intent)
   const baseActions = selected.map((selection, index): ProposedRequestAction => {
     const model = resolveExactModel(models, selection.contractRef)
     if (model === undefined || model.selectionKey !== selection.selectionKey) {
@@ -238,6 +240,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
         ...(decisionPreference === undefined
           ? {}
           : { decisionPreference }),
+        ...(maximumTotalCostCriterion === undefined
+          ? {}
+          : { derivedCriteria: [maximumTotalCostCriterion] }),
         candidates: discoverRequestEvaluationCandidates({
           selectedCapabilities: selected.map(({ selectionKey, contractRef }) => ({ selectionKey, contractRef })),
           bindings: command.bindings,
@@ -277,6 +282,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
     ...(evaluation.decisionPreference === undefined ? {} : {
       objectiveEvidenceRef: evaluation.decisionPreference.evidenceRef,
+    }),
+    ...(maximumTotalCostCriterion === undefined ? {} : {
+      maximumTotalCost: maximumTotalCostCriterion.value,
     }),
   })
   if (routes === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
@@ -457,6 +465,7 @@ export function compileRoutePlans(input: Readonly<{
   models: ReadonlyMap<string, CapabilityDecisionModel>
   objective?: 'lowest_maximum_price'
   objectiveEvidenceRef?: string
+  maximumTotalCost?: Readonly<{ currency: string; amountMinor: number }>
 }>): readonly CustomerRequestRoutePlan[] | undefined {
   if (input.actions.length === 0) return Object.freeze([])
   const choices = input.actions.map((action) => input.candidates.filter(
@@ -533,11 +542,16 @@ export function compileRoutePlans(input: Readonly<{
     }
     return [Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })]
   })
-  const ranking = canRankByLowestMaximumPrice(drafts)
+  const admittedDrafts = input.maximumTotalCost === undefined
+    ? drafts
+    : drafts.filter((route) => route.maximumTotalCost.kind === 'known'
+      && route.maximumTotalCost.currency === input.maximumTotalCost?.currency
+      && route.maximumTotalCost.amountMinor <= input.maximumTotalCost.amountMinor)
+  const ranking = canRankByLowestMaximumPrice(admittedDrafts)
     && input.objectiveEvidenceRef !== undefined
     ? Object.freeze({ objective: input.objective, evidenceRef: input.objectiveEvidenceRef })
     : undefined
-  const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, ranking?.objective))
+  const ordered = admittedDrafts.sort((left, right) => compareRoutePlans(left, right, ranking?.objective))
   return Object.freeze(ordered.map((draft, index): CustomerRequestRoutePlan => {
     const alternatives: Array<Readonly<{
       alternativeRouteRef: string

@@ -125,12 +125,22 @@ export function projectRequestEvaluation(input: Readonly<{
   const routeGeneration = input.routeGenerationRef === undefined
     ? {}
     : { routeGenerationRef: input.routeGenerationRef }
+  const maximumTotalCost = customerMaximumTotalCost(input.evaluation.criteria)
   if (input.evaluation.posture === 'unsupported' && input.actionCount === 0) return requestView({
     ...routeGeneration,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
     summary: 'AE cannot perform the requested operation.',
+    nextAction: 'revise_request',
+    criteria,
+  })
+  if (input.outcome === 'unsupported' && maximumTotalCost !== undefined) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: `No current option stays within your ${formatCustomerMoney(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
     nextAction: 'revise_request',
     criteria,
   })
@@ -197,6 +207,27 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'prepare_options',
     criteria,
   })
+}
+
+function customerMaximumTotalCost(
+  criteria: RequestEvaluationProjectionInput['criteria'],
+): Readonly<{ currency: string; amountMinor: number }> | undefined {
+  const value = criteria.find((criterion) => criterion.label === 'Maximum total cost')?.value
+  if (!isJsonRecord(value)) return undefined
+  const currency = value.currency
+  const amountMinor = value.amountMinor
+  return typeof currency === 'string' && currency.length === 3
+    && typeof amountMinor === 'number' && Number.isSafeInteger(amountMinor) && amountMinor >= 0
+    ? { currency, amountMinor }
+    : undefined
+}
+
+function isJsonRecord(value: JsonValue | undefined): value is Readonly<Record<string, JsonValue>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function formatCustomerMoney(currency: string, amountMinor: number): string {
+  return `${currency} ${(amountMinor / 100).toFixed(2)}`
 }
 
 function customerPurposeLabel(value: string): string {
