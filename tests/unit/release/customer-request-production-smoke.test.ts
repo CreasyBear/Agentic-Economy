@@ -60,4 +60,68 @@ describe('customer Request production smoke entrypoint', () => {
       AE_CUSTOMER_REQUEST_FINISH: 'compelete',
     })).toThrow('AE_CUSTOMER_REQUEST_FINISH must be cancel or complete')
   })
+
+  it('freezes a complete direct-provider comparison from explicit environment inputs', () => {
+    expect(customerRequestProductionSmokeConfigFromEnvironment({
+      AE_CUSTOMER_REQUEST_FINISH: 'complete',
+      AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api","https://quoter.example/api"]',
+      AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
+      AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+    })).toMatchObject({
+      finish: 'complete',
+      directBaseline: {
+        providerOrigins: ['https://resolver.example/api', 'https://quoter.example/api'],
+        credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
+        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+      },
+    })
+  })
+
+  it('fails closed for partial, non-completing, or unsupported direct comparison configuration', () => {
+    expect(() => customerRequestProductionSmokeConfigFromEnvironment({
+      AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api"]',
+    })).toThrow('Direct comparison requires complete explicit configuration')
+    expect(() => customerRequestProductionSmokeConfigFromEnvironment({
+      AE_CUSTOMER_REQUEST_FINISH: 'cancel',
+      AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api"]',
+      AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
+      AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+    })).toThrow('Direct comparison requires AE_CUSTOMER_REQUEST_FINISH=complete')
+    expect(() => customerRequestProductionSmokeConfigFromEnvironment({
+      AE_CUSTOMER_REQUEST_FINISH: 'complete',
+      AE_DIRECT_PROVIDER_ORIGINS_JSON: '["https://resolver.example/api"]',
+      AE_DIRECT_PROVIDER_CREDENTIAL: 'provider_credential',
+      AE_DIRECT_PREDECLARED_GAIN: 'faster',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: '{"currency":"AUD","amountMinor":1000}',
+    })).toThrow('AE_DIRECT_PREDECLARED_GAIN must be recoverable_progress')
+  })
+
+  it('rejects a programmatic cancellation comparison before any hosted or provider call', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+    await expect(runCustomerRequestProductionSmoke({
+      baseUrl: 'https://ae.example', agentApiKey: 'ak_agent', expectedRevision: 'a'.repeat(40),
+      expectedDeploymentId: 'dpl_exact', facts: {}, fetch, finish: 'cancel', messages: [],
+      preflightOnly: false, requestText: 'Find a sandbox option.',
+      directBaseline: {
+        providerOrigins: ['https://resolver.example/api', 'https://quoter.example/api'],
+        credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
+        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+      },
+    })).rejects.toThrow('Direct comparison requires a completed hosted journey')
+    expect(fetch).not.toHaveBeenCalled()
+
+    await expect(runCustomerRequestProductionSmoke({
+      baseUrl: 'https://ae.example', agentApiKey: 'ak_agent', expectedRevision: 'a'.repeat(40),
+      expectedDeploymentId: 'dpl_exact', facts: {}, fetch, finish: 'complete', messages: [],
+      preflightOnly: false, requestText: 'Find a sandbox option.',
+      directBaseline: {
+        providerOrigins: ['http://resolver.example/api', 'https://quoter.example/api'],
+        credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
+        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+      },
+    })).rejects.toThrow('must contain at least two HTTPS provider origins')
+    expect(fetch).not.toHaveBeenCalled()
+  })
 })
