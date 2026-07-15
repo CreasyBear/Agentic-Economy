@@ -23,6 +23,8 @@ import {
   readCurrentRouteMandateStateForPrincipal,
 } from './customerRequestRouteMandate'
 
+const MAX_PENDING_DISPATCH_SCAN = 64
+
 const startCommand = v.object({
   requestId: v.string(),
   principalId: v.string(),
@@ -416,42 +418,75 @@ export const leaseNextDispatch = internalMutation({
       || args.leaseDurationMs < 1_000 || args.leaseDurationMs > 60_000) {
       return { kind: 'refused' as const, reason: 'lease_invalid' as const }
     }
-    const pending = await ctx.db.query('customerRequestRouteDispatchOutbox')
+    const pendingCandidates = await ctx.db.query('customerRequestRouteDispatchOutbox')
       .withIndex('by_state_and_availableAt', (query) => (
         query.eq('state', 'pending').lte('availableAt', now)
-      )).first()
-    if (pending === null) return { kind: 'none' as const }
-    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
-      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', pending.attemptRef)).unique()
-    if (attempt === null || !routeDispatchIntegrityValid(pending)
-      || !routeAttemptIntegrityValid(attempt)
-      || attempt.runRef !== pending.runRef || attempt.state !== 'queued'
-      || attempt.operationKeyDigest !== pending.operationKeyDigest) {
-      throw new Error('customer_request_route_dispatch_integrity_failure')
-    }
-    const leaseExpiresAt = now + args.leaseDurationMs
-    await ctx.db.patch(pending._id, {
-      state: 'leased', leaseOwner: args.workerId, leaseExpiresAt, updatedAt: now,
-    })
-    await ctx.db.patch(attempt._id, { state: 'leased', updatedAt: now })
-    await ctx.scheduler.runAfter(args.leaseDurationMs, internal.customerRequestRouteExecution.recoverExpiredDispatch, {
-      dispatchRef: pending.dispatchRef,
-    })
-    return {
-      kind: 'leased' as const,
-      dispatch: {
+      )).take(MAX_PENDING_DISPATCH_SCAN)
+    for (const pending of pendingCandidates) {
+      const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
+        .withIndex('by_attemptRef', (query) => query.eq('attemptRef', pending.attemptRef)).unique()
+      if (attempt === null || !routeDispatchIntegrityValid(pending)
+        || !routeAttemptIntegrityValid(attempt)
+        || attempt.runRef !== pending.runRef || attempt.state !== 'queued'
+        || attempt.operationKeyDigest !== pending.operationKeyDigest) {
+        throw new Error('customer_request_route_dispatch_integrity_failure')
+      }
+      if (attempt.grant.expiresAt <= now) {
+        await failExpiredUnreleasedAttempt(ctx, pending, attempt, now)
+        continue
+      }
+      const leaseExpiresAt = now + args.leaseDurationMs
+      await ctx.db.patch(pending._id, {
+        state: 'leased', leaseOwner: args.workerId, leaseExpiresAt, updatedAt: now,
+      })
+      await ctx.db.patch(attempt._id, { state: 'leased', updatedAt: now })
+      await ctx.scheduler.runAfter(args.leaseDurationMs, internal.customerRequestRouteExecution.recoverExpiredDispatch, {
         dispatchRef: pending.dispatchRef,
-        attemptRef: attempt.attemptRef,
-        runRef: attempt.runRef,
-        position: attempt.position,
-        operationKeyDigest: attempt.operationKeyDigest,
-        inputJson: attempt.inputJson,
-        grant: attempt.grant,
-        leaseExpiresAt,
-      },
+      })
+      return {
+        kind: 'leased' as const,
+        dispatch: {
+          dispatchRef: pending.dispatchRef,
+          attemptRef: attempt.attemptRef,
+          runRef: attempt.runRef,
+          position: attempt.position,
+          operationKeyDigest: attempt.operationKeyDigest,
+          inputJson: attempt.inputJson,
+          grant: attempt.grant,
+          leaseExpiresAt,
+        },
+      }
     }
+    if (pendingCandidates.length === MAX_PENDING_DISPATCH_SCAN && routeWorkerConfigured()) {
+      await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
+        workerId: `route-worker:expired-dispatch-cleanup:${now}`,
+      })
+    }
+    return { kind: 'none' as const }
   },
 })
+
+async function failExpiredUnreleasedAttempt(
+  ctx: MutationCtx,
+  dispatch: Doc<'customerRequestRouteDispatchOutbox'>,
+  attempt: Doc<'customerRequestRouteStepAttempts'>,
+  now: number,
+): Promise<void> {
+  const run = await ctx.db.query('customerRequestRouteRuns')
+    .withIndex('by_runRef', (query) => query.eq('runRef', attempt.runRef)).unique()
+  if (run === null || run.mandateRef !== attempt.mandateRef
+    || run.currentPosition !== attempt.position
+    || (run.state !== 'queued' && run.state !== 'running')) {
+    throw new Error('customer_request_route_run_integrity_failure')
+  }
+  const failure: JsonValue = { reason: 'authority_expired_before_release' }
+  await ctx.db.patch(dispatch._id, { state: 'failed', updatedAt: now })
+  await ctx.db.patch(attempt._id, { state: 'failed', updatedAt: now })
+  await ctx.db.patch(run._id, {
+    state: 'failed', resultJson: JSON.stringify(failure),
+    resultDigest: canonicalDigest(failure), updatedAt: now,
+  })
+}
 
 const leasedInvocation = v.object({
   dispatchRef: v.string(),

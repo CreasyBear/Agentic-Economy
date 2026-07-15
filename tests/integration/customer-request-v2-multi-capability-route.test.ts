@@ -907,6 +907,39 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })).resolves.toEqual({ kind: 'none' })
   })
 
+  it('terminalizes expired unreleased authority instead of poisoning the shared dispatch queue', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'expired-dispatch')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:expired-dispatch',
+    })
+    const expiresAt = await backend.run(async (ctx) => {
+      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
+      expect(attempts).toHaveLength(1)
+      return attempts[0]?.grant.expiresAt
+    })
+    if (expiresAt === undefined) throw new Error('expired dispatch grant missing')
+    vi.spyOn(Date, 'now').mockReturnValue(expiresAt + 1)
+
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:after-authority-expiry', leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+    await backend.run(async (ctx) => {
+      const runs = await ctx.db.query('customerRequestRouteRuns').collect()
+      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
+      const outbox = await ctx.db.query('customerRequestRouteDispatchOutbox').collect()
+      expect(runs).toHaveLength(1)
+      expect(attempts).toHaveLength(1)
+      expect(outbox).toHaveLength(1)
+      expect(runs[0]).toMatchObject({
+        state: 'failed', resultJson: JSON.stringify({ reason: 'authority_expired_before_release' }),
+      })
+      expect(attempts[0]?.state).toBe('failed')
+      expect(outbox[0]?.state).toBe('failed')
+    })
+  })
+
   it('rechecks the exact registered binding at the release boundary', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
