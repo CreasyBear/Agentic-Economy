@@ -131,6 +131,65 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('retries a transient interpreter outage with the same submitted Request', async () => {
+    const responses = [
+      Response.json({ kind: 'refused', reason: 'interpreter_unavailable' }, { status: 503 }),
+      Response.json(routesReadyView()),
+      Response.json(routesReadyView()),
+      Response.json(requestView('route_confirmed', 2, {
+        routeGenerationRef: 'generation:one', confirmation: confirmation(),
+      })),
+      Response.json(requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+      })),
+      Response.json({
+        kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
+        steps: [{ step: 1, state: 'queued', observedAt: 9_000, evidence: [] }],
+      }),
+      Response.json({
+        kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one',
+        state: 'received', reportedAt: 9_001,
+      }),
+      Response.json(requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+        activity: {
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+        },
+      })),
+      Response.json(requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+        activity: {
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+        },
+      })),
+    ]
+    const bodies: string[] = []
+    const sleep = vi.fn(async () => undefined)
+    const fetch = vi.fn<typeof globalThis.fetch>(async (_input, init) => {
+      if (init?.method === 'POST' && typeof init.body === 'string') bodies.push(init.body)
+      const response = responses.shift()
+      if (response === undefined) throw new Error('unexpected request')
+      return response
+    })
+
+    await runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: '2.0.0' },
+      scenario: { request: 'Recover this request', facts: {}, messages: [] },
+      sandbox: true, fetch, sleep,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })
+
+    expect(bodies[0]).toBe(bodies[1])
+    expect(sleep).toHaveBeenCalledWith(1_000)
+  })
+
   it('rejects a legacy single-business route when the release gate requires composition', async () => {
     const responses = [routesReadyView(), routesReadyView()]
     const fetch = vi.fn<typeof globalThis.fetch>(async () => {

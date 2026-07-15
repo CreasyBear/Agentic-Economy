@@ -81,6 +81,18 @@ jobs:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: npx convex deploy --message "GitHub ${AE_RELEASE_SOURCE_REVISION}"
 
+      - name: Refuse incomplete production execution configuration
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          for key in AE_ROUTE_CALL_SIGNING_SECRET AE_ROUTE_CALL_SIGNING_KEY_ID AE_SANDBOX_PROVIDER_KEY AE_SITE_URL; do
+            value="$(npx convex env get "${key}" --prod)"
+            if [ -z "${value}" ]; then
+              echo "Required production execution setting is missing: ${key}" >&2
+              exit 1
+            fi
+          done
+
       - name: Register labelled sandbox acceptance supply
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

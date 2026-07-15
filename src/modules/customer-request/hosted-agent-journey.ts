@@ -100,7 +100,7 @@ export async function runHostedCustomerRequestJourney(
     idempotencyKey: `acceptance:submit:${nonce}`, requestRef,
     agentRef: `${input.agent.name}:${input.agent.version}`, request: input.scenario.request,
   })
-  let view = await callAgent(input, '/api/v1/requests', 'POST', submit)
+  let view = await submitWithInterpreterRecovery(input, submit)
   const replay = await callAgent(input, '/api/v1/requests', 'POST', submit)
   if (JSON.stringify(view) !== JSON.stringify(replay)) throw new Error('hosted_journey_submit_replay_changed')
   observe(states, view)
@@ -430,7 +430,43 @@ function assertProductionBaseUrl(value: string): void {
 
 function responseError(method: string, path: string, status: number, value: unknown): Error {
   const reason = z.object({ reason: z.string().optional(), error: z.string().optional() }).safeParse(value)
-  return new Error(`${method} ${path} returned ${status}:${reason.success ? reason.data.reason ?? reason.data.error ?? 'unexpected' : 'unexpected'}`)
+  return new HostedJourneyResponseError(
+    method,
+    path,
+    status,
+    reason.success ? reason.data.reason ?? reason.data.error ?? 'unexpected' : 'unexpected',
+  )
+}
+
+class HostedJourneyResponseError extends Error {
+  constructor(
+    readonly method: string,
+    readonly path: string,
+    readonly status: number,
+    readonly reason: string,
+  ) {
+    super(`${method} ${path} returned ${status}:${reason}`)
+  }
+}
+
+async function submitWithInterpreterRecovery(
+  input: HostedCustomerRequestJourneyInput,
+  submit: z.infer<typeof customerRequestSubmitInputSchema>,
+): Promise<CustomerRequestView> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await callAgent(input, '/api/v1/requests', 'POST', submit)
+    } catch (error) {
+      const retryable = error instanceof HostedJourneyResponseError
+        && error.method === 'POST'
+        && error.path === '/api/v1/requests'
+        && error.status === 503
+        && error.reason === 'interpreter_unavailable'
+      if (!retryable || attempt === 3) throw error
+      await (input.sleep ?? defaultSleep)(1_000)
+    }
+  }
+  throw new Error('hosted_journey_interpreter_recovery_exhausted')
 }
 
 function digestInput(value: unknown): string {

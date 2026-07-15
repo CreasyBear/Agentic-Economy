@@ -1699,7 +1699,7 @@ function createConfiguredRequestInterpreter() {
       apiKey, model: modelName,
       ...(env.AE_SITE_URL?.trim() ? { siteUrl: env.AE_SITE_URL.trim() } : {}),
     }),
-    timeoutMs: 20_000,
+    timeoutMs: 45_000,
     maximumPayloadBytes: MAX_INTERPRETER_DESCRIPTOR_BYTES,
     maximumResponseBytes: 64_000,
   })
