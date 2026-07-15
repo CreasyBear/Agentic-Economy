@@ -77,6 +77,11 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
         relation: 'inspect_evidence', method: 'GET', href: `${current}/evidence`,
         summary: 'Inspect the evidence AE currently holds for this work.',
       })
+      actions.push({
+        relation: 'report_problem', method: 'POST', href: `${current}/problems`,
+        summary: 'Report a problem against this Request for review.',
+        input: { idempotencyKey, category: '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>', summary: '<problem summary>' },
+      })
       if (view.activity?.cancellation === 'available_before_next_step') {
         actions.push({
           relation: 'cancel', method: 'POST', href: `${current}/cancellation`,

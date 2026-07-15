@@ -149,7 +149,7 @@ export async function runHostedCustomerRequestJourney(
       if (clarification.kind === 'intent_direction') {
         const message = input.scenario.messages[messageIndex]
         if (message === undefined) throw new Error(`hosted_journey_message_missing:${clarification.prompt}`)
-        view = await callAgent(runtimeInput, requestPath(requestRef, 'messages'), 'POST', customerRequestMessageInputSchema.parse({
+        view = await callObservedAgent(runtimeInput, view, 'answer_clarification', customerRequestMessageInputSchema.parse({
           idempotencyKey: `acceptance:message:${nonce}:${messageIndex}`,
           expectedRevision: view.revision, message,
         }))
@@ -162,7 +162,7 @@ export async function runHostedCustomerRequestJourney(
         if (fact === undefined) {
           throw new Error(`hosted_journey_fact_missing:${clarification.requirementKey}`)
         }
-        view = await callAgent(runtimeInput, requestPath(requestRef, 'facts'), 'POST', customerRequestFactInputSchema.parse({
+        view = await callObservedAgent(runtimeInput, view, 'answer_clarification', customerRequestFactInputSchema.parse({
           idempotencyKey: `acceptance:fact:${nonce}:${clarification.requirementKey}`,
           expectedRevision: view.revision, requirementKey: clarification.requirementKey,
           value: fact,
@@ -177,7 +177,7 @@ export async function runHostedCustomerRequestJourney(
     }
 
     if (view.state === 'ready_to_compare') {
-      view = await callAgent(runtimeInput, requestPath(requestRef, 'options'), 'POST', customerRequestOptionsInputSchema.parse({
+      view = await callObservedAgent(runtimeInput, view, 'prepare_options', customerRequestOptionsInputSchema.parse({
         revision: view.revision, idempotencyKey: `acceptance:prepare:${nonce}:${view.revision}`,
       }), [200, 202])
       observe(states, view)
@@ -191,8 +191,8 @@ export async function runHostedCustomerRequestJourney(
       if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')
       assertExpectedRoute(input.scenario.expectedRoute, route.stepCount, selectedBusinesses)
       authorityStops.push('route_confirmation')
-      view = await callAgent(
-        runtimeInput, requestPath(requestRef, 'confirmation'), 'POST',
+      view = await callObservedAgent(
+        runtimeInput, view, 'confirm_option',
         customerRequestRouteConfirmationInputSchema.parse({
           revision: view.revision, routeRef: route.routeRef,
           idempotencyKey: `acceptance:confirm:${nonce}:${view.revision}`,
@@ -200,31 +200,33 @@ export async function runHostedCustomerRequestJourney(
       )
       observe(states, view)
       if (view.state !== 'route_confirmed') throw new Error(`hosted_journey_confirmation_failed:${view.state}`)
-      view = await callAgent(
-        runtimeInput, requestPath(requestRef, 'run'), 'POST',
+      view = await callObservedAgent(
+        runtimeInput, view, 'start_confirmed_option',
         customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:run:${nonce}` }),
       )
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
+      const progressPath = observedNavigationPath(input, view, 'inspect_progress', 'GET')
+      const evidencePath = observedNavigationPath(input, view, 'inspect_evidence', 'GET')
       if (input.scenario.finish === 'complete') {
         return await completeHostedJourney({
           input: runtimeInput, release, requestRef, route, selectedBusiness, selectedBusinesses,
-          states, authorityStops, consumedFacts, consumedMessages,
+          states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
         })
       }
-      const evidence = await callAgentEvidence(runtimeInput, requestPath(requestRef, 'evidence'))
+      const evidence = await callAgentEvidence(runtimeInput, evidencePath)
       if (evidence.state !== 'queued') throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
-      const problem = await callAgentProblem(runtimeInput, requestPath(requestRef, 'problems'), {
+      const problem = await callAgentProblem(runtimeInput, observedNavigationPath(input, view, 'report_problem', 'POST'), {
         idempotencyKey: `acceptance:problem:${nonce}`, category: 'other',
         summary: 'Labelled sandbox recovery verification.',
       })
-      const cancelled = await callAgent(
-        runtimeInput, requestPath(requestRef, 'cancellation'), 'POST',
+      const cancelled = await callObservedAgent(
+        runtimeInput, view, 'cancel',
         customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:cancel:${nonce}` }),
       )
       observe(states, cancelled)
       if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
-      const resumed = await callAgent(runtimeInput, requestPath(requestRef), 'GET')
+      const resumed = await callAgent(runtimeInput, progressPath, 'GET')
       observe(states, resumed)
       if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
       return hostedCustomerRequestJourneyProofSchema.parse({
@@ -249,7 +251,7 @@ export async function runHostedCustomerRequestJourney(
 
     if (view.state === 'preparing_options') {
       await (input.sleep ?? defaultSleep)(1_000)
-      view = await callAgent(runtimeInput, requestPath(requestRef), 'GET', undefined, [200, 202])
+      view = await callObservedAgent(runtimeInput, view, 'inspect_progress', undefined, [200, 202])
       observe(states, view)
       continue
     }
@@ -278,10 +280,12 @@ async function completeHostedJourney(input: Readonly<{
   authorityStops: Array<'route_confirmation'>
   consumedFacts: Array<{ requirementKey: string; valueDigest: string }>
   consumedMessages: Array<{ index: number; valueDigest: string }>
+  progressPath: string
+  evidencePath: string
 }>): Promise<HostedCustomerRequestJourneyProof> {
   let resumed: CustomerRequestView | undefined
   for (let attempt = 0; attempt < 24; attempt += 1) {
-    resumed = await callAgent(input.input, requestPath(input.requestRef), 'GET', undefined, [200, 202])
+    resumed = await callAgent(input.input, input.progressPath, 'GET', undefined, [200, 202])
     observe(input.states, resumed)
     if (resumed.state === 'completed') break
     if (resumed.state !== 'in_progress') {
@@ -291,7 +295,7 @@ async function completeHostedJourney(input: Readonly<{
   }
   if (resumed?.state !== 'completed' || resumed.action?.state !== 'completed'
     || resumed.action.result === undefined) throw new Error('hosted_journey_completion_timeout')
-  const evidence = await callAgentEvidence(input.input, requestPath(input.requestRef, 'evidence'))
+  const evidence = await callAgentEvidence(input.input, input.evidencePath)
   if (evidence.state !== 'completed' || evidence.result === undefined
     || evidence.steps.length !== input.route.stepCount
     || evidence.steps.some((step) => step.state !== 'completed')) {
@@ -371,6 +375,55 @@ async function callAgent(
   return result
 }
 
+type AgentNavigationRelation = NonNullable<CustomerRequestView['navigation']>['actions'][number]['relation']
+
+async function callObservedAgent(
+  input: HostedCustomerRequestJourneyRuntimeInput,
+  view: CustomerRequestView,
+  relation: AgentNavigationRelation,
+  body?: unknown,
+  acceptedStatuses: readonly number[] = [200],
+): Promise<CustomerRequestView> {
+  const action = observedNavigationAction(input, view, relation)
+  return await callAgent(input, action.path, action.method, body, acceptedStatuses)
+}
+
+function observedNavigationPath(
+  input: HostedCustomerRequestJourneyInput,
+  view: CustomerRequestView,
+  relation: AgentNavigationRelation,
+  expectedMethod: 'GET' | 'POST',
+): string {
+  const action = observedNavigationAction(input, view, relation)
+  if (action.method !== expectedMethod) throw new Error(`hosted_journey_navigation_method:${relation}`)
+  return action.path
+}
+
+function observedNavigationAction(
+  input: HostedCustomerRequestJourneyInput,
+  view: CustomerRequestView,
+  relation: AgentNavigationRelation,
+): Readonly<{ method: 'GET' | 'POST'; path: string }> {
+  const matches = view.navigation?.actions.filter((action) => action.relation === relation) ?? []
+  if (matches.length !== 1) throw new Error(`hosted_journey_navigation_missing:${relation}`)
+  const action = matches[0]
+  if (action === undefined) throw new Error(`hosted_journey_navigation_missing:${relation}`)
+  const base = new URL(normalizedBaseUrl(input.baseUrl))
+  let current: URL
+  let target: URL
+  try {
+    current = new URL(view.navigation?.current ?? '', base)
+    target = new URL(action.href, base)
+  } catch { throw new Error(`hosted_journey_navigation_invalid:${relation}`) }
+  if (target.origin !== base.origin || target.username !== '' || target.password !== '' || target.hash !== ''
+    || current.origin !== base.origin || current.username !== '' || current.password !== '' || current.hash !== ''
+    || !current.pathname.startsWith('/api/v1/requests/')
+    || (target.pathname !== current.pathname && !target.pathname.startsWith(`${current.pathname}/`))) {
+    throw new Error(`hosted_journey_navigation_unsafe:${relation}`)
+  }
+  return { method: action.method, path: `${target.pathname}${target.search}` }
+}
+
 async function callAgentEvidence(input: HostedCustomerRequestJourneyRuntimeInput, path: string) {
   input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
@@ -410,8 +463,7 @@ async function proveDiscovery(input: HostedCustomerRequestJourneyInput): Promise
   }))
   const discovery = `${llms}\n${skill}`
   for (const marker of [
-    '/api/v1/requests', '/messages', '/confirmation', '/run', '/evidence',
-    '/problems', '/cancellation', CUSTOMER_REQUEST_AGENT_SCOPE, 'routes_ready', 'route_confirmed',
+    '/api/v1/requests', CUSTOMER_REQUEST_AGENT_SCOPE, 'navigation.actions', 'routes_ready', 'route_confirmed',
   ]) {
     if (!discovery.includes(marker)) throw new Error(`hosted_journey_discovery_missing:${marker}`)
   }
@@ -438,14 +490,6 @@ function headers(input: HostedCustomerRequestJourneyInput, credential?: string):
 
 function observe(states: CustomerRequestView['state'][], view: CustomerRequestView): void {
   if (states.at(-1) !== view.state) states.push(view.state)
-}
-
-function requestPath(
-  requestRef: string,
-  suffix?: 'facts' | 'messages' | 'options' | 'confirmation' | 'run' | 'evidence' | 'problems' | 'cancellation',
-): string {
-  const base = `/api/v1/requests/${encodeURIComponent(requestRef)}`
-  return suffix === undefined ? base : `${base}/${suffix}`
 }
 
 function normalizedBaseUrl(value: string): string {

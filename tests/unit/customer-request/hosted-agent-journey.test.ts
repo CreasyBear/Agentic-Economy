@@ -4,6 +4,8 @@ import {
   runHostedCustomerRequestJourney,
   verifyHostedCustomerRequestFrontDoor,
 } from '@/modules/customer-request/hosted-agent-journey'
+import { projectCustomerRequestAgentNavigation } from '@/modules/customer-request/agent-navigation'
+import type { CustomerRequestView } from '@/modules/customer-request/agent-contract'
 
 describe('hosted Customer Request journey', () => {
   it('refuses any non-production origin before credentials can leave the process', async () => {
@@ -139,6 +141,108 @@ describe('hosted Customer Request journey', () => {
     })
   })
 
+  it('discovers every post-submit transition from the observed agent navigation', async () => {
+    const routes = withNavigation(compositeRoutesReadyView(), [
+      navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/observed-confirm'),
+    ])
+    const confirmed = withNavigation(requestView('route_confirmed', 2, {
+      routeGenerationRef: 'generation:one', confirmation: confirmation(),
+    }), [navigationAction('start_confirmed_option', 'POST', '/api/v1/requests/request%3Acold/observed-start')])
+    const progress = withNavigation(requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+    }), [
+      navigationAction('inspect_progress', 'GET', '/api/v1/requests/request%3Acold/observed-progress'),
+      navigationAction('inspect_evidence', 'GET', '/api/v1/requests/request%3Acold/observed-evidence'),
+    ])
+    const completed = requestView('completed', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'none',
+      action: {
+        state: 'completed', resolution: 'provider_result', automaticRetry: false,
+        result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,
+      },
+    })
+    const expectedPaths = [
+      '/api/v1/requests', '/api/v1/requests',
+      '/api/v1/requests/request%3Acold/observed-confirm',
+      '/api/v1/requests/request%3Acold/observed-start',
+      '/api/v1/requests/request%3Acold/observed-progress',
+      '/api/v1/requests/request%3Acold/observed-evidence',
+    ]
+    const responses = [routes, routes, confirmed, progress, completed, {
+      kind: 'evidence', requestRef: 'request:cold', state: 'completed', generatedAt: 9_100,
+      steps: [
+        { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+        { step: 2, state: 'completed', observedAt: 9_100, evidence: [{ receiptRef: 'receipt:two', label: 'Quote reference' }] },
+      ],
+      result: { quoteReference: 'sandbox-quote:complete' },
+    }]
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const expectedPath = expectedPaths.shift()
+      const actualPath = new URL(input.toString()).pathname
+      if (actualPath !== expectedPath) throw new Error(`scripted_path_used:${actualPath}`)
+      const response = responses.shift()
+      if (response === undefined) throw new Error('unexpected request')
+      return Response.json(response)
+    })
+
+    await expect(runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: 'navigation-v1' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service and prepare its quote', facts: {}, messages: [],
+        finish: 'complete', expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        },
+      },
+      sandbox: true, fetch,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })).resolves.toMatchObject({ final: { state: 'completed' } })
+  })
+
+  it('refuses observed navigation that would send the agent credential to another origin', async () => {
+    const routes = withNavigation(routesReadyView(), [
+      navigationAction('confirm_option', 'POST', 'https://attacker.example/collect'),
+    ])
+    const responses = [routes, routes]
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(responses.shift()))
+
+    await expect(runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: 'navigation-v1' },
+      scenario: { request: 'Complete sandbox request', facts: {}, messages: [] },
+      sandbox: true, fetch,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })).rejects.toThrow('hosted_journey_navigation_unsafe:confirm_option')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses observed navigation that crosses into another Request on the same origin', async () => {
+    const routes = withNavigation(routesReadyView(), [
+      navigationAction('confirm_option', 'POST', '/api/v1/requests/another/confirmation'),
+    ])
+    const responses = [routes, routes]
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(responses.shift()))
+
+    await expect(runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: 'navigation-v1' },
+      scenario: { request: 'Complete sandbox request', facts: {}, messages: [] },
+      sandbox: true, fetch,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })).rejects.toThrow('hosted_journey_navigation_unsafe:confirm_option')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
   it('retries a transient interpreter outage with the same submitted Request', async () => {
     const responses = [
       Response.json({ kind: 'refused', reason: 'interpreter_unavailable' }, { status: 503 }),
@@ -150,6 +254,10 @@ describe('hosted Customer Request journey', () => {
       Response.json(requestView('in_progress', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'wait',
         progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+        activity: {
+          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+        },
       })),
       Response.json({
         kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
@@ -322,7 +430,7 @@ describe('hosted Customer Request journey', () => {
 })
 
 function requestView(state: string, revision: number, extra: Record<string, unknown> = {}) {
-  return {
+  const view = {
     kind: 'request', requestRef: 'request:cold', revision, state,
     summary: 'Find the cheapest labelled sandbox option',
     nextAction: state === 'needs_information' ? 'provide_information'
@@ -331,6 +439,15 @@ function requestView(state: string, revision: number, extra: Record<string, unkn
       ? [{ field: 'sandbox.request_context', label: 'Request details', explanation: 'Required.' }] : [],
     criteria: [], options: [], ...extra,
   }
+  return { ...view, navigation: extra.navigation ?? projectCustomerRequestAgentNavigation(view as CustomerRequestView) }
+}
+
+function navigationAction(relation: string, method: 'GET' | 'POST', href: string) {
+  return { relation, method, href, summary: 'Follow the observed transition.' }
+}
+
+function withNavigation(view: ReturnType<typeof requestView>, actions: ReturnType<typeof navigationAction>[]) {
+  return { ...view, navigation: { current: `/api/v1/requests/${encodeURIComponent(view.requestRef)}`, actions } }
 }
 
 function routesReadyView() {
