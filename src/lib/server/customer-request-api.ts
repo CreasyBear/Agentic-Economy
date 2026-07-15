@@ -28,9 +28,12 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
         ...(parsed.data.routing.optimizeFor === undefined ? {} : { optimizeFor: parsed.data.routing.optimizeFor }),
       },
     }
-    const result = customerRequestAgentResultSchema.parse(
-      await (options.submit ?? (async (input) => await callSourceAction(submitAction, input)))(args),
-    )
+    const submit = options.submit ?? (async (input: Record<string, unknown>) => await callSourceAction(submitAction, input))
+    let result = customerRequestAgentResultSchema.parse(await submit(args))
+    if (uncommittedCreation(result)) {
+      result = customerRequestAgentResultSchema.parse(await submit(args))
+    }
+    if (uncommittedCreation(result)) return response({ error: 'request_unavailable' }, 503)
     if (result.kind === 'refused') return response(result, result.reason === 'authentication_required' ? 401 : 503)
     if (result.kind === 'conflict') return response(result, 409)
     return response(result, 200)
@@ -38,6 +41,10 @@ export async function handleCustomerRequestPost(request: Request, options: Handl
     if (error instanceof ConvexSourceError) return response({ error: error.code }, error.status)
     return response({ error: 'request_unavailable' }, 503)
   }
+}
+
+function uncommittedCreation(result: Readonly<{ kind: string; revision?: number }>): boolean {
+  return result.kind === 'request' && result.revision === 0
 }
 
 function response(body: unknown, status: number): Response {

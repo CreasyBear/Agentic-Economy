@@ -27,6 +27,48 @@ describe('customer Request HTTP API', () => {
     expect(response.status).toBe(400)
     expect(submit).not.toHaveBeenCalled()
   })
+
+  it('replays one uncommitted creation response instead of exposing a revision-zero Request', async () => {
+    const submit = vi.fn()
+      .mockResolvedValueOnce({
+        kind: 'request', requestRef: 'request:retry', revision: 0, state: 'needs_attention',
+        summary: 'The request changed before it could be recorded. Try again.',
+        nextAction: 'retry', missingFields: [], options: [],
+      })
+      .mockResolvedValueOnce({
+        kind: 'request', requestRef: 'request:retry', revision: 1, state: 'needs_information',
+        summary: 'Find a suitable option', nextAction: 'provide_information', missingFields: [], options: [],
+      })
+
+    const response = await handleCustomerRequestPost(request({
+      idempotencyKey: 'command:retry', requestRef: 'request:retry',
+      agentRef: 'agent:claude', request: 'Find a suitable option',
+    }), { submit })
+
+    expect(submit).toHaveBeenCalledTimes(2)
+    expect(submit.mock.calls[1]).toEqual(submit.mock.calls[0])
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ revision: 1, state: 'needs_information' })
+  })
+
+  it('fails unavailable after one replay rather than presenting an uncommitted Request as durable', async () => {
+    const uncommitted = {
+      kind: 'request' as const, requestRef: 'request:retry', revision: 0,
+      state: 'needs_attention' as const,
+      summary: 'The request changed before it could be recorded. Try again.',
+      nextAction: 'retry' as const, missingFields: [], options: [],
+    }
+    const submit = vi.fn().mockResolvedValue(uncommitted)
+
+    const response = await handleCustomerRequestPost(request({
+      idempotencyKey: 'command:retry', requestRef: 'request:retry',
+      agentRef: 'agent:claude', request: 'Find a suitable option',
+    }), { submit })
+
+    expect(submit).toHaveBeenCalledTimes(2)
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({ error: 'request_unavailable' })
+  })
 })
 
 function request(body: unknown): Request {
