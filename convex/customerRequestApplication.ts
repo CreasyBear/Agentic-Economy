@@ -417,7 +417,7 @@ const customerView = v.object({
   action: v.optional(v.object({
     state: v.union(v.literal('unknown'), v.literal('completed'), v.literal('failed')),
     resolution: v.union(
-      v.literal('awaiting_evidence'), v.literal('provider_result'), v.literal('reconciled'),
+      v.literal('awaiting_evidence'), v.literal('provider_result'), v.literal('reconciled'), v.literal('not_sent'),
     ),
     automaticRetry: v.literal(false), result: v.optional(v.any()), observedAt: v.number(), // runtime-validated JsonValue boundary
   })),
@@ -2278,15 +2278,19 @@ function projectStoredRouteRun(
     criteria,
     updatedAt: run.updatedAt,
   }))
-  if (run.state === 'failed' && result !== undefined) return writableView(projectCustomerActionStatus({
-    requestRef: run.requestId,
-    revision: run.requestRevision,
-    criteria,
-    status: {
-      kind: 'failed', resolution: 'reconciled', result,
-      resolvedAt: run.updatedAt, automaticRetry: false,
-    },
-  }))
+  if (run.state === 'failed' && result !== undefined) {
+    const providerReportedFailure = isProviderReportedRouteFailure(result)
+    return writableView(projectCustomerActionStatus({
+      requestRef: run.requestId,
+      revision: run.requestRevision,
+      criteria,
+      status: {
+        kind: 'failed', resolution: providerReportedFailure ? 'reconciled' : 'not_sent',
+        result: providerReportedFailure ? result : { reason: 'business_contact_not_started' },
+        resolvedAt: run.updatedAt, automaticRetry: false,
+      },
+    }))
+  }
   if (run.state === 'failed') return writableView(projectNeedsAttention({
     requestRef: run.requestId, revision: run.requestRevision, criteria,
     summary: 'This request needs attention before it can continue.',
@@ -2302,6 +2306,11 @@ function projectStoredRouteRun(
     cancellationAvailable: run.currentState === 'queued' || run.currentState === 'leased',
     criteria,
   }))
+}
+
+function isProviderReportedRouteFailure(result: JsonValue): boolean {
+  return typeof result === 'object' && result !== null && 'reason' in result
+    && result.reason === 'business_reported_failure'
 }
 
 function writableView(view: CustomerRequestView): Infer<typeof customerView> {

@@ -340,7 +340,7 @@ export function projectCustomerActionStatus(input: Readonly<{
         resolvedAt: number; automaticRetry: false
       }>
     | Readonly<{
-        kind: 'failed'; resolution: 'reconciled'; result: JsonValue
+        kind: 'failed'; resolution: 'reconciled' | 'not_sent'; result: JsonValue
         resolvedAt: number; automaticRetry: false
       }>
 }>): CustomerRequestView {
@@ -379,9 +379,11 @@ export function projectCustomerActionStatus(input: Readonly<{
     requestRef: input.requestRef, revision: input.revision,
     state: 'failed', nextAction: 'revise_request',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
-    summary: 'The business confirmed that it could not complete this action. AE did not try it again.',
+    summary: input.status.resolution === 'not_sent'
+      ? 'AE could not safely contact the business. Nothing was sent.'
+      : 'The business confirmed that it could not complete this action. AE did not try it again.',
     action: {
-      state: 'failed', resolution: 'reconciled', automaticRetry: false,
+      state: 'failed', resolution: input.status.resolution, automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
     },
     activity: {

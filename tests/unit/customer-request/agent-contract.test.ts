@@ -68,6 +68,7 @@ describe('Customer Request agent contract', () => {
       ['outcome_unknown', 'unknown', 'awaiting_evidence'],
       ['completed', 'completed', 'provider_result'],
       ['failed', 'failed', 'reconciled'],
+      ['failed', 'failed', 'not_sent'],
     ] as const) {
       expect(customerRequestViewSchema.safeParse({
         ...prepared, state, nextAction: state === 'outcome_unknown' ? 'wait' : 'none',

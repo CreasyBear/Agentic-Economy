@@ -471,11 +471,11 @@ export const customerRequestViewSchema = z.strictObject({
   ]).optional(),
   options: z.array(customerOptionSchema), optionSet: customerOptionSetSchema.optional(),
   preparedAction: customerPreparedActionSchema.optional(),
-  action: z.object({
+  action: z.strictObject({
     state: z.enum(['unknown', 'completed', 'failed']),
-    resolution: z.enum(['awaiting_evidence', 'provider_result', 'reconciled']),
+    resolution: z.enum(['awaiting_evidence', 'provider_result', 'reconciled', 'not_sent']),
     automaticRetry: z.literal(false), result: customerRequestJsonValueSchema.optional(), observedAt: safeNonnegativeInteger,
-  }).strict().optional(),
+  }).optional(),
   progress: z.object({
     completed: safeNonnegativeInteger,
     total: safePositiveInteger,

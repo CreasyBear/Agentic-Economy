@@ -495,6 +495,34 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })).resolves.toEqual(first)
   })
 
+  it('fails safely instead of leaving a run queued when call signing is unavailable', async () => {
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'signing-unavailable')
+
+    await expect(admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:signing-unavailable',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'in_progress',
+      progress: { current: { step: 1, state: 'queued' } },
+    })
+
+    await finishScheduledRouteWorkers(backend, 1)
+
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'failed', nextAction: 'revise_request',
+      summary: 'AE could not safely contact the business. Nothing was sent.',
+      action: {
+        state: 'failed', resolution: 'not_sent', automaticRetry: false,
+        result: { reason: 'business_contact_not_started' },
+      },
+    })
+    expect(routeProviderFetch).not.toHaveBeenCalled()
+  })
+
   it('chains only validated evidence into the next step and completes the same durable run', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)

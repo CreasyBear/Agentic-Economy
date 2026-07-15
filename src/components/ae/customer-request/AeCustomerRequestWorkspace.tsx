@@ -949,8 +949,11 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
   if (action === undefined) return null
   const unknown = action.state === 'unknown'
   const failed = action.state === 'failed'
+  const notSent = failed && action.resolution === 'not_sent'
   const explanation = unknown
     ? 'The Request is preserved while AE checks evidence from the business. There will be no automatic retry.'
+    : notSent
+      ? 'No business action occurred. Review or revise your request before trying another option.'
     : failed
       ? 'The failure is final for this action. AE did not send it again.'
       : action.resolution === 'reconciled'
@@ -966,7 +969,7 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         </Text>
         <Heading level={2}>{projection.summary}</Heading>
         <Text color="secondary">{explanation}</Text>
-        {action.result === undefined ? null : <div className="rounded-md border border-border bg-surface p-4">
+        {action.result === undefined || notSent ? null : <div className="rounded-md border border-border bg-surface p-4">
           <Text type="supporting" weight="semibold">Business result</Text>
           <Text color="secondary" className="mt-1">{readableResult(action.result)}</Text>
         </div>}

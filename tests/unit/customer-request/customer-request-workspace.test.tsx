@@ -282,6 +282,32 @@ describe('customer Request workspace', () => {
     }))
   })
 
+  it('shows a not-sent failure without attributing it to the business', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'not-sent' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:not-sent', revision: 1, state: 'failed',
+      summary: 'AE could not safely contact the business. Nothing was sent.',
+      nextAction: 'revise_request', missingFields: [], criteria: [], options: [],
+      action: {
+        state: 'failed', resolution: 'not_sent', automaticRetry: false,
+        result: { reason: 'business_contact_not_started' }, observedAt: 10,
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find an available option' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByRole('heading', {
+      name: 'AE could not safely contact the business. Nothing was sent.',
+    })).toBeTruthy()
+    expect(screen.getByText('No business action occurred. Review or revise your request before trying another option.')).toBeTruthy()
+    expect(screen.queryByText('Business result')).toBeNull()
+    expect(screen.queryByText(/business_contact_not_started/)).toBeNull()
+  })
+
   it('presents the full request as a customer fact instead of a provider question', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'request-label' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { projectCustomerActionStatus } from '@/modules/customer-request/customer-projection'
 
 describe('customer action status projection', () => {
-  it('makes unknown, reconciled completion, and provider-confirmed failure legible without retry choreography', () => {
+  it('makes unknown, reconciled completion, provider failure, and a not-sent failure legible', () => {
     const common = { requestRef: 'request:one', revision: 1, criteria: [] }
 
     expect(projectCustomerActionStatus({
@@ -33,6 +33,19 @@ describe('customer action status projection', () => {
     expect(failed).toMatchObject({
       state: 'failed', nextAction: 'revise_request',
       action: { state: 'failed', resolution: 'reconciled', result: { recoveryCode: 'not_available' } },
+    })
+    expect(projectCustomerActionStatus({
+      ...common,
+      status: {
+        kind: 'failed', resolution: 'not_sent', result: { reason: 'business_contact_not_started' },
+        resolvedAt: 13, automaticRetry: false,
+      },
+    })).toMatchObject({
+      state: 'failed', nextAction: 'revise_request',
+      summary: 'AE could not safely contact the business. Nothing was sent.',
+      action: {
+        state: 'failed', resolution: 'not_sent', result: { reason: 'business_contact_not_started' },
+      },
     })
     expect(JSON.stringify(failed)).not.toMatch(/observationRef|envelopeRef|lineageDigest|protocol/)
   })

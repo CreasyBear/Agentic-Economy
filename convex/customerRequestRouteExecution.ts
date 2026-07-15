@@ -15,7 +15,7 @@ import { routeStepGrantValue } from '@/modules/customer-request/runtime'
 
 import type { Doc } from './_generated/dataModel'
 import { internal } from './_generated/api'
-import { env, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server'
 import { getActiveExactCapabilityContract } from './capabilityContractDocuments'
 import { getEligibleExactCapabilitySupply } from './capabilitySupply'
 import { admitRouteStep } from './customerRequestRouteMandateAdmission'
@@ -310,11 +310,9 @@ export const startOrResume = internalMutation({
       runRef,
       committedAt: now,
     })
-    if (routeWorkerConfigured()) {
-      await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-        workerId: `route-worker:${dispatchRef}`,
-      })
-    }
+    await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
+      workerId: `route-worker:${dispatchRef}`,
+    })
     const run = await readRunProjection(ctx, runRef)
     if (run === null) throw new Error('customer_request_route_run_write_integrity_failure')
     return { kind: 'started', run }
@@ -457,7 +455,7 @@ export const leaseNextDispatch = internalMutation({
         },
       }
     }
-    if (pendingCandidates.length === MAX_PENDING_DISPATCH_SCAN && routeWorkerConfigured()) {
+    if (pendingCandidates.length === MAX_PENDING_DISPATCH_SCAN) {
       await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
         workerId: `route-worker:expired-dispatch-cleanup:${now}`,
       })
@@ -549,11 +547,9 @@ export const recoverExpiredDispatch = internalMutation({
         availableAt: now, updatedAt: now,
       })
       await ctx.db.patch(attempt._id, { state: 'queued', updatedAt: now })
-      if (routeWorkerConfigured()) {
-        await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-          workerId: `route-worker:recovery:${dispatch.dispatchRef}`,
-        })
-      }
+      await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
+        workerId: `route-worker:recovery:${dispatch.dispatchRef}`,
+      })
       return { kind: 'requeued' as const }
     }
     if (dispatch.state === 'delivered'
@@ -1174,11 +1170,9 @@ async function queueNextStep(
     createdAt: now,
     updatedAt: now,
   })
-  if (routeWorkerConfigured()) {
-    await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
-      workerId: `route-worker:${run.runRef}:${position}`,
-    })
-  }
+  await ctx.scheduler.runAfter(0, internal.customerRequestRouteTransportWorker.runNext, {
+    workerId: `route-worker:${run.runRef}:${position}`,
+  })
   await ctx.db.patch(run._id, {
     state: 'running', completedSteps: position - 1, currentPosition: position, updatedAt: now,
   })
@@ -1362,9 +1356,4 @@ function routeDispatchIntegrityValid(dispatch: Doc<'customerRequestRouteDispatch
   })
   return dispatch.dispatchDigest === digest
     && dispatch.dispatchRef === `route-dispatch:v1:${digest}`
-}
-
-function routeWorkerConfigured(): boolean {
-  return env.AE_ROUTE_CALL_SIGNING_SECRET !== undefined
-    && env.AE_ROUTE_CALL_SIGNING_KEY_ID !== undefined
 }
