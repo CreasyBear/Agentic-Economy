@@ -104,6 +104,27 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
+  it('keeps superseded comparison options out of the production composite acceptance graph', async () => {
+    const backend = convexTest(schema, modules)
+    const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {
+      includeComparisonOptions: false,
+    })
+
+    expect(result.retiredSandboxV2Bindings).toEqual([
+      'binding:sandbox-option-one:http-json:v4',
+      'binding:sandbox-option-two:http-json:v4',
+    ])
+    const eligible = await backend.query(internal.capabilitySupply.listEligible, {
+      networkId: 'ae:public', limit: 32,
+    })
+    expect(eligible.kind).toBe('available')
+    if (eligible.kind !== 'available') throw new Error('sandbox supply unavailable')
+    expect(eligible.supplies.map(({ binding }) => binding.bindingId)).toEqual([
+      'binding:sandbox-route-quoter:http-json:v1',
+      'binding:sandbox-route-resolver:http-json:v1',
+    ])
+  })
+
   it('adopts exact pre-existing labelled sandbox identities without overwriting their claim history', async () => {
     const backend = convexTest(schema, modules)
     const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (

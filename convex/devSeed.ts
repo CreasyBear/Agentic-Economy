@@ -449,6 +449,38 @@ export async function admitSandboxV2Supply(
   return admitted
 }
 
+export async function retireSandboxV2AcceptanceSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registrations: readonly SandboxV2SupplyRegistration[],
+  retiredAt: number,
+): Promise<string[]> {
+  const retired: string[] = []
+  for (const registration of registrations) {
+    const result = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:release-proof' },
+      context: {
+        correlationId: `seed:capability-supply:${registration.slug}`,
+        operationKey: `seed:capability-eligibility-retire:${registration.bindingId}`,
+        reasonCode: 'labelled_sandbox_acceptance_route_replaced',
+        evidenceRefs: ['seed:sandbox-route-acceptance-supersedes-options'],
+      },
+      eligibility: {
+        offeringId: registration.offeringId,
+        bindingId: registration.bindingId,
+        contractRef: registration.contractRef,
+        decision: 'revoke',
+        expectedOfferingRegistrationHash: registration.offeringRegistrationHash,
+        expectedBindingRegistrationHash: registration.bindingRegistrationHash,
+        admissionEvidenceRefs: ['seed:sandbox-route-acceptance-supersedes-options'],
+        conformanceEvidenceRefs: ['seed:sandbox-route-acceptance-supersedes-options'],
+      },
+    }, retiredAt)
+    if (result.kind !== 'ineligible') throw new Error(`sandbox_v2_acceptance_retirement_${result.kind}`)
+    retired.push(registration.bindingId)
+  }
+  return retired
+}
+
 export async function retireSupersededSandboxV2Supply(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registrations: readonly SandboxV2SupplyRegistration[],

@@ -85,16 +85,14 @@ jobs:
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
         run: |
-          npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{}' --prod
+          npx convex run sandboxAcceptanceSupply:seedLabelledSandboxSupply '{"includeComparisonOptions":false}' --prod
           for attempt in $(seq 1 30); do
             graph="$(npx convex run capabilitySupply:queryCapabilityGraph '{"networkId":"ae:public","includeInactive":false,"limit":10}' --prod)"
             ready="$(printf '%s' "${graph}" | jq '[.nodes[]? | select(
-              .publicationRef == "offering:sandbox-option-one:reference-lookup:v3"
-              or .publicationRef == "offering:sandbox-option-two:reference-lookup:v3"
-              or .publicationRef == "offering:sandbox-route-resolver:reference-resolve:v1"
+              .publicationRef == "offering:sandbox-route-resolver:reference-resolve:v1"
               or .publicationRef == "offering:sandbox-route-quoter:service-quote:v1"
             )] | length')"
-            if [ "${ready}" -eq 4 ]; then
+            if [ "${ready}" -eq 2 ]; then
               exit 0
             fi
             sleep 2

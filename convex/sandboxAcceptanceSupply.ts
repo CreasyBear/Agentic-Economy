@@ -7,6 +7,7 @@ import {
   registerSandboxBusinesses,
   registerSandboxRouteSupplyRegistrations,
   registerSandboxV2SupplyRegistrations,
+  retireSandboxV2AcceptanceSupply,
   retireSupersededSandboxV2Supply,
   seedSandboxCapabilityPublication,
 } from './devSeed'
@@ -14,16 +15,17 @@ import { runtimeDb } from './source_state'
 import { DEV_SEED_BUSINESS_FIXTURES } from '../src/modules/dev/public'
 
 export const seedLabelledSandboxSupply = internalMutation({
-  args: {},
+  args: { includeComparisonOptions: v.optional(v.boolean()) },
   returns: v.object({
     seededSlugs: v.array(v.string()),
     businessIdsBySlug: v.record(v.string(), v.string()),
     sandboxV2Bindings: v.array(v.string()),
     sandboxCapabilityPublicationRefs: v.array(v.string()),
+    retiredSandboxV2Bindings: v.array(v.string()),
     sandboxRouteBindings: v.array(v.string()),
     sandboxRoutePublicationRefs: v.array(v.string()),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const registeredAt = Date.now()
     const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
       fixture.requestedSlug.startsWith('sandbox-')
@@ -86,9 +88,12 @@ export const seedLabelledSandboxSupply = internalMutation({
       })),
     ])
     await retireSupersededSandboxV2Supply(ctx.db, registrations, registeredAt + 3_000)
+    const retiredSandboxV2Bindings = args.includeComparisonOptions === false
+      ? await retireSandboxV2AcceptanceSupply(ctx.db, registrations, registeredAt + 3_100)
+      : []
     return {
       ...businesses, sandboxV2Bindings, sandboxCapabilityPublicationRefs,
-      sandboxRouteBindings, sandboxRoutePublicationRefs,
+      retiredSandboxV2Bindings, sandboxRouteBindings, sandboxRoutePublicationRefs,
     }
   },
 })
