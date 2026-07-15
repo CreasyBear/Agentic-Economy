@@ -687,7 +687,10 @@ describe('durable RouteMandate lifecycle', () => {
           offeringId: mandateStep.offeringId,
           bindingId: mandateStep.bindingId,
           contractRef: mandateStep.contractRef,
-          maximumSpend: { currency: 'AUD', amountMinor: 900 },
+          maximumSpend: {
+            currency: route.maximumTotalCost.currency,
+            amountMinor: route.maximumTotalCost.amountMinor,
+          },
           dataScope: [{
             effectId: 'request_release',
             inputPointer: '/requestContext',
