@@ -1031,7 +1031,7 @@ async function queueNextStep(
   now: number,
 ): Promise<boolean> {
   const mandateState = await readCurrentRouteMandateStateForPrincipal(
-    ctx, run.requestId, run.principalId, now,
+    ctx, run.requestId, run.principalId, now, { requireCurrentGraph: false },
   )
   if (mandateState.kind !== 'active' || mandateState.mandate.mandateRef !== run.mandateRef) return false
   const mandateStep = mandateState.mandate.route.steps.find((step) => step.position === position)
@@ -1205,7 +1205,7 @@ async function currentLeasedInvocation(
     || routeStepGrantDigest(attempt.grant) !== attempt.grant.grantDigest
     || attempt.grant.expiresAt <= now) return null
   const mandate = await readCurrentRouteMandateStateForPrincipal(
-    ctx, attempt.requestId, attempt.grant.principalId, now,
+    ctx, attempt.requestId, attempt.grant.principalId, now, { requireCurrentGraph: false },
   )
   if (mandate.kind !== 'active' || mandate.mandate.mandateRef !== attempt.grant.mandateRef
     || mandate.mandate.mandateDigest !== attempt.grant.mandateDigest) return null
@@ -1235,7 +1235,7 @@ async function currentLeasedInvocation(
     || publication.credentialState !== 'ready' || publication.healthState !== 'healthy'
     || publication.readinessObservedAt === undefined || publication.readinessObservedAt > now
     || publication.readinessValidUntil === undefined
-    || publication.readinessValidUntil < attempt.grant.expiresAt) return null
+    || publication.readinessValidUntil < now) return null
   return {
     dispatchRef: dispatch.dispatchRef,
     attemptRef: attempt.attemptRef,

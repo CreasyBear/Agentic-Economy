@@ -602,6 +602,18 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-worker',
     })
+    await backend.run(async (ctx) => {
+      const validUntil = Date.now() + 30_000
+      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
+      expect(attempts).toHaveLength(1)
+      expect(attempts[0]?.grant.expiresAt).toBeGreaterThan(validUntil)
+      const publications = await ctx.db.query('capabilityPublications').collect()
+      for (const publication of publications) {
+        if (publication.disposition === 'current') {
+          await ctx.db.patch(publication._id, { readinessValidUntil: validUntil })
+        }
+      }
+    })
 
     await finishScheduledRouteWorkers(backend, 2)
 

@@ -500,6 +500,6 @@ async function exactStepSupplyIsCurrent(
     && publication.readinessObservedAt !== undefined
     && publication.readinessObservedAt <= now
     && publication.readinessValidUntil !== undefined
-    && publication.readinessValidUntil >= authority.expiresAt
+    && publication.readinessValidUntil >= now
   return current
 }
