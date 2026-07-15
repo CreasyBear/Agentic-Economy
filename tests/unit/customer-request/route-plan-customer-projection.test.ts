@@ -109,7 +109,7 @@ describe('RoutePlan customer projection', () => {
     })
     expect(decision.routes[0]?.comparison).toMatchObject({
       outcomeFit: 'same_promised_result', hardConstraints: 'satisfied', completeness: 'complete',
-      duration: 'not_declared', recovery: 'retry_safe', trust: 'registered_live_supply',
+      duration: 'not_declared', recovery: 'retry_safe', trust: 'registered_current_option',
       freshness: { state: 'current', validUntil: 50_000 },
       commercialInfluence: { status: 'none' },
     })
@@ -637,7 +637,7 @@ function route(input: Readonly<{
     fallbacks: { ordering: 'unranked', alternatives: [] },
     comparison: {
       fit: 'all_steps_viable', completeness: 'complete', dataExposureCount: 1,
-      irreversibleEffectCount: 1, evidenceRequirementCount: 1, trust: 'registered_live_supply',
+      irreversibleEffectCount: 1, evidenceRequirementCount: 1, trust: 'registered_current_option',
       outcomeSignature: 'outcome:prepare', hardConstraints: 'satisfied', duration: 'not_declared',
       recovery: 'retry_safe', freshnessValidUntil: 50_000,
       ordering: {

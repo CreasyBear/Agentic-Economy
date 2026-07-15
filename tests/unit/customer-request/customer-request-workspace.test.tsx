@@ -799,7 +799,7 @@ function routeComparison(
     maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor },
     dataExposureCount, irreversibleEffectCount, uncertaintyCount: 0,
     duration: 'not_declared' as const, recovery,
-    trust: 'registered_live_supply' as const, evidenceCount: 1,
+    trust: 'registered_current_option' as const, evidenceCount: 1,
     freshness: {
       state: freshness,
       validUntil: freshness === 'current' ? Date.now() + 60_000 : Date.now() - 60_000,

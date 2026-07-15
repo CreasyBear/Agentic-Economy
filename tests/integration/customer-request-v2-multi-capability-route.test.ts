@@ -194,7 +194,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         dataExposureCount: 2, irreversibleEffectCount: 2, evidenceRequirementCount: 2,
         duration: 'not_declared', recovery: 'reconcile_required',
         freshnessValidUntil: expect.any(Number), outcomeSignature: expect.stringMatching(/^sha256:/u),
-        trust: 'registered_live_supply',
+        trust: 'registered_current_option',
       },
       uncertainty: [], fallbacks: { ordering: 'unranked', alternatives: [] },
     })

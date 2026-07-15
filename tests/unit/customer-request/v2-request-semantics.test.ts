@@ -642,7 +642,7 @@ describe('V2 Request semantics', () => {
         edges: [{ authority: 'registered_contract_semantics' }],
         fallbacks: { ordering: 'unranked', alternatives: [] },
         comparison: {
-          fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_live_supply',
+          fit: 'all_steps_viable', completeness: 'complete', trust: 'registered_current_option',
           ordering: { kind: 'unranked' },
         },
       }] },

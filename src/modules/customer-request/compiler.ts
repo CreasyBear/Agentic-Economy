@@ -120,7 +120,7 @@ export type CustomerRequestRoutePlan = Readonly<{
     dataExposureCount: number
     irreversibleEffectCount: number
     evidenceRequirementCount: number
-    trust: 'registered_live_supply'
+    trust: 'registered_current_option'
     /** Optional only for immutable generations compiled before recommendation integrity was source-owned. */
     outcomeSignature?: string
     hardConstraints?: 'satisfied'
@@ -519,7 +519,7 @@ export function compileRoutePlans(input: Readonly<{
       irreversibleEffectCount: steps.reduce((count, step) => count
         + step.effects.filter((effect) => effect.reversibility === 'irreversible').length, 0),
       evidenceRequirementCount: steps.reduce((count, step) => count + step.evidence.length, 0),
-      trust: 'registered_live_supply' as const,
+      trust: 'registered_current_option' as const,
       outcomeSignature: canonicalDigest({
         contracts: steps.map(({ contractRef }) => contractRef),
         edges: edges.map(({ fromStep, toStep, semanticIdentity, schemaIdentity }) => ({

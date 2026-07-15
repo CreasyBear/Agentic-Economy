@@ -190,7 +190,7 @@ const customerRouteComparisonEvidenceSchema = z.object({
   maximumCost: customerRouteMaximumCostSchema,
   dataExposureCount: safeNonnegativeInteger, irreversibleEffectCount: safeNonnegativeInteger,
   uncertaintyCount: safeNonnegativeInteger, duration: z.literal('not_declared'),
-  recovery: z.enum(['retry_safe', 'reconcile_required']), trust: z.literal('registered_live_supply'),
+  recovery: z.enum(['retry_safe', 'reconcile_required']), trust: z.literal('registered_current_option'),
   evidenceCount: safeNonnegativeInteger,
   freshness: z.object({
     state: z.enum(['current', 'expired']), validUntil: safePositiveInteger,

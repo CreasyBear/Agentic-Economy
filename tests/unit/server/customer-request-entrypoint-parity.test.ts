@@ -65,7 +65,7 @@ const projection = {
         maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor: 1_200 },
         dataExposureCount: 1, irreversibleEffectCount: 1, uncertaintyCount: 0,
         duration: 'not_declared' as const, recovery: 'retry_safe' as const,
-        trust: 'registered_live_supply' as const, evidenceCount: 1,
+        trust: 'registered_current_option' as const, evidenceCount: 1,
         freshness: { state: 'current' as const, validUntil: 50_000 },
         commercialInfluence: { status: 'none' as const, evidenceRefs: ['commercial:none'] },
       },

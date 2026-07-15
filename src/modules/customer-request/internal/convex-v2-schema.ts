@@ -603,7 +603,8 @@ const routePlanV2Value = v.object({
   comparison: v.object({
     fit: v.literal('all_steps_viable'), completeness: v.literal('complete'),
     dataExposureCount: v.number(), irreversibleEffectCount: v.number(), evidenceRequirementCount: v.number(),
-    trust: v.literal('registered_live_supply'),
+    // Historical generations remain readable; new compilation and every customer projection use the truthful current label.
+    trust: v.union(v.literal('registered_current_option'), v.literal('registered_live_supply')),
     outcomeSignature: v.optional(v.string()),
     hardConstraints: v.optional(v.literal('satisfied')),
     duration: v.optional(v.literal('not_declared')),

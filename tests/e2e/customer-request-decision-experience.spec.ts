@@ -182,7 +182,7 @@ function decisionView(): CustomerRequestView {
           outcomeRef: 'outcome:decision', outcomeFit: 'same_promised_result', completeness: 'complete',
           hardConstraints: 'satisfied', maximumCost: { kind: 'known', currency: 'AUD', amountMinor: 1_400 },
           dataExposureCount: 2, irreversibleEffectCount: 1, uncertaintyCount: 0,
-          duration: 'not_declared', recovery: 'reconcile_required', trust: 'registered_live_supply',
+          duration: 'not_declared', recovery: 'reconcile_required', trust: 'registered_current_option',
           evidenceCount: 1, freshness: { state: 'current', validUntil },
           commercialInfluence: { status: 'none', evidenceRefs: ['commercial:none'] },
         },

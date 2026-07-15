@@ -208,7 +208,7 @@ const customerRouteComparisonEvidence = v.object({
   dataExposureCount: v.number(), irreversibleEffectCount: v.number(), uncertaintyCount: v.number(),
   duration: v.literal('not_declared'),
   recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
-  trust: v.literal('registered_live_supply'), evidenceCount: v.number(),
+  trust: v.literal('registered_current_option'), evidenceCount: v.number(),
   freshness: v.object({ state: v.union(v.literal('current'), v.literal('expired')), validUntil: v.number() }),
   commercialInfluence: customerRouteCommercialInfluence,
 })

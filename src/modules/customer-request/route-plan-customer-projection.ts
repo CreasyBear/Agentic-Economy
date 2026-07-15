@@ -236,7 +236,7 @@ function projectRoute(
         ?? (route.steps.some(({ recovery }) => recovery.recovery === 'reconcile_required')
           ? 'reconcile_required' as const
           : 'retry_safe' as const),
-      trust: 'registered_live_supply' as const,
+      trust: 'registered_current_option' as const,
       evidenceCount: evidence.length,
       freshness: Object.freeze({
         state: freshnessValidUntil <= now ? 'expired' as const : 'current' as const,

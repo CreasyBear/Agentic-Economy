@@ -620,7 +620,7 @@ function routeDraft(suffix: string, steps: readonly RouteStep[]): RouteDraft {
     dataExposureCount: 2,
     irreversibleEffectCount: 2,
     evidenceRequirementCount: 2,
-    trust: 'registered_live_supply' as const,
+    trust: 'registered_current_option' as const,
     ordering: { kind: 'unranked' as const },
   }
   const core = {

@@ -396,7 +396,7 @@ function routePlan() {
       maximumCost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
       dataExposureCount: 1, irreversibleEffectCount: 1, uncertaintyCount: 0,
       duration: 'not_declared', recovery: 'retry_safe',
-      trust: 'registered_live_supply', evidenceCount: 1,
+      trust: 'registered_current_option', evidenceCount: 1,
       freshness: { state: 'current', validUntil: 20_000 },
       commercialInfluence: { status: 'none', evidenceRefs: ['commercial:none'] },
     },
