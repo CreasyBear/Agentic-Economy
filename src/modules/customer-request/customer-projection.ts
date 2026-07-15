@@ -125,6 +125,15 @@ export function projectRequestEvaluation(input: Readonly<{
   const routeGeneration = input.routeGenerationRef === undefined
     ? {}
     : { routeGenerationRef: input.routeGenerationRef }
+  if (input.evaluation.posture === 'unsupported' && input.actionCount === 0) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: 'AE cannot perform the requested operation.',
+    nextAction: 'revise_request',
+    criteria,
+  })
   if (input.evaluation.posture === 'unsupported') return requestView({
     ...routeGeneration,
     requestRef: input.snapshot.requestId,

@@ -28,6 +28,35 @@ import {
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
 
 describe('V2 Request semantics', () => {
+  it('distinguishes a clear unsupported operation from missing intent', async () => {
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:unsupported-operation',
+      transport: { generateJson: async () => ({ content: JSON.stringify({
+        kind: 'unsupported_request', reason: 'requested_result_not_available', prompt: '', selections: [],
+      }) }) },
+      timeoutMs: 1_000, maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+
+    const proposal = await interpreter.propose({
+      customerJob: 'Book it, pay for it, and guarantee completion without asking me again.',
+      capabilities: [],
+    })
+    expect(proposal).toMatchObject({
+      kind: 'unsupported_request', reason: 'requested_result_not_available',
+    })
+    const compiled = compileCustomerRequest({
+      requestId: 'request:unsupported-operation', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Book it, pay for it, and guarantee completion without asking me again.',
+      networkId: 'ae:public', proposal, interpreterId: 'interpreter:unsupported-operation',
+      bindings: [], models: [], now: 1,
+    })
+    expect(compiled).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported', plan: { actions: [] } } })
+    expect(projectCustomerRequest(compiled)).toMatchObject({
+      state: 'unsupported', summary: 'AE cannot perform the requested operation.', nextAction: 'revise_request',
+    })
+  })
+
   it('keeps intent-direction copy in customer language instead of exposing model or capability vocabulary', async () => {
     const interpreter = createJsonCustomerRequestSemanticInterpreter({
       interpreterId: 'interpreter:intent-direction',

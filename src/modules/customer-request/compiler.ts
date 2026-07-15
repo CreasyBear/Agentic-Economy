@@ -174,7 +174,7 @@ export type CompileCustomerRequestResult =
   | Readonly<{ kind: 'refused'; reason: 'unsafe_interpretation' | 'capability_graph_invalid' }>
 
 export function compileCustomerRequest(command: CompileCustomerRequestCommand): CompileCustomerRequestResult {
-  if (command.proposal.kind !== 'needs_intent_direction'
+  if (command.proposal.kind === 'capability_candidates'
     && (command.proposal.selections.length > MAX_SELECTIONS
       || command.proposal.selections.reduce((count, selection) => count + selection.facts.length, 0) > MAX_FACTS)) {
     return { kind: 'refused', reason: 'unsafe_interpretation' }
@@ -182,9 +182,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
   const models = exactModelRegistry(command.models)
   if (models === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const registrySnapshotDigest = requestRegistrySnapshotDigest(command.bindings)
-  const selected = command.proposal.kind === 'needs_intent_direction'
-    ? []
-    : normalizeInferredFacts(command, models)
+  const selected = command.proposal.kind === 'capability_candidates'
+    ? normalizeInferredFacts(command, models)
+    : []
   if (selected === undefined) return { kind: 'refused', reason: 'unsafe_interpretation' }
   if (new Set(selected.map((selection) => selection.selectionKey)).size !== selected.length) {
     return { kind: 'refused', reason: 'unsafe_interpretation' }

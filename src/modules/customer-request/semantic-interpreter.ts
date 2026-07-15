@@ -81,7 +81,16 @@ export type CustomerRequestIntentDirectionProposal = Readonly<{
   interpretationEvidence?: CustomerRequestInterpretationEvidence
 }>
 
-export type CustomerRequestSemanticProposal = CustomerRequestCapabilityProposal | CustomerRequestIntentDirectionProposal
+export type CustomerRequestUnsupportedProposal = Readonly<{
+  kind: 'unsupported_request'
+  reason: 'requested_result_not_available'
+  interpretationEvidence?: CustomerRequestInterpretationEvidence
+}>
+
+export type CustomerRequestSemanticProposal =
+  | CustomerRequestCapabilityProposal
+  | CustomerRequestIntentDirectionProposal
+  | CustomerRequestUnsupportedProposal
 
 export type CustomerRequestSemanticInterpretationTransport = Readonly<{
   generateJson: (input: Readonly<{
@@ -113,7 +122,11 @@ const intentDirectionProposalSchema = z.strictObject({
   kind: z.literal('needs_intent_direction'),
   prompt: z.string().trim().min(1).max(240),
 })
-const proposalSchema = z.union([capabilityProposalSchema, intentDirectionProposalSchema])
+const unsupportedProposalSchema = z.strictObject({
+  kind: z.literal('unsupported_request'),
+  reason: z.literal('requested_result_not_available'),
+})
+const proposalSchema = z.union([capabilityProposalSchema, intentDirectionProposalSchema, unsupportedProposalSchema])
 
 const SYSTEM_INSTRUCTION = [
   'Interpret the customer request using only the supplied customer capability descriptors.',
@@ -129,12 +142,13 @@ const SYSTEM_INSTRUCTION = [
   'Commitment-stage inputs are not required for exploring options.',
   'Do not construct routes, calls, approvals, action identifiers, completion evidence, or provider choices.',
   'An intent-direction question must use customer language. Never mention capability names, labels, keys, schemas, routing, sandbox supply, or implementation vocabulary.',
-  'When the request supplies a meaningful context but no wanted service or result, return one concise needs_intent_direction question of at most 160 characters with selections=[].',
-  'Otherwise return kind=capability_candidates, prompt="", and selections=[{"selectionKey":"opaque","facts":[{"inputKey":"opaque","valueJson":"JSON.stringify(customer-stated value)"}]}].',
+  'When the request supplies a meaningful context but no wanted service or result, return one concise needs_intent_direction question of at most 160 characters with reason="" and selections=[].',
+  'When the wanted service, result, or effect is clear but no supplied capability directly returns it, return kind=unsupported_request, reason=requested_result_not_available, prompt="", and selections=[]. Never ask the customer to clarify an already clear unsupported operation.',
+  'Otherwise return kind=capability_candidates, reason="", prompt="", and selections=[{"selectionKey":"opaque","facts":[{"inputKey":"opaque","valueJson":"JSON.stringify(customer-stated value)"}]}].',
   'Before returning, verify that at least one selected capability directly returns the result the customer requested; never prefer a merely fillable prerequisite over the requested result.',
   'Return one JSON object only.',
 ].join(' ')
-const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v7'
+const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v8'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   name: 'customer_request_semantic_proposal',
@@ -142,7 +156,8 @@ const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   schema: {
     type: 'object', additionalProperties: false,
     properties: {
-      kind: { type: 'string', enum: ['needs_intent_direction', 'capability_candidates'] },
+      kind: { type: 'string', enum: ['needs_intent_direction', 'unsupported_request', 'capability_candidates'] },
+      reason: { type: 'string', enum: ['', 'requested_result_not_available'] },
       prompt: { type: 'string', maxLength: 240 },
       selections: {
         type: 'array', maxItems: 64,
@@ -166,7 +181,7 @@ const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
         },
       },
     },
-    required: ['kind', 'prompt', 'selections'],
+    required: ['kind', 'reason', 'prompt', 'selections'],
   },
 })
 
@@ -229,6 +244,13 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
           return Object.freeze({
             kind: 'needs_intent_direction' as const,
             prompt: customerIntentDirectionPrompt(payload.customerJob),
+            interpretationEvidence,
+          })
+        }
+        if (parsed.data.kind === 'unsupported_request') {
+          return Object.freeze({
+            kind: 'unsupported_request' as const,
+            reason: parsed.data.reason,
             interpretationEvidence,
           })
         }
@@ -309,6 +331,8 @@ function normalizeSemanticProposal(value: unknown): unknown {
   }
   return proposal.kind === 'needs_intent_direction' && typeof proposal.prompt === 'string'
     ? { kind: proposal.kind, prompt: proposal.prompt }
+    : proposal.kind === 'unsupported_request' && proposal.reason === 'requested_result_not_available'
+      ? { kind: proposal.kind, reason: proposal.reason }
     : value
 }
 
@@ -335,6 +359,7 @@ function semanticProposalFailureCode(value: unknown): string {
     return 'customer_request_semantic_interpretation_invalid_type'
   }
   return value.kind === 'needs_intent_direction' || value.kind === 'capability_candidates'
+    || value.kind === 'unsupported_request'
     ? 'customer_request_semantic_interpretation_invalid_shape'
     : 'customer_request_semantic_interpretation_invalid_kind'
 }
