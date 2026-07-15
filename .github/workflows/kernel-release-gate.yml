@@ -91,8 +91,10 @@ jobs:
             ready="$(printf '%s' "${graph}" | jq '[.nodes[]? | select(
               .publicationRef == "offering:sandbox-option-one:reference-lookup:v3"
               or .publicationRef == "offering:sandbox-option-two:reference-lookup:v3"
+              or .publicationRef == "offering:sandbox-route-resolver:reference-resolve:v1"
+              or .publicationRef == "offering:sandbox-route-quoter:service-quote:v1"
             )] | length')"
-            if [ "${ready}" -eq 2 ]; then
+            if [ "${ready}" -eq 4 ]; then
               exit 0
             fi
             sleep 2

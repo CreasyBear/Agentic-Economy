@@ -150,7 +150,11 @@ async function registerThirdSandboxBusiness(backend: Backend) {
     }, now + 1)
     if (published.kind !== 'ok') throw new Error(`third business publish failed: ${published.code}`)
 
-    const contract = await ctx.db.query('capabilityContractDocuments').unique()
+    const contract = await ctx.db.query('capabilityContractDocuments')
+      .withIndex('by_capabilityId_and_version', (query) => query
+        .eq('capabilityId', SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.capabilityId)
+        .eq('version', SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT.version))
+      .unique()
     if (contract === null) throw new Error('sandbox contract missing')
     const contractRef = {
       capabilityId: contract.capabilityId,

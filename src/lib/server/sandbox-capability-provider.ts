@@ -2,7 +2,11 @@ import { z } from 'zod'
 
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body'
 import { canonicalDigest } from '@/modules/common/canonical-digest'
-import { SANDBOX_PROVIDER_PROFILES } from '@/modules/sandbox-supply/public'
+import {
+  SANDBOX_PROVIDER_PROFILES,
+  SANDBOX_ROUTE_PROVIDER_PROFILES,
+  type SandboxRouteProviderProfileKey,
+} from '@/modules/sandbox-supply/public'
 
 const MAX_BODY_BYTES = 64 * 1024
 const SANDBOX_OFFER_EXPIRES_AT = Date.UTC(2035, 0, 1)
@@ -37,8 +41,10 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   if (expectedKey === undefined || expectedKey.length === 0) return json({ kind: 'refused', reason: 'sandbox_provider_unconfigured' }, 503)
   if (request.headers.get('Authorization') !== `Bearer ${expectedKey}`) return json({ kind: 'refused', reason: 'authentication_required' }, 401)
   const url = new URL(request.url)
+  const routeKey = url.searchParams.get('route') as SandboxRouteProviderProfileKey | null
+  const routeProfile = routeKey === null ? undefined : SANDBOX_ROUTE_PROVIDER_PROFILES[routeKey]
   const profile = SANDBOX_PROVIDER_PROFILES[url.searchParams.get('profile') as keyof typeof SANDBOX_PROVIDER_PROFILES]
-  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
+  if (profile === undefined && routeProfile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
   const bindingVersion = url.searchParams.get('binding')
   if (bindingVersion !== null && bindingVersion !== 'v2' && bindingVersion !== 'v3' && bindingVersion !== 'v4') {
     return json({ kind: 'refused', reason: 'sandbox_binding_unknown' }, 404)
@@ -50,6 +56,8 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   if (!body.ok) return json({ kind: 'refused', reason: 'request_too_large' }, 413)
   let parsedJson: unknown
   try { parsedJson = JSON.parse(body.text) } catch { return json({ kind: 'refused', reason: 'request_invalid' }, 400) }
+  if (routeKey !== null && routeProfile !== undefined) return routeProviderResponse(routeKey, routeProfile, parsedJson)
+  if (profile === undefined) return json({ kind: 'refused', reason: 'sandbox_profile_unknown' }, 404)
   const preparationEgress = preparationEgressBody.safeParse(parsedJson)
   if (preparationEgress.success) {
     const bindingId = bindingVersion === 'v4'
@@ -89,6 +97,29 @@ export async function handleSandboxCapabilityRequest(request: Request, options: 
   })
   if (parsed.data.operation === 'reconcile') return json({ kind: 'effect_not_committed', reason: 'sandbox_provider_never_creates_real_world_effects' })
   return json({ kind: 'cancellation_rejected', reason: 'sandbox_provider_has_no_real_world_effect' })
+}
+
+function routeProviderResponse(
+  routeKey: SandboxRouteProviderProfileKey,
+  profile: (typeof SANDBOX_ROUTE_PROVIDER_PROFILES)[SandboxRouteProviderProfileKey],
+  input: unknown,
+): Response {
+  const probe = requestBody.safeParse(input)
+  if (probe.success && probe.data.operation === 'quote') return json({
+    kind: 'quoted', expectedCost: money(profile.amountMinor), maximumCost: money(profile.amountMinor),
+    expectedLatencyMs: 50, dataFields: [], disclosures: [],
+    providerQuoteRef: `sandbox-route-quote:${routeKey}`, providerQuoteExpiresAt: SANDBOX_OFFER_EXPIRES_AT,
+  })
+  if (routeKey === 'resolver') {
+    const parsed = z.strictObject({ request: z.string().min(1) }).safeParse(input)
+    if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+    const serviceReference = `sandbox-service:${canonicalDigest(parsed.data).slice(7, 31)}`
+    return json({ serviceReference }, 200, { 'Provider-Receipt': `sandbox-resolver:${serviceReference}` })
+  }
+  const parsed = z.strictObject({ serviceReference: z.string().min(1) }).safeParse(input)
+  if (!parsed.success) return json({ kind: 'refused', reason: 'request_invalid' }, 400)
+  const quoteReference = `sandbox-quote:${canonicalDigest(parsed.data).slice(7, 31)}`
+  return json({ quoteReference }, 200, { 'Provider-Receipt': `sandbox-quoter:${quoteReference}` })
 }
 
 function structuredQuote(profile: SandboxProfile, body: Record<string, unknown>, scenario: z.infer<typeof scenarioValue>): Response {
@@ -154,6 +185,6 @@ async function waitForDelay(milliseconds: number, signal: AbortSignal): Promise<
 
 function money(amountMinor: number) { return { currency: 'AUD', amountMinor } }
 
-function json(body: unknown, status = 200): Response {
-  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } })
+function json(body: unknown, status = 200, headers: Readonly<Record<string, string>> = {}): Response {
+  return Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } })
 }

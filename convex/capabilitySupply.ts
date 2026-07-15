@@ -1670,7 +1670,15 @@ export async function listEligibleCapabilitySupply(
       ...(activePublication === undefined ? {} : { publication: activePublication }),
     })
   }
+  supplies.sort((left, right) => (
+    compareStableIdentifier(left.offering.offeringId, right.offering.offeringId)
+    || compareStableIdentifier(left.binding.bindingId, right.binding.bindingId)
+  ))
   return { kind: 'available' as const, supplies }
+}
+
+function compareStableIdentifier(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }
 
 export async function getEligibleExactCapabilitySupply(

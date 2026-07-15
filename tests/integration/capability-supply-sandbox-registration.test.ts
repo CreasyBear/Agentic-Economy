@@ -39,12 +39,15 @@ describe('labelled sandbox V2 capability supply', () => {
     ).contract.ref.contractDigest).toBe('sha256:b59586aab54e68b3993c2e27d8781a40b815c3e0e3a938febeff8386be8dde93')
   })
 
-  it('seeds only the two labelled acceptance businesses through the normal production command planes', async () => {
+  it('seeds labelled comparison and composite-route businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
     expect(result).toMatchObject({
-      seededSlugs: ['sandbox-option-one', 'sandbox-option-two'],
+      seededSlugs: [
+        'sandbox-option-one', 'sandbox-option-two',
+        'sandbox-route-resolver', 'sandbox-route-quoter',
+      ],
       sandboxV2Bindings: [
         'binding:sandbox-option-one:http-json:v4',
         'binding:sandbox-option-two:http-json:v4',
@@ -53,9 +56,19 @@ describe('labelled sandbox V2 capability supply', () => {
         'offering:sandbox-option-one:reference-lookup:v3',
         'offering:sandbox-option-two:reference-lookup:v3',
       ],
+      sandboxRouteBindings: [
+        'binding:sandbox-route-resolver:http-json:v1',
+        'binding:sandbox-route-quoter:http-json:v1',
+      ],
+      sandboxRoutePublicationRefs: [
+        'offering:sandbox-route-resolver:reference-resolve:v1',
+        'offering:sandbox-route-quoter:service-quote:v1',
+      ],
     })
     const bindings = await backend.run((ctx) => ctx.db.query('capabilityTransportBindings').collect())
     expect(bindings.map((binding) => binding.credentialRef)).toEqual([
+      'env:AE_SANDBOX_PROVIDER_KEY',
+      'env:AE_SANDBOX_PROVIDER_KEY',
       'env:AE_SANDBOX_PROVIDER_KEY',
       'env:AE_SANDBOX_PROVIDER_KEY',
     ])
@@ -63,6 +76,8 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(businesses.map((business) => business.slug).sort()).toEqual([
       'sandbox-option-one',
       'sandbox-option-two',
+      'sandbox-route-quoter',
+      'sandbox-route-resolver',
     ])
     const publications = await backend.run((ctx) => ctx.db.query('capabilityPublications').collect())
     expect(publications).toMatchObject([
@@ -74,6 +89,16 @@ describe('labelled sandbox V2 capability supply', () => {
       {
         publicationRef: 'offering:sandbox-option-two:reference-lookup:v3',
         bindingId: 'binding:sandbox-option-two:http-json:v4',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v1',
+        bindingId: 'binding:sandbox-route-resolver:http-json:v1',
+        credentialState: 'unobserved', healthState: 'unobserved',
+      },
+      {
+        publicationRef: 'offering:sandbox-route-quoter:service-quote:v1',
+        bindingId: 'binding:sandbox-route-quoter:http-json:v1',
         credentialState: 'unobserved', healthState: 'unobserved',
       },
     ])
@@ -90,7 +115,8 @@ describe('labelled sandbox V2 capability supply', () => {
 
     const result = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
 
-    expect(result.businessIdsBySlug).toEqual(existing.businessIdsBySlug)
+    expect(result.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
+    expect(Object.keys(result.businessIdsBySlug)).toHaveLength(4)
     expect(result.sandboxV2Bindings).toHaveLength(2)
   })
 
@@ -117,7 +143,7 @@ describe('labelled sandbox V2 capability supply', () => {
     ])
   })
 
-  it('publishes and admits two inert businesses through the normal production command planes', async () => {
+  it('publishes and admits four inert businesses through the normal production command planes', async () => {
     const backend = convexTest(schema, modules)
     const first = await backend.mutation(internal.devSeed.seedDevCatalog, {})
     const ownerBeforeReplay = await backend.run((ctx) => (
@@ -146,11 +172,11 @@ describe('labelled sandbox V2 capability supply', () => {
       )).collect(),
       catalogOperations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
         operation.operationName === 'publishBusinessCatalog'
-        && (operation.key === 'seed:catalog:sandbox-option-one' || operation.key === 'seed:catalog:sandbox-option-two')
+        && operation.key.startsWith('seed:catalog:sandbox-')
       )),
       claimOperations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
         operation.operationName === 'claimBusiness'
-        && (operation.key === 'seed:claim:sandbox-option-one' || operation.key === 'seed:claim:sandbox-option-two')
+        && operation.key.startsWith('seed:claim:sandbox-')
       )),
       audits: await ctx.db.query('auditEvents').collect(),
     }))
@@ -165,6 +191,16 @@ describe('labelled sandbox V2 capability supply', () => {
         bindingId: 'binding:sandbox-option-two:http-json:v4',
         credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
       },
+      {
+        publicationRef: 'offering:sandbox-route-resolver:reference-resolve:v1',
+        bindingId: 'binding:sandbox-route-resolver:http-json:v1',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      },
+      {
+        publicationRef: 'offering:sandbox-route-quoter:service-quote:v1',
+        bindingId: 'binding:sandbox-route-quoter:http-json:v1',
+        credentialState: 'unobserved', healthState: 'unobserved', readinessEvidenceRefs: [],
+      },
     ])
     expect(state.bindings.find((binding) => binding.bindingId === state.publications[0]?.bindingId))
       .toMatchObject({ credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY' })
@@ -174,39 +210,38 @@ describe('labelled sandbox V2 capability supply', () => {
       kind: 'available',
       nodes: [],
     })
-    expect(state.contracts).toHaveLength(1)
-    expect(state.contracts[0]).toMatchObject({
-      capabilityId: 'sandbox.reference.lookup', version: 3, status: 'active',
-      contractDigest: expect.stringMatching(/^sha256:/),
-    })
-    expect(state.offerings).toHaveLength(2)
-    expect(state.bindings).toHaveLength(2)
-    expect(state.offerings.map((offering) => offering.businessId)).toHaveLength(2)
-    expect(new Set(state.offerings.map((offering) => offering.businessId)).size).toBe(2)
+    expect(state.contracts).toHaveLength(3)
+    expect(state.contracts.map(({ capabilityId, version, status }) => ({ capabilityId, version, status }))).toEqual([
+      { capabilityId: 'sandbox.reference.lookup', version: 3, status: 'active' },
+      { capabilityId: 'sandbox.route.reference.resolve', version: 1, status: 'active' },
+      { capabilityId: 'sandbox.route.service.quote', version: 1, status: 'active' },
+    ])
+    expect(state.offerings).toHaveLength(4)
+    expect(state.bindings).toHaveLength(4)
+    expect(new Set(state.offerings.map((offering) => offering.businessId)).size).toBe(4)
+    const registeredContracts = new Set(state.contracts.map((contract) => (
+      `${contract.capabilityId}:${contract.version}:${contract.contractDigest}`
+    )))
     expect(state.offerings.every((offering) => (
-      offering.capabilityId === state.contracts[0]?.capabilityId
-      && offering.version === state.contracts[0]?.version
-      && offering.contractDigest === state.contracts[0]?.contractDigest
+      registeredContracts.has(`${offering.capabilityId}:${offering.version}:${offering.contractDigest}`)
       && offering.status === 'active'
     ))).toBe(true)
     expect(state.bindings.every((binding) => (
-      binding.capabilityId === state.contracts[0]?.capabilityId
-      && binding.version === state.contracts[0]?.version
-      && binding.contractDigest === state.contracts[0]?.contractDigest
+      registeredContracts.has(`${binding.capabilityId}:${binding.version}:${binding.contractDigest}`)
       && binding.admission === 'admitted'
       && binding.conformance === 'conformant'
       && binding.adapterId === 'http-json:v1'
     ))).toBe(true)
     expect(JSON.stringify({ offerings: state.offerings, bindings: state.bindings })).not.toContain('"operation"')
-    expect(state.supplyOperations).toHaveLength(6)
+    expect(state.supplyOperations).toHaveLength(12)
     expect(state.supplyOperations.every((operation) => operation.actorKind === 'system' && operation.status === 'succeeded')).toBe(true)
-    expect(state.catalogOperations).toHaveLength(2)
+    expect(state.catalogOperations).toHaveLength(4)
     expect(state.catalogOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
-    expect(state.claimOperations).toHaveLength(2)
+    expect(state.claimOperations).toHaveLength(4)
     expect(state.claimOperations.every((operation) => operation.status === 'succeeded')).toBe(true)
     expect(state.audits.filter((audit) => (
       audit.eventType.startsWith('capability_')
-    ))).toHaveLength(8)
+    ))).toHaveLength(16)
     expect(state.audits.filter((audit) => audit.eventType.startsWith('capability_')).every((audit) => (
       audit.actorKind === 'system' && audit.actorRef === 'system:dev-seed'
     ))).toBe(true)
@@ -216,9 +251,9 @@ describe('labelled sandbox V2 capability supply', () => {
         expect.objectContaining({ targetType: 'capability_binding', beforeState: 'not_admitted:not_conformant', afterState: 'admitted:conformant' }),
       ]),
     )
-    expect(state.audits.filter((audit) => audit.eventType === 'claim.published' && (
-      audit.slug === 'sandbox-option-one' || audit.slug === 'sandbox-option-two'
-    ))).toHaveLength(2)
+    expect(state.audits.filter((audit) => (
+      audit.eventType === 'claim.published' && audit.slug?.startsWith('sandbox-')
+    ))).toHaveLength(4)
 
     const eligible = await backend.query(internal.capabilitySupply.listEligible, { networkId: 'ae:public', limit: 32 })
     expect(eligible).toMatchObject({
@@ -226,6 +261,8 @@ describe('labelled sandbox V2 capability supply', () => {
       supplies: [
         { binding: { bindingId: 'binding:sandbox-option-one:http-json:v4' } },
         { binding: { bindingId: 'binding:sandbox-option-two:http-json:v4' } },
+        { binding: { bindingId: 'binding:sandbox-route-quoter:http-json:v1' } },
+        { binding: { bindingId: 'binding:sandbox-route-resolver:http-json:v1' } },
       ],
     })
   })
@@ -248,13 +285,15 @@ describe('labelled sandbox V2 capability supply', () => {
     expect(eligible.supplies.map((supply) => supply.binding.bindingId).sort()).toEqual([
       'binding:sandbox-option-one:http-json:v4',
       'binding:sandbox-option-two:http-json:v4',
+      'binding:sandbox-route-quoter:http-json:v1',
+      'binding:sandbox-route-resolver:http-json:v1',
     ])
     const registrations = await backend.run(async (ctx) => ({
       offerings: await ctx.db.query('capabilityOfferings').collect(),
       bindings: await ctx.db.query('capabilityTransportBindings').collect(),
     }))
-    expect(registrations.offerings).toHaveLength(2)
-    expect(registrations.bindings).toHaveLength(2)
+    expect(registrations.offerings).toHaveLength(4)
+    expect(registrations.bindings).toHaveLength(4)
   })
 
   it('retires stale sandbox bindings through the eligibility command when corrected bindings are published', async () => {
@@ -337,7 +376,9 @@ describe('labelled sandbox V2 capability supply', () => {
         admission: 'admitted', conformance: 'conformant',
       },
     ])
-    expect(bindings.filter((binding) => !binding.bindingId.endsWith(':v4')).map(bindingState)).toEqual([
+    expect(bindings.filter((binding) => (
+      binding.bindingId.includes('sandbox-option-') && !binding.bindingId.endsWith(':v4')
+    )).map(bindingState)).toEqual([
       {
         bindingId: 'binding:sandbox-option-one:http-json', credentialRef: 'env:AE_SANDBOX_PROVIDER_ONE_KEY',
         admission: 'not_admitted', conformance: 'not_conformant',

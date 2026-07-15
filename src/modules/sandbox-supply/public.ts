@@ -123,6 +123,90 @@ export const SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
   lifecycle: Object.freeze({ idempotency: 'required' as const, recovery: 'retry_safe' as const }),
 })
 
+export const SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
+  contractFormat: 'ae.capability-contract:v2' as const,
+  capabilityId: 'sandbox.route.reference.resolve',
+  version: 1,
+  name: 'Resolve a sandbox service reference',
+  description: 'Resolve an ordinary request into one labelled sandbox service reference.',
+  inputSchema: Object.freeze({
+    $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+    properties: Object.freeze({ request: Object.freeze({ type: 'string', minLength: 1 }) }),
+    required: Object.freeze(['request']), additionalProperties: false,
+  }),
+  outputSchema: Object.freeze({
+    $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+    properties: Object.freeze({ serviceReference: Object.freeze({ type: 'string', minLength: 1 }) }),
+    required: Object.freeze(['serviceReference']), additionalProperties: false,
+  }),
+  customerAnnotations: Object.freeze([
+    Object.freeze({
+      annotationId: 'request', document: 'input' as const, pointer: '/request',
+      label: 'What should the first business resolve?', role: 'request' as const, inference: 'allowed' as const,
+    }),
+    Object.freeze({
+      annotationId: 'service_reference_output', semanticIdentity: 'ae.sandbox-service-reference:v1',
+      document: 'output' as const, pointer: '/serviceReference', label: 'Service reference',
+      role: 'completion_evidence' as const,
+    }),
+  ]),
+  dataUse: Object.freeze([Object.freeze({
+    effectId: 'resolve_request_release', inputPointer: '/request', classification: 'public' as const,
+    phase: 'preparation' as const, recipient: Object.freeze({ kind: 'candidate_binding' as const }),
+    purposes: Object.freeze(['resolve_sandbox_service_reference']),
+  })]),
+  effects: Object.freeze([Object.freeze({
+    effectId: 'resolve_request_release', class: 'data_release' as const,
+    authority: 'mandate_or_explicit' as const, reversibility: 'irreversible' as const,
+  })]),
+  evidence: Object.freeze([Object.freeze({
+    evidenceId: 'service_reference', outputPointer: '/serviceReference', purpose: 'completion' as const,
+  })]),
+  lifecycle: Object.freeze({ idempotency: 'required' as const, recovery: 'retry_safe' as const }),
+})
+
+export const SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT = Object.freeze({
+  contractFormat: 'ae.capability-contract:v2' as const,
+  capabilityId: 'sandbox.route.service.quote',
+  version: 1,
+  name: 'Quote a sandbox service reference',
+  description: 'Prepare one labelled sandbox quote from a resolved service reference.',
+  inputSchema: Object.freeze({
+    $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+    properties: Object.freeze({ serviceReference: Object.freeze({ type: 'string', minLength: 1 }) }),
+    required: Object.freeze(['serviceReference']), additionalProperties: false,
+  }),
+  outputSchema: Object.freeze({
+    $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object',
+    properties: Object.freeze({ quoteReference: Object.freeze({ type: 'string', minLength: 1 }) }),
+    required: Object.freeze(['quoteReference']), additionalProperties: false,
+  }),
+  customerAnnotations: Object.freeze([
+    Object.freeze({
+      annotationId: 'service_reference_input', semanticIdentity: 'ae.sandbox-service-reference:v1',
+      document: 'input' as const, pointer: '/serviceReference', label: 'Service reference',
+      role: 'constraint' as const, inference: 'customer_required' as const,
+    }),
+    Object.freeze({
+      annotationId: 'quote_reference', document: 'output' as const, pointer: '/quoteReference',
+      label: 'Quote reference', role: 'completion_evidence' as const,
+    }),
+  ]),
+  dataUse: Object.freeze([Object.freeze({
+    effectId: 'service_reference_release', inputPointer: '/serviceReference', classification: 'public' as const,
+    phase: 'preparation' as const, recipient: Object.freeze({ kind: 'candidate_binding' as const }),
+    purposes: Object.freeze(['prepare_sandbox_service_quote']),
+  })]),
+  effects: Object.freeze([Object.freeze({
+    effectId: 'service_reference_release', class: 'data_release' as const,
+    authority: 'explicit' as const, reversibility: 'irreversible' as const,
+  })]),
+  evidence: Object.freeze([Object.freeze({
+    evidenceId: 'quote_reference', outputPointer: '/quoteReference', purpose: 'completion' as const,
+  })]),
+  lifecycle: Object.freeze({ idempotency: 'required' as const, recovery: 'reconcile_required' as const }),
+})
+
 export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
   one: Object.freeze({
     slug: 'sandbox-option-one', bindingId: 'sandbox.option.one:v1', nodeId: 'sandbox:option-one',
@@ -150,4 +234,22 @@ export const SANDBOX_PROVIDER_PROFILES = Object.freeze({
   }),
 })
 
+export const SANDBOX_ROUTE_PROVIDER_PROFILES = Object.freeze({
+  resolver: Object.freeze({
+    slug: 'sandbox-route-resolver', label: 'Sandbox Route Resolver',
+    offeringId: 'offering:sandbox-route-resolver:reference-resolve:v1',
+    bindingId: 'binding:sandbox-route-resolver:http-json:v1',
+    amountMinor: 300, queryTerms: Object.freeze(['resolve sandbox service reference', 'sandbox route']),
+    contract: SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT,
+  }),
+  quoter: Object.freeze({
+    slug: 'sandbox-route-quoter', label: 'Sandbox Route Quoter',
+    offeringId: 'offering:sandbox-route-quoter:service-quote:v1',
+    bindingId: 'binding:sandbox-route-quoter:http-json:v1',
+    amountMinor: 700, queryTerms: Object.freeze(['quote sandbox service reference', 'sandbox route']),
+    contract: SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
+  }),
+})
+
 export type SandboxProviderProfileKey = keyof typeof SANDBOX_PROVIDER_PROFILES
+export type SandboxRouteProviderProfileKey = keyof typeof SANDBOX_ROUTE_PROVIDER_PROFILES

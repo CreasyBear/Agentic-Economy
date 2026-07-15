@@ -680,7 +680,12 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
     interpreterId: 'interpreter:test',
     bindings: supply.supplies.map(({ offering, binding, publication }) => ({
       businessId: String(offering.businessId), offeringId: offering.offeringId, bindingId: binding.bindingId,
-      contractRef: model.contractRef, offeringRegistrationHash: offering.registrationHash,
+      contractRef: {
+        capabilityId: binding.capabilityId,
+        version: binding.version,
+        contractDigest: binding.contractDigest,
+      },
+      offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
       commercialRelationship: offering.presentation.commercialRelationship,

@@ -23,6 +23,7 @@ import type { CapabilityContractRef } from '@/modules/capability-contract/public
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 import {
   SANDBOX_PROVIDER_PROFILES,
+  SANDBOX_ROUTE_PROVIDER_PROFILES,
   SANDBOX_V2_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
@@ -38,6 +39,8 @@ export const seedDevCatalog = internalMutation({
     businessIdsBySlug: v.record(v.string(), v.string()),
     sandboxV2Bindings: v.array(v.string()),
     sandboxCapabilityPublicationRef: v.string(),
+    sandboxRouteBindings: v.array(v.string()),
+    sandboxRoutePublicationRefs: v.array(v.string()),
   }),
   handler: async (ctx) => {
     const seedStartedAt = Date.now()
@@ -47,18 +50,37 @@ export const seedDevCatalog = internalMutation({
     const db = runtimeDb(ctx.db)
     const result = await persistDevSeedCatalogState(db, bundle)
     const sandboxBusinesses = await registerSandboxBusinesses(db, sandboxFixtures, seedStartedAt)
-    const sandboxRegistrations = await registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000)
-    const sandboxV2Bindings = await admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500)
-    const sandboxCapabilityPublicationRefs = []
-    for (const [index, registration] of sandboxRegistrations.entries()) {
-      const publicationRef = await seedSandboxCapabilityPublication(
-        ctx.db, registration, seedStartedAt + 2_750 + index,
-      )
-      sandboxCapabilityPublicationRefs.push(publicationRef)
-      await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
-        publicationRef, expectedRevision: 1,
-      })
-    }
+    const [sandboxRegistrations, sandboxRouteRegistrations] = await Promise.all([
+      registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000),
+      registerSandboxRouteSupplyRegistrations(ctx.db, seedStartedAt + 2_100),
+    ])
+    const [
+      sandboxV2Bindings,
+      sandboxRouteBindings,
+      sandboxCapabilityPublicationRefs,
+      sandboxRoutePublicationRefs,
+    ] = await Promise.all([
+      admitSandboxV2Supply(ctx.db, sandboxRegistrations, seedStartedAt + 2_500),
+      admitSandboxV2Supply(ctx.db, sandboxRouteRegistrations, seedStartedAt + 2_600),
+      Promise.all(sandboxRegistrations.map(async (registration, index) => {
+        const publicationRef = await seedSandboxCapabilityPublication(
+          ctx.db, registration, seedStartedAt + 2_750 + index,
+        )
+        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+          publicationRef, expectedRevision: 1,
+        })
+        return publicationRef
+      })),
+      Promise.all(sandboxRouteRegistrations.map(async (registration, index) => {
+        const publicationRef = await seedSandboxCapabilityPublication(
+          ctx.db, registration, seedStartedAt + 2_800 + index,
+        )
+        await ctx.scheduler.runAfter(0, internal.capabilitySupplyReadiness.probe, {
+          publicationRef, expectedRevision: 1,
+        })
+        return publicationRef
+      })),
+    ])
     const sandboxCapabilityPublicationRef = sandboxCapabilityPublicationRefs[0]
     if (sandboxCapabilityPublicationRef === undefined) {
       throw new Error('sandbox_capability_publication_registration_missing')
@@ -70,6 +92,8 @@ export const seedDevCatalog = internalMutation({
       businessIdsBySlug: { ...result.businessIdsBySlug, ...sandboxBusinesses.businessIdsBySlug },
       sandboxV2Bindings,
       sandboxCapabilityPublicationRef,
+      sandboxRouteBindings,
+      sandboxRoutePublicationRefs,
     }
   },
 })
@@ -127,7 +151,7 @@ export const seedTestCapabilityPublication = internalMutation({
 })
 
 function isSandboxFixture(fixture: DevSeedBusinessFixture): boolean {
-  return fixture.requestedSlug === 'sandbox-option-one' || fixture.requestedSlug === 'sandbox-option-two'
+  return fixture.requestedSlug.startsWith('sandbox-')
 }
 
 export async function seedSandboxCapabilityPublication(
@@ -329,6 +353,68 @@ export async function registerSandboxV2SupplyRegistrations(
     })
   }
   return registered
+}
+
+export async function registerSandboxRouteSupplyRegistrations(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registeredAt: number,
+): Promise<SandboxV2SupplyRegistration[]> {
+  const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
+  return await Promise.all(Object.entries(SANDBOX_ROUTE_PROVIDER_PROFILES).map(async ([profileKey, profile]) => {
+    const encoded = encodeCapabilityContractDocument(profile.contract)
+    const [contract, business] = await Promise.all([
+      registerCapabilityContractDocument(db, encoded.documentJson, registeredAt),
+      db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique(),
+    ])
+    if (contract.kind !== 'registered') throw new Error(`sandbox_route_contract_registration_${contract.reason}`)
+    if (business === null) throw new Error(`sandbox_route_business_missing_${profile.slug}`)
+    const commandContext = {
+      correlationId: `seed:capability-supply:${profile.slug}`,
+      reasonCode: 'labelled_sandbox_route_registration',
+      evidenceRefs: ['seed:sandbox-labelled-business'],
+    }
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: { ...commandContext, operationKey: `seed:capability-offering:${profile.offeringId}` },
+      registration: {
+        offeringId: profile.offeringId, businessId: business._id, networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.label,
+          summary: 'Labelled sandbox route supply for source and contract verification only.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
+          commercialRelationship: {
+            kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
+            influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+            evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+          },
+        },
+        searchTerms: [...profile.queryTerms], registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
+      },
+    }, registeredAt)
+    if (offering.kind !== 'registered') throw new Error(`sandbox_route_offering_registration_${offering.reason}`)
+    const binding = await registerCapabilityBindingCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: { ...commandContext, operationKey: `seed:capability-binding:${profile.bindingId}` },
+      registration: {
+        bindingId: profile.bindingId, offeringId: profile.offeringId, networkId: 'ae:public',
+        contractRef: contract.ref,
+        endpointUrl: new URL(`/api/sandbox/capability?route=${profileKey}`, siteUrl).href,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+      },
+    }, registeredAt)
+    if (binding.kind !== 'registered') throw new Error(`sandbox_route_binding_registration_${binding.reason}`)
+    return {
+      slug: profile.slug, offeringId: profile.offeringId, bindingId: binding.bindingId,
+      contractRef: contract.ref, offeringRegistrationHash: offering.registrationHash,
+      bindingRegistrationHash: binding.registrationHash,
+    }
+  }))
 }
 
 export async function admitSandboxV2Supply(

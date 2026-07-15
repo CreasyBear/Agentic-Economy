@@ -26,23 +26,56 @@ describe('hosted Customer Request journey', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it('cannot claim the hosted acceptance journey without submitting a requested typed fact', async () => {
+  it('does not demand a redundant fact when the initial Request is already sufficient', async () => {
     const responses = [
       routesReadyView(),
       routesReadyView(),
+      requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 1, current: { step: 1, state: 'queued' } },
+        activity: {
+          actor: 'ae_for_customer', certainty: 'pending', updatedAt: 9_000, nextCheckAt: 10_000,
+          retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
+        },
+      }),
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
+        steps: [{ step: 1, state: 'queued', observedAt: 9_000, evidence: [] }],
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_001 },
+      requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+        activity: {
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+        },
+      }),
+      requestView('cancelled', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'revise_request',
+        activity: {
+          actor: 'ae_for_customer', certainty: 'cancelled', updatedAt: 9_002,
+          retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
+        },
+      }),
     ]
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(responses.shift()))
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+      const next = responses.shift()
+      if (next === undefined) throw new Error('unexpected request')
+      return Response.json(next)
+    })
 
-    await expect(runHostedCustomerRequestJourney({
+    const proof = await runHostedCustomerRequestJourney({
       baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       agent: { name: 'cold-external-agent', version: '1.0.0' },
-      scenario: { request: 'Sandbox request', facts: { '*': 'Configured but unused' }, messages: ['Unused'] },
+      scenario: { request: 'Complete sandbox request', facts: {}, messages: [] },
       sandbox: true, fetch,
       verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
       verifyDiscovery: async () => undefined,
       verifyAnonymousRefusal: async () => undefined,
-    })).rejects.toThrow('hosted_journey_typed_fact_not_submitted')
+    })
+    expect(proof.input).toMatchObject({ request: 'Complete sandbox request', facts: [], messages: [] })
   })
 
   it('confirms, starts, inspects, reports, cancels, and resumes through one external-agent identity', async () => {

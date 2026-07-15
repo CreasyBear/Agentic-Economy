@@ -53,8 +53,8 @@ export const hostedCustomerRequestJourneyProofSchema = z.object({
   observedAt: z.iso.datetime(),
   input: z.object({
     request: z.string(),
-    facts: z.array(z.object({ requirementKey: z.string(), valueDigest: z.string() }).strict()).min(1),
-    messages: z.array(z.object({ index: z.number().int().nonnegative(), valueDigest: z.string() }).strict()),
+    facts: z.array(z.strictObject({ requirementKey: z.string(), valueDigest: z.string() })),
+    messages: z.array(z.strictObject({ index: z.number().int().nonnegative(), valueDigest: z.string() })),
   }).strict(),
   observedStates: z.array(z.enum([
     'needs_information', 'ready_to_compare', 'routes_ready', 'route_confirmed', 'in_progress',
@@ -145,7 +145,6 @@ export async function runHostedCustomerRequestJourney(
     }
 
     if (view.state === 'routes_ready') {
-      if (consumedFacts.length < 1) throw new Error('hosted_journey_typed_fact_not_submitted')
       const route = view.decision?.routes[0]
       const selectedBusiness = route?.businesses[0]?.name
       if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')

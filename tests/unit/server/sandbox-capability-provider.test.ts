@@ -66,6 +66,29 @@ describe('sandbox capability provider', () => {
     await expect(current.json()).resolves.toMatchObject({ bindingId: 'binding:sandbox-option-one:http-json:v4' })
   })
 
+  it('composes two independently registered route capabilities through typed outputs', async () => {
+    const resolved = await handleSandboxCapabilityRequest(new Request(
+      'https://ae.test/api/sandbox/capability?route=resolver', {
+        method: 'POST', headers: { Authorization: 'Bearer secret' },
+        body: JSON.stringify({ request: 'Resolve this labelled sandbox service' }),
+      },
+    ), { providerKey: 'secret' })
+    expect(resolved.status).toBe(200)
+    const resolvedBody = await resolved.json() as { serviceReference: string }
+    expect(resolvedBody.serviceReference).toMatch(/^sandbox-service:/)
+    expect(resolved.headers.get('Provider-Receipt')).toMatch(/^sandbox-resolver:/)
+
+    const quoted = await handleSandboxCapabilityRequest(new Request(
+      'https://ae.test/api/sandbox/capability?route=quoter', {
+        method: 'POST', headers: { Authorization: 'Bearer secret' },
+        body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+      },
+    ), { providerKey: 'secret' })
+    expect(quoted.status).toBe(200)
+    await expect(quoted.json()).resolves.toMatchObject({ quoteReference: expect.stringMatching(/^sandbox-quote:/) })
+    expect(quoted.headers.get('Provider-Receipt')).toMatch(/^sandbox-quoter:/)
+  })
+
   it('refuses missing credentials and never commits a real-world effect', async () => {
     const unauthorized = await handleSandboxCapabilityRequest(new Request('https://ae.test/api/sandbox/capability?profile=one', {
       method: 'POST', body: JSON.stringify({}),

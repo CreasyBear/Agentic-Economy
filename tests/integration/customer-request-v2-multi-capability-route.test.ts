@@ -18,6 +18,11 @@ import { compileCustomerRequest, writableCustomerRequestV2Aggregate } from '@/mo
 import { writableCustomerRequestRoutePlanGeneration } from '@/modules/customer-request/route-plan-generation'
 import { createCustomerRequestServiceAssertion } from '@/modules/customer-request/service-auth-envelope'
 import {
+  SANDBOX_ROUTE_PROVIDER_PROFILES,
+  SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
+  SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT,
+} from '@/modules/sandbox-supply/public'
+import {
   aggregateIsInternallyConsistent,
   currentRoutePlanGenerationGraphStatus,
 } from '../../convex/customerRequestV2'
@@ -632,6 +637,120 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       { transport: 'http', disposition: 'succeeded', providerReceipt: 'provider:first' },
       { transport: 'http', disposition: 'succeeded', providerReceipt: 'provider:second' },
     ])
+    expect(routeProviderFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses source-owned sandbox registrations for one ordinary-language composite Request', async () => {
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
+    vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-secret')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    const backend = convexTest(schema, modules)
+    const seeded = await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await finishImmediateReadinessProbe(backend)
+    for (const [index, publicationRef] of seeded.sandboxRoutePublicationRefs.entries()) {
+      await observeReady(backend, { publicationRef, revision: 1 }, `source-route-${index + 1}`)
+    }
+
+    const resolverModel = openCapabilityDecisionModel(defineCapabilityContract(
+      SANDBOX_ROUTE_RESOLVE_CAPABILITY_CONTRACT_DOCUMENT,
+    ))
+    const quoterModel = openCapabilityDecisionModel(defineCapabilityContract(
+      SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT,
+    ))
+    const requestInput = resolverModel.inputs.find((input) => input.inputPointer === '/request')
+    if (requestInput === undefined) throw new Error('source-owned resolver request input missing')
+    const customerJob = 'Resolve a labelled sandbox service and prepare its quote'
+    const generate = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [
+          {
+            selectionKey: resolverModel.selectionKey,
+            facts: [{ inputKey: requestInput.key, value: customerJob }],
+          },
+          { selectionKey: quoterModel.selectionKey, facts: [] },
+        ],
+      }) } }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', generate)
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-openrouter-key')
+    const customer = backend.withIdentity({
+      subject: 'customer-source-owned-route', issuer: 'https://identity.example',
+    })
+
+    const submitted = await customer.action(api.customerRequestApplication.submit, {
+      compilationKey: 'submit:source-owned-route', requestId: 'request:source-owned-route',
+      delegatedAgentId: 'agent:source-owned-route', customerJob,
+      routing: { networkId: 'ae:public' },
+    })
+    if (submitted.kind !== 'request') throw new Error(`source-owned submit failed: ${submitted.kind}`)
+    const compared = await customer.action(api.customerRequestApplication.compare, {
+      requestRef: submitted.requestRef, revision: submitted.revision,
+      idempotencyKey: 'compare:source-owned-route',
+    })
+    if (compared.kind !== 'request' || compared.decision?.routes[0] === undefined) {
+      throw new Error(`source-owned comparison failed: ${JSON.stringify(compared)}`)
+    }
+    const displayed = compared.decision.routes[0]
+    expect(displayed).toMatchObject({
+      businesses: [
+        { name: SANDBOX_ROUTE_PROVIDER_PROFILES.resolver.label },
+        { name: SANDBOX_ROUTE_PROVIDER_PROFILES.quoter.label },
+      ],
+      stepCount: 2,
+      maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
+      result: {
+        summary: SANDBOX_ROUTE_QUOTE_CAPABILITY_CONTRACT_DOCUMENT.description,
+        deliverables: ['Quote reference'],
+      },
+    })
+    expect(JSON.stringify(compared)).not.toMatch(
+      /capabilityId|bindingId|offeringId|publicationRef|contractDigest|transport|graph/u,
+    )
+
+    const confirmed = await customer.action(api.customerRequestApplication.confirmRoute, {
+      requestRef: compared.requestRef, revision: compared.revision, routeRef: displayed.routeRef,
+      idempotencyKey: 'confirm:source-owned-route',
+    })
+    expect(confirmed).toMatchObject({ kind: 'request', state: 'route_confirmed' })
+    if (confirmed.kind !== 'request' || confirmed.state !== 'route_confirmed') {
+      throw new Error(`source-owned confirmation failed: ${JSON.stringify(confirmed)}`)
+    }
+
+    routeProviderFetch.mockReset()
+    routeProviderFetch
+      .mockImplementationOnce(async (input, init) => {
+        expect(input.toString()).toContain('route=resolver')
+        expect(init?.headers).toMatchObject({ Authorization: 'Bearer sandbox-provider-secret' })
+        expect(JSON.parse(String(init?.body))).toEqual({ request: customerJob })
+        return new UndiciResponse(JSON.stringify({ serviceReference: 'sandbox-service:source-owned' }), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:resolver' },
+        })
+      })
+      .mockImplementationOnce(async (input, init) => {
+        expect(input.toString()).toContain('route=quoter')
+        expect(JSON.parse(String(init?.body))).toEqual({ serviceReference: 'sandbox-service:source-owned' })
+        return new UndiciResponse(JSON.stringify({ quoteReference: 'sandbox-quote:source-owned' }), {
+          status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:quoter' },
+        })
+      })
+    const started = await customer.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:source-owned-route',
+    })
+    expect(started).toMatchObject({
+      kind: 'request', state: 'in_progress',
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+    })
+    await finishScheduledRouteWorkers(backend, 2)
+    const completed = await customer.action(api.customerRequestApplication.resume, {
+      requestRef: compared.requestRef,
+    })
+    expect(completed).toMatchObject({
+      kind: 'request', state: 'completed', nextAction: 'none',
+      action: { state: 'completed', result: { quoteReference: 'sandbox-quote:source-owned' } },
+    })
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
