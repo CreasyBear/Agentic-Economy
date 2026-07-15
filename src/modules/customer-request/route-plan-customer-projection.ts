@@ -112,12 +112,27 @@ export function projectCustomerRoutePlanDecision(input: Readonly<{
     routes: Object.freeze(routes),
     comparison: projectDecisionComparison(input.current.routes, routes),
     actions: Object.freeze({
-      confirm: Object.freeze({ kind: 'confirm_current_option' as const, createsAuthority: true as const }),
+      review: Object.freeze({
+        kind: 'inspect_current_option' as const, createsAuthority: false as const, startsWork: false as const,
+        summary: 'Reviewing shows every important limit. It does not confirm or start anything.',
+      }),
+      confirm: Object.freeze({
+        kind: 'confirm_current_option' as const, createsAuthority: true as const, startsWork: false as const,
+        summary: 'Confirming creates permission for this exact choice. It does not contact a business or start work.',
+      }),
+      start: Object.freeze({
+        kind: 'start_confirmed_option' as const, availableAfter: 'confirmation' as const, startsWork: true as const,
+        summary: 'Starting uses that confirmation to contact the listed businesses and begin the work.',
+      }),
       change: Object.freeze({
-        kind: 'revise_request' as const, createsAuthority: false as const, preservesRequest: true as const,
+        kind: 'revise_request' as const, createsAuthority: false as const, startsWork: false as const,
+        preservesRequest: true as const,
+        summary: 'Changing preserves the Request and returns to its details. The current choice remains unconfirmed.',
       }),
       decline: Object.freeze({
-        kind: 'leave_unconfirmed' as const, createsAuthority: false as const, preservesRequest: true as const,
+        kind: 'leave_unconfirmed' as const, createsAuthority: false as const, startsWork: false as const,
+        preservesRequest: true as const,
+        summary: 'Declining leaves this choice unconfirmed and starts nothing.',
       }),
     }),
     changes: projectChanges(

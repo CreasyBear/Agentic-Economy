@@ -26,9 +26,26 @@ describe('RoutePlan customer projection', () => {
         summary: 'One current way forward is available. This is not a comparison or recommendation.',
       },
       actions: {
-        confirm: { kind: 'confirm_current_option', createsAuthority: true },
-        change: { kind: 'revise_request', createsAuthority: false, preservesRequest: true },
-        decline: { kind: 'leave_unconfirmed', createsAuthority: false, preservesRequest: true },
+        review: {
+          kind: 'inspect_current_option', createsAuthority: false, startsWork: false,
+          summary: 'Reviewing shows every important limit. It does not confirm or start anything.',
+        },
+        confirm: {
+          kind: 'confirm_current_option', createsAuthority: true, startsWork: false,
+          summary: 'Confirming creates permission for this exact choice. It does not contact a business or start work.',
+        },
+        start: {
+          kind: 'start_confirmed_option', availableAfter: 'confirmation', startsWork: true,
+          summary: 'Starting uses that confirmation to contact the listed businesses and begin the work.',
+        },
+        change: {
+          kind: 'revise_request', createsAuthority: false, startsWork: false, preservesRequest: true,
+          summary: 'Changing preserves the Request and returns to its details. The current choice remains unconfirmed.',
+        },
+        decline: {
+          kind: 'leave_unconfirmed', createsAuthority: false, startsWork: false, preservesRequest: true,
+          summary: 'Declining leaves this choice unconfirmed and starts nothing.',
+        },
       },
       routes: [{
         routeRef: customerRouteRef('generation:1', 'route:one'),

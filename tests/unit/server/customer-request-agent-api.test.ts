@@ -100,7 +100,13 @@ describe('agent-native customer Request API', () => {
     }), 'request:1', { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual(result)
+    await expect(response.json()).resolves.toMatchObject({
+      ...result,
+      navigation: {
+        current: `/api/v1/requests/${encodeURIComponent('request:1')}`,
+        actions: [{ relation: 'prepare_options', href: `/api/v1/requests/${encodeURIComponent('request:1')}/options` }],
+      },
+    })
     const [name, calledArgs] = callAction.mock.calls[0] ?? []
     expect(name).toBe('customerRequestApplication:provideFacts')
     const { serviceAuth, ...command } = calledArgs ?? {}
@@ -111,6 +117,48 @@ describe('agent-native customer Request API', () => {
     await expect(verifyCustomerRequestServiceAssertion({
       key, operation: 'facts', command: command as never, assertion: serviceAuth as never, now: 1_001,
     })).resolves.toBe(true)
+  })
+
+  it('tells a cold external agent exactly how to answer the returned clarification', async () => {
+    const callAction = vi.fn(async () => ({
+      kind: 'request' as const,
+      requestRef: 'request:agent:cold',
+      revision: 1,
+      state: 'needs_information' as const,
+      summary: 'One detail is needed before AE can compare ways forward.',
+      nextAction: 'provide_information' as const,
+      missingFields: [{ field: 'lookup_instruction', label: 'Lookup instruction', explanation: 'What should the business look up?' }],
+      clarification: {
+        kind: 'contract_fact' as const,
+        requirementKey: 'lookup_instruction',
+        prompt: 'What should the business look up?',
+        answerKind: 'typed_value' as const,
+      },
+      options: [],
+    }))
+
+    const response = await handleAgentCustomerRequestPost(request('/api/v1/requests', {
+      idempotencyKey: 'submit:cold', requestRef: 'request:agent:cold', agentRef: 'cold-agent',
+      request: 'Find the cheapest sandbox option.',
+    }), { authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000 })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      requestRef: 'request:agent:cold',
+      navigation: {
+        current: `/api/v1/requests/${encodeURIComponent('request:agent:cold')}`,
+        actions: [{
+          relation: 'answer_clarification',
+          method: 'POST',
+          href: `/api/v1/requests/${encodeURIComponent('request:agent:cold')}/facts`,
+          summary: 'Answer this question to continue the same Request.',
+          input: {
+            idempotencyKey: '<unique string>', expectedRevision: 1,
+            requirementKey: 'lookup_instruction', value: '<typed value>',
+          },
+        }],
+      },
+    })
   })
 
   it('returns 401 for missing keys and 403 for unscoped keys before Convex', async () => {

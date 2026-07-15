@@ -327,7 +327,7 @@ const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
   }).strict(),
 ])
 
-export const customerRoutePlanDecisionSchema = z.object({
+export const customerRoutePlanDecisionSchema = z.strictObject({
   generationRef: z.string(), requestRevision: safePositiveInteger,
   outcome: z.object({
     kind: z.enum(['routes_available', 'routes_expired']), routeCount: safePositiveInteger, summary: z.string(),
@@ -354,17 +354,28 @@ export const customerRoutePlanDecisionSchema = z.object({
       groups: z.array(z.object({ outcomeRef: z.string(), routeRefs: z.array(z.string()).min(1) }).strict()).min(2),
     }).strict(),
   ]),
-  actions: z.object({
-    confirm: z.object({
+  actions: z.strictObject({
+    review: z.strictObject({
+      kind: z.literal('inspect_current_option'), createsAuthority: z.literal(false),
+      startsWork: z.literal(false), summary: z.string(),
+    }),
+    confirm: z.strictObject({
       kind: z.literal('confirm_current_option'), createsAuthority: z.literal(true),
-    }).strict(),
-    change: z.object({
-      kind: z.literal('revise_request'), createsAuthority: z.literal(false), preservesRequest: z.literal(true),
-    }).strict(),
-    decline: z.object({
-      kind: z.literal('leave_unconfirmed'), createsAuthority: z.literal(false), preservesRequest: z.literal(true),
-    }).strict(),
-  }).strict(),
+      startsWork: z.literal(false), summary: z.string(),
+    }),
+    start: z.strictObject({
+      kind: z.literal('start_confirmed_option'), availableAfter: z.literal('confirmation'),
+      startsWork: z.literal(true), summary: z.string(),
+    }),
+    change: z.strictObject({
+      kind: z.literal('revise_request'), createsAuthority: z.literal(false), startsWork: z.literal(false),
+      preservesRequest: z.literal(true), summary: z.string(),
+    }),
+    decline: z.strictObject({
+      kind: z.literal('leave_unconfirmed'), createsAuthority: z.literal(false), startsWork: z.literal(false),
+      preservesRequest: z.literal(true), summary: z.string(),
+    }),
+  }),
   changes: z.union([
     z.object({ kind: z.literal('initial') }).strict(),
     z.object({ kind: z.literal('unchanged'), previousGenerationRef: z.string() }).strict(),
@@ -374,7 +385,7 @@ export const customerRoutePlanDecisionSchema = z.object({
     }).strict(),
   ]),
   nextBoundary: z.object({ kind: z.literal('confirmation'), authorityCreated: z.literal(false) }).strict(),
-}).strict()
+})
 
 export const customerPreparedActionSchema = z.object({
   actionRef: z.string(), businessName: z.string(), offeringLabel: z.string(), summary: z.string(),

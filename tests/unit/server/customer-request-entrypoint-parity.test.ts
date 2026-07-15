@@ -75,9 +75,11 @@ const projection = {
       summary: 'One current way forward is available. This is not a comparison or recommendation.',
     },
     actions: {
-      confirm: { kind: 'confirm_current_option' as const, createsAuthority: true as const },
-      change: { kind: 'revise_request' as const, createsAuthority: false as const, preservesRequest: true as const },
-      decline: { kind: 'leave_unconfirmed' as const, createsAuthority: false as const, preservesRequest: true as const },
+      review: { kind: 'inspect_current_option' as const, createsAuthority: false as const, startsWork: false as const, summary: 'Reviewing shows every important limit. It does not confirm or start anything.' },
+      confirm: { kind: 'confirm_current_option' as const, createsAuthority: true as const, startsWork: false as const, summary: 'Confirming creates permission for this exact choice. It does not contact a business or start work.' },
+      start: { kind: 'start_confirmed_option' as const, availableAfter: 'confirmation' as const, startsWork: true as const, summary: 'Starting uses that confirmation to contact the listed businesses and begin the work.' },
+      change: { kind: 'revise_request' as const, createsAuthority: false as const, startsWork: false as const, preservesRequest: true as const, summary: 'Changing preserves the Request and returns to its details. The current choice remains unconfirmed.' },
+      decline: { kind: 'leave_unconfirmed' as const, createsAuthority: false as const, startsWork: false as const, preservesRequest: true as const, summary: 'Declining leaves this choice unconfirmed and starts nothing.' },
     },
     changes: { kind: 'initial' as const },
     nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
@@ -200,7 +202,12 @@ describe('human and external-agent Request entrypoint parity', () => {
 
     expect(calledAction).toBe(entrypoint.actionName)
     expect(agentResponse.status).toBe(humanResponse.status)
-    expect(await agentResponse.json()).toEqual(await humanResponse.json())
+    const agentBody = await agentResponse.json() as Record<string, unknown>
+    const { navigation, ...agentProjection } = agentBody
+    expect(agentProjection).toEqual(await humanResponse.json())
+    expect(navigation).toMatchObject({
+      current: `/api/v1/requests/${encodeURIComponent(requestRef)}`,
+    })
     if (humanCommand === undefined || agentCommand === undefined) throw new Error('entrypoint command missing')
     const { serviceAuth, ...unsignedAgentCommand } = agentCommand
     expect(withoutDelegatedPrincipal(unsignedAgentCommand)).toEqual(withoutDelegatedPrincipal(humanCommand))

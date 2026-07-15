@@ -439,7 +439,8 @@ function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, 
   restart: () => void
 }) {
   const route = projection.decision?.routes.find((candidate) => candidate.routeRef === routeRef)
-  if (route === undefined) return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
+  const actions = projection.decision?.actions
+  if (route === undefined || actions === undefined) return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
     <div className="grid gap-4">
       <Heading level={2}>This choice is no longer available.</Heading>
       <Text color="secondary">Return to the current options before deciding. Nothing was confirmed or shared.</Text>
@@ -452,7 +453,7 @@ function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, 
     <header className="grid gap-2">
       <Text className="text-sm font-semibold text-accent">Your choice</Text>
       <Heading level={2} className="text-3xl">Review before you confirm</Heading>
-      <Text color="secondary">This is the exact boundary AE will use. Confirming allows AE to act within it, but does not start the work.</Text>
+      <Text color="secondary">Check the result, maximum cost, information sharing, effects, expiry, and ways out before you decide.</Text>
     </header>
     <Card padding={5}>
       <div className="grid gap-6">
@@ -475,9 +476,13 @@ function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, 
         </div>
         <RouteDisclosureDetails route={route} review />
         <Text type="supporting" color="secondary">Choice code {route.quoteDigest}</Text>
-        <div className="rounded-md border border-border bg-surface p-4">
-          <Text weight="semibold">Nothing has started.</Text>
-          <Text color="secondary" className="mt-1">No business will be contacted and no information will be shared until you confirm this choice and then separately start it.</Text>
+        <div className="grid gap-3 rounded-md border border-border bg-surface p-4">
+          <Heading level={3}>Review, confirm, then start</Heading>
+          <ol className="grid gap-2 text-sm text-secondary">
+            <li><strong>Review.</strong> {actions.review.summary}</li>
+            <li><strong>Confirm.</strong> {actions.confirm.summary}</li>
+            <li><strong>Start.</strong> {actions.start.summary}</li>
+          </ol>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
@@ -502,7 +507,7 @@ function RouteDisclosureDetails({ route, review }: { route: CustomerRoute; revie
           </ul>}
     </div>
     <div className="grid gap-2">
-      <Text weight="semibold">What could change</Text>
+      <Text weight="semibold">{review ? 'What starting could change' : 'What this way could change'}</Text>
       {route.effects.length === 0
         ? <Text color="secondary">No external change is declared.</Text>
         : <ul className="grid gap-1 text-sm text-secondary">

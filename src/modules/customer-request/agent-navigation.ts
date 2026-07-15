@@ -1,0 +1,113 @@
+import { z } from 'zod'
+
+import {
+  customerRequestViewSchema,
+  type CustomerRequestView,
+} from '@/modules/customer-request/agent-contract'
+
+const navigationInputValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()])
+
+export const customerRequestAgentNavigationSchema = z.strictObject({
+  current: z.string(),
+  actions: z.array(z.strictObject({
+    relation: z.enum([
+      'answer_clarification', 'prepare_options', 'confirm_option', 'start_confirmed_option',
+      'inspect_progress', 'inspect_evidence', 'cancel', 'report_problem',
+    ]),
+    method: z.enum(['GET', 'POST']),
+    href: z.string(),
+    summary: z.string(),
+    input: z.record(z.string(), navigationInputValueSchema).optional(),
+  })),
+})
+
+export type CustomerRequestAgentNavigation = Readonly<z.infer<typeof customerRequestAgentNavigationSchema>>
+
+/**
+ * Adds state-appropriate links to the external-agent projection. The canonical
+ * Request remains the source of truth; this only makes its next move navigable
+ * without requiring a caller to know AE's route choreography in advance.
+ */
+export async function withCustomerRequestAgentNavigation(response: Response): Promise<Response> {
+  if (!response.ok) return response
+  const body = await response.clone().json().catch(() => undefined)
+  const parsed = customerRequestViewSchema.safeParse(body)
+  if (!parsed.success) return response
+
+  const navigation = projectCustomerRequestAgentNavigation(parsed.data)
+  const headers = new Headers(response.headers)
+  headers.set('Cache-Control', 'no-store')
+  headers.set('Content-Type', 'application/json')
+  return Response.json({ ...parsed.data, navigation }, { status: response.status, headers })
+}
+
+export function projectCustomerRequestAgentNavigation(view: CustomerRequestView): CustomerRequestAgentNavigation {
+  const current = `/api/v1/requests/${encodeURIComponent(view.requestRef)}`
+  const idempotencyKey = '<unique string>'
+  const actions: Array<z.infer<typeof customerRequestAgentNavigationSchema>['actions'][number]> = []
+
+  if (view.state === 'needs_information' && view.clarification?.kind === 'contract_fact') {
+    actions.push({
+      relation: 'answer_clarification', method: 'POST', href: `${current}/facts`,
+      summary: 'Answer this question to continue the same Request.',
+      input: {
+        idempotencyKey, expectedRevision: view.revision,
+        requirementKey: view.clarification.requirementKey, value: '<typed value>',
+      },
+    })
+  } else if (view.state === 'needs_information' && view.clarification?.kind === 'intent_direction') {
+    actions.push({
+      relation: 'answer_clarification', method: 'POST', href: `${current}/messages`,
+      summary: 'Answer in natural language to continue the same Request.',
+      input: { idempotencyKey, expectedRevision: view.revision, message: '<natural-language answer>' },
+    })
+  } else if (view.state === 'ready_to_compare') {
+    actions.push({
+      relation: 'prepare_options', method: 'POST', href: `${current}/options`,
+      summary: 'Prepare current options for this Request.',
+      input: { idempotencyKey, revision: view.revision },
+    })
+  } else if (view.state === 'routes_ready') {
+    actions.push({
+      relation: 'confirm_option', method: 'POST', href: `${current}/confirmation`,
+      summary: 'Confirm one current option without starting it.',
+      input: { idempotencyKey, revision: view.revision, routeRef: '<routeRef from decision.routes>' },
+    })
+  } else if (view.state === 'route_confirmed') {
+    actions.push({
+      relation: 'start_confirmed_option', method: 'POST', href: `${current}/run`,
+      summary: 'Start the exact option already confirmed.', input: { idempotencyKey },
+    })
+  } else if (view.state === 'in_progress' || view.state === 'preparing_options') {
+    actions.push({
+      relation: 'inspect_progress', method: 'GET', href: current,
+      summary: 'Inspect the latest state of this Request.',
+    })
+    if (view.state === 'in_progress') {
+      actions.push({
+        relation: 'inspect_evidence', method: 'GET', href: `${current}/evidence`,
+        summary: 'Inspect the evidence AE currently holds for this work.',
+      })
+      if (view.activity?.cancellation === 'available_before_next_step') {
+        actions.push({
+          relation: 'cancel', method: 'POST', href: `${current}/cancellation`,
+          summary: 'Cancel before the next external step.', input: { idempotencyKey },
+        })
+      }
+    }
+  } else if (view.state === 'needs_attention' || view.state === 'outcome_unknown' || view.state === 'failed') {
+    actions.push(
+      {
+        relation: 'inspect_evidence', method: 'GET', href: `${current}/evidence`,
+        summary: 'Inspect the evidence AE currently holds for this Request.',
+      },
+      {
+        relation: 'report_problem', method: 'POST', href: `${current}/problems`,
+        summary: 'Report a problem against this Request for review.',
+        input: { idempotencyKey, category: '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>', summary: '<problem summary>' },
+      },
+    )
+  }
+
+  return customerRequestAgentNavigationSchema.parse({ current, actions })
+}

@@ -27,7 +27,11 @@ test('choice review is legible and authority-free until explicit confirmation', 
   await expect(page.getByRole('heading', { name: 'Review before you confirm' })).toBeVisible()
   await expect(page.getByText(/Fields: Request \(public\)/)).toBeVisible()
   await expect(page.getByText('Choice code quote:decision')).toBeVisible()
-  await expect(page.getByText(/does not start the work/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review, confirm, then start' })).toBeVisible()
+  await expect(page.getByText('Reviewing shows every important limit. It does not confirm or start anything.')).toBeVisible()
+  await expect(page.getByText('Confirming creates permission for this exact choice. It does not contact a business or start work.')).toBeVisible()
+  await expect(page.getByText('Starting uses that confirmation to contact the listed businesses and begin the work.')).toBeVisible()
+  await expect(page.getByText('What starting could change')).toBeVisible()
   expect(confirmations).toBe(0)
 
   await page.getByRole('button', { name: 'Not now' }).click()
@@ -155,9 +159,11 @@ function decisionView(): CustomerRequestView {
         kind: 'single', summary: 'One current way forward is available. This is not a comparison or recommendation.',
       },
       actions: {
-        confirm: { kind: 'confirm_current_option', createsAuthority: true },
-        change: { kind: 'revise_request', createsAuthority: false, preservesRequest: true },
-        decline: { kind: 'leave_unconfirmed', createsAuthority: false, preservesRequest: true },
+        review: { kind: 'inspect_current_option', createsAuthority: false, startsWork: false, summary: 'Reviewing shows every important limit. It does not confirm or start anything.' },
+        confirm: { kind: 'confirm_current_option', createsAuthority: true, startsWork: false, summary: 'Confirming creates permission for this exact choice. It does not contact a business or start work.' },
+        start: { kind: 'start_confirmed_option', availableAfter: 'confirmation', startsWork: true, summary: 'Starting uses that confirmation to contact the listed businesses and begin the work.' },
+        change: { kind: 'revise_request', createsAuthority: false, startsWork: false, preservesRequest: true, summary: 'Changing preserves the Request and returns to its details. The current choice remains unconfirmed.' },
+        decline: { kind: 'leave_unconfirmed', createsAuthority: false, startsWork: false, preservesRequest: true, summary: 'Declining leaves this choice unconfirmed and starts nothing.' },
       },
       changes: { kind: 'initial' },
       nextBoundary: { kind: 'confirmation', authorityCreated: false },

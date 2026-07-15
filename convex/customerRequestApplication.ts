@@ -343,12 +343,25 @@ const customerRouteDecision = v.object({
     }),
   ),
   actions: v.object({
-    confirm: v.object({ kind: v.literal('confirm_current_option'), createsAuthority: v.literal(true) }),
+    review: v.object({
+      kind: v.literal('inspect_current_option'), createsAuthority: v.literal(false),
+      startsWork: v.literal(false), summary: v.string(),
+    }),
+    confirm: v.object({
+      kind: v.literal('confirm_current_option'), createsAuthority: v.literal(true),
+      startsWork: v.literal(false), summary: v.string(),
+    }),
+    start: v.object({
+      kind: v.literal('start_confirmed_option'), availableAfter: v.literal('confirmation'),
+      startsWork: v.literal(true), summary: v.string(),
+    }),
     change: v.object({
-      kind: v.literal('revise_request'), createsAuthority: v.literal(false), preservesRequest: v.literal(true),
+      kind: v.literal('revise_request'), createsAuthority: v.literal(false), startsWork: v.literal(false),
+      preservesRequest: v.literal(true), summary: v.string(),
     }),
     decline: v.object({
-      kind: v.literal('leave_unconfirmed'), createsAuthority: v.literal(false), preservesRequest: v.literal(true),
+      kind: v.literal('leave_unconfirmed'), createsAuthority: v.literal(false), startsWork: v.literal(false),
+      preservesRequest: v.literal(true), summary: v.string(),
     }),
   }),
   changes: v.union(
