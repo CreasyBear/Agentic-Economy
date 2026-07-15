@@ -49,14 +49,52 @@ describe('OpenRouter customer request transport', () => {
 
   it('fails closed on provider errors and malformed responses', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response('payment required', { status: 402 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ choices: [] }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const transport = createOpenRouterCustomerRequestTransport({ apiKey: 'secret', model: 'model:test' })
     const input = { systemInstruction: 'system', payload: { customerJob: 'x', knownFacts: {}, knownFactFields: [], capabilities: [] }, signal: new AbortController().signal }
 
-    await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_503')
+    await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_402')
     await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_invalid')
+  })
+
+  it('retries one transient provider failure and fails closed after bounded exhaustion', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: '{"outcome":"ready"}' } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const transport = createOpenRouterCustomerRequestTransport({ apiKey: 'secret', model: 'model:test' })
+    const input = { systemInstruction: 'system', payload: { customerJob: 'x', knownFacts: {}, knownFactFields: [], capabilities: [] }, signal: new AbortController().signal }
+
+    await expect(transport.generateJson(input)).resolves.toEqual({ content: '{"outcome":"ready"}' })
+    await expect(transport.generateJson(input)).rejects.toThrow('customer_request_interpretation_provider_503')
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('bounds each attempt so one stalled provider call cannot consume the retry window', async () => {
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async (_url: string, init?: RequestInit) => await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: '{"outcome":"ready"}' } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const transport = createOpenRouterCustomerRequestTransport({
+      apiKey: 'secret', model: 'model:test', attemptTimeoutMs: 5,
+    })
+
+    await expect(transport.generateJson({
+      systemInstruction: 'system',
+      payload: { customerJob: 'x', knownFacts: {}, knownFactFields: [], capabilities: [] },
+      signal: new AbortController().signal,
+    })).resolves.toEqual({ content: '{"outcome":"ready"}' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('refuses an oversized serialized request before network release', async () => {

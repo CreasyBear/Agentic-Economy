@@ -5,9 +5,13 @@ type OpenRouterConfiguration = Readonly<{
   apiKey: string
   model: string
   siteUrl?: string
+  attemptTimeoutMs?: number
 }>
 
 const MAX_OPENROUTER_REQUEST_BYTES = 1_000_000
+const TRANSIENT_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504])
+const MAX_PROVIDER_ATTEMPTS = 2
+const DEFAULT_PROVIDER_ATTEMPT_TIMEOUT_MS = 20_000
 
 export function createOpenRouterCustomerRequestTransport(config: OpenRouterConfiguration): CustomerRequestInterpretationTransport {
   return createOpenRouterJsonTransport(config)
@@ -26,6 +30,11 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
   }>) => Promise<Readonly<{ content: string }>>
 }> {
   if (!config.apiKey.trim() || !config.model.trim()) throw new Error('customer_request_interpreter_configuration_invalid')
+  if (config.attemptTimeoutMs !== undefined
+    && (!Number.isSafeInteger(config.attemptTimeoutMs) || config.attemptTimeoutMs <= 0)) {
+    throw new Error('customer_request_interpreter_configuration_invalid')
+  }
+  const attemptTimeoutMs = config.attemptTimeoutMs ?? DEFAULT_PROVIDER_ATTEMPT_TIMEOUT_MS
   return Object.freeze({
     generateJson: async ({ systemInstruction, payload, signal, responseSchema }) => {
       const requestBody = JSON.stringify({
@@ -42,22 +51,50 @@ function createOpenRouterJsonTransport<TPayload>(config: OpenRouterConfiguration
       if (new TextEncoder().encode(requestBody).byteLength > MAX_OPENROUTER_REQUEST_BYTES) {
         throw new Error('customer_request_interpretation_request_too_large')
       }
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': config.siteUrl ?? 'https://agentic-economy-phi.vercel.app',
-          'X-Title': 'Agentic Economy',
-        },
-        body: requestBody,
-        signal,
-      })
-      if (!response.ok) throw new Error(`customer_request_interpretation_provider_${response.status}`)
-      const body: unknown = await response.json()
-      const content = extractContent(body)
-      if (content === undefined) throw new Error('customer_request_interpretation_provider_invalid')
-      return { content }
+      for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
+        const attemptController = new AbortController()
+        const propagateParentAbort = () => attemptController.abort(signal.reason)
+        if (signal.aborted) propagateParentAbort()
+        else signal.addEventListener('abort', propagateParentAbort, { once: true })
+        const attemptTimeout = setTimeout(() => {
+          attemptController.abort(new Error('customer_request_interpretation_provider_timeout'))
+        }, attemptTimeoutMs)
+        let response: Response
+        try {
+          response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${config.apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': config.siteUrl ?? 'https://agentic-economy-phi.vercel.app',
+              'X-Title': 'Agentic Economy',
+            },
+            body: requestBody,
+            signal: attemptController.signal,
+          })
+        } catch (error) {
+          if (signal.aborted) throw error
+          if (!attemptController.signal.aborted || attempt === MAX_PROVIDER_ATTEMPTS) {
+            throw attemptController.signal.reason instanceof Error
+              ? attemptController.signal.reason
+              : error
+          }
+          continue
+        } finally {
+          clearTimeout(attemptTimeout)
+          signal.removeEventListener('abort', propagateParentAbort)
+        }
+        if (!response.ok) {
+          if (attempt < MAX_PROVIDER_ATTEMPTS && !signal.aborted
+            && TRANSIENT_PROVIDER_STATUSES.has(response.status)) continue
+          throw new Error(`customer_request_interpretation_provider_${response.status}`)
+        }
+        const body: unknown = await response.json()
+        const content = extractContent(body)
+        if (content === undefined) throw new Error('customer_request_interpretation_provider_invalid')
+        return { content }
+      }
+      throw new Error('customer_request_interpretation_provider_unavailable')
     },
   })
 }
