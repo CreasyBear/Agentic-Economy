@@ -11,7 +11,7 @@ export const customerRequestAgentNavigationSchema = z.strictObject({
   current: z.string(),
   actions: z.array(z.strictObject({
     relation: z.enum([
-      'answer_clarification', 'prepare_options', 'confirm_option', 'start_confirmed_option',
+      'answer_clarification', 'prepare_options', 'change_request', 'confirm_option', 'start_confirmed_option',
       'inspect_progress', 'inspect_evidence', 'cancel', 'report_problem',
     ]),
     method: z.enum(['GET', 'POST']),
@@ -68,11 +68,18 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       input: { idempotencyKey, revision: view.revision },
     })
   } else if (view.state === 'routes_ready') {
-    actions.push({
-      relation: 'confirm_option', method: 'POST', href: `${current}/confirmation`,
-      summary: 'Confirm one current option without starting it.',
-      input: { idempotencyKey, revision: view.revision, routeRef: '<routeRef from decision.routes>' },
-    })
+    actions.push(
+      {
+        relation: 'change_request', method: 'POST', href: `${current}/messages`,
+        summary: 'Change what matters and prepare a new current choice without confirming this one.',
+        input: { idempotencyKey, expectedRevision: view.revision, message: '<natural-language change>' },
+      },
+      {
+        relation: 'confirm_option', method: 'POST', href: `${current}/confirmation`,
+        summary: 'Confirm one current option without starting it.',
+        input: { idempotencyKey, revision: view.revision, routeRef: '<routeRef from decision.routes>' },
+      },
+    )
   } else if (view.state === 'route_confirmed') {
     actions.push({
       relation: 'start_confirmed_option', method: 'POST', href: `${current}/run`,

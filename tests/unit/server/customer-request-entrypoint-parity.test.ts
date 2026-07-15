@@ -207,6 +207,10 @@ describe('human and external-agent Request entrypoint parity', () => {
     expect(agentProjection).toEqual(await humanResponse.json())
     expect(navigation).toMatchObject({
       current: `/api/v1/requests/${encodeURIComponent(requestRef)}`,
+      actions: [
+        { relation: 'change_request', href: `/api/v1/requests/${encodeURIComponent(requestRef)}/messages` },
+        { relation: 'confirm_option', href: `/api/v1/requests/${encodeURIComponent(requestRef)}/confirmation` },
+      ],
     })
     if (humanCommand === undefined || agentCommand === undefined) throw new Error('entrypoint command missing')
     const { serviceAuth, ...unsignedAgentCommand } = agentCommand
