@@ -579,6 +579,7 @@ describe('V2 Request semantics', () => {
     for (const [index, route] of result.routeGeneration.routes.entries()) {
       expect(route.comparison.ordering).toEqual({
         kind: 'ranked', objective: 'lowest_maximum_price', position: index + 1,
+        evidenceRef: expect.any(String),
       })
       expect(route.fallbacks.ordering).toBe('unranked')
       expect(route.fallbacks.alternatives.length).toBeGreaterThan(0)

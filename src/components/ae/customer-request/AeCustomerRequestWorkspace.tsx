@@ -304,6 +304,7 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
 }) {
   const decision = projection.decision
   if (decision === undefined) return null
+  const recommendation = decision.comparison.kind === 'recommended' ? decision.comparison : undefined
   return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
     <Conversation turns={turns} />
     <WorkingUnderstanding projection={projection} correct={edit} />
@@ -313,7 +314,18 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
       <Text color="secondary">{decision.outcome.kind === 'routes_expired'
         ? 'Your Request is preserved. Check again to rebuild the available ways forward from current business information.'
         : 'Compare who is involved, the maximum cost, what would be shared, and how problems would be handled.'}</Text>
+      <Text color="secondary">{decision.comparison.summary}</Text>
     </header>
+    {recommendation === undefined ? null : <Card padding={4}>
+      <Text weight="semibold">Why AE recommends this way</Text>
+      <ul className="mt-2 grid gap-1 text-sm text-secondary">
+        {recommendation.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+      </ul>
+      <Text type="supporting" weight="semibold" className="mt-3">Tradeoffs checked</Text>
+      <ul className="mt-1 grid gap-1 text-sm text-secondary">
+        {recommendation.tradeoffs.map((tradeoff) => <li key={tradeoff}>{tradeoff}</li>)}
+      </ul>
+    </Card>}
     {decision.changes.kind === 'changed'
       ? <DecisionChanges changes={decision.changes.items} routes={decision.routes} />
       : null}
@@ -324,7 +336,13 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
             <Text type="supporting" color="secondary">
               {route.availability === 'expired'
                 ? 'Expired way forward'
-                : decision.routes.length === 1 ? 'Current way forward' : `Current way forward ${index + 1}`}
+                : recommendation?.routeRef === route.routeRef
+                  ? 'Recommended for your stated priority'
+                  : decision.routes.length === 1
+                    ? 'Current way forward'
+                    : recommendation === undefined
+                      ? `Current way forward ${index + 1}`
+                      : `Other way forward ${index + 1}`}
             </Text>
             <Heading level={3}>{route.result.summary}</Heading>
             <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}</Text>
@@ -371,6 +389,21 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
             <Text color="secondary">{route.uncertainty.length === 0
               ? 'No uncertainty is declared for this way forward.'
               : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text>
+          </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">Timing and comparison basis</Text>
+            <Text color="secondary">{route.comparison.duration === 'not_declared'
+              ? 'Completion timing has not been declared.'
+              : route.comparison.duration}</Text>
+            <Text type="supporting" color="secondary">This option satisfies the registered hard constraints and is supported by {route.comparison.evidenceCount} declared evidence requirement{route.comparison.evidenceCount === 1 ? '' : 's'}.</Text>
+          </div>
+          <div className="grid gap-2">
+            <Text weight="semibold">How commercial relationships affect this option</Text>
+            <Text color="secondary">{route.comparison.commercialInfluence.status === 'unknown'
+              ? 'AE does not have enough commercial relationship evidence to recommend this option.'
+              : route.comparison.commercialInfluence.status === 'none'
+                ? 'No registered commercial relationship affects this option.'
+                : route.comparison.commercialInfluence.summaries.join(' ')}</Text>
           </div>
           <div className="grid gap-2">
             <Text weight="semibold">What AE would need back</Text>

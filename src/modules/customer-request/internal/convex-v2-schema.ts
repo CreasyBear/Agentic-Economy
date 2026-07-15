@@ -495,12 +495,19 @@ const registeredPriceV2Value = v.union(
   v.object({ kind: v.literal('range'), currency: v.string(), minimumAmountMinor: v.number(), maximumAmountMinor: v.number() }),
   v.object({ kind: v.literal('on_request') }),
 )
+const commercialRelationshipV2Value = v.object({
+  kind: v.union(v.literal('none'), v.literal('direct'), v.literal('affiliate'), v.literal('ownership')),
+  summary: v.string(), influencesEligibility: v.boolean(), influencesInclusion: v.boolean(),
+  influencesOrder: v.boolean(), evidenceRefs: v.array(v.string()),
+})
 export const requestEvaluationCandidateV2Value = v.object({
   candidateRef: v.string(), businessId: v.string(), offeringId: v.string(), bindingId: v.string(),
   contractRef: capabilityContractRefV2Value, selectionKey: v.string(), semanticDigest: v.string(),
   offeringRegistrationHash: v.string(), bindingRegistrationHash: v.string(),
   publicationRef: v.optional(v.string()), publicationRevision: v.optional(v.number()), readinessValidUntil: v.optional(v.number()),
   price: v.optional(registeredPriceV2Value),
+  // Optional only for immutable Request revisions written before recommendation integrity was source-owned.
+  commercialRelationship: v.optional(commercialRelationshipV2Value),
   // Optional only for immutable Request revisions written before RoutePlan cancellation was bound.
   // Current production compilation always supplies it and mandate creation rejects its absence.
   cancellation: v.optional(v.object({
@@ -540,6 +547,8 @@ const routePlanV2Value = v.object({
     publicationRef: v.string(), publicationRevision: v.number(),
     resolvedInputs: v.array(requestFactV2Value), deferredInputs: v.array(actionInputMappingV2Value),
     price: registeredPriceV2Value,
+    // Optional only for immutable RoutePlan generations written before recommendation integrity was source-owned.
+    commercialRelationship: v.optional(commercialRelationshipV2Value),
     dataUse: v.array(v.object({
       effectId: v.string(), inputPointer: v.string(),
       classification: v.union(v.literal('public'), v.literal('personal'), v.literal('sensitive'), v.literal('credential')),
@@ -594,9 +603,17 @@ const routePlanV2Value = v.object({
     fit: v.literal('all_steps_viable'), completeness: v.literal('complete'),
     dataExposureCount: v.number(), irreversibleEffectCount: v.number(), evidenceRequirementCount: v.number(),
     trust: v.literal('registered_live_supply'),
+    outcomeSignature: v.optional(v.string()),
+    hardConstraints: v.optional(v.literal('satisfied')),
+    duration: v.optional(v.literal('not_declared')),
+    recovery: v.optional(v.union(v.literal('retry_safe'), v.literal('reconcile_required'))),
+    freshnessValidUntil: v.optional(v.number()),
     ordering: v.union(
       v.object({ kind: v.literal('unranked') }),
-      v.object({ kind: v.literal('ranked'), objective: v.literal('lowest_maximum_price'), position: v.number() }),
+      v.object({
+        kind: v.literal('ranked'), objective: v.literal('lowest_maximum_price'), position: v.number(),
+        evidenceRef: v.optional(v.string()),
+      }),
     ),
   }),
 })

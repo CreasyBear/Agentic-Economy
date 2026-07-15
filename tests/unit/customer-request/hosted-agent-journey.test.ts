@@ -160,7 +160,12 @@ function routesReadyView() {
     decision: {
       generationRef: 'generation:one', requestRevision: 2,
       outcome: { kind: 'routes_available', routeCount: 1, summary: 'One option is ready.' },
-      routes: [routePlan()], changes: { kind: 'initial' },
+      routes: [routePlan()],
+      comparison: {
+        kind: 'single',
+        summary: 'One current way forward is available. This is not a comparison or recommendation.',
+      },
+      changes: { kind: 'initial' },
       nextBoundary: { kind: 'confirmation', authorityCreated: false },
     },
   })
@@ -179,6 +184,16 @@ function routePlan() {
     recovery: [{ step: 1, businessName: 'Sandbox Option Two', posture: 'retry_safe' }],
     cancellation: { kind: 'unavailable', summary: 'Cannot stop after release.' },
     validUntil: 20_000, fallback: { available: false, alternatives: [] }, uncertainty: [],
+    comparison: {
+      outcomeRef: 'outcome:sandbox', outcomeFit: 'same_promised_result',
+      completeness: 'complete', hardConstraints: 'satisfied',
+      maximumCost: { kind: 'known', currency: 'AUD', amountMinor: 900 },
+      dataExposureCount: 1, irreversibleEffectCount: 1, uncertaintyCount: 0,
+      duration: 'not_declared', recovery: 'retry_safe',
+      trust: 'registered_live_supply', evidenceCount: 1,
+      freshness: { state: 'current', validUntil: 20_000 },
+      commercialInfluence: { status: 'none', evidenceRefs: ['commercial:none'] },
+    },
   }
 }
 

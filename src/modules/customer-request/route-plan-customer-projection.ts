@@ -35,6 +35,14 @@ type ProjectionRoute = Readonly<{
       reversibility: 'not_applicable' | 'reversible' | 'conditional' | 'irreversible'
     }>[]
     evidence: readonly Readonly<{ label: string; purpose: 'comparison' | 'completion' | 'recovery' }>[]
+    commercialRelationship?: Readonly<{
+      kind: 'none' | 'direct' | 'affiliate' | 'ownership'
+      summary: string
+      influencesEligibility: boolean
+      influencesInclusion: boolean
+      influencesOrder: boolean
+      evidenceRefs: readonly string[]
+    }>
     cancellation?: Readonly<{ kind: 'unsupported' | 'adapter_managed'; evidenceRefs: readonly string[] }>
     recovery: Readonly<{ recovery: 'retry_safe' | 'reconcile_required' }>
   }>[]
@@ -46,9 +54,19 @@ type ProjectionRoute = Readonly<{
   uncertainty: readonly unknown[]
   fallbacks: Readonly<{ alternatives: readonly Readonly<{ alternativeRouteRef: string }>[] }>
   comparison: Readonly<{
+    outcomeSignature?: string
+    hardConstraints?: 'satisfied'
+    duration?: 'not_declared'
+    recovery?: 'retry_safe' | 'reconcile_required'
+    freshnessValidUntil?: number
     ordering:
       | Readonly<{ kind: 'unranked' }>
-      | Readonly<{ kind: 'ranked'; objective: 'lowest_maximum_price'; position: number }>
+      | Readonly<{
+          kind: 'ranked'
+          objective: 'lowest_maximum_price'
+          position: number
+          evidenceRef?: string
+        }>
   }>
 }>
 export type CustomerRoutePlanProjectionGeneration = Readonly<{
@@ -92,6 +110,7 @@ export function projectCustomerRoutePlanDecision(input: Readonly<{
         : `${routes.length} ways forward are available.`,
     }),
     routes: Object.freeze(routes),
+    comparison: projectDecisionComparison(input.current.routes, routes),
     changes: projectChanges(
       input.current, input.previous, input.businessNames, input.capabilitySemantics,
     ),
@@ -127,6 +146,12 @@ function projectRoute(
   const actionPosition = new Map(route.steps.map((step, index) => [step.actionId, index + 1]))
   const cancellation = routeCancellation(route)
   const routeRef = customerRouteRef(generationRef, route.routePlanId)
+  const outcomeRef = routeOutcomeRef(route, capabilitySemantics)
+  const outcomeFit = new Set(generationRoutes.map((candidate) => routeOutcomeRef(candidate, capabilitySemantics))).size === 1
+    ? 'same_promised_result' as const
+    : 'different_promised_result' as const
+  const commercialInfluence = projectRouteCommercialInfluence(route)
+  const freshnessValidUntil = Math.min(route.comparison.freshnessValidUntil ?? route.expiresAt, route.expiresAt)
   const quoteDigest = canonicalDigest({
     contract: 'ae.customer-route-quote:v1',
     generationRef,
@@ -137,14 +162,14 @@ function projectRoute(
     evidence,
     recovery: route.steps.map(({ businessId, recovery }) => ({ businessId, recovery })),
     cancellation,
-    validUntil: route.expiresAt,
+    validUntil: freshnessValidUntil,
     fallbacks: route.fallbacks,
   } as StableHashValue)
   return Object.freeze({
     routeRef,
     quoteDigest,
     result: routeResult(route, capabilitySemantics),
-    availability: route.expiresAt <= now ? 'expired' as const : 'current' as const,
+    availability: freshnessValidUntil <= now ? 'expired' as const : 'current' as const,
     stepCount: route.steps.length,
     businesses: Object.freeze(businesses),
     maximumTotalCost: Object.freeze({ ...route.maximumTotalCost }),
@@ -161,7 +186,7 @@ function projectRoute(
       posture: step.recovery.recovery,
     }))),
     cancellation: Object.freeze(cancellation),
-    validUntil: route.expiresAt,
+    validUntil: freshnessValidUntil,
     fallback: Object.freeze({
       available: route.fallbacks.alternatives.length > 0,
       alternatives: Object.freeze(route.fallbacks.alternatives.map(({ alternativeRouteRef }) => {
@@ -173,6 +198,28 @@ function projectRoute(
       })),
     }),
     uncertainty: Object.freeze(route.uncertainty.map(() => 'price_needs_confirmation' as const)),
+    comparison: Object.freeze({
+      outcomeRef,
+      outcomeFit,
+      completeness: 'complete' as const,
+      hardConstraints: route.comparison.hardConstraints ?? 'satisfied' as const,
+      maximumCost: Object.freeze({ ...route.maximumTotalCost }),
+      dataExposureCount: recipients.length,
+      irreversibleEffectCount: effects.filter(({ reversibility }) => reversibility === 'irreversible').length,
+      uncertaintyCount: route.uncertainty.length,
+      duration: route.comparison.duration ?? 'not_declared' as const,
+      recovery: route.comparison.recovery
+        ?? (route.steps.some(({ recovery }) => recovery.recovery === 'reconcile_required')
+          ? 'reconcile_required' as const
+          : 'retry_safe' as const),
+      trust: 'registered_live_supply' as const,
+      evidenceCount: evidence.length,
+      freshness: Object.freeze({
+        state: freshnessValidUntil <= now ? 'expired' as const : 'current' as const,
+        validUntil: freshnessValidUntil,
+      }),
+      commercialInfluence,
+    }),
     steps: Object.freeze(route.steps.map((step, index) => Object.freeze({
       step: index + 1,
       business: customerBusiness(step.businessId, businessNames),
@@ -185,6 +232,154 @@ function projectRoute(
         .sort((left, right) => left - right)),
     }))),
   })
+}
+
+function projectDecisionComparison(
+  sourceRoutes: readonly Route[],
+  routes: readonly CustomerRoutePlan[],
+): CustomerRoutePlanDecision['comparison'] {
+  const currentRoutes = routes.filter(({ availability }) => availability === 'current')
+  if (routes.length === 1 && currentRoutes.length === 1) {
+    return Object.freeze({
+      kind: 'single' as const,
+      summary: 'One current way forward is available. This is not a comparison or recommendation.',
+    })
+  }
+  const groups = new Map<string, string[]>()
+  for (const route of routes) {
+    const group = groups.get(route.comparison.outcomeRef) ?? []
+    group.push(route.routeRef)
+    groups.set(route.comparison.outcomeRef, group)
+  }
+  if (groups.size > 1) {
+    return Object.freeze({
+      kind: 'incomparable' as const,
+      summary: 'These ways forward promise different results, so AE has not ranked them against each other.',
+      groups: Object.freeze([...groups].map(([outcomeRef, routeRefs]) => Object.freeze({
+        outcomeRef,
+        routeRefs: Object.freeze([...routeRefs].sort()),
+      })).sort((left, right) => left.outcomeRef.localeCompare(right.outcomeRef))),
+    })
+  }
+  if (currentRoutes.length !== routes.length) {
+    return unrankedComparison('stale_evidence', 'At least one way forward has expired, so AE has not ranked this set.')
+  }
+  const commercial = routes.map(({ comparison }) => comparison.commercialInfluence)
+  if (commercial.some(({ status }) => status === 'unknown')) {
+    return unrankedComparison(
+      'comparison_evidence_missing',
+      'AE is missing evidence needed for a trustworthy comparison, so these ways forward are not ranked.',
+    )
+  }
+  if (commercial.some((influence) => influence.status === 'disclosed' && influence.affectsDecision)) {
+    return unrankedComparison(
+      'commercial_influence',
+      'A commercial relationship could affect this decision, so AE has not ranked these ways forward.',
+    )
+  }
+  const ranked = sourceRoutes.map(({ comparison }) => comparison.ordering)
+  if (!ranked.every((ordering) => ordering.kind === 'ranked' && ordering.evidenceRef !== undefined)) {
+    return unrankedComparison(
+      'customer_preference_absent',
+      'These ways forward are comparable, but AE has no customer priority that justifies recommending one.',
+    )
+  }
+  const evidenceRefs = new Set(ranked.flatMap((ordering) => ordering.kind === 'ranked' && ordering.evidenceRef !== undefined
+    ? [ordering.evidenceRef]
+    : []))
+  const selectedIndex = ranked.findIndex((ordering) => ordering.kind === 'ranked' && ordering.position === 1)
+  const selected = routes[selectedIndex]
+  const orderedByCost = [...routes].sort((left, right) => {
+    const leftAmount = left.maximumTotalCost.kind === 'known' ? left.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
+    const rightAmount = right.maximumTotalCost.kind === 'known' ? right.maximumTotalCost.amountMinor : Number.MAX_SAFE_INTEGER
+    return leftAmount - rightAmount || left.routeRef.localeCompare(right.routeRef)
+  })
+  const next = orderedByCost[1]
+  const evidenceRef = [...evidenceRefs][0]
+  if (evidenceRefs.size !== 1 || selected === undefined || next === undefined || evidenceRef === undefined
+    || selected.routeRef !== orderedByCost[0]?.routeRef
+    || selected.maximumTotalCost.kind !== 'known' || next.maximumTotalCost.kind !== 'known'
+    || selected.maximumTotalCost.currency !== next.maximumTotalCost.currency
+    || selected.maximumTotalCost.amountMinor === next.maximumTotalCost.amountMinor) {
+    return unrankedComparison('tie', 'No current way forward has a unique evidence-backed lead, so AE has not recommended one.')
+  }
+  const currency = selected.maximumTotalCost.currency
+  const difference = next.maximumTotalCost.amountMinor - selected.maximumTotalCost.amountMinor
+  return Object.freeze({
+    kind: 'recommended' as const,
+    summary: 'One way forward best matches the price priority in this Request.',
+    routeRef: selected.routeRef,
+    objective: 'lowest_maximum_price' as const,
+    evidenceRef,
+    commercialInfluence: commercial.some(({ status }) => status === 'disclosed')
+      ? 'disclosed' as const
+      : 'none' as const,
+    reasons: Object.freeze([
+      `Lowest maximum cost: ${formatCustomerMoney(currency, selected.maximumTotalCost.amountMinor)}.`,
+      `${formatCustomerMoney(currency, difference)} below the next current way forward.`,
+    ]),
+    tradeoffs: Object.freeze(comparisonTradeoffs(selected, next)),
+  })
+}
+
+function unrankedComparison(
+  reason: Extract<CustomerRoutePlanDecision['comparison'], { kind: 'unranked' }>['reason'],
+  summary: string,
+): Extract<CustomerRoutePlanDecision['comparison'], { kind: 'unranked' }> {
+  return Object.freeze({ kind: 'unranked' as const, reason, summary })
+}
+
+function comparisonTradeoffs(selected: CustomerRoutePlan, next: CustomerRoutePlan): readonly string[] {
+  const tradeoffs: string[] = []
+  if (selected.comparison.dataExposureCount !== next.comparison.dataExposureCount) {
+    tradeoffs.push(`${selected.comparison.dataExposureCount} information recipient${selected.comparison.dataExposureCount === 1 ? '' : 's'} versus ${next.comparison.dataExposureCount}.`)
+  }
+  if (selected.comparison.irreversibleEffectCount !== next.comparison.irreversibleEffectCount) {
+    tradeoffs.push(`${selected.comparison.irreversibleEffectCount} irreversible effect${selected.comparison.irreversibleEffectCount === 1 ? '' : 's'} versus ${next.comparison.irreversibleEffectCount}.`)
+  }
+  if (selected.comparison.recovery !== next.comparison.recovery) {
+    tradeoffs.push(`Recovery is ${comparisonRecoveryLabel(selected.comparison.recovery)} versus ${comparisonRecoveryLabel(next.comparison.recovery)}.`)
+  }
+  return tradeoffs.length === 0
+    ? Object.freeze(['No other declared comparison dimension separates the two leading ways forward.'])
+    : Object.freeze(tradeoffs)
+}
+
+function projectRouteCommercialInfluence(route: Route): CustomerRoutePlan['comparison']['commercialInfluence'] {
+  if (route.comparison.outcomeSignature === undefined
+    || route.comparison.hardConstraints === undefined
+    || route.comparison.duration === undefined
+    || route.comparison.recovery === undefined
+    || route.comparison.freshnessValidUntil === undefined) {
+    return Object.freeze({ status: 'unknown' as const })
+  }
+  const relationships = route.steps.map(({ commercialRelationship }) => commercialRelationship)
+  if (relationships.some((relationship) => relationship === undefined)) return Object.freeze({ status: 'unknown' as const })
+  const present = relationships.filter((relationship): relationship is NonNullable<typeof relationship> => relationship !== undefined)
+  const evidenceRefs = [...new Set(present.flatMap(({ evidenceRefs: refs }) => refs))].sort()
+  if (present.every(({ kind }) => kind === 'none')) {
+    return Object.freeze({ status: 'none' as const, evidenceRefs: Object.freeze(evidenceRefs) })
+  }
+  return Object.freeze({
+    status: 'disclosed' as const,
+    summaries: Object.freeze([...new Set(present.filter(({ kind }) => kind !== 'none').map(({ summary }) => summary))]),
+    evidenceRefs: Object.freeze(evidenceRefs),
+    affectsDecision: present.some(({ influencesEligibility, influencesInclusion, influencesOrder }) => (
+      influencesEligibility || influencesInclusion || influencesOrder
+    )),
+  })
+}
+
+function routeOutcomeRef(route: Route, capabilitySemantics: CustomerRouteCapabilitySemantics): string {
+  return route.comparison.outcomeSignature ?? `outcome:${canonicalDigest(routeResult(route, capabilitySemantics) as StableHashValue)}`
+}
+
+function formatCustomerMoney(currency: string, amountMinor: number): string {
+  return `${currency} ${(amountMinor / 100).toFixed(2)}`
+}
+
+function comparisonRecoveryLabel(value: 'retry_safe' | 'reconcile_required'): string {
+  return value === 'retry_safe' ? 'safe to retry after confirmed failure' : 'check required before retry'
 }
 
 export function customerRouteRef(generationRef: string, routePlanId: string): string {

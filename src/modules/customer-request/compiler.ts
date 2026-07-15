@@ -16,6 +16,7 @@ import {
   type ProposedRequestAction,
   type RequestActionInputMapping,
   type RegisteredEvaluationBinding,
+  type RegisteredCommercialRelationship,
   type RequestEvaluation,
   type RequestFact,
   type RegisteredSupplyPrice,
@@ -91,6 +92,8 @@ export type CustomerRequestRoutePlan = Readonly<{
     resolvedInputs: readonly RequestFact[]
     deferredInputs: readonly RequestActionInputMapping[]
     price: RegisteredSupplyPrice
+    /** Optional only for immutable generations compiled before recommendation integrity was source-owned. */
+    commercialRelationship?: RegisteredCommercialRelationship
     dataUse: CapabilityDecisionModel['dataUse']
     effects: CapabilityDecisionModel['effects']
     evidence: CapabilityDecisionModel['evidence']
@@ -117,9 +120,21 @@ export type CustomerRequestRoutePlan = Readonly<{
     irreversibleEffectCount: number
     evidenceRequirementCount: number
     trust: 'registered_live_supply'
+    /** Optional only for immutable generations compiled before recommendation integrity was source-owned. */
+    outcomeSignature?: string
+    hardConstraints?: 'satisfied'
+    duration?: 'not_declared'
+    recovery?: 'retry_safe' | 'reconcile_required'
+    freshnessValidUntil?: number
     ordering:
       | Readonly<{ kind: 'unranked' }>
-      | Readonly<{ kind: 'ranked'; objective: 'lowest_maximum_price'; position: number }>
+      | Readonly<{
+          kind: 'ranked'
+          objective: 'lowest_maximum_price'
+          position: number
+          /** Optional only for immutable generations compiled before recommendation integrity was source-owned. */
+          evidenceRef?: string
+        }>
   }>
   authority: 'proposal_only'
   routeDigest: string
@@ -260,6 +275,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
     actions, candidates: evaluation.candidates, now: command.now,
     models,
     ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
+    ...(evaluation.decisionPreference === undefined ? {} : {
+      objectiveEvidenceRef: evaluation.decisionPreference.evidenceRef,
+    }),
   })
   if (routes === undefined) return { kind: 'refused', reason: 'capability_graph_invalid' }
   const planMaterial = {
@@ -438,6 +456,7 @@ export function compileRoutePlans(input: Readonly<{
   now: number
   models: ReadonlyMap<string, CapabilityDecisionModel>
   objective?: 'lowest_maximum_price'
+  objectiveEvidenceRef?: string
 }>): readonly CustomerRequestRoutePlan[] | undefined {
   if (input.actions.length === 0) return Object.freeze([])
   const choices = input.actions.map((action) => input.candidates.filter(
@@ -468,6 +487,12 @@ export function compileRoutePlans(input: Readonly<{
         resolvedInputs: action.inputs,
         deferredInputs: action.inputMappings,
         price: candidate.price,
+        ...(candidate.commercialRelationship === undefined ? {} : {
+          commercialRelationship: {
+            ...candidate.commercialRelationship,
+            evidenceRefs: [...candidate.commercialRelationship.evidenceRefs],
+          },
+        }),
         dataUse: model.dataUse, effects: model.effects, evidence: model.evidence,
         cancellation: candidate.cancellation,
         recovery: model.lifecycle,
@@ -486,6 +511,18 @@ export function compileRoutePlans(input: Readonly<{
         + step.effects.filter((effect) => effect.reversibility === 'irreversible').length, 0),
       evidenceRequirementCount: steps.reduce((count, step) => count + step.evidence.length, 0),
       trust: 'registered_live_supply' as const,
+      outcomeSignature: canonicalDigest({
+        contracts: steps.map(({ contractRef }) => contractRef),
+        edges: edges.map(({ fromStep, toStep, semanticIdentity, schemaIdentity }) => ({
+          fromStep, toStep, semanticIdentity, schemaIdentity,
+        })),
+      } as StableHashValue),
+      hardConstraints: 'satisfied' as const,
+      duration: 'not_declared' as const,
+      recovery: steps.some(({ recovery }) => recovery.recovery === 'reconcile_required')
+        ? 'reconcile_required' as const
+        : 'retry_safe' as const,
+      freshnessValidUntil: expiresAt,
     })
     const core = {
       requestId: input.requestId, requestRevision: input.requestRevision,
@@ -496,8 +533,11 @@ export function compileRoutePlans(input: Readonly<{
     }
     return [Object.freeze({ routePlanId: `route:${canonicalDigest(core as StableHashValue)}`, ...core })]
   })
-  const rankedObjective = canRankByLowestMaximumPrice(drafts) ? input.objective : undefined
-  const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, rankedObjective))
+  const ranking = canRankByLowestMaximumPrice(drafts)
+    && input.objectiveEvidenceRef !== undefined
+    ? Object.freeze({ objective: input.objective, evidenceRef: input.objectiveEvidenceRef })
+    : undefined
+  const ordered = drafts.sort((left, right) => compareRoutePlans(left, right, ranking?.objective))
   return Object.freeze(ordered.map((draft, index): CustomerRequestRoutePlan => {
     const alternatives: Array<Readonly<{
       alternativeRouteRef: string
@@ -514,8 +554,13 @@ export function compileRoutePlans(input: Readonly<{
       ordering: 'unranked' as const,
       alternatives: Object.freeze(alternatives),
     })
-    const ordering = rankedObjective === 'lowest_maximum_price'
-      ? Object.freeze({ kind: 'ranked' as const, objective: rankedObjective, position: index + 1 })
+    const ordering = ranking?.objective === 'lowest_maximum_price'
+      ? Object.freeze({
+          kind: 'ranked' as const,
+          objective: ranking.objective,
+          position: index + 1,
+          evidenceRef: ranking.evidenceRef,
+        })
       : Object.freeze({ kind: 'unranked' as const })
     const material = {
       ...draft,

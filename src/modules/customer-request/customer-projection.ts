@@ -110,7 +110,7 @@ export function projectRequestEvaluation(input: Readonly<{
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
-    summary: 'No registered business capability currently matches this request.',
+    summary: 'No supported way forward is available from registered businesses for this Request.',
     nextAction: 'revise_request',
     criteria,
   })

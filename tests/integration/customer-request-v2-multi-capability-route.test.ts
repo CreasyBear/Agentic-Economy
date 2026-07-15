@@ -142,6 +142,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+        commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
       }]),
       models: [upstreamModel, downstreamModel], now: Date.now(),
@@ -183,7 +184,13 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(route).toMatchObject({
       requestRevision: 1, authority: 'proposal_only',
       maximumTotalCost: { kind: 'known', currency: 'AUD', amountMinor: 1_000 },
-      comparison: { fit: 'all_steps_viable', completeness: 'complete', dataExposureCount: 2, irreversibleEffectCount: 2, evidenceRequirementCount: 2, trust: 'registered_live_supply' },
+      comparison: {
+        fit: 'all_steps_viable', completeness: 'complete', hardConstraints: 'satisfied',
+        dataExposureCount: 2, irreversibleEffectCount: 2, evidenceRequirementCount: 2,
+        duration: 'not_declared', recovery: 'reconcile_required',
+        freshnessValidUntil: expect.any(Number), outcomeSignature: expect.stringMatching(/^sha256:/u),
+        trust: 'registered_live_supply',
+      },
       uncertainty: [], fallbacks: { ordering: 'unranked', alternatives: [] },
     })
     expect(route?.steps).toHaveLength(2)
@@ -192,9 +199,10 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       publicationRef: step.publicationRef, publicationRevision: step.publicationRevision,
       resolvedInputCount: step.resolvedInputs.length, deferredInputCount: step.deferredInputs.length,
       dataUse: step.dataUse, effects: step.effects, evidence: step.evidence, recovery: step.recovery,
+      commercialRelationship: step.commercialRelationship,
     }))).toEqual([
-      expect.objectContaining({ capabilityId: upstreamDocument.capabilityId, version: 2, publicationRef: first.publicationRef, publicationRevision: first.revision, resolvedInputCount: 1, deferredInputCount: 0, recovery: { idempotency: 'required', recovery: 'retry_safe' } }),
-      expect.objectContaining({ capabilityId: downstreamDocument.capabilityId, version: 1, publicationRef: second.publicationRef, publicationRevision: second.revision, resolvedInputCount: 0, deferredInputCount: 1, recovery: { idempotency: 'required', recovery: 'reconcile_required' } }),
+      expect.objectContaining({ capabilityId: upstreamDocument.capabilityId, version: 2, publicationRef: first.publicationRef, publicationRevision: first.revision, resolvedInputCount: 1, deferredInputCount: 0, recovery: { idempotency: 'required', recovery: 'retry_safe' }, commercialRelationship: expect.objectContaining({ kind: 'none', influencesOrder: false }) }),
+      expect.objectContaining({ capabilityId: downstreamDocument.capabilityId, version: 1, publicationRef: second.publicationRef, publicationRevision: second.revision, resolvedInputCount: 0, deferredInputCount: 1, recovery: { idempotency: 'required', recovery: 'reconcile_required' }, commercialRelationship: expect.objectContaining({ kind: 'none', influencesOrder: false }) }),
     ])
     expect(route?.edges).toEqual([expect.objectContaining({
       semanticIdentity: 'ae.service-reference:v1', authority: 'registered_contract_semantics',
@@ -224,6 +232,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+        commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
       }]),
       models: [upstreamModel, downstreamModel], now: Date.now() + 1,
@@ -263,6 +272,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil, price: offering.presentation.price,
+        commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
       }]),
       models: [upstreamModel, downstreamModel], now: Date.now() + 2,
@@ -1787,6 +1797,7 @@ async function committedTwoStepAdmissionRoute(
         publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
         price: offering.presentation.price,
+        commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
       }]
     )),
@@ -1864,6 +1875,7 @@ async function committedOneStepAdmissionRoute(
         publicationRevision: publication.revision,
         readinessValidUntil: publication.readinessValidUntil,
         price: offering.presentation.price,
+        commercialRelationship: offering.presentation.commercialRelationship,
         cancellation: binding.cancellation,
       }]
     )),

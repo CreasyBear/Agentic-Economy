@@ -174,6 +174,30 @@ const customerRouteResultChangeSchema = customerRouteResultSchema.extend({
   position: safePositiveInteger.optional(),
 }).strict()
 
+const customerRouteCommercialInfluenceSchema = z.union([
+  z.object({ status: z.literal('unknown') }).strict(),
+  z.object({ status: z.literal('none'), evidenceRefs: z.array(z.string()) }).strict(),
+  z.object({
+    status: z.literal('disclosed'), summaries: z.array(z.string()).min(1),
+    evidenceRefs: z.array(z.string()).min(1), affectsDecision: z.boolean(),
+  }).strict(),
+])
+
+const customerRouteComparisonEvidenceSchema = z.object({
+  outcomeRef: z.string(),
+  outcomeFit: z.enum(['same_promised_result', 'different_promised_result']),
+  completeness: z.literal('complete'), hardConstraints: z.literal('satisfied'),
+  maximumCost: customerRouteMaximumCostSchema,
+  dataExposureCount: safeNonnegativeInteger, irreversibleEffectCount: safeNonnegativeInteger,
+  uncertaintyCount: safeNonnegativeInteger, duration: z.literal('not_declared'),
+  recovery: z.enum(['retry_safe', 'reconcile_required']), trust: z.literal('registered_live_supply'),
+  evidenceCount: safeNonnegativeInteger,
+  freshness: z.object({
+    state: z.enum(['current', 'expired']), validUntil: safePositiveInteger,
+  }).strict(),
+  commercialInfluence: customerRouteCommercialInfluenceSchema,
+}).strict()
+
 const customerRoutePlanSchema = z.object({
   routeRef: z.string(),
   quoteDigest: z.string(),
@@ -196,6 +220,7 @@ const customerRoutePlanSchema = z.object({
   validUntil: safePositiveInteger,
   fallback: customerRouteFallbackSchema,
   uncertainty: z.array(z.literal('price_needs_confirmation')),
+  comparison: customerRouteComparisonEvidenceSchema,
   steps: z.array(z.object({
     step: safePositiveInteger, business: customerBusinessSchema, after: z.array(safePositiveInteger),
   }).strict()).optional(),
@@ -308,6 +333,27 @@ export const customerRoutePlanDecisionSchema = z.object({
     kind: z.enum(['routes_available', 'routes_expired']), routeCount: safePositiveInteger, summary: z.string(),
   }).strict(),
   routes: z.array(customerRoutePlanSchema).min(1),
+  comparison: z.union([
+    z.object({ kind: z.literal('single'), summary: z.string() }).strict(),
+    z.object({
+      kind: z.literal('recommended'), summary: z.string(), routeRef: z.string(),
+      objective: z.literal('lowest_maximum_price'), evidenceRef: z.string(),
+      commercialInfluence: z.enum(['none', 'disclosed']), reasons: z.array(z.string()).min(1),
+      tradeoffs: z.array(z.string()).min(1),
+    }).strict(),
+    z.object({
+      kind: z.literal('unranked'),
+      reason: z.enum([
+        'customer_preference_absent', 'tie', 'commercial_influence',
+        'stale_evidence', 'comparison_evidence_missing',
+      ]),
+      summary: z.string(),
+    }).strict(),
+    z.object({
+      kind: z.literal('incomparable'), summary: z.string(),
+      groups: z.array(z.object({ outcomeRef: z.string(), routeRefs: z.array(z.string()).min(1) }).strict()).min(2),
+    }).strict(),
+  ]),
   changes: z.union([
     z.object({ kind: z.literal('initial') }).strict(),
     z.object({ kind: z.literal('unchanged'), previousGenerationRef: z.string() }).strict(),

@@ -191,6 +191,26 @@ const customerRouteResultChange = v.object({
   resultRef: v.string(), summary: v.string(), deliverables: v.array(v.string()),
   position: v.optional(v.number()),
 })
+const customerRouteCommercialInfluence = v.union(
+  v.object({ status: v.literal('unknown') }),
+  v.object({ status: v.literal('none'), evidenceRefs: v.array(v.string()) }),
+  v.object({
+    status: v.literal('disclosed'), summaries: v.array(v.string()), evidenceRefs: v.array(v.string()),
+    affectsDecision: v.boolean(),
+  }),
+)
+const customerRouteComparisonEvidence = v.object({
+  outcomeRef: v.string(),
+  outcomeFit: v.union(v.literal('same_promised_result'), v.literal('different_promised_result')),
+  completeness: v.literal('complete'), hardConstraints: v.literal('satisfied'),
+  maximumCost: customerRouteMaximumCost,
+  dataExposureCount: v.number(), irreversibleEffectCount: v.number(), uncertaintyCount: v.number(),
+  duration: v.literal('not_declared'),
+  recovery: v.union(v.literal('retry_safe'), v.literal('reconcile_required')),
+  trust: v.literal('registered_live_supply'), evidenceCount: v.number(),
+  freshness: v.object({ state: v.union(v.literal('current'), v.literal('expired')), validUntil: v.number() }),
+  commercialInfluence: customerRouteCommercialInfluence,
+})
 const customerRoute = v.object({
   routeRef: v.string(), quoteDigest: v.string(), result: customerRouteResult,
   availability: v.union(v.literal('current'), v.literal('expired')),
@@ -212,6 +232,7 @@ const customerRoute = v.object({
     })),
   }),
   uncertainty: v.array(v.literal('price_needs_confirmation')),
+  comparison: customerRouteComparisonEvidence,
   steps: v.optional(v.array(v.object({
     step: v.number(), business: customerBusiness, after: v.array(v.number()),
   }))),
@@ -299,6 +320,27 @@ const customerRouteDecision = v.object({
     routeCount: v.number(), summary: v.string(),
   }),
   routes: v.array(customerRoute),
+  comparison: v.union(
+    v.object({ kind: v.literal('single'), summary: v.string() }),
+    v.object({
+      kind: v.literal('recommended'), summary: v.string(), routeRef: v.string(),
+      objective: v.literal('lowest_maximum_price'), evidenceRef: v.string(),
+      commercialInfluence: v.union(v.literal('none'), v.literal('disclosed')),
+      reasons: v.array(v.string()), tradeoffs: v.array(v.string()),
+    }),
+    v.object({
+      kind: v.literal('unranked'),
+      reason: v.union(
+        v.literal('customer_preference_absent'), v.literal('tie'), v.literal('commercial_influence'),
+        v.literal('stale_evidence'), v.literal('comparison_evidence_missing'),
+      ),
+      summary: v.string(),
+    }),
+    v.object({
+      kind: v.literal('incomparable'), summary: v.string(),
+      groups: v.array(v.object({ outcomeRef: v.string(), routeRefs: v.array(v.string()) })),
+    }),
+  ),
   changes: v.union(
     v.object({ kind: v.literal('initial') }),
     v.object({ kind: v.literal('unchanged'), previousGenerationRef: v.string() }),
@@ -1148,6 +1190,14 @@ type EligibleSupply = Readonly<{
     presentation: Readonly<{
       label: string; summary: string
       price: RegisteredSupplyPrice
+      commercialRelationship: Readonly<{
+        kind: 'none' | 'direct' | 'affiliate' | 'ownership'
+        summary: string
+        influencesEligibility: boolean
+        influencesInclusion: boolean
+        influencesOrder: boolean
+        evidenceRefs: readonly string[]
+      }>
     }>; registrationHash: string
   }>
   publication?: Readonly<{ publicationRef: string; revision: number; readinessValidUntil: number }>
@@ -1226,6 +1276,10 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
       offeringRegistrationHash: item.offering.registrationHash,
       bindingRegistrationHash: item.binding.registrationHash,
       price: item.offering.presentation.price,
+      commercialRelationship: {
+        ...item.offering.presentation.commercialRelationship,
+        evidenceRefs: [...item.offering.presentation.commercialRelationship.evidenceRefs],
+      },
       cancellation: {
         ...item.binding.cancellation,
         evidenceRefs: [...item.binding.cancellation.evidenceRefs],

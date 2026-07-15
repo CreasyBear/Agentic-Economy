@@ -1174,6 +1174,7 @@ async function compileFixture(
       offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
+      commercialRelationship: offering.presentation.commercialRelationship,
       cancellation: binding.cancellation,
       ...(livePublication === undefined ? {} : {
         publicationRef: livePublication.publicationRef,

@@ -190,11 +190,16 @@ describe('customer Request workspace', () => {
           cancellation: { kind: 'unavailable', summary: 'The businesses do not publish a cancellation path for this option.' },
           validUntil: Date.now() + 60_000,
           fallback: { available: false, alternatives: [] }, uncertainty: [],
+          comparison: routeComparison('route:opaque', 'current', 1_400, 2, 1, 'reconcile_required'),
           steps: [
             { step: 1, business: { businessRef: 'business:one', name: 'North Star Services' }, after: [] },
             { step: 2, business: { businessRef: 'business:two', name: 'City Ledger' }, after: [1] },
           ],
         }],
+        comparison: {
+          kind: 'single',
+          summary: 'One current way forward is available. This is not a comparison or recommendation.',
+        },
         changes: {
           kind: 'changed', previousGenerationRef: 'generation:one',
           items: [
@@ -264,6 +269,10 @@ describe('customer Request workspace', () => {
         generationRef: 'generation:confirm', requestRevision: 2,
         outcome: { kind: 'routes_available' as const, routeCount: 1, summary: 'One way forward is available.' },
         routes: [route], changes: { kind: 'initial' as const },
+        comparison: {
+          kind: 'single' as const,
+          summary: 'One current way forward is available. This is not a comparison or recommendation.',
+        },
         nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
       },
     }
@@ -440,6 +449,10 @@ describe('customer Request workspace', () => {
           kind: 'routes_available', routeCount: 2, summary: 'One current way forward and one expired.',
         },
         routes: [routeChoice('route:current', 'current'), routeChoice('route:expired', 'expired')],
+        comparison: {
+          kind: 'unranked', reason: 'stale_evidence',
+          summary: 'At least one way forward has expired, so AE has not ranked this set.',
+        },
         changes: { kind: 'initial' },
         nextBoundary: { kind: 'confirmation', authorityCreated: false },
       },
@@ -499,8 +512,32 @@ function routeChoice(routeRef: string, availability: 'current' | 'expired') {
     cancellation: { kind: 'unavailable' as const, summary: 'No cancellation path is published.' },
     validUntil: availability === 'current' ? Date.now() + 60_000 : Date.now() - 60_000,
     fallback: { available: false, alternatives: [] }, uncertainty: [],
+    comparison: routeComparison(routeRef, availability, 1_200, 0, 0, 'retry_safe'),
     steps: [{
       step: 1, business: { businessRef: `business:${routeRef}`, name: `Business ${routeRef}` }, after: [],
     }],
+  }
+}
+
+function routeComparison(
+  outcomeRef: string,
+  freshness: 'current' | 'expired',
+  amountMinor: number,
+  dataExposureCount: number,
+  irreversibleEffectCount: number,
+  recovery: 'retry_safe' | 'reconcile_required',
+) {
+  return {
+    outcomeRef, outcomeFit: 'same_promised_result' as const,
+    completeness: 'complete' as const, hardConstraints: 'satisfied' as const,
+    maximumCost: { kind: 'known' as const, currency: 'AUD', amountMinor },
+    dataExposureCount, irreversibleEffectCount, uncertaintyCount: 0,
+    duration: 'not_declared' as const, recovery,
+    trust: 'registered_live_supply' as const, evidenceCount: 1,
+    freshness: {
+      state: freshness,
+      validUntil: freshness === 'current' ? Date.now() + 60_000 : Date.now() - 60_000,
+    },
+    commercialInfluence: { status: 'none' as const, evidenceRefs: ['commercial:none'] },
   }
 }

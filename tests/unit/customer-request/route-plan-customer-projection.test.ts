@@ -21,6 +21,10 @@ describe('RoutePlan customer projection', () => {
       generationRef: 'generation:1',
       requestRevision: 3,
       outcome: { kind: 'routes_available', routeCount: 1 },
+      comparison: {
+        kind: 'single',
+        summary: 'One current way forward is available. This is not a comparison or recommendation.',
+      },
       routes: [{
         routeRef: customerRouteRef('generation:1', 'route:one'),
         quoteDigest: expect.any(String),
@@ -52,6 +56,89 @@ describe('RoutePlan customer projection', () => {
       state: 'routes_ready', summary: 'A route is ready.', nextAction: 'inspect_routes',
       missingFields: [], criteria: [], options: [], decision,
     }).success).toBe(true)
+  })
+
+  it('recommends a unique price leader only from fresh substitutable routes and explicit customer evidence', () => {
+    const lower = route({ amountMinor: 900, routePlanId: 'route:lower' })
+    const higher = changed(route({ amountMinor: 1_200, routePlanId: 'route:higher' }), (value) => {
+      value.steps[0]!.businessId = 'business:two'
+      value.steps[0]!.offeringId = 'offering:two'
+      value.steps[0]!.bindingId = 'binding:two'
+      value.steps[0]!.publicationRef = 'publication:two'
+      value.comparison.ordering = {
+        kind: 'ranked', objective: 'lowest_maximum_price', position: 2,
+        evidenceRef: 'preference:lowest-price',
+      }
+    })
+    const decision = projectCustomerRoutePlanDecision({
+      current: generation(1, [lower, higher]),
+      businessNames: { 'business:one': 'North Star Services', 'business:two': 'City Ledger' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.comparison).toMatchObject({
+      kind: 'recommended',
+      routeRef: customerRouteRef('generation:1', 'route:lower'),
+      objective: 'lowest_maximum_price',
+      evidenceRef: 'preference:lowest-price',
+      commercialInfluence: 'none',
+      reasons: ['Lowest maximum cost: AUD 9.00.', 'AUD 3.00 below the next current way forward.'],
+    })
+    expect(decision.routes[0]?.comparison).toMatchObject({
+      outcomeFit: 'same_promised_result', hardConstraints: 'satisfied', completeness: 'complete',
+      duration: 'not_declared', recovery: 'retry_safe', trust: 'registered_live_supply',
+      freshness: { state: 'current', validUntil: 50_000 },
+      commercialInfluence: { status: 'none' },
+    })
+  })
+
+  it.each([
+    ['commercial influence', (routes: CustomerRequestRoutePlan[]) => {
+      routes[0] = changed(routes[0]!, (value) => {
+        value.steps[0]!.commercialRelationship = {
+          kind: 'affiliate', summary: 'AE may receive a fee.', influencesEligibility: false,
+          influencesInclusion: false, influencesOrder: true, evidenceRefs: ['commercial:affiliate'],
+        }
+      })
+    }, 'commercial_influence'],
+    ['stale evidence', (routes: CustomerRequestRoutePlan[]) => {
+      routes[0] = changed(routes[0]!, (value) => { value.expiresAt = 5_000 })
+    }, 'stale_evidence'],
+    ['missing comparison evidence', (routes: CustomerRequestRoutePlan[]) => {
+      routes[0] = changed(routes[0]!, (value) => { delete value.steps[0]!.commercialRelationship })
+    }, 'comparison_evidence_missing'],
+  ] as const)('refuses to recommend when %s would make the rank misleading', (_case, mutate, reason) => {
+    const routes = [route({ amountMinor: 900, routePlanId: 'route:lower' }), route({ amountMinor: 1_200, routePlanId: 'route:higher' })]
+    mutate(routes)
+    const decision = projectCustomerRoutePlanDecision({
+      current: generation(1, routes),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.comparison).toMatchObject({ kind: 'unranked', reason })
+  })
+
+  it('separates routes that do not promise the same result instead of ranking them', () => {
+    const replacement = changed(route({ amountMinor: 800, routePlanId: 'route:replacement' }), (value) => {
+      value.steps[0]!.contractRef = {
+        capabilityId: 'generic.result.replace', version: 1, contractDigest: 'digest:replacement',
+      }
+      value.comparison.outcomeSignature = 'outcome:replacement'
+    })
+    const decision = projectCustomerRoutePlanDecision({
+      current: generation(1, [route({ amountMinor: 900 }), replacement]),
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.comparison).toMatchObject({
+      kind: 'incomparable',
+      summary: 'These ways forward promise different results, so AE has not ranked them against each other.',
+    })
   })
 
   it('derives a price-only delta from immutable generation material without reporting unchanged categories', () => {
@@ -515,6 +602,10 @@ function route(input: Readonly<{
         guaranteed: true, schemaIdentity: 'schema:result-reference' as never,
       }],
       cancellation: { kind: 'unsupported', evidenceRefs: ['cancellation:binding:one'] },
+      commercialRelationship: {
+        kind: 'none', summary: 'No commercial relationship.', influencesEligibility: false,
+        influencesInclusion: false, influencesOrder: false, evidenceRefs: ['commercial:none'],
+      },
       recovery: { idempotency: 'required', recovery: 'retry_safe' },
     }],
     edges: [],
@@ -525,7 +616,12 @@ function route(input: Readonly<{
     comparison: {
       fit: 'all_steps_viable', completeness: 'complete', dataExposureCount: 1,
       irreversibleEffectCount: 1, evidenceRequirementCount: 1, trust: 'registered_live_supply',
-      ordering: { kind: 'ranked', objective: 'lowest_maximum_price', position: 1 },
+      outcomeSignature: 'outcome:prepare', hardConstraints: 'satisfied', duration: 'not_declared',
+      recovery: 'retry_safe', freshnessValidUntil: 50_000,
+      ordering: {
+        kind: 'ranked', objective: 'lowest_maximum_price', position: 1,
+        evidenceRef: 'preference:lowest-price',
+      },
     },
     authority: 'proposal_only',
     routeDigest: `digest:${routePlanId}`,

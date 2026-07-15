@@ -683,6 +683,7 @@ async function compiledAggregate(backend: ReturnType<typeof convexTest>) {
       contractRef: model.contractRef, offeringRegistrationHash: offering.registrationHash,
       bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
+      commercialRelationship: offering.presentation.commercialRelationship,
       cancellation: binding.cancellation,
       ...(publication === undefined ? {} : {
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,
@@ -733,6 +734,7 @@ async function compileRefreshCandidate(
       contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
       offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
       price: offering.presentation.price,
+      commercialRelationship: offering.presentation.commercialRelationship,
       cancellation: binding.cancellation,
       ...(publication === undefined ? {} : {
         publicationRef: publication.publicationRef, publicationRevision: publication.revision,

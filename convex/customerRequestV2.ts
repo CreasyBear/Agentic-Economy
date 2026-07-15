@@ -1010,6 +1010,9 @@ export async function currentRoutePlanGenerationGraphStatus(
       && binding.readinessValidUntil >= route.expiresAt
       && binding.price !== undefined
       && canonicalDigest(binding.price) === canonicalDigest(step.price)
+      && step.commercialRelationship !== undefined
+      && binding.commercialRelationship !== undefined
+      && canonicalDigest(binding.commercialRelationship) === canonicalDigest(step.commercialRelationship)
       && step.cancellation !== undefined
       && canonicalDigest(binding.cancellation) === canonicalDigest(step.cancellation)
     )))
@@ -1037,6 +1040,10 @@ function registeredEvaluationBindingsFromEligibleSupply(
     offeringRegistrationHash: offering.registrationHash,
     bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    commercialRelationship: {
+      ...offering.presentation.commercialRelationship,
+      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
+    },
     cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
     ...(publication === undefined ? {} : {
       publicationRef: publication.publicationRef,
@@ -1151,6 +1158,9 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
     actions, candidates: evaluation.candidates, now: aggregate.snapshot.recordedAt,
     models,
     ...(evaluation.decisionPreference === undefined ? {} : { objective: evaluation.decisionPreference.objective }),
+    ...(evaluation.decisionPreference === undefined ? {} : {
+      objectiveEvidenceRef: evaluation.decisionPreference.evidenceRef,
+    }),
   })
   const unknownCostFailsClosed = routeGeneration === undefined
     && aggregate.outcome === 'unsupported'

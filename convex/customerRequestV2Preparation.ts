@@ -322,6 +322,10 @@ async function loadCurrentActionModel(
     contractRef: { capabilityId: binding.capabilityId, version: binding.version, contractDigest: binding.contractDigest },
     offeringRegistrationHash: offering.registrationHash, bindingRegistrationHash: binding.registrationHash,
     price: offering.presentation.price,
+    commercialRelationship: {
+      ...offering.presentation.commercialRelationship,
+      evidenceRefs: [...offering.presentation.commercialRelationship.evidenceRefs],
+    },
     cancellation: { ...binding.cancellation, evidenceRefs: [...binding.cancellation.evidenceRefs] },
   }))
   if (requestRegistrySnapshotDigest(bindings) !== aggregate.evaluation.registrySnapshotDigest
