@@ -111,6 +111,15 @@ export function projectCustomerRoutePlanDecision(input: Readonly<{
     }),
     routes: Object.freeze(routes),
     comparison: projectDecisionComparison(input.current.routes, routes),
+    actions: Object.freeze({
+      confirm: Object.freeze({ kind: 'confirm_current_option' as const, createsAuthority: true as const }),
+      change: Object.freeze({
+        kind: 'revise_request' as const, createsAuthority: false as const, preservesRequest: true as const,
+      }),
+      decline: Object.freeze({
+        kind: 'leave_unconfirmed' as const, createsAuthority: false as const, preservesRequest: true as const,
+      }),
+    }),
     changes: projectChanges(
       input.current, input.previous, input.businessNames, input.capabilitySemantics,
     ),

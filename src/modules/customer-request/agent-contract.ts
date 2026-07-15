@@ -354,6 +354,17 @@ export const customerRoutePlanDecisionSchema = z.object({
       groups: z.array(z.object({ outcomeRef: z.string(), routeRefs: z.array(z.string()).min(1) }).strict()).min(2),
     }).strict(),
   ]),
+  actions: z.object({
+    confirm: z.object({
+      kind: z.literal('confirm_current_option'), createsAuthority: z.literal(true),
+    }).strict(),
+    change: z.object({
+      kind: z.literal('revise_request'), createsAuthority: z.literal(false), preservesRequest: z.literal(true),
+    }).strict(),
+    decline: z.object({
+      kind: z.literal('leave_unconfirmed'), createsAuthority: z.literal(false), preservesRequest: z.literal(true),
+    }).strict(),
+  }).strict(),
   changes: z.union([
     z.object({ kind: z.literal('initial') }).strict(),
     z.object({ kind: z.literal('unchanged'), previousGenerationRef: z.string() }).strict(),

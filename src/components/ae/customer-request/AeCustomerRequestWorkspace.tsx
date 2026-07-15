@@ -12,6 +12,7 @@ type WorkspaceState =
   | Readonly<{ kind: 'submitting' }>
   | Readonly<{ kind: 'request'; projection: CustomerRequestView }>
   | Readonly<{ kind: 'comparing'; projection: CustomerRequestView }>
+  | Readonly<{ kind: 'reviewing'; projection: CustomerRequestView; routeRef: string }>
   | Readonly<{ kind: 'confirming'; projection: CustomerRequestView; routeRef: string }>
   | Readonly<{ kind: 'refreshing'; projection: CustomerRequestView }>
   | Readonly<{
@@ -21,6 +22,7 @@ type WorkspaceState =
     }>
   | Readonly<{ kind: 'error'; message: string; authenticationRequired: boolean }>
 type ConversationTurn = Readonly<{ speaker: 'customer' | 'ae'; text: string }>
+type CustomerRoute = NonNullable<CustomerRequestView['decision']>['routes'][number]
 
 const optionTimeFormatter = new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -83,6 +85,14 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
     setEditingRevision(undefined)
     requestIdentityRef.current = undefined
     setState({ kind: 'idle' })
+  }
+
+  function reviewRoute(projection: CustomerRequestView, routeRef: string) {
+    setState({ kind: 'reviewing', projection, routeRef })
+  }
+
+  function leaveRouteReview(projection: CustomerRequestView) {
+    setState({ kind: 'request', projection })
   }
 
   async function continueRequest(projection: CustomerRequestView) {
@@ -250,13 +260,13 @@ export function AeCustomerRequestWorkspace({ initialNeed = '' }: AeCustomerReque
         </form>
         <Text type="supporting" color="secondary" className="text-center">No budget or full specification required. Keep contact, payment, and account details until AE asks for them.</Text>
         {editingRevision !== undefined ? <Text type="supporting" color="secondary">Editing revision {editingRevision} of this Request.</Text> : null}
-        {state.kind === 'error' ? <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
-      </section> : <RequestResult state={state} compare={compare} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
+        {state.kind === 'error' ? <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} /> : <StartExamples />}
+      </section> : <RequestResult state={state} compare={compare} reviewRoute={reviewRoute} leaveRouteReview={leaveRouteReview} confirmRoute={confirmRoute} actOnRoute={actOnRoute} authorize={authorize} refresh={refresh} continueRequest={continueRequest} edit={edit} restart={restart} answer={answer} setAnswer={setAnswer} turns={turns} />}
     </main>
   )
 }
 
-function RequestResult({ state, compare, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
+function RequestResult({ state, compare, reviewRoute, leaveRouteReview, confirmRoute, actOnRoute, authorize, refresh, continueRequest, edit, restart, answer, setAnswer, turns }: { state: WorkspaceState; compare: (projection: CustomerRequestView) => Promise<void>; reviewRoute: (projection: CustomerRequestView, routeRef: string) => void; leaveRouteReview: (projection: CustomerRequestView) => void; confirmRoute: (projection: CustomerRequestView, routeRef: string) => Promise<void>; actOnRoute: (projection: CustomerRequestView, operation: 'run' | 'cancellation') => Promise<void>; authorize: (projection: CustomerRequestView) => Promise<void>; refresh: (projection: CustomerRequestView) => Promise<void>; continueRequest: (projection: CustomerRequestView) => Promise<void>; edit: (projection: CustomerRequestView) => void; restart: () => void; answer: string; setAnswer: (answer: string) => void; turns: readonly ConversationTurn[] }) {
   if (state.kind === 'error') return <Card padding={5} className="min-w-0" aria-live="polite"><div className="grid gap-4"><Heading level={2}>Request unavailable</Heading><Text color="secondary">{state.message}</Text>{state.authenticationRequired ? <Button label="Sign in to continue" href="/sign-in" variant="primary" /> : null}</div></Card>
   if (state.kind === 'conflict') return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
     <div className="grid gap-4">
@@ -270,8 +280,11 @@ function RequestResult({ state, compare, confirmRoute, actOnRoute, authorize, re
   if (state.kind === 'request' && state.projection.confirmation !== undefined) {
     return <RouteConfirmationCard projection={state.projection} turns={turns} start={() => actOnRoute(state.projection, 'run')} edit={() => edit(state.projection)} restart={restart} />
   }
+  if (state.kind === 'reviewing') {
+    return <RouteReviewCard projection={state.projection} routeRef={state.routeRef} turns={turns} confirm={() => confirmRoute(state.projection, state.routeRef)} decline={() => leaveRouteReview(state.projection)} edit={() => edit(state.projection)} restart={restart} />
+  }
   if (state.kind === 'request' && state.projection.decision !== undefined) {
-    return <RouteDecisionCard projection={state.projection} turns={turns} confirm={(routeRef) => confirmRoute(state.projection, routeRef)} check={() => compare(state.projection)} edit={() => edit(state.projection)} restart={restart} />
+    return <RouteDecisionCard projection={state.projection} turns={turns} review={(routeRef) => reviewRoute(state.projection, routeRef)} check={() => compare(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   }
   if (state.kind === 'request' && state.projection.state === 'options_ready') return <OptionsCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
@@ -294,10 +307,10 @@ function conflictExplanation(reason: Extract<CustomerRequestProjection, { kind: 
   return 'This operation key was already used for different work.'
 }
 
-function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }: {
+function RouteDecisionCard({ projection, turns, review, check, edit, restart }: {
   projection: CustomerRequestView
   turns: readonly ConversationTurn[]
-  confirm: (routeRef: string) => Promise<void>
+  review: (routeRef: string) => void
   check: () => Promise<void>
   edit: () => void
   restart: () => void
@@ -365,52 +378,16 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
             </div>
           </div>
           <div className="grid gap-2">
-            <Text weight="semibold">What would be shared</Text>
-            {route.dataUse.recipients.length === 0
-              ? <Text color="secondary">No information sharing is declared for this way forward.</Text>
-              : <ul className="grid gap-2 text-sm text-secondary">
-                  {route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>
-                    <strong>{recipient.name}</strong> — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}
-                  </li>)}
-                </ul>}
+            <Text weight="semibold">Why it fits</Text>
+            <Text color="secondary">It covers the requested result and every constraint AE could check.</Text>
           </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">What could change</Text>
-            {route.effects.length === 0
-              ? <Text color="secondary">No external consequence is declared for this way forward.</Text>
-              : <ul className="grid gap-1 text-sm text-secondary">
-                  {route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>
-                    {effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}
-                  </li>)}
-                </ul>}
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-secondary">
+            <span>{route.dataUse.recipientCount} information {route.dataUse.recipientCount === 1 ? 'recipient' : 'recipients'}</span>
+            <span>{route.comparison.irreversibleEffectCount} irreversible {route.comparison.irreversibleEffectCount === 1 ? 'effect' : 'effects'}</span>
+            <span>{route.comparison.recovery === 'retry_safe' ? 'Safe retry after confirmed failure' : 'Check required before retry'}</span>
+            <span>{route.comparison.duration === 'not_declared' ? 'Timing not declared' : route.comparison.duration}</span>
           </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">What still needs confirmation</Text>
-            <Text color="secondary">{route.uncertainty.length === 0
-              ? 'No uncertainty is declared for this way forward.'
-              : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text>
-          </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">Timing and comparison basis</Text>
-            <Text color="secondary">{route.comparison.duration === 'not_declared'
-              ? 'Completion timing has not been declared.'
-              : route.comparison.duration}</Text>
-            <Text type="supporting" color="secondary">This option satisfies the registered hard constraints and is supported by {route.comparison.evidenceCount} declared evidence requirement{route.comparison.evidenceCount === 1 ? '' : 's'}.</Text>
-          </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">How commercial relationships affect this option</Text>
-            <Text color="secondary">{route.comparison.commercialInfluence.status === 'unknown'
-              ? 'AE does not have enough commercial relationship evidence to recommend this option.'
-              : route.comparison.commercialInfluence.status === 'none'
-                ? 'No registered commercial relationship affects this option.'
-                : route.comparison.commercialInfluence.summaries.join(' ')}</Text>
-          </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">What AE would need back</Text>
-            <ul className="grid gap-1 text-sm text-secondary">
-              {route.evidence.map((evidence) => <li key={`${evidence.label}:${evidence.purpose}`}>{evidence.label}</li>)}
-            </ul>
-          </div>
+          <RouteImportantDetails route={route} />
           <details className="rounded-md border border-border bg-surface p-4">
             <summary className="min-h-11 cursor-pointer font-semibold">How this would work</summary>
             <ol className="mt-3 grid gap-3 text-sm text-secondary">
@@ -422,25 +399,8 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
               </li>)}
             </ol>
           </details>
-          <div className="grid gap-2">
-            <Text weight="semibold">If something goes wrong</Text>
-            <ul className="grid gap-1 text-sm text-secondary">
-              {route.recovery.map((recovery) => <li key={recovery.step}>
-                Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe'
-                  ? 'AE can safely retry after a confirmed failure.'
-                  : 'AE must check what happened before any retry.'}
-              </li>)}
-            </ul>
-            <Text type="supporting" color="secondary">{route.fallback.available
-              ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before confirmation.`
-              : 'No alternative way is currently declared.'}</Text>
-          </div>
-          <div className="grid gap-2">
-            <Text weight="semibold">Cancellation</Text>
-            <Text color="secondary">{route.cancellation.summary}</Text>
-          </div>
           {route.availability === 'current' && route.maximumTotalCost.kind === 'known'
-            ? <Button label={`Confirm ${route.result.summary.replace(/[.!?]+$/u, '')}`} variant="primary" clickAction={() => void confirm(route.routeRef)} />
+            ? <Button label={`Review ${route.result.summary.replace(/[.!?]+$/u, '')}`} variant="primary" clickAction={() => review(route.routeRef)} />
             : <Button label="Check current options" variant="secondary" clickAction={() => void check()} />}
         </article>
       </Card>)}
@@ -451,6 +411,138 @@ function RouteDecisionCard({ projection, turns, confirm, check, edit, restart }:
     </Card>
     <RecoveryActions edit={edit} restart={restart} />
   </section>
+}
+
+function RouteImportantDetails({ route }: { route: CustomerRoute }) {
+  return <details className="rounded-md border border-border bg-surface p-4">
+    <summary className="min-h-11 cursor-pointer font-semibold">Important details</summary>
+    <div className="mt-4 grid gap-5">
+      <RouteDisclosureDetails route={route} review={false} />
+    </div>
+  </details>
+}
+
+function RouteReviewCard({ projection, routeRef, turns, confirm, decline, edit, restart }: {
+  projection: CustomerRequestView
+  routeRef: string
+  turns: readonly ConversationTurn[]
+  confirm: () => Promise<void>
+  decline: () => void
+  edit: () => void
+  restart: () => void
+}) {
+  const route = projection.decision?.routes.find((candidate) => candidate.routeRef === routeRef)
+  if (route === undefined) return <Card padding={5} className="mx-auto w-full max-w-4xl" aria-live="polite">
+    <div className="grid gap-4">
+      <Heading level={2}>This choice is no longer available.</Heading>
+      <Text color="secondary">Return to the current options before deciding. Nothing was confirmed or shared.</Text>
+      <Button label="Return to options" variant="primary" clickAction={decline} />
+    </div>
+  </Card>
+  return <section className="mx-auto grid w-full max-w-4xl gap-6" aria-live="polite">
+    <Conversation turns={turns} />
+    <WorkingUnderstanding projection={projection} correct={edit} />
+    <header className="grid gap-2">
+      <Text className="text-sm font-semibold text-accent">Your choice</Text>
+      <Heading level={2} className="text-3xl">Review before you confirm</Heading>
+      <Text color="secondary">This is the exact boundary AE will use. Confirming allows AE to act within it, but does not start the work.</Text>
+    </header>
+    <Card padding={5}>
+      <div className="grid gap-6">
+        <div className="grid gap-1">
+          <Heading level={3}>{route.result.summary}</Heading>
+          <Text color="secondary">Through {businessList(route.businesses.map(({ name }) => name))}</Text>
+          {route.result.deliverables.length === 0 ? null : <Text type="supporting" color="secondary">Expected result: {route.result.deliverables.join(', ')}</Text>}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Text type="supporting" weight="semibold">Maximum cost</Text>
+            <Text type="large" weight="semibold">{route.maximumTotalCost.kind === 'known'
+              ? `Maximum ${formatMoney(route.maximumTotalCost.currency, route.maximumTotalCost.amountMinor)}`
+              : 'Price needs confirmation'}</Text>
+          </div>
+          <div>
+            <Text type="supporting" weight="semibold">Confirm before</Text>
+            <Text color="secondary">{formatOptionTime(route.validUntil)}</Text>
+          </div>
+        </div>
+        <RouteDisclosureDetails route={route} review />
+        <Text type="supporting" color="secondary">Choice code {route.quoteDigest}</Text>
+        <div className="rounded-md border border-border bg-surface p-4">
+          <Text weight="semibold">Nothing has started.</Text>
+          <Text color="secondary" className="mt-1">No business will be contacted and no information will be shared until you confirm this choice and then separately start it.</Text>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Button label="Confirm this choice" variant="primary" clickAction={confirm} />
+          <Button label="Not now" variant="secondary" clickAction={decline} />
+        </div>
+      </div>
+    </Card>
+    <RecoveryActions edit={edit} restart={restart} />
+  </section>
+}
+
+function RouteDisclosureDetails({ route, review }: { route: CustomerRoute; review: boolean }) {
+  return <>
+    <div className="grid gap-2">
+      <Text weight="semibold">What would be shared</Text>
+      {route.dataUse.recipients.length === 0
+        ? <Text color="secondary">{review ? 'No information would be shared.' : 'No information sharing is declared for this way forward.'}</Text>
+        : <ul className="grid gap-2 text-sm text-secondary">
+            {route.dataUse.recipients.map((recipient) => <li key={recipient.recipientRef}>
+              <strong>{recipient.name}</strong> — {recipient.purposes.map(readableLabel).join(', ')}. Fields: {recipient.fields.map(({ label, classification }) => `${label} (${classification})`).join(', ')}
+            </li>)}
+          </ul>}
+    </div>
+    <div className="grid gap-2">
+      <Text weight="semibold">What could change</Text>
+      {route.effects.length === 0
+        ? <Text color="secondary">No external change is declared.</Text>
+        : <ul className="grid gap-1 text-sm text-secondary">
+            {route.effects.map((effect) => <li key={`${effect.kind}:${effect.reversibility}`}>
+              {effectLabel(effect.kind)} — {reversibilityLabel(effect.reversibility)}
+            </li>)}
+          </ul>}
+    </div>
+    <div className="grid gap-2">
+      <Text weight="semibold">What remains uncertain</Text>
+      <Text color="secondary">{route.uncertainty.length === 0
+        ? `No uncertainty is declared for this ${review ? 'choice' : 'way forward'}.`
+        : route.uncertainty.map(uncertaintyLabel).join(', ')}</Text>
+      <Text type="supporting" color="secondary">{route.comparison.duration === 'not_declared'
+        ? 'Completion timing has not been declared.'
+        : route.comparison.duration}</Text>
+    </div>
+    <div className="grid gap-2">
+      <Text weight="semibold">Commercial relationships</Text>
+      <Text color="secondary">{route.comparison.commercialInfluence.status === 'unknown'
+        ? 'AE does not have enough commercial relationship evidence to recommend this option.'
+        : route.comparison.commercialInfluence.status === 'none'
+          ? 'No registered commercial relationship affects this option.'
+          : route.comparison.commercialInfluence.summaries.join(' ')}</Text>
+    </div>
+    <div className="grid gap-2">
+      <Text weight="semibold">If something goes wrong</Text>
+      <ul className="grid gap-1 text-sm text-secondary">
+        {route.recovery.map((recovery) => <li key={recovery.step}>
+          Step {recovery.step}, {recovery.businessName}: {recovery.posture === 'retry_safe'
+            ? 'AE can safely retry after a confirmed failure.'
+            : 'AE must check what happened before any retry.'}
+        </li>)}
+      </ul>
+      <Text type="supporting" color="secondary">{route.fallback.available
+        ? `${route.fallback.alternatives.length} alternative ${route.fallback.alternatives.length === 1 ? 'way is' : 'ways are'} available before confirmation.`
+        : 'No alternative way is currently declared.'}</Text>
+    </div>
+    <div className="grid gap-2">
+      <Text weight="semibold">Cancellation</Text>
+      <Text color="secondary">{route.cancellation.summary}</Text>
+    </div>
+    <div className="grid gap-2">
+      <Text weight="semibold">Evidence expected</Text>
+      <Text color="secondary">{route.evidence.map(({ label }) => label).join(', ') || 'No completion evidence is declared.'}</Text>
+    </div>
+  </>
 }
 
 function RouteConfirmationCard({ projection, turns, start, edit, restart }: {

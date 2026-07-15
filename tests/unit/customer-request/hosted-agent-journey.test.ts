@@ -165,6 +165,11 @@ function routesReadyView() {
         kind: 'single',
         summary: 'One current way forward is available. This is not a comparison or recommendation.',
       },
+      actions: {
+        confirm: { kind: 'confirm_current_option', createsAuthority: true },
+        change: { kind: 'revise_request', createsAuthority: false, preservesRequest: true },
+        decline: { kind: 'leave_unconfirmed', createsAuthority: false, preservesRequest: true },
+      },
       changes: { kind: 'initial' },
       nextBoundary: { kind: 'confirmation', authorityCreated: false },
     },

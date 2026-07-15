@@ -153,7 +153,7 @@ describe('customer Request workspace', () => {
 
   it('renders the shared RoutePlan decision as an outcome, not routing machinery', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-route' })
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
       kind: 'request', requestRef: 'request:route', revision: 2,
       routeGenerationRef: 'generation:two', state: 'routes_ready',
       summary: 'Prepare a result using registered businesses.', nextAction: 'inspect_routes',
@@ -200,6 +200,11 @@ describe('customer Request workspace', () => {
           kind: 'single',
           summary: 'One current way forward is available. This is not a comparison or recommendation.',
         },
+        actions: {
+          confirm: { kind: 'confirm_current_option', createsAuthority: true },
+          change: { kind: 'revise_request', createsAuthority: false, preservesRequest: true },
+          decline: { kind: 'leave_unconfirmed', createsAuthority: false, preservesRequest: true },
+        },
         changes: {
           kind: 'changed', previousGenerationRef: 'generation:one',
           items: [
@@ -232,7 +237,8 @@ describe('customer Request workspace', () => {
         },
         nextBoundary: { kind: 'confirmation', authorityCreated: false },
       },
-    })))
+    }))
+    vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
@@ -245,16 +251,39 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Through North Star Services and City Ledger')).toBeTruthy()
     expect(screen.getByText('Maximum $14.00')).toBeTruthy()
     expect(screen.queryByText(/Option fingerprint/i)).toBeNull()
-    expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
+    expect(screen.getByText('It covers the requested result and every constraint AE could check.')).toBeTruthy()
+    expect(screen.getByText('2 information recipients')).toBeTruthy()
+    expect(screen.getByText('1 irreversible effect')).toBeTruthy()
+    expect(screen.getByText(/Fields: Request \(public\)/).closest('details')?.hasAttribute('open')).toBe(false)
+    expect(screen.getByText('City Ledger will follow step 1.').closest('details')?.hasAttribute('open')).toBe(false)
+    fireEvent.click(screen.getByText('Important details'))
+    expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
     expect(screen.getByText(/Information would be shared/)).toBeTruthy()
     expect(screen.getByText('No uncertainty is declared for this way forward.')).toBeTruthy()
     expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Confirm Prepare a governed result' })).toBeTruthy()
-    expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
+    fireEvent.click(screen.getByText('How this would work'))
     expect(screen.getByText('City Ledger will follow step 1.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Review Prepare a governed result' })).toBeTruthy()
+    expect(screen.getByText(/Nothing has been authorized or shared/)).toBeTruthy()
     expect(screen.queryByText(/capability|binding|transport|graph node/i)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review Prepare a governed result' }))
+    expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
+    expect(screen.getByText('Prepare a governed result.')).toBeTruthy()
+    expect(screen.getByText('Maximum $14.00')).toBeTruthy()
+    expect(screen.getByText(/Fields: Request \(public\)/)).toBeTruthy()
+    expect(screen.getByText(/cannot be reversed automatically/)).toBeTruthy()
+    expect(screen.getByText('The businesses do not publish a cancellation path for this option.')).toBeTruthy()
+    expect(screen.getByText('Choice code quote:opaque')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Confirm this choice' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    expect(await screen.findByRole('button', { name: 'Review Prepare a governed result' })).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('confirms the displayed choice, then starts and follows it without exposing kernel choreography', async () => {
@@ -272,6 +301,11 @@ describe('customer Request workspace', () => {
         comparison: {
           kind: 'single' as const,
           summary: 'One current way forward is available. This is not a comparison or recommendation.',
+        },
+        actions: {
+          confirm: { kind: 'confirm_current_option' as const, createsAuthority: true as const },
+          change: { kind: 'revise_request' as const, createsAuthority: false as const, preservesRequest: true as const },
+          decline: { kind: 'leave_unconfirmed' as const, createsAuthority: false as const, preservesRequest: true as const },
         },
         nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
       },
@@ -303,7 +337,14 @@ describe('customer Request workspace', () => {
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Prepare a result' } })
     fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm Result from route:confirm' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review Result from route:confirm' }))
+
+    expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
+    expect(screen.getByText('Choice code quote:route:confirm')).toBeTruthy()
+    expect(screen.getByText('No information would be shared.')).toBeTruthy()
+    expect(screen.getByText('No cancellation path is published.')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm this choice' }))
 
     expect(await screen.findByText('Choice confirmed')).toBeTruthy()
     expect(screen.getByText(/Nothing has started yet/)).toBeTruthy()

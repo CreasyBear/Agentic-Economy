@@ -74,6 +74,11 @@ const projection = {
       kind: 'single' as const,
       summary: 'One current way forward is available. This is not a comparison or recommendation.',
     },
+    actions: {
+      confirm: { kind: 'confirm_current_option' as const, createsAuthority: true as const },
+      change: { kind: 'revise_request' as const, createsAuthority: false as const, preservesRequest: true as const },
+      decline: { kind: 'leave_unconfirmed' as const, createsAuthority: false as const, preservesRequest: true as const },
+    },
     changes: { kind: 'initial' as const },
     nextBoundary: { kind: 'confirmation' as const, authorityCreated: false as const },
   },

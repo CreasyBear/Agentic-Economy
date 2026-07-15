@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: customer-product-frontier
 status: active
-stopped_at: "Comparable customer choices are source-complete at eca1890d; next frontier is the end-to-end decision experience #125"
+stopped_at: "Issue #125 is in progress: outcome-led choice review is source-complete locally; fresh-context comprehension proof remains open"
 last_updated: "2026-07-15"
 progress:
   total_phases: 6
@@ -54,6 +54,8 @@ Anonymous Request frontier (2026-07-15): [Build the anonymous Request journey: f
 
 Comparable choice frontier (2026-07-15): [Define comparable RoutePlan recommendation and commercial influence](https://github.com/CreasyBear/Agentic-Economy/issues/124) is source-complete at exact revision `eca1890d`. Human and external-agent projections now distinguish one way forward, an evidence-backed recommendation, an intentionally unranked set, and incomparable promised outcomes. A recommendation requires substitutable current routes, complete registered comparison evidence, one explicit customer priority, and a unique lead; stale evidence, missing evidence, ties, different outcomes, or decision-affecting commercial influence fail closed. Commercial relationships are registered supply material and invalidate prepared choices when they change. Full unit and integration suites, TypeScript, lint, Convex codegen, import/type/copy/SEO/UI standards, the production build, and six compact/wide keyboard checks passed. This is source/local labelled-sandbox contract proof only; hosted decision readback, useful real recommendations, real supply, booking, payment, fulfilment, and customer value remain unproven.
 
+Decision experience frontier (2026-07-15): [Prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125) is in progress. The human Request surface now presents the promised result, business, maximum cost, expiry and decision-level tradeoffs first; keeps disclosure, effects, uncertainty, commercial influence, recovery and route steps behind deliberate inspection; and separates authority-free review and decline from the existing exact confirmation command. The external-agent projection declares equivalent confirm, revise and leave-unconfirmed semantics. TypeScript, lint, Convex codegen, 1,286 unit tests, 232 integration tests, import/type/copy/SEO/UI standards, production build and compact/wide real-browser tests pass. This does not close the issue: its predeclared fresh-context comprehension threshold and hosted readback remain unproven, and no new approval or execution model was introduced.
+
 Reason: Phase 35 proved the old repo has useful product insight but poor launch architecture. Six of seven deferred surfaces were spine-woven, so pruning in place would spend launch energy untangling old coupling instead of shipping a clean product.
 
 ## Customer product sequence
@@ -92,7 +94,7 @@ The remaining Wayfinder work is ordered by customer comprehension and evidence, 
 
 ## Next action
 
-The next unclaimed frontier is [prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125). Claim it only in a new logical ticket session. Start from the source-complete comparison contract at `eca1890d` and test the full customer decision, not another schema seam: can a person or external AI move from an ordinary Request to a legible choice, understand why it is or is not recommended, inspect the material cost/data/effect/recovery tradeoffs, revise the Request, and reach confirmation without seeing kernel choreography or accidentally creating authority?
+The active claimed frontier is [prove the RoutePlan decision experience before approval](https://github.com/CreasyBear/Agentic-Economy/issues/125). The next proof is fresh-context comprehension against the implemented decision surface: can a person or external AI identify the chosen result, maximum cost, data release, effect, expiry/change and cancellation/recovery without seeing kernel choreography or accidentally creating authority? Do not advance to issue #122 until the predeclared threshold is met and the current revision is read back through its intended hosted surface.
 
 The active orchestration map is `.planning/scopes/SCOPE-EXECUTION-READINESS.md`. It distinguishes source/local execution from deployed/provider proof, points Scopes 2-5 at active lightweight indexes instead of stale archived-only paths, and keeps issue #5, issue #33, issue #36, PM-01, PM-02, PM-04, PM-05, and the 14-day bootstrap gate as explicit blockers.
 

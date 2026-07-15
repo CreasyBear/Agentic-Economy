@@ -341,6 +341,15 @@ const customerRouteDecision = v.object({
       groups: v.array(v.object({ outcomeRef: v.string(), routeRefs: v.array(v.string()) })),
     }),
   ),
+  actions: v.object({
+    confirm: v.object({ kind: v.literal('confirm_current_option'), createsAuthority: v.literal(true) }),
+    change: v.object({
+      kind: v.literal('revise_request'), createsAuthority: v.literal(false), preservesRequest: v.literal(true),
+    }),
+    decline: v.object({
+      kind: v.literal('leave_unconfirmed'), createsAuthority: v.literal(false), preservesRequest: v.literal(true),
+    }),
+  }),
   changes: v.union(
     v.object({ kind: v.literal('initial') }),
     v.object({ kind: v.literal('unchanged'), previousGenerationRef: v.string() }),
