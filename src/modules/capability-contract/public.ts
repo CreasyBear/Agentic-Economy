@@ -65,6 +65,7 @@ const customerAnnotation = z.strictObject({
   document: z.enum(['input', 'output']),
   pointer: z.string().startsWith('/').max(500).refine(pointerSyntaxIsCanonical),
   label: z.string().trim().min(1).max(160),
+  prompt: z.string().trim().min(1).max(240).optional(),
   role: z.enum(['request', 'constraint', 'comparison', 'commitment', 'result', 'completion_evidence', 'recovery']),
   inference: z.enum(['allowed', 'customer_required']).optional(),
 })
@@ -134,6 +135,7 @@ export type CapabilityInputSemantic = Readonly<{
   semanticIdentity?: string
   inputPointer: string
   label: string
+  prompt?: string
   role: 'request' | 'constraint' | 'comparison' | 'commitment'
   inference: 'allowed' | 'customer_required'
   stage: CapabilityInputStage
@@ -379,6 +381,7 @@ export function openCapabilityDecisionModel(contract: CapabilityContract): Capab
       ...(annotation.semanticIdentity === undefined ? {} : { semanticIdentity: annotation.semanticIdentity }),
       inputPointer: annotation.pointer,
       label: annotation.label,
+      ...(annotation.prompt === undefined ? {} : { prompt: annotation.prompt }),
       role: annotation.role as CapabilityInputSemantic['role'],
       inference: annotation.inference ?? 'allowed',
       stage: annotation.role === 'commitment' ? 'commitment' : 'option_selection',

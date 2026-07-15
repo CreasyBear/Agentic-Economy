@@ -472,6 +472,7 @@ const missingTargetV2Value = v.object({
 const informationRequirementV2Value = v.union(
   v.object({
     kind: v.literal('contract_fact'), requirementKey: v.string(), customerLabel: v.string(),
+    customerPrompt: v.optional(v.string()),
     targets: v.array(missingTargetV2Value),
     impact: v.object({ affectedCandidates: v.array(v.string()), probesEnabled: v.array(v.string()) }),
     requirementDigest: v.string(),
@@ -517,7 +518,7 @@ export const requestEvaluationCandidateV2Value = v.object({
   viability: v.union(
     v.object({ kind: v.literal('viable') }),
     v.object({ kind: v.literal('blocked_on_information'), inputs: v.array(v.object({
-      ...missingTargetV2Value.fields, customerLabel: v.string(),
+      ...missingTargetV2Value.fields, customerLabel: v.string(), customerPrompt: v.optional(v.string()),
     })) }),
     v.object({ kind: v.literal('incompatible'), issueKeywords: v.array(v.string()) }),
   ),

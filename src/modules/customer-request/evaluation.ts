@@ -97,12 +97,16 @@ export type MissingInputTarget = Readonly<{
   schemaIdentity: PointedSchemaIdentity
 }>
 
-export type MissingInputDescriptor = MissingInputTarget & Readonly<{ customerLabel: string }>
+export type MissingInputDescriptor = MissingInputTarget & Readonly<{
+  customerLabel: string
+  customerPrompt?: string
+}>
 
 export type ContractFactInformationRequirement = Readonly<{
   kind: 'contract_fact'
   requirementKey: string
   customerLabel: string
+  customerPrompt?: string
   targets: readonly MissingInputTarget[]
   impact: Readonly<{
     affectedCandidates: readonly string[]
@@ -255,6 +259,7 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
                 inputPointer: semantic.inputPointer,
                 schemaIdentity: semantic.schemaIdentity,
                 customerLabel: semantic.label,
+                ...(semantic.prompt === undefined ? {} : { customerPrompt: semantic.prompt }),
               }))),
             })
           : assessment.kind === 'incompatible' ? Object.freeze({
@@ -426,6 +431,7 @@ function factsForModel(facts: readonly RequestFact[], model: CapabilityDecisionM
 function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]): InformationRequirement | undefined {
   const groups = new Map<string, {
     customerLabel: string
+    customerPrompt?: string
     targets: MissingInputTarget[]
     affectedCandidates: string[]
     probesEnabled: string[]
@@ -433,9 +439,15 @@ function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]
   for (const candidate of candidates) {
     if (candidate.viability.kind !== 'blocked_on_information') continue
     for (const missing of candidate.viability.inputs) {
-      const groupKey = canonicalDigest({ customerLabel: missing.customerLabel, schemaIdentity: missing.schemaIdentity })
+      const groupKey = canonicalDigest({
+        customerLabel: missing.customerLabel,
+        ...(missing.customerPrompt === undefined ? {} : { customerPrompt: missing.customerPrompt }),
+        schemaIdentity: missing.schemaIdentity,
+      })
       const group = groups.get(groupKey) ?? {
-        customerLabel: missing.customerLabel, targets: [], affectedCandidates: [], probesEnabled: [],
+        customerLabel: missing.customerLabel,
+        ...(missing.customerPrompt === undefined ? {} : { customerPrompt: missing.customerPrompt }),
+        targets: [], affectedCandidates: [], probesEnabled: [],
       }
       group.targets.push(targetFromMissing(missing))
       group.affectedCandidates.push(candidate.candidateRef)
@@ -459,9 +471,14 @@ function chooseNextRequirement(candidates: readonly RequestEvaluationCandidate[]
     kind: 'contract_fact',
     requirementKey,
     customerLabel: selected.customerLabel,
+    ...(selected.customerPrompt === undefined ? {} : { customerPrompt: selected.customerPrompt }),
     targets,
     impact,
-    requirementDigest: canonicalDigest({ requirementKey, customerLabel: selected.customerLabel, targets, impact }),
+    requirementDigest: canonicalDigest({
+      requirementKey, customerLabel: selected.customerLabel,
+      ...(selected.customerPrompt === undefined ? {} : { customerPrompt: selected.customerPrompt }),
+      targets, impact,
+    }),
   })
 }
 

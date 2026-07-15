@@ -83,7 +83,7 @@ type RequestEvaluationProjectionInput = Readonly<{
   posture: 'needs_information' | 'progress_available' | 'unsupported'
   nextRequirement?: Readonly<
     | { kind: 'intent_direction'; prompt: string }
-    | { kind: 'contract_fact'; requirementKey: string; customerLabel: string }
+    | { kind: 'contract_fact'; requirementKey: string; customerLabel: string; customerPrompt?: string }
   >
   preparationDisclosure?: Readonly<{
     maximumRecipients: number
@@ -146,7 +146,9 @@ export function projectRequestEvaluation(input: Readonly<{
       ? { kind: 'intent_direction', prompt: input.evaluation.nextRequirement.prompt, answerKind: 'natural_language' }
       : {
           kind: 'contract_fact', requirementKey: input.evaluation.nextRequirement.requirementKey,
-          prompt: input.evaluation.nextRequirement.customerLabel, answerKind: 'typed_value',
+          prompt: input.evaluation.nextRequirement.customerPrompt
+            ?? 'What else should AE know to find the right options?',
+          answerKind: 'typed_value',
         },
     criteria,
   })

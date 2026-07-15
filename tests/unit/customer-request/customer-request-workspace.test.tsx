@@ -271,6 +271,28 @@ describe('customer Request workspace', () => {
     }))
   })
 
+  it('presents the full request as a customer fact instead of a provider question', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'request-label' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:label', revision: 1, state: 'ready_to_compare',
+      summary: 'Find a labelled service and tell me what it costs.',
+      nextAction: 'prepare_options', missingFields: [], options: [],
+      criteria: [{
+        label: 'What should the first business resolve?',
+        value: 'Find a labelled service and tell me what it costs.', basis: 'extracted_from_request',
+      }],
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Find a labelled service and tell me what it costs.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByText(/Request:/)).toBeTruthy()
+    expect(screen.queryByText(/What should the first business resolve\?/)).toBeNull()
+  })
+
   it('renders the shared RoutePlan decision as an outcome, not routing machinery', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-route' })
     const fetchMock = vi.fn().mockResolvedValue(Response.json({

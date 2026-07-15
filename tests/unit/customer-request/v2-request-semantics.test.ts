@@ -13,6 +13,7 @@ import {
   type RegisteredSupplyPrice,
 } from '@/modules/customer-request/evaluation'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
+import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 import {
   routePlanGenerationIsInternallyConsistent,
   routePlanGenerationMaterialDigest,
@@ -360,6 +361,54 @@ describe('V2 Request semantics', () => {
     expect(evaluation.nextRequirement.impact.probesEnabled)
       .toEqual(evaluation.nextRequirement.impact.affectedCandidates)
     expect(evaluation.nextRequirement).not.toMatchObject({ customerLabel: 'Option identifier' })
+  })
+
+  it('keeps a registered fact label separate from the question shown to the customer', () => {
+    const document = capabilityContractV2({
+      customerAnnotations: [
+        {
+          annotationId: 'area', document: 'input', pointer: '/request', label: 'Area',
+          prompt: 'Which area should the business cover?', role: 'constraint', inference: 'customer_required',
+        },
+        {
+          annotationId: 'result', document: 'output', pointer: '/result',
+          label: 'Result', role: 'completion_evidence',
+        },
+      ],
+    })
+    const model = openCapabilityDecisionModel(defineCapabilityContract(document))
+    const input = requiredInput(model, 'area')
+    const candidate = { ...supply('binding:label-and-prompt', model), model }
+    const missing = evaluateCustomerRequestSnapshot({
+      requestId: 'request:label-and-prompt', requestRevision: 1,
+      intent: 'Find a nearby business', facts: [], registrySnapshotDigest: 'sha256:graph',
+      candidates: [candidate],
+    })
+
+    expect(missing.nextRequirement).toMatchObject({
+      kind: 'contract_fact', customerLabel: 'Area', customerPrompt: 'Which area should the business cover?',
+    })
+    expect(projectRequestEvaluation({
+      snapshot: { requestId: 'request:label-and-prompt', revision: 1, intent: 'Find a nearby business' },
+      evaluation: missing,
+    })).toMatchObject({
+      missingFields: [{ label: 'Area' }],
+      clarification: { kind: 'contract_fact', prompt: 'Which area should the business cover?' },
+    })
+
+    const answered = evaluateCustomerRequestSnapshot({
+      requestId: 'request:label-and-prompt', requestRevision: 2,
+      intent: 'Find a nearby business', registrySnapshotDigest: 'sha256:graph', candidates: [candidate],
+      facts: [{
+        contractRef: model.contractRef, selectionKey: model.selectionKey,
+        inputKey: input.key, inputPointer: input.inputPointer, schemaIdentity: input.schemaIdentity,
+        value: 'Fremantle', source: { kind: 'customer', assertionRef: 'assertion:area' },
+      }],
+    })
+    expect(projectRequestEvaluation({
+      snapshot: { requestId: 'request:label-and-prompt', revision: 2, intent: 'Find a nearby business' },
+      evaluation: answered,
+    }).criteria).toContainEqual(expect.objectContaining({ label: 'Area', value: 'Fremantle' }))
   })
 
   it('refuses an expanded descriptor payload before calling the model transport', async () => {
