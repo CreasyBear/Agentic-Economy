@@ -10,7 +10,7 @@ const providerDiscoverySchema = z.strictObject({
   sandbox: z.literal(true),
   business: z.strictObject({ slug: z.string().min(1), name: z.string().min(1) }),
   operation: z.strictObject({
-    method: z.literal('POST'), endpoint: z.url().startsWith('https://'),
+    method: z.literal('POST'), endpoint: z.url(),
     authentication: z.strictObject({ scheme: z.literal('bearer') }),
     maximumCost: moneySchema,
     inputSchema: z.looseObject({ required: z.array(z.string()).default([]) }),
@@ -146,7 +146,9 @@ async function discoverProvider(origin: string, fetchImpl: typeof globalThis.fet
 function safePublicUrl(value: string): URL | undefined {
   try {
     const url = new URL(value)
-    if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hash !== '') return undefined
+    const loopbackHttp = url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost')
+    if ((url.protocol !== 'https:' && !loopbackHttp)
+      || url.username !== '' || url.password !== '' || url.hash !== '') return undefined
     return url
   } catch {
     return undefined

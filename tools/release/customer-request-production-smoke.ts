@@ -154,7 +154,7 @@ function parseDirectBaseline(
 
 function assertDirectBaselineConfig(config: DirectBaselineConfig): void {
   if (config.providerOrigins.length < 2 || config.providerOrigins.some((origin) => !isSafeProviderOrigin(origin))) {
-    throw new Error('AE_DIRECT_PROVIDER_ORIGINS_JSON must contain at least two HTTPS provider origins')
+    throw new Error('AE_DIRECT_PROVIDER_ORIGINS_JSON must contain at least two safe provider origins')
   }
   if (config.credential.trim().length === 0) throw new Error('AE_DIRECT_PROVIDER_CREDENTIAL is required')
   if (!isMoney(config.maximumTotalCost)) {
@@ -165,7 +165,9 @@ function assertDirectBaselineConfig(config: DirectBaselineConfig): void {
 function isSafeProviderOrigin(value: string): boolean {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' && url.username === '' && url.password === '' && url.hash === ''
+    const loopbackHttp = url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost')
+    return (url.protocol === 'https:' || loopbackHttp)
+      && url.username === '' && url.password === '' && url.hash === ''
   } catch {
     return false
   }

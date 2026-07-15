@@ -81,6 +81,38 @@ describe('frozen direct-agent baseline', () => {
     })
   })
 
+  it('allows HTTP only for loopback development provider origins', async () => {
+    const seen: string[] = []
+    const proof = await runFrozenDirectAgentBaseline({
+      job: 'Resolve a labelled sandbox service and prepare its quote',
+      providerOrigins: [
+        'http://127.0.0.1:3000/api/sandbox/providers/route-resolver',
+        'http://localhost:3000/api/sandbox/providers/route-quoter',
+      ],
+      credential: 'secret', agent: { name: 'frozen-direct-integrator', version: '1' },
+      predeclaredGain: 'recoverable_progress', hardConstraints: {},
+      fetch: async (input, init) => {
+        const url = input.toString()
+        seen.push(url)
+        if ((init?.method ?? 'GET') === 'GET') return Response.json(url.includes('route-resolver')
+          ? discovery(url, 'Sandbox Route Resolver', 300, ['request'], ['serviceReference'])
+          : discovery(url, 'Sandbox Route Quoter', 700, ['serviceReference'], ['quoteReference']))
+        return Response.json(url.includes('route-resolver')
+          ? { serviceReference: 'sandbox-service:dev' }
+          : { quoteReference: 'sandbox-quote:dev' })
+      },
+    })
+    expect(proof.completion.state).toBe('completed')
+    expect(seen).toHaveLength(4)
+
+    const blocked = await runFrozenDirectAgentBaseline({
+      job: 'Same job', providerOrigins: ['http://provider.example/api'], credential: 'secret',
+      agent: { name: 'frozen-direct-integrator', version: '1' }, predeclaredGain: 'recoverable_progress',
+      hardConstraints: {}, fetch: async () => { throw new Error('unsafe origin must not be fetched') },
+    })
+    expect(blocked.comparisonEligibility.state).toBe('ineligible')
+  })
+
   it('preserves a usable partial result when a later direct provider call fails', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       const url = input.toString()

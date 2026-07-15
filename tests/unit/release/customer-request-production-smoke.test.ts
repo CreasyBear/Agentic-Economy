@@ -121,7 +121,7 @@ describe('customer Request production smoke entrypoint', () => {
         credential: 'provider_credential', predeclaredGain: 'recoverable_progress',
         maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
       },
-    })).rejects.toThrow('must contain at least two HTTPS provider origins')
+    })).rejects.toThrow('must contain at least two safe provider origins')
     expect(fetch).not.toHaveBeenCalled()
   })
 })

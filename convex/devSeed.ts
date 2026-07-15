@@ -49,8 +49,45 @@ export const seedDevCatalog = internalMutation({
     const sandboxFixtures = DEV_SEED_BUSINESS_FIXTURES.filter(isSandboxFixture)
     const bundle = buildDevSeedCatalogState(ordinaryFixtures)
     const db = runtimeDb(ctx.db)
-    const result = await persistDevSeedCatalogState(db, bundle)
-    const sandboxBusinesses = await registerSandboxBusinesses(db, sandboxFixtures, seedStartedAt)
+    const [result, existingSandboxBusinesses, currentClaimOperations] = await Promise.all([
+      persistDevSeedCatalogState(db, bundle),
+      Promise.all(sandboxFixtures.map(async (fixture) => (
+        await ctx.db.query('businesses')
+          .withIndex('by_slug', (query) => query.eq('slug', fixture.requestedSlug))
+          .unique()
+      ))),
+      Promise.all(sandboxFixtures.map(async (fixture) => (
+        await ctx.db.query('operationKeys').withIndex('by_scope_key', (query) => (
+          query.eq('scope', 'business_claim').eq('key', `seed:claim:${fixture.requestedSlug}`)
+        )).unique()
+      ))),
+    ])
+    for (const [index, fixture] of sandboxFixtures.entries()) {
+      const business = existingSandboxBusinesses[index]
+      if (business !== undefined && business !== null && currentClaimOperations[index] === null
+        && (business.name !== fixture.businessName
+        || business.category !== fixture.category
+        || business.claimStatus !== 'published'
+        || business.publicStatus !== 'published')) {
+        throw new Error(`sandbox_dev_seed_identity_mismatch:${fixture.requestedSlug}`)
+      }
+    }
+    const replayOrMissingFixtures = sandboxFixtures.filter((_, index) => (
+      existingSandboxBusinesses[index] === null || currentClaimOperations[index] !== null
+    ))
+    const registeredSandboxBusinesses = await registerSandboxBusinesses(
+      db, replayOrMissingFixtures, seedStartedAt,
+    )
+    const sandboxBusinesses = {
+      seededSlugs: sandboxFixtures.map((fixture) => fixture.requestedSlug),
+      businessIdsBySlug: {
+        ...Object.fromEntries(sandboxFixtures.flatMap((fixture, index) => {
+          const business = existingSandboxBusinesses[index]
+          return business === undefined || business === null ? [] : [[fixture.requestedSlug, business._id]]
+        })),
+        ...registeredSandboxBusinesses.businessIdsBySlug,
+      },
+    }
     const [sandboxRegistrations, sandboxRouteRegistrations] = await Promise.all([
       registerSandboxV2SupplyRegistrations(ctx.db, seedStartedAt + 2_000),
       registerSandboxRouteSupplyRegistrations(ctx.db, seedStartedAt + 2_100),

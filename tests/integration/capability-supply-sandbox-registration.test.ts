@@ -301,6 +301,32 @@ describe('labelled sandbox V2 capability supply', () => {
     })
   })
 
+  it('adopts exact sandbox identities created by an older seed generation', async () => {
+    const backend = convexTest(schema, modules)
+    const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => fixture.requestedSlug.startsWith('sandbox-'))
+    const existing = await backend.run((ctx) => (
+      registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+    ))
+    await backend.run(async (ctx) => {
+      const operations = await ctx.db.query('operationKeys').withIndex('by_scope_key', (query) => (
+        query.eq('scope', 'business_claim')
+      )).collect()
+      for (const operation of operations) {
+        if (operation.key.startsWith('seed:claim:sandbox-')) {
+          await ctx.db.patch(operation._id, { key: `legacy:${operation.key}` })
+        }
+      }
+    })
+
+    const replay = await backend.mutation(internal.devSeed.seedDevCatalog, {})
+
+    expect(replay.businessIdsBySlug).toMatchObject(existing.businessIdsBySlug)
+    expect(replay.sandboxRouteBindings).toEqual([
+      'binding:sandbox-route-resolver:http-json:v2',
+      'binding:sandbox-route-quoter:http-json:v2',
+    ])
+  })
+
   it('does not promote a published listing without an offering and binding into V2 supply', async () => {
     const backend = convexTest(schema, modules)
     await backend.mutation(internal.devSeed.seedDevCatalog, {})
