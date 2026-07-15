@@ -16,8 +16,10 @@ export type CustomerRequestProductionSmokeConfig = Readonly<{
   deploymentProtectionBypass?: string
   expectedRevision?: string
   expectedDeploymentId?: string
+  expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }>
   facts: Readonly<Record<string, unknown>>
   fetch: typeof globalThis.fetch
+  finish?: 'cancel' | 'complete'
   messages: readonly string[]
   preflightOnly: boolean
   requestText: string
@@ -37,8 +39,10 @@ export function customerRequestProductionSmokeConfigFromEnvironment(
     ...(bypass === undefined ? {} : { deploymentProtectionBypass: bypass }),
     ...(revision === undefined ? {} : { expectedRevision: revision }),
     ...(deploymentId === undefined ? {} : { expectedDeploymentId: deploymentId }),
+    ...parseExpectedRoute(env),
     facts: parseFacts(env.AE_CUSTOMER_REQUEST_FACTS_JSON),
     fetch: globalThis.fetch,
+    finish: parseFinish(env.AE_CUSTOMER_REQUEST_FINISH),
     messages: parseMessages(env.AE_CUSTOMER_REQUEST_MESSAGES_JSON),
     preflightOnly: false,
     requestText: env.AE_CUSTOMER_REQUEST_TEXT ?? 'Find the cheapest labelled sandbox option.',
@@ -71,11 +75,40 @@ export async function runCustomerRequestProductionSmoke(
     ...frontDoor,
     agentApiKey, expectedRevision, expectedDeploymentId, verifyRelease,
     agent: { name: 'ae-hosted-cold-external-agent', version: '2' },
-    scenario: { request: config.requestText, facts: config.facts, messages: config.messages },
+    scenario: {
+      request: config.requestText, facts: config.facts, messages: config.messages,
+      finish: config.finish ?? 'cancel',
+      ...(config.expectedRoute === undefined ? {} : { expectedRoute: config.expectedRoute }),
+    },
     sandbox: true,
   })
   process.stdout.write(`${JSON.stringify(proof)}\n`)
   return proof
+}
+
+function parseFinish(value: string | undefined): 'cancel' | 'complete' {
+  const finish = optionalText(value) ?? 'cancel'
+  if (finish !== 'cancel' && finish !== 'complete') {
+    throw new Error('AE_CUSTOMER_REQUEST_FINISH must be cancel or complete')
+  }
+  return finish
+}
+
+function parseExpectedRoute(
+  env: Record<string, string | undefined>,
+): Readonly<{ expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }> }> {
+  const countText = optionalText(env.AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT)
+  const businessesText = optionalText(env.AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON)
+  if (countText === undefined && businessesText === undefined) return {}
+  const stepCount = Number(countText)
+  const businesses: unknown = businessesText === undefined ? undefined : JSON.parse(businessesText)
+  if (!Number.isInteger(stepCount) || stepCount < 1
+    || !Array.isArray(businesses)
+    || businesses.length < 1
+    || !businesses.every((value) => typeof value === 'string' && value.length > 0)) {
+    throw new Error('Expected route requires a positive step count and a JSON array of business names')
+  }
+  return { expectedRoute: { stepCount, businesses } }
 }
 
 function parseFacts(value: string | undefined): Readonly<Record<string, unknown>> {

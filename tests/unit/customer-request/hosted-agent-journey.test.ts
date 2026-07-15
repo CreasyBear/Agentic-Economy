@@ -78,6 +78,85 @@ describe('hosted Customer Request journey', () => {
     expect(proof.input).toMatchObject({ request: 'Complete sandbox request', facts: [], messages: [] })
   })
 
+  it('requires the declared composite route and resumes it to completed evidence', async () => {
+    const responses = [
+      compositeRoutesReadyView(),
+      compositeRoutesReadyView(),
+      requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+      requestView('in_progress', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'wait',
+        progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+      }),
+      requestView('completed', 2, {
+        routeGenerationRef: 'generation:one', nextAction: 'none',
+        action: {
+          state: 'completed', resolution: 'provider_result', automaticRetry: false,
+          result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,
+        },
+      }),
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'completed', generatedAt: 9_100,
+        steps: [
+          { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+          { step: 2, state: 'completed', observedAt: 9_100, evidence: [{ receiptRef: 'receipt:two', label: 'Quote reference' }] },
+        ],
+        result: { quoteReference: 'sandbox-quote:complete' },
+      },
+    ]
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+      const next = responses.shift()
+      if (next === undefined) throw new Error('unexpected request')
+      return Response.json(next)
+    })
+    const proof = await runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: '2.0.0' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service and prepare its quote', facts: {}, messages: [],
+        finish: 'complete',
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        },
+      },
+      sandbox: true, fetch, now: () => 10_000,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })
+    expect(proof.final).toMatchObject({
+      state: 'completed', selectedBusinesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+      stepCount: 2, runState: 'completed', evidenceState: 'completed',
+      problemState: 'not_reported', resumedState: 'completed', resultDigest: expect.stringMatching(/^sha256:/),
+    })
+  })
+
+  it('rejects a legacy single-business route when the release gate requires composition', async () => {
+    const responses = [routesReadyView(), routesReadyView()]
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+      const next = responses.shift()
+      if (next === undefined) throw new Error('unexpected request')
+      return Response.json(next)
+    })
+
+    await expect(runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: '2.0.0' },
+      scenario: {
+        request: 'Resolve a labelled sandbox service and prepare its quote', facts: {}, messages: [],
+        finish: 'complete',
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+        },
+      },
+      sandbox: true, fetch,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })).rejects.toThrow('hosted_journey_step_count:1')
+  })
+
   it('confirms, starts, inspects, reports, cancels, and resumes through one external-agent identity', async () => {
     const calls: Array<{ url: string; authorization: string | null; body: unknown }> = []
     const responses = [
@@ -209,6 +288,26 @@ function routesReadyView() {
       nextBoundary: { kind: 'confirmation', authorityCreated: false },
     },
   })
+}
+
+function compositeRoutesReadyView() {
+  const view = routesReadyView()
+  const decision = (view as typeof view & { decision: Readonly<Record<string, unknown>> }).decision
+  const route = routePlan()
+  return {
+    ...view,
+    decision: {
+      ...decision,
+      routes: [{
+        ...route,
+        stepCount: 2,
+        businesses: [
+          { businessRef: 'business:resolver', name: 'Sandbox Route Resolver' },
+          { businessRef: 'business:quoter', name: 'Sandbox Route Quoter' },
+        ],
+      }],
+    },
+  }
 }
 
 function routePlan() {

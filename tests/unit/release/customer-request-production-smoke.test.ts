@@ -42,10 +42,22 @@ describe('customer Request production smoke entrypoint', () => {
       AE_RELEASE_SOURCE_REVISION: 'a'.repeat(40), AE_RELEASE_DEPLOYMENT_ID: 'dpl_exact',
       AE_CUSTOMER_REQUEST_FACTS_JSON: '{"sandbox.request_context":"Find a sandbox option"}',
       AE_CUSTOMER_REQUEST_MESSAGES_JSON: '["A short answer"]',
+      AE_CUSTOMER_REQUEST_FINISH: 'complete',
+      AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '2',
+      AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON: '["Resolver","Quoter"]',
     })).toMatchObject({
       baseUrl: 'https://ae.example', agentApiKey: 'ak_agent',
       expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
       facts: { 'sandbox.request_context': 'Find a sandbox option' }, messages: ['A short answer'],
+      finish: 'complete', expectedRoute: { stepCount: 2, businesses: ['Resolver', 'Quoter'] },
     })
+  })
+
+  it('rejects an unknown finish mode instead of falling back to cancellation', () => {
+    expect(() => customerRequestProductionSmokeConfigFromEnvironment({
+      AE_CUSTOMER_REQUEST_BASE_URL: 'https://ae.example',
+      AE_CUSTOMER_REQUEST_API_KEY: 'ak_agent',
+      AE_CUSTOMER_REQUEST_FINISH: 'compelete',
+    })).toThrow('AE_CUSTOMER_REQUEST_FINISH must be cancel or complete')
   })
 })

@@ -32,6 +32,8 @@ export type HostedCustomerRequestJourneyInput = Readonly<{
     request: string
     facts: Readonly<Record<string, unknown>>
     messages: readonly string[]
+    finish?: 'cancel' | 'complete'
+    expectedRoute?: Readonly<{ stepCount: number; businesses: readonly string[] }>
   }>
   sandbox: true
   deploymentProtectionBypass?: string
@@ -63,9 +65,13 @@ export const hostedCustomerRequestJourneyProofSchema = z.object({
   ])),
   authorityStops: z.array(z.literal('route_confirmation')),
   final: z.object({
-    requestRef: z.string(), state: z.literal('cancelled'), selectedBusiness: z.string(),
-    runState: z.literal('in_progress'), evidenceState: z.literal('queued'),
-    problemState: z.literal('received'), resumedState: z.literal('cancelled'),
+    requestRef: z.string(), state: z.enum(['cancelled', 'completed']), selectedBusiness: z.string(),
+    selectedBusinesses: z.array(z.string()).min(1), stepCount: z.number().int().positive(),
+    runState: z.enum(['in_progress', 'completed']),
+    evidenceState: z.enum(['queued', 'completed']),
+    problemState: z.enum(['received', 'not_reported']),
+    resumedState: z.enum(['cancelled', 'completed']),
+    resultDigest: z.string().optional(),
   }).strict(),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
@@ -146,8 +152,10 @@ export async function runHostedCustomerRequestJourney(
 
     if (view.state === 'routes_ready') {
       const route = view.decision?.routes[0]
-      const selectedBusiness = route?.businesses[0]?.name
+      const selectedBusinesses = route?.businesses.map(({ name }) => name) ?? []
+      const selectedBusiness = selectedBusinesses[0]
       if (route === undefined || selectedBusiness === undefined) throw new Error('hosted_journey_route_missing')
+      assertExpectedRoute(input.scenario.expectedRoute, route.stepCount, selectedBusinesses)
       authorityStops.push('route_confirmation')
       view = await callAgent(
         input, requestPath(requestRef, 'confirmation'), 'POST',
@@ -164,6 +172,12 @@ export async function runHostedCustomerRequestJourney(
       )
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
+      if (input.scenario.finish === 'complete') {
+        return await completeHostedJourney({
+          input, release, requestRef, routeStepCount: route.stepCount, selectedBusiness, selectedBusinesses,
+          states, authorityStops, consumedFacts, consumedMessages,
+        })
+      }
       const evidence = await callAgentEvidence(input, requestPath(requestRef, 'evidence'))
       if (evidence.state !== 'queued') throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
       const problem = await callAgentProblem(input, requestPath(requestRef, 'problems'), {
@@ -189,7 +203,8 @@ export async function runHostedCustomerRequestJourney(
         input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
         observedStates: states, authorityStops,
         final: {
-          requestRef, state: resumed.state, selectedBusiness, runState: 'in_progress',
+          requestRef, state: resumed.state, selectedBusiness, selectedBusinesses,
+          stepCount: route.stepCount, runState: 'in_progress',
           evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
         },
         sandbox: true,
@@ -215,6 +230,73 @@ export async function runHostedCustomerRequestJourney(
     }
   }
   throw new Error('hosted_journey_transition_limit_exceeded')
+}
+
+async function completeHostedJourney(input: Readonly<{
+  input: HostedCustomerRequestJourneyInput
+  release: ReleaseVerification
+  requestRef: string
+  routeStepCount: number
+  selectedBusiness: string
+  selectedBusinesses: readonly string[]
+  states: CustomerRequestView['state'][]
+  authorityStops: Array<'route_confirmation'>
+  consumedFacts: Array<{ requirementKey: string; valueDigest: string }>
+  consumedMessages: Array<{ index: number; valueDigest: string }>
+}>): Promise<HostedCustomerRequestJourneyProof> {
+  let resumed: CustomerRequestView | undefined
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    resumed = await callAgent(input.input, requestPath(input.requestRef), 'GET', undefined, [200, 202])
+    observe(input.states, resumed)
+    if (resumed.state === 'completed') break
+    if (resumed.state !== 'in_progress') {
+      throw new Error(`hosted_journey_completion_stopped:${resumed.state}`)
+    }
+    await (input.input.sleep ?? defaultSleep)(1_000)
+  }
+  if (resumed?.state !== 'completed' || resumed.action?.state !== 'completed'
+    || resumed.action.result === undefined) throw new Error('hosted_journey_completion_timeout')
+  const evidence = await callAgentEvidence(input.input, requestPath(input.requestRef, 'evidence'))
+  if (evidence.state !== 'completed' || evidence.result === undefined
+    || evidence.steps.length !== input.routeStepCount
+    || evidence.steps.some((step) => step.state !== 'completed')) {
+    throw new Error('hosted_journey_completed_evidence_missing')
+  }
+  return hostedCustomerRequestJourneyProofSchema.parse({
+    kind: 'cold_external_agent_journey', agent: input.input.agent,
+    release: {
+      revision: input.release.revision, deploymentId: input.release.deploymentId,
+      environment: 'production', baseUrl: normalizedBaseUrl(input.input.baseUrl),
+    },
+    observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
+    input: {
+      request: input.input.scenario.request,
+      facts: input.consumedFacts,
+      messages: input.consumedMessages,
+    },
+    observedStates: input.states, authorityStops: input.authorityStops,
+    final: {
+      requestRef: input.requestRef, state: resumed.state, selectedBusiness: input.selectedBusiness,
+      selectedBusinesses: input.selectedBusinesses, stepCount: input.routeStepCount,
+      runState: 'completed', evidenceState: evidence.state,
+      problemState: 'not_reported', resumedState: resumed.state,
+      resultDigest: digestInput(evidence.result),
+    },
+    sandbox: true,
+    claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
+  })
+}
+
+function assertExpectedRoute(
+  expected: HostedCustomerRequestJourneyInput['scenario']['expectedRoute'],
+  stepCount: number,
+  businesses: readonly string[],
+): void {
+  if (expected === undefined) return
+  if (stepCount !== expected.stepCount) throw new Error(`hosted_journey_step_count:${stepCount}`)
+  if (JSON.stringify(businesses) !== JSON.stringify(expected.businesses)) {
+    throw new Error(`hosted_journey_businesses:${businesses.join('|')}`)
+  }
 }
 
 export async function verifyHostedCustomerRequestFrontDoor(input: Readonly<{
