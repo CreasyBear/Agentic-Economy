@@ -761,7 +761,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     routeProviderFetch.mockReset()
     routeProviderFetch
       .mockImplementationOnce(async (input, init) => {
-        expect(input.toString()).toContain('route=resolver')
+        expect(input.toString()).toContain('/api/sandbox/providers/route-resolver')
         expect(init?.headers).toMatchObject({ Authorization: 'Bearer sandbox-provider-secret' })
         expect(JSON.parse(String(init?.body))).toEqual({ request: customerJob })
         return new UndiciResponse(JSON.stringify({ serviceReference: 'sandbox-service:source-owned' }), {
@@ -769,7 +769,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         })
       })
       .mockImplementationOnce(async (input, init) => {
-        expect(input.toString()).toContain('route=quoter')
+        expect(input.toString()).toContain('/api/sandbox/providers/route-quoter')
         expect(JSON.parse(String(init?.body))).toEqual({ serviceReference: 'sandbox-service:source-owned' })
         return new UndiciResponse(JSON.stringify({ quoteReference: 'sandbox-quote:source-owned' }), {
           status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:quoter' },

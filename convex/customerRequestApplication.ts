@@ -2205,6 +2205,8 @@ function projectStoredAggregate(
   return writableView(projectRequestEvaluation({
     snapshot: aggregate.snapshot,
     evaluation: aggregate.evaluation,
+    outcome: aggregate.outcome,
+    actionCount: aggregate.plan.actions.length,
     ...(routeGenerationRef === undefined ? {} : { routeGenerationRef }),
   }))
 }

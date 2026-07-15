@@ -106,6 +106,8 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
   return projectRequestEvaluation({
     snapshot: result.aggregate.snapshot,
     evaluation: result.aggregate.evaluation,
+    outcome: result.aggregate.outcome,
+    actionCount: result.aggregate.plan.actions.length,
     ...(result.routeGeneration === undefined
       ? {}
       : { routeGenerationRef: result.routeGeneration.generationRef }),
@@ -115,6 +117,8 @@ export function projectCustomerRequest(result: CompileCustomerRequestResult): Cu
 export function projectRequestEvaluation(input: Readonly<{
   snapshot: Readonly<{ requestId: string; revision: number; intent: string }>
   evaluation: RequestEvaluationProjectionInput
+  outcome?: 'plan_ready' | 'needs_information' | 'unsupported'
+  actionCount?: number
   routeGenerationRef?: string
 }>): CustomerRequestView {
   const criteria = projectCustomerCriteria(input.evaluation.criteria)
@@ -165,6 +169,15 @@ export function projectRequestEvaluation(input: Readonly<{
       maximumRecipients: input.evaluation.preparationDisclosure.maximumRecipients,
       categories: input.evaluation.preparationDisclosure.categories.map(({ label, classification }) => ({ label, classification })),
     },
+  })
+  if (input.outcome === 'unsupported' && input.actionCount !== 1) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: 'No business on AE can support this request right now.',
+    nextAction: 'revise_request',
+    criteria,
   })
   return requestView({
     ...routeGeneration,

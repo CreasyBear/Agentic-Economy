@@ -13,7 +13,7 @@ import {
   type RegisteredSupplyPrice,
 } from '@/modules/customer-request/evaluation'
 import { compileCustomerRequest } from '@/modules/customer-request/compiler'
-import { projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
+import { projectCustomerRequest, projectRequestEvaluation } from '@/modules/customer-request/customer-projection'
 import {
   routePlanGenerationIsInternallyConsistent,
   routePlanGenerationMaterialDigest,
@@ -773,6 +773,10 @@ describe('V2 Request semantics', () => {
     ])
     expect(mixedCurrency).toMatchObject({ kind: 'compiled', aggregate: { outcome: 'unsupported' } })
     expect(mixedCurrency).not.toHaveProperty('routeGeneration')
+    expect(projectCustomerRequest(mixedCurrency)).toMatchObject({
+      state: 'unsupported', nextAction: 'revise_request',
+      summary: 'No business on AE can support this request right now.',
+    })
     const unsafeSum = compileWithPrices([
       { kind: 'fixed', currency: 'AUD', amountMinor: Number.MAX_SAFE_INTEGER },
       { kind: 'fixed', currency: 'AUD', amountMinor: 1 },
