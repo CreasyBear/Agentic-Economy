@@ -87,6 +87,99 @@ describe('V2 Request semantics', () => {
     })
   })
 
+  it('closes a selected outcome over one uniquely registered producer without another customer question', async () => {
+    const lookup = compositionLookupModel('catalog.resolve-for-quote')
+    const quote = compositionShippingModel(lookup)
+    const generateJson = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        kind: 'capability_candidates',
+        selections: [{ selectionKey: quote.selectionKey, facts: [] }],
+      }),
+    })
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:dependency-closure', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+    const customerJob = 'Find a labelled service and tell me what it costs.'
+    const capabilities = [lookup, quote].map((model) => bindCustomerCapabilityDescriptor({
+      contractRef: model.contractRef,
+      selectionKey: model.selectionKey,
+      name: model.contractRef.capabilityId,
+      description: `Registered ${model.contractRef.capabilityId} service.`,
+      inputs: model.inputs,
+      valueSchemas: model.inputs.map((input) => ({
+        inputKey: input.key,
+        valueSchema: projectCapabilityInputValueSchema(
+          model === lookup
+            ? { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { request: { type: 'string' } }, required: ['request'], additionalProperties: false }
+            : { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { optionId: { type: 'string' } }, required: ['optionId'], additionalProperties: false },
+          input,
+        ),
+      })),
+      evidence: model.evidence.map(({ label, purpose, schemaIdentity, semanticIdentity, guaranteed }) => ({
+        label, purpose, schemaIdentity, guaranteed,
+        ...(semanticIdentity === undefined ? {} : { semanticIdentity }),
+      })),
+    }))
+
+    const proposal = await interpreter.propose({ customerJob, capabilities })
+
+    expect(proposal).toMatchObject({
+      kind: 'capability_candidates',
+      selections: expect.arrayContaining([
+        expect.objectContaining({ selectionKey: quote.selectionKey, facts: [] }),
+        expect.objectContaining({
+          selectionKey: lookup.selectionKey,
+          facts: [expect.objectContaining({
+            value: customerJob, source: expect.objectContaining({ kind: 'agent_inference' }),
+          })],
+        }),
+      ]),
+    })
+  })
+
+  it('does not guess a prerequisite when two registered producers match the same semantic input', async () => {
+    const first = compositionLookupModel('catalog.resolve-one')
+    const second = compositionLookupModel('catalog.resolve-two')
+    const quote = compositionShippingModel(first)
+    const generateJson = vi.fn().mockResolvedValue({
+      content: JSON.stringify({
+        kind: 'capability_candidates', selections: [{ selectionKey: quote.selectionKey, facts: [] }],
+      }),
+    })
+    const interpreter = createJsonCustomerRequestSemanticInterpreter({
+      interpreterId: 'interpreter:ambiguous-dependency', transport: { generateJson }, timeoutMs: 1_000,
+      maximumPayloadBytes: 64_000, maximumResponseBytes: 8_000,
+    })
+    const capabilities = [first, second, quote].map((model) => bindCustomerCapabilityDescriptor({
+      contractRef: model.contractRef, selectionKey: model.selectionKey,
+      name: model.contractRef.capabilityId, description: 'Registered service.', inputs: model.inputs,
+      valueSchemas: model.inputs.map((input) => ({
+        inputKey: input.key,
+        valueSchema: projectCapabilityInputValueSchema(
+          model === quote
+            ? { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { optionId: { type: 'string' } }, required: ['optionId'], additionalProperties: false }
+            : { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', properties: { request: { type: 'string' } }, required: ['request'], additionalProperties: false },
+          input,
+        ),
+      })),
+      evidence: model.evidence.map(({ label, purpose, schemaIdentity, semanticIdentity, guaranteed }) => ({
+        label, purpose, schemaIdentity, guaranteed,
+        ...(semanticIdentity === undefined ? {} : { semanticIdentity }),
+      })),
+    }))
+
+    const proposal = await interpreter.propose({
+      customerJob: 'Find a service and tell me what it costs.', capabilities,
+    })
+
+    expect(proposal).toMatchObject({
+      kind: 'capability_candidates', selections: [expect.objectContaining({
+        selectionKey: quote.selectionKey, facts: [],
+      })],
+    })
+  })
+
   it('preserves divergent model outputs even when both normalize to the same empty selection set', async () => {
     const model = decisionModelWithCommitment()
     const generateJson = vi.fn()

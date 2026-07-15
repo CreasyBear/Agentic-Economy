@@ -112,7 +112,7 @@ jobs:
         env:
           AE_CUSTOMER_REQUEST_BASE_URL: https://agentic-economy-phi.vercel.app
           AE_RELEASE_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
-          AE_CUSTOMER_REQUEST_TEXT: Resolve a labelled sandbox service and prepare its quote.
+          AE_CUSTOMER_REQUEST_TEXT: Find a labelled sandbox service and tell me what it costs.
           AE_CUSTOMER_REQUEST_FACTS_JSON: '{}'
           AE_CUSTOMER_REQUEST_FINISH: complete
           AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: '2'

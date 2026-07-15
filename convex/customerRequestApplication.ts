@@ -1283,7 +1283,10 @@ async function loadRequestGraph(ctx: ActionCtx, networkId: string): Promise<Requ
             model.inputs,
             MAX_CONTRACT_PROJECTED_INPUT_SCHEMA_BYTES,
           ),
-          evidence: model.evidence.map(({ label, purpose, schemaIdentity }) => ({ label, purpose, schemaIdentity })),
+          evidence: model.evidence.map(({ label, purpose, schemaIdentity, semanticIdentity, guaranteed }) => ({
+            label, purpose, schemaIdentity, guaranteed,
+            ...(semanticIdentity === undefined ? {} : { semanticIdentity }),
+          })),
         })
       } catch {
         return { kind: 'unavailable' }

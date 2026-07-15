@@ -21,6 +21,7 @@ export type CustomerInputDescriptor = Readonly<{
   stage: CapabilityInputSemantic['stage']
   required: boolean
   schemaIdentity: PointedSchemaIdentity
+  semanticIdentity?: string
   valueSchema: Readonly<Record<string, JsonValue>>
 }>
 
@@ -28,6 +29,8 @@ export type CustomerEvidenceDescriptor = Readonly<{
   label: string
   purpose: 'comparison' | 'completion' | 'recovery'
   schemaIdentity: PointedSchemaIdentity
+  semanticIdentity?: string
+  guaranteed?: boolean
 }>
 
 export type CustomerInputValueSchema = Readonly<{
@@ -125,7 +128,7 @@ const SYSTEM_INSTRUCTION = [
   'Otherwise return {"kind":"capability_candidates","selections":[{"selectionKey":"opaque","facts":[{"inputKey":"opaque","value":"customer-stated value"}]}]}.',
   'Return one JSON object only.',
 ].join(' ')
-const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v3'
+const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v4'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 
 export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
@@ -227,10 +230,14 @@ export function createJsonCustomerRequestSemanticInterpreter(input: Readonly<{
             facts: Object.freeze(facts),
           })]
         }).sort((left, right) => left.selectionKey.localeCompare(right.selectionKey))
+        const completedSelections = completeRegisteredDependencies({
+          selections, capabilities: payload.capabilities, customerJob: payload.customerJob,
+          interpreterId: input.interpreterId, interpretationEvidence,
+        })
         const decisionPreference = deriveCustomerDecisionPreference(payload.customerJob)
         return Object.freeze({
           kind: 'capability_candidates' as const,
-          selections: Object.freeze(selections),
+          selections: completedSelections,
           interpretationEvidence,
           ...(decisionPreference === undefined ? {} : { decisionPreference }),
         })
@@ -277,6 +284,7 @@ export function bindCustomerCapabilityDescriptor(input: Readonly<{
         stage: semantic.stage,
         required: semantic.required,
         schemaIdentity: semantic.schemaIdentity,
+        ...(semantic.semanticIdentity === undefined ? {} : { semanticIdentity: semantic.semanticIdentity }),
         valueSchema,
       }
     })),
@@ -348,4 +356,109 @@ function publicDescriptor(descriptor: ServerCapabilityDescriptor): CustomerCapab
     inputs: descriptor.inputs.map((input) => ({ ...input })),
     evidence: descriptor.evidence.map((evidence) => ({ ...evidence })),
   }
+}
+
+function completeRegisteredDependencies(input: Readonly<{
+  selections: readonly ResolvedCapabilitySelection[]
+  capabilities: readonly ServerCapabilityDescriptor[]
+  customerJob: string
+  interpreterId: string
+  interpretationEvidence: CustomerRequestInterpretationEvidence
+}>): readonly ResolvedCapabilitySelection[] {
+  const descriptors = new Map(input.capabilities.map((descriptor) => [descriptor.selectionKey, descriptor]))
+  const selected = new Map(input.selections.map((selection) => [selection.selectionKey, selection]))
+  let changed = true
+  while (changed && selected.size <= input.capabilities.length) {
+    changed = false
+    for (const selection of [...selected.values()]) {
+      const descriptor = descriptors.get(selection.selectionKey)
+      if (descriptor === undefined) continue
+      const grounded = groundRegisteredRequestInputs(selection, descriptor, input)
+      if (grounded !== selection) {
+        selected.set(selection.selectionKey, grounded)
+        changed = true
+      }
+      const supplied = new Set(grounded.facts.map((fact) => fact.inputKey))
+      for (const target of descriptor.inputs) {
+        if (!target.required || supplied.has(target.inputKey) || target.semanticIdentity === undefined) continue
+        const producers = input.capabilities.filter((candidate) => candidate.evidence.some((evidence) => (
+          evidence.guaranteed === true
+          && evidence.semanticIdentity === target.semanticIdentity
+          && evidence.schemaIdentity === target.schemaIdentity
+        )))
+        if (producers.length !== 1) continue
+        const producer = producers[0]
+        if (producer === undefined || selected.has(producer.selectionKey)) continue
+        selected.set(producer.selectionKey, groundRegisteredRequestInputs({
+          selectionKey: producer.selectionKey,
+          contractRef: producer.contractRef,
+          facts: Object.freeze([]),
+        }, producer, input))
+        changed = true
+      }
+    }
+  }
+  return Object.freeze([...selected.values()].sort((left, right) => (
+    left.selectionKey.localeCompare(right.selectionKey)
+  )))
+}
+
+function groundRegisteredRequestInputs(
+  selection: ResolvedCapabilitySelection,
+  descriptor: ServerCapabilityDescriptor,
+  context: Readonly<{
+    customerJob: string
+    interpreterId: string
+    interpretationEvidence: CustomerRequestInterpretationEvidence
+  }>,
+): ResolvedCapabilitySelection {
+  const supplied = new Set(selection.facts.map((fact) => fact.inputKey))
+  const inferred = descriptor.inputs.flatMap((candidate): RequestFact[] => {
+    if (supplied.has(candidate.inputKey) || !candidate.required || candidate.semanticIdentity !== undefined
+      || candidate.role !== 'request'
+      || candidate.inference !== 'allowed' || !plainStringSchemaAccepts(candidate.valueSchema, context.customerJob)) return []
+    const binding = descriptor.inputBindings.find(({ inputKey }) => inputKey === candidate.inputKey)
+    if (binding === undefined) throw new Error('customer_request_descriptor_authority_missing')
+    return [{
+      contractRef: descriptor.contractRef,
+      selectionKey: descriptor.selectionKey,
+      inputKey: candidate.inputKey,
+      inputPointer: binding.inputPointer,
+      schemaIdentity: candidate.schemaIdentity,
+      value: context.customerJob,
+      source: {
+        kind: 'agent_inference',
+        inferenceRef: `inference:${canonicalDigest({
+          kind: 'registered_request_input',
+          interpreterId: context.interpreterId,
+          customerJob: context.customerJob,
+          selectionKey: descriptor.selectionKey,
+          inputKey: candidate.inputKey,
+          interpretationEvidence: context.interpretationEvidence,
+        })}`,
+      },
+    }]
+  })
+  if (inferred.length === 0) return selection
+  return Object.freeze({ ...selection, facts: Object.freeze([...selection.facts, ...inferred]) })
+}
+
+function plainStringSchemaAccepts(schema: Readonly<Record<string, JsonValue>>, value: string): boolean {
+  if (schema.type !== 'string') return false
+  if (['allOf', 'anyOf', 'oneOf', 'not', 'if', 'then', 'else'].some((keyword) => schema[keyword] !== undefined)) {
+    return false
+  }
+  const length = [...value].length
+  if (typeof schema.minLength === 'number' && length < schema.minLength) return false
+  if (typeof schema.maxLength === 'number' && length > schema.maxLength) return false
+  if (typeof schema.const === 'string' && schema.const !== value) return false
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return false
+  if (typeof schema.pattern === 'string') {
+    try {
+      if (!new RegExp(schema.pattern, 'u').test(value)) return false
+    } catch {
+      return false
+    }
+  }
+  return schema.format === undefined
 }
