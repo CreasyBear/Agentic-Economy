@@ -14,7 +14,7 @@ type RouteTransportResponse = Readonly<{
 
 type RouteTransportRequestInit = Readonly<{
   method?: string
-  redirect?: RequestRedirect
+  redirect?: 'error' | 'follow' | 'manual'
   signal?: AbortSignal
   body?: string
   headers?: Readonly<Record<string, string>>

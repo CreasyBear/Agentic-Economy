@@ -160,7 +160,7 @@ export function inquiryReceiptKeyRef(
   return `inquiry-receipt-key:sha256:${bytesToHex(sha256(material))}`
 }
 
-async function importWrappingKey(secret: string): Promise<CryptoKey> {
+async function importWrappingKey(secret: string) {
   return crypto.subtle.importKey('raw', ownedBytes(sha256(secret)), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
 }
 
