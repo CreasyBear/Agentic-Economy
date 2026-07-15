@@ -22,6 +22,7 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   request: string
   facts: Readonly<Record<string, unknown>>
   messages: readonly string[]
+  finish: 'complete' | 'cancel'
   expectedRoute: Readonly<{ stepCount: number; businesses: readonly string[] }>
   fetch: typeof globalThis.fetch
 }>
@@ -36,7 +37,7 @@ export function customerRequestDevelopmentSmokeConfig(
     AE_CUSTOMER_REQUEST_TEXT: env.AE_CUSTOMER_REQUEST_TEXT ?? DEFAULT_REQUEST,
     AE_CUSTOMER_REQUEST_FACTS_JSON: env.AE_CUSTOMER_REQUEST_FACTS_JSON,
     AE_CUSTOMER_REQUEST_MESSAGES_JSON: env.AE_CUSTOMER_REQUEST_MESSAGES_JSON,
-    AE_CUSTOMER_REQUEST_FINISH: 'complete',
+    AE_CUSTOMER_REQUEST_FINISH: env.AE_CUSTOMER_REQUEST_FINISH ?? 'complete',
     AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT: env.AE_CUSTOMER_REQUEST_EXPECTED_STEP_COUNT ?? '2',
     AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON:
       env.AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON ?? JSON.stringify(DEFAULT_BUSINESSES),
@@ -51,6 +52,7 @@ export function customerRequestDevelopmentSmokeConfig(
     request: shared.requestText,
     facts: shared.facts,
     messages: shared.messages,
+    finish: shared.finish ?? 'complete',
     expectedRoute: shared.expectedRoute ?? { stepCount: 2, businesses: DEFAULT_BUSINESSES },
     fetch: globalThis.fetch,
   }
@@ -82,7 +84,7 @@ export async function runCustomerRequestDevelopmentSmoke(
           request: config.request,
           facts: config.facts,
           messages: config.messages,
-          finish: 'complete',
+          finish: config.finish,
           expectedRoute: config.expectedRoute,
         },
         sandbox: true,

@@ -38,4 +38,14 @@ describe('customer Request development smoke configuration', () => {
       CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
     }, 'dirty')).toThrow('development source revision must be an exact Git commit')
   })
+
+  it('selects the canonical cancellation and recovery journey explicitly', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'cancel',
+    }, 'a'.repeat(40))).toMatchObject({ finish: 'cancel' })
+  })
 })
