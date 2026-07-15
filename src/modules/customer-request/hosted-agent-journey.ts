@@ -81,8 +81,8 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   final: z.object({
     requestRef: z.string(), state: z.enum(['cancelled', 'completed']), selectedBusiness: z.string(),
     selectedBusinesses: z.array(z.string()).min(1), stepCount: z.number().int().positive(),
-    runState: z.enum(['in_progress', 'completed']),
-    evidenceState: z.enum(['queued', 'running', 'completed']),
+    runState: z.enum(['in_progress', 'completed', 'cancelled']),
+    evidenceState: z.enum(['queued', 'running', 'completed', 'cancelled']),
     problemState: z.enum(['received', 'not_reported']),
     resumedState: z.enum(['cancelled', 'completed']),
     resultDigest: z.string().optional(),
@@ -217,23 +217,23 @@ export async function runHostedCustomerRequestJourney(
           states, authorityStops, consumedFacts, consumedMessages, progressPath, evidencePath,
         })
       }
-      const evidence = await callAgentEvidence(runtimeInput, evidencePath)
-      if (evidence.state !== 'queued' && evidence.state !== 'running') {
-        throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
-      }
       const problemAction = observedNavigationAction(input, view, 'report_problem')
       if (problemAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:report_problem')
-      const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {
-        '<unique string>': `acceptance:problem:${nonce}`,
-        '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
-        '<problem summary>': 'Labelled sandbox recovery verification.',
-      }))
       const cancelled = await callObservedAgent(
         runtimeInput, view, 'cancel',
         { '<unique string>': `acceptance:cancel:${nonce}` },
       )
       observe(states, cancelled)
       if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
+      const evidence = await callAgentEvidence(runtimeInput, evidencePath)
+      if (evidence.state !== 'queued' && evidence.state !== 'running' && evidence.state !== 'cancelled') {
+        throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
+      }
+      const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {
+        '<unique string>': `acceptance:problem:${nonce}`,
+        '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+        '<problem summary>': 'Labelled sandbox recovery verification.',
+      }))
       const resumed = await callAgent(runtimeInput, progressPath, 'GET')
       observe(states, resumed)
       if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
@@ -245,7 +245,7 @@ export async function runHostedCustomerRequestJourney(
         observedStates: states, authorityStops,
         final: {
           requestRef, state: resumed.state, selectedBusiness, selectedBusinesses,
-          stepCount: route.stepCount, runState: 'in_progress',
+          stepCount: route.stepCount, runState: 'cancelled',
           evidenceState: evidence.state, problemState: problem.state, resumedState: resumed.state,
         },
         measurements: journeyMeasurements(runtimeInput, route, false, true),

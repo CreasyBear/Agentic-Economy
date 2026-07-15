@@ -71,11 +71,6 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
-      {
-        kind: 'evidence', requestRef: 'request:cold', state: 'running', generatedAt: 9_000,
-        steps: [{ step: 1, state: 'awaiting_result', observedAt: 9_000, evidence: [] }],
-      },
-      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_001 },
       requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -83,6 +78,11 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
         },
       }),
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'cancelled', generatedAt: 9_002,
+        steps: [{ step: 1, state: 'cancelled', observedAt: 9_002, evidence: [] }],
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_003 },
       requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -108,7 +108,7 @@ describe('hosted Customer Request journey', () => {
       verifyAnonymousRefusal: async () => undefined,
     })
     expect(proof.input).toMatchObject({ request: 'Complete sandbox request', facts: [], messages: [] })
-    expect(proof.final.evidenceState).toBe('running')
+    expect(proof.final.evidenceState).toBe('cancelled')
   })
 
   it('requires the declared composite route and resumes it to completed evidence', async () => {
@@ -324,14 +324,6 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       })),
-      Response.json({
-        kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
-        steps: [{ step: 1, state: 'queued', observedAt: 9_000, evidence: [] }],
-      }),
-      Response.json({
-        kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one',
-        state: 'received', reportedAt: 9_001,
-      }),
       Response.json(requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -339,6 +331,14 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
         },
       })),
+      Response.json({
+        kind: 'evidence', requestRef: 'request:cold', state: 'cancelled', generatedAt: 9_002,
+        steps: [{ step: 1, state: 'cancelled', observedAt: 9_002, evidence: [] }],
+      }),
+      Response.json({
+        kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one',
+        state: 'received', reportedAt: 9_003,
+      }),
       Response.json(requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -423,11 +423,6 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'available_before_next_step', safeNextAction: 'check_progress',
         },
       }),
-      {
-        kind: 'evidence', requestRef: 'request:cold', state: 'queued', generatedAt: 9_000,
-        steps: [{ step: 1, state: 'queued', observedAt: 9_000, evidence: [] }],
-      },
-      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_001 },
       requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -435,6 +430,11 @@ describe('hosted Customer Request journey', () => {
           retry: 'not_needed', cancellation: 'complete', safeNextAction: 'revise_request',
         },
       }),
+      {
+        kind: 'evidence', requestRef: 'request:cold', state: 'cancelled', generatedAt: 9_002,
+        steps: [{ step: 1, state: 'cancelled', observedAt: 9_002, evidence: [] }],
+      },
+      { kind: 'problem_reported', requestRef: 'request:cold', reportRef: 'report:one', state: 'received', reportedAt: 9_003 },
       requestView('cancelled', 2, {
         routeGenerationRef: 'generation:one', nextAction: 'revise_request',
         activity: {
@@ -473,7 +473,7 @@ describe('hosted Customer Request journey', () => {
       authorityStops: ['route_confirmation'],
       final: {
         state: 'cancelled', selectedBusiness: 'Sandbox Option Two',
-        runState: 'in_progress', evidenceState: 'queued',
+        runState: 'cancelled', evidenceState: 'cancelled',
         problemState: 'received', resumedState: 'cancelled',
       },
     })
@@ -487,9 +487,9 @@ describe('hosted Customer Request journey', () => {
     expect(calls[3]?.url).toContain('/options')
     expect(calls[4]?.url).toContain('/confirmation')
     expect(calls[5]?.url).toContain('/run')
-    expect(calls[6]?.url).toContain('/evidence')
-    expect(calls[7]?.url).toContain('/problems')
-    expect(calls[8]?.url).toContain('/cancellation')
+    expect(calls[6]?.url).toContain('/cancellation')
+    expect(calls[7]?.url).toContain('/evidence')
+    expect(calls[8]?.url).toContain('/problems')
     expect(calls.some((call) => call.url.includes('/approval'))).toBe(false)
   })
 })
