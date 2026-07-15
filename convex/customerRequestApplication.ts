@@ -2267,6 +2267,9 @@ function projectStoredRouteRun(
     requestRef: run.requestId,
     revision: run.requestRevision,
     criteria,
+    routeProgress: {
+      completed: run.completedSteps, total: run.totalSteps, currentStep: run.currentPosition,
+    },
     status: {
       kind: 'unknown', reason: 'provider_outcome_unconfirmed',
       observedAt: run.updatedAt, automaticRetry: false,
@@ -2284,6 +2287,9 @@ function projectStoredRouteRun(
       requestRef: run.requestId,
       revision: run.requestRevision,
       criteria,
+      routeProgress: {
+        completed: run.completedSteps, total: run.totalSteps, currentStep: run.currentPosition,
+      },
       status: {
         kind: 'failed', resolution: providerReportedFailure ? 'reconciled' : 'not_sent',
         result: providerReportedFailure ? result : { reason: 'business_contact_not_started' },

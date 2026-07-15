@@ -74,6 +74,23 @@ test('exact clarification stays conversational and explains its decision impact'
   })
 })
 
+test('partial progress remains legible when a later business result is unknown', async ({ page }) => {
+  await page.route('**/api/requests', async (route) => await route.fulfill({ json: unknownOutcomeView() }))
+
+  await page.goto('/engine')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('What are you looking for?').fill('Resolve a service and prepare its quote')
+  await page.getByRole('button', { name: 'Explore' }).click()
+
+  await expect(page.getByText('Still confirming', { exact: true })).toBeVisible()
+  await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
+  await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
+  await expect(page.getByText('Wait for confirmation before changing or starting this Request again.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Edit this Request' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start a new Request' })).not.toBeVisible()
+})
+
 function clarificationView(): CustomerRequestView {
   return {
     kind: 'request', requestRef: 'request:clarification', revision: 1,
@@ -99,6 +116,24 @@ function clarifiedView(): CustomerRequestView {
       label: 'Area', value: 'Fremantle and nearby suburbs', basis: 'customer_provided',
       impact: 'eligibility_and_comparison',
     }],
+  }
+}
+
+function unknownOutcomeView(): CustomerRequestView {
+  return {
+    kind: 'request', requestRef: 'request:partial-unknown', revision: 1,
+    state: 'outcome_unknown',
+    summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+    nextAction: 'wait', missingFields: [], options: [],
+    progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+    action: {
+      state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false, observedAt: 10,
+    },
+    activity: {
+      actor: 'ae_for_customer', certainty: 'unknown', updatedAt: 10, nextCheckAt: 40,
+      retry: 'blocked_until_reconciled', cancellation: 'too_late_or_unsupported',
+      safeNextAction: 'wait_for_evidence',
+    },
   }
 }
 

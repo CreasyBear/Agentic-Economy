@@ -8,10 +8,12 @@ describe('customer action status projection', () => {
 
     expect(projectCustomerActionStatus({
       ...common,
+      routeProgress: { completed: 1, total: 2, currentStep: 2 },
       status: { kind: 'unknown', reason: 'provider_pending', observedAt: 10, automaticRetry: false },
     })).toMatchObject({
       state: 'outcome_unknown', nextAction: 'wait',
       action: { state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false },
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
     })
     expect(projectCustomerActionStatus({
       ...common,
@@ -36,13 +38,15 @@ describe('customer action status projection', () => {
     })
     expect(projectCustomerActionStatus({
       ...common,
+      routeProgress: { completed: 1, total: 2, currentStep: 2 },
       status: {
         kind: 'failed', resolution: 'not_sent', result: { reason: 'business_contact_not_started' },
         resolvedAt: 13, automaticRetry: false,
       },
     })).toMatchObject({
       state: 'failed', nextAction: 'revise_request',
-      summary: 'AE could not safely contact the business. Nothing was sent.',
+      summary: 'AE could not safely continue. The next business step was not sent.',
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
       action: {
         state: 'failed', resolution: 'not_sent', result: { reason: 'business_contact_not_started' },
       },

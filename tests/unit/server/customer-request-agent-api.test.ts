@@ -184,6 +184,41 @@ describe('agent-native customer Request API', () => {
     })
   })
 
+  it('gives a cold agent the same partial progress and no-retry recovery state as the human view', async () => {
+    const callAction = vi.fn(async () => ({
+      kind: 'request' as const, requestRef: 'request:agent:partial', revision: 1,
+      state: 'outcome_unknown' as const,
+      summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+      nextAction: 'wait' as const, missingFields: [], criteria: [], options: [],
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' as const } },
+      action: {
+        state: 'unknown' as const, resolution: 'awaiting_evidence' as const,
+        automaticRetry: false as const, observedAt: 1_000,
+      },
+      activity: {
+        actor: 'ae_for_customer' as const, certainty: 'unknown' as const, updatedAt: 1_000,
+        nextCheckAt: 31_000, retry: 'blocked_until_reconciled' as const,
+        cancellation: 'too_late_or_unsupported' as const, safeNextAction: 'wait_for_evidence' as const,
+      },
+    }))
+
+    const response = await handleAgentCustomerRequestGet('request:agent:partial', {
+      authenticate, callAction, env: { AE_CONVEX_SERVER_FUNCTION_TOKEN: key }, now: () => 1_000,
+    })
+    expect(response.status).toBe(200)
+    expect(customerRequestAgentResultSchema.parse(await response.json())).toMatchObject({
+      state: 'outcome_unknown',
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      action: { state: 'unknown', automaticRetry: false },
+      activity: { retry: 'blocked_until_reconciled', safeNextAction: 'wait_for_evidence' },
+      navigation: { actions: [
+        { relation: 'inspect_progress', method: 'GET' },
+        { relation: 'inspect_evidence', method: 'GET' },
+        { relation: 'report_problem', method: 'POST' },
+      ] },
+    })
+  })
+
   it('returns 401 for missing keys and 403 for unscoped keys before Convex', async () => {
     const callAction = vi.fn()
     const missing = await handleAgentCustomerRequestGet('request:1', {

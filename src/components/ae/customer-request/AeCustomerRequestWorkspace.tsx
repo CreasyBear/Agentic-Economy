@@ -953,7 +953,9 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
   const explanation = unknown
     ? 'The Request is preserved while AE checks evidence from the business. There will be no automatic retry.'
     : notSent
-      ? 'No business action occurred. Review or revise your request before trying another option.'
+      ? (projection.progress?.completed ?? 0) > 0
+        ? 'No further business action occurred. Review the completed work before deciding what to do next.'
+        : 'No business action occurred. Review or revise your request before trying another option.'
     : failed
       ? 'The failure is final for this action. AE did not send it again.'
       : action.resolution === 'reconciled'
@@ -969,6 +971,12 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         </Text>
         <Heading level={2}>{projection.summary}</Heading>
         <Text color="secondary">{explanation}</Text>
+        {projection.progress === undefined || projection.progress.completed === 0 ? null : <div className="rounded-md border border-border bg-surface p-4">
+          <Text weight="semibold">{projection.progress.completed} of {projection.progress.total} business steps completed.</Text>
+          <Text type="supporting" color="secondary" className="mt-1">{unknown
+            ? 'AE will not repeat the step whose result is still being confirmed.'
+            : 'Completed steps remain recorded and will not be repeated automatically.'}</Text>
+        </div>}
         {action.result === undefined || notSent ? null : <div className="rounded-md border border-border bg-surface p-4">
           <Text type="supporting" weight="semibold">Business result</Text>
           <Text color="secondary" className="mt-1">{readableResult(action.result)}</Text>
@@ -981,7 +989,9 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         </Text>}
         {unknown ? <Button label="Check again" variant="primary" clickAction={refresh} /> : null}
         <RequestRecordLinks requestRef={projection.requestRef} />
-        <RecoveryActions edit={edit} restart={restart} />
+        {unknown
+          ? <Text weight="semibold">Wait for confirmation before changing or starting this Request again.</Text>
+          : <RecoveryActions edit={edit} restart={restart} />}
       </div>
     </Card>
   </section>

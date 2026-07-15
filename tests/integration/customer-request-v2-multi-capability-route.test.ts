@@ -804,22 +804,27 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     const admin = await ownerAdmin(backend)
     const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-interrupted')
     routeProviderFetch.mockReset()
-    routeProviderFetch.mockRejectedValueOnce(new DOMException('Timed out', 'TimeoutError'))
+    routeProviderFetch
+      .mockResolvedValueOnce(new UndiciResponse(JSON.stringify({ serviceReference: 'sandbox-service:interrupted' }), {
+        status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:resolver' },
+      }))
+      .mockRejectedValueOnce(new DOMException('Timed out', 'TimeoutError'))
     await admin.action(api.customerRequestApplication.runRoute, {
       requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-interrupted',
     })
 
-    await finishScheduledRouteWorkers(backend, 1)
+    await finishScheduledRouteWorkers(backend, 2)
     await expect(admin.action(api.customerRequestApplication.resume, {
       requestRef: confirmed.requestRef,
     })).resolves.toMatchObject({
       kind: 'request', state: 'outcome_unknown', nextAction: 'wait',
       action: { state: 'unknown', automaticRetry: false },
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
     })
     await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
       workerId: 'worker:transport:unsafe-retry',
     })).resolves.toEqual({ kind: 'none' })
-    expect(routeProviderFetch).toHaveBeenCalledTimes(1)
+    expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
   it('never advances or retries when a released step has an invalid or unknown outcome', async () => {

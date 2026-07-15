@@ -308,6 +308,36 @@ describe('customer Request workspace', () => {
     expect(screen.queryByText(/business_contact_not_started/)).toBeNull()
   })
 
+  it('shows completed work when a later business result is still unknown', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'partial-unknown' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({
+      kind: 'request', requestRef: 'request:partial-unknown', revision: 1, state: 'outcome_unknown',
+      summary: 'The business may have acted, but AE does not yet have enough evidence to confirm the result. AE will not send it again.',
+      nextAction: 'wait', missingFields: [], criteria: [], options: [],
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+      action: {
+        state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false, observedAt: 10,
+      },
+      activity: {
+        actor: 'ae_for_customer', certainty: 'unknown', updatedAt: 10, nextCheckAt: 40,
+        retry: 'blocked_until_reconciled', cancellation: 'too_late_or_unsupported',
+        safeNextAction: 'wait_for_evidence',
+      },
+    })))
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Resolve a service and prepare its quote' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+
+    expect(await screen.findByText('1 of 2 business steps completed.')).toBeTruthy()
+    expect(screen.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeTruthy()
+    expect(screen.getByText('Wait for confirmation before changing or starting this Request again.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Edit this Request' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start a new Request' })).toBeNull()
+  })
+
   it('presents the full request as a customer fact instead of a provider question', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'request-label' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({

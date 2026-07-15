@@ -333,6 +333,7 @@ export function projectCustomerActionStatus(input: Readonly<{
   requestRef: string
   revision: number
   criteria?: readonly CustomerCriterion[]
+  routeProgress?: Readonly<{ completed: number; total: number; currentStep: number }>
   status:
     | Readonly<{ kind: 'unknown'; reason: string; observedAt: number; automaticRetry: false }>
     | Readonly<{
@@ -344,6 +345,7 @@ export function projectCustomerActionStatus(input: Readonly<{
         resolvedAt: number; automaticRetry: false
       }>
 }>): CustomerRequestView {
+  const hasCompletedRouteSteps = (input.routeProgress?.completed ?? 0) > 0
   if (input.status.kind === 'unknown') return requestView({
     requestRef: input.requestRef, revision: input.revision,
     state: 'outcome_unknown', nextAction: 'wait',
@@ -353,6 +355,7 @@ export function projectCustomerActionStatus(input: Readonly<{
       state: 'unknown', resolution: 'awaiting_evidence', automaticRetry: false,
       observedAt: input.status.observedAt,
     },
+    ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),
     activity: {
       actor: 'ae_for_customer', certainty: 'unknown', updatedAt: input.status.observedAt,
       nextCheckAt: input.status.observedAt + 30_000, retry: 'blocked_until_reconciled',
@@ -380,17 +383,28 @@ export function projectCustomerActionStatus(input: Readonly<{
     state: 'failed', nextAction: 'revise_request',
     ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
     summary: input.status.resolution === 'not_sent'
-      ? 'AE could not safely contact the business. Nothing was sent.'
+      ? hasCompletedRouteSteps
+        ? 'AE could not safely continue. The next business step was not sent.'
+        : 'AE could not safely contact the business. Nothing was sent.'
       : 'The business confirmed that it could not complete this action. AE did not try it again.',
     action: {
       state: 'failed', resolution: input.status.resolution, automaticRetry: false,
       result: structuredClone(input.status.result), observedAt: input.status.resolvedAt,
     },
+    ...(input.routeProgress === undefined ? {} : { progress: terminalRouteProgress(input.routeProgress) }),
     activity: {
       actor: 'ae_for_customer', certainty: 'failed', updatedAt: input.status.resolvedAt,
       retry: 'manual_after_failure', cancellation: 'complete', safeNextAction: 'revise_request',
     },
   })
+}
+
+function terminalRouteProgress(progress: Readonly<{ completed: number; total: number; currentStep: number }>) {
+  return {
+    completed: progress.completed,
+    total: progress.total,
+    current: { step: progress.currentStep, state: 'needs_attention' as const },
+  }
 }
 
 function requestView(input: Readonly<{
