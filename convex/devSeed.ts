@@ -398,7 +398,9 @@ export async function registerSandboxRouteSupplyRegistrations(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registeredAt: number,
 ): Promise<SandboxV2SupplyRegistration[]> {
-  const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
+  const providerOrigin = process.env.AE_SANDBOX_PROVIDER_ORIGIN?.trim()
+    || process.env.AE_SITE_URL?.trim()
+    || 'https://agentic-economy-phi.vercel.app'
   return await Promise.all(Object.values(SANDBOX_ROUTE_PROVIDER_PROFILES).map(async (profile) => {
     const encoded = encodeCapabilityContractDocument(profile.contract)
     const [contract, business] = await Promise.all([
@@ -439,7 +441,7 @@ export async function registerSandboxRouteSupplyRegistrations(
       registration: {
         bindingId: profile.bindingId, offeringId: profile.offeringId, networkId: 'ae:public',
         contractRef: contract.ref,
-        endpointUrl: new URL(profile.endpointPath, siteUrl).href,
+        endpointUrl: new URL(profile.endpointPath, providerOrigin).href,
         credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
         continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
         cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
@@ -532,31 +534,43 @@ export async function retireSupersededSandboxRouteSupply(
     const corrected = registrationsBySlug.get(profile.slug)
     if (corrected === undefined) throw new Error(`sandbox_route_corrected_registration_missing_${profile.slug}`)
     const contractRef = encodeCapabilityContractDocument(profile.contract).contract.ref
-    const [offering, binding, business] = await Promise.all([
-      db.query('capabilityOfferings')
-        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId)).unique(),
-      db.query('capabilityTransportBindings')
-        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId)).unique(),
-      db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique(),
-    ])
-    if (offering === null && binding === null) continue
-    const expectedEndpointUrl = new URL(`/api/sandbox/capability?route=${routeKey}`, siteUrl).href
-    const expectedOfferingRegistrationHash = business === null ? undefined : capabilityOfferingRegistrationHash({
-      offeringId: profile.priorOfferingId, businessId: business._id, networkId: 'ae:public', contractRef,
-      presentation: {
-        label: profile.label,
-        summary: 'Labelled sandbox route supply for source and contract verification only.',
-        price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
-        materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
-        commercialRelationship: {
-          kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
-          influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
-          evidenceRefs: ['seed:sandbox-commercial-neutrality'],
-        },
+    const business = await db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
+    const historical = [
+      {
+        offeringId: profile.priorOfferingId,
+        bindingId: profile.priorBindingId,
+        endpointUrl: new URL(`/api/sandbox/capability?route=${routeKey}`, siteUrl).href,
       },
-      searchTerms: [...profile.queryTerms], registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
-    })
-    if (
+      {
+        offeringId: profile.priorV2OfferingId,
+        bindingId: profile.priorV2BindingId,
+        endpointUrl: new URL(profile.endpointPath, siteUrl).href,
+      },
+    ] as const
+    for (const expected of historical) {
+      const [offering, binding] = await Promise.all([
+        db.query('capabilityOfferings')
+          .withIndex('by_offeringId', (query) => query.eq('offeringId', expected.offeringId)).unique(),
+        db.query('capabilityTransportBindings')
+          .withIndex('by_bindingId', (query) => query.eq('bindingId', expected.bindingId)).unique(),
+      ])
+      if (offering === null && binding === null) continue
+      const expectedOfferingRegistrationHash = business === null ? undefined : capabilityOfferingRegistrationHash({
+        offeringId: expected.offeringId, businessId: business._id, networkId: 'ae:public', contractRef,
+        presentation: {
+          label: profile.label,
+          summary: 'Labelled sandbox route supply for source and contract verification only.',
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{ termId: 'sandbox_only', label: 'Environment', value: 'Sandbox only; not real supply.' }],
+          commercialRelationship: {
+            kind: 'none', summary: 'Sandbox verification has no commercial relationship.',
+            influencesEligibility: false, influencesInclusion: false, influencesOrder: false,
+            evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+          },
+        },
+        searchTerms: [...profile.queryTerms], registrationEvidenceRefs: ['seed:sandbox-labelled-business'],
+      })
+      if (
       offering === null
       || binding === null
       || business === null
@@ -566,12 +580,12 @@ export async function retireSupersededSandboxRouteSupply(
       || offering.version !== contractRef.version
       || offering.contractDigest !== contractRef.contractDigest
       || offering.registrationHash !== expectedOfferingRegistrationHash
-      || binding.offeringId !== profile.priorOfferingId
+      || binding.offeringId !== expected.offeringId
       || binding.networkId !== 'ae:public'
       || binding.capabilityId !== contractRef.capabilityId
       || binding.version !== contractRef.version
       || binding.contractDigest !== contractRef.contractDigest
-      || binding.endpointUrl !== expectedEndpointUrl
+      || binding.endpointUrl !== expected.endpointUrl
       || binding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
       || binding.adapterId !== 'http-json:v1'
       || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
@@ -584,12 +598,12 @@ export async function retireSupersededSandboxRouteSupply(
       || binding.cancellation.evidenceRefs[0] !== 'seed:sandbox-no-cancellation'
       || binding.registrationEvidenceRefs.length !== 1
       || binding.registrationEvidenceRefs[0] !== 'seed:production-v2-registration-path'
-    ) throw new Error(`sandbox_route_historical_identity_mismatch_${profile.priorBindingId}`)
-    const evidenceRef = 'seed:sandbox-distinct-provider-origins'
-    const result = await setCapabilitySupplyEligibilityCommand(db, {
+      ) throw new Error(`sandbox_route_historical_identity_mismatch_${expected.bindingId}`)
+      const evidenceRef = 'seed:sandbox-distinct-provider-origins'
+      const result = await setCapabilitySupplyEligibilityCommand(db, {
       actor: { kind: 'system', ref: 'system:dev-seed' },
       context: {
-        operationKey: `seed:capability-route-binding-retire:${profile.priorBindingId}`,
+        operationKey: `seed:capability-route-binding-retire:${expected.bindingId}`,
         correlationId: `seed:capability-supply:${profile.slug}`,
         reasonCode: 'labelled_sandbox_route_binding_replaced', evidenceRefs: [evidenceRef],
       },
@@ -600,11 +614,12 @@ export async function retireSupersededSandboxRouteSupply(
         expectedBindingRegistrationHash: binding.registrationHash,
         admissionEvidenceRefs: [evidenceRef], conformanceEvidenceRefs: [evidenceRef],
       },
-    }, retiredAt)
-    if (result.kind !== 'ineligible') {
-      throw new Error(`sandbox_route_historical_retirement_${result.kind}`)
+      }, retiredAt)
+      if (result.kind !== 'ineligible') {
+        throw new Error(`sandbox_route_historical_retirement_${result.kind}`)
+      }
+      retired.push(binding.bindingId)
     }
-    retired.push(binding.bindingId)
   }
   return retired
 }
