@@ -378,7 +378,7 @@ describe('current V2 Customer Request application path', () => {
     const refineAuth = await createCustomerRequestServiceAssertion({
       key, operation: 'refine', command: refineCommand,
       principal: {
-        principalId: 'principal:external', ownerId: 'owner:external', credentialId: 'credential:external',
+        principalId: 'principal:external:rotated', ownerId: 'owner:external', credentialId: 'credential:external:rotated',
         scopes: ['customer_requests:create'],
       },
       issuedAt: Date.now(),
@@ -389,6 +389,21 @@ describe('current V2 Customer Request application path', () => {
     if (answered.kind !== 'request' || answered.state !== 'ready_to_compare') {
       throw new Error(`external refinement missing: ${JSON.stringify(answered)}`)
     }
+    const wrongOwnerCommand = {
+      requestRef: answered.requestRef, expectedRevision: answered.revision,
+      idempotencyKey: 'refine:external:wrong-owner:1', message: 'Change the request.',
+    }
+    const wrongOwnerAuth = await createCustomerRequestServiceAssertion({
+      key, operation: 'refine', command: wrongOwnerCommand,
+      principal: {
+        principalId: 'principal:external:wrong-owner', ownerId: 'owner:other', credentialId: 'credential:external:wrong-owner',
+        scopes: ['customer_requests:create'],
+      },
+      issuedAt: Date.now(),
+    })
+    await expect(backend.action(api.customerRequestApplication.refine, {
+      ...wrongOwnerCommand, serviceAuth: { ...wrongOwnerAuth, scopes: [...wrongOwnerAuth.scopes] },
+    })).resolves.toEqual({ kind: 'refused', reason: 'request_not_found' })
     const prepareCommand = {
       requestRef: answered.requestRef, revision: answered.revision, idempotencyKey: 'prepare:external:1',
     }

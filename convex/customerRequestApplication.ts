@@ -2460,6 +2460,22 @@ async function resolveRequestCaller(
     scopes: [...assertion.scopes], seenAt: Date.now(),
   })
   if (recorded.kind !== 'recorded') return undefined
+  const requestRef = typeof command.requestRef === 'string' ? command.requestRef : undefined
+  if (requestRef !== undefined) {
+    const current = await loadCurrent(ctx, requestRef)
+    if (current.kind === 'current' && current.aggregate.snapshot.principalId !== assertion.principalId) {
+      const requestPrincipal = await ctx.runQuery(internal.customerRequestPrincipals.getAgentPrincipal, {
+        principalId: current.aggregate.snapshot.principalId,
+      })
+      if (requestPrincipal?.ownerId === assertion.ownerId
+        && requestPrincipal.ownerTokenIdentifier === `${clerkIssuer}|${assertion.ownerId}`) {
+        return {
+          principalId: requestPrincipal.principalId,
+          delegatedAgentId: assertion.principalId,
+        }
+      }
+    }
+  }
   return {
     principalId: assertion.principalId,
     delegatedAgentId: assertion.principalId,
