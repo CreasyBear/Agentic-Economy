@@ -10,8 +10,8 @@ afterEach(() => vi.restoreAllMocks())
 describe('customer Request production smoke entrypoint', () => {
   it('keeps the script as a credential-free front-door wrapper in preflight mode', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(new Response('/api/v1/requests /messages /confirmation /run /evidence /problems /cancellation customer_requests:create routes_ready route_confirmed'))
-      .mockResolvedValueOnce(new Response('/api/v1/requests /messages /confirmation /run /evidence /problems /cancellation customer_requests:create routes_ready route_confirmed'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests navigation.actions customer_requests:create routes_ready route_confirmed'))
+      .mockResolvedValueOnce(new Response('/api/v1/requests navigation.actions customer_requests:create routes_ready route_confirmed'))
       .mockResolvedValueOnce(Response.json({ kind: 'refused', reason: 'authentication_required' }, { status: 401 }))
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 

@@ -17,6 +17,7 @@ import {
 type ReleaseVerification = Readonly<{ kind: 'verified'; revision: string; deploymentId: string }>
 
 export type HostedCustomerRequestJourneyInput = Readonly<{
+  environment?: 'production' | 'development'
   baseUrl: string
   agentApiKey: string
   expectedRevision: string
@@ -49,13 +50,22 @@ type HostedCustomerRequestJourneyRuntimeInput = HostedCustomerRequestJourneyInpu
   metrics: JourneyMetrics
 }>
 
+const journeyReleaseSchema = z.discriminatedUnion('environment', [
+  z.strictObject({
+    revision: z.string().regex(/^[a-f0-9]{40}$/u), deploymentId: z.string().startsWith('dpl_'),
+    environment: z.literal('production'), baseUrl: z.url().startsWith('https://'),
+  }),
+  z.strictObject({
+    revision: z.string().regex(/^[a-f0-9]{40}$/u), deploymentId: z.string().startsWith('convex:'),
+    environment: z.literal('development'), baseUrl: z.url().startsWith('http://'),
+    verification: z.literal('local_checkout_and_named_dev_deployment'),
+  }),
+])
+
 export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
   kind: z.literal('cold_external_agent_journey'),
   agent: z.object({ name: z.string(), version: z.string() }).strict(),
-  release: z.object({
-    revision: z.string().regex(/^[a-f0-9]{40}$/u), deploymentId: z.string().startsWith('dpl_'),
-    environment: z.literal('production'), baseUrl: z.url().startsWith('https://'),
-  }).strict(),
+  release: journeyReleaseSchema,
   observedAt: z.iso.datetime(),
   input: z.object({
     request: z.string(),
@@ -103,7 +113,7 @@ export type HostedCustomerRequestJourneyProof = Readonly<z.infer<typeof hostedCu
 export async function runHostedCustomerRequestJourney(
   input: HostedCustomerRequestJourneyInput,
 ): Promise<HostedCustomerRequestJourneyProof> {
-  assertProductionBaseUrl(input.baseUrl)
+  assertJourneyBaseUrl(input.baseUrl, journeyEnvironment(input))
   const metrics: JourneyMetrics = {
     startedAt: (input.now ?? Date.now)(), requestCalls: 0, clarifications: 0,
   }
@@ -227,10 +237,7 @@ export async function runHostedCustomerRequestJourney(
       if (resumed.state !== 'cancelled') throw new Error(`hosted_journey_cancel_resume_failed:${resumed.state}`)
       return hostedCustomerRequestJourneyProofSchema.parse({
         kind: 'cold_external_agent_journey', agent: input.agent,
-        release: {
-          revision: release.revision, deploymentId: release.deploymentId,
-          environment: 'production', baseUrl: normalizedBaseUrl(input.baseUrl),
-        },
+        release: journeyReleaseProjection(input, release),
         observedAt: new Date((input.now ?? Date.now)()).toISOString(),
         input: { request: input.scenario.request, facts: consumedFacts, messages: consumedMessages },
         observedStates: states, authorityStops,
@@ -299,10 +306,7 @@ async function completeHostedJourney(input: Readonly<{
   }
   return hostedCustomerRequestJourneyProofSchema.parse({
     kind: 'cold_external_agent_journey', agent: input.input.agent,
-    release: {
-      revision: input.release.revision, deploymentId: input.release.deploymentId,
-      environment: 'production', baseUrl: normalizedBaseUrl(input.input.baseUrl),
-    },
+    release: journeyReleaseProjection(input.input, input.release),
     observedAt: new Date((input.input.now ?? Date.now)()).toISOString(),
     input: {
       request: input.input.scenario.request,
@@ -534,6 +538,41 @@ function observe(states: CustomerRequestView['state'][], view: CustomerRequestVi
 
 function normalizedBaseUrl(value: string): string {
   return value.replace(/\/+$/u, '')
+}
+
+function journeyEnvironment(input: HostedCustomerRequestJourneyInput): 'production' | 'development' {
+  return input.environment ?? 'production'
+}
+
+function journeyReleaseProjection(
+  input: HostedCustomerRequestJourneyInput,
+  release: ReleaseVerification,
+): z.infer<typeof journeyReleaseSchema> {
+  const base = {
+    revision: release.revision, deploymentId: release.deploymentId,
+    baseUrl: normalizedBaseUrl(input.baseUrl),
+  }
+  return journeyEnvironment(input) === 'development'
+    ? { ...base, environment: 'development', verification: 'local_checkout_and_named_dev_deployment' }
+    : { ...base, environment: 'production' }
+}
+
+function assertJourneyBaseUrl(value: string, environment: 'production' | 'development'): void {
+  if (environment === 'production') {
+    assertProductionBaseUrl(value)
+    return
+  }
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('hosted_journey_base_url_invalid')
+  }
+  if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost')
+    || url.username !== '' || url.password !== '' || url.pathname.replace(/\/+$/u, '') !== ''
+    || url.search !== '' || url.hash !== '') {
+    throw new Error('hosted_journey_base_url_not_development')
+  }
 }
 
 function assertProductionBaseUrl(value: string): void {

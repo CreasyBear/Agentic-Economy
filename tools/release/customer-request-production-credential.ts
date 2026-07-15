@@ -33,6 +33,7 @@ export async function withTemporaryClerkAcceptanceCredentials(input: Readonly<{
   fetch: typeof globalThis.fetch
   run: (credentials: Readonly<{ agentApiKey: string; customerSessionToken: string }>) => Promise<void>
   keyNamePrefix?: string
+  revocationReason?: string
 }>): Promise<void> {
   const headers = await clerkAcceptanceHeaders(input)
   await withTemporaryAgentKey({ ...input, headers, run: async (agentApiKey) => {
@@ -70,6 +71,7 @@ export async function withTemporaryClerkApiKey(input: Readonly<{
   fetch: typeof globalThis.fetch
   run: (apiKey: string) => Promise<void>
   keyNamePrefix?: string
+  revocationReason?: string
 }>): Promise<void> {
   const headers = await clerkAcceptanceHeaders(input)
   await withTemporaryAgentKey({ ...input, headers, run: input.run })
@@ -95,7 +97,7 @@ async function clerkAcceptanceHeaders(input: Readonly<{
 
 async function withTemporaryAgentKey(input: Readonly<{
   subject: string; fetch: typeof globalThis.fetch; headers: Record<string, string>
-  keyNamePrefix?: string; run: (apiKey: string) => Promise<void>
+  keyNamePrefix?: string; revocationReason?: string; run: (apiKey: string) => Promise<void>
 }>): Promise<void> {
   const createdValue = await readClerkJson(input.fetch, `${CLERK_API}/api_keys`, {
     method: 'POST', headers: input.headers,
@@ -119,7 +121,9 @@ async function withTemporaryAgentKey(input: Readonly<{
   try {
     const response = await input.fetch(`${CLERK_API}/api_keys/${encodeURIComponent(createdIdentity.id)}/revoke`, {
       method: 'POST', headers: input.headers,
-      body: JSON.stringify({ revocation_reason: 'Temporary production acceptance completed' }),
+      body: JSON.stringify({
+        revocation_reason: input.revocationReason ?? 'Temporary production acceptance completed',
+      }),
     })
     if (!response.ok) revocationFailure = new Error(`clerk_temporary_api_key_revocation_failed:${response.status}`)
   } catch (error) {

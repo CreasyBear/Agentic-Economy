@@ -8,6 +8,36 @@ import { projectCustomerRequestAgentNavigation } from '@/modules/customer-reques
 import type { CustomerRequestView } from '@/modules/customer-request/agent-contract'
 
 describe('hosted Customer Request journey', () => {
+  it('runs the exact cold-agent contract against an explicit loopback development surface', async () => {
+    const responses = completeJourneyResponses()
+    const proof = await runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'development-v1' },
+      scenario: {
+        request: 'Complete sandbox request', facts: {}, messages: [], finish: 'complete',
+      },
+      sandbox: true,
+      fetch: vi.fn(async () => {
+        const next = responses.shift()
+        return next === undefined ? Response.json({ error: 'unexpected' }, { status: 500 }) : Response.json(next)
+      }),
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })
+
+    expect(proof.release).toEqual({
+      revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      environment: 'development', baseUrl: 'http://127.0.0.1:4319',
+      verification: 'local_checkout_and_named_dev_deployment',
+    })
+  })
+
   it('refuses any non-production origin before credentials can leave the process', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>()
     await expect(runHostedCustomerRequestJourney({
@@ -559,4 +589,31 @@ function confirmation() {
     confirmationRef: 'confirmation:one', generationRef: 'generation:one', requestRevision: 2,
     confirmedAt: 8_000, validUntil: 20_000, route: routePlan(),
   }
+}
+
+function completeJourneyResponses(): unknown[] {
+  return [
+    compositeRoutesReadyView(),
+    compositeRoutesReadyView(),
+    requestView('route_confirmed', 2, { routeGenerationRef: 'generation:one', confirmation: confirmation() }),
+    requestView('in_progress', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'wait',
+      progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
+    }),
+    requestView('completed', 2, {
+      routeGenerationRef: 'generation:one', nextAction: 'none',
+      action: {
+        state: 'completed', resolution: 'provider_result', automaticRetry: false,
+        result: { quoteReference: 'sandbox-quote:complete' }, observedAt: 9_100,
+      },
+    }),
+    {
+      kind: 'evidence', requestRef: 'request:cold', state: 'completed', generatedAt: 9_100,
+      steps: [
+        { step: 1, state: 'completed', observedAt: 9_050, evidence: [{ receiptRef: 'receipt:one', label: 'Service reference' }] },
+        { step: 2, state: 'completed', observedAt: 9_100, evidence: [{ receiptRef: 'receipt:two', label: 'Quote reference' }] },
+      ],
+      result: { quoteReference: 'sandbox-quote:complete' },
+    },
+  ]
 }
