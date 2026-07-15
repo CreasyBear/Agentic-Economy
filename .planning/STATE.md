@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: customer-product-frontier
 status: active
-stopped_at: "Issue #125 is in progress: outcome-led choice review is source-complete locally; fresh-context comprehension proof remains open"
+stopped_at: "Wayfinder map reset around Ask -> Clarify -> Choose -> Confirm -> Follow -> Recover; reconcile open Ask and Compare proofs before finishing customer choice comprehension"
 last_updated: "2026-07-15"
 progress:
   total_phases: 6
@@ -21,6 +21,8 @@ progress:
 **Last source/local phase closed:** Phase 6 source/local proof only  
 **Status:** active gate with open deployed/provider/demo blockers
 ## Active decision
+
+Customer-product reset (2026-07-15): [Wayfinder map: Build one customer product over AE's neutral kernel](https://github.com/CreasyBear/Agentic-Economy/issues/112) now orders the remaining work by the customer's durable Request lifecycle: Ask, Clarify, Choose, Confirm, Follow and Recover. The neutral kernel remains production authority but is not the public product object. Recommendation, alternatives, confirmation, activity, result and recovery are customer-semantic projections of one Request. The immediate frontier is evidence reconciliation for the already-built Ask and Compare work before the unfinished real-human choice-comprehension proof continues. Standing authority, guarantees, marketplace expansion and broad brand claims stay downstream of a real end-to-end Request proof.
 
 `Agentic-Economy-Backup` is frozen as a source mine. The fresh `agentic-economy` repo is the working product repo.
 
