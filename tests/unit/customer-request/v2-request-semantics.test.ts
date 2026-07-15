@@ -784,6 +784,9 @@ describe('V2 Request semantics', () => {
     expect(deriveCustomerDecisionPreference('Find the cheapest suitable option')).toMatchObject({
       objective: 'lowest_maximum_price', basis: 'extracted_from_request',
     })
+    expect(deriveCustomerDecisionPreference('Prefer the lowest maximum total cost.')).toMatchObject({
+      objective: 'lowest_maximum_price', basis: 'extracted_from_request',
+    })
     expect(deriveCustomerDecisionPreference('Price should not be the cheapest')).toBeUndefined()
     const model = decisionModelWithCommitment()
     const interpreter = createJsonCustomerRequestSemanticInterpreter({

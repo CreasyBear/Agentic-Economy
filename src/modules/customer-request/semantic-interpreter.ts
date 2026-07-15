@@ -308,7 +308,7 @@ function inputPointerForDescriptor(
 export function deriveCustomerDecisionPreference(customerJob: string): CustomerRequestCapabilityProposal['decisionPreference'] {
   const normalized = customerJob.normalize('NFKC').toLocaleLowerCase('en')
   let latest: Readonly<{ index: number; priority: boolean }> | undefined
-  for (const match of normalized.matchAll(/\b(?:cheapest|lowest(?:[\s-]+maximum)?[\s-]+price)\b/gu)) {
+  for (const match of normalized.matchAll(/\b(?:cheapest|lowest(?:[\s-]+maximum)?(?:[\s-]+total)?[\s-]+(?:price|cost))\b/gu)) {
     const index = match.index
     const before = normalized.slice(Math.max(0, index - 48), index)
     const after = normalized.slice(index + match[0].length, index + match[0].length + 48)
