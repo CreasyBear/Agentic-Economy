@@ -8,14 +8,8 @@ import {
   CUSTOMER_REQUEST_AGENT_SCOPE,
   customerRequestAgentResultSchema,
   customerRequestEvidenceResultSchema,
-  customerRequestFactInputSchema,
   customerRequestJsonValueSchema,
-  customerRequestMessageInputSchema,
-  customerRequestOptionsInputSchema,
-  customerRequestProblemInputSchema,
   customerRequestProblemResultSchema,
-  customerRequestRouteActionInputSchema,
-  customerRequestRouteConfirmationInputSchema,
   customerRequestSubmitInputSchema,
   type CustomerRequestView,
 } from './agent-contract'
@@ -149,10 +143,10 @@ export async function runHostedCustomerRequestJourney(
       if (clarification.kind === 'intent_direction') {
         const message = input.scenario.messages[messageIndex]
         if (message === undefined) throw new Error(`hosted_journey_message_missing:${clarification.prompt}`)
-        view = await callObservedAgent(runtimeInput, view, 'answer_clarification', customerRequestMessageInputSchema.parse({
-          idempotencyKey: `acceptance:message:${nonce}:${messageIndex}`,
-          expectedRevision: view.revision, message,
-        }))
+        view = await callObservedAgent(runtimeInput, view, 'answer_clarification', {
+          '<unique string>': `acceptance:message:${nonce}:${messageIndex}`,
+          '<natural-language answer>': message,
+        })
         consumedMessages.push({ index: messageIndex, valueDigest: canonicalDigest(message) })
         messageIndex += 1
       } else {
@@ -162,11 +156,10 @@ export async function runHostedCustomerRequestJourney(
         if (fact === undefined) {
           throw new Error(`hosted_journey_fact_missing:${clarification.requirementKey}`)
         }
-        view = await callObservedAgent(runtimeInput, view, 'answer_clarification', customerRequestFactInputSchema.parse({
-          idempotencyKey: `acceptance:fact:${nonce}:${clarification.requirementKey}`,
-          expectedRevision: view.revision, requirementKey: clarification.requirementKey,
-          value: fact,
-        }))
+        view = await callObservedAgent(runtimeInput, view, 'answer_clarification', {
+          '<unique string>': `acceptance:fact:${nonce}:${clarification.requirementKey}`,
+          '<typed value>': customerRequestJsonValueSchema.parse(fact),
+        })
         consumedFacts.push({
           requirementKey: clarification.requirementKey,
           valueDigest: digestInput(fact),
@@ -177,9 +170,9 @@ export async function runHostedCustomerRequestJourney(
     }
 
     if (view.state === 'ready_to_compare') {
-      view = await callObservedAgent(runtimeInput, view, 'prepare_options', customerRequestOptionsInputSchema.parse({
-        revision: view.revision, idempotencyKey: `acceptance:prepare:${nonce}:${view.revision}`,
-      }), [200, 202])
+      view = await callObservedAgent(runtimeInput, view, 'prepare_options', {
+        '<unique string>': `acceptance:prepare:${nonce}:${view.revision}`,
+      }, [200, 202])
       observe(states, view)
       continue
     }
@@ -193,16 +186,16 @@ export async function runHostedCustomerRequestJourney(
       authorityStops.push('route_confirmation')
       view = await callObservedAgent(
         runtimeInput, view, 'confirm_option',
-        customerRequestRouteConfirmationInputSchema.parse({
-          revision: view.revision, routeRef: route.routeRef,
-          idempotencyKey: `acceptance:confirm:${nonce}:${view.revision}`,
-        }),
+        {
+          '<unique string>': `acceptance:confirm:${nonce}:${view.revision}`,
+          '<routeRef from decision.routes>': route.routeRef,
+        },
       )
       observe(states, view)
       if (view.state !== 'route_confirmed') throw new Error(`hosted_journey_confirmation_failed:${view.state}`)
       view = await callObservedAgent(
         runtimeInput, view, 'start_confirmed_option',
-        customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:run:${nonce}` }),
+        { '<unique string>': `acceptance:run:${nonce}` },
       )
       observe(states, view)
       if (view.state !== 'in_progress') throw new Error(`hosted_journey_run_failed:${view.state}`)
@@ -216,13 +209,16 @@ export async function runHostedCustomerRequestJourney(
       }
       const evidence = await callAgentEvidence(runtimeInput, evidencePath)
       if (evidence.state !== 'queued') throw new Error(`hosted_journey_evidence_state:${evidence.state}`)
-      const problem = await callAgentProblem(runtimeInput, observedNavigationPath(input, view, 'report_problem', 'POST'), {
-        idempotencyKey: `acceptance:problem:${nonce}`, category: 'other',
-        summary: 'Labelled sandbox recovery verification.',
-      })
+      const problemAction = observedNavigationAction(input, view, 'report_problem')
+      if (problemAction.method !== 'POST') throw new Error('hosted_journey_navigation_method:report_problem')
+      const problem = await callAgentProblem(runtimeInput, problemAction.path, materializeObservedInput(view, problemAction, {
+        '<unique string>': `acceptance:problem:${nonce}`,
+        '<incorrect_result | unexpected_cost | privacy_concern | could_not_stop | other>': 'other',
+        '<problem summary>': 'Labelled sandbox recovery verification.',
+      }))
       const cancelled = await callObservedAgent(
         runtimeInput, view, 'cancel',
-        customerRequestRouteActionInputSchema.parse({ idempotencyKey: `acceptance:cancel:${nonce}` }),
+        { '<unique string>': `acceptance:cancel:${nonce}` },
       )
       observe(states, cancelled)
       if (cancelled.state !== 'cancelled') throw new Error(`hosted_journey_cancellation_failed:${cancelled.state}`)
@@ -381,10 +377,11 @@ async function callObservedAgent(
   input: HostedCustomerRequestJourneyRuntimeInput,
   view: CustomerRequestView,
   relation: AgentNavigationRelation,
-  body?: unknown,
+  replacements: Readonly<Record<string, unknown>> = {},
   acceptedStatuses: readonly number[] = [200],
 ): Promise<CustomerRequestView> {
   const action = observedNavigationAction(input, view, relation)
+  const body = action.method === 'POST' ? materializeObservedInput(view, action, replacements) : undefined
   return await callAgent(input, action.path, action.method, body, acceptedStatuses)
 }
 
@@ -403,7 +400,7 @@ function observedNavigationAction(
   input: HostedCustomerRequestJourneyInput,
   view: CustomerRequestView,
   relation: AgentNavigationRelation,
-): Readonly<{ method: 'GET' | 'POST'; path: string }> {
+): ObservedNavigationAction {
   const matches = view.navigation?.actions.filter((action) => action.relation === relation) ?? []
   if (matches.length !== 1) throw new Error(`hosted_journey_navigation_missing:${relation}`)
   const action = matches[0]
@@ -421,7 +418,50 @@ function observedNavigationAction(
     || (target.pathname !== current.pathname && !target.pathname.startsWith(`${current.pathname}/`))) {
     throw new Error(`hosted_journey_navigation_unsafe:${relation}`)
   }
-  return { method: action.method, path: `${target.pathname}${target.search}` }
+  return { method: action.method, path: `${target.pathname}${target.search}`, input: action.input }
+}
+
+type ObservedNavigationAction = Readonly<{ method: 'GET' | 'POST'; path: string; input?: unknown }>
+
+function materializeObservedInput(
+  view: CustomerRequestView,
+  action: ObservedNavigationAction,
+  replacements: Readonly<Record<string, unknown>>,
+): unknown {
+  if (action.input === undefined) throw new Error('hosted_journey_navigation_input_missing')
+  const used = new Set<string>()
+  const visit = (value: unknown): unknown => {
+    if (typeof value === 'string' && Object.hasOwn(replacements, value)) {
+      used.add(value)
+      return replacements[value]
+    }
+    if (typeof value === 'string' && /^<[^>]+>$/u.test(value)) {
+      throw new Error(`hosted_journey_navigation_input_unresolved:${value}`)
+    }
+    if (Array.isArray(value)) return value.map(visit)
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, visit(entry)]))
+    }
+    return value
+  }
+  const materialized = customerRequestJsonValueSchema.parse(visit(action.input))
+  for (const placeholder of Object.keys(replacements)) {
+    if (!used.has(placeholder)) throw new Error(`hosted_journey_navigation_input_placeholder_missing:${placeholder}`)
+  }
+  if (materialized !== null && typeof materialized === 'object' && !Array.isArray(materialized)) {
+    const record = materialized as Record<string, unknown>
+    for (const revision of [record.revision, record.expectedRevision]) {
+      if (revision !== undefined && revision !== view.revision) {
+        throw new Error('hosted_journey_navigation_input_stale_revision')
+      }
+    }
+    if (record.requirementKey !== undefined
+      && (view.clarification?.kind !== 'contract_fact'
+        || record.requirementKey !== view.clarification.requirementKey)) {
+      throw new Error('hosted_journey_navigation_input_wrong_requirement')
+    }
+  }
+  return materialized
 }
 
 async function callAgentEvidence(input: HostedCustomerRequestJourneyRuntimeInput, path: string) {
@@ -444,7 +484,7 @@ async function callAgentProblem(
   input.metrics.requestCalls += 1
   const response = await (input.fetch ?? fetch)(`${normalizedBaseUrl(input.baseUrl)}${path}`, {
     method: 'POST', headers: headers(input, input.agentApiKey),
-    body: JSON.stringify(customerRequestProblemInputSchema.parse(body)),
+    body: JSON.stringify(body),
   })
   const value: unknown = await response.json()
   if (!response.ok) throw responseError('POST', path, response.status, value)

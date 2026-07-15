@@ -143,11 +143,16 @@ describe('hosted Customer Request journey', () => {
 
   it('discovers every post-submit transition from the observed agent navigation', async () => {
     const routes = withNavigation(compositeRoutesReadyView(), [
-      navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/observed-confirm'),
+      navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/observed-confirm', {
+        idempotencyKey: '<unique string>', revision: 2,
+        routeRef: '<routeRef from decision.routes>', serverTemplateMarker: 'observed-confirm-template',
+      }),
     ])
     const confirmed = withNavigation(requestView('route_confirmed', 2, {
       routeGenerationRef: 'generation:one', confirmation: confirmation(),
-    }), [navigationAction('start_confirmed_option', 'POST', '/api/v1/requests/request%3Acold/observed-start')])
+    }), [navigationAction('start_confirmed_option', 'POST', '/api/v1/requests/request%3Acold/observed-start', {
+      idempotencyKey: '<unique string>',
+    })])
     const progress = withNavigation(requestView('in_progress', 2, {
       routeGenerationRef: 'generation:one', nextAction: 'wait',
       progress: { completed: 0, total: 2, current: { step: 1, state: 'queued' } },
@@ -177,10 +182,16 @@ describe('hosted Customer Request journey', () => {
       ],
       result: { quoteReference: 'sandbox-quote:complete' },
     }]
-    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       const expectedPath = expectedPaths.shift()
       const actualPath = new URL(input.toString()).pathname
       if (actualPath !== expectedPath) throw new Error(`scripted_path_used:${actualPath}`)
+      if (actualPath.endsWith('/observed-confirm')) {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        if (body.serverTemplateMarker !== 'observed-confirm-template') {
+          throw new Error('observed_input_template_ignored')
+        }
+      }
       const response = responses.shift()
       if (response === undefined) throw new Error('unexpected request')
       return Response.json(response)
@@ -240,6 +251,29 @@ describe('hosted Customer Request journey', () => {
       verifyDiscovery: async () => undefined,
       verifyAnonymousRefusal: async () => undefined,
     })).rejects.toThrow('hosted_journey_navigation_unsafe:confirm_option')
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses a stale revision embedded in an observed input template', async () => {
+    const routes = withNavigation(routesReadyView(), [
+      navigationAction('confirm_option', 'POST', '/api/v1/requests/request%3Acold/confirmation', {
+        idempotencyKey: '<unique string>', revision: 1,
+        routeRef: '<routeRef from decision.routes>',
+      }),
+    ])
+    const responses = [routes, routes]
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(responses.shift()))
+
+    await expect(runHostedCustomerRequestJourney({
+      baseUrl: 'https://agentic-economy-phi.vercel.app', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'dpl_exact',
+      agent: { name: 'cold-external-agent', version: 'navigation-v1' },
+      scenario: { request: 'Complete sandbox request', facts: {}, messages: [] },
+      sandbox: true, fetch,
+      verifyRelease: async () => ({ kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'dpl_exact' }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+    })).rejects.toThrow('hosted_journey_navigation_input_stale_revision')
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
@@ -442,8 +476,8 @@ function requestView(state: string, revision: number, extra: Record<string, unkn
   return { ...view, navigation: extra.navigation ?? projectCustomerRequestAgentNavigation(view as CustomerRequestView) }
 }
 
-function navigationAction(relation: string, method: 'GET' | 'POST', href: string) {
-  return { relation, method, href, summary: 'Follow the observed transition.' }
+function navigationAction(relation: string, method: 'GET' | 'POST', href: string, input?: Record<string, unknown>) {
+  return { relation, method, href, summary: 'Follow the observed transition.', input }
 }
 
 function withNavigation(view: ReturnType<typeof requestView>, actions: ReturnType<typeof navigationAction>[]) {
