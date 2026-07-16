@@ -452,10 +452,8 @@ export async function registerSandboxRouteSupplyRegistrations(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registeredAt: number,
 ): Promise<SandboxV2SupplyRegistration[]> {
-  const providerOrigin = process.env.AE_SANDBOX_PROVIDER_ORIGIN?.trim()
-    || process.env.AE_SITE_URL?.trim()
-    || 'https://agentic-economy-phi.vercel.app'
   return await Promise.all(Object.values(SANDBOX_ROUTE_PROVIDER_PROFILES).map(async (profile) => {
+    const providerOrigin = sandboxRouteProviderOrigin(profile)
     const encoded = encodeCapabilityContractDocument(profile.contract)
     const [contract, business] = await Promise.all([
       registerCapabilityContractDocument(db, encoded.documentJson, registeredAt),
@@ -510,6 +508,18 @@ export async function registerSandboxRouteSupplyRegistrations(
       bindingRegistrationHash: binding.registrationHash,
     }
   }))
+}
+
+function sandboxRouteProviderOrigin(
+  profile: (typeof SANDBOX_ROUTE_PROVIDER_PROFILES)[keyof typeof SANDBOX_ROUTE_PROVIDER_PROFILES],
+): string {
+  const profileOrigin = profile === SANDBOX_ROUTE_PROVIDER_PROFILES.resolver
+    ? process.env.AE_SANDBOX_ROUTE_RESOLVER_ORIGIN?.trim()
+    : process.env.AE_SANDBOX_ROUTE_QUOTER_ORIGIN?.trim()
+  return profileOrigin
+    || process.env.AE_SANDBOX_PROVIDER_ORIGIN?.trim()
+    || process.env.AE_SITE_URL?.trim()
+    || 'https://agentic-economy-phi.vercel.app'
 }
 
 export async function admitSandboxV2Supply(
@@ -583,6 +593,7 @@ export async function retireSupersededSandboxRouteSupply(
 ): Promise<string[]> {
   const retired: string[] = []
   const siteUrl = process.env.AE_SITE_URL?.trim() || 'https://agentic-economy-phi.vercel.app'
+  const priorSharedProviderOrigin = process.env.AE_SANDBOX_PROVIDER_ORIGIN?.trim() || siteUrl
   const registrationsBySlug = new Map(registrations.map((registration) => [registration.slug, registration]))
   for (const [routeKey, profile] of Object.entries(SANDBOX_ROUTE_PROVIDER_PROFILES)) {
     const corrected = registrationsBySlug.get(profile.slug)
@@ -599,6 +610,11 @@ export async function retireSupersededSandboxRouteSupply(
         offeringId: profile.priorV2OfferingId,
         bindingId: profile.priorV2BindingId,
         endpointUrl: new URL(profile.endpointPath, siteUrl).href,
+      },
+      {
+        offeringId: profile.priorV3OfferingId,
+        bindingId: profile.priorV3BindingId,
+        endpointUrl: new URL(profile.endpointPath, priorSharedProviderOrigin).href,
       },
     ] as const
     for (const expected of historical) {
