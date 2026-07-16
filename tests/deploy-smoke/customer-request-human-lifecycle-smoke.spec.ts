@@ -6,8 +6,9 @@ const baseUrl = productionBaseUrl()
 const requestText = process.env.AE_CUSTOMER_REQUEST_TEXT?.trim()
   || 'Find a labelled sandbox service and tell me what it costs.'
 const expectedBusinesses = expectedBusinessNames()
+const finish = expectedFinish()
 
-test('a cold human browser completes and resumes the production Request lifecycle', async ({ page }) => {
+test('a cold human browser executes and resumes the Request lifecycle', async ({ page }) => {
   test.setTimeout(120_000)
   await applyVercelProtectionBypassToPage(page, baseUrl)
   await page.goto(new URL('/engine', baseUrl).href, { waitUntil: 'networkidle' })
@@ -27,6 +28,10 @@ test('a cold human browser completes and resumes the production Request lifecycl
   await page.getByRole('button', { name: /^Review /u }).first().click()
   await page.getByRole('button', { name: 'Confirm this choice' }).click()
   await page.getByRole('button', { name: 'Start now' }).click()
+  if (finish === 'outcome_unknown') {
+    await proveUnknownOutcomeRecovery(page)
+    return
+  }
   await waitForCompletedResult(page)
 
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible()
@@ -46,6 +51,53 @@ test('a cold human browser completes and resumes the production Request lifecycl
     /capabilityId|bindingId|offeringId|RoutePlan|RouteMandate|transport|MCP|x402|graph node/u,
   )
 })
+
+async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page): Promise<void> {
+  await expect(page.getByText('Still confirming', { exact: true }).first()).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
+  await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
+  await expect(page.getByText('Wait for confirmation before changing or starting this Request again.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check again' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Start now' })).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Edit this Request' })).not.toBeVisible()
+
+  const requestRef = await activeRequestRef(page)
+  const evidence = await page.evaluate(async (ref) => {
+    const response = await fetch(`/api/requests/${encodeURIComponent(ref)}/evidence`, {
+      headers: { Accept: 'application/json' },
+    })
+    return { status: response.status, body: await response.json() as unknown }
+  }, requestRef)
+  expect(evidence).toMatchObject({
+    status: 200,
+    body: {
+      kind: 'evidence', state: 'outcome_unknown',
+      steps: [{ step: 1, state: 'completed' }, { step: 2, state: 'outcome_unknown' }],
+    },
+  })
+
+  await page.getByRole('button', { name: 'Report a problem' }).click()
+  await page.getByLabel('What went wrong?').fill('The labelled sandbox quote result is still unknown.')
+  await page.getByRole('button', { name: 'Send problem report' }).click()
+  await expect(page.getByText(/Problem recorded\. Report reference/u)).toBeVisible()
+
+  await page.reload({ waitUntil: 'networkidle' })
+  await expect(page.getByText('Still confirming', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
+  await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
+  expect(await activeRequestRef(page)).toBe(requestRef)
+}
+
+async function activeRequestRef(page: import('@playwright/test').Page): Promise<string> {
+  const requestRef = await page.evaluate(() => {
+    const stored: unknown = JSON.parse(localStorage.getItem('ae.customer-request.active:v1') ?? 'null')
+    return stored !== null && typeof stored === 'object' && 'requestRef' in stored
+      ? String(stored.requestRef)
+      : undefined
+  })
+  expect(requestRef).toMatch(/^request:/u)
+  return requestRef as string
+}
 
 async function reachComparableChoice(page: import('@playwright/test').Page): Promise<void> {
   for (let turn = 0; turn < 5; turn += 1) {
@@ -117,4 +169,12 @@ function expectedBusinessNames(): readonly string[] {
     throw new Error('AE_CUSTOMER_REQUEST_EXPECTED_BUSINESSES_JSON_invalid')
   }
   return parsed
+}
+
+function expectedFinish(): 'complete' | 'outcome_unknown' {
+  const configured = process.env.AE_CUSTOMER_REQUEST_FINISH?.trim() ?? 'complete'
+  if (configured !== 'complete' && configured !== 'outcome_unknown') {
+    throw new Error('AE_CUSTOMER_REQUEST_FINISH must be complete or outcome_unknown for the human smoke')
+  }
+  return configured
 }
