@@ -565,6 +565,19 @@ const repeatPermissionResult = v.union(
   }),
 )
 type RepeatPermissionResult = Infer<typeof repeatPermissionResult>
+const repeatPermissionAssistantsResult = v.union(
+  v.object({
+    kind: v.literal('connected_assistants'),
+    requestRef: v.string(),
+    assistants: v.array(v.object({
+      assistantRef: v.string(),
+      label: v.string(),
+      lastUsedAt: v.number(),
+    })),
+  }),
+  v.object({ kind: v.literal('refused'), reason: refusedReason }),
+)
+type RepeatPermissionAssistantsResult = Infer<typeof repeatPermissionAssistantsResult>
 export const submit = action({
   args: {
     compilationKey: v.string(), requestId: v.string(), expectedRevision: v.optional(v.number()),
@@ -943,6 +956,33 @@ export const confirmRoute = action({
         ? 'Sign in again before confirming this choice.'
         : 'This choice can no longer be confirmed. Review the current options.',
     }))
+  },
+})
+
+export const listRepeatPermissionAssistants = action({
+  args: { requestRef: v.string() },
+  returns: repeatPermissionAssistantsResult,
+  handler: async (ctx, args): Promise<RepeatPermissionAssistantsResult> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
+    const caller = await resolveRequestCaller(ctx, 'inspect_repeat', args, undefined)
+    if (caller === undefined) return { kind: 'refused', reason: 'authentication_required' }
+    const current = await loadCurrent(ctx, args.requestRef)
+    if (current.kind !== 'current' || current.aggregate.snapshot.principalId !== caller.principalId) {
+      return { kind: 'refused', reason: 'request_not_found' }
+    }
+    const credentials = await ctx.runQuery(internal.customerRequestPrincipals.listStandingCredentials, {
+      ownerId: identity.subject,
+    })
+    return {
+      kind: 'connected_assistants',
+      requestRef: args.requestRef,
+      assistants: credentials.map((credential, index) => ({
+        assistantRef: credential.credentialId,
+        label: `Connected assistant ${index + 1}`,
+        lastUsedAt: credential.lastSeenAt,
+      })),
+    }
   },
 })
 

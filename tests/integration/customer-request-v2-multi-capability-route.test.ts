@@ -511,6 +511,17 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       ...permissionCommand,
       serviceAuth: { ...serviceAuth, scopes: [...serviceAuth.scopes] },
     })
+    await expect(admin.action(api.customerRequestApplication.listRepeatPermissionAssistants, {
+      requestRef: compared.requestRef,
+    })).resolves.toEqual({
+      kind: 'connected_assistants',
+      requestRef: compared.requestRef,
+      assistants: [{
+        assistantRef: 'credential:repeat-permission',
+        label: 'Connected assistant 1',
+        lastUsedAt: 1_000,
+      }],
+    })
 
     expect(permission, JSON.stringify(permission)).toMatchObject({
       kind: 'repeat_permission',

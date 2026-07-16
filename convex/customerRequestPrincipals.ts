@@ -52,3 +52,23 @@ export const getAgentPrincipal = internalQuery({
     }
   },
 })
+
+export const listStandingCredentials = internalQuery({
+  args: { ownerId: v.string() },
+  returns: v.array(v.object({
+    credentialId: v.string(),
+    lastSeenAt: v.number(),
+  })),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('customerRequestAgentPrincipals')
+      .withIndex('by_ownerId', (query) => query.eq('ownerId', args.ownerId))
+      .take(65)
+    if (rows.length > 64) throw new Error('customer_request_agent_principal_history_overflow')
+    return rows
+      .filter((row) => (
+        row.scopes.includes('customer_requests:standing_authority')
+      ))
+      .sort((left, right) => right.lastSeenAt - left.lastSeenAt)
+      .map((row) => ({ credentialId: row.credentialId, lastSeenAt: row.lastSeenAt }))
+  },
+})
