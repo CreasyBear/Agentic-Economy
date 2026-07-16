@@ -465,9 +465,12 @@ describe('hosted Customer Request journey', () => {
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
-  it('retries a transient interpreter outage with the same submitted Request', async () => {
+  it.each([
+    ['interpreter outage', { kind: 'refused', reason: 'interpreter_unavailable' }],
+    ['uncommitted Request response', { error: 'request_unavailable' }],
+  ])('retries a transient %s with the same submitted Request', async (_label, failure) => {
     const responses = [
-      Response.json({ kind: 'refused', reason: 'interpreter_unavailable' }, { status: 503 }),
+      Response.json(failure, { status: 503 }),
       Response.json(routesReadyView()),
       Response.json(routesReadyView()),
       Response.json(requestView('route_confirmed', 2, {

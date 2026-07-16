@@ -802,7 +802,7 @@ async function submitWithInterpreterRecovery(
         && error.method === 'POST'
         && error.path === '/api/v1/requests'
         && error.status === 503
-        && error.reason === 'interpreter_unavailable'
+        && (error.reason === 'interpreter_unavailable' || error.reason === 'request_unavailable')
       if (!retryable || attempt === 3) throw error
       await (input.sleep ?? defaultSleep)(1_000)
     }
