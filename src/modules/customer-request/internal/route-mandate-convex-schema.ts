@@ -212,7 +212,59 @@ export const routeStepGrantValue = v.object({
   expiresAt: v.number(),
 })
 
+export const standingRoutePolicyValue = v.object({
+  format: v.literal('ae.standing-route-policy:v1'),
+  policyRef: v.string(),
+  policyDigest: v.string(),
+  principalId: v.string(),
+  delegatedCredentialId: v.string(),
+  generationRef: v.string(),
+  generationDigest: v.string(),
+  routes: v.array(v.object({ routePlanId: v.string(), routeDigest: v.string() })),
+  capabilityContracts: v.array(capabilityContractRef),
+  allowedEffectClasses: v.array(v.literal('data_release')),
+  limits: v.object({
+    perUseSpend: money,
+    cumulativeSpend: money,
+    perUseDataAllocations: v.number(),
+    cumulativeDataAllocations: v.number(),
+    occurrences: v.number(),
+  }),
+  fallback: v.object({ kind: v.literal('explicit_confirmation_required') }),
+  validFrom: v.number(),
+  validUntil: v.number(),
+  revokedAt: v.optional(v.number()),
+})
+
 export const customerRequestRouteMandateTables = {
+  customerRequestStandingRoutePolicyIssues: defineTable({
+    policyRef: v.string(),
+    policyDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    requestRevision: v.number(),
+    generationRef: v.string(),
+    routePlanId: v.string(),
+    delegatedCredentialId: v.string(),
+    policy: standingRoutePolicyValue,
+    authenticationEvidenceRef: v.string(),
+    commandDigest: v.string(),
+    recordedAt: v.number(),
+  })
+    .index('by_policyRef', ['policyRef'])
+    .index('by_requestId_and_recordedAt', ['requestId', 'recordedAt']),
+
+  customerRequestStandingRoutePolicyCommands: defineTable({
+    commandKey: v.string(),
+    commandDigest: v.string(),
+    principalId: v.string(),
+    requestId: v.string(),
+    policyRef: v.string(),
+    policyDigest: v.string(),
+    result: standingRoutePolicyValue,
+    committedAt: v.number(),
+  }).index('by_commandKey', ['commandKey']),
+
   customerRequestRouteMandateIssues: defineTable({
     mandateRef: v.string(),
     mandateDigest: v.string(),

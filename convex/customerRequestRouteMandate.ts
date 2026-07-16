@@ -583,7 +583,7 @@ function routeMandateCommandKey(principalId: string, args: IssueCommand): string
   })}`
 }
 
-async function authenticateRequestOwnerForMutation(
+export async function authenticateRequestOwnerForMutation(
   ctx: MutationCtx,
   requestId: string,
   serviceAuthorization?: ServiceAuthorization,
@@ -652,7 +652,7 @@ async function authenticateRequestOwner(
   return authenticatedRequest(head.principalId, identity)
 }
 
-type AuthenticatedRequestResult =
+export type AuthenticatedRequestResult =
   | { kind: 'authenticated'; principalId: string; identity: AuthenticatedRequest['identity'] }
   | { kind: 'unauthenticated' }
   | { kind: 'not_found' }
@@ -672,7 +672,7 @@ function authenticatedRequest(
   }
 }
 
-async function openCurrentRouteGeneration(
+export async function openCurrentRouteGeneration(
   ctx: Pick<MutationCtx | QueryCtx, 'db'>,
   requestId: string,
 ): Promise<{

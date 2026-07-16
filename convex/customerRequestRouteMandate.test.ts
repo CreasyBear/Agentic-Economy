@@ -23,6 +23,70 @@ const identity = {
 describe('durable RouteMandate lifecycle', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('issues and exactly replays one immutable standing policy against the current route generation', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    const backend = convexTest(schema, modules)
+    const current = await committedRequest(backend)
+    const route = current.routeGeneration.routes[0]
+    if (route === undefined || route.maximumTotalCost.kind !== 'known') {
+      throw new Error('exact route fixture missing')
+    }
+    await expect(backend.mutation(internal.customerRequestPrincipals.recordAgentPrincipal, {
+      principalId: 'agent:assistant:standing',
+      ownerId: identity.subject,
+      ownerTokenIdentifier: identity.tokenIdentifier,
+      credentialId: 'credential:assistant:standing',
+      scopes: ['customer_requests:create', 'customer_requests:standing_authority'],
+      seenAt: 900,
+    })).resolves.toEqual({ kind: 'recorded' })
+    const command = {
+      requestId: current.aggregate.snapshot.requestId,
+      expectedRequestRevision: current.aggregate.snapshot.revision,
+      expectedGenerationRef: current.routeGeneration.generationRef,
+      selectedRoutePlanId: route.routePlanId,
+      delegatedCredentialId: 'credential:assistant:standing',
+      perUseSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor,
+      },
+      cumulativeSpend: {
+        currency: route.maximumTotalCost.currency,
+        amountMinor: route.maximumTotalCost.amountMinor * 2,
+      },
+      perUseDataAllocations: route.steps.reduce((total, step) => total + step.dataUse.length, 0),
+      cumulativeDataAllocations: route.steps.reduce((total, step) => total + step.dataUse.length, 0) * 2,
+      occurrences: 2,
+      validUntil: Math.min(route.expiresAt, 9_000),
+      idempotencyKey: 'standing-policy:one',
+    }
+    const customer = backend.withIdentity(identity)
+
+    const issued = await customer.mutation(internal.customerRequestStandingRoutePolicy.issue, command)
+    expect(issued).toMatchObject({
+      kind: 'issued',
+      policy: {
+        format: 'ae.standing-route-policy:v1',
+        principalId: identity.tokenIdentifier,
+        delegatedCredentialId: command.delegatedCredentialId,
+        generationRef: current.routeGeneration.generationRef,
+        routes: [{ routePlanId: route.routePlanId, routeDigest: route.routeDigest }],
+        limits: {
+          perUseSpend: command.perUseSpend,
+          cumulativeSpend: command.cumulativeSpend,
+          occurrences: 2,
+        },
+        validFrom: 1_000,
+        validUntil: command.validUntil,
+      },
+    })
+    await expect(customer.mutation(internal.customerRequestStandingRoutePolicy.issue, command))
+      .resolves.toEqual({ ...issued, kind: 'replayed' })
+    await expect(customer.mutation(internal.customerRequestStandingRoutePolicy.issue, {
+      ...command,
+      expectedGenerationRef: 'route-generation:changed',
+    })).resolves.toEqual({ kind: 'conflict', reason: 'command_changed' })
+  })
+
   it('issues and exactly replays one server-derived mandate only for the authenticated Request principal', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const backend = convexTest(schema, modules)
