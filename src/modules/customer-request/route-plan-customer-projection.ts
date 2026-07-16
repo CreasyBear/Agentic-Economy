@@ -73,6 +73,13 @@ type ProjectionRoute = Readonly<{
 export type CustomerRoutePlanProjectionGeneration = Readonly<{
   generationRef: string
   requestRevision: number
+  decisionSnapshot?: Readonly<{
+    criteria: readonly Readonly<{
+      label: string
+      value: StableHashValue
+      basis: 'customer_provided' | 'extracted_from_request'
+    }>[]
+  }>
   routes: readonly ProjectionRoute[]
 }>
 type Route = ProjectionRoute
@@ -445,6 +452,19 @@ function projectChanges(
 ): CustomerRoutePlanDecision['changes'] {
   if (previous === undefined) return Object.freeze({ kind: 'initial' as const })
   const items: Change[] = []
+  if (previous.decisionSnapshot !== undefined && current.decisionSnapshot !== undefined) {
+    addChanged(
+      items,
+      'request_criteria',
+      criteriaSnapshot(previous),
+      criteriaSnapshot(current),
+      () => ({
+        kind: 'request_criteria',
+        before: criteriaSnapshot(previous),
+        after: criteriaSnapshot(current),
+      }),
+    )
+  }
   addChanged(
     items,
     'route_result',
@@ -535,6 +555,14 @@ function projectChanges(
         previousGenerationRef: previous.generationRef,
         items: Object.freeze(items),
       })
+}
+
+function criteriaSnapshot(generation: CustomerRoutePlanProjectionGeneration) {
+  return (generation.decisionSnapshot?.criteria ?? []).map(({ label, value, basis }) => ({
+    label,
+    value: structuredClone(value),
+    basis,
+  })).sort((left, right) => left.label.localeCompare(right.label))
 }
 
 function routeResultSnapshot(

@@ -588,6 +588,11 @@ describe('customer Request workspace', () => {
           kind: 'changed', previousGenerationRef: 'generation:one',
           items: [
             {
+              kind: 'request_criteria',
+              before: [{ label: 'Meeting time', value: '15:00', basis: 'customer_provided' }],
+              after: [{ label: 'Meeting time', value: '09:00', basis: 'customer_provided' }],
+            },
+            {
               kind: 'maximum_cost',
               before: [{
                 resultRef: 'route:opaque',
@@ -630,6 +635,7 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Through North Star Services and City Ledger')).toBeTruthy()
     expect(screen.getByText('Maximum $14.00')).toBeTruthy()
     expect(screen.queryByText(/Option fingerprint/i)).toBeNull()
+    expect(screen.getByText('What matters changed. Before: Meeting time: 15:00. Now: Meeting time: 09:00.')).toBeTruthy()
     expect(screen.getByText('The maximum for Prepare a governed result changed from $16.00 to $14.00.')).toBeTruthy()
     expect(screen.getByText('Businesses changed. Before: Prepare a governed result: North Star Services. Now: Prepare a governed result: North Star Services and City Ledger.')).toBeTruthy()
     expect(screen.getByText('It covers the requested result and every constraint AE could check.')).toBeTruthy()

@@ -846,6 +846,9 @@ function decisionChangeLabel(
   change: Extract<NonNullable<CustomerRequestView['decision']>['changes'], { kind: 'changed' }>['items'][number],
   resultNames: ReadonlyMap<string, string>,
 ): string {
+  if (change.kind === 'request_criteria') {
+    return `What matters changed. Before: ${criteriaList(change.before)}. Now: ${criteriaList(change.after)}.`
+  }
   if (change.kind === 'maximum_cost' && change.before.length === 1 && change.after.length === 1
     && change.before[0]?.cost.kind === 'known' && change.after[0]?.cost.kind === 'known') {
     return `The maximum for ${resultName(change.after[0].resultRef, resultNames)} changed from ${formatMoney(change.before[0].cost.currency, change.before[0].cost.amountMinor)} to ${formatMoney(change.after[0].cost.currency, change.after[0].cost.amountMinor)}.`
@@ -884,6 +887,15 @@ function decisionChangeLabel(
     return `Recovery changed. Before: ${recoveryList(change.before, resultNames)}. Now: ${recoveryList(change.after, resultNames)}.`
   }
   return `Cancellation changed. Before: ${cancellationList(change.before, resultNames)}. Now: ${cancellationList(change.after, resultNames)}.`
+}
+
+function criteriaList(criteria: readonly Readonly<{ label: string; value: unknown }>[]): string {
+  return criteria.map(({ label, value }) => `${label}: ${customerValue(value)}`).join('; ')
+}
+
+function customerValue(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return JSON.stringify(value)
 }
 
 function costList(

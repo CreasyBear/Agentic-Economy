@@ -241,6 +241,17 @@ const customerRoute = v.object({
 })
 const customerRouteDecisionChange = v.union(
   v.object({
+    kind: v.literal('request_criteria'),
+    before: v.array(v.object({
+      label: v.string(), value: v.any(),
+      basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+    })),
+    after: v.array(v.object({
+      label: v.string(), value: v.any(),
+      basis: v.union(v.literal('customer_provided'), v.literal('extracted_from_request')),
+    })),
+  }),
+  v.object({
     kind: v.literal('route_result'),
     before: v.object({ routeCount: v.number(), results: v.array(customerRouteResultChange) }),
     after: v.object({ routeCount: v.number(), results: v.array(customerRouteResultChange) }),

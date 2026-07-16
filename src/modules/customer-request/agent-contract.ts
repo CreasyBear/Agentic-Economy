@@ -330,6 +330,17 @@ export const customerRouteConfirmationSchema = z.object({
 
 const customerRouteDecisionChangeSchema = z.discriminatedUnion('kind', [
   z.object({
+    kind: z.literal('request_criteria'),
+    before: z.array(z.object({
+      label: z.string(), value: customerRequestJsonValueSchema,
+      basis: z.enum(['customer_provided', 'extracted_from_request']),
+    }).strict()),
+    after: z.array(z.object({
+      label: z.string(), value: customerRequestJsonValueSchema,
+      basis: z.enum(['customer_provided', 'extracted_from_request']),
+    }).strict()),
+  }).strict(),
+  z.object({
     kind: z.literal('route_result'),
     before: z.object({ routeCount: safeNonnegativeInteger, results: z.array(customerRouteResultChangeSchema) }).strict(),
     after: z.object({ routeCount: safeNonnegativeInteger, results: z.array(customerRouteResultChangeSchema) }).strict(),

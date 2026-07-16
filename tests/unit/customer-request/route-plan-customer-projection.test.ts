@@ -259,6 +259,32 @@ describe('RoutePlan customer projection', () => {
     expect(decision.routes[0]?.quoteDigest).not.toBe(previousDecision.routes[0]?.quoteDigest)
   })
 
+  it('reports a changed customer criterion even when the route shape stays the same', () => {
+    const previous = generation(1, [route({ amountMinor: 900 })], [
+      { label: 'Meeting time', value: '15:00', basis: 'customer_provided' },
+    ])
+    const current = generation(2, [route({ amountMinor: 900 })], [
+      { label: 'Meeting time', value: '09:00', basis: 'customer_provided' },
+    ])
+
+    const decision = projectCustomerRoutePlanDecision({
+      current,
+      previous,
+      businessNames: { 'business:one': 'North Star Services' },
+      capabilitySemantics,
+      now: 10_000,
+    })
+
+    expect(decision.changes).toMatchObject({
+      kind: 'changed',
+      items: [{
+        kind: 'request_criteria',
+        before: [{ label: 'Meeting time', value: '15:00', basis: 'customer_provided' }],
+        after: [{ label: 'Meeting time', value: '09:00', basis: 'customer_provided' }],
+      }],
+    })
+  })
+
   it('makes an expired generation legible without discarding its exact routes', () => {
     const decision = projectCustomerRoutePlanDecision({
       current: generation(1, [route({ amountMinor: 1_200 })]),
@@ -626,6 +652,11 @@ function copyCustomerMaterial(
 function generation(
   generationNumber: number,
   routes: readonly CustomerRequestRoutePlan[],
+  criteria?: readonly Readonly<{
+    label: string
+    value: string
+    basis: 'customer_provided' | 'extracted_from_request'
+  }>[],
 ): CustomerRequestRoutePlanGeneration {
   return {
     format: 'ae.route-plan-generation:v1',
@@ -641,6 +672,22 @@ function generation(
       proposalDigest: 'digest:proposal',
     },
     registrySnapshotDigest: 'digest:registry',
+    ...(criteria === undefined ? {} : {
+      decisionSnapshot: {
+        requestSnapshotDigest: `digest:request:${generationNumber}`,
+        factsDigest: `digest:facts:${generationNumber}`,
+        criteria: criteria.map((criterion, index) => ({
+          inputKey: `criterion:${index}` as never,
+          inputPointer: `/criterion/${index}`,
+          ...criterion,
+          criterionDigest: `digest:criterion:${generationNumber}:${index}`,
+        })),
+        completionRequirements: [],
+        evaluationDigest: `digest:evaluation:${generationNumber}`,
+        planRevisionId: `plan:${generationNumber}`,
+        planDigest: `digest:plan:${generationNumber}`,
+      },
+    }),
     routes,
     authority: 'proposal_only',
     createdAt: 1_000 + generationNumber,
