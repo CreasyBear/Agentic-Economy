@@ -1,6 +1,9 @@
 import type { CompileCustomerRequestResult } from './compiler'
 import type { JsonValue } from '@/modules/capability-contract/public'
-import { CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY } from './evaluation'
+import {
+  CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY,
+  CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY,
+} from './evaluation'
 import type { PreparedRouteCandidateSet } from './preparation'
 import { projectCustomerOptionSet } from './customer-option-set'
 import type {
@@ -129,6 +132,7 @@ export function projectRequestEvaluation(input: Readonly<{
     ? {}
     : { routeGenerationRef: input.routeGenerationRef }
   const maximumTotalCost = customerMaximumTotalCost(input.evaluation.criteria)
+  const maximumResponseTimeMs = customerMaximumResponseTimeMs(input.evaluation.criteria)
   const providerDataSharingProhibited = input.evaluation.criteria.some((criterion) => (
     criterion.inputKey === CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY && criterion.value === false
   ))
@@ -141,21 +145,30 @@ export function projectRequestEvaluation(input: Readonly<{
     nextAction: 'revise_request',
     criteria,
   })
-  if (input.outcome === 'unsupported' && maximumTotalCost !== undefined) return requestView({
-    ...routeGeneration,
-    requestRef: input.snapshot.requestId,
-    revision: input.snapshot.revision,
-    state: 'unsupported',
-    summary: `No current option stays within your ${formatCustomerMoney(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
-    nextAction: 'revise_request',
-    criteria,
-  })
   if (input.outcome === 'unsupported' && providerDataSharingProhibited) return requestView({
     ...routeGeneration,
     requestRef: input.snapshot.requestId,
     revision: input.snapshot.revision,
     state: 'unsupported',
     summary: 'Available options require sharing information with a business, which you asked AE not to do.',
+    nextAction: 'revise_request',
+    criteria,
+  })
+  if (input.outcome === 'unsupported' && maximumResponseTimeMs !== undefined) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: `No current option declares a response time within ${maximumResponseTimeMs} milliseconds.`,
+    nextAction: 'revise_request',
+    criteria,
+  })
+  if (input.outcome === 'unsupported' && maximumTotalCost !== undefined) return requestView({
+    ...routeGeneration,
+    requestRef: input.snapshot.requestId,
+    revision: input.snapshot.revision,
+    state: 'unsupported',
+    summary: `No current option stays within your ${formatCustomerMoney(maximumTotalCost.currency, maximumTotalCost.amountMinor)} maximum.`,
     nextAction: 'revise_request',
     criteria,
   })
@@ -234,6 +247,18 @@ function customerMaximumTotalCost(
   return typeof currency === 'string' && currency.length === 3
     && typeof amountMinor === 'number' && Number.isSafeInteger(amountMinor) && amountMinor >= 0
     ? { currency, amountMinor }
+    : undefined
+}
+
+function customerMaximumResponseTimeMs(
+  criteria: RequestEvaluationProjectionInput['criteria'],
+): number | undefined {
+  const criterion = criteria.find((candidate) => candidate.inputKey === CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY)
+  if (!isJsonRecord(criterion?.value)) return undefined
+  const amount = criterion.value.amount
+  const unit = criterion.value.unit
+  return typeof amount === 'number' && Number.isSafeInteger(amount) && amount >= 0 && unit === 'milliseconds'
+    ? amount
     : undefined
 }
 

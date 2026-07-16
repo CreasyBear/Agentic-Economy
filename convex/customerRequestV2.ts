@@ -27,6 +27,7 @@ import {
 import {
   deriveCustomerDecisionPreference,
   deriveCustomerMaximumTotalCostCriterion,
+  deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
 import {
@@ -1149,6 +1150,7 @@ async function validateAggregateAgainstCurrentCapabilityGraph(
         ...(() => {
           const criteria = [
             deriveCustomerMaximumTotalCostCriterion(aggregate.snapshot.intent),
+            deriveCustomerMaximumResponseTimeCriterion(aggregate.snapshot.intent),
             deriveCustomerProviderDataSharingCriterion(aggregate.snapshot.intent),
           ].filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== undefined)
           return criteria.length === 0 ? {} : { derivedCriteria: criteria }

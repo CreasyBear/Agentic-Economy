@@ -12,6 +12,7 @@ import {
 import { canonicalDigest } from '@/modules/common/canonical-digest'
 
 import {
+  CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY,
   CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY,
   type RequestFact,
   type UnderstoodCriterion,
@@ -156,6 +157,7 @@ const SYSTEM_INSTRUCTION_VERSION = 'customer-request-semantic:v8'
 const EXPLICIT_PRICE_PRIORITY_VERSION = 'customer-request-price-priority:v1'
 const EXPLICIT_MAXIMUM_TOTAL_COST_VERSION = 'customer-request-maximum-total-cost:v1'
 const EXPLICIT_PROVIDER_DATA_SHARING_VERSION = 'customer-request-provider-data-sharing:v1'
+const EXPLICIT_MAXIMUM_RESPONSE_TIME_VERSION = 'customer-request-maximum-response-time:v1'
 const SEMANTIC_RESPONSE_SCHEMA = Object.freeze({
   name: 'customer_request_semantic_proposal',
   strict: true,
@@ -513,6 +515,34 @@ export function deriveCustomerProviderDataSharingCriterion(customerJob: string):
     criterionDigest: canonicalDigest({
       customerJob, inputKey, inputPointer, label, value, basis,
       version: EXPLICIT_PROVIDER_DATA_SHARING_VERSION,
+    }),
+  })
+}
+
+export function deriveCustomerMaximumResponseTimeCriterion(customerJob: string): UnderstoodCriterion | undefined {
+  const normalized = customerJob.normalize('NFKC').toLocaleLowerCase('en')
+  let latestAmountMs: number | undefined
+  for (const match of normalized.matchAll(/\b(?:within|under|below|less\s+than|at\s+most|no\s+more\s+than|maximum|max)\s+(\d+(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s)\b/gu)) {
+    const precedingText = normalized.slice(Math.max(0, (match.index ?? 0) - 64), match.index)
+    if (!/\b(?:respond(?:s|ed|ing)?|response|complet(?:e|es|ed|ing|ion)|finish(?:es|ed|ing)?|return(?:s|ed|ing)?|deliver(?:s|ed|ing)?)\b[^.!?\n]{0,48}$/u.test(precedingText)) continue
+    const amount = Number(match[1])
+    const unit = match[2]
+    if (!Number.isFinite(amount) || amount < 0 || unit === undefined) continue
+    const amountMs = /^(?:s|secs?|seconds?)$/u.test(unit) ? amount * 1_000 : amount
+    if (!Number.isSafeInteger(amountMs)) continue
+    latestAmountMs = amountMs
+  }
+  if (latestAmountMs === undefined) return undefined
+  const inputKey = CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY
+  const inputPointer = '/customerConstraints/maximumResponseTimeMs'
+  const label = 'Maximum response time'
+  const value = Object.freeze({ amount: latestAmountMs, unit: 'milliseconds' })
+  const basis = 'extracted_from_request' as const
+  return Object.freeze({
+    inputKey, inputPointer, label, value, basis,
+    criterionDigest: canonicalDigest({
+      customerJob, inputKey, inputPointer, label, value, basis,
+      version: EXPLICIT_MAXIMUM_RESPONSE_TIME_VERSION,
     }),
   })
 }

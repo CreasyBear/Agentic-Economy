@@ -25,6 +25,7 @@ import {
   createJsonCustomerRequestSemanticInterpreter,
   deriveCustomerDecisionPreference,
   deriveCustomerMaximumTotalCostCriterion,
+  deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
 } from '@/modules/customer-request/semantic-interpreter'
 import { capabilityContractV2 } from '@/../tests/fixtures/capability-contract-v2'
@@ -964,6 +965,51 @@ describe('V2 Request semantics', () => {
       summary: 'Available options require sharing information with a business, which you asked AE not to do.',
       nextAction: 'revise_request',
     })
+  })
+
+  it('fails closed when an explicit maximum response time has no declared supply evidence', () => {
+    expect(deriveCustomerMaximumResponseTimeCriterion(
+      'Find a labelled sandbox option that responds within 50 milliseconds.',
+    )).toMatchObject({
+      label: 'Maximum response time', value: { amount: 50, unit: 'milliseconds' },
+      basis: 'extracted_from_request',
+    })
+    const lookup = compositionLookupModel()
+    const request = requiredInput(lookup, 'request')
+    const result = compileCustomerRequest({
+      requestId: 'request:maximum-response-time', expectedRevision: 0,
+      principalId: 'principal:test', delegatedAgentId: 'agent:test',
+      intent: 'Find a labelled sandbox option that responds within 50 milliseconds.',
+      networkId: 'ae:public',
+      proposal: { kind: 'capability_candidates', selections: [{
+        selectionKey: lookup.selectionKey, contractRef: lookup.contractRef,
+        facts: [{
+          contractRef: lookup.contractRef, selectionKey: lookup.selectionKey,
+          inputKey: request.key, inputPointer: request.inputPointer, schemaIdentity: request.schemaIdentity,
+          value: 'labelled sandbox option',
+          source: { kind: 'customer' as const, assertionRef: 'customer:request-message' },
+        }],
+      }] },
+      interpreterId: 'interpreter:test',
+      bindings: [supply('binding:lookup:maximum-response-time', lookup)],
+      models: [lookup], now: 10_000,
+    })
+
+    expect(result).toMatchObject({
+      kind: 'compiled', aggregate: { outcome: 'unsupported', evaluation: { candidates: [] } },
+    })
+    expect(result).not.toHaveProperty('routeGeneration')
+    expect(projectCustomerRequest(result)).toMatchObject({
+      state: 'unsupported',
+      summary: 'No current option declares a response time within 50 milliseconds.',
+      nextAction: 'revise_request',
+    })
+  })
+
+  it('does not invent a response-time constraint from an unrelated duration', () => {
+    expect(deriveCustomerMaximumResponseTimeCriterion(
+      'I will decide within 2 seconds; response time is not constrained.',
+    )).toBeUndefined()
   })
 
   it('does not price-rank otherwise viable routes across currencies', () => {

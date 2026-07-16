@@ -133,6 +133,7 @@ export type UnderstoodCriterion = Readonly<{
 }>
 
 export const CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY = 'customer:provider-data-sharing' as CapabilityInputKey
+export const CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY = 'customer:maximum-response-time' as CapabilityInputKey
 
 export type PreparationDisclosurePreview = Readonly<{
   maximumRecipients: number
@@ -211,11 +212,15 @@ export function evaluateCustomerRequestSnapshot(input: Readonly<{
   const providerDataSharingProhibited = criteria.some((criterion) => (
     criterion.inputKey === CUSTOMER_PROVIDER_DATA_SHARING_INPUT_KEY && criterion.value === false
   ))
-  const admittedInputs = providerDataSharingProhibited
-    ? input.candidates.filter(({ model }) => !model.dataUse.some((use) => (
+  const maximumResponseTimeRequired = criteria.some((criterion) => (
+    criterion.inputKey === CUSTOMER_MAXIMUM_RESPONSE_TIME_INPUT_KEY
+  ))
+  const admittedInputs = input.candidates.filter(({ model }) => (
+    !maximumResponseTimeRequired
+    && (!providerDataSharingProhibited || !model.dataUse.some((use) => (
         use.recipient.kind === 'candidate_binding' || use.recipient.kind === 'selected_binding'
       )))
-    : input.candidates
+  ))
   const candidates = admittedInputs.map((candidate): RequestEvaluationCandidate => {
     const facts = factsForModel(input.facts, candidate.model)
     const assessment = candidate.model.assessInput({

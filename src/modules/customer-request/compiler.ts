@@ -24,6 +24,7 @@ import {
 import {
   deriveCustomerDecisionPreference,
   deriveCustomerMaximumTotalCostCriterion,
+  deriveCustomerMaximumResponseTimeCriterion,
   deriveCustomerProviderDataSharingCriterion,
   type CustomerRequestSemanticProposal,
 } from './semantic-interpreter'
@@ -196,8 +197,9 @@ export function compileCustomerRequest(command: CompileCustomerRequestCommand): 
   if (facts === undefined) return { kind: 'refused', reason: 'unsafe_interpretation' }
   const decisionPreference = deriveCustomerDecisionPreference(command.intent)
   const maximumTotalCostCriterion = deriveCustomerMaximumTotalCostCriterion(command.intent)
+  const maximumResponseTimeCriterion = deriveCustomerMaximumResponseTimeCriterion(command.intent)
   const providerDataSharingCriterion = deriveCustomerProviderDataSharingCriterion(command.intent)
-  const derivedCriteria = [maximumTotalCostCriterion, providerDataSharingCriterion]
+  const derivedCriteria = [maximumTotalCostCriterion, maximumResponseTimeCriterion, providerDataSharingCriterion]
     .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== undefined)
   const baseActions = selected.map((selection, index): ProposedRequestAction => {
     const model = resolveExactModel(models, selection.contractRef)
