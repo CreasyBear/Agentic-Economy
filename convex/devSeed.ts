@@ -795,6 +795,118 @@ export async function retireSupersededSandboxRouteSupply(
   return retired
 }
 
+export async function retireSupersededSandboxProcurementSupply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  registrations: readonly SandboxV2SupplyRegistration[],
+  retiredAt: number,
+): Promise<string[]> {
+  const retired: string[] = []
+  const historicalOrigin = process.env.AE_SITE_URL?.trim()
+    || 'https://agentic-economy-phi.vercel.app'
+  const registrationsBySlug = new Map(registrations.map((registration) => [registration.slug, registration]))
+  const procurementProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
+    .filter(([, profile]) => profile.cohortId === 'procurement')
+  for (const [providerKey, profile] of procurementProfiles) {
+    if (registrationsBySlug.get(profile.slug) === undefined) {
+      throw new Error(`sandbox_workflow_corrected_registration_missing_${profile.slug}`)
+    }
+    const document = sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey)
+    const contractRef = encodeCapabilityContractDocument(document).contract.ref
+    const [business, offering, binding] = await Promise.all([
+      db.query('businesses').withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique(),
+      db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.priorOfferingId)).unique(),
+      db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.priorBindingId)).unique(),
+    ])
+    if (offering === null && binding === null) continue
+    const expectedOfferingRegistrationHash = business === null ? undefined : capabilityOfferingRegistrationHash({
+      offeringId: profile.priorOfferingId,
+      businessId: business._id,
+      networkId: 'ae:public',
+      contractRef,
+      presentation: {
+        label: profile.capabilityName,
+        summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
+        price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+        materialTerms: [{
+          termId: 'sandbox_only',
+          label: 'Environment',
+          value: 'Sandbox only; no real supplier order, payment, or fulfilment.',
+        }],
+        commercialRelationship: {
+          kind: 'none',
+          summary: 'Sandbox verification has no commercial relationship.',
+          influencesEligibility: false,
+          influencesInclusion: false,
+          influencesOrder: false,
+          evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+        },
+      },
+      searchTerms: [
+        profile.cohortLabel,
+        profile.capabilityName,
+        'workplace catering supplier recommendation',
+      ],
+      registrationEvidenceRefs: ['seed:sandbox-labelled-workflow-business'],
+    })
+    if (
+      business === null
+      || offering === null
+      || binding === null
+      || offering.businessId !== business._id
+      || offering.networkId !== 'ae:public'
+      || offering.capabilityId !== contractRef.capabilityId
+      || offering.version !== contractRef.version
+      || offering.contractDigest !== contractRef.contractDigest
+      || offering.registrationHash !== expectedOfferingRegistrationHash
+      || binding.offeringId !== profile.priorOfferingId
+      || binding.networkId !== 'ae:public'
+      || binding.capabilityId !== contractRef.capabilityId
+      || binding.version !== contractRef.version
+      || binding.contractDigest !== contractRef.contractDigest
+      || binding.endpointUrl !== new URL(profile.endpointPath, historicalOrigin).href
+      || binding.credentialRef !== 'env:AE_SANDBOX_PROVIDER_KEY'
+      || binding.adapterId !== 'http-json:v1'
+      || binding.configJson !== '{"method":"POST","requestTimeoutMs":5000}'
+      || binding.configDigest !== canonicalDigest({ method: 'POST', requestTimeoutMs: 5_000 })
+      || binding.continuation.kind !== 'single_response'
+      || binding.continuation.evidenceRefs.length !== 1
+      || binding.continuation.evidenceRefs[0] !== 'seed:sandbox-single-response'
+      || binding.cancellation.kind !== 'unsupported'
+      || binding.cancellation.evidenceRefs.length !== 1
+      || binding.cancellation.evidenceRefs[0] !== 'seed:sandbox-no-cancellation'
+      || binding.registrationEvidenceRefs.length !== 1
+      || binding.registrationEvidenceRefs[0] !== 'seed:production-v2-registration-path'
+    ) throw new Error(`sandbox_workflow_historical_identity_mismatch_${profile.priorBindingId}`)
+    const evidenceRef = 'seed:sandbox-workflow-origin-replaced'
+    const result = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:dev-seed' },
+      context: {
+        operationKey: `seed:capability-workflow-binding-retire:${profile.priorBindingId}`,
+        correlationId: `seed:capability-supply:${profile.slug}`,
+        reasonCode: 'labelled_sandbox_workflow_binding_replaced',
+        evidenceRefs: [evidenceRef],
+      },
+      eligibility: {
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef,
+        decision: 'revoke',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: [evidenceRef],
+        conformanceEvidenceRefs: [evidenceRef],
+      },
+    }, retiredAt)
+    if (result.kind !== 'ineligible') {
+      throw new Error(`sandbox_workflow_historical_retirement_${result.kind}`)
+    }
+    retired.push(binding.bindingId)
+  }
+  return retired
+}
+
 export async function retireSupersededSandboxV2Supply(
   db: Parameters<typeof registerCapabilityContractDocument>[0],
   registrations: readonly SandboxV2SupplyRegistration[],

@@ -22,6 +22,11 @@ import {
   SANDBOX_V2_LEGACY_CAPABILITY_CONTRACT_DOCUMENT,
   SANDBOX_V2_PRIOR_CAPABILITY_CONTRACT_DOCUMENT,
 } from '@/modules/sandbox-supply/public'
+import {
+  SANDBOX_WORKFLOW_PROVIDER_PROFILES,
+  sandboxWorkflowCapabilityContractDocument,
+  type SandboxWorkflowProviderKey,
+} from '@/modules/sandbox-supply/workflow-cohorts'
 import { encodeCapabilityContractDocument } from '@/modules/capability-contract-registry/public'
 
 const discoveredModules = import.meta.glob('../../convex/**/*.{ts,js}')
@@ -575,6 +580,52 @@ describe('labelled sandbox V2 capability supply', () => {
     await expect(readHistoricalRouteV1Retirement(backend)).resolves.toEqual(afterMigration)
   })
 
+  it('retires exact historical procurement v1 supply after corrected workflow supply is published and replays idempotently', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-procurement-brief'
+        || fixture.requestedSlug === 'sandbox-supplier-options'
+        || fixture.requestedSlug === 'sandbox-procurement-recommendation'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerHistoricalProcurementV1Supply(ctx.db)
+    })
+
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    const afterMigration = await readHistoricalProcurementV1Retirement(backend)
+    expect(afterMigration.bindings).toEqual([
+      { bindingId: 'binding:sandbox-procurement-brief:http-json:v1', admission: 'not_admitted', conformance: 'not_conformant' },
+      { bindingId: 'binding:sandbox-procurement-recommendation:http-json:v1', admission: 'not_admitted', conformance: 'not_conformant' },
+      { bindingId: 'binding:sandbox-supplier-options:http-json:v1', admission: 'not_admitted', conformance: 'not_conformant' },
+    ])
+    expect(afterMigration.operations).toHaveLength(3)
+    expect(afterMigration.audits).toHaveLength(6)
+
+    await backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {})
+    await expect(readHistoricalProcurementV1Retirement(backend)).resolves.toEqual(afterMigration)
+  })
+
+  it('refuses to retire a reserved historical procurement binding at a different provider endpoint', async () => {
+    const backend = convexTest(schema, modules)
+    await backend.run(async (ctx) => {
+      const fixtures = DEV_SEED_BUSINESS_FIXTURES.filter((fixture) => (
+        fixture.requestedSlug === 'sandbox-procurement-brief'
+        || fixture.requestedSlug === 'sandbox-supplier-options'
+        || fixture.requestedSlug === 'sandbox-procurement-recommendation'
+      ))
+      await registerSandboxBusinesses(runtimeDb(ctx.db), fixtures, 1_000)
+      await registerHistoricalProcurementV1Supply(ctx.db, {
+        briefEndpointUrl: 'https://wrong-provider.example.test/capability',
+      })
+    })
+
+    await expect(backend.mutation(internal.sandboxAcceptanceSupply.seedLabelledSandboxSupply, {}))
+      .rejects.toThrow(
+        'sandbox_workflow_historical_identity_mismatch_binding:sandbox-procurement-brief:http-json:v1',
+      )
+  })
+
   it('retires exact historical route v2 supply when the provider origin changes and replays idempotently', async () => {
     const backend = convexTest(schema, modules)
     await backend.run(async (ctx) => {
@@ -1050,6 +1101,108 @@ async function registerHistoricalRouteV1Supply(
   }
 }
 
+async function registerHistoricalProcurementV1Supply(
+  db: Parameters<typeof registerCapabilityContractDocument>[0],
+  options: Readonly<{ briefEndpointUrl?: string }> = {},
+): Promise<void> {
+  const procurementProfiles = Object.entries(SANDBOX_WORKFLOW_PROVIDER_PROFILES)
+    .filter(([, profile]) => profile.cohortId === 'procurement')
+  for (const [providerKey, profile] of procurementProfiles) {
+    const encoded = encodeCapabilityContractDocument(
+      sandboxWorkflowCapabilityContractDocument(providerKey as SandboxWorkflowProviderKey),
+    )
+    const contract = await registerCapabilityContractDocument(db, encoded.documentJson, 2_000)
+    if (contract.kind !== 'registered') throw new Error(`historical workflow contract failed: ${contract.reason}`)
+    const business = await db.query('businesses')
+      .withIndex('by_slug', (query) => query.eq('slug', profile.slug)).unique()
+    if (business === null) throw new Error(`historical workflow business missing: ${profile.slug}`)
+    const offering = await registerCapabilityOfferingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:historical-workflow-offering:${profile.priorOfferingId}`,
+        correlationId: `test:historical-workflow-supply:${profile.slug}`,
+        reasonCode: 'test_historical_workflow_registration',
+        evidenceRefs: ['test:historical-workflow-supply'],
+      },
+      registration: {
+        offeringId: profile.priorOfferingId,
+        businessId: business._id,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        presentation: {
+          label: profile.capabilityName,
+          summary: `Labelled sandbox ${profile.cohortLabel.toLowerCase()} workflow evidence only.`,
+          price: { kind: 'fixed', currency: 'AUD', amountMinor: profile.amountMinor },
+          materialTerms: [{
+            termId: 'sandbox_only',
+            label: 'Environment',
+            value: 'Sandbox only; no real supplier order, payment, or fulfilment.',
+          }],
+          commercialRelationship: {
+            kind: 'none',
+            summary: 'Sandbox verification has no commercial relationship.',
+            influencesEligibility: false,
+            influencesInclusion: false,
+            influencesOrder: false,
+            evidenceRefs: ['seed:sandbox-commercial-neutrality'],
+          },
+        },
+        searchTerms: [
+          profile.cohortLabel,
+          profile.capabilityName,
+          'workplace catering supplier recommendation',
+        ],
+        registrationEvidenceRefs: ['seed:sandbox-labelled-workflow-business'],
+      },
+    }, 2_100)
+    if (offering.kind !== 'registered') throw new Error(`historical workflow offering failed: ${offering.reason}`)
+    const binding = await registerCapabilityBindingCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:historical-workflow-binding:${profile.priorBindingId}`,
+        correlationId: `test:historical-workflow-supply:${profile.slug}`,
+        reasonCode: 'test_historical_workflow_registration',
+        evidenceRefs: ['test:historical-workflow-supply'],
+      },
+      registration: {
+        bindingId: profile.priorBindingId,
+        offeringId: profile.priorOfferingId,
+        networkId: 'ae:public',
+        contractRef: contract.ref,
+        endpointUrl: providerKey === 'procurement-brief' && options.briefEndpointUrl !== undefined
+          ? options.briefEndpointUrl
+          : new URL(profile.endpointPath, 'https://agentic-economy-phi.vercel.app').href,
+        credentialRef: 'env:AE_SANDBOX_PROVIDER_KEY',
+        continuation: { kind: 'single_response', evidenceRefs: ['seed:sandbox-single-response'] },
+        cancellation: { kind: 'unsupported', evidenceRefs: ['seed:sandbox-no-cancellation'] },
+        adapter: { adapterId: 'http-json:v1', config: { method: 'POST', requestTimeoutMs: 5_000 } },
+        registrationEvidenceRefs: ['seed:production-v2-registration-path'],
+      },
+    }, 2_200)
+    if (binding.kind !== 'registered') throw new Error(`historical workflow binding failed: ${binding.reason}`)
+    const admitted = await setCapabilitySupplyEligibilityCommand(db, {
+      actor: { kind: 'system', ref: 'system:migration-test' },
+      context: {
+        operationKey: `test:historical-workflow-admission:${profile.priorBindingId}`,
+        correlationId: `test:historical-workflow-supply:${profile.slug}`,
+        reasonCode: 'test_historical_workflow_admission',
+        evidenceRefs: ['test:historical-workflow-supply'],
+      },
+      eligibility: {
+        offeringId: profile.priorOfferingId,
+        bindingId: profile.priorBindingId,
+        contractRef: contract.ref,
+        decision: 'admit',
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['test:historical-workflow-supply'],
+        conformanceEvidenceRefs: ['test:historical-workflow-supply'],
+      },
+    }, 2_300)
+    if (admitted.kind !== 'eligible') throw new Error(`historical workflow admission failed: ${admitted.kind}`)
+  }
+}
+
 async function readHistoricalRouteV1Retirement(
   backend: ReturnType<typeof convexTest>,
 ) {
@@ -1071,6 +1224,28 @@ async function readHistoricalRouteRetirement(
     audits: (await ctx.db.query('auditEvents').collect()).filter((audit) => (
       audit.eventType === 'capability_supply.eligibility_changed'
       && audit.idempotencyKey.startsWith('seed:capability-route-binding-retire:')
+    )),
+  }))
+}
+
+async function readHistoricalProcurementV1Retirement(
+  backend: ReturnType<typeof convexTest>,
+) {
+  return backend.run(async (ctx) => ({
+    bindings: (await ctx.db.query('capabilityTransportBindings').collect())
+      .filter((binding) => (
+        (binding.bindingId.startsWith('binding:sandbox-procurement-')
+          || binding.bindingId === 'binding:sandbox-supplier-options:http-json:v1')
+        && binding.bindingId.endsWith(':v1')
+      ))
+      .map(({ bindingId, admission, conformance }) => ({ bindingId, admission, conformance }))
+      .sort((left, right) => left.bindingId.localeCompare(right.bindingId)),
+    operations: (await ctx.db.query('operationKeys').collect()).filter((operation) => (
+      operation.key.startsWith('seed:capability-workflow-binding-retire:')
+    )),
+    audits: (await ctx.db.query('auditEvents').collect()).filter((audit) => (
+      audit.eventType === 'capability_supply.eligibility_changed'
+      && audit.idempotencyKey.startsWith('seed:capability-workflow-binding-retire:')
     )),
   }))
 }
