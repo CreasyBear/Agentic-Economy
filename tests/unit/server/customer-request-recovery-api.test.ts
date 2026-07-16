@@ -41,6 +41,7 @@ describe('Customer Request recovery surface', () => {
         visibility: 'customer_and_ae_only' as const,
         evidence: [],
         affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
+        claims: [],
       },
     }
     let humanCommand: Record<string, unknown> | undefined
@@ -76,6 +77,7 @@ describe('Customer Request recovery surface', () => {
         decisionAuthority: 'not_assigned' as const,
         visibility: 'customer_and_ae_only' as const, evidence: [],
         reportedAt: 950, affected: { step: 1, attemptRef: 'attempt:opaque', business: 'Example business' },
+        claims: [],
         history: [{
           version: 0, state: 'received' as const, source: 'customer' as const,
           message: 'The result is wrong.', recordedAt: 950,

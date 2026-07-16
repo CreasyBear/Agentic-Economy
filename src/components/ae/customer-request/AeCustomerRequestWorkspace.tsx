@@ -1164,6 +1164,28 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
             </Text>
             {problem.evidence.length === 0 ? null
               : <Text type="supporting" color="secondary">{problem.evidence.length} recorded evidence item{problem.evidence.length === 1 ? '' : 's'} attached.</Text>}
+            {(() => {
+              const businessClaims = []
+              for (const claim of problem.claims) {
+                if (claim.claimSource === 'business') businessClaims.push(claim)
+              }
+              return businessClaims.length === 0 ? null : <div className="grid gap-1">
+                <Text type="supporting" weight="semibold">Business statements</Text>
+                {businessClaims.map((claim) => <Text
+                  key={`${claim.business ?? 'business'}:${claim.recordedAt}`}
+                  type="supporting"
+                  color="secondary"
+                >
+                  {claim.business ?? 'The business'}: {claim.statement}{' '}
+                  {claim.causalityPosition === 'supports'
+                    ? 'The business says this supports your report.'
+                    : claim.causalityPosition === 'disputes'
+                      ? 'The business disputes the reported cause.'
+                      : 'The business says the cause is still uncertain.'}
+                </Text>)}
+                <Text type="supporting" color="secondary">These statements do not decide cause, responsibility, or remedy.</Text>
+              </div>
+            })()}
             {problem.history.length <= 1 ? null : <ol className="grid gap-1 border-l border-border pl-3">
               {problem.history.slice(1).map((update) => <li key={update.version}>
                 <Text type="supporting" color="secondary">

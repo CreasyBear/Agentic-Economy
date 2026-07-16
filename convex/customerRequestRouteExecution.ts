@@ -981,6 +981,134 @@ export const reportProblem = internalMutation({
   },
 })
 
+const businessCausalityPosition = v.union(
+  v.literal('supports'),
+  v.literal('disputes'),
+  v.literal('uncertain'),
+)
+
+const businessProblemReportResult = v.union(
+  v.object({
+    kind: v.union(v.literal('recorded'), v.literal('replayed')),
+    statementRef: v.string(),
+    reportRef: v.string(),
+    business: v.string(),
+    causalityPosition: businessCausalityPosition,
+    statement: v.string(),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    recordedAt: v.number(),
+  }),
+  v.object({ kind: v.literal('conflict') }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authentication_required'),
+      v.literal('authority_denied'),
+      v.literal('report_not_found'),
+      v.literal('sharing_not_authorized'),
+      v.literal('evidence_not_found'),
+      v.literal('invalid_report'),
+    ),
+  }),
+)
+
+export const recordProblemBusinessReport = internalMutation({
+  args: {
+    reportRef: v.string(),
+    idempotencyKey: v.string(),
+    causalityPosition: businessCausalityPosition,
+    statement: v.string(),
+    evidenceReceiptRefs: v.array(v.string()),
+  },
+  returns: businessProblemReportResult,
+  handler: async (ctx, args): Promise<Infer<typeof businessProblemReportResult>> => {
+    const identity = await ctx.auth.getUserIdentity()
+    if (identity === null) return { kind: 'refused', reason: 'authentication_required' }
+    const report = await ctx.db.query('customerRequestRouteProblemReports')
+      .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
+    if (report === null || report.attemptRef === undefined) {
+      return { kind: 'refused', reason: 'report_not_found' }
+    }
+    if ((report.visibility ?? 'customer_and_ae_only') !== 'share_with_affected_business') {
+      return { kind: 'refused', reason: 'sharing_not_authorized' }
+    }
+    const attempt = await ctx.db.query('customerRequestRouteStepAttempts')
+      .withIndex('by_attemptRef', (query) => query.eq('attemptRef', report.attemptRef!)).unique()
+    if (attempt === null || attempt.requestId !== report.requestId || attempt.position !== report.step
+      || !routeAttemptIntegrityValid(attempt)) {
+      throw new Error('customer_request_route_problem_attempt_integrity_failure')
+    }
+    const business = await ctx.db.get(attempt.grant.step.businessId as Id<'businesses'>)
+    const owner = business === null ? null : await ctx.db.get(business.ownerId)
+    if (business === null || owner === null || owner.clerkUserId !== identity.subject) {
+      return { kind: 'refused', reason: 'authority_denied' }
+    }
+    const statement = args.statement.trim()
+    if (args.idempotencyKey.trim().length === 0 || statement.length === 0 || statement.length > 1_000
+      || args.evidenceReceiptRefs.length > 20
+      || new Set(args.evidenceReceiptRefs).size !== args.evidenceReceiptRefs.length) {
+      return { kind: 'refused', reason: 'invalid_report' }
+    }
+    const commandKey = `route-problem-business-report:v1:${canonicalDigest({
+      reportRef: args.reportRef,
+      businessId: String(business._id),
+      idempotencyKey: args.idempotencyKey,
+    })}`
+    const commandDigest = canonicalDigest(args)
+    const prior = await ctx.db.query('customerRequestRouteProblemBusinessReports')
+      .withIndex('by_commandKey', (query) => query.eq('commandKey', commandKey)).unique()
+    if (prior !== null) {
+      const priorEvidence = labelAttemptEvidence(attempt, prior.evidenceReceiptRefs)
+      if (priorEvidence.length !== prior.evidenceReceiptRefs.length) {
+        throw new Error('customer_request_route_problem_business_report_integrity_failure')
+      }
+      return prior.commandDigest === commandDigest
+        ? {
+          kind: 'replayed',
+          statementRef: prior.statementRef,
+          reportRef: prior.reportRef,
+          business: prior.businessName,
+          causalityPosition: prior.causalityPosition,
+          statement: prior.statement,
+          evidence: priorEvidence,
+          recordedAt: prior.createdAt,
+        }
+        : { kind: 'conflict' }
+    }
+    const evidence = labelAttemptEvidence(attempt, args.evidenceReceiptRefs)
+    if (evidence.length !== args.evidenceReceiptRefs.length) {
+      return { kind: 'refused', reason: 'evidence_not_found' }
+    }
+    const recordedAt = Date.now()
+    const statementRef = `problem-business-report:${canonicalDigest({
+      commandKey, commandDigest, attemptRef: attempt.attemptRef,
+    })}`
+    await ctx.db.insert('customerRequestRouteProblemBusinessReports', {
+      statementRef,
+      reportRef: report.reportRef,
+      commandKey,
+      commandDigest,
+      businessId: String(business._id),
+      businessName: business.name,
+      actorRef: identity.tokenIdentifier,
+      causalityPosition: args.causalityPosition,
+      statement,
+      evidenceReceiptRefs: args.evidenceReceiptRefs,
+      createdAt: recordedAt,
+    })
+    return {
+      kind: 'recorded',
+      statementRef,
+      reportRef: report.reportRef,
+      business: business.name,
+      causalityPosition: args.causalityPosition,
+      statement,
+      evidence,
+      recordedAt,
+    }
+  },
+})
+
 const problemUpdateState = v.union(
   v.literal('investigating'),
   v.literal('waiting_for_customer'),
@@ -1253,6 +1381,19 @@ const supportProblemExport = v.object({
   evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
   reportedAt: v.number(),
   affected: v.object({ step: v.number(), business: v.optional(v.string()) }),
+  claims: v.array(v.object({
+    claimSource: v.union(v.literal('customer'), v.literal('business')),
+    causalityPosition: v.union(
+      v.literal('reported_problem'),
+      v.literal('supports'),
+      v.literal('disputes'),
+      v.literal('uncertain'),
+    ),
+    statement: v.string(),
+    business: v.optional(v.string()),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    recordedAt: v.number(),
+  })),
   history: v.array(v.object({
     version: v.number(),
     state: v.union(
@@ -1292,8 +1433,9 @@ export const exportProblemForSupport = internalQuery({
     const problem = await ctx.db.query('customerRequestRouteProblemReports')
       .withIndex('by_reportRef', (query) => query.eq('reportRef', args.reportRef)).unique()
     if (problem === null) return { kind: 'not_found' as const }
-    const [updates, attempt] = await Promise.all([
+    const [updates, businessReports, attempt] = await Promise.all([
       readProblemUpdates(ctx, problem.reportRef),
+      readProblemBusinessReports(ctx, problem.reportRef),
       problem.attemptRef === undefined
         ? null
         : ctx.db.query('customerRequestRouteStepAttempts')
@@ -1323,6 +1465,12 @@ export const exportProblemForSupport = internalQuery({
     if ((problem.evidenceReceiptRefs ?? []).some((receiptRef) => !evidenceByReceipt.has(receiptRef))) {
       throw new Error('customer_request_route_problem_evidence_integrity_failure')
     }
+    if (businessReports.some((report) => (
+      report.businessId !== attempt?.grant.step.businessId
+      || report.evidenceReceiptRefs.some((receiptRef) => !evidenceByReceipt.has(receiptRef))
+    ))) {
+      throw new Error('customer_request_route_problem_business_report_integrity_failure')
+    }
     return {
       kind: 'problem_export' as const,
       reportRef: problem.reportRef,
@@ -1348,6 +1496,29 @@ export const exportProblemForSupport = internalQuery({
         step: problem.step ?? 1,
         ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
       },
+      claims: [
+        {
+          claimSource: 'customer' as const,
+          causalityPosition: 'reported_problem' as const,
+          statement: problem.summary,
+          evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
+            receiptRef,
+            label: evidenceByReceipt.get(receiptRef)!,
+          })),
+          recordedAt: problem.createdAt,
+        },
+        ...businessReports.map((businessReport) => ({
+          claimSource: 'business' as const,
+          causalityPosition: businessReport.causalityPosition,
+          statement: businessReport.statement,
+          business: businessReport.businessName,
+          evidence: businessReport.evidenceReceiptRefs.map((receiptRef) => ({
+            receiptRef,
+            label: evidenceByReceipt.get(receiptRef)!,
+          })),
+          recordedAt: businessReport.createdAt,
+        })),
+      ],
       history: [
         {
           version: 0,
@@ -1381,6 +1552,30 @@ async function readProblemUpdates(ctx: MutationCtx | QueryCtx, reportRef: string
     throw new Error('customer_request_route_problem_update_integrity_failure')
   }
   return updates
+}
+
+async function readProblemBusinessReports(ctx: MutationCtx | QueryCtx, reportRef: string) {
+  const reports = await ctx.db.query('customerRequestRouteProblemBusinessReports')
+    .withIndex('by_reportRef_and_createdAt', (query) => query.eq('reportRef', reportRef))
+    .take(101)
+  if (reports.length > 100) {
+    throw new Error('customer_request_route_problem_business_report_integrity_failure')
+  }
+  return reports
+}
+
+function labelAttemptEvidence(
+  attempt: Doc<'customerRequestRouteStepAttempts'>,
+  receiptRefs: readonly string[],
+) {
+  const available = new Map((attempt.evidence ?? []).map((item, index) => [
+    `evidence:${canonicalDigest({ attemptRef: attempt.attemptRef, evidence: item })}`,
+    `Result evidence ${index + 1}`,
+  ]))
+  return receiptRefs.flatMap((receiptRef) => {
+    const label = available.get(receiptRef)
+    return label === undefined ? [] : [{ receiptRef, label }]
+  })
 }
 
 export const exportCustomerEvidence = internalQuery({
@@ -1426,6 +1621,19 @@ export const exportCustomerEvidence = internalQuery({
         affected: v.object({
           step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
         }),
+        claims: v.array(v.object({
+          claimSource: v.union(v.literal('customer'), v.literal('business')),
+          causalityPosition: v.union(
+            v.literal('reported_problem'),
+            v.literal('supports'),
+            v.literal('disputes'),
+            v.literal('uncertain'),
+          ),
+          statement: v.string(),
+          business: v.optional(v.string()),
+          evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+          recordedAt: v.number(),
+        })),
         history: v.array(v.object({
           version: v.number(),
           state: v.union(
@@ -1459,9 +1667,10 @@ export const exportCustomerEvidence = internalQuery({
     if (problems.length > 100 || problems.some((problem) => problem.principalId !== args.principalId)) {
       throw new Error('customer_request_route_problem_integrity_failure')
     }
-    const updatesByProblem = await Promise.all(
-      problems.map(async (problem) => readProblemUpdates(ctx, problem.reportRef)),
-    )
+    const [updatesByProblem, businessReportsByProblem] = await Promise.all([
+      Promise.all(problems.map(async (problem) => readProblemUpdates(ctx, problem.reportRef))),
+      Promise.all(problems.map(async (problem) => readProblemBusinessReports(ctx, problem.reportRef))),
+    ])
     return {
       kind: 'found' as const, state: run.state, generatedAt: Date.now(),
       ...(run.resultJson === undefined ? {} : { resultJson: run.resultJson }),
@@ -1474,6 +1683,7 @@ export const exportCustomerEvidence = internalQuery({
       })),
       problems: problems.map((problem, problemIndex) => {
         const updates = updatesByProblem[problemIndex] ?? []
+        const businessReports = businessReportsByProblem[problemIndex] ?? []
         const latest = updates.at(-1)
         const tracking = projectCustomerRequestProblemTracking(
           problem.createdAt,
@@ -1492,6 +1702,12 @@ export const exportCustomerEvidence = internalQuery({
               `Result evidence ${index + 1}`,
             )
           }
+        }
+        if (businessReports.some((businessReport) => (
+          businessReport.businessId !== attempt?.grant.step.businessId
+          || businessReport.evidenceReceiptRefs.some((receiptRef) => !evidenceByReceipt.has(receiptRef))
+        ))) {
+          throw new Error('customer_request_route_problem_business_report_integrity_failure')
         }
         return {
           reportRef: problem.reportRef,
@@ -1514,6 +1730,29 @@ export const exportCustomerEvidence = internalQuery({
             ...(problem.attemptRef === undefined ? {} : { attemptRef: problem.attemptRef }),
             ...(problem.businessName === undefined ? {} : { business: problem.businessName }),
           },
+          claims: [
+            {
+              claimSource: 'customer' as const,
+              causalityPosition: 'reported_problem' as const,
+              statement: problem.summary,
+              evidence: (problem.evidenceReceiptRefs ?? []).map((receiptRef) => ({
+                receiptRef,
+                label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',
+              })),
+              recordedAt: problem.createdAt,
+            },
+            ...businessReports.map((businessReport) => ({
+              claimSource: 'business' as const,
+              causalityPosition: businessReport.causalityPosition,
+              statement: businessReport.statement,
+              business: businessReport.businessName,
+              evidence: businessReport.evidenceReceiptRefs.map((receiptRef) => ({
+                receiptRef,
+                label: evidenceByReceipt.get(receiptRef) ?? 'Recorded evidence',
+              })),
+              recordedAt: businessReport.createdAt,
+            })),
+          ],
           history: [
             {
               version: 0,

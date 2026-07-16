@@ -1049,6 +1049,101 @@ export const reportRouteProblem = action({
   },
 })
 
+const businessProblemReportActionResult = v.union(
+  v.object({
+    kind: v.literal('business_report_recorded'),
+    statementRef: v.string(),
+    reportRef: v.string(),
+    business: v.string(),
+    claimSource: v.literal('business'),
+    causalityPosition: v.union(
+      v.literal('supports'),
+      v.literal('disputes'),
+      v.literal('uncertain'),
+    ),
+    causality: v.literal('unknown'),
+    resolution: v.literal('not_adjudicated'),
+    decisionAuthority: v.literal('not_assigned'),
+    statement: v.string(),
+    evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+    recordedAt: v.number(),
+  }),
+  v.object({ kind: v.literal('conflict'), reason: v.literal('idempotency_key_reused') }),
+  v.object({
+    kind: v.literal('refused'),
+    reason: v.union(
+      v.literal('authentication_required'),
+      v.literal('authority_denied'),
+      v.literal('report_not_found'),
+      v.literal('sharing_not_authorized'),
+      v.literal('evidence_not_found'),
+      v.literal('invalid_report'),
+    ),
+  }),
+)
+type BusinessProblemReportActionResult = Infer<typeof businessProblemReportActionResult>
+
+export const recordRouteProblemBusinessReport = action({
+  args: {
+    reportRef: v.string(),
+    idempotencyKey: v.string(),
+    causalityPosition: v.union(
+      v.literal('supports'),
+      v.literal('disputes'),
+      v.literal('uncertain'),
+    ),
+    statement: v.string(),
+    evidenceReceiptRefs: v.optional(v.array(v.string())),
+  },
+  returns: businessProblemReportActionResult,
+  handler: async (ctx, args): Promise<BusinessProblemReportActionResult> => {
+    const result: Readonly<
+      | {
+          kind: 'recorded' | 'replayed'
+          statementRef: string
+          reportRef: string
+          business: string
+          causalityPosition: 'supports' | 'disputes' | 'uncertain'
+          statement: string
+          evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
+          recordedAt: number
+        }
+      | { kind: 'conflict' }
+      | {
+          kind: 'refused'
+          reason:
+            | 'authentication_required'
+            | 'authority_denied'
+            | 'report_not_found'
+            | 'sharing_not_authorized'
+            | 'evidence_not_found'
+            | 'invalid_report'
+        }
+    > = await ctx.runMutation(
+      internal.customerRequestRouteExecution.recordProblemBusinessReport,
+      { ...args, evidenceReceiptRefs: args.evidenceReceiptRefs ?? [] },
+    )
+    if (result.kind === 'conflict') {
+      return { kind: 'conflict', reason: 'idempotency_key_reused' }
+    }
+    if (result.kind === 'refused') return result
+    return {
+      kind: 'business_report_recorded',
+      statementRef: result.statementRef,
+      reportRef: result.reportRef,
+      business: result.business,
+      claimSource: 'business',
+      causalityPosition: result.causalityPosition,
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      decisionAuthority: 'not_assigned',
+      statement: result.statement,
+      evidence: result.evidence.map((item) => ({ ...item })),
+      recordedAt: result.recordedAt,
+    }
+  },
+})
+
 export const updateRouteProblemStatus = action({
   args: {
     reportRef: v.string(),
@@ -1256,6 +1351,19 @@ const supportProblemExportResult = v.union(
     evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
     reportedAt: v.number(),
     affected: v.object({ step: v.number(), business: v.optional(v.string()) }),
+    claims: v.array(v.object({
+      claimSource: v.union(v.literal('customer'), v.literal('business')),
+      causalityPosition: v.union(
+        v.literal('reported_problem'),
+        v.literal('supports'),
+        v.literal('disputes'),
+        v.literal('uncertain'),
+      ),
+      statement: v.string(),
+      business: v.optional(v.string()),
+      evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+      recordedAt: v.number(),
+    })),
     history: v.array(v.object({
       version: v.number(),
       state: v.union(
@@ -1340,6 +1448,19 @@ const evidenceExport = v.object({
     affected: v.object({
       step: v.number(), attemptRef: v.optional(v.string()), business: v.optional(v.string()),
     }),
+    claims: v.array(v.object({
+      claimSource: v.union(v.literal('customer'), v.literal('business')),
+      causalityPosition: v.union(
+        v.literal('reported_problem'),
+        v.literal('supports'),
+        v.literal('disputes'),
+        v.literal('uncertain'),
+      ),
+      statement: v.string(),
+      business: v.optional(v.string()),
+      evidence: v.array(v.object({ receiptRef: v.string(), label: v.string() })),
+      recordedAt: v.number(),
+    })),
     history: v.array(v.object({
       version: v.number(),
       state: v.union(
@@ -1399,6 +1520,14 @@ export const exportRouteEvidence = action({
             evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
             reportedAt: number
             affected: Readonly<{ step: number; attemptRef?: string; business?: string }>
+            claims: readonly Readonly<{
+              claimSource: 'customer' | 'business'
+              causalityPosition: 'reported_problem' | 'supports' | 'disputes' | 'uncertain'
+              statement: string
+              business?: string
+              evidence: readonly Readonly<{ receiptRef: string; label: string }>[]
+              recordedAt: number
+            }>[]
             history: readonly Readonly<{
               version: number
               state: 'received' | 'investigating' | 'waiting_for_customer' | 'closed'
@@ -1421,6 +1550,10 @@ export const exportRouteEvidence = action({
       problems: exported.problems.map((problem) => ({
         ...problem, affected: { ...problem.affected },
         evidence: problem.evidence.map((item) => ({ ...item })),
+        claims: problem.claims.map((claim) => ({
+          ...claim,
+          evidence: claim.evidence.map((item) => ({ ...item })),
+        })),
         history: problem.history.map((item) => ({ ...item })),
       })),
       ...(result === undefined ? {} : { result }),

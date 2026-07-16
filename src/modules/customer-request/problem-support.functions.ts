@@ -46,6 +46,14 @@ const supportProblemExportSchema = z.union([
     evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
     reportedAt: z.number().int().nonnegative(),
     affected: z.strictObject({ step: z.number().int().positive(), business: z.string().optional() }),
+    claims: z.array(z.strictObject({
+      claimSource: z.enum(['customer', 'business']),
+      causalityPosition: z.enum(['reported_problem', 'supports', 'disputes', 'uncertain']),
+      statement: z.string(),
+      business: z.string().optional(),
+      evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
+      recordedAt: z.number().int().nonnegative(),
+    })).default([]),
     history: z.array(z.strictObject({
       version: z.number().int().nonnegative(),
       state: z.enum(['received', 'investigating', 'waiting_for_customer', 'closed']),

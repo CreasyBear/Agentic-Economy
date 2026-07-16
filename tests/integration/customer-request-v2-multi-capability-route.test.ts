@@ -1446,6 +1446,150 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('records an affected business claim without turning it into causality or remedy authority', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(8_000)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const support = await supportAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'business-problem-claim')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'run:business-problem-claim',
+    })
+    const firstLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:business-problem-claim',
+      leaseDurationMs: 10_000,
+    })
+    if (firstLease.kind !== 'leased') throw new Error('business problem step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: firstLease.dispatch.dispatchRef,
+      attemptRef: firstLease.dispatch.attemptRef,
+      workerId: 'worker:business-problem-claim',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
+      attemptRef: firstLease.dispatch.attemptRef,
+      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: firstLease.dispatch.attemptRef,
+      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
+      outcome: { kind: 'succeeded', outputJson: JSON.stringify({ serviceReference: 'service:business-claim' }) },
+    })
+    const evidenceBeforeReport = await admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })
+    if (evidenceBeforeReport.kind !== 'evidence' || evidenceBeforeReport.steps[0]?.evidence[0] === undefined) {
+      throw new Error('business problem evidence was not recorded')
+    }
+    const receiptRef = evidenceBeforeReport.steps[0].evidence[0].receiptRef
+    const reported = await admin.action(api.customerRequestApplication.reportRouteProblem, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'problem:business-problem-claim',
+      category: 'incorrect_result',
+      summary: 'The first business result did not satisfy the confirmed request.',
+      affectedStep: 1,
+      evidenceReceiptRefs: [receiptRef],
+      visibility: 'share_with_affected_business',
+    })
+    if (reported.kind !== 'problem_reported') throw new Error('business problem report was not accepted')
+
+    const affectedOwner = await businessOwnerForAttempt(backend, firstLease.dispatch.attemptRef)
+    const unrelatedOwner = (await publishedBusinessOwner(backend, 'unrelated-problem-claim')).owner
+    const command = {
+      reportRef: reported.reportRef,
+      idempotencyKey: 'business-claim:first',
+      causalityPosition: 'uncertain' as const,
+      statement: 'Our recorded output is authentic, but it does not establish which step caused the final mismatch.',
+      evidenceReceiptRefs: [receiptRef],
+    }
+    await expect(unrelatedOwner.action(
+      api.customerRequestApplication.recordRouteProblemBusinessReport,
+      command,
+    )).resolves.toEqual({ kind: 'refused', reason: 'authority_denied' })
+    await expect(affectedOwner.action(
+      api.customerRequestApplication.recordRouteProblemBusinessReport,
+      { ...command, idempotencyKey: 'business-claim:invented-evidence', evidenceReceiptRefs: ['evidence:invented'] },
+    )).resolves.toEqual({ kind: 'refused', reason: 'evidence_not_found' })
+
+    now.mockReturnValue(9_000)
+    const recorded = await affectedOwner.action(
+      api.customerRequestApplication.recordRouteProblemBusinessReport,
+      command,
+    )
+    expect(recorded).toMatchObject({
+      kind: 'business_report_recorded',
+      reportRef: reported.reportRef,
+      causalityPosition: 'uncertain',
+      claimSource: 'business',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      decisionAuthority: 'not_assigned',
+      evidence: [{ receiptRef }],
+      recordedAt: 9_000,
+    })
+    await expect(affectedOwner.action(
+      api.customerRequestApplication.recordRouteProblemBusinessReport,
+      command,
+    )).resolves.toEqual(recorded)
+    await expect(affectedOwner.action(
+      api.customerRequestApplication.recordRouteProblemBusinessReport,
+      { ...command, statement: 'Changed replay.' },
+    )).resolves.toEqual({ kind: 'conflict', reason: 'idempotency_key_reused' })
+
+    const customerExport = await admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })
+    expect(customerExport).toMatchObject({
+      kind: 'evidence',
+      problems: [{
+        reportRef: reported.reportRef,
+        causality: 'unknown',
+        resolution: 'not_adjudicated',
+        claims: [
+          {
+            claimSource: 'customer',
+            causalityPosition: 'reported_problem',
+            statement: 'The first business result did not satisfy the confirmed request.',
+            evidence: [{ receiptRef }],
+          },
+          {
+            claimSource: 'business',
+            causalityPosition: 'uncertain',
+            statement: 'Our recorded output is authentic, but it does not establish which step caused the final mismatch.',
+            evidence: [{ receiptRef }],
+            recordedAt: 9_000,
+          },
+        ],
+      }],
+    })
+    await expect(support.action(api.customerRequestApplication.exportRouteProblemForSupport, {
+      reportRef: reported.reportRef,
+    })).resolves.toMatchObject({
+      kind: 'problem_export',
+      causality: 'unknown',
+      resolution: 'not_adjudicated',
+      claims: [
+        { claimSource: 'customer', causalityPosition: 'reported_problem' },
+        { claimSource: 'business', causalityPosition: 'uncertain' },
+      ],
+    })
+
+    const privateReport = await admin.action(api.customerRequestApplication.reportRouteProblem, {
+      requestRef: confirmed.requestRef,
+      idempotencyKey: 'problem:private-business-problem-claim',
+      category: 'incorrect_result',
+      summary: 'Keep this report between the customer and AE.',
+      affectedStep: 1,
+      evidenceReceiptRefs: [receiptRef],
+      visibility: 'customer_and_ae_only',
+    })
+    if (privateReport.kind !== 'problem_reported') throw new Error('private report was not accepted')
+    await expect(affectedOwner.action(
+      api.customerRequestApplication.recordRouteProblemBusinessReport,
+      { ...command, reportRef: privateReport.reportRef, idempotencyKey: 'business-claim:private' },
+    )).resolves.toEqual({ kind: 'refused', reason: 'sharing_not_authorized' })
+  })
+
   it('refuses a problem report that names another step evidence receipt', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(4_100)
     const backend = convexTest(schema, modules)
@@ -2605,4 +2749,25 @@ async function publishedBusinessOwner(backend: ReturnType<typeof convexTest>, sl
     return await ctx.db.insert('businesses', { ownerId, slug: `route-${slug}`, name: `Route ${slug}`, normalizedName: `route ${slug}`, category: 'professional services', suburb: 'Perth', stateTerritory: 'WA', publicStatus: 'published', trustTier: 'listed', claimStatus: 'published', sourceHash: `source:route:${slug}`, createdAt: 1, updatedAt: 1 })
   }) as Id<'businesses'>
   return { businessId, owner: backend.withIdentity(identity) }
+}
+
+async function businessOwnerForAttempt(
+  backend: ReturnType<typeof convexTest>,
+  attemptRef: string,
+) {
+  const identity = await backend.run(async (ctx) => {
+    const attempt = (await ctx.db.query('customerRequestRouteStepAttempts').take(20))
+      .find((candidate) => candidate.attemptRef === attemptRef)
+    if (attempt === null) throw new Error('attempt missing')
+    const business = await ctx.db.get(attempt.grant.step.businessId as Id<'businesses'>)
+    if (business === null) throw new Error('attempt business missing')
+    const owner = await ctx.db.get(business.ownerId)
+    if (owner === null) throw new Error('attempt business owner missing')
+    return {
+      subject: owner.clerkUserId,
+      issuer: 'https://identity.example',
+      tokenIdentifier: `token_business_problem_${owner.clerkUserId}`,
+    }
+  })
+  return backend.withIdentity(identity)
 }

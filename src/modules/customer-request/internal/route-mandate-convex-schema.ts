@@ -449,6 +449,26 @@ export const customerRequestRouteMandateTables = {
     .index('by_commandKey', ['commandKey'])
     .index('by_reportRef_and_version', ['reportRef', 'version']),
 
+  customerRequestRouteProblemBusinessReports: defineTable({
+    statementRef: v.string(),
+    reportRef: v.string(),
+    commandKey: v.string(),
+    commandDigest: v.string(),
+    businessId: v.string(),
+    businessName: v.string(),
+    actorRef: v.string(),
+    causalityPosition: v.union(
+      v.literal('supports'),
+      v.literal('disputes'),
+      v.literal('uncertain'),
+    ),
+    statement: v.string(),
+    evidenceReceiptRefs: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index('by_commandKey', ['commandKey'])
+    .index('by_reportRef_and_createdAt', ['reportRef', 'createdAt']),
+
   customerRequestRouteStepAttempts: defineTable({
     attemptRef: v.string(),
     attemptDigest: v.string(),

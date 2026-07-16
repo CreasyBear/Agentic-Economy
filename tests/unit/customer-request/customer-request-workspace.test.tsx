@@ -440,6 +440,21 @@ describe('customer Request workspace', () => {
           evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
           reportedAt: 10,
           affected: { step: 2, attemptRef: 'attempt:opaque', business: 'Quote preparation service' },
+          claims: [
+            {
+              claimSource: 'customer', causalityPosition: 'reported_problem',
+              statement: 'The quote is over the confirmed maximum.',
+              evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
+              recordedAt: 10,
+            },
+            {
+              claimSource: 'business', causalityPosition: 'uncertain',
+              statement: 'Our receipt confirms the quote, but not the cause of the mismatch.',
+              business: 'Quote preparation service',
+              evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
+              recordedAt: 12,
+            },
+          ],
           history: [{
             version: 0, state: 'received', source: 'customer',
             message: 'The quote is over the confirmed maximum.', recordedAt: 10,
@@ -468,6 +483,10 @@ describe('customer Request workspace', () => {
     expect(screen.getByText('Step 2: report received')).toBeTruthy()
     expect(screen.getByText('The quote is over the confirmed maximum.')).toBeTruthy()
     expect(screen.getByText(/AE has not decided what caused the problem/u)).toBeTruthy()
+    expect(screen.getByText('Business statements')).toBeTruthy()
+    expect(screen.getByText(/Our receipt confirms the quote, but not the cause of the mismatch/u)).toBeTruthy()
+    expect(screen.getByText(/The business says the cause is still uncertain/u)).toBeTruthy()
+    expect(screen.getByText(/These statements do not decide cause, responsibility, or remedy/u)).toBeTruthy()
     expect(screen.getByText('Visible only to you and AE.')).toBeTruthy()
     expect(screen.getByText('1 recorded evidence item attached.')).toBeTruthy()
     expect(screen.queryByText(/problem:opaque|attempt:opaque/u)).toBeNull()

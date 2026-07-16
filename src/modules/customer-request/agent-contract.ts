@@ -114,6 +114,14 @@ const customerRequestProblemProjectionSchema = z.strictObject({
     attemptRef: z.string().optional(),
     business: z.string().optional(),
   }),
+  claims: z.array(z.strictObject({
+    claimSource: z.enum(['customer', 'business']),
+    causalityPosition: z.enum(['reported_problem', 'supports', 'disputes', 'uncertain']),
+    statement: boundedText(1_000),
+    business: z.string().optional(),
+    evidence: z.array(z.strictObject({ receiptRef: z.string(), label: z.string() })),
+    recordedAt: safeNonnegativeInteger,
+  })).default([]),
 })
 
 export const customerRequestProblemReceiptSchema = z.strictObject({
