@@ -34,7 +34,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
   if (existingRequestRef === undefined || existingRequestRef.length === 0) {
     await expect(page.getByRole('heading', { level: 1, name: 'What can we help you find?' })).toBeVisible()
     await page.getByLabel('What are you looking for?').fill(requestText)
-    await page.getByRole('button', { name: 'Explore' }).click()
+    await page.getByRole('button', { name: 'Start my Request' }).click()
     await reachComparableChoice(page)
 
     for (const business of expectedBusinesses) {

@@ -31,8 +31,8 @@ test.describe('engine product accessibility', () => {
     await page.getByLabel('What are you looking for?').fill('Fremantle')
     await expect(page.getByLabel('What are you looking for?')).toHaveValue('Fremantle')
     await expect(page.getByLabel('Maximum spend (AUD)')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Explore' }).focus()
-    await expect(page.getByRole('button', { name: 'Explore' })).toBeFocused()
+    await page.getByRole('button', { name: 'Start my Request' }).focus()
+    await expect(page.getByRole('button', { name: 'Start my Request' })).toBeFocused()
   })
 
   test('workbench contains wide data without widening the mobile viewport', async ({ page }) => {

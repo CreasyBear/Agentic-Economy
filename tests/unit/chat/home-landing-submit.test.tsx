@@ -93,7 +93,7 @@ describe('Request-first home', () => {
     renderHomeRoute()
     enterQuery('Emergency plumber in Brunswick')
 
-    const submit = screen.getByRole('button', { name: 'Explore' })
+    const submit = screen.getByRole('button', { name: 'Start my Request' })
     const form = submit.closest('form')
     if (form === null) throw new Error('The home composer submit action must belong to a form.')
 
@@ -116,7 +116,7 @@ describe('Request-first home', () => {
     renderHomeRoute()
     enterQuery('Replace a leaking kitchen tap')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     const request = fetchMock.mock.calls[0]

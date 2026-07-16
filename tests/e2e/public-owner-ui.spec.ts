@@ -26,7 +26,7 @@ test.describe('public owner routes', () => {
 
     await expect(page.getByRole('heading', { name: 'What do you need to make happen?' })).toBeVisible()
     await expect(page.getByLabel('What are you looking for?')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Explore' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Start my Request' })).toBeDisabled()
     await expect(page.getByText('Nothing is confirmed, shared, or started until you decide.')).toBeVisible()
     await expect(page.getByText('Your agent knows who to call.')).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Activity' })).toHaveCount(0)

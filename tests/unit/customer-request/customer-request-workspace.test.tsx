@@ -32,7 +32,7 @@ describe('customer Request workspace', () => {
 
     expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value)
       .toBe('A quiet place for dinner')
-    expect((screen.getByRole('button', { name: 'Explore' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Start my Request' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('resumes the active browser Request after reload and forgets only its local pointer on restart', async () => {
@@ -58,7 +58,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find lunch in Fremantle' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     expect(await screen.findByRole('button', { name: 'Show available options' })).toBeTruthy()
     expect(JSON.parse(localStorage.getItem('ae.customer-request.active:v1') ?? '{}')).toEqual({
       requestRef: 'request:resume-1',
@@ -113,7 +113,7 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Compare available sandbox options' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await screen.findByRole('button', { name: 'Show available options' })
     fireEvent.click(screen.getByRole('button', { name: 'Show available options' }))
 
@@ -165,7 +165,7 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Find the cheapest option' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
 
     expect(await screen.findByRole('heading', { name: 'AE recommends Option Two.' })).toBeTruthy()
@@ -192,7 +192,7 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Fremantle' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await screen.findByRole('heading', { name: 'What are you looking for there?' })
     expect(screen.queryByRole('heading', { name: 'Start with whatever you know.' })).toBeNull()
     expect(screen.queryByText('Your answer')).toBeNull()
@@ -239,7 +239,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find a suitable option' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     await screen.findByRole('heading', { name: 'Which area should the business cover?' })
     expect(screen.getByPlaceholderText('Add a detail…')).toBeTruthy()
@@ -306,7 +306,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find an available option' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByRole('heading', {
       name: 'AE could not safely contact the business. Nothing was sent.',
@@ -333,7 +333,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find an option. My private medical context is included.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByRole('heading', {
       name: 'No business on AE can support this request right now.',
@@ -365,7 +365,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Resolve a service and prepare its quote' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByText('1 of 2 business steps completed.')).toBeTruthy()
     expect(screen.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeTruthy()
@@ -404,7 +404,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Resolve a service and prepare its quote, even if only a partial result is available.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByText('Partial result received')).toBeTruthy()
     expect(screen.getByText(/sandbox-partial-quote:one/u)).toBeTruthy()
@@ -476,7 +476,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Resolve a service and prepare its quote' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     fireEvent.click(await screen.findByRole('button', { name: 'View activity record' }))
 
     expect(await screen.findByRole('heading', { name: 'Activity record' })).toBeTruthy()
@@ -522,7 +522,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find a labelled service and tell me what it costs.' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByText(/Request:/)).toBeTruthy()
     expect(screen.queryByText(/What should the first business resolve\?/)).toBeNull()
@@ -628,7 +628,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Prepare a result using registered businesses' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByRole('heading', { name: 'One way forward is available.' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Prepare a governed result.' })).toBeTruthy()
@@ -719,7 +719,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Choose the lowest maximum cost' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByText('AUD 3.00 below the next current way forward.')).toBeTruthy()
     expect(screen.getByText(
@@ -784,7 +784,7 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Prepare a result' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Review Result from route:confirm' }))
 
     expect(await screen.findByRole('heading', { name: 'Review before you confirm' })).toBeTruthy()
@@ -835,12 +835,12 @@ describe('customer Request workspace', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Fremantle' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await screen.findByRole('button', { name: 'Edit this Request' })
     fireEvent.click(screen.getByRole('button', { name: 'Edit this Request' }))
     await screen.findByText('Editing revision 1 of this Request.')
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Lunch in Fremantle' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await screen.findByRole('button', { name: 'Show available options' })
     const secondBody = JSON.parse(String((fetchMock.mock.calls[1]?.[1] as RequestInit | undefined)?.body))
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/requests/request%3Auuid-1/messages', expect.objectContaining({
@@ -854,7 +854,7 @@ describe('customer Request workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start a new Request' }))
     await waitFor(() => expect((screen.getByLabelText('What are you looking for?') as HTMLTextAreaElement).value).toBe(''))
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'A separate request' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await screen.findByRole('button', { name: 'Edit this Request' })
     const thirdBody = JSON.parse(String((fetchMock.mock.calls[2]?.[1] as RequestInit | undefined)?.body))
     expect(thirdBody).toMatchObject({ requestRef: 'request:uuid-3', agentRef: 'web:uuid-4', request: 'A separate request' })
@@ -880,7 +880,7 @@ describe('customer Request workspace', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<AeCustomerRequestWorkspace />)
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Send my parcel' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     await screen.findByRole('heading', { name: 'Review what would be shared' })
     expect(screen.getByText(/up to 2 matching businesses/)).toBeTruthy()
@@ -907,7 +907,7 @@ describe('customer Request workspace', () => {
     render(<AeCustomerRequestWorkspace />)
 
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Find a suitable option' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
 
     expect(await screen.findByText('Checking connected businesses')).toBeTruthy()
@@ -928,7 +928,7 @@ describe('customer Request workspace', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ error: 'missing_auth' }, { status: 401 })))
     render(<AeCustomerRequestWorkspace />)
     fireEvent.change(screen.getByLabelText('What are you looking for?'), { target: { value: 'Find an option' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     await waitFor(() => expect(screen.getByRole('link', { name: 'Sign in to continue' })).toBeTruthy())
     expect(screen.queryByText('missing_auth')).toBeNull()
   })
@@ -1151,7 +1151,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find a current way forward' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
 
     expect(await screen.findByText('Current way forward 1')).toBeTruthy()
     expect(screen.getByText('Expired way forward')).toBeTruthy()
@@ -1211,7 +1211,7 @@ describe('customer Request workspace', () => {
     fireEvent.change(screen.getByLabelText('What are you looking for?'), {
       target: { value: 'Find a current option' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start my Request' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Show available options' }))
 
     expect(await screen.findByRole('heading', { name: 'This Request changed.' })).toBeTruthy()
