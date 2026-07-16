@@ -24,6 +24,7 @@ const ae = {
   final: {
     state: 'completed' as const, runState: 'completed' as const, evidenceState: 'completed' as const,
     resumedState: 'completed' as const, selectedBusinesses: ['Sandbox Resolver', 'Sandbox Quoter'],
+    resultDigest: 'sha256:result',
   },
   measurements: {
     integrationBurden: { requestCalls: 8, clarifications: 1 }, turns: { total: 8 }, elapsedMs: 80,
@@ -37,6 +38,7 @@ const ae = {
       recipients: ['Sandbox Quoter', 'Sandbox Resolver'],
       purposes: ['prepare_quote', 'resolve_request'],
     },
+    resultIntegrity: { state: 'verified' as const, digest: 'sha256:result' },
   },
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value' as const,
 }
@@ -55,6 +57,7 @@ describe('agent journey comparison', () => {
           recipients: ['Sandbox Quoter', 'Sandbox Resolver'],
           purposes: ['prepare_quote', 'resolve_request'],
         },
+        resultIntegrity: { state: 'verified', digest: 'sha256:result' },
       }),
       claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value',
     }))
@@ -109,6 +112,21 @@ describe('agent journey comparison', () => {
     })
     expect(proof.verdict).toBe('fail_for_declared_class')
     expect(proof.failures).toContain('ae_disclosure_integrity_not_proven')
+  })
+
+  it('fails the zero-tolerance gate when completed result integrity was not proven', () => {
+    const proof = compareAgentJourneys({
+      direct,
+      ae: {
+        ...ae,
+        measurements: {
+          ...ae.measurements,
+          resultIntegrity: { state: 'not_proven' as const },
+        },
+      },
+    })
+    expect(proof.verdict).toBe('fail_for_declared_class')
+    expect(proof.failures).toContain('ae_result_integrity_not_proven')
   })
 
   it('fails closed for an unrecognized predeclared gain', () => {

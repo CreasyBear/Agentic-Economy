@@ -118,6 +118,10 @@ export const hostedCustomerRequestJourneyProofSchema = z.strictObject({
       recipients: z.array(z.string()),
       purposes: z.array(z.string()),
     }),
+    resultIntegrity: z.discriminatedUnion('state', [
+      z.strictObject({ state: z.literal('verified'), digest: z.string().startsWith('sha256:') }),
+      z.strictObject({ state: z.literal('not_applicable') }),
+    ]),
   }),
   sandbox: z.literal(true),
   claimBoundary: z.literal('contract_and_hosted_journey_only_not_real_supply_or_customer_value'),
@@ -403,6 +407,9 @@ async function completeHostedJourney(input: Readonly<{
     || evidence.steps.some((step) => step.state !== 'completed')) {
     throw new Error('hosted_journey_completed_evidence_missing')
   }
+  const actionResultDigest = digestInput(resumed.action.result)
+  const evidenceResultDigest = digestInput(evidence.result)
+  if (actionResultDigest !== evidenceResultDigest) throw new Error('hosted_journey_result_mismatch')
   return hostedCustomerRequestJourneyProofSchema.parse({
     kind: 'cold_external_agent_journey', agent: input.input.agent,
     release: journeyReleaseProjection(input.input, input.release),
@@ -418,9 +425,9 @@ async function completeHostedJourney(input: Readonly<{
       selectedBusinesses: input.selectedBusinesses, stepCount: input.route.stepCount,
       runState: 'completed', evidenceState: evidence.state,
       problemState: 'not_reported', resumedState: resumed.state,
-      resultDigest: digestInput(evidence.result),
+      resultDigest: evidenceResultDigest,
     },
-    measurements: journeyMeasurements(input.input, input.route, true, true),
+    measurements: journeyMeasurements(input.input, input.route, true, true, evidenceResultDigest),
     sandbox: true,
     claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value',
   })
@@ -779,6 +786,7 @@ function journeyMeasurements(
   route: NonNullable<NonNullable<CustomerRequestView['decision']>['routes']>[number],
   resultUsable: boolean,
   resumed: boolean,
+  resultDigest?: string,
 ) {
   const totalCostAccuracy = route.maximumTotalCost.kind === 'known'
     ? {
@@ -806,6 +814,9 @@ function journeyMeasurements(
       recipients: route.dataUse.recipients.map(({ name }) => name).sort(),
       purposes: [...route.dataUse.purposes].sort(),
     },
+    resultIntegrity: resultDigest === undefined
+      ? { state: 'not_applicable' as const }
+      : { state: 'verified' as const, digest: resultDigest },
   }
 }
 

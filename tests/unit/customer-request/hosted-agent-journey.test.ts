@@ -191,7 +191,44 @@ describe('hosted Customer Request journey', () => {
         recipients: ['Sandbox Route Quoter', 'Sandbox Route Resolver'],
         purposes: ['prepare_sandbox_service_quote', 'resolve_sandbox_service_reference'],
       },
+      resultIntegrity: { state: 'verified', digest: expect.stringMatching(/^sha256:/) },
     })
+  })
+
+  it('refuses completed proof when the action and evidence results diverge', async () => {
+    const responses = completeJourneyResponses()
+    const evidence = responses.at(-1)
+    if (evidence === null || typeof evidence !== 'object' || Array.isArray(evidence)) {
+      throw new Error('evidence fixture missing')
+    }
+    responses[responses.length - 1] = {
+      ...evidence,
+      result: { quoteReference: 'sandbox-quote:fabricated-different-result' },
+    }
+    await expect(runHostedCustomerRequestJourney({
+      environment: 'development',
+      baseUrl: 'http://127.0.0.1:4319', agentApiKey: 'ak_agent',
+      expectedRevision: 'a'.repeat(40), expectedDeploymentId: 'convex:loyal-peacock-107',
+      agent: { name: 'cold-external-agent', version: 'result-integrity-v1' },
+      scenario: {
+        request: 'Resolve and quote', facts: {}, messages: [], finish: 'complete',
+        expectedRoute: {
+          stepCount: 2, businesses: ['Sandbox Route Resolver', 'Sandbox Route Quoter'],
+          recipients: [
+            { name: 'Sandbox Route Resolver', purposes: ['resolve_sandbox_service_reference'] },
+            { name: 'Sandbox Route Quoter', purposes: ['prepare_sandbox_service_quote'] },
+          ],
+        },
+      },
+      sandbox: true,
+      fetch: vi.fn(async () => Response.json(responses.shift() ?? { error: 'unexpected' })),
+      verifyRelease: async () => ({
+        kind: 'verified', revision: 'a'.repeat(40), deploymentId: 'convex:loyal-peacock-107',
+      }),
+      verifyDiscovery: async () => undefined,
+      verifyAnonymousRefusal: async () => undefined,
+      sleep: async () => undefined,
+    })).rejects.toThrow('hosted_journey_result_mismatch')
   })
 
   it('refuses confirmation when the recipient count does not match the disclosed ledger', async () => {

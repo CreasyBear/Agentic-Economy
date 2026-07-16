@@ -31,6 +31,7 @@ type AeJourney = Readonly<{
     evidenceState: 'completed' | 'running' | 'queued' | 'cancelled' | 'outcome_unknown'
     resumedState: 'completed' | 'cancelled' | 'outcome_unknown'
     selectedBusinesses: readonly string[]
+    resultDigest?: string | undefined
   }>
   measurements: Readonly<{
     integrationBurden: Readonly<{ requestCalls: number; clarifications: number }>
@@ -46,6 +47,10 @@ type AeJourney = Readonly<{
       recipients: readonly string[]
       purposes: readonly string[]
     }>
+    resultIntegrity: Readonly<
+      { state: 'verified'; digest: string }
+      | { state: 'not_applicable' | 'not_proven' }
+    >
   }>
   claimBoundary: 'contract_and_hosted_journey_only_not_real_supply_or_customer_value'
 }>
@@ -60,6 +65,7 @@ type ComparisonFailure =
   | 'ae_recovery_not_durable' | 'ae_recovery_not_resumed'
   | 'ae_execution_start_replay_not_proven'
   | 'ae_disclosure_integrity_not_proven'
+  | 'ae_result_integrity_not_proven'
 
 export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae: AeJourney }>) {
   const { direct, ae } = input
@@ -90,6 +96,10 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
   if (ae.measurements.disclosureIntegrity.state !== 'verified') {
     failures.push('ae_disclosure_integrity_not_proven')
   }
+  if (ae.measurements.resultIntegrity.state !== 'verified'
+    || ae.final.resultDigest !== ae.measurements.resultIntegrity.digest) {
+    failures.push('ae_result_integrity_not_proven')
+  }
 
   return {
     kind: 'agent_journey_comparison' as const,
@@ -116,6 +126,7 @@ export function compareAgentJourneys(input: Readonly<{ direct: DirectJourney; ae
       },
       replaySafety: { aeExecutionStart: ae.measurements.replaySafety.executionStart },
       disclosureIntegrity: ae.measurements.disclosureIntegrity,
+      resultIntegrity: ae.measurements.resultIntegrity,
     },
     claimBoundary: 'labelled_sandbox_comparison_not_independently_operated_supply_fulfilment_or_customer_value' as const,
   }
