@@ -369,6 +369,7 @@ function RequestResult({ state, compare, reviewRoute, leaveRouteReview, confirmR
   if (state.kind === 'request' && state.projection.state === 'no_options') return <NoOptions projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'needs_authorization') return <DisclosureReview projection={state.projection} turns={turns} authorize={() => authorize(state.projection)} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && state.projection.state === 'in_progress') return <RouteProgressCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} cancel={() => actOnRoute(state.projection, 'cancellation')} edit={() => edit(state.projection)} restart={restart} />
+  if (state.kind === 'request' && state.projection.state === 'cancelled') return <CancelledStatusCard projection={state.projection} turns={turns} edit={() => edit(state.projection)} restart={restart} />
   if (state.kind === 'request' && (state.projection.state === 'outcome_unknown'
     || state.projection.state === 'completed' || state.projection.state === 'failed')) {
     return <ActionStatusCard projection={state.projection} turns={turns} refresh={() => refresh(state.projection)} edit={() => edit(state.projection)} restart={restart} />
@@ -1082,6 +1083,31 @@ function ActionStatusCard({ projection, turns, refresh, edit, restart }: {
         {unknown
           ? <Text weight="semibold">Wait for confirmation before changing or starting this Request again.</Text>
           : <RecoveryActions edit={edit} restart={restart} />}
+      </div>
+    </Card>
+  </section>
+}
+
+function CancelledStatusCard({ projection, turns, edit, restart }: {
+  projection: CustomerRequestView
+  turns: readonly ConversationTurn[]
+  edit: () => void
+  restart: () => void
+}) {
+  const progress = projection.progress
+  return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
+    <Conversation turns={turns} />
+    <WorkingUnderstanding projection={projection} correct={edit} />
+    <Card padding={5}>
+      <div className="grid gap-4">
+        <Text className="text-sm font-semibold text-accent">Stopped</Text>
+        <Heading level={2}>{projection.summary}</Heading>
+        {progress === undefined ? null : <>
+          <Text weight="semibold">{progress.completed} of {progress.total} business steps completed.</Text>
+          <Text color="secondary">Step {progress.current.step} did not begin. Completed work remains recorded and will not be repeated automatically.</Text>
+        </>}
+        <RequestRecordLinks requestRef={projection.requestRef} />
+        <RecoveryActions edit={edit} restart={restart} />
       </div>
     </Card>
   </section>

@@ -1842,6 +1842,88 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     })
   })
 
+  it('stops unreleased downstream work when cancellation is requested during an in-flight step', async () => {
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(40_000)
+      .mockReturnValueOnce(40_100)
+      .mockReturnValue(40_200)
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'cancel-after-current')
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:cancel-after-current',
+    })
+    const firstLease = await backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:cancel-after-current', leaseDurationMs: 10_000,
+    })
+    if (firstLease.kind !== 'leased') throw new Error('cancel-after-current route step was not leased')
+    await backend.mutation(internal.customerRequestRouteExecution.markDispatched, {
+      dispatchRef: firstLease.dispatch.dispatchRef,
+      attemptRef: firstLease.dispatch.attemptRef,
+      workerId: 'worker:cancel-after-current',
+    })
+    await backend.mutation(internal.customerRequestRouteExecution.markAccepted, {
+      attemptRef: firstLease.dispatch.attemptRef,
+      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
+    })
+
+    await expect(admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:after-current',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'in_progress',
+      activity: {
+        cancellation: {
+          state: 'not_available',
+          reason: 'business_step_released',
+          requestedAt: 40_200,
+        },
+      },
+    })
+
+    await expect(backend.mutation(internal.customerRequestRouteExecution.recordOutcome, {
+      attemptRef: firstLease.dispatch.attemptRef,
+      operationKeyDigest: firstLease.dispatch.operationKeyDigest,
+      outcome: { kind: 'succeeded', outputJson: JSON.stringify({ serviceReference: 'service:stopped' }) },
+    })).resolves.toMatchObject({
+      kind: 'cancelled',
+      run: { state: 'cancelled', completedSteps: 1, currentPosition: 1 },
+    })
+    await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {
+      workerId: 'worker:must-not-release-second', leaseDurationMs: 10_000,
+    })).resolves.toEqual({ kind: 'none' })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'cancelled', nextAction: 'revise_request',
+      progress: { completed: 1, total: 2 },
+      activity: { cancellation: { state: 'stopped' } },
+    })
+    await expect(admin.action(api.customerRequestApplication.cancelRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'cancel:after-current',
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'cancelled', progress: { completed: 1, total: 2 },
+    })
+    await expect(admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'evidence', state: 'cancelled',
+      steps: [{ step: 1, state: 'completed' }],
+    })
+    await backend.run(async (ctx) => {
+      const attempts = await ctx.db.query('customerRequestRouteStepAttempts').collect()
+      const runs = await ctx.db.query('customerRequestRouteRuns').collect()
+      expect(attempts).toHaveLength(1)
+      expect(attempts[0]).toMatchObject({ position: 1, state: 'succeeded' })
+      expect(runs).toHaveLength(1)
+      expect(runs[0]).toMatchObject({
+        state: 'cancelled', completedSteps: 1, currentPosition: 1,
+      })
+      const cancellations = await ctx.db.query('customerRequestRouteCancellationCommands').collect()
+      expect(cancellations).toHaveLength(1)
+      expect(cancellations[0]).toMatchObject({ result: 'too_late', committedAt: 40_200 })
+    })
+  })
+
   it('uses the same run, lease, validation, and completion machinery for one step', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)

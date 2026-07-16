@@ -28,9 +28,21 @@ describe('customer action status projection', () => {
     expect(progress('needs_attention').activity).toMatchObject({ actor: 'customer' })
     expect(projectRouteCancelled({
       requestRef: 'request:one', revision: 1, updatedAt: 11,
-    }).activity).toMatchObject({
-      actor: 'none',
-      cancellation: { state: 'stopped', stoppedAt: 11 },
+      businesses: [
+        { businessRef: 'business:one', name: 'First Business' },
+        { businessRef: 'business:two', name: 'Second Business' },
+      ],
+      routeProgress: { completed: 1, total: 2, currentStep: 2 },
+    })).toMatchObject({
+      summary: 'Stopped after 1 of 2 business steps completed. No later step began.',
+      progress: {
+        completed: 1, total: 2, current: { step: 2, state: 'cancelled' },
+        dependencies: { completed: [{ step: 1, business: 'First Business' }] },
+      },
+      activity: {
+        actor: 'none',
+        cancellation: { state: 'stopped', stoppedAt: 11 },
+      },
     })
   })
 

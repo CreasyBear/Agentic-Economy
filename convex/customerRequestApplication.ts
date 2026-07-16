@@ -435,7 +435,7 @@ const customerView = v.object({
       step: v.number(),
       state: v.union(
         v.literal('queued'), v.literal('contacting'), v.literal('awaiting_result'),
-        v.literal('validating_result'), v.literal('needs_attention'),
+        v.literal('validating_result'), v.literal('needs_attention'), v.literal('cancelled'),
       ),
     }),
     dependencies: v.optional(v.object({
@@ -2961,6 +2961,12 @@ function projectStoredRouteRun(
   if (run.state === 'cancelled') return writableView(projectRouteCancelled({
     requestRef: run.requestId,
     revision: run.requestRevision,
+    ...(run.businesses === undefined ? {} : { businesses: run.businesses }),
+    routeProgress: {
+      completed: run.completedSteps,
+      total: run.totalSteps,
+      currentStep: Math.min(run.completedSteps + 1, run.totalSteps),
+    },
     criteria,
     updatedAt: run.updatedAt,
   }))

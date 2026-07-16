@@ -701,6 +701,7 @@ export const markAccepted = internalMutation({
 
 const outcomeResult = v.union(
   v.object({ kind: v.literal('advanced'), run: runProjection }),
+  v.object({ kind: v.literal('cancelled'), run: runProjection }),
   v.object({ kind: v.literal('completed'), run: runProjection }),
   v.object({ kind: v.literal('failed'), run: runProjection }),
   v.object({ kind: v.literal('outcome_unknown'), run: runProjection }),
@@ -818,6 +819,21 @@ export const recordOutcome = internalMutation({
       ...observationPatch,
       updatedAt: now,
     })
+    const cancellation = await ctx.db.query('customerRequestRouteCancellationCommands')
+      .withIndex('by_runRef_and_committedAt', (query) => query.eq('runRef', run.runRef))
+      .order('desc')
+      .first()
+    if (attempt.position < run.totalSteps && cancellation?.result === 'too_late') {
+      await ctx.db.patch(run._id, {
+        state: 'cancelled',
+        completedSteps: attempt.position,
+        currentPosition: attempt.position,
+        updatedAt: now,
+      })
+      const cancelled = await readRunProjection(ctx, run.runRef)
+      if (cancelled === null) throw new Error('customer_request_route_run_integrity_failure')
+      return { kind: 'cancelled', run: cancelled }
+    }
     if (attempt.position === run.totalSteps) {
       await ctx.db.patch(run._id, {
         state: 'completed',

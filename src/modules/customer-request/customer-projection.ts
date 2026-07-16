@@ -436,20 +436,40 @@ export function projectRouteProgress(input: Readonly<{
 export function projectRouteCancelled(input: Readonly<{
   requestRef: string
   revision: number
+  businesses?: readonly Readonly<{ businessRef: string; name: string }>[]
+  routeProgress?: Readonly<{ completed: number; total: number; currentStep: number }>
   criteria?: readonly CustomerCriterion[]
   updatedAt?: number
 }>): CustomerRequestView {
   return requestView({
-    ...input,
+    requestRef: input.requestRef,
+    revision: input.revision,
     state: 'cancelled',
-    summary: 'This request was stopped before the next business step began.',
+    ...(input.businesses === undefined ? {} : { businesses: input.businesses }),
+    summary: input.routeProgress === undefined || input.routeProgress.completed === 0
+      ? 'This request was stopped before the next business step began.'
+      : `Stopped after ${input.routeProgress.completed} of ${input.routeProgress.total} business steps completed. No later step began.`,
     nextAction: 'revise_request',
+    ...(input.routeProgress === undefined ? {} : {
+      progress: {
+        completed: input.routeProgress.completed,
+        total: input.routeProgress.total,
+        current: { step: input.routeProgress.currentStep, state: 'cancelled' },
+        ...dependencyProgress(
+          input.routeProgress.completed,
+          input.routeProgress.total,
+          input.routeProgress.currentStep,
+          input.businesses,
+        ),
+      },
+    }),
     activity: {
       actor: 'none', certainty: 'cancelled', updatedAt: input.updatedAt ?? 0,
       retry: 'not_needed',
       cancellation: { state: 'stopped', stoppedAt: input.updatedAt ?? 0 },
       safeNextAction: 'revise_request',
     },
+    ...(input.criteria === undefined ? {} : { criteria: input.criteria }),
   })
 }
 

@@ -1020,6 +1020,45 @@ describe('customer Request workspace', () => {
     expect(screen.queryByRole('button', { name: 'Stop before the next step' })).toBeNull()
   })
 
+  it('shows completed work and the unreleased stopped step after in-flight cancellation', async () => {
+    localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
+      requestRef: 'request:stopped-after-current',
+    }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({
+      kind: 'request', requestRef: 'request:stopped-after-current', revision: 1,
+      state: 'cancelled',
+      summary: 'Stopped after 1 of 2 business steps completed. No later step began.',
+      nextAction: 'revise_request', missingFields: [], criteria: [], options: [],
+      businesses: [
+        { businessRef: 'business:one', name: 'First Business' },
+        { businessRef: 'business:two', name: 'Second Business' },
+      ],
+      progress: {
+        completed: 1, total: 2, current: { step: 2, state: 'cancelled' },
+        dependencies: {
+          completed: [{ step: 1, business: 'First Business' }],
+          blocked: [],
+        },
+      },
+      activity: {
+        actor: 'none', certainty: 'cancelled', updatedAt: 40_200,
+        retry: 'not_needed', cancellation: { state: 'stopped', stoppedAt: 40_200 },
+        safeNextAction: 'revise_request',
+      },
+    })))
+
+    render(<AeCustomerRequestWorkspace />)
+
+    expect(await screen.findByRole('heading', {
+      name: 'Stopped after 1 of 2 business steps completed. No later step began.',
+    })).toBeTruthy()
+    expect(screen.getByText('1 of 2 business steps completed.')).toBeTruthy()
+    expect(screen.getByText(
+      'Step 2 did not begin. Completed work remains recorded and will not be repeated automatically.',
+    )).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stop before the next step' })).toBeNull()
+  })
+
   it('shows completed and waiting business work without route machinery', async () => {
     localStorage.setItem('ae.customer-request.active:v1', JSON.stringify({
       requestRef: 'request:dependencies',
