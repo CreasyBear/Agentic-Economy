@@ -2105,7 +2105,24 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         state: 'running',
         completedSteps: 1,
         currentPosition: 1,
+        currentState: 'succeeded',
         cancellationAttempt: { state: 'pending' },
+      },
+    })
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request',
+      state: 'in_progress',
+      progress: {
+        completed: 1,
+        total: 2,
+        current: { step: 1, state: 'completed' },
+      },
+      activity: {
+        actor: 'ae',
+        certainty: 'confirmed',
+        cancellation: { state: 'pending' },
       },
     })
     await expect(backend.mutation(internal.customerRequestRouteExecution.leaseNextDispatch, {

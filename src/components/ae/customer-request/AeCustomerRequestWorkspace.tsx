@@ -700,8 +700,8 @@ function RouteProgressCard({ projection, turns, refresh, cancel, edit, restart }
       ? 'Contacting the business'
       : progress.current.state === 'awaiting_result'
         ? 'Waiting for the business result'
-        : progress.current.state === 'validating_result'
-          ? 'Checking the result'
+        : progress.current.state === 'completed'
+          ? 'Business result checked'
           : 'Needs attention'
   return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite">
     <Conversation turns={turns} />

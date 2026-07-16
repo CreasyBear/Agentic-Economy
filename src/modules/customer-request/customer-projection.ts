@@ -386,7 +386,7 @@ export function projectRouteProgress(input: Readonly<{
   total: number
   current: Readonly<{
     step: number
-    state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention'
+    state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention'
   }>
   updatedAt: number
   cancellationAvailable: boolean
@@ -424,7 +424,8 @@ export function projectRouteProgress(input: Readonly<{
       certainty: input.cancellationAttempt?.state === 'unknown'
         ? 'unknown'
         : input.cancellationAttempt?.state === 'rejected'
-          || input.current.state === 'ready_to_contact' ? 'confirmed' : 'pending',
+          || input.current.state === 'ready_to_contact'
+          || input.current.state === 'completed' ? 'confirmed' : 'pending',
       updatedAt: input.updatedAt,
       nextCheckAt: input.cancellationAttempt === undefined
         || input.cancellationAttempt.state === 'rejected'
@@ -596,7 +597,7 @@ export function projectCustomerActionStatus(input: Readonly<{
 }
 
 function progressActor(
-  state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention',
+  state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention',
 ): 'ae' | 'business' | 'customer' {
   if (state === 'awaiting_result') return 'business'
   if (state === 'needs_attention') return 'customer'

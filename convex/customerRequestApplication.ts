@@ -435,7 +435,7 @@ const customerView = v.object({
       step: v.number(),
       state: v.union(
         v.literal('queued'), v.literal('ready_to_contact'), v.literal('contacting'), v.literal('awaiting_result'),
-        v.literal('validating_result'), v.literal('needs_attention'), v.literal('cancelled'),
+        v.literal('completed'), v.literal('needs_attention'), v.literal('cancelled'),
       ),
     }),
     dependencies: v.optional(v.object({
@@ -3342,12 +3342,12 @@ async function resolveRequestCaller(
 
 function customerProgressState(
   state: 'queued' | 'leased' | 'dispatched' | 'accepted' | 'succeeded' | 'failed' | 'outcome_unknown' | 'cancelled',
-): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention' {
+): 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention' {
   if (state === 'queued') return 'queued'
   if (state === 'leased') return 'ready_to_contact'
   if (state === 'dispatched') return 'contacting'
   if (state === 'accepted') return 'awaiting_result'
-  if (state === 'succeeded') return 'validating_result'
+  if (state === 'succeeded') return 'completed'
   return 'needs_attention'
 }
 

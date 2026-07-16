@@ -418,7 +418,7 @@ describe('customer Request workspace', () => {
       .mockResolvedValueOnce(Response.json({
         kind: 'request', requestRef: 'request:completed-evidence', revision: 1, state: 'completed',
         summary: 'Your result is ready.', nextAction: 'none', missingFields: [], criteria: [], options: [],
-        progress: { completed: 2, total: 2, current: { step: 2, state: 'validating_result' } },
+        progress: { completed: 2, total: 2, current: { step: 2, state: 'completed' } },
         action: {
           state: 'completed', resolution: 'provider_result',
           result: { quoteReference: 'sandbox-quote:usable' }, observedAt: 10,

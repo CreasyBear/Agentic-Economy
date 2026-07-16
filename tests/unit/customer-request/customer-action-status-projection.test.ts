@@ -71,7 +71,7 @@ describe('customer action status projection', () => {
   })
 
   it('names who must act next without exposing execution machinery', () => {
-    const progress = (state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'validating_result' | 'needs_attention') => (
+    const progress = (state: 'queued' | 'ready_to_contact' | 'contacting' | 'awaiting_result' | 'completed' | 'needs_attention') => (
       projectRouteProgress({
         requestRef: 'request:one', revision: 1, generationRef: 'generation:one',
         completed: 0, total: 2, current: { step: 1, state },
@@ -96,7 +96,7 @@ describe('customer action status projection', () => {
       },
     })
     expect(progress('awaiting_result').activity).toMatchObject({ actor: 'business' })
-    expect(progress('validating_result').activity).toMatchObject({ actor: 'ae' })
+    expect(progress('completed').activity).toMatchObject({ actor: 'ae', certainty: 'confirmed' })
     expect(progress('needs_attention').activity).toMatchObject({ actor: 'customer' })
     expect(projectRouteCancelled({
       requestRef: 'request:one', revision: 1, updatedAt: 11,

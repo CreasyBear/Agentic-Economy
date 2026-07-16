@@ -587,7 +587,7 @@ export const customerRequestViewSchema = z.strictObject({
       step: safePositiveInteger,
       state: z.enum([
         'queued', 'ready_to_contact', 'contacting', 'awaiting_result',
-        'validating_result', 'needs_attention', 'cancelled',
+        'completed', 'needs_attention', 'cancelled',
       ]),
     }).strict(),
     dependencies: z.strictObject({
