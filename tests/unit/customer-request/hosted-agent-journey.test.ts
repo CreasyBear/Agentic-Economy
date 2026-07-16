@@ -229,6 +229,10 @@ describe('hosted Customer Request journey', () => {
       first,
       first,
       expired,
+      requestView('needs_attention', 2, {
+        routeGenerationRef: 'generation:one',
+        nextAction: 'retry',
+      }),
       refreshed,
       requestView('route_confirmed', 2, {
         routeGenerationRef: 'generation:two',
@@ -294,7 +298,7 @@ describe('hosted Customer Request journey', () => {
       verifyAnonymousRefusal: async () => undefined,
     })
 
-    expect(sleep).toHaveBeenCalledWith(310_000)
+    expect(sleep.mock.calls).toEqual([[310_000], [1_000]])
     expect(calls.filter(({ url }) => url.endsWith('/confirmation'))).toHaveLength(2)
     expect(calls.filter(({ url }) => url.endsWith('/run'))).toHaveLength(2)
     expect(calls.find(({ url }) => url.endsWith('/options'))).toBeDefined()

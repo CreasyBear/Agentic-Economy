@@ -90,10 +90,12 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
       }
     }
   } else if (view.state === 'needs_attention' || view.state === 'outcome_unknown' || view.state === 'failed') {
-    if (view.state === 'needs_attention' && view.decision?.outcome.kind === 'routes_expired') {
+    if (view.state === 'needs_attention' && view.nextAction === 'retry') {
       actions.push({
         relation: 'prepare_options', method: 'POST', href: `${current}/options`,
-        summary: 'Prepare a new current choice because the previous options expired.',
+        summary: view.decision?.outcome.kind === 'routes_expired'
+          ? 'Prepare a new current choice because the previous options expired.'
+          : 'Try preparing current options again.',
         input: { idempotencyKey, revision: view.revision },
       })
     }

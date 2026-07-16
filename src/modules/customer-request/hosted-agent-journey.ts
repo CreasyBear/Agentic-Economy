@@ -375,6 +375,16 @@ export async function runHostedCustomerRequestJourney(
       continue
     }
 
+    if (view.state === 'needs_attention' && view.nextAction === 'retry'
+      && expiredChoice !== undefined && runtimeInput.metrics.staleOptionRecovery === undefined) {
+      await (input.sleep ?? defaultSleep)(1_000)
+      view = await callObservedAgent(runtimeInput, view, 'prepare_options', {
+        '<unique string>': `acceptance:retry-expired:${nonce}:${transitions}`,
+      }, [200, 202])
+      observe(states, view)
+      continue
+    }
+
     if (view.state === 'unsupported' || view.state === 'no_options' || view.state === 'needs_attention'
       || view.state === 'outcome_unknown' || view.state === 'completed' || view.state === 'failed'
       || view.state === 'options_ready' || view.state === 'needs_authorization'
