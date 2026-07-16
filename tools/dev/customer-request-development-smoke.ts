@@ -35,7 +35,7 @@ export type CustomerRequestDevelopmentSmokeConfig = Readonly<{
   request: string
   facts: Readonly<Record<string, unknown>>
   messages: readonly string[]
-  finish: 'complete' | 'cancel' | 'outcome_unknown'
+  finish: 'complete' | 'cancel' | 'outcome_unknown' | 'provider_denied'
   expiryRecovery?: Readonly<{ waitMs: number }>
   unsupportedRecovery?: Readonly<{ message: string }>
   expectedRoute: Readonly<{

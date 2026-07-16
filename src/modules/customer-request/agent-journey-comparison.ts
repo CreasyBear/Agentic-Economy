@@ -26,10 +26,10 @@ type AeJourney = Readonly<{
   sandbox: true
   input: Readonly<{ request: string }>
   final: Readonly<{
-    state: 'completed' | 'cancelled' | 'outcome_unknown'
-    runState: 'completed' | 'in_progress' | 'cancelled' | 'outcome_unknown'
-    evidenceState: 'completed' | 'running' | 'queued' | 'cancelled' | 'outcome_unknown'
-    resumedState: 'completed' | 'cancelled' | 'outcome_unknown'
+    state: 'completed' | 'failed' | 'cancelled' | 'outcome_unknown'
+    runState: 'completed' | 'in_progress' | 'failed' | 'cancelled' | 'outcome_unknown'
+    evidenceState: 'completed' | 'running' | 'queued' | 'failed' | 'cancelled' | 'outcome_unknown'
+    resumedState: 'completed' | 'failed' | 'cancelled' | 'outcome_unknown'
     selectedBusinesses: readonly string[]
     resultDigest?: string | undefined
   }>

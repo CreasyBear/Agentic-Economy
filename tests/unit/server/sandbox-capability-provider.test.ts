@@ -176,6 +176,30 @@ describe('sandbox capability provider', () => {
     })
   })
 
+  it('lets the route journey exercise a definite second-step provider denial', async () => {
+    const resolverUrl = 'https://ae.test/api/sandbox/providers/route-resolver'
+    const quoterUrl = 'https://ae.test/api/sandbox/providers/route-quoter'
+    const resolved = await handleSandboxRouteProviderRequest('resolver', new Request(resolverUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({
+        request: 'Resolve a labelled sandbox service and prepare its quote. Use the provider denial scenario.',
+      }),
+    }), { providerKey: 'secret' })
+    const resolvedBody = await resolved.json() as { serviceReference: string }
+
+    const denied = await handleSandboxRouteProviderRequest('quoter', new Request(quoterUrl, {
+      method: 'POST', headers: { Authorization: 'Bearer secret' },
+      body: JSON.stringify({ serviceReference: resolvedBody.serviceReference }),
+    }), { providerKey: 'secret' })
+
+    expect(denied.status).toBe(409)
+    expect(denied.headers.get('Provider-Receipt')).toMatch(/^sandbox-quoter-denial:/)
+    await expect(denied.json()).resolves.toEqual({
+      kind: 'refused',
+      reason: 'sandbox_provider_declined',
+    })
+  })
+
   it('refuses missing credentials and never commits a real-world effect', async () => {
     const unauthorized = await handleSandboxCapabilityRequest(new Request('https://ae.test/api/sandbox/capability?profile=one', {
       method: 'POST', body: JSON.stringify({}),

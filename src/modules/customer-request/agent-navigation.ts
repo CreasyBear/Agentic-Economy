@@ -112,6 +112,12 @@ export function projectCustomerRequestAgentNavigation(view: CustomerRequestView)
         relation: 'inspect_progress', method: 'GET', href: current,
         summary: 'Resume this Request, then follow the latest safe action.',
       })
+    } else if (view.nextAction === 'revise_request') {
+      actions.push({
+        relation: 'change_request', method: 'POST', href: `${current}/messages`,
+        summary: 'Revise the request in ordinary language and continue from the same Request.',
+        input: { idempotencyKey, expectedRevision: view.revision, message: '<natural-language change>' },
+      })
     }
     actions.push(
       {

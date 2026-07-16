@@ -858,6 +858,55 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
     expect(routeProviderFetch).toHaveBeenCalledTimes(2)
   })
 
+  it('records a definite released provider denial as failed and never retries it', async () => {
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_SECRET', 'route-call-signing-secret-with-at-least-32-bytes')
+    vi.stubEnv('AE_ROUTE_CALL_SIGNING_KEY_ID', 'route-calls:test')
+    vi.stubEnv('ROUTE_ADMISSION_RESOLVER_KEY', 'resolver-secret')
+    vi.stubEnv('ROUTE_ADMISSION_QUOTER_KEY', 'quoter-secret')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    const backend = convexTest(schema, modules)
+    const admin = await ownerAdmin(backend)
+    const confirmed = await confirmedTwoStepRoute(backend, admin, 'transport-provider-denial')
+    routeProviderFetch.mockReset()
+    routeProviderFetch
+      .mockResolvedValueOnce(new UndiciResponse(JSON.stringify({ serviceReference: 'sandbox-service:denied' }), {
+        status: 200, headers: { 'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:resolver' },
+      }))
+      .mockResolvedValueOnce(new UndiciResponse(JSON.stringify({
+        kind: 'refused', reason: 'sandbox_provider_declined',
+      }), {
+        status: 409, headers: {
+          'Content-Type': 'application/json', 'Provider-Receipt': 'sandbox:quoter-denial',
+        },
+      }))
+    await admin.action(api.customerRequestApplication.runRoute, {
+      requestRef: confirmed.requestRef, idempotencyKey: 'run:transport-provider-denial',
+    })
+
+    await finishScheduledRouteWorkers(backend, 2)
+    await expect(admin.action(api.customerRequestApplication.resume, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'request', state: 'failed', nextAction: 'revise_request',
+      action: {
+        state: 'failed', resolution: 'reconciled', automaticRetry: false,
+        result: { reason: 'business_reported_failure' },
+      },
+      progress: { completed: 1, total: 2, current: { step: 2, state: 'needs_attention' } },
+    })
+    await expect(admin.action(api.customerRequestApplication.exportRouteEvidence, {
+      requestRef: confirmed.requestRef,
+    })).resolves.toMatchObject({
+      kind: 'evidence', state: 'failed',
+      steps: [{ step: 1, state: 'completed' }, { step: 2, state: 'failed' }],
+      result: { reason: 'business_reported_failure' },
+    })
+    await expect(backend.action(internal.customerRequestRouteTransportWorker.runNext, {
+      workerId: 'worker:transport:denial-retry',
+    })).resolves.toEqual({ kind: 'none' })
+    expect(routeProviderFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('never advances or retries when a released step has an invalid or unknown outcome', async () => {
     const backend = convexTest(schema, modules)
     const admin = await ownerAdmin(backend)
