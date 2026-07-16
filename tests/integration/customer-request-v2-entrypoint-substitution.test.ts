@@ -36,6 +36,52 @@ describe('V2 Request registration-only business substitution', () => {
     vi.unstubAllGlobals()
   })
 
+  it('changes the customer options when only an admitted registration changes', async () => {
+    vi.stubEnv('AE_SITE_URL', 'https://sandbox-ae.example.test')
+    vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-test-key')
+    vi.spyOn(defaultDnsResolver, 'lookup').mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    providerFetch.mockImplementation(async () => new UndiciResponse(JSON.stringify({
+      kind: 'quoted',
+      expectedCost: { currency: 'AUD', amountMinor: 0 },
+      maximumCost: { currency: 'AUD', amountMinor: 0 },
+      expectedLatencyMs: 1,
+      dataFields: [],
+      disclosures: ['Sandbox readiness probe only.'],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const backend = createBackend()
+    await backend.mutation(internal.devSeed.seedDevCatalog, {})
+    await observeAllPublishedSupplyReady(backend)
+
+    const before = await prepareCustomerChoice(backend, 'request:substitution:registered')
+    expect(before).toMatchObject({
+      state: 'options_ready',
+      preparedAction: {
+        businessName: 'Sandbox Option Two',
+        alternatives: [{ businessName: 'Sandbox Option One' }],
+      },
+    })
+
+    const revokeCommand = {
+      profile: 'two',
+      decision: 'revoke',
+      operationKey: 'test:substitution:registration-only:revoke-two',
+    } as const
+    const revoked = await backend.mutation(internal.devSeed.setSandboxOptionEligibility, revokeCommand)
+    expect(revoked).toMatchObject({ kind: 'ineligible' })
+    await expect(backend.mutation(internal.devSeed.setSandboxOptionEligibility, revokeCommand))
+      .resolves.toEqual(revoked)
+
+    const after = await prepareCustomerChoice(backend, 'request:substitution:registered-after')
+    expect(after).toMatchObject({
+      state: 'options_ready',
+      preparedAction: {
+        businessName: 'Sandbox Option One',
+        selection: { alternativeCount: 0 },
+        alternatives: [],
+      },
+    })
+  })
+
   it('adds and removes a conformant business without changing the Request or caller contract', async () => {
     vi.stubEnv('AE_SITE_URL', 'https://sandbox-ae.example.test')
     vi.stubEnv('AE_SANDBOX_PROVIDER_KEY', 'sandbox-provider-test-key')

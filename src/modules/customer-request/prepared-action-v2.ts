@@ -255,6 +255,12 @@ export function compilePreparedActionOptions(input: Readonly<{
     }
   }
   if (prepared.length === 0) return firstFailure ?? { kind: 'not_prepared', reason: 'selection_required' }
+  if (prepared.length === 1) {
+    const selected = prepared[0]
+    return selected === undefined
+      ? { kind: 'not_prepared', reason: 'selection_required' }
+      : withFallbacks(selected, fallbacks)
+  }
   if (input.selection.kind === 'lowest_maximum_price') {
     return compileLowestMaximumPrice(input as Readonly<{
       lineage: ActionPreparationLineage
@@ -263,11 +269,7 @@ export function compilePreparedActionOptions(input: Readonly<{
       now: number
     }>, prepared, fallbacks)
   }
-  if (prepared.length !== 1) return { kind: 'not_prepared', reason: 'selection_required' }
-  const selected = prepared[0]
-  return selected === undefined
-    ? { kind: 'not_prepared', reason: 'selection_required' }
-    : withFallbacks(selected, fallbacks)
+  return { kind: 'not_prepared', reason: 'selection_required' }
 }
 
 function compileSingleOption(

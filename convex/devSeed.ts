@@ -137,6 +137,60 @@ export const seedDevCatalog = internalMutation({
   },
 })
 
+export const setSandboxOptionEligibility = internalMutation({
+  args: {
+    profile: v.union(v.literal('one'), v.literal('two')),
+    decision: v.union(v.literal('admit'), v.literal('revoke')),
+    operationKey: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      kind: v.union(v.literal('eligible'), v.literal('ineligible')),
+      offeringId: v.string(),
+      bindingId: v.string(),
+      eligibilityHash: v.string(),
+    }),
+    v.object({ kind: v.literal('refused'), reason: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    const profile = SANDBOX_PROVIDER_PROFILES[args.profile]
+    const [offering, binding] = await Promise.all([
+      ctx.db.query('capabilityOfferings')
+        .withIndex('by_offeringId', (query) => query.eq('offeringId', profile.offeringId))
+        .unique(),
+      ctx.db.query('capabilityTransportBindings')
+        .withIndex('by_bindingId', (query) => query.eq('bindingId', profile.v3BindingId))
+        .unique(),
+    ])
+    if (offering === null || binding === null) {
+      return { kind: 'refused' as const, reason: 'sandbox_option_registration_missing' }
+    }
+    return await setCapabilitySupplyEligibilityCommand(ctx.db, {
+      actor: { kind: 'system', ref: 'system:dev-substitution-proof' },
+      context: {
+        operationKey: args.operationKey,
+        correlationId: `dev:substitution:${args.profile}`,
+        reasonCode: 'labelled_sandbox_registration_substitution_proof',
+        evidenceRefs: ['dev:sandbox-registration-only-substitution'],
+      },
+      eligibility: {
+        offeringId: offering.offeringId,
+        bindingId: binding.bindingId,
+        contractRef: {
+          capabilityId: offering.capabilityId,
+          version: offering.version,
+          contractDigest: offering.contractDigest,
+        },
+        decision: args.decision,
+        expectedOfferingRegistrationHash: offering.registrationHash,
+        expectedBindingRegistrationHash: binding.registrationHash,
+        admissionEvidenceRefs: ['dev:sandbox-registration-only-substitution'],
+        conformanceEvidenceRefs: ['dev:sandbox-registration-only-substitution'],
+      },
+    }, Date.now())
+  },
+})
+
 export const seedTestCapabilityPublication = internalMutation({
   args: {},
   returns: v.object({ publicationRef: v.string(), credentialRef: v.string() }),
