@@ -4,6 +4,10 @@ import { Card } from '@astryxdesign/core/Card'
 import { Heading, Text } from '@astryxdesign/core/Text'
 import { Skeleton } from '@astryxdesign/core/Skeleton'
 
+import {
+  customerRequestEvidenceResultSchema,
+  type CustomerRequestEvidenceExport,
+} from '@/modules/customer-request/agent-contract'
 import { fetchBrowserRequestWithInterpreterRecovery } from '@/modules/customer-request/browser-submit-recovery'
 import type { CustomerRequestProjection, CustomerRequestView } from '@/modules/customer-request/customer-projection'
 
@@ -1006,6 +1010,34 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
   const [summary, setSummary] = useState('')
   const [receipt, setReceipt] = useState<string | undefined>()
   const [error, setError] = useState<string | undefined>()
+  const [evidence, setEvidence] = useState<CustomerRequestEvidenceExport | undefined>()
+  const [evidenceLoading, setEvidenceLoading] = useState(false)
+  const [evidenceError, setEvidenceError] = useState<string | undefined>()
+
+  async function inspectEvidence() {
+    if (evidenceLoading) return
+    if (evidence !== undefined) {
+      setEvidence(undefined)
+      return
+    }
+    setEvidenceLoading(true)
+    setEvidenceError(undefined)
+    try {
+      const response = await fetch(`/api/requests/${encodeURIComponent(requestRef)}/evidence`, {
+        headers: { Accept: 'application/json' },
+      })
+      const parsed = customerRequestEvidenceResultSchema.safeParse(await response.json())
+      if (!response.ok || !parsed.success || parsed.data.kind !== 'evidence') {
+        setEvidenceError('AE could not open the activity record. Your Request is unchanged.')
+        return
+      }
+      setEvidence(parsed.data)
+    } catch {
+      setEvidenceError('AE could not be reached. Your Request is unchanged.')
+    } finally {
+      setEvidenceLoading(false)
+    }
+  }
 
   async function reportProblem() {
     if (summary.trim().length === 0) return
@@ -1035,9 +1067,29 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
 
   return <div className="grid gap-3 border-t border-border pt-4">
     <div className="flex flex-wrap items-center gap-4">
-      <a className="min-h-11 py-2 text-sm font-semibold underline underline-offset-4" href={`/api/requests/${encodeURIComponent(requestRef)}/evidence`}>View activity record</a>
+      <button type="button" className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={() => void inspectEvidence()}>
+        {evidenceLoading ? 'Opening activity record…' : evidence === undefined ? 'View activity record' : 'Hide activity record'}
+      </button>
       <button type="button" className="min-h-11 text-sm font-semibold underline underline-offset-4" onClick={() => setReporting((current) => !current)}>Report a problem</button>
     </div>
+    {evidence === undefined ? null : <section className="grid gap-3 rounded-md border border-border bg-surface p-4" aria-live="polite">
+      <Heading level={3}>Activity record</Heading>
+      <Text color="secondary">{activityRecordSummary(evidence.state)}</Text>
+      <ol className="grid gap-3">
+        {evidence.steps.map((step) => <li key={step.step} className="grid gap-1 border-l-2 border-accent pl-3">
+          <Text weight="semibold">Step {step.step} {activityStepState(step.state)}</Text>
+          {step.evidence.length === 0
+            ? <Text type="supporting" color="secondary">No receipt has been recorded for this step yet.</Text>
+            : step.evidence.map((item) => <Text key={item.receiptRef} type="supporting" color="secondary">{item.label}</Text>)}
+        </li>)}
+      </ol>
+      {evidence.result === undefined ? null : <div className="grid gap-1">
+        <Text weight="semibold">Recorded result</Text>
+        <Text color="secondary">{readableResult(evidence.result)}</Text>
+      </div>}
+      <Text type="supporting" color="secondary">Generated {new Date(evidence.generatedAt).toLocaleString()}.</Text>
+    </section>}
+    {evidenceError === undefined ? null : <Text type="supporting" color="secondary">{evidenceError}</Text>}
     {reporting ? <form className="grid gap-2" onSubmit={(event) => { event.preventDefault(); void reportProblem() }}>
       <label htmlFor={`problem-${requestRef}`} className="text-sm font-semibold">What went wrong?</label>
       <textarea id={`problem-${requestRef}`} value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={1_000} required className="min-h-24 rounded-md border border-border bg-card p-3 outline-none focus:ring-2 focus:ring-accent" />
@@ -1047,6 +1099,22 @@ function RequestRecordLinks({ requestRef }: { requestRef: string }) {
     {error === undefined ? null : <Text type="supporting" color="secondary">{error}</Text>}
   </div>
 }
+
+function activityRecordSummary(state: CustomerRequestEvidenceExport['state']): string {
+  if (state === 'completed') return 'AE recorded a completed result and the supporting step receipts.'
+  if (state === 'outcome_unknown') return 'Some work is recorded, but AE is still confirming a later result and will not repeat it automatically.'
+  if (state === 'failed') return 'AE recorded where the work stopped and any completed steps remain preserved.'
+  if (state === 'cancelled') return 'AE recorded where the Request stopped.'
+  return 'AE is recording progress as the work continues.'
+}
+
+function activityStepState(state: CustomerRequestEvidenceExport['steps'][number]['state']): string {
+  if (state === 'outcome_unknown') return 'still being confirmed'
+  if (state === 'awaiting_result') return 'waiting for a result'
+  if (state === 'contacting') return 'contacting the business'
+  return state.replaceAll('_', ' ')
+}
+
 function DisclosureReview({ projection, turns, authorize, edit, restart }: { projection: CustomerRequestView; turns: readonly ConversationTurn[]; authorize: () => Promise<void>; edit: () => void; restart: () => void }) { const review = projection.disclosureReview; if (review === undefined) return null; return <section className="mx-auto grid w-full max-w-4xl gap-5" aria-live="polite"><Conversation turns={turns} /><WorkingUnderstanding projection={projection} correct={edit} /><Card padding={5}><div className="grid gap-4"><Text className="text-sm font-semibold text-accent">Before AE contacts businesses</Text><Heading level={2}>Review what would be shared</Heading><Text color="secondary">To {review.purpose.toLocaleLowerCase()}, AE would share the following with up to {review.maximumRecipients} matching {review.maximumRecipients === 1 ? 'business' : 'businesses'}.</Text><ul className="grid gap-2">{review.categories.map((category) => <li key={`${category.label}:${category.classification}`} className="rounded-md border border-border bg-surface px-3 py-2"><strong>{category.label}</strong> <span className="text-secondary">· {category.classification}</span></li>)}</ul><Text weight="semibold">Nothing has been shared. Explicit permission is required before preparation can continue.</Text><Button label="Allow this comparison" variant="primary" clickAction={authorize} /><RecoveryActions edit={edit} restart={restart} /></div></Card></section> }
 function WorkingUnderstanding({ projection, correct }: { projection: CustomerRequestView; correct: () => void }) { const criteria = projection.criteria ?? []; if (criteria.length === 0) return null; return <Card padding={4}><div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><Text className="text-sm font-semibold text-accent">AE’s working understanding</Text></div><button type="button" onClick={correct} className="min-h-11 text-sm font-semibold underline underline-offset-4">Correct</button></div><div className="grid gap-2">{criteria.map((criterion) => <div key={`${criterion.label}:${workingCriterionValue(criterion.value)}`} className="rounded-md border border-border bg-surface px-3 py-2 text-sm"><div><strong>{workingCriterionLabel(criterion.label, criterion.value, projection.summary)}:</strong> {workingCriterionValue(criterion.value)}</div><Text type="supporting" color="secondary">{criterion.basis === 'customer_provided' ? 'You said this.' : 'Understood from your request.'} Used to decide which options fit and how they compare.</Text></div>)}</div></div></Card> }
 

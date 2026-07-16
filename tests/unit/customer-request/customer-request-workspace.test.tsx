@@ -366,6 +366,55 @@ describe('customer Request workspace', () => {
     expect(screen.queryByRole('button', { name: 'Start a new Request' })).toBeNull()
   })
 
+  it('shows the canonical activity record inline instead of sending the customer to raw JSON', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'completed-evidence' })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        kind: 'request', requestRef: 'request:completed-evidence', revision: 1, state: 'completed',
+        summary: 'Your result is ready.', nextAction: 'none', missingFields: [], criteria: [], options: [],
+        progress: { completed: 2, total: 2, current: { step: 2, state: 'validating_result' } },
+        action: {
+          state: 'completed', resolution: 'provider_result',
+          result: { quoteReference: 'sandbox-quote:usable' }, observedAt: 10,
+        },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        kind: 'evidence', requestRef: 'request:completed-evidence', state: 'completed', generatedAt: 11,
+        steps: [
+          {
+            step: 1, state: 'completed', observedAt: 8,
+            evidence: [{ receiptRef: 'receipt:resolver', label: 'Service reference accepted' }],
+          },
+          {
+            step: 2, state: 'completed', observedAt: 10,
+            evidence: [{ receiptRef: 'receipt:quoter', label: 'Quote reference accepted' }],
+          },
+        ],
+        result: { quoteReference: 'sandbox-quote:usable' },
+      }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AeCustomerRequestWorkspace />)
+
+    fireEvent.change(screen.getByLabelText('What are you looking for?'), {
+      target: { value: 'Resolve a service and prepare its quote' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Explore' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'View activity record' }))
+
+    expect(await screen.findByRole('heading', { name: 'Activity record' })).toBeTruthy()
+    expect(screen.getByText('Step 1 completed')).toBeTruthy()
+    expect(screen.getByText('Service reference accepted')).toBeTruthy()
+    expect(screen.getByText('Step 2 completed')).toBeTruthy()
+    expect(screen.getByText('Quote reference accepted')).toBeTruthy()
+    expect(screen.getAllByText('sandbox-quote:usable')).toHaveLength(2)
+    expect(screen.queryByText(/receipt:resolver|receipt:quoter/u)).toBeNull()
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/requests/request%3Acompleted-evidence/evidence',
+      { headers: { Accept: 'application/json' } },
+    )
+  })
+
   it('presents the full request as a customer fact instead of a provider question', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'request-label' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({

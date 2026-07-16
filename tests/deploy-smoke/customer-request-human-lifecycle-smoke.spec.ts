@@ -37,6 +37,7 @@ test('a cold human browser executes and resumes the Request lifecycle', async ({
 
   await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible()
   await expect(page.getByText(/sandbox-quote:/u)).toBeVisible()
+  await proveInlineActivityRecord(page, 'completed')
   const requestRef = await page.evaluate(() => {
     const stored: unknown = JSON.parse(localStorage.getItem('ae.customer-request.active:v1') ?? 'null')
     return stored !== null && typeof stored === 'object' && 'requestRef' in stored
@@ -76,19 +77,7 @@ async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page
   await expect(page.getByRole('button', { name: 'Edit this Request' })).not.toBeVisible()
 
   const requestRef = await activeRequestRef(page)
-  const evidence = await page.evaluate(async (ref) => {
-    const response = await fetch(`/api/requests/${encodeURIComponent(ref)}/evidence`, {
-      headers: { Accept: 'application/json' },
-    })
-    return { status: response.status, body: await response.json() as unknown }
-  }, requestRef)
-  expect(evidence).toMatchObject({
-    status: 200,
-    body: {
-      kind: 'evidence', state: 'outcome_unknown',
-      steps: [{ step: 1, state: 'completed' }, { step: 2, state: 'outcome_unknown' }],
-    },
-  })
+  await proveInlineActivityRecord(page, 'outcome_unknown')
 
   await page.getByRole('button', { name: 'Report a problem' }).click()
   await page.getByLabel('What went wrong?').fill('The labelled sandbox quote result is still unknown.')
@@ -100,6 +89,26 @@ async function proveUnknownOutcomeRecovery(page: import('@playwright/test').Page
   await expect(page.getByText('1 of 2 business steps completed.')).toBeVisible()
   await expect(page.getByText('AE will not repeat the step whose result is still being confirmed.')).toBeVisible()
   expect(await activeRequestRef(page)).toBe(requestRef)
+}
+
+async function proveInlineActivityRecord(
+  page: import('@playwright/test').Page,
+  expected: 'completed' | 'outcome_unknown',
+): Promise<void> {
+  await page.getByRole('button', { name: 'View activity record' }).click()
+  await expect(page.getByRole('heading', { name: 'Activity record' })).toBeVisible()
+  await expect(page.getByText('Step 1 completed')).toBeVisible()
+  if (expected === 'completed') {
+    await expect(page.getByText('Step 2 completed')).toBeVisible()
+    await expect(page.getByText('AE recorded a completed result and the supporting step receipts.')).toBeVisible()
+    await expect(page.getByText(/sandbox-quote:/u).last()).toBeVisible()
+  } else {
+    await expect(page.getByText('Step 2 still being confirmed')).toBeVisible()
+    await expect(page.getByText(
+      'Some work is recorded, but AE is still confirming a later result and will not repeat it automatically.',
+    )).toBeVisible()
+  }
+  expect(await page.locator('main').innerText()).not.toMatch(/receipt:[a-z0-9_-]+/iu)
 }
 
 async function activeRequestRef(page: import('@playwright/test').Page): Promise<string> {
