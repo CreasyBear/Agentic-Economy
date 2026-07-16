@@ -9,7 +9,6 @@ describe('customer Request development smoke configuration', () => {
       AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
       AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
       CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
-      AE_DIRECT_PROVIDER_ORIGINS_JSON: 'production configuration must not leak into dev',
     }, 'a'.repeat(40))).toMatchObject({
       baseUrl: 'http://127.0.0.1:3002',
       convexDeployment: 'convex:loyal-peacock-107',
@@ -57,5 +56,41 @@ describe('customer Request development smoke configuration', () => {
       CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
       AE_CUSTOMER_REQUEST_FINISH: 'outcome_unknown',
     }, 'a'.repeat(40))).toMatchObject({ finish: 'outcome_unknown' })
+  })
+
+  it('admits an explicit frozen direct baseline only beside a completed hosted journey', () => {
+    expect(customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'complete',
+      AE_DIRECT_PROVIDER_ORIGINS_JSON: JSON.stringify([
+        'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-resolver',
+        'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-quoter',
+      ]),
+      AE_DIRECT_PROVIDER_CREDENTIAL: 'provider-secret',
+      AE_DIRECT_PREDECLARED_GAIN: 'recoverable_progress',
+      AE_DIRECT_MAXIMUM_TOTAL_COST_JSON: JSON.stringify({ currency: 'AUD', amountMinor: 1_000 }),
+    }, 'a'.repeat(40))).toMatchObject({
+      directBaseline: {
+        predeclaredGain: 'recoverable_progress',
+        maximumTotalCost: { currency: 'AUD', amountMinor: 1_000 },
+      },
+    })
+  })
+
+  it('rejects a partially configured direct baseline', () => {
+    expect(() => customerRequestDevelopmentSmokeConfig({
+      CLERK_SECRET_KEY: 'sk_test',
+      AE_CUSTOMER_REQUEST_CLERK_INSTANCE_ID: 'ins_dev',
+      AE_CUSTOMER_REQUEST_CLERK_SUBJECT: 'user_dev',
+      CONVEX_DEPLOYMENT: 'dev:loyal-peacock-107',
+      AE_CUSTOMER_REQUEST_FINISH: 'complete',
+      AE_DIRECT_PROVIDER_ORIGINS_JSON: JSON.stringify([
+        'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-resolver',
+        'https://loyal-peacock-107.convex.site/api/sandbox/providers/route-quoter',
+      ]),
+    }, 'a'.repeat(40))).toThrow('Direct comparison requires complete explicit configuration')
   })
 })
