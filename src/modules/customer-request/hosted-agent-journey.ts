@@ -660,7 +660,12 @@ async function adapterCancellationHostedJourney(input: Readonly<{
       break
     }
     if (progress.state !== 'in_progress') {
-      throw new Error(`hosted_journey_adapter_cancel_unexpected_terminal:${progress.state}`)
+      throw new Error(`hosted_journey_adapter_cancel_unexpected_terminal:${JSON.stringify({
+        state: progress.state,
+        progress: progress.progress,
+        activity: progress.activity,
+        nextAction: progress.nextAction,
+      })}`)
     }
     await (input.input.sleep ?? defaultSleep)(125)
   }
