@@ -43,6 +43,7 @@ import {
   projectCustomerCriteria,
   projectNeedsAttention,
   projectRequestEvaluation,
+  repeatPermissionUseRecoverySummary,
   projectRouteConfirmed,
   projectRouteCancelled,
   projectRouteProgress,
@@ -1193,9 +1194,7 @@ export const useRepeatRoute = action({
     return writableView(projectNeedsAttention({
       requestRef: args.requestRef,
       revision: args.revision,
-      summary: result.reason === 'policy_revoked'
-        ? 'Repeat permission was withdrawn. Ask for confirmation before continuing.'
-        : 'Repeat permission cannot be used for this choice. Ask for confirmation before continuing.',
+      summary: repeatPermissionUseRecoverySummary(result.reason),
     }))
   },
 })

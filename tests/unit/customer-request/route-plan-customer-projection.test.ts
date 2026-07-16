@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import type { CustomerRequestRoutePlan } from '@/modules/customer-request/compiler'
 import {
+  repeatPermissionUseRecoverySummary,
+  type RepeatPermissionUseRefusalReason,
+} from '@/modules/customer-request/customer-projection'
+import {
   customerRouteRef,
   projectCustomerRoutePlanDecision,
 } from '@/modules/customer-request/route-plan-customer-projection'
@@ -9,6 +13,37 @@ import type { CustomerRequestRoutePlanGeneration } from '@/modules/customer-requ
 import { customerRequestViewSchema } from '@/modules/customer-request/agent-contract'
 
 describe('RoutePlan customer projection', () => {
+  it('gives every repeat-permission refusal a specific safe customer recovery', () => {
+    const expected = new Map<RepeatPermissionUseRefusalReason, string>([
+      ['policy_revoked', 'Repeat permission was withdrawn. Ask for confirmation before continuing.'],
+      ['policy_expired', 'Repeat permission expired. Confirm the current choice before continuing.'],
+      ['mandate_expiry_invalid', 'Repeat permission expired. Confirm the current choice before continuing.'],
+      ['policy_not_yet_valid', 'Repeat permission is not active yet. Confirm the current choice to continue now.'],
+      ['spend_limit_exceeded', 'Repeat permission has reached its limit. Confirm the current choice before continuing.'],
+      ['data_limit_exceeded', 'Repeat permission has reached its limit. Confirm the current choice before continuing.'],
+      ['occurrence_limit_exceeded', 'Repeat permission has reached its limit. Confirm the current choice before continuing.'],
+      ['generation_changed', 'The current choice has changed beyond this repeat permission. Review and confirm it before continuing.'],
+      ['route_not_allowed', 'The current choice has changed beyond this repeat permission. Review and confirm it before continuing.'],
+      ['capability_not_allowed', 'The current choice has changed beyond this repeat permission. Review and confirm it before continuing.'],
+      ['consequential_effect_requires_confirmation', 'The current choice has changed beyond this repeat permission. Review and confirm it before continuing.'],
+      ['credential_mismatch', 'The connected assistant is no longer allowed to use this repeat permission. Confirm the current choice before continuing.'],
+      ['principal_mismatch', 'The connected assistant is no longer allowed to use this repeat permission. Confirm the current choice before continuing.'],
+      ['policy_integrity_invalid', 'AE could not verify this repeat permission safely. Confirm the current choice before continuing.'],
+      ['prior_use_invalid', 'AE could not verify this repeat permission safely. Confirm the current choice before continuing.'],
+      ['authentication_required', 'Repeat permission is unavailable for this choice. Confirm the current choice before continuing.'],
+      ['request_not_found', 'Repeat permission is unavailable for this choice. Confirm the current choice before continuing.'],
+      ['policy_not_found', 'Repeat permission is unavailable for this choice. Confirm the current choice before continuing.'],
+    ])
+
+    for (const [reason, summary] of expected) {
+      expect(repeatPermissionUseRecoverySummary(reason), reason).toBe(summary)
+    }
+    expect(expected.size).toBe(18)
+    expect([...expected.values()].join(' ')).not.toMatch(
+      /policy|mandate|generation|capability|binding|offering|graph/u,
+    )
+  })
+
   it('projects one exact generation without exposing compiler choreography or creating authority', () => {
     const decision = projectCustomerRoutePlanDecision({
       current: generation(1, [route({ amountMinor: 1_200 })]),

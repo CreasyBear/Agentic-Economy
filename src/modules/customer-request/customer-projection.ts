@@ -341,6 +341,58 @@ export function projectNeedsAttention(input: Readonly<{
   return requestView({ ...input, state: 'needs_attention', nextAction: 'retry' })
 }
 
+export type RepeatPermissionUseRefusalReason =
+  | 'authentication_required'
+  | 'request_not_found'
+  | 'policy_not_found'
+  | 'policy_integrity_invalid'
+  | 'principal_mismatch'
+  | 'credential_mismatch'
+  | 'policy_not_yet_valid'
+  | 'policy_expired'
+  | 'policy_revoked'
+  | 'generation_changed'
+  | 'route_not_allowed'
+  | 'capability_not_allowed'
+  | 'consequential_effect_requires_confirmation'
+  | 'spend_limit_exceeded'
+  | 'data_limit_exceeded'
+  | 'occurrence_limit_exceeded'
+  | 'mandate_expiry_invalid'
+  | 'prior_use_invalid'
+
+export function repeatPermissionUseRecoverySummary(
+  reason: RepeatPermissionUseRefusalReason,
+): string {
+  if (reason === 'policy_revoked') {
+    return 'Repeat permission was withdrawn. Ask for confirmation before continuing.'
+  }
+  if (reason === 'policy_expired' || reason === 'mandate_expiry_invalid') {
+    return 'Repeat permission expired. Confirm the current choice before continuing.'
+  }
+  if (reason === 'policy_not_yet_valid') {
+    return 'Repeat permission is not active yet. Confirm the current choice to continue now.'
+  }
+  if (reason === 'spend_limit_exceeded'
+    || reason === 'data_limit_exceeded'
+    || reason === 'occurrence_limit_exceeded') {
+    return 'Repeat permission has reached its limit. Confirm the current choice before continuing.'
+  }
+  if (reason === 'generation_changed'
+    || reason === 'route_not_allowed'
+    || reason === 'capability_not_allowed'
+    || reason === 'consequential_effect_requires_confirmation') {
+    return 'The current choice has changed beyond this repeat permission. Review and confirm it before continuing.'
+  }
+  if (reason === 'credential_mismatch' || reason === 'principal_mismatch') {
+    return 'The connected assistant is no longer allowed to use this repeat permission. Confirm the current choice before continuing.'
+  }
+  if (reason === 'policy_integrity_invalid' || reason === 'prior_use_invalid') {
+    return 'AE could not verify this repeat permission safely. Confirm the current choice before continuing.'
+  }
+  return 'Repeat permission is unavailable for this choice. Confirm the current choice before continuing.'
+}
+
 export function projectRoutePlansReady(input: Readonly<{
   requestRef: string
   revision: number

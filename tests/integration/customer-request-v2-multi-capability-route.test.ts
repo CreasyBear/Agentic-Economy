@@ -494,7 +494,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
           ? displayedRoute.maximumTotalCost.amountMinor * 2
           : 0,
       },
-      validUntil: displayedRoute.validUntil,
+      validUntil: Math.min(displayedRoute.validUntil, 5_000),
       idempotencyKey: 'allow-repeat:customer',
     }
     const serviceKey = 'repeat-permission-service-key-long-enough'
@@ -543,7 +543,7 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
         occurrences: 2,
       },
       fallback: 'ask_for_confirmation',
-      validUntil: displayedRoute.validUntil,
+      validUntil: permissionCommand.validUntil,
     })
     expect(JSON.stringify(permission)).not.toMatch(
       /policyRef|policyDigest|mandate|capabilityId|bindingId|offeringId|graph/u,
@@ -588,6 +588,31 @@ describe('Customer Request V2 multi-capability RoutePlan production path', () =>
       ...useCommand,
       serviceAuth: { ...useAuth, scopes: [...useAuth.scopes] },
     })).resolves.toEqual(confirmed)
+    vi.spyOn(Date, 'now').mockReturnValue(permission.validUntil + 1)
+    const expiredUseCommand = {
+      ...useCommand,
+      idempotencyKey: 'use-repeat:expired',
+    }
+    const expiredUseAuth = await createCustomerRequestServiceAssertion({
+      key: serviceKey,
+      operation: 'use_repeat',
+      command: expiredUseCommand,
+      principal: servicePrincipal,
+      issuedAt: permission.validUntil + 1,
+    })
+    const expiredUse = await backend.action(api.customerRequestApplication.useRepeatRoute, {
+      ...expiredUseCommand,
+      serviceAuth: { ...expiredUseAuth, scopes: [...expiredUseAuth.scopes] },
+    })
+    expect(expiredUse).toMatchObject({
+      kind: 'request',
+      state: 'needs_attention',
+      summary: 'Repeat permission expired. Confirm the current choice before continuing.',
+    })
+    expect(JSON.stringify(expiredUse)).not.toMatch(
+      /policy|mandate|generation|capability|binding|offering|graph/u,
+    )
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const inspectCommand = {
       requestRef: compared.requestRef,
       permissionRef: permission.permissionRef,
