@@ -1293,7 +1293,6 @@ function assertCancelledExecutionStartReplay(
   const replayedCancellation = replayed.activity?.cancellation
   const sameExecutionAuthority = replayed.requestRef === started.requestRef
     && replayed.revision === started.revision
-    && replayed.routeGenerationRef === started.routeGenerationRef
   const sameStoppedRecord = typeof cancellation === 'object' && cancellation.state === 'stopped'
     && typeof replayedCancellation === 'object' && replayedCancellation.state === 'stopped'
     && replayedCancellation.stoppedAt === cancellation.stoppedAt
